@@ -450,7 +450,6 @@ interface DataQualityRuleFailureDto {
     targetTable?: string | null;
     action?: string | null;
     owner?: string | null;
-    countsOnly: boolean;
 }
 
 interface DataQualityRunDto {
@@ -2093,6 +2092,7 @@ interface RunDesignerResponse {
 interface SaveDesignerResponse {
     version: number;
     sourceRevision?: string | null;
+    scriptText?: string | null;
 }
 
 interface SaveGlossaryTermRequest {

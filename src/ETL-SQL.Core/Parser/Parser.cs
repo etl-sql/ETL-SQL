@@ -309,11 +309,91 @@ public class Parser : IParser
     }
 
 
-    /// <summary>Parses a top-level query (SELECT or set operation).</summary>
+    /// <summary>
+    /// Returns true if the current position begins a query expression (<c>SELECT</c>, <c>WITH</c>,
+    /// or a parenthesized query term / set operation).
+    /// </summary>
+    public bool IsQueryStart()
+    {
+        if (Current.Type == TokenType.SELECT || Current.Type == TokenType.WITH)
+            return true;
+        return Current.Type == TokenType.LPAREN && IsParenthesizedQueryAt(0, requireFollowingQueryContext: true);
+    }
+
+    public bool IsInsertQueryStart()
+    {
+        if (Current.Type != TokenType.LPAREN) return false;
+        var next = LookAhead(1);
+        if (next.Type == TokenType.SELECT || next.Type == TokenType.WITH)
+            return true;
+        return next.Type == TokenType.LPAREN && IsParenthesizedQueryAt(1, requireFollowingQueryContext: true);
+    }
+
+    private bool IsParenthesizedQueryAt(int offset, bool requireFollowingQueryContext)
+    {
+        if (LookAhead(offset).Type != TokenType.LPAREN) return false;
+
+        var inner = LookAhead(offset + 1);
+        if (inner.Type == TokenType.LPAREN)
+        {
+            if (!IsParenthesizedQueryAt(offset + 1, requireFollowingQueryContext: true))
+                return false;
+        }
+        else if (inner.Type != TokenType.SELECT && inner.Type != TokenType.WITH)
+        {
+            return false;
+        }
+
+        int depth = 1;
+        int i = offset + 1;
+        while (depth > 0)
+        {
+            var tok = LookAhead(i);
+            if (tok.Type == TokenType.EOF) return false;
+            if (tok.Type == TokenType.LPAREN) depth++;
+            else if (tok.Type == TokenType.RPAREN) depth--;
+            i++;
+        }
+
+        if (!requireFollowingQueryContext) return true;
+        var after = LookAhead(i);
+        return after.Type == TokenType.RPAREN
+            || after.Type == TokenType.UNION
+            || after.Type == TokenType.EXCEPT
+            || after.Type == TokenType.INTERSECT
+            || (after.Type == TokenType.IDENTIFIER && after.Value.Equals("MINUS", StringComparison.OrdinalIgnoreCase));
+    }
+
+    public Statement AttachCtes(Statement stmt, List<CteDefinition> ctes, bool isRecursive)
+    {
+        var mergedCtes = stmt.Ctes is { Count: > 0 }
+            ? ctes.Concat(stmt.Ctes).ToList()
+            : ctes;
+        stmt = stmt with { Ctes = mergedCtes };
+        if (isRecursive)
+        {
+            stmt = stmt switch
+            {
+                SelectStatement select => select with { IsRecursive = true },
+                SetOperationStatement setOp => setOp with { IsRecursive = true },
+                _ => stmt
+            };
+        }
+        return stmt;
+    }
+
+    /// <summary>Parses a query expression (optional WITH clause, SELECT/parenthesized terms, and set operations).</summary>
     public Statement ParseQuery()
     {
-        if (!Match(TokenType.SELECT)) throw new SyntaxException("Expected SELECT", Current.Line, Current.Column);
-        var left = ParseSelectBody();
+        bool isRecursive = false;
+        List<CteDefinition>? ctes = null;
+        if (Match(TokenType.WITH))
+        {
+            isRecursive = Match(TokenType.RECURSIVE);
+            ctes = _statementParser.ParseCtes();
+        }
+
+        var left = ParseQueryTerm();
 
         while (Current.Type == TokenType.UNION || Current.Type == TokenType.EXCEPT || Current.Type == TokenType.INTERSECT || IsMinusKeyword())
         {
@@ -338,14 +418,33 @@ public class Parser : IParser
                 op = SetOpType.EXCEPT;
             }
 
-            Consume(TokenType.SELECT, "Expected SELECT after set operator");
-            var right = ParseSelectBody();
+            var right = ParseQueryTerm();
             left = new SetOperationStatement(left, op, right) { ByName = byName };
+        }
+
+        if (ctes != null)
+        {
+            left = AttachCtes(left, ctes, isRecursive);
         }
 
         // Global semicolon consumption for top level queries
         if (Current.Type == TokenType.SEMICOLON) Advance();
         return left;
+    }
+
+    private Statement ParseQueryTerm()
+    {
+        if (Match(TokenType.SELECT))
+            return ParseSelectBody();
+
+        if (Match(TokenType.LPAREN))
+        {
+            var inner = ParseQuery();
+            Consume(TokenType.RPAREN, "Expected ')' after parenthesized query");
+            return inner;
+        }
+
+        throw new SyntaxException("Expected SELECT or '(' in query expression", Current.Line, Current.Column);
     }
 
     public string CaptureRawBlock()
@@ -354,13 +453,14 @@ public class Parser : IParser
         var startToken = Consume(TokenType.BEGIN, "Expected BEGIN");
         int depth = 1;
         var tokens = new List<Token>();
+        var previous = startToken.Type;
 
         while (depth > 0 && Current.Type != TokenType.EOF)
         {
-            if (Current.Type == TokenType.BEGIN) depth++;
-            else if (Current.Type == TokenType.END) depth--;
+            depth += RawBlockDepthDelta(previous, Current.Type);
 
             if (depth == 0) break;
+            previous = Current.Type;
             tokens.Add(Advance());
         }
 
@@ -372,6 +472,20 @@ public class Parser : IParser
         // Fallback: reconstruct from tokens if source is missing
         return string.Join(" ", tokens.Select(t => t.Type == TokenType.STRING_LITERAL ? $"'{t.Value.Replace("'", "''")}'" : t.Value));
     }
+
+    /// <summary>
+    /// How a token moves the nesting depth of a raw <c>BEGIN ... END</c> block. <c>CASE</c> opens
+    /// a level that its <c>END</c> closes, so <c>CASE WHEN ... END</c> inside the block does not end
+    /// it early. A <c>CASE</c> straight after <c>END</c> is the procedural <c>END CASE</c> closer,
+    /// whose <c>END</c> already closed the level.
+    /// </summary>
+    internal static int RawBlockDepthDelta(TokenType previous, TokenType current) => current switch
+    {
+        TokenType.BEGIN => 1,
+        TokenType.CASE when previous != TokenType.END => 1,
+        TokenType.END => -1,
+        _ => 0
+    };
 
     private string ReconstructFromSource(Token startToken, Token endToken)
     {
@@ -401,7 +515,7 @@ public class Parser : IParser
             if (Current.Type == TokenType.NUMBER)
             {
                 var t = Advance();
-                topCount = new LiteralExpression(decimal.Parse(t.Value), TokenType.NUMBER) { Line = t.Line, Column = t.Column };
+                topCount = new LiteralExpression(decimal.Parse(t.Value, System.Globalization.CultureInfo.InvariantCulture), TokenType.NUMBER) { Line = t.Line, Column = t.Column };
             }
             else if (Current.Type == TokenType.VARIABLE)
             {
@@ -443,7 +557,7 @@ public class Parser : IParser
         {
             hasExplicitFrom = true;
             bool parenthesizedFrom = false;
-            if (Current.Type == TokenType.LPAREN && Peek.Type != TokenType.SELECT && Peek.Type != TokenType.VALUES)
+            if (Current.Type == TokenType.LPAREN && Peek.Type != TokenType.VALUES && !IsParenthesizedQueryAt(0, requireFollowingQueryContext: false))
             {
                 parenthesizedFrom = true;
                 Consume(TokenType.LPAREN, "Expected '('");
@@ -599,7 +713,7 @@ public class Parser : IParser
                     {
                         Advance(); // optional ASC
                     }
-                    orderBy.Add(new OrderByClause(orderExpr, descending));
+                    orderBy.Add(new OrderByClause(orderExpr, descending, ParseNullsPlacement()));
                 }
                 while (Match(TokenType.COMMA) && !AtClauseEnd());
             }
@@ -611,7 +725,7 @@ public class Parser : IParser
             if (Current.Type == TokenType.NUMBER)
             {
                 var t = Advance();
-                limitCount = new LiteralExpression(decimal.Parse(t.Value), TokenType.NUMBER) { Line = t.Line, Column = t.Column };
+                limitCount = new LiteralExpression(decimal.Parse(t.Value, System.Globalization.CultureInfo.InvariantCulture), TokenType.NUMBER) { Line = t.Line, Column = t.Column };
             }
             else if (Current.Type == TokenType.VARIABLE)
             {
@@ -646,16 +760,21 @@ public class Parser : IParser
             Advance(); // USING
             Advance(); // SAMPLE
             var numTok = Consume(TokenType.NUMBER, "Expected a number after SAMPLE");
-            decimal count = decimal.Parse(numTok.Value);
-            bool isPercent = true;
-            if (Match(TokenType.MODULO)) isPercent = true;            // n%
-            else if (Match(TokenType.PERCENT)) isPercent = true;      // n PERCENT
-            else if (Match(TokenType.ROWS) || Match(TokenType.ROW)) isPercent = false; // n ROWS
+            decimal count = decimal.Parse(numTok.Value, System.Globalization.CultureInfo.InvariantCulture);
+            // The unit is required, as docs/grammar.ebnf says: a bare number was read as a
+            // percentage, so USING SAMPLE 10 meant 10% where it reads as 10 rows.
+            bool isPercent;
+            if (Match(TokenType.MODULO) || Match(TokenType.PERCENT)) isPercent = true; // n% | n PERCENT
+            else if (Match(TokenType.ROWS) || Match(TokenType.ROW)) isPercent = false;  // n ROWS
+            else throw new SyntaxException("Expected PERCENT or ROWS after the USING SAMPLE size", Current.Line, Current.Column);
+            // A percentage above 100 sampled every row with no error.
+            if (isPercent && count > 100)
+                throw new SyntaxException($"USING SAMPLE {count} PERCENT is above 100 percent", numTok.Line, numTok.Column);
             int? seed = null;
             if (Match(TokenType.REPEATABLE))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after REPEATABLE");
-                seed = (int)decimal.Parse(Consume(TokenType.NUMBER, "Expected seed number").Value);
+                seed = (int)decimal.Parse(Consume(TokenType.NUMBER, "Expected seed number").Value, System.Globalization.CultureInfo.InvariantCulture);
                 Consume(TokenType.RPAREN, "Expected ')' after REPEATABLE seed");
             }
             sample = new SampleClause(count, isPercent, seed);
@@ -1220,10 +1339,10 @@ public class Parser : IParser
 
         TableReference tableRef;
 
-        // Subquery Support: (SELECT ...) [AS] Alias
+        // Subquery Support: (SELECT ...) / (WITH ...) [AS] Alias
         if (Match(TokenType.LPAREN))
         {
-            if (Current.Type == TokenType.SELECT)
+            if (IsQueryStart())
             {
                 var subquery = ParseQuery();
                 Consume(TokenType.RPAREN, "Expected ')' after subquery in FROM/JOIN");
@@ -1408,8 +1527,9 @@ public class Parser : IParser
             };
         }
 
-        // Handle WITH (...) options
-        if (allowWithClause && Match(TokenType.WITH))
+        // Handle WITH (...) options (require '(' after WITH so a trailing CTE clause like
+        // `INSERT INTO t WITH c AS (...) SELECT ...` is not mistaken for table options)
+        if (allowWithClause && Current.Type == TokenType.WITH && Peek.Type == TokenType.LPAREN && Match(TokenType.WITH))
         {
             Consume(TokenType.LPAREN, "Expected '(' after WITH");
             while (Current.Type != TokenType.RPAREN && Current.Type != TokenType.EOF)
@@ -1823,10 +1943,26 @@ public class Parser : IParser
             bool descending = false;
             if (Match(TokenType.DESC)) descending = true;
             else Match(TokenType.ASC);
-            orderBy.Add(new OrderByClause(orderExpr, descending));
+            orderBy.Add(new OrderByClause(orderExpr, descending, ParseNullsPlacement()));
         }
         while (Match(TokenType.COMMA));
         return orderBy;
+    }
+
+    /// <summary>
+    /// Reads an optional <c>NULLS FIRST</c> or <c>NULLS LAST</c> after a sort key. <c>NULLS</c>
+    /// is not a reserved word, so it is read only where a sort key can end.
+    /// </summary>
+    public bool? ParseNullsPlacement()
+    {
+        if (Current.Type != TokenType.IDENTIFIER
+            || !Current.Value.Equals("NULLS", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        Advance();
+        if (MatchWord("FIRST")) return true;
+        if (MatchWord("LAST")) return false;
+        throw new SyntaxException("Expected FIRST or LAST after NULLS", Current.Line, Current.Column);
     }
 
     private SelectColumn ParseMeasureColumn()
@@ -1910,7 +2046,11 @@ public class Parser : IParser
         or TokenType.GROUP or TokenType.HAVING or TokenType.QUALIFY or TokenType.WINDOW or TokenType.ORDER
         or TokenType.LIMIT or TokenType.OFFSET or TokenType.FETCH or TokenType.FOR
         or TokenType.UNION or TokenType.EXCEPT or TokenType.INTERSECT
-        or TokenType.RPAREN or TokenType.SEMICOLON or TokenType.EOF;
+        or TokenType.RPAREN or TokenType.SEMICOLON or TokenType.EOF
+        // Clauses that start with a contextual word: USING SAMPLE, MINUS, ON FAILURE.
+        || (Current.Type == TokenType.USING && Peek.Type == TokenType.SAMPLE)
+        || (Current.Type == TokenType.IDENTIFIER && Current.Value.Equals("MINUS", StringComparison.OrdinalIgnoreCase))
+        || (Current.Type == TokenType.ON && IsContextualKeyword(Peek, "FAILURE"));
 
     public SelectColumn ParseSelectColumn()
     {

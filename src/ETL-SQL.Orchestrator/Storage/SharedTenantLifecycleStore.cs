@@ -445,6 +445,15 @@ public partial class RelationalJobHistoryStore
             "DELETE FROM job_schedules WHERE job_id IN (SELECT id FROM jobs WHERE tenant_id = @tenant);",
             "DELETE FROM job_notifications WHERE job_id IN (SELECT id FROM jobs WHERE tenant_id = @tenant);",
             "DELETE FROM tenant_usage_records WHERE tenant_id = @tenant;",
+            // Lineage, bundles and fence records are partitioned by tenant too. Left behind, they
+            // outlive the tenant and resurface for a re-provisioned tenant of the same id.
+            "DELETE FROM lineage_history WHERE tenant_id = @tenant;",
+            "DELETE FROM bundle_dependencies WHERE tenant_id = @tenant;",
+            "DELETE FROM bundle_files WHERE tenant_id = @tenant;",
+            "DELETE FROM bundle_versions WHERE tenant_id = @tenant;",
+            "DELETE FROM tenant_portability_fenced_jobs WHERE tenant_id = @tenant;",
+            "DELETE FROM tenant_portability_cutovers WHERE tenant_id = @tenant;",
+            "DELETE FROM shared_tenant_lifecycle_fenced_jobs WHERE tenant_id = @tenant;",
             "DELETE FROM schedules WHERE tenant_id = @tenant;",
             "DELETE FROM notifications WHERE tenant_id = @tenant;",
             "DELETE FROM jobs WHERE tenant_id = @tenant;"

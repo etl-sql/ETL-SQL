@@ -54,8 +54,27 @@ namespace ETL_SQL.Connectors.Mongodb
         private IMongoClient GetClient()
         {
             if (_client != null) return _client;
-            _client = new MongoClient(_connectionString);
+            _client = new MongoClient(BuildClientSettings());
             return _client;
+        }
+
+        /// <summary>
+        /// Driver settings from the connection URL, with TIMEOUT_SECONDS applied to server selection
+        /// and connect. The option was advertised but never reached the driver.
+        /// </summary>
+        internal MongoClientSettings BuildClientSettings()
+        {
+            var settings = MongoClientSettings.FromConnectionString(_connectionString);
+            if (_options != null
+                && _options.TryGetValue("TIMEOUT_SECONDS", out var raw)
+                && int.TryParse(raw, out var seconds)
+                && seconds > 0)
+            {
+                var timeout = TimeSpan.FromSeconds(seconds);
+                settings.ServerSelectionTimeout = timeout;
+                settings.ConnectTimeout = timeout;
+            }
+            return settings;
         }
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
@@ -144,12 +163,14 @@ namespace ETL_SQL.Connectors.Mongodb
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No collection specified for MongoDB data source write.");
 
-            var client = GetClient();
-            var db = client.GetDatabase(_databaseName);
-            var coll = db.GetCollection<BsonDocument>(_tableName);
-
             try
             {
+                // A malformed URL fails in the MongoClient constructor (MongoConfigurationException),
+                // so the client is created inside the wrapped region.
+                var client = GetClient();
+                var db = client.GetDatabase(_databaseName);
+                var coll = db.GetCollection<BsonDocument>(_tableName);
+
                 if (!append)
                 {
                     await db.DropCollectionAsync(_tableName, effectiveCancellationToken);
@@ -192,7 +213,7 @@ namespace ETL_SQL.Connectors.Mongodb
                 var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
                 var client = GetClient();
                 var db = client.GetDatabase(_databaseName);
-                var cursor = await db.ListCollectionNamesAsync(cancellationToken: effectiveCancellationToken);
+                using var cursor = await db.ListCollectionNamesAsync(cancellationToken: effectiveCancellationToken);
                 return await cursor.ToListAsync(effectiveCancellationToken);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))

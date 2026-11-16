@@ -180,10 +180,11 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
-        public async Task Go_SecondBatchRunsAfterFirstFails()
+        public async Task Go_FailedBatchStopsTheScript()
         {
             var ev = MakeEval();
-            // Batch 1 fails (divide by zero), batch 2 should still run
+            // A failed batch used to be logged and skipped, so the script ran on and reported
+            // success. It now stops the script, like sqlcmd -b.
             string script = """
                 DECLARE @a INT;
                 SET @a = 1 / 0;
@@ -191,7 +192,27 @@ namespace ETL_SQL.Tests.Statements
                 DECLARE @b INT;
                 SET @b = 42;
                 """;
-            // Should not throw; batch 2 completes successfully
+            await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(
+                () => ev.Evaluate(TestHelpers.Parse(script)));
+            Assert.False(ev.Variables.ContainsKey("@b"));
+        }
+
+        [Fact]
+        public async Task Go_TryCatchInsideABatchStillHandlesTheError()
+        {
+            var ev = MakeEval();
+            string script = """
+                BEGIN TRY
+                    DECLARE @a INT;
+                    SET @a = 1 / 0;
+                END TRY
+                BEGIN CATCH
+                    DECLARE @caught INT = 1;
+                END CATCH
+                GO
+                DECLARE @b INT;
+                SET @b = 42;
+                """;
             await ev.Evaluate(TestHelpers.Parse(script));
             Assert.Equal(42m, ev.Variables["@b"]);
         }

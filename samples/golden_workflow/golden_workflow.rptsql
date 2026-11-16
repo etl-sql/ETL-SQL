@@ -182,13 +182,13 @@ CREATE VISUAL TargetGapTable AS TABLE (
 CREATE VISUAL QualityIssues AS TABLE (
     TITLE = 'Validation Issues',
     SOURCE = (
-        SELECT OrderId, Customer, Revenue, Cost, Issue
+        SELECT OrderId, CustomerID, Revenue, Quantity, Issue
         FROM #quality_issues
         WHERE @ShowIssues = 1
     ),
     FORMATTING (
         Revenue < 0 THEN '#fecaca',
-        Cost < 0 THEN '#fecaca'
+        Quantity <= 0 THEN '#fecaca'
     )
 );
 

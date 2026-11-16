@@ -258,13 +258,13 @@ namespace ETL_SQL.ReportBuilder.CLI
             if (outputPath == null)
             {
                 AnsiConsole.MarkupLine($"[bold blue]ETL-SQL Report Printer[/]");
-                AnsiConsole.MarkupLine($"[grey]Executing {Path.GetFileName(scriptPath)}...[/]");
+                AnsiConsole.MarkupLine($"[grey]Executing {Markup.Escape(Path.GetFileName(scriptPath))}...[/]");
             }
 
             var (evaluator, err) = await EvaluateScriptFile(scriptPath, parameters);
             if (evaluator == null)
             {
-                if (outputPath == null) AnsiConsole.MarkupLine($"[red]error: {err}[/]");
+                if (outputPath == null) AnsiConsole.MarkupLine($"[red]error: {Markup.Escape(err ?? string.Empty)}[/]");
                 else await File.WriteAllTextAsync(outputPath, $"error: {err}");
                 return 2;
             }
@@ -347,6 +347,8 @@ namespace ETL_SQL.ReportBuilder.CLI
             var evaluator = provider.GetRequiredService<Evaluator>();
             evaluator.RedirectOutput = true;
             evaluator.IsMockMode = isMock;
+            // Relative paths inside the report resolve against the script's folder, not the shell's.
+            evaluator.CurrentScriptPath = Path.GetFullPath(scriptPath);
 
             // Inject parameters before evaluation
             if (parameters != null)

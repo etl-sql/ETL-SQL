@@ -10,9 +10,13 @@ namespace ETL_SQL.Analysis.Linting.Grammar;
 
 public static class DefaultGrammar
 {
-    public static GrammarStateTree Build(IMetadataManager? metadata = null)
+    /// <param name="requireParserAcceptance">
+    /// True (the default) makes the production parser the final judge of a complete sequence. Tests
+    /// pass false to check the state transitions on their own, which the parser would otherwise mask.
+    /// </param>
+    public static GrammarStateTree Build(IMetadataManager? metadata = null, bool requireParserAcceptance = true)
     {
-        var tree = new GrammarStateTree(requireParserAcceptance: true);
+        var tree = new GrammarStateTree(requireParserAcceptance);
 
         var sharedWithNode = new StateNode("FILE_WITH");
         var sharedAtNode = new StateNode("FILE_AT");
@@ -214,6 +218,13 @@ public static class DefaultGrammar
         var keyfileValNode = new StateNode("KF_VAL");
         var pgpkeyKeywordNode = new StateNode("PK_KEYWORD");
         var pgpkeyValNode = new StateNode("PK_VAL");
+        // PGP signing (ROADMAP FO11): SIGNING_KEY 'k' [SIGNING_PASSWORD 'p'] on ENCRYPT, VERIFY_KEY 'k' on DECRYPT.
+        var signKeywordNode = new StateNode("SIGN_KEYWORD");
+        var signValNode = new StateNode("SIGN_VAL");
+        var signPasswordKeywordNode = new StateNode("SIGN_PW_KEYWORD");
+        var signPasswordValNode = new StateNode("SIGN_PW_VAL");
+        var verifyKeywordNode = new StateNode("VERIFY_KEYWORD");
+        var verifyValNode = new StateNode("VERIFY_VAL");
 
         var withOpenParenNode = new StateNode("FILE_WITH_PAREN_OPEN");
         var withOptionNameNode = new StateNode("FILE_WITH_OPTION_NAME");
@@ -286,6 +297,7 @@ public static class DefaultGrammar
         passwordValNode.AddTransitionTo("KEYFILE", keyfileKeywordNode, SuggestionType.Keyword);
         passwordValNode.AddTransitionTo("PGP_KEY", pgpkeyKeywordNode, SuggestionType.Keyword);
         passwordValNode.AddTransitionTo("AT", atNode, SuggestionType.Keyword);
+        passwordValNode.AddTransitionTo("VERIFY_KEY", verifyKeywordNode, SuggestionType.Keyword);
 
         // Keyfile logic: KEYFILE 'val'
         keyfileKeywordNode.AddWildcardTransition(keyfileValNode, "<keyfile>");
@@ -300,6 +312,21 @@ public static class DefaultGrammar
         pgpkeyValNode.AddTransitionTo("PASSWORD", passwordKeywordNode, SuggestionType.Keyword);
         pgpkeyValNode.AddTransitionTo("KEYFILE", keyfileKeywordNode, SuggestionType.Keyword);
         pgpkeyValNode.AddTransitionTo("AT", atNode, SuggestionType.Keyword);
+        pgpkeyValNode.AddTransitionTo("SIGNING_KEY", signKeywordNode, SuggestionType.Keyword);
+        pgpkeyValNode.AddTransitionTo("VERIFY_KEY", verifyKeywordNode, SuggestionType.Keyword);
+
+        signKeywordNode.AddWildcardTransition(signValNode, "<signing_key>");
+        signValNode.AddTransitionTo("SIGNING_PASSWORD", signPasswordKeywordNode, SuggestionType.Keyword);
+        signValNode.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
+        signValNode.AddTransitionTo("AT", atNode, SuggestionType.Keyword);
+        signPasswordKeywordNode.AddWildcardTransition(signPasswordValNode, "<signing_password>");
+        signPasswordValNode.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
+        signPasswordValNode.AddTransitionTo("AT", atNode, SuggestionType.Keyword);
+
+        verifyKeywordNode.AddWildcardTransition(verifyValNode, "<verify_key>");
+        verifyValNode.AddTransitionTo("PASSWORD", passwordKeywordNode, SuggestionType.Keyword);
+        verifyValNode.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
+        verifyValNode.AddTransitionTo("AT", atNode, SuggestionType.Keyword);
 
         // AT connection
         atNode.AddTransition(new StateTransition(
@@ -454,7 +481,12 @@ public static class DefaultGrammar
 
         tree.RegisterStartNode("SELECT", selectNode);
 
-        selectNode.AddWildcardTransition(selectExpr, "<expression>");
+        // A select list cannot be empty: the token after SELECT cannot be a clause keyword or the end.
+        selectNode.AddTransition(new StateTransition(
+            t => t.Type is not (TokenType.EOF or TokenType.SEMICOLON or TokenType.FROM or TokenType.WHERE
+                or TokenType.GROUP or TokenType.HAVING or TokenType.ORDER or TokenType.QUALIFY),
+            selectExpr,
+            "<expression>"));
 
         // selectExpr self-loop until FROM or INTO
         selectExpr.AddTransition(new StateTransition(
@@ -578,7 +610,7 @@ public static class DefaultGrammar
         AddUnionTransitions(groupBy);
         AddUnionTransitions(orderBy);
 
-        // From unionNode: allow optional ALL/DISTINCT, then must go to SELECT
+        // From unionNode: allow optional ALL/DISTINCT, then must go to SELECT or "("
         var unionAll = new StateNode("UNION_ALL");
         unionNode.AddTransitionTo("ALL", unionAll, SuggestionType.Keyword);
         unionNode.AddTransitionTo("DISTINCT", unionAll, SuggestionType.Keyword);
@@ -586,28 +618,28 @@ public static class DefaultGrammar
         unionNode.AddTransitionTo("SELECT", selectNode, SuggestionType.Keyword);
         unionAll.AddTransitionTo("SELECT", selectNode, SuggestionType.Keyword);
 
-        // Subqueries (nested SELECT queries inside FROM and JOIN clauses)
+        // Subqueries (nested SELECT / WITH queries inside FROM, JOIN, and UNION branches)
         var querySubqueryStart = new StateNode("QUERY_SUBQUERY_START");
         var querySubqueryEnd = new StateNode("QUERY_SUBQUERY_END");
         var querySubqueryAlias = new StateNode("QUERY_SUBQUERY_ALIAS");
 
         static int GetQueryDepth(TokenWalker walker) => walker.StateBag.TryGetValue("QueryParenDepth", out var d) ? (int)d : 0;
 
-        fromSource.AddTokenTransition(TokenType.LPAREN, querySubqueryStart, "(", null, null,
-            (token, walker) =>
-            {
-                int d = GetQueryDepth(walker);
-                walker.StateBag["QueryParenDepth"] = d + 1;
-            }
-        );
+        void AddSubqueryOpenTransition(StateNode sourceNode) =>
+            sourceNode.AddTokenTransition(TokenType.LPAREN, querySubqueryStart, "(", null, null,
+                (token, walker) => walker.StateBag["QueryParenDepth"] = GetQueryDepth(walker) + 1);
 
-        joinSource.AddTokenTransition(TokenType.LPAREN, querySubqueryStart, "(", null, null,
-            (token, walker) =>
-            {
-                int d = GetQueryDepth(walker);
-                walker.StateBag["QueryParenDepth"] = d + 1;
-            }
-        );
+        AddSubqueryOpenTransition(selectNode);
+        AddSubqueryOpenTransition(selectExpr);
+        AddSubqueryOpenTransition(fromNode);
+        AddSubqueryOpenTransition(fromSource);
+        AddSubqueryOpenTransition(joinNode);
+        AddSubqueryOpenTransition(joinSource);
+        AddSubqueryOpenTransition(joinOnNode);
+        AddSubqueryOpenTransition(whereNode);
+        AddSubqueryOpenTransition(unionNode);
+        AddSubqueryOpenTransition(unionAll);
+        AddSubqueryOpenTransition(querySubqueryStart);
 
         querySubqueryStart.AddTransitionTo("SELECT", selectNode, SuggestionType.Keyword);
 
@@ -844,22 +876,29 @@ public static class DefaultGrammar
             "<next_statement>"
         ));
 
-        // 6. WITH <cte> AS ( <subquery> ) [, <cte> AS ( ... )] <SELECT|INSERT|UPDATE|DELETE|MERGE>
+        // 6. WITH [RECURSIVE] <cte> AS ( <subquery> ) [, <cte> AS ( ... )] <SELECT|(|INSERT|UPDATE|DELETE|MERGE>
         // The parser accepts CTEs, so the grammar must too (otherwise completion stops offering valid
         // next tokens inside/after a WITH). The subquery body is consumed with balanced-paren tracking
         // via the walker StateBag, then control hands off to the existing DML start nodes.
         var withStart = new StateNode("WITH");
+        var withRecursive = new StateNode("WITH_RECURSIVE");
         var withName = new StateNode("WITH_NAME");
         var withAs = new StateNode("WITH_AS");
         var withBody = new StateNode("WITH_BODY");
         var withAfter = new StateNode("WITH_AFTER");
 
         tree.RegisterStartNode("WITH", withStart);
+        querySubqueryStart.AddTransitionTo("WITH", withStart, SuggestionType.Keyword);
 
         var withCols = new StateNode("WITH_COLS");
         var withColsDone = new StateNode("WITH_COLS_DONE");
 
+        withStart.AddTransitionTo("RECURSIVE", withRecursive, SuggestionType.Keyword);
         withStart.AddTransition(new StateTransition(
+            t => !t.Value.Equals("RECURSIVE", StringComparison.OrdinalIgnoreCase) && (t.Type == TokenType.IDENTIFIER || IsWord(t.Value)),
+            withName,
+            "<cte_name>"));
+        withRecursive.AddTransition(new StateTransition(
             t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
             withName,
             "<cte_name>"));
@@ -900,8 +939,9 @@ public static class DefaultGrammar
             withBody,
             "<cte_body_token>"));
 
-        // After ")": another CTE (comma) or the main statement.
+        // After ")": another CTE (comma), a parenthesized query branch, or the main statement.
         withAfter.AddTokenTransition(TokenType.COMMA, withStart, ",");
+        AddSubqueryOpenTransition(withAfter);
         withAfter.AddTransitionTo("SELECT", selectNode, SuggestionType.Keyword);
         withAfter.AddTransitionTo("INSERT", insertNode, SuggestionType.Keyword);
         withAfter.AddTransitionTo("UPDATE", updateNode, SuggestionType.Keyword);
@@ -1594,7 +1634,7 @@ public static class DefaultGrammar
                 "SET_CUBE_LIMIT", "MAX_SESSION_SIZE", "MAX_LAST_RESULT_ROWS",
                 "MAX_GENERATE_ROWS", "MAX_SMTP_EMAILS_PER_SCRIPT", "MAX_INTERNAL_OPERATIONS",
                 "OPERATOR_MEMORY_GRANT", "CONNECTION_PREVIEW_LIMIT", "TEMPLATE_PATH",
-                "LINEAGE_NAMESPACE", "LINEAGE_IMPORT_CATALOG", "WEEK_START_DAY", "SCRIPT_HASH_POLICY"
+                "LINEAGE_NAMESPACE", "LINEAGE_IMPORT_CATALOG", "WEEK_START_DAY", "DATEFORMAT", "SCRIPT_HASH_POLICY"
             };
 
             foreach (var opt in valueOptions)

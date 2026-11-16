@@ -197,14 +197,14 @@ public class ReportParser : ParserComponent
             {
                 Match(TokenType.EQUALS);
                 var minStr = ConsumeReportOptionValue();
-                if (double.TryParse(minStr, out var minVal)) min = minVal;
+                if (double.TryParse(minStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var minVal)) min = minVal;
                 options.Add(new VisualOption { Key = "MIN", Value = minStr });
             }
             else if (Match(TokenType.MAX))
             {
                 Match(TokenType.EQUALS);
                 var maxStr = ConsumeReportOptionValue();
-                if (double.TryParse(maxStr, out var maxVal)) max = maxVal;
+                if (double.TryParse(maxStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var maxVal)) max = maxVal;
                 options.Add(new VisualOption { Key = "MAX", Value = maxStr });
             }
             else if (Match(TokenType.DECIMALS))
@@ -1529,26 +1529,26 @@ public class ReportParser : ParserComponent
             {
                 Advance();
                 Match(TokenType.EQUALS);
-                layout = layout with { CustomWidth = decimal.Parse(ConsumeReportOptionValue()) };
+                layout = layout with { CustomWidth = decimal.Parse(ConsumeReportOptionValue(), System.Globalization.CultureInfo.InvariantCulture) };
             }
             else if (IsCurrentValue("CUSTOM_HEIGHT"))
             {
                 Advance();
                 Match(TokenType.EQUALS);
-                layout = layout with { CustomHeight = decimal.Parse(ConsumeReportOptionValue()) };
+                layout = layout with { CustomHeight = decimal.Parse(ConsumeReportOptionValue(), System.Globalization.CultureInfo.InvariantCulture) };
             }
             else if (IsCurrentValue("MARGINS") || Match(TokenType.MARGIN))
             {
                 if (IsCurrentValue("MARGINS") || IsCurrentValue("MARGIN")) Advance();
                 Match(TokenType.EQUALS);
                 Consume(TokenType.LPAREN, "Expected '(' for margins");
-                var top = decimal.Parse(ConsumeReportOptionValue());
+                var top = decimal.Parse(ConsumeReportOptionValue(), System.Globalization.CultureInfo.InvariantCulture);
                 Match(TokenType.COMMA);
-                var right = decimal.Parse(ConsumeReportOptionValue());
+                var right = decimal.Parse(ConsumeReportOptionValue(), System.Globalization.CultureInfo.InvariantCulture);
                 Match(TokenType.COMMA);
-                var bottom = decimal.Parse(ConsumeReportOptionValue());
+                var bottom = decimal.Parse(ConsumeReportOptionValue(), System.Globalization.CultureInfo.InvariantCulture);
                 Match(TokenType.COMMA);
-                var left = decimal.Parse(ConsumeReportOptionValue());
+                var left = decimal.Parse(ConsumeReportOptionValue(), System.Globalization.CultureInfo.InvariantCulture);
                 Consume(TokenType.RPAREN, "Expected ')' for margins");
                 layout = layout with { MarginTop = top, MarginRight = right, MarginBottom = bottom, MarginLeft = left };
             }
@@ -3661,7 +3661,9 @@ public class ReportParser : ParserComponent
             if (ReportCheck(TokenType.STRING_LITERAL))
             {
                 markdown = Advance().Value;
-                Match(TokenType.COMMA);
+                // COMPAT_BREAK: 0.22 — markdown and subsequent TOOLTIP parts require a comma.
+                if (!ReportCheck(TokenType.RPAREN))
+                    Consume(TokenType.COMMA, "Expected ',' between TOOLTIP parts");
             }
 
             // VISUALS (...) and FIELDS (...) follow in either order, separated by commas; each at most once.
@@ -3716,8 +3718,8 @@ public class ReportParser : ParserComponent
                 {
                     throw new SyntaxException("Expected VISUALS or FIELDS in TOOLTIP", _parser.Current.Line, _parser.Current.Column);
                 }
-                // The comma is optional: before v0.20.0 VISUALS (...) FIELDS (...) was written without one.
-                Match(TokenType.COMMA);
+                if (!ReportCheck(TokenType.RPAREN))
+                    Consume(TokenType.COMMA, "Expected ',' between TOOLTIP parts");
             }
 
             Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP inline block");

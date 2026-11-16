@@ -129,7 +129,7 @@ public sealed class StudioStewardshipJourneyTests(StudioAuthoringFixture fixture
 
         // ── The fix, in the surface the author actually uses ─────────────────
         var reportId = await ReportIdAsync(reportName);
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
 
@@ -247,14 +247,14 @@ public sealed class StudioStewardshipJourneyTests(StudioAuthoringFixture fixture
 
     private static async Task OpenGovernanceOverviewAsync(IPage page)
     {
-        await page.GotoAsync("/index.html#governance/overview");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/overview");
         await Expect(page.Locator(".gov-body")).ToBeVisibleAsync(
             new LocatorAssertionsToBeVisibleOptions { Timeout = 30_000 });
     }
 
     private static async Task GoToAdminTabAsync(IPage page, string tab)
     {
-        if (!page.Url.Contains("/admin.html", StringComparison.Ordinal)) await page.GotoAsync("/admin.html");
+        if (!page.Url.Contains("/admin.html", StringComparison.Ordinal)) await page.GotoWithDiagnosticsAsync("/admin.html");
         await page.ClickAsync($"#tab-{tab}");
         await Expect(page.Locator($"#panel-{tab}")).ToBeVisibleAsync();
     }
@@ -302,7 +302,7 @@ public sealed class StudioStewardshipJourneyTests(StudioAuthoringFixture fixture
     /// </summary>
     private static async Task RunReportAsync(IPage page, string folderName, string reportName)
     {
-        await page.GotoAsync("/index.html");
+        await page.GotoWithDiagnosticsAsync("/index.html");
         var folderItem = page.Locator($"#folderTree .folder-item:has-text(\"{folderName}\")");
         await folderItem.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 30_000 });
         await folderItem.ClickAsync();

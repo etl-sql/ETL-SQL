@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -21,6 +22,7 @@ namespace ETL_SQL.LanguageServer.Tests
     public class FlatFileMetadataTests : IDisposable
     {
         private readonly string _csv;
+        private readonly List<ServiceProvider> _providers = [];
 
         public FlatFileMetadataTests()
         {
@@ -31,6 +33,7 @@ namespace ETL_SQL.LanguageServer.Tests
 
         public void Dispose()
         {
+            foreach (var provider in _providers) provider.Dispose();
             if (File.Exists(_csv)) File.Delete(_csv);
         }
 
@@ -38,12 +41,18 @@ namespace ETL_SQL.LanguageServer.Tests
         {
             var services = new ServiceCollection();
             services.AddLogging();
-            var loggerFactory = services.BuildServiceProvider().GetRequiredService<ILoggerFactory>();
+            using var provider = services.BuildServiceProvider();
+            var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
 
             var registry = new ETL_SQL.Data.ConnectorRegistry();
             registry.Register(new FlatFileConnector());
 
-            var metadata = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, registry);
+            // Foreground metadata is under test; background refresh has separate lifecycle tests.
+            var metadata = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, registry)
+            {
+                SchemaCacheDirectory = null,
+                DisableBackgroundRefresh = true
+            };
             var handler = new TextDocumentHandler(loggerFactory, metadata, new DocumentStateStore());
 
             await handler.AnalyzeAsync(DocumentUri.From("untitled:Untitled-1"), script);
@@ -53,11 +62,12 @@ namespace ETL_SQL.LanguageServer.Tests
         private string Script =>
             $"CREATE CONNECTION pats AS FLATFILE(PATH='{_csv}', TEXT_QUALIFIER='\"', DELIMITER=',', HEADER=TRUE);";
 
-        private static CustomMethodsHandler NewHandler(MetadataManager metadata)
+        private CustomMethodsHandler NewHandler(MetadataManager metadata)
         {
             var services = new ServiceCollection();
             services.AddLogging();
             var provider = services.BuildServiceProvider();
+            _providers.Add(provider);
             var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
             var registry = new ConnectorRegistry();
             var diag = new ETL_SQL.Core.Diagnostics.ConnectionDiagnosticEngine(registry);
@@ -153,6 +163,7 @@ namespace ETL_SQL.LanguageServer.Tests
             var columns = (await metadata.GetColumnsAsync("pats", "FILE", "untitled:Untitled-1")).ToList();
 
             Assert.All(columns, c => Assert.DoesNotContain("\"", c));
+            using var exclusiveInput = File.Open(_csv, FileMode.Open, FileAccess.Read, FileShare.None);
         }
     }
 }

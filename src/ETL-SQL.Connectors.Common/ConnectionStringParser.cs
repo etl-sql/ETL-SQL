@@ -136,18 +136,20 @@ public static class ConnectionStringParser
 
             var canonicalKey = StandardKeyAliases.TryGetValue(key, out var mapped) ? mapped : key.ToUpperInvariant().Replace(' ', '_');
 
-            // Normalize boolean values
-            if (val.Equals("True", StringComparison.OrdinalIgnoreCase) || val.Equals("SSPI", StringComparison.OrdinalIgnoreCase))
+            bool isPassword = canonicalKey.Equals("PASSWORD", StringComparison.OrdinalIgnoreCase) || canonicalKey.Equals("PWD", StringComparison.OrdinalIgnoreCase);
+
+            // Normalize boolean values. A password that happens to read "True" stays as typed.
+            if (!isPassword && (val.Equals("True", StringComparison.OrdinalIgnoreCase) || val.Equals("SSPI", StringComparison.OrdinalIgnoreCase)))
             {
                 val = "ON";
             }
-            else if (val.Equals("False", StringComparison.OrdinalIgnoreCase))
+            else if (!isPassword && val.Equals("False", StringComparison.OrdinalIgnoreCase))
             {
                 val = "OFF";
             }
 
             // Extract credentials
-            if (canonicalKey.Equals("PASSWORD", StringComparison.OrdinalIgnoreCase) || canonicalKey.Equals("PWD", StringComparison.OrdinalIgnoreCase))
+            if (isPassword)
             {
                 extractedCredential = val;
                 canonicalKey = "PASSWORD";
@@ -220,7 +222,7 @@ public static class ConnectionStringParser
             _ => scheme.ToUpperInvariant()
         };
 
-        if (detectedProvider is "FLATFILE" or "FILE")
+        if (detectedProvider is "FLATFILE")
         {
             options["PATH"] = uri.LocalPath;
             return new ParsedConnectionStringResult("FLATFILE", options, null, null);
@@ -293,7 +295,16 @@ public static class ConnectionStringParser
             {
                 if (c == quoteChar)
                 {
-                    inQuotes = false;
+                    // A doubled closing character ('' "" }}) is a literal one.
+                    if (i + 1 < connectionString.Length && connectionString[i + 1] == quoteChar)
+                    {
+                        currentValue.Append(c);
+                        i++;
+                    }
+                    else
+                    {
+                        inQuotes = false;
+                    }
                 }
                 else
                 {
@@ -302,8 +313,11 @@ public static class ConnectionStringParser
             }
             else
             {
-                if (c is '\'' or '"' or '{')
+                // A value is quoted only when its first non-space character opens the quote. A quote
+                // or brace inside an unquoted value (a password such as p'ss) is literal text.
+                if (!inKey && c is '\'' or '"' or '{' && IsBlank(currentValue))
                 {
+                    currentValue.Clear();
                     inQuotes = true;
                     quoteChar = c == '{' ? '}' : c;
                 }
@@ -335,5 +349,14 @@ public static class ConnectionStringParser
         }
 
         return result;
+    }
+
+    private static bool IsBlank(System.Text.StringBuilder value)
+    {
+        for (int i = 0; i < value.Length; i++)
+        {
+            if (!char.IsWhiteSpace(value[i])) return false;
+        }
+        return true;
     }
 }

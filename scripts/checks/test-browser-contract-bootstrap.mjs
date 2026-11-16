@@ -126,6 +126,20 @@ try {
     write(path.join(root, contracts[1]), current[1]);
     recoverBrowserContracts({ root });
     preserved(current);
+    const ignoredCache = path.join(root, 'src/etl-sql-vscode/.vscode-test');
+    const endpointTarget = path.join(root, 'private-test-endpoint');
+    fs.mkdirSync(ignoredCache, { recursive: true });
+    fs.mkdirSync(endpointTarget);
+    const endpoint = path.join(ignoredCache, 'local-endpoint');
+    fs.symlinkSync(endpointTarget, endpoint, 'junction');
+    try {
+        await bootstrap({ generate: async context => {
+            staged(context);
+            write(path.join(ignoredCache, 'state.json'), '{"cacheChanged":true}');
+        } });
+    } finally {
+        fs.unlinkSync(endpoint);
+    }
     for (const relative of contracts) fs.unlinkSync(path.join(root, relative));
     const result = await bootstrap({ generate: async context => staged(context) });
     assert.deepEqual(result.outputs, contracts);

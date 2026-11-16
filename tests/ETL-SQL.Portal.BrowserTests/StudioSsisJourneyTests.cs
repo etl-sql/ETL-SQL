@@ -1,5 +1,6 @@
 using ETL_SQL.WorkstationEditor;
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace ETL_SQL.Portal.BrowserTests;
 
@@ -43,7 +44,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=ssis-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=ssis-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
         await page.Locator("[data-projection='split']").ClickAsync();
@@ -128,7 +129,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=branch-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=branch-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
         await page.Locator("[data-projection='split']").ClickAsync();
@@ -194,7 +195,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=edit-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=edit-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
         await page.Locator("[data-projection='split']").ClickAsync();
@@ -277,7 +278,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=lane-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=lane-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
         await page.Locator("[data-projection='split']").ClickAsync();
@@ -349,7 +350,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=data-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=data-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
         await page.Locator("[data-projection='split']").ClickAsync();
@@ -380,7 +381,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
         // Its columns are ticked rather than typed.
         await page.Locator("[data-column-pick='columns'][value='UserID']").CheckAsync();
         await page.Locator("[data-column-pick='columns'][value='UserName']").CheckAsync();
-        Assert.Equal("UserID, UserName", await page.Locator("[data-task-field='columns']").InputValueAsync());
+        await Expect(page.Locator("[data-task-field='columns']")).ToHaveValueAsync("UserID, UserName");
         await page.Locator("[data-task-field='target']").FillAsync("#staged_users");
 
         // The statement is on screen before anything is written.
@@ -440,7 +441,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=transform-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=transform-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
         await page.Locator("[data-projection='split']").ClickAsync();

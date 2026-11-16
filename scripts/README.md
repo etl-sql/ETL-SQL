@@ -3,6 +3,255 @@
 Build, test, utility, and release packaging scripts for ETL-SQL. Windows workflows use PowerShell;
 Linux and macOS workflows also have Bash entry points.
 
+For workstation or service setup, use the packaged installation paths in the
+[Installation guide](../docs/administration/platform/installation.md). The simulated workstation
+bootstrap scripts and obsolete standalone service helpers were retired in v0.22.0.
+
+## Release evidence
+
+`collect-release-evidence.mjs` requires a green Release Evidence dispatch on the exact candidate
+(every job in `release-evidence-policy.json`, artifacts still retained with digests), no open CodeQL
+alerts on its release branch and, for a real release, an approved `release-approval` deployment in
+Tag Release. Tag Release, both release drivers and Release run it; Release rechecks the same selection
+before publication. `Test-ReleaseEvidenceReports.ps1` merges the deployment Profile and Transition
+claim indexes and checks them and the canary report against their contracts in Release Evidence. See
+[Release Evidence and approval](../docs/releases/release-checklist.md#release-evidence-and-approval).
+
+MSI Portal diagnostics submit phase markers and memory counts to their own check-run annotations
+before/after resource probes. This is opt-in CI transport with current-job identity checks, a
+three-second request deadline and bounded responses. Its payload changes output only; it cannot
+change the certification result. Local runs and unavailable transport continue using local logs.
+GitHub documents annotation appends in the
+[check-run API](https://docs.github.com/en/rest/checks/runs#update-a-check-run).
+
+## CI impact selection
+
+`ci-impact.json` owns the initial change-to-lane mapping. `select-ci-lanes.mjs` reports affected
+lanes and the reason for each path. Regular CI uses the report to select jobs. Local pre-push stops
+after source checks for explicitly classified documentation-only changes. Extension-only edits
+run the engine integration build and both extension/UI package checks. Browser-test-only edits
+build and format the browser test project, then run its complete browser inventory in one shard.
+That run also captures the Studio performance result for the local platform under a unique
+`release-validation/pre-push-browser/` directory. Combined extension/browser-test changes run both
+targeted paths, including the engine prerequisite and both extension/UI packages, then the complete
+browser inventory and Studio performance receipt. They avoid unrelated broad checks. Shared,
+unknown and incomplete selections retain broader checks.
+A selection report is never release certification.
+
+`check-workflow-timeouts.mjs` requires an explicit job deadline for every runner job, capped at
+180 minutes, and explicit shell-command and checkout deadlines within that job's limit.
+Reusable calls inherit their constituent jobs' limits. The scanner fails closed on
+unsupported job layouts; actionlint remains the workflow syntax/schema checker. Deadlines bound
+failures and do not establish the release-time target.
+
+VS Code UI files under `src/etl-sql-vscode/ui/src/` select extension checks, browser/consumer
+contracts, browser journeys and Studio performance in regular CI, plus native packaging. The
+`browser-consumer-contracts` lane can also be requested directly for diagnostic CI. UI dependency
+manifests, lockfiles, Vite/TypeScript configuration, public assets and unknown paths keep full
+selection. Local UI selection adds both package checks and complete browser/Studio validation to
+the existing broad formatting, consumer and smoke checks.
+
+The extension CI job has a 75-minute ceiling and explicit command-step deadlines. Its engine build
+runs through the shared supervisor; npm commands stream stdout/stderr to individual logs under
+`release-validation/vscode/`. The workflow retains that directory as
+`vscode-checks-<run-id>-<attempt>` even after a failed step. Inspect those logs and the failed Actions
+step before retrying unchanged inputs. Hosted timeout and diagnostic-upload acceptance remain open.
+
+Every CI artifact upload uses an attempt-specific name, including browser ownership, Studio
+performance and enterprise certification results. Rerunning failed jobs preserves earlier evidence
+and creates new artifacts. Select the intended attempt when inspecting results; an older artifact
+does not describe a later test execution. See the upload action's
+[artifact naming rules](https://github.com/actions/upload-artifact#not-uploading-to-the-same-artifact).
+
+The report's `nativePackages` field also controls native package PR builds. Every manifest rule
+declares package impact explicitly. Classified planning/release documentation and browser-test-only
+changes do not require native builds; extension, shipped/runtime and unknown inputs do. Full/manual
+selection and missing comparison history always require packaging. Native checks collect source
+preflight before builds, retain their selection report, and reject missing or invalid gate outcomes.
+Superseded native-package PR runs are cancelled within the same PR ref. Manual candidate runs use
+separate SHA identities and are preserved. A no-impact PR skip does not certify release packages.
+
+Release promotes the Windows ZIP/VSIX from a successful manual native-package run on the frozen
+release branch. `collect-certified-windows.mjs` verifies the original job/artifact, acceptance details,
+toolchain and package hashes. It pins the selection before promotion and rechecks it alongside the
+actual draft files before publication. Missing certification blocks Release without a Windows rebuild.
+See the [release checklist](../docs/releases/release-checklist.md) for dispatch and recovery.
+
+`Invoke-Release.ps1` / `invoke-release.sh` do not require a local pre-release run (since v0.22.0);
+the Release workflow requires hosted evidence instead. Both drivers resolve authored release notes
+from `docs/releases/` when `-NotesFile` / `--notes-file` is omitted.
+
+macOS promotion uses the same native acceptance verifier through `collect-certified-macos.mjs`.
+Both architecture artifacts must come from a successful exact-candidate manual native-package run
+on a release branch. Intel additionally requires the mounted DMG acceptance and hash. Release pins
+each selection, uploads the retained ZIP/VSIX/DMG bytes, and verifies origins and actual draft bytes
+again before publication. No macOS build runs in Release. Failed upload recovery reuses the original
+artifact IDs; missing or changed evidence blocks promotion. Hosted acceptance remains required.
+
+`MsiImpact.Helpers.ps1` reads the same manifest rules for regular MSI selection. The same classified
+documentation and browser-test-only paths can skip installer certification; shipped/shared and
+unknown inputs require it. Missing comparison history requires certification. Ordinary manual dispatch and
+release workflow calls always run full MSI certification. Invalid or missing impact policy fails
+detection and cannot satisfy the MSI gate.
+
+The explicitly listed MSI certification scripts and fixtures select only source preflight and
+`msi-upgrade` in regular CI. The MSI classifier requires certification for either native-package
+impact or an explicit MSI lane, so these fixes still build and install-test the MSI while skipping
+unrelated ZIP/VSIX builds. Shared helpers, build scripts and unknown files retain broad selection.
+Local pre-push keeps its existing full validation path for MSI-only edits.
+
+```powershell
+# Changes since the tracked upstream, including staged, unstaged and untracked local files.
+node scripts\select-ci-lanes.mjs --base '@{upstream}' --working-tree
+
+# Review a branch against its merge base with main.
+node scripts\select-ci-lanes.mjs --base origin/main --head HEAD --comparison merge-base
+
+# Explicit full selection, including documentation-only changes.
+node scripts\select-ci-lanes.mjs --base HEAD --full
+
+# Explicit diagnostic selection (never release evidence).
+node scripts\select-ci-lanes.mjs --base HEAD --lanes build-vscode
+```
+
+Push comparisons use the before/after commits directly; PR comparisons use their merge base.
+Renames include both old and new paths. Missing history selects all lanes. Unknown paths and
+shared runtime, UI, build, dependency or workflow changes select all lanes. Only explicitly
+classified surfaces narrow the selection; runtime help under `docs/reference` is not exempt.
+Local reports include working-tree changes only when `--working-tree` is specified.
+Use `--output <path>` to save JSON. Run `node scripts\checks\test-ci-impact.mjs` to exercise the
+mapping and Git comparisons without a build or network access.
+
+`release-certification.yml` calls the same CI implementation with full selection and verifies that
+the requested SHA matches the dispatched branch. Certification runs are not cancelled by newer
+regular CI pushes. The release drivers first wait for regular CI, then reuse it if every required
+job passed. A green targeted push can instead reuse complete nightly CI for the same candidate
+on a release branch within seven days. Existing explicit certification takes precedence; failed
+explicit or regular runs cannot fall back to nightly success. The entire selected nightly run
+must have succeeded, and every required CI job must have run successfully. Otherwise the drivers
+start or resume explicit certification when evidence is absent; failed or invalid evidence stops
+the driver. The publication gate checks
+the complete job inventory, not merely a green workflow badge. Diagnostic manual runs of `ci.yml`
+cannot qualify.
+
+The `build-and-test` impact lane runs solution verification and Portal smoke/security on separate
+workers. Push/full-certification CI also divides the existing 12 engine coverage shards into three
+groups of four. Each worker builds its focused test project from the same checkout; solution-wide
+build, formatting and dependency audit remain in `Build Verification`. PRs retain engine smoke,
+Portal smoke/security, generated contracts and the complete language-server suite.
+
+`Build & Test` remains the aggregate required check. Full certification additionally requires
+`Build Verification`, `Portal Smoke & Security` and all three `Engine Coverage (n/3)` jobs.
+The aggregate selects the latest retained artifact for each group, including successful groups
+from earlier attempts, verifies the candidate/run/configuration, identical full discovery plans,
+complete theory results, nonoverlapping methods and TRX-linked coverage hashes, then invokes
+`Test-CoverageGate.ps1` with the unchanged 70% threshold. A broken latest artifact fails the gate.
+Existing engine skips remain visible in the merged inventory. Local `test-lane.ps1 -Lane engine`
+still runs every shard; `-EngineShardGroup 1 -EngineShardGroupCount 3` runs only the first group.
+Run `node scripts\checks\test-engine-coverage.mjs` for source-only recovery regressions.
+Additional focused builds consume runner time to remove serial test work; hosted elapsed-time
+acceptance remains in `TODO.md` until measured.
+
+For manual use:
+
+```powershell
+$candidateSha = git rev-parse HEAD
+node scripts\ensure-release-certification.mjs $candidateSha release/v0.22.0
+gh workflow run ci.yml --ref release/v0.22.0 -f lanes=build-vscode
+
+# Diagnose one browser shard without starting the other two.
+gh workflow run ci.yml --ref release/v0.22.0 -f lanes=portal-browser-journey -f browser_shard=2
+```
+
+`browser_shard` accepts `all` (the default), `1`, `2` or `3`. A single shard requires explicit
+`portal-browser-journey` diagnostic lane selection. It keeps the normal three-way test partition
+and retains that shard's logs and results. Partial runs skip the full browser coverage gate;
+manual CI diagnostics cannot satisfy release certification. Regular CI and full certification
+always use all three shards.
+
+The first command may dispatch certification and prints the workflow to watch. It preserves a
+request journal under `release-validation/certification-requests/` before sending the dispatch.
+After an uncertain network response, resume waiting rather than dispatching twice. If no run ever
+registers, inspect GitHub and the request failure before deliberately removing that candidate's
+request record and trying again. A failed existing run requires diagnosis and an explicit failed-job
+retry, not a new dispatch. The new dispatch workflow must be available on the repository's default
+branch before hosted rollout; see [GitHub's dispatch requirements](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch).
+MSI diagnostics use `msi-upgrade.yml` directly, not the regular CI lane selector.
+For an installation investigation on a development branch, reuse a retained `msi-inputs-*` artifact:
+
+```powershell
+gh workflow run msi-upgrade.yml --ref fix/my-investigation -f diagnostic_artifact_id=ARTIFACT_ID
+```
+
+Use the numeric artifact ID from the failed run's successful build. This separate diagnostic job
+checks the original repository/run/build and artifact hashes, records both script and installer
+source identities, then runs only the Portal profile. It never rebuilds an installer, emits a
+certification receipt or satisfies the release gate. `main`, `dev`, release branches and tags reject
+diagnostic mode. Omitting the input runs normal certification. Diagnostic and certification runs
+must not be combined into passing release evidence.
+
+Each profile uploads candidate identity, the Portal summary and supervisor result/heartbeat/stderr
+before its full evidence bundle. The focused upload has a five-minute deadline, the full upload
+20 minutes, and the profile job 65 minutes. Both artifacts retain their original run attempt.
+Release Evidence and package certification requirements remain.
+
+Since v0.22.0 no workstation run is part of the release. The checks that used to run only there
+(EBNF, SLT, 10M-row spill, Smoke and Standard scale) run in the hosted Engine Certification CI job.
+Scale timings are reported, not gated, because hosted runner hardware varies; row counts, checksums
+and scenario failures still fail the job. The third-party inventory drift check runs in Build
+Verification and the local/container smoke parity check in Docker Integration Tests.
+`lib/submitted-evidence.mjs` holds the safe ZIP extraction the Windows payload collector uses.
+
+## Portal test processes
+
+The PowerShell `portal` lane uses 12 sequential testhosts by default. Whole classes stay together;
+exact method filters, per-method discovered case counts and retained TRX results verify that every
+test ran without overlapping shards. Hosted-service tests keep their separate process. The 8 GB
+managed heap limit still applies to each host. `-PortalShardCount 1` reproduces the previous single
+host for diagnosis. Each host releases its retained factory and EF state when its class group finishes.
+
+## Browser CI shards
+
+CI discovers the `Category=Browser` inventory and assigns whole classes to three runners by
+discovered case count. Exact method filters prevent overlapping class-name matches. Each runner
+retains discovery, its complete partition manifest, TRX, supervisor logs and a successful coverage
+receipt. The `Portal Browser Journey` aggregate check requires all three jobs and matching,
+complete, nonoverlapping evidence. It retains the original required-check name.
+
+To reproduce one shard after preparing assets and building the browser project:
+
+```powershell
+.\scripts\Test-BrowserShard.ps1 -Shard 2 -ShardCount 3 -Configuration Release -NoBuild -EvidenceDirectory artifacts/browser-shard-local
+```
+
+Navigation failures retain sanitized transport history and process resource snapshots in
+`<EvidenceDirectory>/navigation-diagnostics/`, within the uploaded shard artifact. Windows captures
+per-process handles and IPv4/IPv6 TCP/UDP endpoint counts; unavailable counters are explicit.
+For direct `dotnet test` runs, set `ETLSQL_BROWSER_DIAGNOSTICS_DIR` to retain the same evidence at a
+chosen path. The shard driver sets it automatically and restores the caller's environment afterward.
+
+Browser shard, test-lane and smoke `-NoBuild` / `--no-build` entry points check every asset consumer
+in each selected project's evaluated MSBuild graph before tests or shard discovery.
+Unrelated host outputs do not require rebuilding. Missing or stale consumed stamps, graph-evaluation
+errors and unsupported configuration/framework overrides reject reuse. The standalone checker also
+supports an explicit project check:
+
+```powershell
+node scripts/check-built-browser-assets.mjs --configuration Release --project tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj
+```
+
+Omit `-NoBuild` to prepare and build first. CI runs the script through
+`Invoke-CertificationProcess.ps1` with a 30-minute timeout inside a 35-minute step limit. A timeout
+or failed test never produces a passing receipt. A failed-job rerun retains previous shard
+artifacts; the aggregate gate chooses the newest attempt for each shard and rejects incomplete
+latest evidence. Do not rerun successful shards just to retry a failed shard on unchanged code.
+Failed shards print candidate/run/shard identity and `gh run view --log-failed` plus
+`gh run rerun --failed` commands. The same report is appended to the job summary and retained as
+`recovery.md` in the shard artifact, including preparation and build failures. These commands are
+instructions for inspection and recovery; the workflow does not retry tests automatically.
+Hosted timing and retry behavior still need a rehearsal; case-count balancing is not a duration
+measurement.
+
 ## Packaged browser runtime acceptance
 
 `test-packaged-browser-runtime.mjs` checks an extracted Windows release outside its checkout.
@@ -55,11 +304,12 @@ than the operator front door.
 | **[`Test-SltCorpus.ps1`](./Test-SltCorpus.ps1)** / **[`Test-SltCorpus.sh`](./Test-SltCorpus.sh)** | PowerShell / Bash | Cross-platform | Runs the SqlLogicTests corpus suite and pipes console logs + TRX file output to a timestamped folder in `slt_results/`. |
 | **[`Parse-SltResults.ps1`](./Parse-SltResults.ps1)** | PowerShell | Windows / macOS / Linux | Parses TRX files from an SLT run to output a clean color-coded summary of passes, skips, and failed stack traces. |
 | **[`Test-AllSamples.ps1`](./Test-AllSamples.ps1)** / **[`test-all-samples.sh`](./test-all-samples.sh)** | PowerShell / Bash | Cross-platform | Discovers and executes all samples (`*.etlsql` and `*.rptsql`) in the `samples/` folder to validate engine runtime backward compatibility. |
+| **[`start-sample-services.sh`](./start-sample-services.sh)** | Bash | Cross-platform | Builds and starts the Portal (5000) and Orchestrator (5001) from source with throwaway state, for the samples tagged `@requires: portal` or `orchestrator`. The CI Linux sample job runs it; PIDs and logs go to the directory you pass. |
 | **[`Compare-Benchmarks.ps1`](./Compare-Benchmarks.ps1)** / **[`compare-benchmarks.sh`](./compare-benchmarks.sh)** | PowerShell / Bash | Cross-platform | Compares BenchmarkDotNet JSON results against a checked-in baseline file and returns an exit code of 1 if regression exceeds a given threshold. |
-| **[`Test-ScaleCertification.ps1`](./Test-ScaleCertification.ps1)** / **[`test-scale-certification.sh`](./test-scale-certification.sh)** | PowerShell / Bash | Cross-platform | Runs the dedicated scale fixture (Smoke/Standard/Stress/Huge/Provider tiers) with repeated samples and a fixture-definition hash. Bash delegates to the canonical PowerShell runner. Huge (~50M+, 1000x) is opt-in and needs a capable host. |
+| **[`Test-ScaleCertification.ps1`](./Test-ScaleCertification.ps1)** / **[`test-scale-certification.sh`](./test-scale-certification.sh)** | PowerShell / Bash | Cross-platform | Runs the dedicated scale fixture with repeated samples and a fixture-definition hash. Smoke and Standard isolate each scenario in its own test host; other complete tiers retain their entry points. Bash delegates to the canonical PowerShell runner. Huge (~50M+, 1000x) is opt-in and needs a capable host. |
 | **[`Test-DeploymentProfileCertification.ps1`](./Test-DeploymentProfileCertification.ps1)** | PowerShell | Cross-platform | Composes Solo, Team, Enterprise, SaaS, transition, and upgrade proof from focused suites; fails closed and writes commit-bound JSON/Markdown evidence with phase logs. |
 | **[`Test-ProviderNeutralFaultCertification.ps1`](./Test-ProviderNeutralFaultCertification.ps1)** | PowerShell | Cross-platform | Repeats the provider-neutral failure matrix through local, Docker, and cloud adapters and writes invariant/checkpoint evidence for each supported profile. |
-| **[`Test-ProductionCanaryCertification.ps1`](./Test-ProductionCanaryCertification.ps1)** | PowerShell | Cross-platform | Certifies all hosted canary journeys, SLO coverage, isolation, alert attribution, credential lifecycle, and fault-drill evidence. |
+| **[`Test-ProductionCanaryCertification.ps1`](./Test-ProductionCanaryCertification.ps1)** | PowerShell | Cross-platform | Certifies deterministic canary journey/fault contracts, exact region/domain coverage, isolation, alert attribution and credential lifecycle. Rejects source drift during the run. Live hosted behavior needs separate operator evidence. |
 | **[`Measure-LeanWorkerProfile.ps1`](./Measure-LeanWorkerProfile.ps1)** | PowerShell | Cross-platform; Docker optional | Compares the unified CLI with the non-shipping engine-worker fixture across published size, dependency closure, startup latency/working set, loaded assemblies, sandbox lifetime, and startup cost sensitivity. `-TrimExperiment` records a rejected trim contract as evidence; it never authorizes publication. |
 | **[`Measure-StudioPerformance.ps1`](./Measure-StudioPerformance.ps1)** | PowerShell | Cross-platform | Measures the canonical Studio browser fixture against OS-specific startup, JavaScript heap, keystroke, 250-row aggregation, and canvas-redraw budgets and writes JSON evidence. |
 | **[`typecheck-browser.mjs`](./typecheck-browser.mjs)** | Node.js | Cross-platform | The browser type gate. Runs `tsc --checkJs` over the canonical browser sources and fails on any finding not in `browser-typecheck-baseline.txt`, and on any baseline entry that no longer reproduces. `--summary` prints what is left by file and code; `--update` rewrites the baseline. Needs `npm ci --prefix scripts/typecheck` once. |
@@ -75,7 +325,7 @@ than the operator front door.
 | **[`test-portal-consumer-home.mjs`](./checks/test-portal-consumer-home.mjs)** | Node.js | Cross-platform | Pins the favorites/recent/featured/popular home, fuzzy global catalog search, intentional report icons, and one concise activity line per report card. |
 | **[`test-portal-studio.mjs`](./checks/test-portal-studio.mjs)** | Node.js | Cross-platform | Pins the capability-aware catalog Studio home, catalog-native report creation, equal Code/Design modes, hidden navigation, and disabled-authoring route fences. |
 | **[`Test-ScaleBaseline.ps1`](./Test-ScaleBaseline.ps1)** | PowerShell | Windows / macOS / Linux | Captures resumable 10M or 50M core baselines with one Release/server-GC test host per scenario, avoiding cross-scenario memory contamination. |
-| **[`Test-ScaleCommitComparison.ps1`](./Test-ScaleCommitComparison.ps1)** | PowerShell | Windows / macOS / Linux | Compares two commits in one clean worktree with interleaved A/B arms, a rebuild and discarded warm-up per sample, within-arm spread, and commit-bound JSON/Markdown evidence. |
+| **[`Test-ScaleCommitComparison.ps1`](./Test-ScaleCommitComparison.ps1)** | PowerShell | Windows / macOS / Linux | Compares two commits in one clean worktree with interleaved A/B arms, prepared/verified assets, a rebuild and discarded warm-up per sample, within-arm spread, and commit-bound JSON/Markdown evidence. Asset failures stop measurement and restore the original branch. |
 | **[`Test-BillionRowCertification.ps1`](./Test-BillionRowCertification.ps1)** | PowerShell | Windows | Runs the resumable 1B operator certification matrix with disk preflight, isolated child logs, heartbeat/status JSON, and per-scenario restart. |
 | **[`Test-BillionRowEvidence.ps1`](./Test-BillionRowEvidence.ps1)** | PowerShell | Windows / macOS / Linux | Validates that an operator-run billion-row certification report passed, contains required scenario evidence, and belongs to the current commit before citing performance claims. |
 | **[`Test-GateF.ps1`](./Test-GateF.ps1)** / **[`Test-GateFEvidence.ps1`](./Test-GateFEvidence.ps1)** | PowerShell | Compatibility | Historical aliases retained for existing automation; prefer the `Test-BillionRow*` script names in new docs and workflows. |
@@ -94,7 +344,7 @@ than the operator front door.
 | **[`New-HaSoakRunbook.ps1`](./New-HaSoakRunbook.ps1)** | PowerShell | Cross-platform | Creates a non-secret operator runbook with ordered HA soak commands, expected artifacts, and diagnostics instructions. |
 | **[`Test-HaSoakRunbook.ps1`](./Test-HaSoakRunbook.ps1)** | PowerShell | Cross-platform | Self-test for runbook generation, command sequencing, diagnostics references, and secret omission. |
 | **[`Test-HaSoakEvidence.ps1`](./Test-HaSoakEvidence.ps1)** | PowerShell | Cross-platform | Validates completed operator-run HA soak evidence before it is cited for capacity or recovery claims. |
-| **[`Test-EnterpriseHardeningCertification.ps1`](./Test-EnterpriseHardeningCertification.ps1)** | PowerShell | Cross-platform | Runs the enterprise hardening certification slice for path/link races, DNS/redirect/proxy controls, connector aliases, standalone behavior, and portal policy transport evidence. |
+| **[`Test-EnterpriseHardeningCertification.ps1`](./Test-EnterpriseHardeningCertification.ps1)** | PowerShell | Cross-platform | Runs enterprise hardening tests and retains configuration-bound evidence. Defaults to Release; `-Configuration Debug` is development-only evidence. |
 | **[`Test-HaSoakEvidenceValidation.ps1`](./Test-HaSoakEvidenceValidation.ps1)** | PowerShell | Cross-platform | Self-test for completed HA soak evidence validation, including missing-artifact failure behavior. |
 | **[`New-HaLargeJobSoakPlan.ps1`](./New-HaLargeJobSoakPlan.ps1)** | PowerShell | Cross-platform | Creates a non-secret per-run large-job soak plan from the manifest and generated topology metadata. |
 | **[`Test-HaLargeJobSoakPlan.ps1`](./Test-HaLargeJobSoakPlan.ps1)** | PowerShell | Cross-platform | Self-test for large-job soak plan generation, scenario binding, and secret omission. |
@@ -121,17 +371,20 @@ Candidate artifacts are not product claims until the public certification matrix
 | **[`test-service-capacity-smoke.mjs`](./checks/test-service-capacity-smoke.mjs)** | Node.js | Cross-platform | Runs the capacity harness against local mock endpoints to verify report generation without deployed services. |
 | **[`Test-PreRelease.ps1`](./Test-PreRelease.ps1)** / **[`test-pre-release.sh`](./test-pre-release.sh)** | PowerShell / Bash | Cross-platform | Runs the local-first pre-release validation gate with resumable phases, optional Docker/Standard-scale/installer checks, and JSON/Markdown reports under `release-validation/`. |
 | **[`Publish-TenantValidator.ps1`](./Publish-TenantValidator.ps1)** | PowerShell | Windows / Linux / macOS targets | Publishes the offline, self-contained tenant-bundle validator for customer-held signature and recipient keys. |
-| **[`Compile-Changelog.ps1`](./Compile-Changelog.ps1)** | PowerShell | Cross-platform | Compiles `changelog.d/*.md` fragments into `CHANGELOG.md` and fails the release gate when feature-surface changes have no changelog coverage. |
+| **[`Compile-Changelog.ps1`](./Compile-Changelog.ps1)** | PowerShell | Cross-platform | Compiles literal `changelog.d/*.md` paths into the checkout's `CHANGELOG.md`, requiring one Unreleased heading before and after compilation. Coverage includes committed, staged, unstaged and untracked feature paths, both rename paths, Unicode and embedded newlines; empty fragments cannot provide it. Invalid/missing comparison commits, failed Git queries and parent-repository discovery stop verification. `-CoverageBase` supplies a commit when no main-branch merge base or release tag is available. `-CheckCoverageOnly` preserves files and directories; it is mutually exclusive with `-SkipCoverageCheck`. |
+| **[`test-changelog-compiler.mjs`](./checks/test-changelog-compiler.mjs)** | Node.js / PowerShell | Cross-platform | Exercises read-only checking, conflicting switches, invalid headings, literal checkout/fragment names, neighboring-checkout preservation, Unicode/untracked coverage, comparison failures and tag fallback through public commands in private unsigned Git fixtures. Runs in the shared source preflight. |
+| **[`test-vsix-module-identity.mjs`](./checks/test-vsix-module-identity.mjs)** | Node.js | Cross-platform | Verifies that packaged-webview acceptance finds the activated module through filesystem aliases and rejects other copies. Runs in the shared source preflight. |
 | **[`Test-VulnerablePackages.ps1`](./Test-VulnerablePackages.ps1)** | PowerShell | Cross-platform | CI gate that fails when any NuGet package (direct or transitive) has a known vulnerability. Requires a prior `dotnet restore`; response procedure in `SECURITY.md` §13. |
 | **[`sync-assets.ps1`](./sync-assets.ps1)** / **[`sync-assets.js`](./sync-assets.js)** | PowerShell / JavaScript | Cross-platform | Synchronizes canonical shared browser assets from `src/ETL-SQL.ReportRuntime` to dependent shell host directories (VS Code extension, portal, player). |
 | **[`generate-syntax-index.js`](./generate-syntax-index.js)** | JavaScript | Cross-platform | Regenerates the canonical token inventory appendix inside `docs/syntax-index.md` from `LanguageMetadata.cs`. |
-| **[`install.ps1`](./install.ps1)** / **[`install.sh`](./install.sh)** | PowerShell / Bash | Cross-platform | Boostrapping workstation installers that download, unpack, and register the ETL-SQL SDK to the user's `PATH`. |
-| **[`Master-Release.ps1`](./Master-Release.ps1)** | PowerShell | Windows | Orchestrator script to validate tools, compile release binaries, execute smoke tests, build the UI, bundle cross-platform packages, and construct installer setups. |
+| **[`Master-Release.ps1`](./Master-Release.ps1)** | PowerShell 7 | Windows / Linux / macOS | Builds portable bundles and the host's native package. Validates installer sources before publishing, checks every command and collects a fresh nonempty MSI/DEB/Intel DMG into `release/`. Requires Node.js 22; restores caller location and version environment state. |
 | **[`publish-release.ps1`](./publish-release.ps1)** | PowerShell | Windows | Publishes the CLI applications for different platforms (Windows, Linux, macOS) targeting x64 and arm64 architectures. |
 | **[`build-msi.ps1`](./build-msi.ps1)** | PowerShell | Windows | Bundles Windows published binaries into an MSI setup package using the WiX candle/light compilation toolset. |
 | **[`Test-MsiUpgrade.ps1`](./Test-MsiUpgrade.ps1)** | PowerShell | Windows (Administrator) | Installs release N then N+1, proves a single upgraded uninstall entry, sentinel preservation, installed CLI version, and complete uninstall, with verbose MSI logs and JSON evidence. |
-| **[`build-linux-packages.sh`](./build-linux-packages.sh)** | Bash | Linux / WSL | Packages published binaries into Debian (`.deb`) and RedHat (`.rpm`) distributions using standard linux packaging utilities. |
-| **[`build-mac-dmg.sh`](./build-mac-dmg.sh)** | Bash | macOS | Compiles a macOS application bundle and outputs a signed, notarized DMG mount disk image. |
+| **[`Prepare-MsiPortalDiagnostic.ps1`](./Prepare-MsiPortalDiagnostic.ps1)** | PowerShell 7 | Cross-platform | Checks the retained MSI artifact's original successful build and records diagnostic-only provenance. Does not install or build; the development-branch workflow runs Portal diagnosis separately. |
+| **[`build-linux-packages.sh`](./build-linux-packages.sh)** | Bash | Linux | Packages published binaries into a Debian `.deb` with `dpkg-deb`. Requires repository-bound staging and removes non-owner write access from the program payload. |
+| **[`build-mac-dmg.sh`](./build-mac-dmg.sh)** | Bash | macOS | Creates an Intel app bundle and DMG with `hdiutil`. Removes non-owner write access from the bundle; signing and notarization are separate release steps. |
+| **[`test-native-package-permissions.sh`](./checks/test-native-package-permissions.sh)** | Bash + dpkg-deb | Linux | Builds a synthetic DEB and macOS bundle, checks non-owner write permissions and protected staging paths, and verifies missing-tool failures. DMG image creation is mocked; nothing is installed. |
 | **[`build-vsix.ps1`](./build-vsix.ps1)** / **[`build-vsix.sh`](./build-vsix.sh)** | PowerShell / Bash | Cross-platform | Restores pinned tools, rebuilds browser/UI/extension sources, publishes four self-contained tools, and atomically promotes a validated native VSIX. Optional `-Platform` / `--platform` selects win-x64, linux-x64, osx-x64, or osx-arm64; default uses the host architecture. |
 | **[`publish-vsix.ps1`](./publish-vsix.ps1)** / **[`publish-vsix.sh`](./publish-vsix.sh)** | PowerShell / Bash | Cross-platform | Uses the same coordinator with `-Platform` / `--platform` and `-BinSourceDir` / `--bin-dir`. Checks actual tool versions/architectures and published Player assets before packaging. Optional `-Version` / `--version` must match repository metadata; `-OutputDir` / `--out-dir` selects an owned workspace directory. Default is `release/vsix/<name>-<version>-<target>.vsix`. |
 | **[`generate-third-party-inventory.js`](./generate-third-party-inventory.js)** | JavaScript | Cross-platform | Scans npm and NuGet locks to build the third-party dependency licensing inventory report. |
@@ -147,12 +400,30 @@ Candidate artifacts are not product claims until the public certification matrix
 Release-gate helpers that produce evidence JSON under `certification-results/`. These back the scale
 and performance claims; they are not part of the default test lanes.
 
+Smoke and Standard captures run thirteen exact method filters, one per process per sample.
+An explicit `-Scenario` uses the same process and filter. Each child retains its own raw output,
+and the JSON report keeps its filter, exit code and metrics under `sampleReports[].children`.
+Missing, duplicate or wrong-scenario child metrics fail certification, as does a source change
+during capture. Reports record `processIsolation: single-scenario-process-v1`; baseline comparison
+rejects older shared-host captures. Keep old baselines until matching clean captures are reviewed.
+Reports also record `discardedProcessWarmUp`. New baseline comparisons require that flag to be
+true in both reports and retain own-path warm-up. `-NoWarmUp` and `-NoScenarioWarmUp` captures are
+diagnostic; matching skipped-warm-up flags do not make them valid baseline references. Historical
+reports without the new field can be compared with each other, but cannot qualify a new capture.
+
+New captures use `own-path-scaled-untimed-v2`:
+one untimed operation at the measured row scale through Standard (10x), capped at 10x for larger
+workloads. Each metric records the scale actually warmed, selected runtime GC settings and GC memory
+state after measurement. A capture rejects missing/wrong warm-up provenance or changing GC settings;
+baseline comparisons require matching observed GC configurations and warm-up versions. These
+protocol changes require clean recalibration; no baseline is automatically replaced.
+
 | Script Name | Language | Platform | Description |
 | :--- | :--- | :---: | :--- |
 | **[`Test-ColumnarStorageGate.ps1`](./Test-ColumnarStorageGate.ps1)** | PowerShell | Cross-platform | Certifies columnar storage size against a maximum ratio (default 0.5) at a chosen row count. |
 | **[`Test-ColumnarOperatorGate.ps1`](./Test-ColumnarOperatorGate.ps1)** | PowerShell | Cross-platform | Certifies columnar operator speedup against a minimum factor (default 1.5x) at a chosen row count. |
 | **[`Test-SpillAllocProfile.ps1`](./Test-SpillAllocProfile.ps1)** | PowerShell | Cross-platform | Profiles allocation, GC and I/O for the Gate F `#temp` round trip and writes a spill-allocation report. |
-| **[`Compare-AllocBudget.ps1`](./Compare-AllocBudget.ps1)** | PowerShell | Cross-platform | Compares a spill-allocation profile against its checked-in budget and fails on regression. Bless a new budget with `-UpdateBudget`. |
+| **[`Compare-AllocBudget.ps1`](./Compare-AllocBudget.ps1)** | PowerShell | Cross-platform | Compares a spill-allocation profile against its checked-in budget and fails on regression. Bless a new budget with `-UpdateBudget`. `-MachineMetricsReportOnly` (hosted CI) turns GC counts, GC pause and peak working set into warnings; allocation per row and spill evidence still fail. |
 | **[`Compare-CertBaseline.ps1`](./Compare-CertBaseline.ps1)** | PowerShell | Cross-platform | Compares a `cert-report.json` against the stored baseline and reports regressions. |
 | **[`Test-ReportPayloadBudget.ps1`](./Test-ReportPayloadBudget.ps1)** | PowerShell | Cross-platform | Gates raw and gzip bytes for the shared report runtime and end-to-end page weight against `docs/benchmarks/report-payload-budget.json`. Bless a new budget with `-UpdateBudget`. Also runs in the default test lane via `ReportPayloadBudgetTests`. |
 
@@ -426,6 +697,9 @@ complete bundle, host copies, and build manifest.
 For source editing, run `node scripts\compile-browser.mjs --watch` and reload after a successful
 preparation. The watcher refreshes host copies and the manifest too. Failed compilation keeps the
 last successful output. Concurrent preparation is refused with a clear lock diagnostic.
+Compilation shares a program for compatible shared-runtime and Portal module graphs. Surfaces
+with independent classic globals, ambient augmentations or library directives keep separate
+programs. Each surface retains its import resolution and strict diagnostics.
 If sources change during preparation, rerun it before building; a manifest is certified only for
 unchanged inputs. The watcher schedules a follow-up for edits made while preparing. Temporary
 consumer-test modules named `*.__test-*.mjs` never enter the sync inventory or product packages.
@@ -435,3 +709,16 @@ existing preparation. Pre-push and CI run every discovered `scripts/checks/test-
 The browser lint gate additionally needs `npm ci --prefix scripts/lint`.
 See [Report Runtime Asset Standards](../docs/architecture/standards/report-runtime-asset-standards.md)
 for ownership, contract regeneration, and the source-control cleanup acceptance checks.
+
+### Workflow preflight setup
+
+Run `node scripts/setup-actionlint.mjs` once before calling `node scripts/release-preflight.mjs` directly.
+Pre-push, pre-release and hosted workflows prepare it automatically. Setup downloads the pinned
+MIT-licensed actionlint archive, verifies its SHA-256, and extracts it under ignored `scratch/`.
+Later setup calls reuse the verified archive. The check runs offline and validates workflow YAML,
+expressions and reusable-workflow contracts. External ShellCheck and Pyflakes integration is disabled;
+those optional executables are not prerequisites of this gate.
+
+After shared preflight passes for the same sources, `node scripts/check-consumer-contracts.mjs --exclude-preflight`
+skips its already-passed fixtures. CI and pre-push use this mode; standalone consumer checks retain
+the full default inventory and need the workflow checker prepared first.

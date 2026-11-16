@@ -603,8 +603,6 @@ public sealed class RelationalSandboxAdmissionLedger(
                     lockHeld = true;
                 }
 
-                await MigrateLegacyTablesAsync(connection, cancellationToken);
-
                 await using var create = connection.CreateCommand();
                 create.CommandText = $"""
                     CREATE TABLE IF NOT EXISTS sandbox_admissions (
@@ -643,7 +641,6 @@ public sealed class RelationalSandboxAdmissionLedger(
                     );
                     """;
                 await create.ExecuteNonQueryAsync(cancellationToken);
-                await AddFairSelectionColumnsAsync(connection, cancellationToken);
                 _initialized = true;
             }
             finally
@@ -659,47 +656,6 @@ public sealed class RelationalSandboxAdmissionLedger(
         finally
         {
             _initializeGate.Release();
-        }
-    }
-
-    /// <summary>
-    /// Additive migration for a ledger created before cluster-global fair selection existed. An older
-    /// database simply has no claims and no accumulated virtual time, so every queued row starts
-    /// unclaimed and every tenant starts level.
-    /// </summary>
-    private async Task MigrateLegacyTablesAsync(DbConnection connection, CancellationToken ct)
-    {
-        await OrchestratorSchemaMigration.MigrateLegacyTableAsync(dialect, connection, "SandboxAdmissions", "sandbox_admissions", ct);
-        await OrchestratorSchemaMigration.MigrateLegacyTableAsync(dialect, connection, "SandboxAdmissionPools", "sandbox_admission_pools", ct);
-        await OrchestratorSchemaMigration.MigrateLegacyTableAsync(dialect, connection, "SandboxAdmissionTenantCapacity", "sandbox_admission_tenant_capacity", ct);
-    }
-
-    private async Task AddFairSelectionColumnsAsync(
-        DbConnection connection,
-        CancellationToken cancellationToken)
-    {
-        await AddColumnIfMissingAsync("sandbox_admissions", "claimed_by_node", "TEXT NULL");
-        await AddColumnIfMissingAsync("sandbox_admissions", "claim_heartbeat_utc", "TEXT NULL");
-        await AddColumnIfMissingAsync("sandbox_admission_pools", "virtual_base", $"{dialect.Int64Type} NOT NULL DEFAULT 0");
-        await AddColumnIfMissingAsync(
-            "sandbox_admission_tenant_capacity", "virtual_time", $"{dialect.Int64Type} NOT NULL DEFAULT 0");
-        return;
-
-        async Task AddColumnIfMissingAsync(string table, string column, string definition)
-        {
-            var columns = await dialect.GetColumnNamesAsync(connection, table, cancellationToken);
-            if (columns.Contains(column))
-                return;
-            await using var alter = connection.CreateCommand();
-            alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
-            try
-            {
-                await alter.ExecuteNonQueryAsync(cancellationToken);
-            }
-            catch (DbException)
-            {
-                // Another node won the same additive migration between the snapshot and this ALTER.
-            }
         }
     }
 

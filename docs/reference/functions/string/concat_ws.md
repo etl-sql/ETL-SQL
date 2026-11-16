@@ -26,6 +26,7 @@ Skips `NULL` value arguments. Returns `NULL` when all value arguments are `NULL`
 ## Remarks
 
 - No separator is inserted for skipped `NULL` arguments.
+- A date or number turns into the same text as [`CAST`](../conversion/cast.md) to `STRING` (`2024-01-08 09:30:05`, `1.5`), on every server.
 
 ## Examples
 

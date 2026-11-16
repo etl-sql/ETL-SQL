@@ -12,9 +12,7 @@ export async function reportIssue(context: vscode.ExtensionContext): Promise<voi
             'portal.url',
             'lint.enable',
             'explain.enable',
-            'ai.provider',
-            'ai.model',
-            'ai.endpoint'
+            'ai.model'
         ];
         const redactedConfig: Record<string, string> = {};
         for (const key of keys) {

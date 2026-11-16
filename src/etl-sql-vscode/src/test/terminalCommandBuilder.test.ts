@@ -37,9 +37,9 @@ describe('terminalCommandBuilder', () => {
             expect(cmd).toBe("& etl --name 'John''s Script'");
         });
 
-        it('should preserve already quoted arguments', () => {
-            const cmd = getTerminalCommand('etl', ['"already quoted"', "'also quoted'"]);
-            expect(cmd).toBe('& etl "already quoted" \'also quoted\'');
+        it('quotes an argument that already looks quoted instead of passing it to the shell', () => {
+            const cmd = getTerminalCommand('etl', ['"C:\\r\\$(whoami).rptsql"', "'also quoted'"]);
+            expect(cmd).toBe('& etl \'"C:\\r\\$(whoami).rptsql"\' \'\'\'also quoted\'\'\'');
         });
 
         it('should escape executable path if it has spaces', () => {
@@ -56,6 +56,11 @@ describe('terminalCommandBuilder', () => {
         it('should double-quote arguments with spaces or special characters', () => {
             const cmd = getTerminalCommand('etl', ['run', 'my script.etlsql', 'a&b']);
             expect(cmd).toBe('etl run "my script.etlsql" "a&b"');
+        });
+
+        it('quotes a pre-quoted argument so an embedded quote cannot end it early', () => {
+            const cmd = getTerminalCommand('etl', ['"a" & calc & "b"']);
+            expect(cmd).toBe('etl """a"" & calc & ""b"""');
         });
 
         it('should escape double-quotes inside cmd arguments', () => {
@@ -77,6 +82,11 @@ describe('terminalCommandBuilder', () => {
         it('should single-quote arguments with shell-specific metacharacters', () => {
             const cmd = getTerminalCommand('etl', ['run', 'my script.etlsql', 'value$1', 'a&b']);
             expect(cmd).toBe("etl run 'my script.etlsql' 'value$1' 'a&b'");
+        });
+
+        it('quotes a pre-quoted path so command substitution in a file name never runs', () => {
+            const cmd = getTerminalCommand('etl', ['"/tmp/$(whoami).rptsql"', '/tmp/`id`.rptsql']);
+            expect(cmd).toBe("etl '\"/tmp/$(whoami).rptsql\"' '/tmp/`id`.rptsql'");
         });
 
         it("should escape single quotes inside bash arguments using '\\''", () => {

@@ -130,13 +130,27 @@ namespace ETL_SQL.Tests.UI
         [Fact]
         public async Task TestDelimiterColumnSuggestions()
         {
-            // Simulate a pipe-delimited file connection
-            var options = new Dictionary<string, string> { { "DELIMITER", "PIPE" } };
-            // We can't easily mock the file system here for FlatFileDataSource without temp files, 
-            // but we can mock the IDataSource return
-            var mock = new MockSqlDataSource(SystemExecutionContext.Instance, "dummy", "CSV");
-            // InternalMockSqlDataSource.GetColumns is currently hardcoded dummy
-            await Task.CompletedTask;
+            // A pipe-delimited file: column suggestions must split the header on the configured
+            // delimiter, not offer the whole header line as one column.
+            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"suggest-pipe-{Guid.NewGuid():N}.csv");
+            System.IO.File.WriteAllLines(path, new[] { "Alpha|Beta|Gamma", "1|2|3" });
+            try
+            {
+                var options = new Dictionary<string, string> { { "DELIMITER", "PIPE" } };
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, path, options);
+                var connections = new Dictionary<string, IDataSource> { { "pipe_conn", ds } };
+
+                var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("P.", "SELECT * FROM pipe_conn P; WHERE P.", connections);
+
+                Assert.Contains(suggestions, s => s.Text == "P.Alpha");
+                Assert.Contains(suggestions, s => s.Text == "P.Beta");
+                Assert.Contains(suggestions, s => s.Text == "P.Gamma");
+                Assert.DoesNotContain(suggestions, s => s.Text.Contains('|'));
+            }
+            finally
+            {
+                System.IO.File.Delete(path);
+            }
         }
 
         [Fact]

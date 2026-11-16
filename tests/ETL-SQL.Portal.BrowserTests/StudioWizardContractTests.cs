@@ -71,7 +71,7 @@ public sealed class StudioWizardContractTests(StudioSurfaceFixture fixture) : IA
     private async Task<IPage> OpenStudioAsync(BrowserSession session)
     {
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await page.Locator(".etlsql-studio-shell").WaitForAsync();
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");

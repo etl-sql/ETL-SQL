@@ -68,7 +68,14 @@ public static class ConstrainedHtmlPolicy
 
     private static readonly HashSet<string> SafeSchemes = new(StringComparer.OrdinalIgnoreCase) { "https", "http", "mailto", "tel" };
     private static readonly string[] SafeDataImages = ["data:image/png", "data:image/jpeg", "data:image/gif", "data:image/webp"];
-    private static readonly Regex TagPattern = new(@"<(?<closing>/)?(?<tag>[a-zA-Z][a-zA-Z0-9-]*)(?<attrs>[^>]*)(?<selfclose>/)?>", RegexOptions.Compiled);
+    // Quoted attribute values may contain '>' (the browser keeps reading the tag), so the attribute
+    // run is quote-aware; an unterminated quote leaves the tag unmatched and it fails as malformed.
+    private static readonly Regex TagPattern = new("""<(?<closing>/)?(?<tag>[a-zA-Z][a-zA-Z0-9-]*)(?<attrs>(?:"[^"]*"|'[^']*'|[^'">])*)(?<selfclose>/)?>""", RegexOptions.Compiled);
+    // Script-capable SVG content: script, foreignObject, SMIL animation that can rewrite href, any
+    // event-handler attribute, and a javascript: scheme anywhere (whitespace inside it ignored).
+    private static readonly Regex UnsafeSvgContent = new(
+        """<\s*(?:script|foreignObject|set|animate|animateMotion|animateTransform|handler|iframe|embed|object)\b|\bon[a-z]+\s*=|j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:""",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex AttributePattern = new("""(?<name>[a-zA-Z][a-zA-Z0-9_-]*)\s*(?:=\s*(?:"(?<dval>[^"]*)"|'(?<sval>[^']*)'|(?<uval>\S+)))?""", RegexOptions.Compiled);
     private static readonly Regex CssUnsafe = new("""@import|@font-face|expression\s*\(|-moz-binding|behavior\s*:|javascript\s*:|url\s*\(\s*['"]?\s*(?:https?:|//)|url\s*\(\s*['"]?\s*data:(?!image/)|var\s*\(\s*--(?!etl-)|\\""", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex BindingPattern = new(@"\{\{\s*(?![#/])(?<name>@?[A-Za-z_][A-Za-z0-9_]*)(?:\s+FORMAT\s+'[^']*')?\s*\}\}", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -116,10 +123,14 @@ public static class ConstrainedHtmlPolicy
                 }
                 if (value is not null && (attr.Equals("href", StringComparison.OrdinalIgnoreCase)
                     || attr.Equals("src", StringComparison.OrdinalIgnoreCase)
-                    || attr.Equals("cite", StringComparison.OrdinalIgnoreCase)
-                    || attr.Equals("srcset", StringComparison.OrdinalIgnoreCase)))
+                    || attr.Equals("cite", StringComparison.OrdinalIgnoreCase)))
                 {
                     var urlError = ValidateUrl(value);
+                    if (urlError is not null) violations.Add(new("Url", urlError, tag.Index));
+                }
+                if (value is not null && attr.Equals("srcset", StringComparison.OrdinalIgnoreCase))
+                {
+                    var urlError = SrcsetCandidateUrls(WebUtility.HtmlDecode(value)).Select(ValidateUrl).FirstOrDefault(error => error is not null);
                     if (urlError is not null) violations.Add(new("Url", urlError, tag.Index));
                 }
                 if (name.Equals("button", StringComparison.OrdinalIgnoreCase) && attr.Equals("type", StringComparison.OrdinalIgnoreCase)
@@ -438,13 +449,39 @@ public static class ConstrainedHtmlPolicy
             var svg = header.Contains(";base64", StringComparison.OrdinalIgnoreCase)
                 ? Encoding.UTF8.GetString(Convert.FromBase64String(payload))
                 : Uri.UnescapeDataString(payload);
-            return !Regex.IsMatch(svg,
-                """<\s*(?:script|foreignObject)\b|\bon[a-z]+\s*=|(?:href|src)\s*=\s*['"]?\s*javascript:""",
-                RegexOptions.IgnoreCase);
+            // XML character references (&#x6a;, &#106;, &Tab;) decode before the SVG is interpreted.
+            return !UnsafeSvgContent.IsMatch(WebUtility.HtmlDecode(svg));
         }
         catch (FormatException)
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Splits a srcset value into its candidate URLs the way the HTML parser does: a URL is a run of
+    /// non-whitespace (trailing commas end the candidate), followed by optional descriptors up to the
+    /// next comma.
+    /// </summary>
+    private static IEnumerable<string> SrcsetCandidateUrls(string srcset)
+    {
+        var position = 0;
+        while (position < srcset.Length)
+        {
+            while (position < srcset.Length && (char.IsWhiteSpace(srcset[position]) || srcset[position] == ',')) position++;
+            if (position >= srcset.Length) yield break;
+
+            var start = position;
+            while (position < srcset.Length && !char.IsWhiteSpace(srcset[position])) position++;
+            var url = srcset[start..position];
+            if (url.EndsWith(','))
+            {
+                yield return url.TrimEnd(',');
+                continue;
+            }
+            yield return url;
+
+            while (position < srcset.Length && srcset[position] != ',') position++;
         }
     }
 }

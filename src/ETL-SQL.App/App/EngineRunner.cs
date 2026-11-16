@@ -449,6 +449,9 @@ namespace ETL_SQL.App
                         evaluator.Telemetry.QueueWaitMs = envQueueWait;
                     }
 
+                    // Seal plaintext secrets and literal USE PASSWORD on disk on first run before hashing/running.
+                    await evaluator.SealCurrentScriptIfNeededAsync(CancellationToken.None);
+
                     if (System.IO.File.Exists(ctx.ScriptFile.FullName))
                     {
                         var bytes = await System.IO.File.ReadAllBytesAsync(ctx.ScriptFile.FullName);
@@ -614,12 +617,7 @@ namespace ETL_SQL.App
                                 {
                                     type = "variables",
                                     uri = ctx.ScriptFile.FullName,
-                                    data = evaluator.VarContext.GetVariablesWithMetadata().Select(kv => new
-                                    {
-                                        name = kv.Key,
-                                        value = kv.Value.Value?.ToString() ?? "null",
-                                        type = kv.Value.Value?.GetType().Name ?? "null"
-                                    }).ToList()
+                                    data = BuildVariablesPayload(evaluator.VarContext.GetVariablesWithMetadata())
                                 };
                                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(vars));
 
@@ -659,12 +657,7 @@ namespace ETL_SQL.App
                                 {
                                     type = "variables",
                                     uri = ctx.ScriptFile.FullName,
-                                    data = evaluator.VarContext.GetVariablesWithMetadata().Select(kv => new
-                                    {
-                                        name = kv.Key,
-                                        value = kv.Value.Value?.ToString() ?? "null",
-                                        type = kv.Value.Value?.GetType().Name ?? "null"
-                                    }).ToList()
+                                    data = BuildVariablesPayload(evaluator.VarContext.GetVariablesWithMetadata())
                                 };
                                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(finalVars));
 
@@ -1018,6 +1011,31 @@ namespace ETL_SQL.App
             return 1;
         }
 
+        /// <summary>
+        /// Projects the variable scope into the <c>--json</c> "variables" event. SECRET and
+        /// SENSITIVE variables are masked and every other value goes through
+        /// <see cref="SecretRedactor"/>, so a resolved secret never reaches stdout while the
+        /// script is still running (before the end-of-run purge).
+        /// </summary>
+        internal static List<VariablePayload> BuildVariablesPayload(
+            IDictionary<string, (object? Value, VariableMetadata Metadata)> variables)
+        {
+            var result = new List<VariablePayload>(variables.Count);
+            foreach (var (name, (value, metadata)) in variables)
+            {
+                result.Add(new VariablePayload(
+                    name,
+                    SecretRedactor.VariableDisplayValue(value, metadata, "null"),
+                    value?.GetType().Name ?? "null"));
+            }
+            return result;
+        }
+
+        internal sealed record VariablePayload(
+            [property: System.Text.Json.Serialization.JsonPropertyName("name")] string Name,
+            [property: System.Text.Json.Serialization.JsonPropertyName("value")] string Value,
+            [property: System.Text.Json.Serialization.JsonPropertyName("type")] string Type);
+
         private static IReadOnlyList<StatementMetricsPayload> CollectStatementMetrics(
             ETL_SQL.Engine.Evaluator? evaluator,
             bool runFailed)
@@ -1326,6 +1344,7 @@ CREATE PAGE Main AS DASHBOARD (
                     var rptScript = new Parser(new Lexer(rptSource).Tokenize(), rptSource).Parse();
                     await using var rptEval = Program.ServiceProvider.GetRequiredService<Evaluator>();
                     rptEval.SecurityService.IsTestMode = true;
+                    rptEval.SealScriptOnFirstRun = false;
                     rptEval.CurrentScriptPath = rptSmokePath;
                     await rptEval.Evaluate(rptScript);
 

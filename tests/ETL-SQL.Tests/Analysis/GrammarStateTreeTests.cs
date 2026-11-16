@@ -213,6 +213,18 @@ namespace ETL_SQL.Tests.Analysis
             Assert.NotNull(error3);
         }
 
+        [Theory]
+        [InlineData("ENCRYPT FILE 'a.csv' TO 'a.pgp' PGP_KEY 'partner.asc' SIGNING_KEY 'ours.asc' SIGNING_PASSWORD 'p'")]
+        [InlineData("ENCRYPT FILE 'a.csv' TO 'a.pgp' PGP_KEY 'partner.asc' SIGNING_KEY 'ours.asc' WITH ( OVERWRITE = ON )")]
+        [InlineData("DECRYPT FILE 'a.pgp' TO 'a.csv' PGP_KEY 'ours.asc' PASSWORD 'p' VERIFY_KEY 'partner.asc'")]
+        [InlineData("DECRYPT FILE 'a.pgp' TO 'a.csv' PGP_KEY 'ours.asc' VERIFY_KEY 'partner.asc' PASSWORD 'p' AT sftp")]
+        public void PgpSigningClauses_ValidGrammar_Succeeds(string sql)
+        {
+            var tree = DefaultGrammar.Build();
+            bool result = tree.ValidateSequence(Tokenize(sql).ToList(), out var error);
+            Assert.True(result, error);
+        }
+
         [Fact]
         public void TokenWalker_Suggestions_ReturnsCorrectCandidates()
         {

@@ -1,4 +1,40 @@
 # Package only the deployment-profile bundles selected by a release-specific claims index.
+. (Join-Path $PSScriptRoot 'DeploymentCertification.Contracts.ps1')
+. (Join-Path $PSScriptRoot 'DeploymentCertification.Evidence.ps1')
+
+function Assert-CompleteDeploymentClaimIndex {
+    param([Parameter(Mandatory)][object]$Index)
+
+    $required = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($kind in @('Profile', 'Transition')) {
+        foreach ($lane in (Get-DeploymentCertificationLanes -Kind $kind)) { $null = $required.Add("$kind/$lane") }
+    }
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($claim in $Index.claims) {
+        $key = "$($claim.kind)/$($claim.lane)"
+        if (-not $required.Contains($key)) { throw 'Unknown deployment claim.' }
+        if (-not $seen.Add($key)) { throw "Duplicate deployment claim: '$key'." }
+        if ($claim.result -cne 'Passed' -or $claim.releaseEligible -isnot [bool] -or -not $claim.releaseEligible) {
+            throw "Required deployment claim did not pass: '$key'."
+        }
+        $canonical = Get-TopologyClaim $claim.lane
+        foreach ($field in @('topology', 'claim', 'claimScope', 'sharedSaaS')) {
+            $expected = $canonical[$field]
+            if ($field -eq 'claimScope' -and $null -eq $expected) { $expected = 'ProfileAndTransitionContracts' }
+            if ($field -eq 'sharedSaaS' -and $null -eq $expected) { $expected = 'N/A' }
+            if ($claim.$field -cne $expected) { throw "Deployment claim differs from the canonical contract ($field): '$key'." }
+        }
+        $expectedGaps = if ($null -eq $canonical.uncovered) { @() } else { @($canonical.uncovered) }
+        $claimGaps = if ($null -eq $claim.uncovered) { @() } else { @($claim.uncovered) }
+        if ((ConvertTo-Json -InputObject @($claimGaps) -Compress) -cne
+            (ConvertTo-Json -InputObject @($expectedGaps) -Compress)) {
+            throw "Deployment claim changes its canonical uncovered scope: '$key'."
+        }
+    }
+    foreach ($key in $required) {
+        if (-not $seen.Contains($key)) { throw "Required deployment claim is missing: '$key'." }
+    }
+}
 
 function Resolve-ReleaseEvidenceFile {
     param([string]$Root, [string]$RelativePath)
@@ -17,12 +53,11 @@ function Resolve-ReleaseEvidenceFile {
 }
 
 function Assert-ReleaseEvidenceTimestamp {
-    param([string]$Value, [int]$MaxAgeDays, [string]$Description)
+    param([object]$Value, [int]$MaxAgeDays, [string]$Description)
 
-    $timestamp = [DateTimeOffset]::MinValue
-    if (-not [DateTimeOffset]::TryParse($Value, [ref]$timestamp)) { throw "Missing/invalid timestamp for $Description." }
+    try { $timestamp = ConvertTo-DeploymentEvidenceTime $Value } catch { throw "Missing/invalid timestamp for $Description." }
     $now = [DateTimeOffset]::UtcNow
-    if ($timestamp -lt $now.AddDays(-$MaxAgeDays) -or $timestamp -gt $now.AddMinutes(5)) {
+    if ($timestamp -lt $now.AddDays(-$MaxAgeDays) -or $timestamp -gt $now) {
         throw "Stale or future-dated evidence for $Description."
     }
     return $timestamp
@@ -33,9 +68,14 @@ function Get-ReleaseCertificationInputs {
         [Parameter(Mandatory)][string]$EvidenceRoot,
         [Parameter(Mandatory)][string]$ReleaseVersion,
         [Parameter(Mandatory)][string]$CandidateCommit,
-        [ValidateRange(1, 30)][int]$MaxAgeDays = 7
+        [ValidateRange(1, 30)][int]$MaxAgeDays = 7,
+        [switch]$RequireCompleteClaimIndex,
+        [switch]$RequireValidatedExecutionPlan
     )
 
+    if ($CandidateCommit -cnotmatch '^[a-f0-9]{40}$') { throw 'Certification candidate must be a full Git SHA.' }
+    $cleanFingerprint = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
+            [Text.Encoding]::UTF8.GetBytes($CandidateCommit))).ToLowerInvariant()
     $root = (Resolve-Path -LiteralPath $EvidenceRoot -ErrorAction Stop).Path
     $indexPath = Resolve-ReleaseEvidenceFile -Root $root -RelativePath 'claims-index.json'
     $index = Get-Content -LiteralPath $indexPath -Raw | ConvertFrom-Json
@@ -43,7 +83,8 @@ function Get-ReleaseCertificationInputs {
         $index.releaseVersion -ne $ReleaseVersion -or @($index.claims).Count -eq 0) {
         throw 'Claims index does not describe the requested release.'
     }
-    $null = Assert-ReleaseEvidenceTimestamp -Value $index.generatedUtc -MaxAgeDays $MaxAgeDays -Description 'claims index'
+    $indexGenerated = Assert-ReleaseEvidenceTimestamp -Value $index.generatedUtc -MaxAgeDays $MaxAgeDays -Description 'claims index'
+    if ($RequireCompleteClaimIndex) { Assert-CompleteDeploymentClaimIndex -Index $index }
     $selected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $null = $selected.Add($indexPath)
     # The Markdown index is a view; the JSON index carries the checked claims.
@@ -51,18 +92,32 @@ function Get-ReleaseCertificationInputs {
     if (Test-Path -LiteralPath $markdownIndex -PathType Leaf) { $null = $selected.Add($markdownIndex) }
 
     $bundles = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $certifications = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($claim in $index.claims) {
         if ($claim.result -eq 'NotCertified' -and $claim.releaseEligible -eq $false) { continue }
-        if ($claim.result -ne 'Passed' -or $claim.releaseEligible -ne $true -or $claim.commit -ne $CandidateCommit) {
+        if ($claim.result -ne 'Passed' -or $claim.releaseEligible -ne $true -or $claim.commit -cne $CandidateCommit) {
             throw "Unusable or mixed-candidate release claim: '$($claim.lane)'."
         }
         $reportPath = Resolve-ReleaseEvidenceFile -Root $root -RelativePath $claim.evidence
         $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+        $null = $certifications.Add($reportPath)
         if ($report.schemaVersion -ne 'etl-sql.deployment-profile-certification/v1' -or
-            $report.commit -ne $CandidateCommit -or $report.dirty -ne $false -or
+            $report.commit -cne $CandidateCommit -or $report.sourceFingerprint -cne $cleanFingerprint -or $report.dirty -ne $false -or
             $report.releaseEligible -ne $true -or $report.result -ne 'Passed' -or
             $report.kind -ne $claim.kind -or $claim.lane -notin $report.lanes -or @($report.phases).Count -eq 0) {
             throw "Unusable or mixed-candidate certification: '$($claim.evidence)'."
+        }
+        if ($RequireCompleteClaimIndex) {
+            if ($report.configuration -cne 'Release' -or $report.dirty -isnot [bool] -or $report.releaseEligible -isnot [bool]) {
+                throw "Deployment release evidence needs Release configuration and explicit boolean eligibility: '$($claim.evidence)'."
+            }
+            $allowedLanes = @(Get-DeploymentCertificationLanes -Kind $report.kind)
+            $reportLanes = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            foreach ($lane in $report.lanes) {
+                if ($allowedLanes -cnotcontains $lane -or -not $reportLanes.Add($lane)) {
+                    throw 'Certification report has an unknown or duplicate lane.'
+                }
+            }
         }
         $reportedClaims = @($report.topologyClaims | Where-Object { $_.lane -eq $claim.lane })
         if ($reportedClaims.Count -ne 1) { throw "Missing or ambiguous topology claim: '$($claim.lane)'." }
@@ -90,6 +145,7 @@ function Get-ReleaseCertificationInputs {
             $start = Assert-ReleaseEvidenceTimestamp -Value $phase.startedUtc -MaxAgeDays $MaxAgeDays -Description $phase.phase
             $end = Assert-ReleaseEvidenceTimestamp -Value $phase.completedUtc -MaxAgeDays $MaxAgeDays -Description $phase.phase
             if ($end -lt $start) { throw "Reversed phase timestamps: '$($phase.phase)'." }
+            if ($end -gt $indexGenerated) { throw "Phase completion is later than its claims index: '$($phase.phase)'." }
             $log = Resolve-ReleaseEvidenceFile -Root $bundleRoot -RelativePath $phase.log
             if ((Get-Item -LiteralPath $log).Length -eq 0) { throw "Empty phase log: '$($phase.log)'." }
         }
@@ -105,13 +161,17 @@ function Get-ReleaseCertificationInputs {
             if (-not $item.PSIsContainer) {
                 if ($item.Name -eq 'certification.json') {
                     $nested = Get-Content -LiteralPath $item.FullName -Raw | ConvertFrom-Json
-                    if ($nested.commit -ne $CandidateCommit -or $nested.dirty -ne $false -or $nested.result -ne 'Passed') {
+                    if ($nested.commit -cne $CandidateCommit -or $nested.sourceFingerprint -cne $cleanFingerprint -or
+                        $nested.dirty -ne $false -or $nested.result -ne 'Passed') {
                         throw "Unusable or mixed-candidate nested certification: '$($item.FullName)'."
                     }
                 }
                 $null = $selected.Add($item.FullName)
             }
         }
+    }
+    if ($RequireValidatedExecutionPlan) {
+        foreach ($path in $certifications) { Assert-DeploymentExecutionEvidence -ReportPath $path }
     }
     foreach ($path in $selected) {
         $null = Resolve-ReleaseEvidenceFile -Root $root -RelativePath ([IO.Path]::GetRelativePath($root, $path))
@@ -131,15 +191,19 @@ function New-ReleaseCertificationArchive {
         [Parameter(Mandatory)][string]$EvidenceRoot,
         [Parameter(Mandatory)][string]$ReleaseVersion,
         [Parameter(Mandatory)][string]$CandidateCommit,
-        [Parameter(Mandatory)][string]$DestinationPath
+        [Parameter(Mandatory)][string]$DestinationPath,
+        [switch]$RequireCompleteClaimIndex,
+        [switch]$RequireValidatedExecutionPlan
     )
 
-    $files = @(Get-ReleaseCertificationInputs -EvidenceRoot $EvidenceRoot -ReleaseVersion $ReleaseVersion -CandidateCommit $CandidateCommit)
+    $files = @(Get-ReleaseCertificationInputs -EvidenceRoot $EvidenceRoot -ReleaseVersion $ReleaseVersion -CandidateCommit $CandidateCommit -RequireCompleteClaimIndex:$RequireCompleteClaimIndex -RequireValidatedExecutionPlan:$RequireValidatedExecutionPlan)
     $manifest = [ordered]@{
         schemaVersion = 'etl-sql.release-certification-archive/v1'
         releaseVersion = $ReleaseVersion
         commit = $CandidateCommit
         generatedUtc = [DateTimeOffset]::UtcNow.ToString('O')
+        claimIndexScope = if ($RequireCompleteClaimIndex) { 'AllProfilesAndTransitions' } else { 'SelectedClaims' }
+        executionEvidenceScope = if ($RequireValidatedExecutionPlan) { 'RequiredPhasesAndTestReceipts' } else { 'Unchecked' }
         scope = 'Deployment-profile contracts and the selected certified transitions; uncovered claims remain in the index.'
         files = @($files | Sort-Object RelativePath | ForEach-Object { [ordered]@{ path = $_.RelativePath; sha256 = $_.Sha256 } })
     }

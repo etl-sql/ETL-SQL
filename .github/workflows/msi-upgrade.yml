@@ -1,52 +1,108 @@
 name: MSI In-Place Upgrade
 
 # This job downloads a ~900 MB previous release, installs WiX and builds an installer before it can
-# assert anything — roughly 26 minutes. Running that for a documentation change buys nothing, so the
-# expensive job is scoped inside the workflow to files that can actually change upgrade behaviour.
+# assert anything — roughly 26 minutes. Shared package-impact rules select changes that can affect
+# the payload; classified documentation and browser-test-only edits skip the expensive jobs.
 # The workflow itself always runs for pull requests so the final gate reports success when the
-# certification is intentionally skipped. Tags and manual dispatches always run it in full.
+# certification is intentionally skipped. Release calls and manual dispatches run it in full.
 on:
   push:
     branches:
       - 'release/**'
-    tags:
-      - 'v*'
   pull_request:
     branches:
       - main
+      - 'release/**'
   workflow_dispatch:
+    inputs:
+      diagnostic_artifact_id:
+        description: Optional retained msi-inputs artifact for Portal diagnosis only, on a development branch
+        type: string
+        default: ''
+      diagnostic_scenario:
+        description: Retained-input diagnostic scope only; ordinary certification always runs All
+        type: choice
+        options: ['All', 'UpgradeRollback']
+        default: 'All'
+  workflow_call:
+    inputs:
+      source_sha:
+        description: Exact candidate commit resolved by the release workflow
+        required: true
+        type: string
+    outputs:
+      artifact_id:
+        description: Installer pair whose required certification jobs passed
+        value: ${{ jobs.msi-upgrade-gate.outputs.artifact_id }}
+      receipt_id:
+        description: Successful certification receipt artifact
+        value: ${{ jobs.msi-upgrade-gate.outputs.receipt_id }}
 
 permissions:
   contents: read
 
+env:
+  CERTIFICATION_SHA: ${{ inputs.source_sha || github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   detect-upgrade-impact:
     name: Detect MSI Upgrade Impact
+    if: ${{ !inputs.diagnostic_artifact_id }}
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.changes.outputs.should_run }}
     steps:
       - name: Checkout
+        timeout-minutes: 13
         uses: actions/checkout@v6
         with:
+          ref: ${{ env.CERTIFICATION_SHA }}
           fetch-depth: 0
 
+      - name: Set up source-check runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Prepare pinned workflow checker
+        timeout-minutes: 13
+        run: node scripts/setup-actionlint.mjs
+      - name: Collect source preflight findings
+        timeout-minutes: 12
+        env:
+          ETLSQL_RELEASE_BRANCH: ${{ github.base_ref || github.ref_name }}
+        run: node scripts/release-preflight.mjs --release-branch "$ETLSQL_RELEASE_BRANCH"
+
+      - name: Upload source preflight logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/preflight/
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Classify changed paths
+        timeout-minutes: 13
         id: changes
         shell: pwsh
         env:
           EVENT_NAME: ${{ github.event_name }}
-          REF_TYPE: ${{ github.ref_type }}
           BEFORE_SHA: ${{ github.event.before }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          CURRENT_SHA: ${{ github.sha }}
+          RELEASE_CALL: ${{ inputs.source_sha != '' }}
         run: |
           $ErrorActionPreference = 'Stop'
 
-          $force = $env:EVENT_NAME -eq 'workflow_dispatch' -or $env:REF_TYPE -eq 'tag'
+          $actualSha = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actualSha -cne $env:CERTIFICATION_SHA) {
+            throw 'MSI checkout does not match the candidate SHA.'
+          }
+          $force = $env:EVENT_NAME -eq 'workflow_dispatch' -or $env:RELEASE_CALL -eq 'true'
           if ($force) {
             'should_run=true' >> $env:GITHUB_OUTPUT
-            Write-Host 'Running full MSI certification for a tag or manual dispatch.'
+            Write-Host 'Running full MSI certification for a release call or manual dispatch.'
             exit 0
           }
 
@@ -56,62 +112,103 @@ jobs:
             $env:BEFORE_SHA
           }
           if ([string]::IsNullOrWhiteSpace($baseSha) -or $baseSha -match '^0+$') {
-            $baseSha = "HEAD~1"
+            'should_run=true' >> $env:GITHUB_OUTPUT
+            Write-Host 'No comparison base; full MSI certification is required.'
+            exit 0
           }
 
-          $changedPaths = @(git diff --name-only $baseSha HEAD)
+          # Include both old and new paths for renames across the documentation boundary.
+          $changedPaths = @(git -c core.quotePath=false diff --name-only --no-renames $baseSha HEAD --)
           if ($LASTEXITCODE -ne 0) {
-            Write-Warning "git diff failed against $baseSha; checking HEAD~1..."
-            $changedPaths = @(git diff --name-only HEAD~1 HEAD)
-            if ($LASTEXITCODE -ne 0) { throw 'Cannot classify MSI impact from the changed paths.' }
+            'should_run=true' >> $env:GITHUB_OUTPUT
+            Write-Warning 'Cannot compare the complete change range; full MSI certification is required.'
+            exit 0
           }
 
-          $upgradePatterns = @(
-            '^src/ETL-SQL\.Installer/',
-            '^scripts/Test-MsiUpgrade\.ps1$',
-            '^scripts/Test-MsiPortalUpgrade\.ps1$',
-            '^scripts/test-installed-portal-assets\.mjs$',
-            '^scripts/MsiUpgrade\.Helpers\.ps1$',
-            # Dependency versions and the shipped configuration change what the MSI installs.
-            '^Directory\.Packages\.props$',
-            '^src/appsettings\.json$',
-            '^scripts/Release\.Helpers\.ps1$',
-            '^scripts/build-msi\.ps1$',
-            '^\.github/workflows/msi-upgrade\.yml$',
-            '^Directory\.Build\.props$',
-            # The installer ships the prepared browser files, which are no longer in Git: a change to
-            # an owner or to preparation changes the package without touching any installer path.
-            '^src/ETL-SQL\.ReportRuntime/Resources/',
-            '^src/ETL-SQL\.Portal/(BrowserSources|wwwroot)/',
-            '^scripts/(sync-assets\.js|compile-browser\.mjs|lib/)',
-            '^types/'
-          )
-          $relevant = @($changedPaths | Where-Object {
-            $path = $_
-            @($upgradePatterns | Where-Object { $path -match $_ }).Count -gt 0
-          })
-          $shouldRun = $relevant.Count -gt 0
+          . ./scripts/MsiImpact.Helpers.ps1
+          $impact = Get-MsiUpgradeImpact -ChangedPaths $changedPaths
+          $relevant = @($impact.RelevantPaths)
+          $shouldRun = $impact.ShouldRun
           "should_run=$($shouldRun.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
 
           if ($shouldRun) {
             Write-Host 'MSI-impacting paths:'
             $relevant | ForEach-Object { Write-Host "  $_" }
           } else {
-            Write-Host 'No MSI-impacting paths changed; the expensive certification will be skipped.'
+            Write-Host 'Shared package-impact rules found no payload changes; MSI certification will be skipped.'
           }
 
-  msi-upgrade:
-    name: MSI In-Place Upgrade Certification
+  publish-windows-payload:
+    name: Publish Windows payload
+    timeout-minutes: 100
     needs: detect-upgrade-impact
+    if: needs.detect-upgrade-impact.outputs.should_run == 'true'
+    runs-on: windows-latest
+    outputs:
+      artifact_id: ${{ steps.payload.outputs.artifact-id }}
+      manifest_sha256: ${{ steps.identity.outputs.manifest_sha256 }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ env.CERTIFICATION_SHA }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install payload browser compiler
+        timeout-minutes: 3
+        run: npm ci --prefix scripts/typecheck
+      - name: Publish shared Windows binaries once
+        id: identity
+        shell: pwsh
+        timeout-minutes: 62
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Publish-WindowsPayload.ps1 -ScriptArguments @('-OutputDirectory', 'artifacts/windows-payload/bundle') -EvidenceDirectory release-validation/windows-payload-build -TimeoutSeconds 3600
+      - name: Retain Windows payload diagnostics
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-payload-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/windows-payload-build/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Retain immutable Windows payload
+        id: payload
+        timeout-minutes: 8
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-payload-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/windows-payload/
+          include-hidden-files: true
+          # Self-contained hosts are compressible; reduce both consumers' download volume.
+          compression-level: 1
+          if-no-files-found: error
+          retention-days: 30
+
+  build-msi:
+    name: Build MSI certification inputs
+    timeout-minutes: 90
+    outputs:
+      artifact_id: ${{ steps.inputs.outputs.artifact-id }}
+      previous_tag: ${{ steps.versions.outputs.previous_tag }}
+    needs: [detect-upgrade-impact, publish-windows-payload]
     if: needs.detect-upgrade-impact.outputs.should_run == 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout
+        timeout-minutes: 8
         uses: actions/checkout@v6
         with:
+          ref: ${{ env.CERTIFICATION_SHA }}
           fetch-depth: 0
 
-      - name: Resolve current version and previous release
+      - name: Resolve current version and the release it upgrades from
+        timeout-minutes: 3
         id: versions
         shell: pwsh
         env:
@@ -121,25 +218,27 @@ jobs:
           $currentVersion = [string]$props.Project.PropertyGroup.VersionPrefix
           if ([string]::IsNullOrWhiteSpace($currentVersion)) { throw 'Directory.Build.props has no VersionPrefix.' }
 
-          $currentTag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "v$currentVersion" }
           . ./scripts/Release.Helpers.ps1
           $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate prior GitHub releases.' }
           $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ })
-          $previousTag = Select-PreviousStableRelease -CurrentVersion $currentVersion -Releases $releases
+          # '' for the first public release, which is certified as a fresh install.
+          $previousTag = Select-UpgradeBaseline -CurrentVersion $currentVersion -Releases $releases
 
           "current_version=$currentVersion" >> $env:GITHUB_OUTPUT
           "previous_tag=$previousTag" >> $env:GITHUB_OUTPUT
 
       - name: Restore cached previous MSI
         id: previous-cache
+        if: steps.versions.outputs.previous_tag != ''
         uses: actions/cache@v6
         with:
           path: .upgrade-cache
           key: previous-msi-${{ steps.versions.outputs.previous_tag }}-x64
 
       - name: Download previous MSI
-        if: steps.previous-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 5
+        if: steps.versions.outputs.previous_tag != '' && steps.previous-cache.outputs.cache-hit != 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -158,118 +257,366 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
+        timeout-minutes: 3
         run: npm ci --prefix scripts/typecheck
 
       - name: Install WiX Toolset
+        timeout-minutes: 8
         shell: pwsh
         run: choco install wixtoolset -y --no-progress --skip-if-installed
 
+      - name: Download original Windows payload
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.publish-windows-payload.outputs.artifact_id }}
+          path: artifacts/windows-payload-input
+
       - name: Build current MSI
+        timeout-minutes: 15
         shell: pwsh
         env:
           ETL_SQL_VERSION: ${{ steps.versions.outputs.current_version }}
-        run: .\scripts\build-msi.ps1
+          WINDOWS_PAYLOAD_HASH: ${{ needs.publish-windows-payload.outputs.manifest_sha256 }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/build-msi.ps1 -ScriptArguments @('-WindowsPayloadDirectory', 'artifacts/windows-payload-input/bundle', '-WindowsPayloadHash', $env:WINDOWS_PAYLOAD_HASH) -EvidenceDirectory release-validation/msi-build -TimeoutSeconds 780
+
+      - name: Retain MSI build diagnostics first
+        if: always()
+        timeout-minutes: 5
+        # Keep candidate retention independent of diagnostic transport.
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi-build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/msi-build/
+          if-no-files-found: warn
+          retention-days: 30
 
       # Split from the certification below so the log says which half failed. The static contract
       # needs no elevation and no install, and it is where the gate's first real run went wrong —
       # keeping it as its own step means that class of failure is named rather than buried in the
       # output of an install sequence that never started.
       - name: Check the static upgrade contract
+        timeout-minutes: 3
         shell: pwsh
         env:
           CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
+          PREVIOUS_TAG: ${{ steps.versions.outputs.previous_tag }}
         run: |
-          $previous = @(Get-ChildItem .upgrade-cache -Filter '*-x64-Setup.msi')
-          if ($previous.Count -ne 1) { throw 'Previous MSI cache must contain exactly one MSI.' }
           $current = "src/ETL-SQL.Installer/ETL-SQL-v$env:CURRENT_VERSION.msi"
-          .\scripts\Test-MsiUpgrade.ps1 -PreviousMsi $previous[0].FullName -CurrentMsi $current -StaticChecksOnly
-
-      - name: Certify in-place upgrade
-        shell: pwsh
-        env:
-          CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
-        run: |
-          $previous = @(Get-ChildItem .upgrade-cache -Filter '*-x64-Setup.msi')
-          if ($previous.Count -ne 1) { throw 'Previous MSI cache must contain exactly one MSI.' }
-          $current = "src/ETL-SQL.Installer/ETL-SQL-v$env:CURRENT_VERSION.msi"
-          .\scripts\Test-MsiUpgrade.ps1 -PreviousMsi $previous[0].FullName -CurrentMsi $current
-
-      # The workstation profile above installs no service. This one runs the Portal and
-      # Orchestrator: fresh install, upgrade with served-asset and cache checks, and rollback.
-      - name: Certify Portal profile install, upgrade and rollback
-        if: ${{ !cancelled() }}
-        # A step-timeout kill loses the runner and every log. The script bounds its own waits
-        # (msiexec 10 min, services 3 min, admin backup 5 min, each HTTP request 30 s), yet runs
-        # 39131831623 and 39137736713 still reached this limit with nothing uploaded. So a watchdog
-        # runs the script as a child, stops it at 35 minutes with the process tree and recent
-        # events, and ends the step itself, leaving the upload step to run. The limit stays as the
-        # last resort.
-        timeout-minutes: 45
-        shell: pwsh
-        env:
-          CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
-        run: |
-          $previous = @(Get-ChildItem .upgrade-cache -Filter '*-x64-Setup.msi')
-          if ($previous.Count -ne 1) { throw 'Previous MSI cache must contain exactly one MSI.' }
-          $current = "src/ETL-SQL.Installer/ETL-SQL-v$env:CURRENT_VERSION.msi"
-          $evidence = 'release-validation/msi-upgrade'
-          New-Item -ItemType Directory -Force -Path $evidence | Out-Null
-          $console = Join-Path $evidence 'portal-certification-console.log'
-          $cert = Start-Process pwsh -PassThru -NoNewWindow `
-            -ArgumentList @('-NoProfile', '-File', 'scripts/Test-MsiPortalUpgrade.ps1', '-PreviousMsi', "`"$($previous[0].FullName)`"", '-CurrentMsi', $current) `
-            -RedirectStandardOutput $console -RedirectStandardError "$console.err"
-          if (-not $cert.WaitForExit(35 * 60 * 1000)) {
-            $report = Join-Path $evidence 'watchdog.txt'
-            "Watchdog stopped the Portal certification at $((Get-Date).ToString('o'))" | Set-Content $report
-            Get-CimInstance Win32_Process | Sort-Object ProcessId |
-              ForEach-Object { '{0,6} parent {1,6} {2,-28} {3}' -f $_.ProcessId, $_.ParentProcessId, $_.Name, $_.CommandLine } |
-              Add-Content $report
-            Get-Service 'ETL-SQL*', msiserver -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Name) $($_.Status)" } | Add-Content $report
-            Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = (Get-Date).AddMinutes(-20) } -MaxEvents 40 -ErrorAction SilentlyContinue |
-              ForEach-Object { "$($_.TimeCreated.ToString('o')) $($_.ProviderName): $($_.Message)" } | Add-Content $report
-            & taskkill.exe /T /F /PID $cert.Id | Add-Content $report
-            throw 'Portal certification exceeded 35 minutes; see watchdog.txt, the console log and summary.txt.'
+          if ($env:PREVIOUS_TAG) {
+            $previous = @(Get-ChildItem .upgrade-cache -Filter '*-x64-Setup.msi')
+            if ($previous.Count -ne 1) { throw 'Previous MSI cache must contain exactly one MSI.' }
+            .\scripts\Test-MsiUpgrade.ps1 -PreviousMsi $previous[0].FullName -CurrentMsi $current -StaticChecksOnly
+          } else {
+            .\scripts\Test-MsiUpgrade.ps1 -CurrentMsi $current -StaticChecksOnly
           }
-          exit $cert.ExitCode
 
-      - name: Upload upgrade evidence
-        if: always()
+      - name: Preserve certification inputs
+        timeout-minutes: 3
+        shell: pwsh
+        env:
+          CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
+          WINDOWS_PAYLOAD_HASH: ${{ needs.publish-windows-payload.outputs.manifest_sha256 }}
+          PREVIOUS_TAG: ${{ steps.versions.outputs.previous_tag }}
+        run: |
+          New-Item -ItemType Directory -Force candidate | Out-Null
+          if ($env:PREVIOUS_TAG) { Copy-Item .upgrade-cache/*-x64-Setup.msi candidate/previous.msi }
+          Copy-Item "src/ETL-SQL.Installer/ETL-SQL-v$env:CURRENT_VERSION.msi" candidate/current.msi
+          ./scripts/MsiCandidate.ps1 -Mode Create -Directory candidate -SourceSha $env:CERTIFICATION_SHA -WindowsPayloadHash $env:WINDOWS_PAYLOAD_HASH -Version $env:CURRENT_VERSION
+
+      - name: Upload certification inputs
+        id: inputs
+        timeout-minutes: 5
         uses: actions/upload-artifact@v7
         with:
-          name: msi-upgrade-${{ github.run_id }}
+          name: msi-inputs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  msi-upgrade:
+    name: MSI certification (${{ matrix.profile }})
+    permissions:
+      contents: read
+      actions: read
+      checks: write
+    needs: build-msi
+    runs-on: windows-latest
+    timeout-minutes: 65
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [workstation, portal]
+    steps:
+      - name: Checkout
+        timeout-minutes: 8
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.CERTIFICATION_SHA }}
+
+      - name: Download pinned certification inputs
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.build-msi.outputs.artifact_id }}
+          path: candidate
+          merge-multiple: true
+
+      - name: Verify certification inputs
+        timeout-minutes: 3
+        shell: pwsh
+        run: ./scripts/MsiCandidate.ps1 -Mode Verify -Directory candidate -SourceSha $env:CERTIFICATION_SHA
+
+      - name: Set up browser verification runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Prepare candidate browser inventory
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          npm ci --prefix scripts/typecheck
+          if ($LASTEXITCODE -ne 0) { throw 'Browser compiler restore failed.' }
+          node scripts/sync-assets.js
+          if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed.' }
+          node scripts/sync-assets.js -Check
+          if ($LASTEXITCODE -ne 0) { throw 'Browser inventory verification failed.' }
+
+      - name: Certify installer profile with bounded supervision
+        timeout-minutes: 25
+        shell: pwsh
+        env:
+          PROFILE: ${{ matrix.profile }}
+          GH_TOKEN: ${{ github.token }}
+          ETLSQL_MSI_DURABLE_CHECKPOINTS: '1'
+          ETLSQL_MSI_CHECKPOINT_RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $script = if ($env:PROFILE -eq 'portal') { 'scripts/Test-MsiPortalUpgrade.ps1' } else { 'scripts/Test-MsiUpgrade.ps1' }
+          . ./scripts/MsiCheckpoint.Helpers.ps1
+          $null = Write-MsiDurableCheckpoint -Stage 'supervisor starting'
+          Write-Host '::notice title=MSI checkpoint::{"stage":"supervisor starting"}'
+          # The first public release has no previous.msi and is certified as a fresh install.
+          $arguments = @('-CurrentMsi', 'candidate/current.msi')
+          if (Test-Path -LiteralPath candidate/previous.msi) { $arguments = @('-PreviousMsi', 'candidate/previous.msi') + $arguments }
+          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath $script -ScriptArguments $arguments -EvidenceDirectory "release-validation/msi-supervisor/$env:PROFILE" -TimeoutSeconds 1200 -ForwardMsiCheckpoints
+
+      - name: Upload profile diagnostics first
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi-diagnostics-${{ matrix.profile }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            release-validation/msi-upgrade
-            release-validation/msi-portal-upgrade
+            candidate/candidate.json
+            release-validation/msi-portal-upgrade/summary.txt
+            release-validation/msi-supervisor/${{ matrix.profile }}/result.json
+            release-validation/msi-supervisor/${{ matrix.profile }}/heartbeat.log
+            release-validation/msi-supervisor/${{ matrix.profile }}/stderr.log
           if-no-files-found: warn
           retention-days: 30
 
+      - name: Upload upgrade evidence
+        if: always()
+        timeout-minutes: 20
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi-upgrade-${{ matrix.profile }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            candidate/candidate.json
+            release-validation/msi-upgrade
+            release-validation/msi-portal-upgrade
+            release-validation/msi-supervisor
+          if-no-files-found: warn
+          retention-days: 30
+
+  msi-progress:
+    name: MSI runner progress monitor
+    needs: build-msi
+    if: always() && (needs.build-msi.result == 'success' || inputs.diagnostic_artifact_id != '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      actions: write
+      checks: read
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Observe MSI progress from an independent runner
+        id: progress
+        timeout-minutes: 66
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MSI_MONITOR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          MSI_MONITOR_DIAGNOSTIC: ${{ inputs.diagnostic_artifact_id != '' }}
+        run: node scripts/watch-msi-progress.mjs
+      - name: Retain independent progress evidence before cancellation
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi-progress-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/msi-progress/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: End an unresponsive MSI run without rebuilding successful jobs
+        if: always() && steps.progress.outputs.stalled == 'true'
+        timeout-minutes: 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current_attempt="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .run_attempt)"
+          if [[ "$current_attempt" != "$GITHUB_RUN_ATTEMPT" ]]; then
+            echo 'MSI run attempt changed; refusing cancellation.'
+            exit 1
+          fi
+          gh run cancel "$GITHUB_RUN_ID" --force
+
   msi-upgrade-gate:
     name: MSI In-Place Upgrade
+    timeout-minutes: 5
+    outputs:
+      artifact_id: ${{ steps.gate.outputs.artifact_id }}
+      receipt_id: ${{ steps.receipt.outputs.artifact-id }}
     needs:
       - detect-upgrade-impact
+      - build-msi
       - msi-upgrade
-    if: always()
+      - msi-progress
+    if: always() && !inputs.diagnostic_artifact_id
     runs-on: ubuntu-latest
     steps:
       - name: Require certification when applicable
+        timeout-minutes: 3
+        id: gate
         shell: pwsh
         env:
           DETECTION_RESULT: ${{ needs.detect-upgrade-impact.result }}
           SHOULD_RUN: ${{ needs.detect-upgrade-impact.outputs.should_run }}
+          BUILD_RESULT: ${{ needs.build-msi.result }}
           CERTIFICATION_RESULT: ${{ needs.msi-upgrade.result }}
+          PROGRESS_RESULT: ${{ needs.msi-progress.result }}
+          ARTIFACT_ID: ${{ needs.build-msi.outputs.artifact_id }}
+          PREVIOUS_TAG: ${{ needs.build-msi.outputs.previous_tag }}
         run: |
           if ($env:DETECTION_RESULT -ne 'success') {
             throw "MSI impact detection ended as '$env:DETECTION_RESULT'."
           }
-          if ($env:SHOULD_RUN -eq 'true' -and $env:CERTIFICATION_RESULT -ne 'success') {
+          if ($env:SHOULD_RUN -notin @('true', 'false')) { throw 'MSI impact decision is missing or invalid.' }
+          if ($env:SHOULD_RUN -eq 'true' -and ($env:BUILD_RESULT -ne 'success' -or $env:CERTIFICATION_RESULT -ne 'success')) {
             throw "MSI upgrade certification was required but ended as '$env:CERTIFICATION_RESULT'."
           }
-          if ($env:SHOULD_RUN -ne 'true' -and $env:CERTIFICATION_RESULT -ne 'skipped') {
+          if ($env:SHOULD_RUN -eq 'true' -and $env:PROGRESS_RESULT -ne 'success') { throw 'Independent MSI progress monitoring did not pass.' }
+          if ($env:SHOULD_RUN -eq 'false' -and ($env:BUILD_RESULT -ne 'skipped' -or $env:CERTIFICATION_RESULT -ne 'skipped')) {
             throw "MSI upgrade certification was not required but ended as '$env:CERTIFICATION_RESULT'."
           }
 
           if ($env:SHOULD_RUN -eq 'true') {
+            if ($env:ARTIFACT_ID -notmatch '^[1-9][0-9]*$') { throw 'Certified artifact ID is missing or invalid.' }
+            "artifact_id=$env:ARTIFACT_ID" >> $env:GITHUB_OUTPUT
+            @{
+              schemaVersion = 1; repository = $env:GITHUB_REPOSITORY
+              sourceSha = $env:CERTIFICATION_SHA; runId = $env:GITHUB_RUN_ID
+              runAttempt = $env:GITHUB_RUN_ATTEMPT; artifactId = $env:ARTIFACT_ID
+              previousTag = $env:PREVIOUS_TAG; workstation = 'success'; portal = 'success'
+            } | ConvertTo-Json | Set-Content certification.json
             Write-Host 'MSI upgrade certification passed.'
           } else {
             Write-Host 'MSI upgrade certification was not applicable to this change.'
           }
+
+      - name: Save successful certification receipt
+        id: receipt
+        if: needs.detect-upgrade-impact.outputs.should_run == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi-certified-${{ github.run_id }}-${{ github.run_attempt }}
+          path: certification.json
+          if-no-files-found: error
+          retention-days: 30
+
+  diagnostic-portal:
+    name: MSI Portal diagnostic only
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnostic_artifact_id != ''
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+      checks: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PROFILE: portal
+      ETLSQL_MSI_DIAGNOSTIC_ONLY: '1'
+      ETLSQL_MSI_DURABLE_CHECKPOINTS: '1'
+      ETLSQL_MSI_CHECKPOINT_RUN_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+      - name: Select original successful MSI build inputs
+        id: inputs
+        timeout-minutes: 3
+        shell: pwsh
+        env:
+          INPUT_ARTIFACT_ID: ${{ inputs.diagnostic_artifact_id }}
+        run: ./scripts/Prepare-MsiPortalDiagnostic.ps1 -ArtifactId $env:INPUT_ARTIFACT_ID
+      - uses: actions/download-artifact@v8
+        timeout-minutes: 5
+        with:
+          artifact-ids: ${{ steps.inputs.outputs.artifact_id }}
+          run-id: ${{ steps.inputs.outputs.origin_run_id }}
+          github-token: ${{ github.token }}
+          path: candidate
+          merge-multiple: true
+      - name: Verify retained payload and record diagnostic scope
+        timeout-minutes: 2
+        shell: pwsh
+        env:
+          INPUT_RUN_HEAD: ${{ steps.inputs.outputs.origin_head }}
+        run: |
+          $manifest = Get-Content candidate/candidate.json -Raw | ConvertFrom-Json
+          if ($manifest.sourceSha -cnotmatch '^[a-f0-9]{40}$') { throw 'Invalid original installer source.' }
+          $commit = gh api "repos/$env:GITHUB_REPOSITORY/commits/$($manifest.sourceSha)" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or ($manifest.sourceSha -cne $env:INPUT_RUN_HEAD -and $env:INPUT_RUN_HEAD -cnotin @($commit.parents.sha))) { throw 'Installer source is not the original run head or its PR merge.' }
+          ./scripts/MsiCandidate.ps1 -Mode Verify -Directory candidate -SourceSha $manifest.sourceSha
+          if ($LASTEXITCODE -ne 0) { throw 'Retained MSI hash verification failed.' }
+          "CERTIFICATION_SHA=$($manifest.sourceSha)" >> $env:GITHUB_ENV
+          Copy-Item candidate/candidate.json release-validation/msi-portal-diagnostic/candidate.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Prepare diagnostic browser inventory
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          npm ci --prefix scripts/typecheck
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic compiler restore failed.' }
+          node scripts/sync-assets.js
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic browser preparation failed.' }
+          node scripts/sync-assets.js -Check
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic browser inventory is stale.' }
+      - name: Diagnose the Portal profile without rebuilding
+        timeout-minutes: 22
+        shell: pwsh
+        env:
+          DIAGNOSTIC_SCENARIO: ${{ inputs.diagnostic_scenario || 'All' }}
+        run: |
+          . ./scripts/MsiCheckpoint.Helpers.ps1
+          $null = Write-MsiDurableCheckpoint -Stage 'supervisor starting'
+          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-MsiPortalUpgrade.ps1 -ScriptArguments @('-PreviousMsi', 'candidate/previous.msi', '-CurrentMsi', 'candidate/current.msi', '-OutDir', 'release-validation/msi-portal-diagnostic/report', '-DiagnosticScenario', $env:DIAGNOSTIC_SCENARIO) -EvidenceDirectory release-validation/msi-portal-diagnostic/supervisor -TimeoutSeconds 1200 -ForwardMsiCheckpoints
+      - name: Retain diagnostic reports without certification receipt
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi-portal-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/msi-portal-diagnostic/
+          if-no-files-found: warn
+          retention-days: 30

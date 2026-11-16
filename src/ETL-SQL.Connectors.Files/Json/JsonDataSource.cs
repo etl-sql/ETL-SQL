@@ -85,7 +85,7 @@ namespace ETL_SQL.Connectors.Json
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath)) yield break;
 
-            using var stream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".json");
+            using var stream = OpenDecodedReadStream();
             await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, _rootPath, batchSize, _trim)
                 .WithCancellation(effectiveCancellationToken))
             {
@@ -93,12 +93,30 @@ namespace ETL_SQL.Connectors.Json
             }
         }
 
+        /// <summary>
+        /// The file as UTF-8, whatever ENCODING says it is stored in. The JSON reader only reads
+        /// UTF-8, so a Latin-1 or UTF-16 file was decoded as the wrong characters.
+        /// </summary>
+        private Stream OpenDecodedReadStream()
+        {
+            var stream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".json");
+            return _encoding == null || _encoding.CodePage == Encoding.UTF8.CodePage
+                ? stream
+                : Encoding.CreateTranscodingStream(stream, _encoding, Encoding.UTF8, leaveOpen: false);
+        }
+
+        private bool IsNonUtf8Encoding => _encoding != null && _encoding.CodePage != Encoding.UTF8.CodePage;
+
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
             WriteBatches(batches, append, CancellationToken.None);
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            // The writer only writes a top-level array, so rows written through ROOT_PATH could not be
+            // read back through the same connection, and the rest of the document would be lost.
+            if (!string.IsNullOrEmpty(_rootPath))
+                throw new ExecutionException("Cannot write to a JSON connection with ROOT_PATH: rows are written as a top-level array, so they could not be read back through it. Write through a connection without ROOT_PATH.");
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
             string tempFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
             string? publicationFile = null;
@@ -109,10 +127,35 @@ namespace ETL_SQL.Connectors.Json
                 string? singleJson = null;
                 bool alreadyJson = false;
                 var options = new JsonSerializerOptions { WriteIndented = true };
-                await using (var stream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+
+                // INSERT INTO a JSON file arrives with append: true. The existing top-level array's
+                // elements are copied through unchanged ahead of the new rows; the file used to be
+                // overwritten with only the new rows.
+                JsonDocument? existing = null;
+                if (append && System.IO.File.Exists(_filePath) && new System.IO.FileInfo(_filePath).Length > 0)
+                {
+                    await using var existingStream = OpenDecodedReadStream();
+                    existing = await JsonDocument.ParseAsync(existingStream, cancellationToken: effectiveCancellationToken);
+                    if (existing.RootElement.ValueKind != JsonValueKind.Array)
+                    {
+                        existing.Dispose();
+                        throw new ExecutionException("Cannot append to this JSON file: its top level is not an array of rows.");
+                    }
+                }
+
+                await using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                await using (var stream = IsNonUtf8Encoding
+                    ? Encoding.CreateTranscodingStream(fileStream, _encoding!, Encoding.UTF8, leaveOpen: true)
+                    : fileStream)
+                using (existing)
                 {
                     await using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true, Encoder = options.Encoder });
                     writer.WriteStartArray();
+                    if (existing != null)
+                    {
+                        foreach (var element in existing.RootElement.EnumerateArray())
+                            element.WriteTo(writer);
+                    }
                     var dict = new Dictionary<string, object?>();
                     await foreach (var b in batches.WithCancellation(effectiveCancellationToken))
                     {
@@ -136,7 +179,7 @@ namespace ETL_SQL.Connectors.Json
 
                 if (alreadyJson && singleJson != null)
                 {
-                    await System.IO.File.WriteAllTextAsync(tempFile, singleJson, effectiveCancellationToken);
+                    await System.IO.File.WriteAllTextAsync(tempFile, singleJson, _encoding ?? new UTF8Encoding(false), effectiveCancellationToken);
                 }
 
                 string fileToEncrypt = tempFile;

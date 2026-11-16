@@ -72,14 +72,18 @@ public sealed class GatewayHost(
 
             attempts++;
             SetStatus(GatewayHostStatus.Connecting);
+            DateTimeOffset? sessionEstablished = null;
 
             try
             {
                 var client = new GatewaySessionClient(options.SessionOptions, dispatcher);
-                SetStatus(GatewayHostStatus.Connected);
-                currentBackoff = options.InitialBackoff; // Reset backoff on successful connection
-
-                await client.RunAsync(cancellationToken).ConfigureAwait(false);
+                // Connected only once the broker has acknowledged the session. Reporting it before
+                // the dial told a health probe the Gateway was up while it was still failing to connect.
+                await client.RunAsync(cancellationToken, () =>
+                {
+                    sessionEstablished = _time.GetUtcNow();
+                    SetStatus(GatewayHostStatus.Connected);
+                }).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -88,25 +92,33 @@ public sealed class GatewayHost(
             catch (Exception ex)
             {
                 ErrorOccurred?.Invoke(ex);
-
-                if (cancellationToken.IsCancellationRequested)
-                    break;
-
-                SetStatus(GatewayHostStatus.BackingOff);
-                try
-                {
-                    await Task.Delay(currentBackoff, _time, cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-
-                // Exponential backoff capped at MaxBackoff
-                currentBackoff = TimeSpan.FromTicks(Math.Min(
-                    currentBackoff.Ticks * 2,
-                    options.MaxBackoff.Ticks));
             }
+
+            if (cancellationToken.IsCancellationRequested)
+                break;
+
+            // A session that stayed up was healthy, so its loss starts the backoff over. One that
+            // failed to connect, or dropped at once, keeps doubling it. Resetting before every attempt
+            // held the delay at twice the initial value, and a session the broker closed cleanly
+            // reconnected with no delay at all. The uptime is measured from the acknowledgement, so a
+            // connect attempt that was slow to fail never counts as a healthy session.
+            if (sessionEstablished is { } established && _time.GetUtcNow() - established >= options.MaxBackoff)
+                currentBackoff = options.InitialBackoff;
+
+            SetStatus(GatewayHostStatus.BackingOff);
+            try
+            {
+                await Task.Delay(currentBackoff, _time, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            // Exponential backoff capped at MaxBackoff
+            currentBackoff = TimeSpan.FromTicks(Math.Min(
+                currentBackoff.Ticks * 2,
+                options.MaxBackoff.Ticks));
         }
 
         SetStatus(GatewayHostStatus.Stopped);

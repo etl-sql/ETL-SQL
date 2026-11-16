@@ -169,6 +169,59 @@ public class LineageAnalyzer
         _ => null
     };
 
+    private void AnalyzeSubqueriesInExpression(Expression? expr)
+    {
+        switch (expr)
+        {
+            case SubqueryExpression subq: AnalyzeStatement(subq.Query); break;
+            case ExistsExpression exists: AnalyzeStatement(exists.Subquery); break;
+            case InExpression inExpr:
+                AnalyzeSubqueriesInExpression(inExpr.Left);
+                AnalyzeSubqueriesInExpression(inExpr.Right);
+                break;
+            case BinaryExpression bin:
+                AnalyzeSubqueriesInExpression(bin.Left);
+                AnalyzeSubqueriesInExpression(bin.Right);
+                break;
+            case UnaryExpression un: AnalyzeSubqueriesInExpression(un.Expression); break;
+            case FunctionCallExpression func:
+                foreach (var arg in func.Arguments) AnalyzeSubqueriesInExpression(arg);
+                AnalyzeSubqueriesInExpression(func.Filter);
+                break;
+            case CaseExpression c:
+                AnalyzeSubqueriesInExpression(c.InputExpression);
+                foreach (var w in c.WhenClauses)
+                {
+                    AnalyzeSubqueriesInExpression(w.Condition);
+                    AnalyzeSubqueriesInExpression(w.Result);
+                }
+                AnalyzeSubqueriesInExpression(c.ElseResult);
+                break;
+            case BetweenExpression b:
+                AnalyzeSubqueriesInExpression(b.Left);
+                AnalyzeSubqueriesInExpression(b.Start);
+                AnalyzeSubqueriesInExpression(b.End);
+                break;
+            case IsNullExpression n: AnalyzeSubqueriesInExpression(n.Expression); break;
+            case IsDistinctFromExpression d:
+                AnalyzeSubqueriesInExpression(d.Left);
+                AnalyzeSubqueriesInExpression(d.Right);
+                break;
+            case LikeExpression l:
+                AnalyzeSubqueriesInExpression(l.Left);
+                AnalyzeSubqueriesInExpression(l.Pattern);
+                AnalyzeSubqueriesInExpression(l.EscapeChar);
+                break;
+            case ListExpression list:
+                foreach (var item in list.Items) AnalyzeSubqueriesInExpression(item);
+                break;
+            case AtTimeZoneExpression atz:
+                AnalyzeSubqueriesInExpression(atz.Left);
+                AnalyzeSubqueriesInExpression(atz.TimeZone);
+                break;
+        }
+    }
+
     private void AnalyzeStatements(IEnumerable<Statement> statements)
     {
         foreach (var stmt in statements)
@@ -179,6 +232,29 @@ public class LineageAnalyzer
 
     private void AnalyzeStatement(Statement stmt)
     {
+        if (stmt.Ctes is { Count: > 0 })
+        {
+            var prevTarget = _selectTargetOverride;
+            var prevCols = _selectTargetColumnsOverride;
+            var prevOp = _selectOperationOverride;
+            try
+            {
+                foreach (var cte in stmt.Ctes)
+                {
+                    _selectTargetOverride = cte.Name;
+                    _selectTargetColumnsOverride = cte.ColumnNames;
+                    _selectOperationOverride = "CTE";
+                    AnalyzeStatement(cte.Query);
+                }
+            }
+            finally
+            {
+                _selectTargetOverride = prevTarget;
+                _selectTargetColumnsOverride = prevCols;
+                _selectOperationOverride = prevOp;
+            }
+        }
+
         if (stmt is BlockStatement block)
         {
             AnalyzeStatements(block.Statements);
@@ -222,7 +298,13 @@ public class LineageAnalyzer
         }
         else if (stmt is SetOperationStatement setOp)
         {
+            var savedTarget = _selectTargetOverride;
+            var savedCols = _selectTargetColumnsOverride;
+            var savedOp = _selectOperationOverride;
             AnalyzeStatement(setOp.Left);
+            _selectTargetOverride = savedTarget;
+            _selectTargetColumnsOverride = savedCols;
+            _selectOperationOverride = savedOp;
             AnalyzeStatement(setOp.Right);
         }
         else if (stmt is DeclareStatement dec)
@@ -259,6 +341,17 @@ public class LineageAnalyzer
             _selectTargetOverride = null;   // applies only to this immediate SELECT
             _selectTargetColumnsOverride = null;
             _selectOperationOverride = null;
+
+            if (sel.FromTable?.Subquery != null) AnalyzeStatement(sel.FromTable.Subquery);
+            foreach (var join in sel.Joins)
+            {
+                if (join.Table.Subquery != null) AnalyzeStatement(join.Table.Subquery);
+                AnalyzeSubqueriesInExpression(join.Condition);
+            }
+            foreach (var col in sel.Columns) AnalyzeSubqueriesInExpression(col.Expression);
+            AnalyzeSubqueriesInExpression(sel.WhereClause);
+            AnalyzeSubqueriesInExpression(sel.HavingClause);
+            AnalyzeSubqueriesInExpression(sel.QualifyClause);
 
             // Create table mapping for alias/unqualified resolution
             var tableMapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

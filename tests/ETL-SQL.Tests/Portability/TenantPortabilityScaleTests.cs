@@ -117,6 +117,56 @@ public sealed class TenantPortabilityScaleTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
     }
 
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    public async Task EncryptedComponentPlaintextLengthIsCheckedAgainstTheInventory(int lengthSkew, bool expectValid)
+    {
+        var source = new MovingConsistencySource(stable: true);
+        var point = await TenantExportConsistencyCoordinator.CaptureAsync(
+            source, "tenant-a", "enc-1", finalCutover: false, DateTimeOffset.UtcNow);
+        var bytes = Encoding.UTF8.GetBytes("CREATE FOLDER 'Sales';");
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+        var root = Path.Combine(Path.GetTempPath(), $"phase2-enc-{Guid.NewGuid():N}");
+        var keys = Path.Combine(Path.GetTempPath(), $"phase2-enc-keys-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(keys);
+        var pub = Path.Combine(keys, "public.asc");
+        var priv = Path.Combine(keys, "private.asc");
+        try
+        {
+            using (var pgp = new PgpCore.PGP())
+                await pgp.GenerateKeyAsync(new FileInfo(pub), new FileInfo(priv), "tenant@example.test", string.Empty, 1024);
+
+            await TenantBundleWriter.WriteAsync(root, new TenantBundleRequest(
+                "bundle-enc", DateTimeOffset.UtcNow, "0.22.0", "Shared", "tenant-a",
+                TenantBundleExportMode.FullEligibleTenantExport, point.Digest,
+                [new TenantBundlePayload("catalog:portal", "catalog", "application/x-etlsql",
+                    "catalog/portal.etlsql", bytes, [])], [], [],
+                RecipientPublicKeyFile: pub,
+                DeclaredConsistencyPoint: point,
+                Inventory: [new("catalog:portal", "catalog", TenantInventoryDisposition.Included,
+                    bytes.Length, hash, "user:owner", ["group:admins:owner"], null, null, "tenant-a")]));
+
+            // The writer refuses a mismatched inventory, so skew the (unsigned) manifest afterwards:
+            // only the plaintext seen after decryption can expose it.
+            var manifestPath = Path.Combine(root, TenantBundle.ManifestFileName);
+            var json = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(manifestPath))!;
+            json["Inventory"]![0]!["ByteLength"] = bytes.Length + lengthSkew;
+            await File.WriteAllTextAsync(manifestPath, json.ToJsonString());
+
+            var result = await TenantBundleValidator.ValidateAsync(root,
+                new TenantBundleValidator.Options(null, RequireSignature: false, RecipientPrivateKeyFile: priv));
+            Assert.Equal(expectValid, result.IsValid);
+            if (!expectValid)
+                Assert.Contains(result.Findings, f => f.Code == "bundle.inventory.component-mismatch");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            if (Directory.Exists(keys)) Directory.Delete(keys, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task DeltaSequenceRejectsMixedTenantReplayAndOutOfOrderFinalDelta()
     {

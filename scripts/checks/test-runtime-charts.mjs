@@ -176,6 +176,7 @@ class MockDOMParser {
             return errDoc;
         }
         const svg = new MockElement('svg');
+        svg.namespaceURI = 'http://www.w3.org/2000/svg';
         svg.setAttribute('viewBox', '0 0 600 400');
         svg.setAttribute('width', '600');
         svg.setAttribute('height', '400');
@@ -207,6 +208,7 @@ globalThis.ResizeObserver = class {
     disconnect() {}
 };
 
+let detailRefreshes = 0;
 const dependencies = {
     ...util,
     actionsFor: () => [],
@@ -214,7 +216,7 @@ const dependencies = {
     executeAction: () => {},
     showCtxMenu: () => {},
     appendDetailStaticNote: () => {},
-    attachDetailSurface: () => ({ destroy: () => {} }),
+    attachDetailSurface: () => ({ destroy: () => {}, refresh: () => { detailRefreshes++; } }),
     apiBase: '/api',
     getLastManifest: () => null,
     isWebMode: true,
@@ -253,7 +255,8 @@ return {
     observeNativeLayout,
     getNativeLayoutObservers,
     setNativeLayoutObservers,
-    _nativeLayoutTimers
+    _nativeLayoutTimers,
+    updateNativeVisualInPlace
 };`)(...Object.values(dependencies));
 
 const {
@@ -283,6 +286,9 @@ const {
 {
     // Modern resolved manifest
     const modern = resolveInteraction({
+        visualType: 'bar',
+        interactions: { ON_SELECT: 'FILTER', MATCHING: 'RetiredRegion' },
+        options: { 'mapping:y': 'RetiredSales' },
         interaction: {
             key: 'Category',
             valueKey: 'Revenue',
@@ -298,19 +304,18 @@ const {
     assert.equal(modern.highlight, 'CATEGORICAL');
     assert.equal(crossFilterActive(modern), true);
 
-    // Legacy fallback
+    // Retired manifests cannot infer interaction semantics from options or visual type.
     const legacyBar = resolveInteraction({
         visualType: 'bar',
         interactions: { ON_SELECT: 'FILTER', MATCHING: 'Region' },
         options: { 'mapping:y': 'Sales' }
     });
-    assert.equal(legacyBar.key, 'Region');
-    assert.equal(legacyBar.valueKey, 'Sales');
-    assert.equal(legacyBar.select, 'MULTIPLE');
-    assert.equal(legacyBar.effect, 'FILTER');
-    assert.equal(legacyBar.highlight, 'PROPORTIONAL');
-    assert.deepEqual(legacyBar.extent, { axis: 'y', anchor: 'end' });
-    assert.equal(crossFilterActive(legacyBar), true);
+    assert.equal(legacyBar.key, null);
+    assert.equal(legacyBar.valueKey, null);
+    assert.equal(legacyBar.select, 'NONE');
+    assert.equal(legacyBar.highlight, 'NONE');
+    assert.equal(legacyBar.extent, null);
+    assert.equal(crossFilterActive(legacyBar), false);
 
     // Inactive interaction
     const inactive = resolveInteraction(null);
@@ -383,6 +388,33 @@ const {
     setNativeLayoutObservers([]);
     assert.equal(getNativeLayoutObservers().length, 0);
     assert.ok(_nativeLayoutTimers instanceof Map);
+}
+
+// ── Responsive redraw keeps the <svg>-level interactions ─────────────────────
+{
+    const card = new MockElement('div');
+    const visual = {
+        name: 'vResize', visualType: 'bar',
+        nativeSvg: '<svg viewBox="0 0 600 400"><rect data-row-index="0"/></svg>',
+        options: { CROSSHAIR: 'ON', HOVER_FOCUS: 'SELF' },
+        columns: ['Category', 'Sales'], rows: [['A', 1]]
+    };
+    renderNativeSvg(card, visual, { visuals: [visual] }, null);
+    const wrapper = card.querySelector('.native-chart-wrapper');
+    const firstSvg = wrapper.querySelector('svg');
+    assert.ok(firstSvg.listeners.pointermove?.length, 'first render wires the crosshair');
+
+    detailRefreshes = 0;
+    assert.equal(rtCharts.updateNativeVisualInPlace(card, visual), true);
+    const redrawn = wrapper.querySelector('svg');
+    assert.notEqual(redrawn, firstSvg, 'the svg was replaced');
+    // The replacement used to get an empty crosshair group and no listeners at all.
+    assert.ok(redrawn.listeners.pointermove?.length, 'crosshair listener re-attached');
+    assert.ok(redrawn.listeners.pointerover?.length, 'hover focus listener re-attached');
+    // The mock's class selector reads classList; the runtime sets the SVG class attribute.
+    const crosshair = redrawn.querySelectorAll('g').find(g => g.getAttribute('class') === 'plot-crosshair-group');
+    assert.equal(crosshair.children.length, 2, 'crosshair lines re-created');
+    assert.equal(detailRefreshes, 1, 'detail surface re-prepares the new marks for keyboard focus');
 }
 
 console.log('runtime charts: all contract, rendering, interaction, and layout checks passed');

@@ -64,7 +64,22 @@ public sealed class ReportLibrarySandboxTests(SandboxStoryFixture fixture) : IAs
 
         await page.Locator("#folderTree .folder-item[data-id='1']").FocusAsync();
         await page.Keyboard.PressAsync("Enter");
-        await Expect(page.Locator(".library-title h2")).ToHaveTextAsync("Finance");
+        // CI 42609393604 (2026-11-09) once left Finance on "Loading reports…" for 5 s although the mock
+        // answers at once; 80 local runs, idle and under full CPU load, never did. Record what the page
+        // asked for and whether a view transition was still holding the update.
+        try { await Expect(page.Locator(".library-title h2")).ToHaveTextAsync("Finance"); }
+        catch (PlaywrightException failure)
+        {
+            var state = await page.EvaluateAsync<string>("""
+                () => JSON.stringify({
+                    visibility: document.visibilityState,
+                    activeViewTransition: !!document.activeViewTransition,
+                    main: document.getElementById('mainContent')?.innerText.slice(0, 200),
+                    calls: window.__readerMock.calls.map(call => `${call.method} ${call.path}`),
+                })
+                """);
+            throw new PlaywrightException($"{failure.Message}\nLibrary state: {state}", failure);
+        }
         await Expect(page.Locator(".report-card")).ToHaveCountAsync(3);
         await Expect(quarterly).ToHaveAttributeAsync("aria-selected", "false");
         Assert.Empty(session.PageErrors);
@@ -278,7 +293,7 @@ public sealed class ReportLibrarySandboxTests(SandboxStoryFixture fixture) : IAs
 
     private async Task OpenAsync(IPage page, string scenario = "healthy", string hash = "")
     {
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/reader-page-frame.html?fixture={scenario}{hash}");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/reader-page-frame.html?fixture={scenario}{hash}");
         await Expect(page.Locator("body")).ToHaveAttributeAsync("data-reader-sandbox-ready", "true");
         await Expect(page.Locator("#mainContent .loading-state")).ToHaveCountAsync(0);
     }

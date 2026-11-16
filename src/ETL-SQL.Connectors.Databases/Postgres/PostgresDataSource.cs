@@ -133,8 +133,10 @@ namespace ETL_SQL.Connectors.Postgres
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
 
+                var noRows = true;
                 while (await reader.ReadAsync(effectiveCancellationToken))
                 {
+                    noRows = false;
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
@@ -150,7 +152,8 @@ namespace ETL_SQL.Connectors.Postgres
                     }
                 }
 
-                if (currentBatch.Rows.Count > 0)
+                // An empty result still names its columns, so an outer join can name an empty side.
+                if (currentBatch.Rows.Count > 0 || noRows)
                 {
                     yield return currentBatch;
                 }
@@ -167,6 +170,7 @@ namespace ETL_SQL.Connectors.Postgres
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            if (_context != null && _context.IsWhatIf) return;
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Postgres data source write.");
 
@@ -344,6 +348,7 @@ namespace ETL_SQL.Connectors.Postgres
         {
             DateTimeOffset offset => offset.UtcDateTime.ToString(
                 "yyyy-MM-dd HH:mm:ss.ffffff+00", System.Globalization.CultureInfo.InvariantCulture),
+            DateOnly dateOnly => dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
             DateTime dateTime => dateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff",
                 System.Globalization.CultureInfo.InvariantCulture),
             IFormattable formattable => formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
@@ -621,6 +626,7 @@ namespace ETL_SQL.Connectors.Postgres
 
         private async Task TruncateAsync(CancellationToken cancellationToken)
         {
+            if (_context != null && _context.IsWhatIf) return;
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Postgres truncate.");
 

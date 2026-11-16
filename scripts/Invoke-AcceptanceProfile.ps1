@@ -180,6 +180,10 @@ CREATE VISUAL V AS TABLE (SOURCE = #d, MAPPINGS (Value = Value));
             scriptPath = $scriptName
         } -Token $token -AllowFailure
         if ($created) { Write-Step "published report $reportName" }
+        elseif ($ScriptRootPath) {
+            # The script was written to the root just above, so the Portal had what it needed.
+            Write-Host "  report not published: the Portal refused $scriptName." -ForegroundColor Red
+        }
         else {
             Write-Host "  SKIP  report not seeded: $scriptName is not under the Portal's ScriptRootPath." -ForegroundColor Yellow
             Write-Host "        Pass -ScriptRootPath when the root is reachable from here." -ForegroundColor Yellow
@@ -223,7 +227,14 @@ if ($folder) {
     $reports = Invoke-Portal GET "/api/folders/$($folder.id)/reports" -Token $token
     $report = $reports | Where-Object { $_.name -eq $reportName } | Select-Object -First 1
 
-    if (-not $report) {
+    if (-not $report -and $ScriptRootPath) {
+        # With the script root supplied there is nothing to excuse a missing report. Skipping here
+        # let a publish that failed on both parity targets pass as agreeing skips.
+        Assert-That "seeded report is listed" { $false }
+        Record-Skip "seeded report starts a job" "the report is not listed"
+        Record-Skip "seeded report completes" "the report is not listed"
+    }
+    elseif (-not $report) {
         Record-Skip "seeded report is listed" "no report was seeded"
         Record-Skip "seeded report starts a job" "no report was seeded"
         Record-Skip "seeded report completes" "no report was seeded"

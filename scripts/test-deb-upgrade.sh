@@ -7,19 +7,23 @@
 # configuration survived. It then reinstalls the previous package over the candidate and purges
 # everything. Every check is reported; the exit code is non-zero when any failed.
 #
+# With an empty <previous.deb> (no public release to upgrade from yet) only the fresh install runs.
+#
 # Mutates the machine: run as root on a disposable host or WSL distro with systemd and no
 # etl-sql package installed. Node 22 must be on PATH (or set NODE) for the asset checks.
 #
-# Usage: sudo scripts/test-deb-upgrade.sh <previous.deb> <current.deb> <prepared-checkout> <evidence-dir>
+# Usage: sudo scripts/test-deb-upgrade.sh <previous.deb|""> <current.deb> <prepared-checkout> <evidence-dir>
 set -uo pipefail
 
-PREVIOUS_DEB=$(realpath "$1"); CURRENT_DEB=$(realpath "$2"); CHECKOUT=$(realpath "$3"); OUT=$4
+[ $# -eq 4 ] || { echo "Usage: $0 <previous.deb|\"\"> <current.deb> <prepared-checkout> <evidence-dir>" >&2; exit 2; }
+PREVIOUS_DEB=${1:+$(realpath "$1")}; CURRENT_DEB=$(realpath "$2"); CHECKOUT=$(realpath "$3"); OUT=$4
 NODE=${NODE:-node}
 INSTALL=/usr/lib/etl-sql/bin
 CFG=$INSTALL/appsettings.json
 FIRST_RUN=/etc/etl-sql/first-run-password
 URL=http://localhost:5002
 CHECKER=$CHECKOUT/scripts/test-installed-portal-assets.mjs
+. "$CHECKOUT/scripts/lib/installed-linux-checks.sh"
 
 [ "$(id -u)" -eq 0 ] || { echo "Run as root." >&2; exit 2; }
 dpkg -s etl-sql >/dev/null 2>&1 && { echo "etl-sql is already installed; use a clean host." >&2; exit 2; }
@@ -83,48 +87,38 @@ wait_portal() {
 
 # A running service whose executable was replaced underneath it reports the old inode as deleted.
 service_runs_installed_binary() {
-    local pid; pid=$(systemctl show -p MainPID --value "$1")
-    if [ -z "$pid" ] || [ "$pid" = 0 ]; then
+    local service=$1 expected=$2 pid exe
+    if ! systemctl is-active --quiet "$service"; then
+        echo "$service is not active"
+        return 1
+    fi
+    if ! pid=$(systemctl show -p MainPID --value "$service") || [[ ! "$pid" =~ ^[1-9][0-9]*$ ]]; then
         echo "$1 has no main process"
         journalctl -u "$1" --no-pager -n 80 > "$OUT/${1%.service}-$(date +%s)-journal.txt" 2>&1
         return 1
     fi
-    local exe; exe=$(readlink "/proc/$pid/exe"); echo "$1 pid $pid exe $exe"
-    [[ "$exe" != *"(deleted)"* ]]
+    if ! exe=$(readlink "/proc/$pid/exe"); then
+        echo "$service executable could not be inspected"
+        return 1
+    fi
+    echo "$service pid $pid exe $exe"
+    [[ "$exe" == "$expected" ]]
 }
 
 cli_reports() { local out; out=$(etl-sql --version 2>&1); echo "$out"; grep -q -- "${1%%[-~+]*}" <<<"$out"; }
-mask() { [ -n "$1" ] && echo "${1:0:4}…(${#1})" || echo "<empty>"; }
-setting_is() { local value; value=$(setting "$1"); echo "$1: was $(mask "$2") now $(mask "$value")"; [ -n "$value" ] && [ "$value" = "$2" ]; }
-setting_present() { local value; value=$(setting "$1"); echo "$1: $(mask "$value")"; [ -n "$value" ]; }
+setting_is() { local value; value=$(setting "$1"); [ -n "$value" ] && [ "$value" = "$2" ]; }
+setting_present() { local value; value=$(setting "$1"); [ -n "$value" ]; }
 root_only_file() { local mode; mode=$(stat -c '%a %U' "$1" 2>&1); echo "$1: $mode"; [ "$mode" = "600 root" ] && [ -s "$1" ]; }
 # postinst writes generated secrets into appsettings.json, so dpkg reports it as modified by design.
-# Packages up to v0.20.1 also shipped Portal snapshot files that the running Portal later prunes.
 dpkg_verify_clean() {
-    local problems; problems=$(dpkg --verify etl-sql 2>&1 | grep -v -e ' /usr/lib/etl-sql/bin/appsettings.json$' -e ' /usr/lib/etl-sql/bin/Snapshots/')
+    local problems; problems=$(dpkg --verify etl-sql 2>&1 | grep -v -e ' /usr/lib/etl-sql/bin/appsettings.json$')
     echo "$problems"; [ -z "$problems" ]
 }
 
-# Releases up to v0.20.0 ship units that cannot start (the service user has no home directory for
-# its state or for single-file extraction). Apply the drop-in an operator needs for such a package,
-# so the upgrade starts from a working install; it is removed again before the candidate is installed.
-DROPIN_DIRS="/etc/systemd/system/etl-sql-portal.service.d /etc/systemd/system/etl-sql-orchestrator.service.d"
-operator_workaround_if_needed() {
-    grep -q DOTNET_BUNDLE_EXTRACT_BASE_DIR /etc/systemd/system/etl-sql-portal.service && return 0
-    log "NOTE $1: package units lack an extraction directory; applying the operator drop-in"
-    for d in $DROPIN_DIRS; do
-        mkdir -p "$d"
-        printf '[Service]\nStateDirectory=etl-sql\nCacheDirectory=etl-sql\nEnvironment=HOME=/var/lib/etl-sql\nEnvironment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=/var/cache/etl-sql\nExecStartPre=/bin/mkdir -p /var/lib/etl-sql/.local/share\n' > "$d/extract.conf"
-    done
-    systemctl daemon-reload
-    systemctl restart etl-sql-orchestrator.service etl-sql-portal.service
-}
-remove_operator_workaround() { rm -f /etc/systemd/system/etl-sql-*.service.d/extract.conf; systemctl daemon-reload; }
-
-# A v0.20.0 operator follows the documented first-start steps (docs/administration/portal/
-# deployment.md and portal-configuration.md) in the installed configuration file: a bootstrap
-# administrator password and the dataset at-rest key. The upgrade must carry both forward, and the
-# setting of the operator's own.
+# An operator follows the documented first-start steps (docs/administration/portal/deployment.md
+# and portal-configuration.md) in the installed configuration file: a bootstrap administrator
+# password and the dataset at-rest key. The upgrade must carry both forward, and the setting of the
+# operator's own.
 configure_previous() {
     python3 - "$CFG" <<'CONFIG'
 import base64, json, os, sys
@@ -135,10 +129,13 @@ data["Portal"]["Dataset"]["AtRestKey"] = base64.b64encode(os.urandom(32)).decode
 data["UpgradeSentinel"] = {"Value": "kept"}
 json.dump(data, open(path, "w", encoding="utf-8"), indent=2)
 CONFIG
+    # Model the administrator consuming the previous install's bootstrap file, as the MSI check does. Its continued presence would not prove that the upgrade
+    # generated another one.
+    rm -f "$FIRST_RUN"
     systemctl restart etl-sql-portal.service
 }
 # `admin backup` runs as root, not the service user, so it must be told where the service's job
-# history is. Before v0.21.0 it silently backed up no Orchestrator database.
+# history is; otherwise it silently backs up no Orchestrator database.
 backup_has_job_history() {
     local db=/var/lib/etl-sql/.local/share/etlsql-data/etlsql.db dir="$OUT/fresh-backup"
     setting_is Portal:Orchestrator:DatabasePath "$db" || return 1
@@ -155,8 +152,13 @@ PY
 }
 assets() { "$NODE" "$CHECKER" --url "$URL" --install "$INSTALL" --dump "$OUT/served-mismatch" "$@"; }
 
-PREV_V=$(package_version "$PREVIOUS_DEB"); CUR_V=$(package_version "$CURRENT_DEB")
-log "previous $PREV_V $(sha256sum "$PREVIOUS_DEB" | cut -c1-64)"
+CUR_V=$(package_version "$CURRENT_DEB")
+if [ -n "$PREVIOUS_DEB" ]; then
+    PREV_V=$(package_version "$PREVIOUS_DEB")
+    log "previous $PREV_V $(sha256sum "$PREVIOUS_DEB" | cut -c1-64)"
+else
+    log "previous none (fresh install only)"
+fi
 log "current  $CUR_V $(sha256sum "$CURRENT_DEB" | cut -c1-64)"
 log "checkout $(git -C "$CHECKOUT" rev-parse HEAD 2>/dev/null || echo unknown)"
 
@@ -164,31 +166,40 @@ log "checkout $(git -C "$CHECKOUT" rev-parse HEAD 2>/dev/null || echo unknown)"
 log "== fresh install of $CUR_V"
 check "fresh: dpkg install" dpkg -i "$CURRENT_DEB"
 check "fresh: Portal healthy" wait_portal fresh
-check "fresh: Portal runs the installed executable" service_runs_installed_binary etl-sql-portal.service
-check "fresh: Orchestrator runs the installed executable" service_runs_installed_binary etl-sql-orchestrator.service
+check "fresh: Portal runs the installed executable" service_runs_installed_binary etl-sql-portal.service "$INSTALL/ETL-SQL-Portal"
+check "fresh: Orchestrator runs the installed executable" service_runs_installed_binary etl-sql-orchestrator.service "$INSTALL/ETL-SQL-Service"
+check "fresh: shipped paths are root-owned and protected" installed_package_permissions
+check "fresh: services write databases and logs; service account writes data" installed_service_writes
 check "fresh: one-time sign-in written for root only" root_only_file "$FIRST_RUN"
 check "fresh: dataset at-rest key generated" setting_present Portal:Dataset:AtRestKey
 check "fresh: secrets readable by the service account only" secrets_file_protected
 check "fresh: shared appsettings.json holds no generated secret" shared_config_holds_no_secrets
 check "fresh: served assets match the candidate" assets --inventory-root "$CHECKOUT" --out "$OUT/fresh-assets.json"
 check "fresh: admin backup includes the job history the service writes" backup_has_job_history
+check "fresh: candidate backup passes recovery validation with a retained report" \
+    "$NODE" "$CHECKOUT/scripts/test-backup-recovery.mjs" "$OUT/fresh-backup" "$OUT/recovery-report.json"
 check "fresh: dpkg purge" dpkg --purge etl-sql
 check "fresh: purge removed state, cache and sign-in file" \
     bash -c '[ ! -e /var/lib/etl-sql ] && [ ! -e /var/cache/etl-sql ] && [ ! -e /etc/etl-sql ]'
 userdel etlsql 2>/dev/null || true
 rm -rf /usr/lib/etl-sql
 
+if [ -z "$PREVIOUS_DEB" ]; then
+    [ $FAILED -eq 0 ] && log "RESULT PASS" || log "RESULT FAIL"
+    exit $FAILED
+fi
+
 # 1. Previous release, as an operator would leave it.
 log "== install previous $PREV_V"
 check "previous: dpkg install" dpkg -i "$PREVIOUS_DEB"
-operator_workaround_if_needed previous
 configure_previous
 check "previous: Portal healthy" wait_portal previous
 SECRET=$(setting Portal:Jwt:Secret); API_KEY=$(setting Orchestrator:ApiKey); AT_REST=$(setting Portal:Dataset:AtRestKey)
-echo kept > "$INSTALL/data-upgrade-sentinel.txt"
+check "previous: service account creates runtime data" \
+    runuser -u etlsql -- sh -c 'printf "%s\n" kept > "$1/data-upgrade-sentinel.txt"' sh "$INSTALL"
 check "previous: served assets recorded as a browser cache" assets --record "$OUT/cache-previous.json" --out "$OUT/previous-assets.json"
-# The pre-upgrade backup a rollback needs: v0.21.0 renames the database schema on first start, and a
-# previous release cannot open the renamed tables. SQLite files are copied with the services stopped.
+# The pre-upgrade backup a rollback needs: an upgrade may migrate the database schema on first
+# start, and a previous release cannot open migrated tables. SQLite files are copied with the services stopped.
 # The Portal's database sits in the install folder; the Orchestrator's in the service user's home.
 BACKUP=$OUT/pre-upgrade-backup
 databases() { find "$INSTALL" /var/lib/etl-sql -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' 2>/dev/null; }
@@ -202,11 +213,12 @@ systemctl start etl-sql-orchestrator.service etl-sql-portal.service
 
 # 2. Upgrade in place. The services are left exactly as the package scripts leave them.
 log "== upgrade to $CUR_V"
-remove_operator_workaround
 check "upgrade: dpkg install" dpkg -i "$CURRENT_DEB"
 check "upgrade: Portal healthy" wait_portal upgrade
-check "upgrade: Portal runs the upgraded executable" service_runs_installed_binary etl-sql-portal.service
-check "upgrade: Orchestrator runs the upgraded executable" service_runs_installed_binary etl-sql-orchestrator.service
+check "upgrade: Portal runs the upgraded executable" service_runs_installed_binary etl-sql-portal.service "$INSTALL/ETL-SQL-Portal"
+check "upgrade: Orchestrator runs the upgraded executable" service_runs_installed_binary etl-sql-orchestrator.service "$INSTALL/ETL-SQL-Service"
+check "upgrade: shipped paths are root-owned and protected" installed_package_permissions
+check "upgrade: services write databases and logs; service account writes data" installed_service_writes
 check "upgrade: CLI reports $CUR_V" cli_reports "$CUR_V"
 check "upgrade: installed files match the package" dpkg_verify_clean
 check "upgrade: Portal JWT secret preserved" setting_is Portal:Jwt:Secret "$SECRET"
@@ -217,6 +229,7 @@ check "upgrade: secrets moved to the service-only file" secrets_file_protected
 check "upgrade: shared appsettings.json holds no generated secret" shared_config_holds_no_secrets
 check "upgrade: no one-time sign-in for an existing Portal" test ! -e "$FIRST_RUN"
 check "upgrade: runtime data preserved" grep -qx kept "$INSTALL/data-upgrade-sentinel.txt"
+check "upgrade: preserved runtime data still belongs to the service" service_owned_nonempty_file "$INSTALL/data-upgrade-sentinel.txt"
 check "upgrade: served assets match the candidate; cached browser refetches changes" \
     assets --inventory-root "$CHECKOUT" --revalidate "$OUT/cache-previous.json" --record "$OUT/cache-current.json" --out "$OUT/upgrade-assets.json"
 
@@ -224,7 +237,6 @@ check "upgrade: served assets match the candidate; cached browser refetches chan
 #    of the databases and configuration with the services stopped.
 log "== roll back to $PREV_V"
 check "rollback: dpkg install" dpkg -i "$PREVIOUS_DEB"
-operator_workaround_if_needed rollback
 setting_is Portal:Jwt:Secret "$SECRET" > /dev/null \
     || log "NOTE rollback: $PREV_V package scripts replaced the configuration"
 systemctl stop etl-sql-portal.service etl-sql-orchestrator.service
@@ -232,7 +244,7 @@ databases | xargs -r rm -f
 tar -xpPf "$BACKUP/databases.tar"; cp -p "$BACKUP/appsettings.json" "$CFG"; chown etlsql:etlsql "$CFG"
 systemctl start etl-sql-orchestrator.service etl-sql-portal.service
 check "rollback: Portal healthy on the restored database" wait_portal rollback
-check "rollback: Portal runs the reinstalled executable" service_runs_installed_binary etl-sql-portal.service
+check "rollback: Portal runs the reinstalled executable" service_runs_installed_binary etl-sql-portal.service "$INSTALL/ETL-SQL-Portal"
 check "rollback: CLI reports $PREV_V" cli_reports "$PREV_V"
 check "rollback: installed files match the previous package" dpkg_verify_clean
 check "rollback: served assets are the previous release's; cached browser refetches changes" \
@@ -241,9 +253,9 @@ check "rollback: served assets are the previous release's; cached browser refetc
 # 4. Purge leaves nothing behind.
 log "== purge"
 check "purge: dpkg purge" dpkg --purge etl-sql
-rm -rf $DROPIN_DIRS; systemctl daemon-reload; rm -rf /var/cache/etl-sql /var/lib/etl-sql /etc/etl-sql
-# The purge runs the previous package's scripts, which predate these v0.21.0 files: record them,
-# then remove them so the next run starts clean.
+rm -rf /var/cache/etl-sql /var/lib/etl-sql /etc/etl-sql
+# The purge runs the previous package's scripts: record anything they leave of the secrets, then
+# remove it so the next run starts clean.
 find "$INSTALL" -maxdepth 2 \( -name appsettings.secrets.json -o -name .portal-keys \) > "$OUT/left-by-previous-purge.txt" 2>/dev/null
 rm -rf "$INSTALL/appsettings.secrets.json" "$INSTALL/.portal-keys"
 rm -f "$INSTALL/data-upgrade-sentinel.txt"; rmdir --ignore-fail-on-non-empty "$INSTALL" /usr/lib/etl-sql 2>/dev/null

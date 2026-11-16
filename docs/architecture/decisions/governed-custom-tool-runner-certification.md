@@ -1,60 +1,36 @@
-# Governed Custom Tool Runner - Adversarial Certification Evidence
+# Governed Custom Tool Runner - Security Controls & Evidence
 
 ## Overview
-This document records the adversarial certification evidence for the Governed Custom Tool Runner extension in ETL-SQL. The runner implements OCI-hardened execution bindings, zero-trust network policies, and isolated capabilities to ensure that custom containerized tools cannot compromise the engine, access unauthorized tenant data, or exhaust host resources.
+This document records the implemented security controls, tested boundaries, and explicit non-claims for the Governed Custom Tool Runner (`EXECUTE TOOL`) in ETL-SQL.
 
-## Certification Vectors & Evidence
+## Implemented Controls & Verified Evidence
 
-### 1. Injection & Execution Control
-* **Vector**: Malicious script author attempting to inject arbitrary shell commands or overwrite the container entrypoint.
-* **Evidence (Pass)**: The `ExecuteToolStatementHandler` executes Docker via `System.Diagnostics.Process` bypassing shell evaluation (`cmd.exe` / `bash -c`). Arguments are passed directly in the `ArgumentList`. All execution options (image, working directory, environment variables) are strictly parsed from the validated AST and are immutable during execution.
-* **Artifact**: `ExecuteToolStatementHandler.cs` lines 88-210.
+### 1. Injection, Parameter Roles & Execution Control
+* **Vector**: Script author or caller parameters attempting shell injection, multi-argument expansion, second-pass placeholder substitution, or interpreter code execution.
+* **Control**: `ExecuteToolStatementHandler` launches processes with `UseShellExecute = false` and `ProcessStartInfo.ArgumentList` (no `cmd.exe` or `/bin/sh -c`). `BuildArguments` tokenizes `ARGS` templates first and replaces placeholders in a single pass so nested `{OTHER}` syntax inside parameter values is never re-expanded. Parameter role validation blocks option-shaped values (while permitting signed negative numbers and paths) and blocks interpreter execution switches (`-c`, `-e`, `--eval`, `/c`, `-command`) or unanchored caller script entrypoints unless an administrator sets `ALLOW_CALLER_CODE_ARGS = true`.
+* **Evidence**: Verified by unit tests in `ToolSecretDeliveryTests` and `ExternalToolSecurityTests`.
 
-### 2. Sandbox Escape & Read-Only Roots
-* **Vector**: Tool attempting to overwrite host-mounted binaries, install rootkits, or mutate the container image layer.
-* **Evidence (Pass)**: The OCI binding enforces `--read-only` root filesystems, `--cap-drop ALL`, and `--security-opt no-new-privileges:true`. A dedicated `--tmpfs /tmp:rw,noexec,nosuid,size=65536k` provides strict, isolated scratch space with `noexec` to prevent runtime code downloading and execution.
+### 2. Catalog Containment & Administrative Ownership
+* **Vector**: Alias traversal (`../`), reparse-point swaps, unprivileged catalog registration, or `PATH`-hijacked native executable lookups.
+* **Control**: `LocalToolCatalogProvider` enforces strict alias validation (`ToolAliasValidator`), root containment, and reparse-point checks across resolve, store, get, list, enable, disable, and delete. `ToolAdminService` requires elevated administrator/root privileges for machine catalog mutations, `OsToolCatalogProtector` protects catalog roots/entries with read-only service ACLs (`MachineAdministrator` default; `PersonalWorkstation` explicit only), and native `EXECUTABLE` `COMMAND` / `SCRIPT_PATH` values must be fully qualified non-UNC, non-reparse paths.
+* **Non-claim**: Cryptographic artifact/hash pinning of native binaries on disk is tracked separately (see `ROADMAP.md` XT08).
 
-### 3. Unauthorized Data, Secret, and Network Access
-* **Vector**: Tool attempting to exfiltrate data via public internet, or probe the Orchestrator/Portal control plane.
-* **Evidence (Pass)**: 
-  * Network isolation is enforced by default via `--network none`.
-  * Secrets are resolved just-in-time and passed strictly via `--env` using the explicit `CAPABILITY_SECRETS` allowlist.
-  * API access to the Orchestrator is restricted via short-lived `CapabilityToken` payloads. Tokens are cryptographically tied to the session ID, tenant, policy hash, and expire automatically. They grant access only to the current sandbox context.
+### 3. Dry-Run (`WHAT_IF`) Safety
+* **Control**: `ExecuteToolStatementHandler` validates catalog definitions, native path contracts, Docker/policy approvals, resource limits, and parameter roles before `context.IsWhatIf` short-circuits, returning without creating scratch directories, issuing capability tokens, recording ledger starts, or spawning processes.
 
-### 4. Artifact Substitution & Image Spoofing
-* **Vector**: Supply chain attack replacing the tag of a benign image with a malicious one on the registry.
-* **Evidence (Pass)**: The `CONTAINER` tool handler explicitly rejects execution unless the `IMAGE` identifier contains a pinned digest (`@sha256:`). Tags (like `latest` or `v1.2`) are insufficient for execution.
+### 4. Container Image Pinning & Governance Policy
+* **Control**: `CONTAINER` tools require a valid `@sha256:<64-hex>` digest and pass `ProcessPolicyRules.EnforceContainerToolImage` (enforcing enrolled enterprise `Security:AllowedDockerImages` policy, including revocation, and any configured host-admin `Governance:Docker:AllowedImages` allowlist).
 
-### 5. Protocol Confusion & Staged Output Integrity
-* **Vector**: Tool streaming arbitrary memory payloads or malformed responses to crash the engine parser.
-* **Evidence (Pass)**: 
-  * Protocol bounds are enforced via configurable limits (e.g., 100MB / 1M rows) before JSON deserialization.
-  * Outputs are buffered to an `InMemoryDataSource` and schema-validated against the `#targetTable`. Only perfectly conformed and fully validated outputs are merged into the session context upon a successful `0` exit code.
+### 5. Protocol Bounds & Staged Output Integrity
+* **Control**: Output streaming enforces `Tools:Limits:MaxBytes`, `Tools:Limits:MaxRows`, `Tools:Limits:MaxLineChars`, and `Tools:Limits:MaxStderrChars` before deserialization into `#temp` / staged tables. Zero-exit completion, scratch `/tmp:rw,noexec,nosuid`, and capability tokens do not by themselves establish host isolation.
 
-### 6. Checkpoint Replacement & Idempotency
-* **Vector**: Tool repeating side-effecting operations upon job retry or orchestrator restart.
-* **Evidence (Pass)**: 
-  * A deterministic `operationId` is computed by hashing the session ID, tool digest, protocol version, execution policy hash, and all sanitized arguments/environments.
-  * This hash is recorded in the `ExecutionLedger`. Upon job resume, any tool with a matching identity and a `Completed` status is bypassed without re-invocation. Capabilities (`ETLSQL_CAPABILITY_TOKEN`) are explicitly excluded from the idempotency hash and regenerated dynamically on resume to avoid replay attacks.
-
-### 7. Resource Exhaustion
-* **Vector**: Tool performing infinite loops or consuming all disk space/memory.
-* **Evidence (Pass)**: 
-  * Memory and CPU limits are governed by the tenant's `ExecutionPolicy`.
-  * Disk writes are constrained by the `tmpfs` `size=65536k` limitation, preventing host disk starvation.
-
-### 8. Cross-Tenant Isolation
-* **Vector**: Tool deployed in a shared SaaS environment accessing another tenant's mounts or network namespace.
-* **Evidence (Pass)**: 
-  * Capability tokens explicitly bake in the `TenantId` retrieved from the `StorageCapability` context.
-  * Shared session volumes are strictly partitioned. The execution boundary prevents the tool container from sharing IPC, PID, or Network namespaces with other tenant instances.
-
-## Isolation Profiles
-To prevent merging isolation strategies into one weak default, the runner conceptually separates:
-1. **Hardened Shared**: `CONTAINER` tool bindings with OCI capabilities dropped, `nobody` user enforcement, and zero networking.
-2. **Dedicated Environment**: `EXECUTABLE` native bindings, running with host limits but trusted to interact with the broader dedicated instance (relying on single-tenant host segregation).
-3. **Interactive Isolation**: Real-time tools triggered via the IDE/LSP which bypass durable ledger idempotency but retain strict `stdout` streaming bounds.
+### 6. Container Resource Ceilings & Isolation Profile Distinction
+* **Control**: `CONTAINER` runs inject explicit Docker ceilings (`--cpus`, `--memory`, `--memory-swap` equal to `--memory`, and `--pids-limit`) derived from administrator-controlled `Tools:Limits` configuration and bounded tool options, alongside `--read-only`, `--cap-drop ALL`, `--security-opt no-new-privileges:true`, non-root `--user`, and `--network none` by default.
+* **Non-claim / Separation of Profiles**:
+  1. **Standard Container (`ContainerStandard` / default `CONTAINER`)**: Constrained by Docker resource flags and Linux kernel namespaces; not equivalent to hypervisor/gVisor isolation for hostile multi-tenant execution.
+  2. **Hardened Container (`Hardened` / `HardenedSandbox` / `HardenedShared` / `HostileTenant`)**: Rejected unless an approved hardened OCI runtime (`Tools:Limits:HardenedContainerRuntime`) is explicitly configured and network/mount isolation is intact.
+  3. **Trusted Dedicated Native (`EXECUTABLE` / `TrustedNative`)**: Inherits the host OS account authority and cannot enforce container `--cpus`, `--memory`, `--pids-limit`, or `--network none`. Rejected in multi-tenant contexts (unless explicitly overridden) and rejected whenever container resource options or container/hardened isolation profiles are claimed.
 
 ---
-**Status**: Certified
-**Date**: August 2026
+**Status**: Active controls (adversarial host-kernel certification out of scope of unit suite)
+**Updated**: November 2026

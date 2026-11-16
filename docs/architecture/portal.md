@@ -94,6 +94,13 @@ StudioPrivateDraft ──> PortalUser                  (owner; no one else can r
 
 - **Soft-delete on `Report`** — `IsDeleted = true` hides records from all queries. Snapshots are preserved on disk after soft-deletion; hard deletion is a manual operation.
 
+- **Alert delivery uses named notifications** — `ReportAlert` owns the condition and an
+  `AlertNotification` collection naming Orchestrator notifications. v0.22.0 removes the obsolete
+  inline recipient/SMTP columns from both catalog providers. The pre-deployment migration is a
+  deliberate exception to rolling expansion: stop older Portal hosts before applying it.
+  Mixed-version rolling operation across that migration is unsupported. Migration contract tests
+  permit only those two column drops and real provider tests preserve definitions and attachments.
+
 - **Folder and report ACLs** — `FolderAcl` remains group-based for broad catalog access.
   `ReportAcl` adds report-scoped user or group grants for self-service access approvals, so an owner
   can approve one restricted report without granting the entire folder. Effective report permission
@@ -410,11 +417,13 @@ are deleted with the user.
 | DELETE | `/api/reports/{id}/favorite` | Any | Remove favorite |
 | POST | `/api/reports/{id}/share-links` | Admin, Publisher | Create share link |
 | GET | `/api/reports/{id}/share-links` | Admin, Publisher | List share links |
-| DELETE | `/api/reports/{id}/share-links/{token}` | Admin, Publisher | Revoke share link |
+| DELETE | `/api/reports/{id}/share-links/{token}` | Admin, Publisher | Revoke share link by token |
+| DELETE | `/api/reports/{id}/share-links/by-id/{linkId}` | Admin, Publisher | Revoke share link by id |
 | GET | `/api/share/{token}` | Public | Resolve share link |
 | POST | `/api/reports/{id}/embed-tokens` | Admin, Publisher | Create embed token |
 | GET | `/api/reports/{id}/embed-tokens` | Admin, Publisher | List embed tokens |
-| DELETE | `/api/reports/{id}/embed-tokens/{token}` | Admin, Publisher | Revoke embed token |
+| DELETE | `/api/reports/{id}/embed-tokens/{token}` | Admin, Publisher | Revoke embed token by token |
+| DELETE | `/api/reports/{id}/embed-tokens/by-id/{tokenId}` | Admin, Publisher | Revoke embed token by id |
 | GET | `/api/embed/{token}` | Public | Resolve embed token |
 | GET | `/api/reports/{id}/saved-views` | Any | List saved views |
 | POST | `/api/reports/{id}/saved-views` | Any | Create saved view |

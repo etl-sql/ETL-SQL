@@ -175,6 +175,9 @@ public class AdminController(
             pageSize));
     }
 
+    private static bool ContainsTerm(string? value, string term) =>
+        value is not null && value.Contains(term, StringComparison.OrdinalIgnoreCase);
+
     [HttpGet("users/catalog")]
     public async Task<IActionResult> GetUserCatalog(
         [FromQuery] string? q = null,
@@ -213,26 +216,31 @@ public class AdminController(
 
         if (!string.IsNullOrWhiteSpace(q))
         {
-            // Filter server-side so the database does the matching and pagination instead of loading the
-            // whole users table into memory. ToLower()+Contains translates to LOWER(col) LIKE '%term%',
-            // which is case-insensitive on both SQLite and PostgreSQL (the previous
-            // Contains(..., StringComparison.OrdinalIgnoreCase) overload is not EF-translatable, so it
-            // forced full materialization + client-side filtering/paging).
-            var term = q.Trim().ToLower();
-            query = query.Where(u =>
-                (u.UserName != null && u.UserName.ToLower().Contains(term)) ||
-                (u.Email != null && u.Email.ToLower().Contains(term)) ||
-                (u.FirstName != null && u.FirstName.ToLower().Contains(term)) ||
-                (u.LastName != null && u.LastName.ToLower().Contains(term)));
+            // Email, first and last name are PII-encrypted with a random IV, so SQL LIKE only ever
+            // saw ciphertext and matched the username alone. The other filters still run in the
+            // database; the text match runs on the decrypted rows, then the page is cut.
+            var term = q.Trim();
+            var candidates = await query
+                .AsNoTracking()
+                .OrderBy(u => u.UserName)
+                .ToListAsync();
+            var matches = candidates
+                .Where(u => ContainsTerm(u.UserName, term) || ContainsTerm(u.Email, term)
+                    || ContainsTerm(u.FirstName, term) || ContainsTerm(u.LastName, term))
+                .ToList();
+            total = matches.Count;
+            users = matches.Skip((page - 1) * pageSize).Take(pageSize).ToList();
         }
-
-        total = await query.CountAsync();
-        users = await query
-            .AsNoTracking()
-            .OrderBy(u => u.UserName)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+        else
+        {
+            total = await query.CountAsync();
+            users = await query
+                .AsNoTracking()
+                .OrderBy(u => u.UserName)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
 
         var items = await ToUserDtosAsync(users);
         return Ok(new PagedResult<UserDto>(items, total, page, pageSize));
@@ -512,7 +520,7 @@ public class AdminController(
         // Durable shared resources (folders, reports, datasets) must be explicitly reassigned
         // before their owner disappears — otherwise ownership dangles and PRIVATE datasets
         // become reachable only by administrators.
-        var ownedFolders = await db.Folders.CountAsync(f => f.OwnerId == id);
+        var ownedFolders = await catalogScope.Folders.CountAsync(f => f.OwnerId == id);
         var ownedReports = await catalogScope.Reports.CountAsync(r => r.CreatedBy == id);
         var ownedDatasets = await db.Datasets.CountAsync(
             d => d.TenantId == TenantId && d.CreatedBy == id);
@@ -532,7 +540,7 @@ public class AdminController(
                 return BadRequest(new { error = "reassignTo must identify a different, active user." });
 
             // Bump versions so any concurrent edit holding the old version conflicts cleanly.
-            await db.Folders.Where(f => f.OwnerId == id).ExecuteUpdateAsync(s => s
+            await catalogScope.Folders.Where(f => f.OwnerId == id).ExecuteUpdateAsync(s => s
                 .SetProperty(f => f.OwnerId, target.Id)
                 .SetProperty(f => f.Version, f => f.Version + 1));
             await catalogScope.Reports.Where(r => r.CreatedBy == id).ExecuteUpdateAsync(s => s
@@ -1644,7 +1652,7 @@ public class AdminController(
         var groupIds = user.UserGroups.Select(ug => ug.GroupId).ToHashSet();
         var groupNames = user.UserGroups.Select(ug => ug.Group.Name).OrderBy(n => n).ToList();
 
-        var folders = await db.Folders
+        var folders = await catalogScope.Folders
             .Include(f => f.Acls).ThenInclude(a => a.Group)
             .OrderBy(f => f.Path)
             .ToListAsync();
@@ -1700,7 +1708,7 @@ public class AdminController(
     [HttpGet("permissions/effective/folder/{folderId:int}")]
     public async Task<IActionResult> GetEffectivePermissionsForFolder(int folderId)
     {
-        var folder = await db.Folders
+        var folder = await catalogScope.Folders
             .Include(f => f.Acls).ThenInclude(a => a.Group)
             .FirstOrDefaultAsync(f => f.Id == folderId);
         if (folder is null) return NotFound();
@@ -2101,7 +2109,8 @@ public class AdminController(
     {
         var matching = folder.Acls
             .Where(a => groupIds.Contains(a.GroupId))
-            .OrderByDescending(a => a.Permission)
+            // Ranked, never the stored integer: Author is stored as 3 and Manage as 2.
+            .OrderByDescending(a => a.Permission.Rank())
             .ThenBy(a => a.Group.Name)
             .ToList();
         if (matching.Count == 0) return null;
@@ -2129,7 +2138,8 @@ public class AdminController(
         var groupIds = user.UserGroups.Select(ug => ug.GroupId).ToHashSet();
         var matching = acls
             .Where(a => groupIds.Contains(a.GroupId))
-            .OrderByDescending(a => a.Permission)
+            // Ranked, never the stored integer: Author is stored as 3 and Manage as 2.
+            .OrderByDescending(a => a.Permission.Rank())
             .ThenBy(a => a.Group.Name)
             .ToList();
         if (matching.Count == 0) return null;

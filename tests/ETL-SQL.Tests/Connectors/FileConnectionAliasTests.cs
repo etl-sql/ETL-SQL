@@ -46,19 +46,12 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public async Task TestFileConnectionLegacyAliasShouldFail()
+        public async Task TestFileConnectionTypeIsNotAConnector()
         {
-            var source = "CREATE CONNECTION my_conn AS FILE('data.csv');";
-            var lexer = new Lexer(source);
-            var tokens = lexer.Tokenize();
-            var parser = new Parser(tokens);
-            var script = parser.Parse();
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var source = $"CREATE CONNECTION my_conn AS FILE('{_tempFile.Replace("\\", "/")}');";
 
-            // Run linter manually as Parser no longer adds this diagnostic directly
-            var lintResults = await ETL_SQL.Analysis.Linting.LinterFactory.CreateWithAllRules()
-                .AnalyzeAsync(script, new ETL_SQL.Analysis.Linting.DefaultLintContext());
-
-            Assert.Contains(lintResults, r => r.Message.Contains("Connection type 'FILE' is deprecated"));
+            await Assert.ThrowsAnyAsync<Exception>(() => eval.Evaluate(new Lexer(source).TokenizeToScript()));
         }
 
         [Fact]

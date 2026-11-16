@@ -7,7 +7,10 @@ param(
 
     [switch]$NoRestore,
 
-    [switch]$NoBuild
+    [switch]$NoBuild,
+
+    [ValidateSet('all', 'engine', 'portal')]
+    [string]$ProjectGroup = 'all'
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,11 +18,6 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if ($NoBuild) {
     & node (Join-Path $PSScriptRoot 'sync-assets.js') -Check
-    if ($LASTEXITCODE -eq 0) {
-        # Current preparation does not make existing binaries current; they keep the assets they were built with.
-        & node (Join-Path $PSScriptRoot 'check-built-browser-assets.mjs') --configuration $Configuration
-        if ($LASTEXITCODE -ne 0) { throw "Compiled output was built from an older browser asset preparation. Rebuild without -NoBuild." }
-    }
 } else {
     & node (Join-Path $PSScriptRoot 'sync-assets.js')
 }
@@ -69,6 +67,7 @@ $lanes = [ordered]@{
 }
 
 $selected = if ($Lane -eq "all") { @("core", "security", "reporting", "portal") } else { @($Lane) }
+$executedSuites = 0
 
 foreach ($name in $selected) {
     $laneInfo = $lanes[$name]
@@ -76,9 +75,17 @@ foreach ($name in $selected) {
     Write-Host "==> Smoke lane: $($laneInfo.Label) [$name]"
 
     foreach ($test in $laneInfo.Tests) {
+        $isPortal = $test.Project -like '*ETL-SQL.Portal.Tests*'
+        if (($ProjectGroup -eq 'engine' -and $isPortal) -or ($ProjectGroup -eq 'portal' -and -not $isPortal)) { continue }
+        $executedSuites++
+        $projectPath = Join-Path $repoRoot $test.Project
+        if ($NoBuild) {
+            & node (Join-Path $PSScriptRoot 'check-built-browser-assets.mjs') --configuration $Configuration --project $projectPath
+            if ($LASTEXITCODE -ne 0) { throw 'Selected project has missing, stale or unverifiable browser assets. Rebuild without -NoBuild.' }
+        }
         $args = @(
             "test",
-            (Join-Path $repoRoot $test.Project),
+            $projectPath,
             "--configuration", $Configuration,
             "--filter", $test.Filter,
             "--logger", "console;verbosity=minimal"
@@ -93,3 +100,4 @@ foreach ($name in $selected) {
         }
     }
 }
+if ($executedSuites -eq 0) { throw 'The selected smoke lane and project group contain no test suites.' }

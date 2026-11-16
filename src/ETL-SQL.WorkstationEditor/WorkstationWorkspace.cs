@@ -241,7 +241,8 @@ public sealed class WorkstationWorkspace
     private string ToRelativePath(string path) =>
         Path.GetRelativePath(Root, Path.GetFullPath(path)).Replace(Path.DirectorySeparatorChar, '/');
 
-    private static bool IsEditableScript(string path) =>
+    /// <summary>True for the file types the editor opens and saves. Git commits use the same list.</summary>
+    internal static bool IsEditableScript(string path) =>
         EditableExtensions.Contains(Path.GetExtension(path));
 
     private static string ValidateEntryName(string newName)

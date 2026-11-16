@@ -1,51 +1,47 @@
-# Portal Saved Views
-Create and manage named parameter snapshots for portal reports inside an `EXECUTE portal` block.
+# SAVED VIEW
+
+Creates a private named view of a Portal report's parameters. Portal stores one resolved-state envelope, shared with author bookmarks, and stamps the report revision for drift detection.
 
 ## Syntax
 ```sql
 EXECUTE portal BEGIN
   CREATE SAVED VIEW 'ViewName' FOR REPORT 'ReportName'
-    WITH (PARAMETERS = '@param1=value1,@param2=value2');
+    [DEFAULT] [PARAMETERS (@name = 'value', ...)] [INTO #view];
+  CREATE SAVED VIEW 'ViewName' FOR REPORT 'ReportName'
+    [DEFAULT] WITH (PARAMETERS = '@name=value,...') [INTO #view];
   SELECT * FROM eng.saved_views('ReportName');
   DROP SAVED VIEW 'ViewName' FOR REPORT 'ReportName';
 END;
 ```
 
-## Examples
+## Options
+
+- **PARAMETERS** — String assignments to report parameters. Values such as `'001'`, `'2026'` and `'true'` remain strings in the envelope. Use the parenthesized assignments when a value contains a comma or equals sign.
+- **DEFAULT** — Makes this the caller's default view for the report, replacing their previous default.
+- **INTO #view** — Captures the created view's API response in an engine temporary table.
+- **Ownership** — Views belong to the authenticated user and report. Other users cannot resolve or apply them.
+- **Revision** — Portal stamps the current script hash. Republishing the report produces a drift warning when an older view is resolved.
+
+## Example
+
 ```sql
--- Create a saved view for a specific quarter and region
 EXECUTE portal BEGIN
-  CREATE SAVED VIEW 'Q1 2025 - West' FOR REPORT 'Sales Dashboard'
-    WITH (PARAMETERS = '@start_date=2025-01-01,@end_date=2025-03-31,@region=West');
-END;
-
--- Create a second view for the same report
-EXECUTE portal BEGIN
-  CREATE SAVED VIEW 'Q2 2025 - East' FOR REPORT 'Sales Dashboard'
-    WITH (PARAMETERS = '@start_date=2025-04-01,@end_date=2025-06-30,@region=East');
-END;
-
--- List all saved views for a report
-EXECUTE portal BEGIN
+  CREATE SAVED VIEW 'West region' FOR REPORT 'Sales Dashboard'
+    PARAMETERS (@region = 'West', @customer_code = '001');
   SELECT * INTO #views FROM eng.saved_views('Sales Dashboard');
 END;
-SELECT view_name, parameters, created_by, created_at FROM #views;
-
--- Remove a saved view
-EXECUTE portal BEGIN
-  DROP SAVED VIEW 'Q1 2025 - West' FOR REPORT 'Sales Dashboard';
-END;
+SELECT * FROM #views;
 ```
 
-## Notes
-- Saved views store a named set of parameter values for a report, allowing users to quickly restore a specific data perspective without re-entering filter values.
-- The `PARAMETERS` value is a comma-separated list of `@name=value` pairs. Parameter names must match the parameters declared in the report script.
-- Date and datetime values should be formatted as ISO 8601 strings (e.g., `2025-01-01` or `2025-01-01T08:00:00`).
-- Saved views are scoped to the report — the same view name can exist on different reports.
-- `DROP SAVED VIEW` removes the view definition but does not affect the underlying report or its data.
-- Dropping a report does not automatically remove its saved views; clean up views before dropping a report to avoid orphaned entries.
-- See: PORTAL_REPORT, PORTAL_SHOW
+## API and upgrades
 
-References:
-- [Data Connectors](../../administration/platform/README.md)
+- **Create/update** — Send `stateJson` containing a `ResolvedReportState` JSON envelope. It supports typed scalar parameters, the active page, and named visibility/collapse maps.
+- **Default view** — Send the envelope in `state` to the default-view endpoint.
+- **Flat fields** — Top-level `parameters` and `filters` are rejected, including explicit nulls. Responses expose `stateJson` and `state`.
+- **v0.22.0 upgrade** — Stop older Portal hosts before applying the migration. It preserves existing envelopes and converts old flat string maps once, merging filters over parameters and adding missing `@` prefixes. Strings keep their original contents. Invalid old maps stop the upgrade; repair them or save a valid envelope before retrying. Mixed-version operation across this migration is unsupported.
+
+## References
+
 - [Portal Admin Commands](README.md)
+- [Portal Engine Catalog](../eng/portal-catalog.md)
+- [Reporting Architecture](../../architecture/reporting.md)

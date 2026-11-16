@@ -17,7 +17,7 @@ usage() {
 
 VERSION="${1:-}"
 if [[ -z "$VERSION" ]]; then usage; fi
-if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
     echo "ERROR: version must be Major.Minor.Patch, got: $VERSION"
     exit 1
 fi
@@ -100,10 +100,7 @@ update_file "src/etl-sql-vscode/package.json" \
     "(\"version\": \")[0-9]+\.[0-9]+\.[0-9]+(\")" \
     "\1${VERSION}\2"
 
-# VS Code extension README version badge
-update_file "src/etl-sql-vscode/README.md" \
-    "(ETL--SQL-v)[0-9]+\.[0-9]+\.[0-9]+(-5C6BC0)" \
-    "\1${VERSION}\2"
+# VS Code extension README version badge updates automatically via shields.io Marketplace badge
 
 
 # VS Code extension lock file (context-aware)
@@ -131,10 +128,6 @@ update_file "scripts/Master-Release.ps1" \
     "(Master-Release\.ps1 -Version \")[0-9]+\.[0-9]+\.[0-9]+(\")" \
     "\1${VERSION}\2"
 
-update_file "scripts/publish-release.ps1" \
-    "(\} else \{ \")[0-9]+\.[0-9]+\.[0-9]+(\" \})" \
-    "\1${VERSION}\2"
-
 update_file "scripts/build-msi.ps1" \
     "(\} else \{ \")[0-9]+\.[0-9]+\.[0-9]+(\" \})" \
     "\1${VERSION}\2"
@@ -156,10 +149,6 @@ update_file "docs/releases/release-checklist.md" \
 
 update_file "docs/guides/onboarding/migration-guide.md" \
     "(ETL-SQL Migration Guide \(v)[0-9]+\.[0-9]+\.[0-9]+(\))" \
-    "\1${VERSION}\2"
-
-update_file "docs/guides/onboarding/migration-guide.md" \
-    "(ETL-SQL v)[0-9]+\.[0-9]+\.[0-9]+( is the current release baseline)" \
     "\1${VERSION}\2"
 
 update_file "docs/reference/performance/performance.md" \
@@ -215,6 +204,12 @@ for page in "$ROOT"/src/ETL-SQL.Portal/wwwroot/*.html; do
         "(\?v=)[0-9]+\.[0-9]+\.[0-9]+" \
         "\1${VERSION}"
 done
+# The Portal builds its report frame document in TypeScript, so its stamps live in source too.
+if [ -d "$ROOT/src/ETL-SQL.Portal/BrowserSources" ]; then
+    while IFS= read -r source; do
+        update_file "${source#"$ROOT"/}" "(\?v=)[0-9]+\.[0-9]+\.[0-9]+" "\1${VERSION}"
+    done < <(grep -rlE --include='*.ts' '\?v=[0-9]+\.[0-9]+\.[0-9]+' "$ROOT/src/ETL-SQL.Portal/BrowserSources" || true)
+fi
 
 echo ""
 echo "Done."

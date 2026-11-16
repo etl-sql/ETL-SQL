@@ -31,11 +31,6 @@ public class VariableScopeManager : IVariableContext
     /// <summary>Gets the current set of variable metadata in the active scope.</summary>
     public IDictionary<string, VariableMetadata> CurrentMetadata { get { lock (_lock) { return _metadataStack.Count > 0 ? _metadataStack.Peek() : _variableMetadata; } } }
 
-    [Obsolete("Use Variables")]
-    public IDictionary<string, object?> GlobalVariables => Variables;
-    [Obsolete("Use VariableMetadata")]
-    public IDictionary<string, VariableMetadata> GlobalMetadata => VariableMetadata;
-
     /// <summary>Pushes a new variable scope onto the stack.</summary>
     public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null)
     {
@@ -86,6 +81,24 @@ public class VariableScopeManager : IVariableContext
             // Fall back to global session variables
             if (_variables.TryGetValue(name, out var gval)) return gval;
             return null;
+        }
+    }
+
+    /// <summary>Finds metadata in the scope <see cref="GetVariable"/> reads from: innermost local scope first, then global.</summary>
+    public bool TryGetVariableMetadata(string name,
+        [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out VariableMetadata metadata)
+    {
+        lock (_lock)
+        {
+            var scopes = _scopeStack.ToArray();
+            var metas = _metadataStack.ToArray();
+            for (int i = 0; i < scopes.Length; i++)
+            {
+                // A local that shadows a global owns the metadata, even when it has none recorded.
+                if (metas[i].TryGetValue(name, out metadata)) return true;
+                if (scopes[i].ContainsKey(name)) { metadata = null!; return false; }
+            }
+            return _variableMetadata.TryGetValue(name, out metadata);
         }
     }
 
@@ -290,17 +303,33 @@ public class VariableScopeManager : IVariableContext
     {
         lock (_lock)
         {
-            if (spawned._variables is CopyOnWriteDictionary<object?> variables)
+            MergeWrites(_variables, spawned._variables);
+            // Metadata too: a SECRET declared inside a PARALLEL branch must stay masked here.
+            MergeWrites(_variableMetadata, spawned._variableMetadata);
+
+            // A PARALLEL inside a procedure or RUN SCRIPT writes to the forked copies of the
+            // local scopes. The fork mirrors this stack level for level, so fold them back.
+            if (spawned._scopeStack.Count == _scopeStack.Count)
             {
-                foreach (var kvp in variables.LocalValues)
-                    _variables[kvp.Key] = kvp.Value;
-            }
-            else
-            {
-                foreach (var kvp in spawned.Variables)
-                    _variables[kvp.Key] = kvp.Value;
+                var scopes = _scopeStack.ToArray();
+                var metas = _metadataStack.ToArray();
+                var spawnedScopes = spawned._scopeStack.ToArray();
+                var spawnedMetas = spawned._metadataStack.ToArray();
+                for (int i = 0; i < scopes.Length; i++)
+                {
+                    MergeWrites(scopes[i], spawnedScopes[i]);
+                    MergeWrites(metas[i], spawnedMetas[i]);
+                }
             }
         }
+    }
+
+    private static void MergeWrites<T>(IDictionary<string, T> target, IDictionary<string, T> spawned)
+    {
+        if (ReferenceEquals(target, spawned)) return;
+        var writes = spawned is CopyOnWriteDictionary<T> cow ? cow.LocalValues : spawned;
+        foreach (var kvp in writes)
+            target[kvp.Key] = kvp.Value;
     }
     /// <summary>Purges all variables, procedures, functions, and scopes from the context.</summary>
     public void Reset()

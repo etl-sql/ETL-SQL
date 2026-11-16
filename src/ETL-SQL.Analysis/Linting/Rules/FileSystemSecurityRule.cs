@@ -14,8 +14,15 @@ public class FileSystemSecurityRule : ILintRule
     public string Name => "FileSystemSecurity";
     public string Description => "Enforces security guardrails by discouraging access to system directories and drive roots.";
 
+    // Root-anchored system folders: matched as a prefix of the (normalized, upper-case) path.
     private static readonly string[] ForbiddenFolders = {
-        "C:\\WINDOWS", "C:\\BIN", "\\ETC", "\\ROOT", ".GIT", ".SSH"
+        "C:\\WINDOWS", "C:\\BIN", "\\ETC", "\\ROOT"
+    };
+
+    // Repository and credential folders: matched as a whole segment anywhere in the path, so
+    // /home/user/.ssh/id_rsa, C:\repo\.git\config and data/../../.ssh/id_rsa are all caught.
+    private static readonly string[] ForbiddenSegments = {
+        ".GIT", ".SSH", ".AWS", ".AZURE", ".KUBE", ".GNUPG"
     };
 
     public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
@@ -33,6 +40,43 @@ public class FileSystemSecurityRule : ILintRule
         if (statement is CreateConnectionStatement conn)
         {
             CheckPathExpression(conn.TargetExpression, results);
+            if (conn.Options != null)
+                foreach (var option in conn.Options.Values) CheckPathExpression(option, results);
+        }
+        else if (statement is MergeFilesStatement merge)
+        {
+            CheckPathExpression(merge.Source, results);
+            CheckPathExpression(merge.Destination, results);
+        }
+        else if (statement is SplitFileStatement split)
+        {
+            CheckPathExpression(split.Source, results);
+            CheckPathExpression(split.DestinationDir, results);
+        }
+        else if (statement is SyncDirectoryStatement sync)
+        {
+            CheckPathExpression(sync.Source, results);
+            CheckPathExpression(sync.Destination, results);
+        }
+        else if (statement is ConvertFileEncodingStatement convert)
+        {
+            CheckPathExpression(convert.Source, results);
+            CheckPathExpression(convert.Destination, results);
+        }
+        else if (statement is VerifyFileIntegrityStatement verify)
+        {
+            CheckPathExpression(verify.Source, results);
+            CheckPathExpression(verify.HashFile, results);
+        }
+        else if (statement is ExportDatasetStatement exportDataset)
+        {
+            CheckPathString(exportDataset.TargetPath, exportDataset.Line, exportDataset.Column, results);
+            if (exportDataset.KeyFile != null) CheckPathString(exportDataset.KeyFile, exportDataset.Line, exportDataset.Column, results);
+        }
+        else if (statement is PublishDatasetStatement publishDataset)
+        {
+            CheckPathString(publishDataset.SourcePath, publishDataset.Line, publishDataset.Column, results);
+            if (publishDataset.KeyFile != null) CheckPathString(publishDataset.KeyFile, publishDataset.Line, publishDataset.Column, results);
         }
         else if (statement is RunScriptStatement run)
         {
@@ -138,13 +182,18 @@ public class FileSystemSecurityRule : ILintRule
         }
 
         // 2. System directory check
+        var segments = upperPath.Split('\\', StringSplitOptions.RemoveEmptyEntries);
         foreach (var forbidden in ForbiddenFolders)
         {
             if (IsForbiddenPath(upperPath, forbidden))
             {
                 AddSecurityWarning($"Access to system directory '{path}' is restricted for security reasons.", line, col, results);
-                break;
+                return;
             }
+        }
+        if (segments.Any(segment => ForbiddenSegments.Contains(segment, StringComparer.Ordinal)))
+        {
+            AddSecurityWarning($"Access to system directory '{path}' is restricted for security reasons.", line, col, results);
         }
     }
 

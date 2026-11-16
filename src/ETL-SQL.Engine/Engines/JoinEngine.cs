@@ -22,294 +22,11 @@ public class JoinEngine
         _logger = logger;
     }
 
-    /// <summary>Applies multiple joins to a set of buffered rows, choosing the best algorithm for each join.</summary>
-    public async Task<List<Row>> ApplyJoins(List<Row> allBufferedRows, List<JoinClause> joins, SelectStatement stmt)
-    {
-        if (joins == null || joins.Count == 0) return allBufferedRows;
-
-        // Ensure the initial left rows are qualified with the base table alias.
-        // Use ForEachColumn to avoid allocating a Dictionary per row.
-        string baseAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
-        if (allBufferedRows.Count > 0)
-        {
-            var toAdd = new List<(string k, object? v)>();
-            foreach (var r in allBufferedRows)
-            {
-                toAdd.Clear();
-                r.ForEachColumn((k, v) => { if (!k.Contains('.')) toAdd.Add(($"{baseAlias}.{k}", v)); });
-                foreach (var (k, v) in toAdd) r[k] = v;
-            }
-        }
-
-        // Flatten WHERE predicates for progressive pushdown into CROSS JOINs whose predicates use
-        // unqualified column names (which CrossJoinPredicatePushdown cannot handle via GetSourceTables).
-        var wherePredicates = new List<Expression>();
-        if (stmt.WhereClause != null) FlattenAnds(stmt.WhereClause, wherePredicates);
-
-        // Pre-filter the FROM table before any joins so single-table predicates (e.g., 765=b4)
-        // never participate in a Cartesian product at all.
-        bool hasRightOrFull = joins.Any(j => IsRightOuter(j.JoinType));
-        if (allBufferedRows.Count > 0 && wherePredicates.Count > 0 && !hasRightOrFull)
-            allBufferedRows = await ApplyResolvablePredicates(allBufferedRows, wherePredicates, "INNER JOIN");
-
-        foreach (var join in joins)
-        {
-            if (join.IsApply)
-            {
-                allBufferedRows = await PerformApplyJoin(allBufferedRows, join);
-                if (wherePredicates.Count > 0)
-                    allBufferedRows = await ApplyResolvablePredicates(allBufferedRows, wherePredicates, join.JoinType);
-                continue;
-            }
-
-            _logger.Debug("Joining table {TableName}{Alias} ({JoinType})", join.Table.TableName, join.Table.Alias != null ? $" AS {join.Table.Alias}" : "", join.JoinType);
-            var joinRows = await GetJoinRows(join);
-
-            // Pre-filter the join table using predicates that reference ONLY its own columns —
-            // none of the already-accumulated left columns. Eliminates single-table predicates
-            // (e.g., d6 IN (...)) before any Cartesian product is formed. Only valid for INNER/CROSS joins.
-            bool isInnerOrCross = !IsLeftOuter(join.JoinType) && !IsRightOuter(join.JoinType) && !IsSemiJoin(join.JoinType) && !IsAntiJoin(join.JoinType);
-            if (joinRows.Count > 0 && wherePredicates.Count > 0 && allBufferedRows.Count > 0 && isInnerOrCross)
-                joinRows = await PreFilterJoinTable(joinRows, wherePredicates, BuildBareColumnSet(allBufferedRows[0]));
-
-            // For CROSS JOINs still carrying a literal-true condition, find WHERE predicates whose
-            // referenced columns are all present in the combined left+right row — and use them as
-            // the join condition. This prevents O(n^k) Cartesian materialization for queries that
-            // use unqualified column names (e.g., WHERE a3=b9 AND c9=688).
-            var effectiveJoin = wherePredicates.Count > 0
-                ? TryEnrichCrossJoin(join, allBufferedRows, joinRows, wherePredicates)
-                : join;
-
-            if (effectiveJoin.IsAsof)
-            {
-                var asofRightAlias = effectiveJoin.Table.Alias ?? effectiveJoin.Table.TableName;
-                allBufferedRows = await PerformAsofJoin(allBufferedRows, joinRows, effectiveJoin, asofRightAlias);
-                if (wherePredicates.Count > 0)
-                    allBufferedRows = await ApplyResolvablePredicates(allBufferedRows, wherePredicates, effectiveJoin.JoinType);
-                continue;
-            }
-            if (effectiveJoin.IsFuzzy)
-            {
-                var fuzzyEngine = new FuzzyJoinEngine(_context, _logger);
-                allBufferedRows = await fuzzyEngine.PerformFuzzyJoin(allBufferedRows, joinRows, effectiveJoin);
-                if (wherePredicates.Count > 0)
-                    allBufferedRows = await ApplyResolvablePredicates(allBufferedRows, wherePredicates, effectiveJoin.JoinType);
-                continue;
-            }
-            else if (IsSemiJoin(effectiveJoin.JoinType))
-            {
-                var rightAlias = effectiveJoin.Table.Alias ?? effectiveJoin.Table.TableName;
-                var hashKeysLeft = new List<string>();
-                var hashKeysRight = new List<string>();
-                if (TryExtractEqualityKeys(effectiveJoin.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight))
-                    allBufferedRows = PerformHashSemiAntiJoin(allBufferedRows, joinRows, hashKeysLeft, hashKeysRight, semi: true);
-                else
-                    allBufferedRows = await PerformSemiJoin(allBufferedRows, joinRows, effectiveJoin);
-            }
-            else if (IsAntiJoin(effectiveJoin.JoinType))
-            {
-                var rightAlias = effectiveJoin.Table.Alias ?? effectiveJoin.Table.TableName;
-                var hashKeysLeft = new List<string>();
-                var hashKeysRight = new List<string>();
-                if (TryExtractEqualityKeys(effectiveJoin.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight))
-                    allBufferedRows = PerformHashSemiAntiJoin(allBufferedRows, joinRows, hashKeysLeft, hashKeysRight, semi: false);
-                else
-                    allBufferedRows = await PerformAntiJoin(allBufferedRows, joinRows, effectiveJoin);
-            }
-            else // INNER, LEFT, RIGHT, FULL
-            {
-                var rightAlias = effectiveJoin.Table.Alias ?? effectiveJoin.Table.TableName;
-                var hashKeysLeft = new List<string>();
-                var hashKeysRight = new List<string>();
-                var leftColSet = allBufferedRows.Count > 0 ? BuildBareColumnSet(allBufferedRows[0]) : null;
-                var rightColSet = joinRows.Count > 0 ? BuildBareColumnSet(joinRows[0]) : null;
-                bool hasEquality = TryExtractEqualityKeys(effectiveJoin.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight, leftColSet, rightColSet);
-
-                // HYPER-SCALE: Check for disk-spilling threshold (row-count backstop + byte-based grant).
-                long grantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
-                long joinBufferBytes = RowWidthEstimator.EstimateTotalBytes(allBufferedRows) + RowWidthEstimator.EstimateTotalBytes(joinRows);
-                bool joinExceedsRowLimit = allBufferedRows.Count > _context.JoinSpillThreshold || joinRows.Count > _context.JoinSpillThreshold;
-                bool joinExceedsByteGrant = joinBufferBytes > grantBytes;
-                // Global pressure: spill if other concurrent operators have already committed most
-                // of the process-wide pool (read-only — the pipeline lease owns this query's footprint).
-                var arbiter = _context.MemoryArbiter;
-                bool joinExceedsGlobalGrant = arbiter.TotalBudgetBytes > 0
-                    && arbiter.ReservedBytes + joinBufferBytes > arbiter.TotalBudgetBytes;
-                if (hasEquality && (joinExceedsRowLimit || joinExceedsByteGrant || joinExceedsGlobalGrant))
-                {
-                    _logger.WriteLine($"[yellow]HYPER-SCALE: Memory threshold exceeded ({Math.Max(allBufferedRows.Count, joinRows.Count)} rows). Triggering External Disk-Spilling Join.[/]");
-
-                    var externalEngine = new ExternalJoinEngine(_context, _logger);
-                    allBufferedRows = await externalEngine.ApplyHashJoinExternal(
-                        allBufferedRows.ToAsyncEnumerable(), joinRows.ToAsyncEnumerable(), effectiveJoin,
-                        hashKeysLeft, hashKeysRight,
-                        knownBuildRowCount: joinRows.Count,
-                        knownBuildBytes: RowWidthEstimator.EstimateTotalBytes(joinRows)).ToListAsync();
-                }
-                else
-                {
-                    JoinHint algorithm = GetBestAlgorithm(effectiveJoin, allBufferedRows.Count, joinRows.Count, hasEquality);
-
-                    switch (algorithm)
-                    {
-                        case JoinHint.Hash:
-                            allBufferedRows = await PerformHashJoin(allBufferedRows, joinRows, effectiveJoin, hashKeysLeft, hashKeysRight);
-                            break;
-                        case JoinHint.Merge:
-                            allBufferedRows = await PerformMergeJoin(allBufferedRows, joinRows, effectiveJoin, hashKeysLeft, hashKeysRight);
-                            break;
-                        default:
-                            if (allBufferedRows.Count > _context.JoinSpillThreshold)
-                                allBufferedRows = await PerformNestedLoopJoinSpilled(allBufferedRows, joinRows, effectiveJoin);
-                            else
-                                allBufferedRows = await PerformNestedLoopJoin(allBufferedRows, joinRows, effectiveJoin);
-                            break;
-                    }
-                }
-            }
-
-            // After each join step, apply any WHERE predicates whose columns are now fully
-            // available in the result. This handles non-equality predicates (e.g., IN expressions,
-            // LIKE, range checks) that TryEnrichCrossJoin can't convert to join conditions.
-            // Filtering early prevents feeding large intermediate sets into subsequent join steps.
-            if (wherePredicates.Count > 0)
-                allBufferedRows = await ApplyResolvablePredicates(allBufferedRows, wherePredicates, effectiveJoin.JoinType);
-        }
-        return allBufferedRows;
-    }
-
-    /// <summary>
-    /// For a CROSS JOIN with a literal-true condition, finds WHERE predicates whose referenced columns
-    /// are all available in the combined left+right row, promotes them to the join condition (converting
-    /// the CROSS to an INNER), and removes them from <paramref name="wherePredicates"/> so they are
-    /// not re-evaluated by subsequent steps. Falls back to the original join if none are applicable.
-    /// </summary>
-    private JoinClause TryEnrichCrossJoin(JoinClause join, List<Row> leftRows, List<Row> rightRows, List<Expression> wherePredicates)
-    {
-        if (join.Condition is not LiteralExpression lit || !true.Equals(lit.Value)) return join;
-        if (!string.Equals(join.JoinType, "CROSS JOIN", StringComparison.OrdinalIgnoreCase)) return join;
-        if (leftRows.Count == 0 || rightRows.Count == 0) return join;
-
-        var combinedBareCols = BuildBareColumnSet(leftRows[0], rightRows[0]);
-        var applicable = new List<Expression>();
-        foreach (var p in wherePredicates)
-        {
-            var cols = p.GetSourceColumns().ToList();
-            if (cols.Count > 0 && cols.All(c => combinedBareCols.Contains(c)))
-                applicable.Add(p);
-        }
-
-        if (applicable.Count == 0) return join;
-
-        Expression cond = applicable.Count == 1
-            ? applicable[0]
-            : applicable.Skip(1).Aggregate(applicable[0],
-                (acc, p) => (Expression)new BinaryExpression(acc, TokenType.AND, p));
-
-        _logger.Debug("[JOIN] Progressive WHERE pushdown: {Count} predicate(s) applied to CROSS JOIN on {Table}", applicable.Count, join.Table.TableName ?? "");
-
-        // Remove promoted predicates — they're now the join condition and won't need re-filtering.
-        foreach (var p in applicable) wherePredicates.Remove(p);
-
-        return new JoinClause("INNER JOIN", join.Table, cond, join.Hint, join.KeepBest);
-    }
-
     private static HashSet<string> BuildBareColumnSet(Row sample)
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         sample.ForEachColumn((k, _) => set.Add(k.Contains('.') ? k[(k.IndexOf('.') + 1)..] : k));
         return set;
-    }
-
-    private static HashSet<string> BuildBareColumnSet(Row leftSample, Row rightSample)
-    {
-        var set = BuildBareColumnSet(leftSample);
-        rightSample.ForEachColumn((k, _) => set.Add(k.Contains('.') ? k[(k.IndexOf('.') + 1)..] : k));
-        return set;
-    }
-
-    /// <summary>
-    /// Applies WHERE predicates that are fully resolvable against the current row set,
-    /// then removes them from <paramref name="wherePredicates"/> so they are not re-evaluated
-    /// in subsequent join steps. Skips outer-join steps to avoid discarding null-extended rows.
-    /// </summary>
-    private async Task<List<Row>> ApplyResolvablePredicates(List<Row> rows, List<Expression> wherePredicates, string joinType)
-    {
-        if (rows.Count == 0 || wherePredicates.Count == 0) return rows;
-
-        // Don't pre-filter after outer joins — the null-extended rows are deliberate and the
-        // outer WHERE is the correct place to filter them.
-        if (IsLeftOuter(joinType) || IsRightOuter(joinType)) return rows;
-
-        var currentCols = BuildBareColumnSet(rows[0]);
-        var applicable = new List<Expression>();
-        foreach (var p in wherePredicates)
-        {
-            var cols = p.GetSourceColumns().ToList();
-            if (cols.Count > 0 && cols.All(c => currentCols.Contains(c)))
-                applicable.Add(p);
-        }
-        if (applicable.Count == 0) return rows;
-
-        Expression filter = applicable.Count == 1
-            ? applicable[0]
-            : applicable.Skip(1).Aggregate(applicable[0],
-                (acc, p) => (Expression)new BinaryExpression(acc, TokenType.AND, p));
-
-        var filtered = new List<Row>(rows.Count);
-        foreach (var r in rows)
-            if (await _context.EvaluateCondition(filter, r)) filtered.Add(r);
-
-        if (filtered.Count < rows.Count)
-            _logger.Debug("[JOIN] Post-join filter: {Predicates} predicate(s) reduced {Before} → {After} rows",
-                applicable.Count, rows.Count, filtered.Count);
-
-        // Remove applied predicates so subsequent join steps don't re-evaluate them.
-        foreach (var p in applicable) wherePredicates.Remove(p);
-
-        return filtered;
-    }
-
-    /// <summary>
-    /// Applies WHERE predicates that reference ONLY columns in the join table — none from the
-    /// already-accumulated left side. This pre-filters each join table before it participates
-    /// in any Cartesian product, preventing exponential row explosion for comma-join queries
-    /// with per-table filter predicates (e.g., IN-lists scoped to a single table).
-    /// </summary>
-    private async Task<List<Row>> PreFilterJoinTable(
-        List<Row> joinRows,
-        List<Expression> wherePredicates,
-        HashSet<string> leftBareColumns)
-    {
-        if (joinRows.Count == 0 || wherePredicates.Count == 0) return joinRows;
-
-        var joinBare = BuildBareColumnSet(joinRows[0]);
-        var applicable = new List<Expression>();
-        foreach (var p in wherePredicates)
-        {
-            var cols = p.GetSourceColumns().ToList();
-            if (cols.Count > 0
-                && cols.All(c => joinBare.Contains(c))
-                && !cols.Any(c => leftBareColumns.Contains(c)))
-                applicable.Add(p);
-        }
-        if (applicable.Count == 0) return joinRows;
-
-        Expression filter = applicable.Count == 1
-            ? applicable[0]
-            : applicable.Skip(1).Aggregate(applicable[0],
-                (acc, p) => (Expression)new BinaryExpression(acc, TokenType.AND, p));
-
-        var filtered = new List<Row>(joinRows.Count);
-        foreach (var r in joinRows)
-            if (await _context.EvaluateCondition(filter, r)) filtered.Add(r);
-
-        if (filtered.Count < joinRows.Count)
-            _logger.Debug("[JOIN] Pre-join table filter: {Predicates} predicate(s) reduced {Before} → {After} rows",
-                applicable.Count, joinRows.Count, filtered.Count);
-
-        foreach (var p in applicable) wherePredicates.Remove(p);
-        return filtered;
     }
 
     private static void FlattenAnds(Expression expr, List<Expression> list)
@@ -339,9 +56,11 @@ public class JoinEngine
     public async IAsyncEnumerable<Row> ApplyJoinsStreaming(IAsyncEnumerable<Row> leftStream, List<JoinClause> joins, SelectStatement stmt)
     {
         var currentStream = leftStream;
+        var leftTables = new List<TableReference> { stmt.FromTable };
         foreach (var join in joins)
         {
-            currentStream = StreamSingleJoin(currentStream, join, stmt);
+            currentStream = StreamSingleJoin(currentStream, join, stmt, leftTables.ToList());
+            leftTables.Add(join.Table);
         }
         await foreach (var row in currentStream)
         {
@@ -349,10 +68,11 @@ public class JoinEngine
         }
     }
 
-    private async IAsyncEnumerable<Row> StreamSingleJoin(IAsyncEnumerable<Row> leftStream, JoinClause join, SelectStatement stmt)
+    private async IAsyncEnumerable<Row> StreamSingleJoin(IAsyncEnumerable<Row> leftStream, JoinClause join, SelectStatement stmt, List<TableReference> leftTables)
     {
         var leftAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
         var rightAlias = join.Table.Alias ?? join.Table.TableName;
+        var shape = await ShapeForAsync(join, leftTables);
 
         if (join.IsApply)
         {
@@ -369,6 +89,7 @@ public class JoinEngine
                     left.ForEachColumn((k, v) => { if (!k.Contains('.')) qualifiedLeft[$"{leftAlias}.{k}"] = v; });
                 }
 
+                shape.SeeLeft(qualifiedLeft);
                 _context.OuterRowStack.Push(qualifiedLeft);
                 try
                 {
@@ -384,6 +105,7 @@ public class JoinEngine
                                 qualifiedRight = rr.Clone();
                                 rr.ForEachColumn((k, v) => { if (!k.Contains('.')) qualifiedRight[$"{rightAlias}.{k}"] = v; });
                             }
+                            shape.SeeRight(qualifiedRight);
                             var combined = CombineRows(qualifiedLeft, qualifiedRight);
                             if (!conditionIsTrue && !await _context.EvaluateCondition(join.Condition, combined))
                                 continue;
@@ -393,7 +115,7 @@ public class JoinEngine
                     }
                     if (!hasMatch && join.JoinType.Equals("OUTER APPLY", StringComparison.OrdinalIgnoreCase))
                     {
-                        yield return qualifiedLeft.Clone();
+                        yield return shape.Unmatched(qualifiedLeft);
                     }
                 }
                 finally { _context.OuterRowStack.Pop(); }
@@ -403,7 +125,7 @@ public class JoinEngine
 
         var streamingLeftKeys = new List<string>();
         var streamingRightKeys = new List<string>();
-        var rightSource = await _context.ResolveDataSourceAsync(join.Table);
+        var rightSource = await _context.ResolveReadSourceAsync(join.Table);
         var estimatedRightRows = (rightSource as IEstimatedCardinalityDataSource)?.EstimatedRowCount;
         var knownLargeRight = estimatedRightRows > _context.JoinSpillThreshold;
         var isInnerEquiJoin = join.JoinType.Equals("INNER", StringComparison.OrdinalIgnoreCase)
@@ -416,10 +138,10 @@ public class JoinEngine
             _logger.WriteLine(
                 $"[yellow]HYPER-SCALE: Right-side estimate ({estimatedRightRows} rows) exceeds threshold. " +
                 "Streaming both sides directly into ExternalJoinEngine.[/]");
-            var externalJoin = new ExternalJoinEngine(_context, _logger);
+            var externalJoin = new ExternalJoinEngine(_context, _logger) { Shape = shape };
             await foreach (var row in externalJoin.ApplyHashJoinExternal(
                 leftStream,
-                GetJoinRowsAsyncEnumerable(join),
+                GetJoinRowsAsyncEnumerable(join, shape),
                 join,
                 streamingLeftKeys,
                 streamingRightKeys,
@@ -428,7 +150,9 @@ public class JoinEngine
             yield break;
         }
 
-        var joinRows = await GetJoinRows(join); // Buffer right side (usually smaller)
+        var joinRows = await GetJoinRows(join, shape); // Buffer right side (usually smaller)
+        if (joinRows.Count > 0) shape.SeeRight(joinRows[0]);
+        else await DeclareEmptyRightAsync(join, shape, rightSource);
 
         // Pre-filter the right-side join table using predicates in WHERE that reference ONLY this table (INNER/CROSS only).
         bool isInnerOrCross = !IsLeftOuter(join.JoinType) && !IsRightOuter(join.JoinType) && !IsSemiJoin(join.JoinType) && !IsAntiJoin(join.JoinType);
@@ -471,7 +195,7 @@ public class JoinEngine
             var leftBuffered = new List<Row>();
             await foreach (var l in leftStream) leftBuffered.Add(l);
             var fuzzyEngine = new FuzzyJoinEngine(_context, _logger);
-            var results = await fuzzyEngine.PerformFuzzyJoin(leftBuffered, joinRows, join);
+            var results = await fuzzyEngine.PerformFuzzyJoin(leftBuffered, joinRows, join, shape);
             foreach (var r in results) yield return r;
             yield break;
         }
@@ -492,7 +216,7 @@ public class JoinEngine
                 foreach (var (k, v) in pending) l[k] = v;
                 leftBuffered.Add(l);
             }
-            foreach (var r in await PerformAsofJoin(leftBuffered, joinRows, join, rightAlias))
+            foreach (var r in await PerformAsofJoin(leftBuffered, joinRows, join, rightAlias, shape))
                 yield return r;
             yield break;
         }
@@ -502,13 +226,17 @@ public class JoinEngine
         {
             if (IsRightOuter(join.JoinType))
             {
+                // The left side had no rows and nothing has named its columns yet: ask.
+                if (!shape.LeftKnown && joinRows.Count > 0)
+                    shape.DeclareLeft(await OuterJoinShape.DeclaredColumnsAsync(leftTables, _context, askSources: true));
                 foreach (var right in joinRows)
-                    yield return right.Clone();
+                    yield return shape.Unmatched(right);
             }
             yield break;
         }
 
         var firstLeft = leftEnumerator.Current;
+        shape.SeeLeft(firstLeft);
         var leftRows = PrependRows(firstLeft, ContinueStream(leftEnumerator));
         var leftColSet = BuildBareColumnSet(firstLeft);
         var rightColSet = joinRows.Count > 0 ? BuildBareColumnSet(joinRows[0]) : null;
@@ -522,7 +250,7 @@ public class JoinEngine
         if (hasEquality && joinRows.Count > _context.JoinSpillThreshold)
         {
             _logger.WriteLine($"[yellow]HYPER-SCALE: Right side ({joinRows.Count} rows) exceeds threshold. Using ExternalJoinEngine.[/]");
-            var externalJoin = new ExternalJoinEngine(_context, _logger);
+            var externalJoin = new ExternalJoinEngine(_context, _logger) { Shape = shape };
             await foreach (var r in externalJoin.ApplyHashJoinExternal(
                 leftRows, joinRows.ToAsyncEnumerable(), join, hashKeysLeft, hashKeysRight,
                 knownBuildRowCount: joinRows.Count,
@@ -537,7 +265,7 @@ public class JoinEngine
 
         if (algorithm == JoinHint.Hash)
         {
-            await foreach (var r in PerformHashJoinStream(leftRows, joinRows, join, hashKeysLeft, hashKeysRight)) yield return r;
+            await foreach (var r in PerformHashJoinStream(leftRows, joinRows, join, hashKeysLeft, hashKeysRight, shape)) yield return r;
         }
         else if (algorithm == JoinHint.Merge)
         {
@@ -545,12 +273,12 @@ public class JoinEngine
             // In a production engine, we'd check if sides are already sorted by an index/ORDER BY.
             var leftBuffered = new List<Row>();
             await foreach (var l in leftRows) leftBuffered.Add(l);
-            var results = await PerformMergeJoin(leftBuffered, joinRows, join, hashKeysLeft, hashKeysRight);
+            var results = await PerformMergeJoin(leftBuffered, joinRows, join, hashKeysLeft, hashKeysRight, shape);
             foreach (var r in results) yield return r;
         }
         else
         {
-            await foreach (var r in PerformNestedLoopJoinStream(leftRows, joinRows, join)) yield return r;
+            await foreach (var r in PerformNestedLoopJoinStream(leftRows, joinRows, join, shape)) yield return r;
         }
     }
 
@@ -586,14 +314,18 @@ public class JoinEngine
 
     }
 
-    public async Task<List<Row>> GetJoinRows(JoinClause join)
+    public Task<List<Row>> GetJoinRows(JoinClause join) => GetJoinRows(join, null);
+
+    private async Task<List<Row>> GetJoinRows(JoinClause join, OuterJoinShape? shape)
     {
         var rows = new List<Row>();
-        await foreach (var r in GetJoinRowsAsyncEnumerable(join)) rows.Add(r);
+        await foreach (var r in GetJoinRowsAsyncEnumerable(join, shape)) rows.Add(r);
         return rows;
     }
 
-    public async IAsyncEnumerable<Row> GetJoinRowsAsyncEnumerable(JoinClause join)
+    public IAsyncEnumerable<Row> GetJoinRowsAsyncEnumerable(JoinClause join) => GetJoinRowsAsyncEnumerable(join, null);
+
+    private async IAsyncEnumerable<Row> GetJoinRowsAsyncEnumerable(JoinClause join, OuterJoinShape? shape)
     {
         var joinBatches = _context.ResolveAndApplyOperators(join.Table);
         string joinName = join.Table.Alias ?? join.Table.TableName;
@@ -601,6 +333,10 @@ public class JoinEngine
 
         await foreach (var jb in joinBatches)
         {
+            // A source with no rows can still hand back a batch that names its columns.
+            if (shape != null && jb.Rows.Count == 0 && jb.Schema.ColumnCount > 0)
+                shape.DeclareRight(OuterJoinShape.Qualified(jb.Schema.ColumnNames, join.Table));
+
             foreach (var jr in jb.Rows)
             {
                 if (jr.Schema != null)
@@ -631,48 +367,13 @@ public class JoinEngine
         }
     }
 
-    private async Task<List<Row>> PerformApplyJoin(List<Row> leftRows, JoinClause join)
-    {
-        var nextRows = new List<Row>();
-        var rightAlias = join.Table.Alias ?? join.Table.TableName;
-        foreach (var left in leftRows)
-        {
-            _context.OuterRowStack.Push(left);
-            try
-            {
-                var rightBatches = _context.ResolveAndApplyOperators(join.Table);
-                bool foundMatch = false;
-                await foreach (var rb in rightBatches)
-                {
-                    foreach (var rr in rb.Rows)
-                    {
-                        var qualifiedRight = rr;
-                        if (!string.IsNullOrEmpty(rightAlias))
-                        {
-                            qualifiedRight = rr.Clone();
-                            rr.ForEachColumn((k, v) => { if (!k.Contains('.')) qualifiedRight[$"{rightAlias}.{k}"] = v; });
-                        }
-                        nextRows.Add(CombineRows(left, qualifiedRight));
-                        foundMatch = true;
-                    }
-                }
-                if (!foundMatch && join.JoinType.Contains("OUTER", StringComparison.OrdinalIgnoreCase))
-                {
-                    nextRows.Add(left.Clone());
-                }
-            }
-            finally { _context.OuterRowStack.Pop(); }
-        }
-        return nextRows;
-    }
-
     /// <summary>
     /// ASOF join: for each left row, among right rows satisfying the equality predicates, returns the
     /// single closest one satisfying the inequality. <c>&gt;=</c>/<c>&gt;</c> pick the largest qualifying
     /// right value; <c>&lt;=</c>/<c>&lt;</c> pick the smallest. ASOF LEFT keeps unmatched left rows.
     /// Both inputs are expected alias-qualified. O(left x right) for this first implementation.
     /// </summary>
-    private async Task<List<Row>> PerformAsofJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join, string rightAlias)
+    private async Task<List<Row>> PerformAsofJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join, string rightAlias, OuterJoinShape shape)
     {
         var conjuncts = new List<Expression>();
         FlattenAnds(join.Condition, conjuncts);
@@ -698,6 +399,7 @@ public class JoinEngine
         Expression? equalityPredicate = equalityParts.Count == 0 ? null
             : equalityParts.Skip(1).Aggregate(equalityParts[0], (acc, p) => (Expression)new BinaryExpression(acc, TokenType.AND, p));
         bool asofLeft = join.JoinType.Equals("ASOF LEFT", StringComparison.OrdinalIgnoreCase);
+        if (leftRows.Count > 0) shape.SeeLeft(leftRows[0]);
 
         // A combined schema preserves the right side's qualified aliases (e.g. q.ts) so the ON
         // predicate resolves them — a bare CombineRows would only carry canonical column names.
@@ -722,129 +424,12 @@ public class JoinEngine
                 }
             }
             if (best != null) results.Add(best);
-            else if (asofLeft) results.Add(left.Clone());
+            else if (asofLeft) results.Add(Unmatched(left, schema, shape));
         }
         return results;
     }
 
-    private async Task<List<Row>> PerformSemiJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join)
-    {
-        var nextRows = new List<Row>();
-        foreach (var left in leftRows)
-        {
-            bool foundMatch = false;
-            foreach (var right in rightRows)
-            {
-                if (await _context.EvaluateCondition(join.Condition, CombineRows(left, right))) { foundMatch = true; break; }
-            }
-            if (foundMatch) nextRows.Add(left);
-        }
-        return nextRows;
-    }
-
-    private async Task<List<Row>> PerformAntiJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join)
-    {
-        var nextRows = new List<Row>();
-        foreach (var left in leftRows)
-        {
-            bool foundMatch = false;
-            foreach (var right in rightRows)
-            {
-                if (await _context.EvaluateCondition(join.Condition, CombineRows(left, right))) { foundMatch = true; break; }
-            }
-            if (!foundMatch) nextRows.Add(left);
-        }
-        return nextRows;
-    }
-
-    private List<Row> PerformHashSemiAntiJoin(List<Row> leftRows, List<Row> rightRows,
-        List<string> leftKeys, List<string> rightKeys, bool semi)
-    {
-        var rightKeySet = new HashSet<CompoundKey>(rightRows.Select(r => GetHashKey(r, rightKeys)));
-        var results = new List<Row>(leftRows.Count);
-        foreach (var left in leftRows)
-        {
-            bool found = rightKeySet.Contains(GetHashKey(left, leftKeys));
-            if (semi ? found : !found)
-                results.Add(left);
-        }
-        return results;
-    }
-
-    private async Task<List<Row>> PerformNestedLoopJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join)
-    {
-        TableSchema? schema = leftRows.Count > 0 && rightRows.Count > 0
-            ? BuildCombinedSchema(leftRows[0], rightRows[0]) : null;
-        var results = new List<Row>();
-        await foreach (var r in PerformNestedLoopJoinStream(leftRows.ToAsyncEnumerable(), rightRows, join, schema)) results.Add(r);
-        return results;
-    }
-
-    /// <summary>
-    /// Block nested-loop join for large left sides: spills left rows to disk and processes them
-    /// one page at a time against the in-memory right side. Prevents OOM when no equality keys
-    /// are available for hash join but the left side exceeds the spill threshold.
-    /// </summary>
-    private async Task<List<Row>> PerformNestedLoopJoinSpilled(List<Row> leftRows, List<Row> rightRows, JoinClause join)
-    {
-        _logger.WriteLine($"[yellow]HYPER-SCALE: Left side ({leftRows.Count} rows) exceeds threshold for nested-loop join. Spilling left side to disk.[/]");
-
-        string spillName = $"{Guid.NewGuid():N}_nl_left.tmp";
-        try
-        {
-            await using (var writer = await _context.SpillStore.CreateWriterAsync(spillName))
-                await writer.WriteRowsAsync(leftRows);
-
-            TableSchema? schema = leftRows.Count > 0 && rightRows.Count > 0
-                ? BuildCombinedSchema(leftRows[0], rightRows[0]) : null;
-
-            var results = new List<Row>();
-            var matchedRightIndices = IsRightOuter(join.JoinType) ? new HashSet<int>() : null;
-
-            await using var reader = await _context.SpillStore.CreateReaderAsync(spillName);
-            await foreach (var left in reader.AsEnumerableAsync())
-            {
-                if (schema == null && rightRows.Count > 0)
-                    schema = BuildCombinedSchema(left, rightRows[0]);
-
-                bool foundMatch = false;
-                for (int ri = 0; ri < rightRows.Count; ri++)
-                {
-                    var combined = CombineRows(left, rightRows[ri], schema);
-                    if (await _context.EvaluateCondition(join.Condition, combined))
-                    {
-                        foundMatch = true;
-                        if (IsSemiJoin(join.JoinType) || IsAntiJoin(join.JoinType)) break;
-                        results.Add(combined);
-                        matchedRightIndices?.Add(ri);
-                    }
-                }
-
-                if (IsSemiJoin(join.JoinType) && foundMatch) results.Add(left.Clone());
-                else if (IsAntiJoin(join.JoinType) && !foundMatch) results.Add(left.Clone());
-                else if (!foundMatch && IsLeftOuter(join.JoinType)) results.Add(left.Clone());
-            }
-
-            if (IsRightOuter(join.JoinType) && matchedRightIndices != null)
-            {
-                for (int ri = 0; ri < rightRows.Count; ri++)
-                {
-                    if (!matchedRightIndices.Contains(ri))
-                        results.Add(schema != null
-                            ? CombineRows(new Row(schema), rightRows[ri], schema)
-                            : rightRows[ri].Clone());
-                }
-            }
-
-            return results;
-        }
-        finally
-        {
-            _context.SpillStore.DeleteChunk(spillName);
-        }
-    }
-
-    private async IAsyncEnumerable<Row> PerformNestedLoopJoinStream(IAsyncEnumerable<Row> leftStream, List<Row> rightRows, JoinClause join, TableSchema? combinedSchema = null)
+    private async IAsyncEnumerable<Row> PerformNestedLoopJoinStream(IAsyncEnumerable<Row> leftStream, List<Row> rightRows, JoinClause join, OuterJoinShape shape, TableSchema? combinedSchema = null)
     {
         var matchedRight = new HashSet<Row>();
 
@@ -869,7 +454,7 @@ public class JoinEngine
 
             if (IsSemiJoin(join.JoinType) && foundMatch) yield return left.Clone();
             else if (IsAntiJoin(join.JoinType) && !foundMatch) yield return left.Clone();
-            else if (!foundMatch && IsLeftOuter(join.JoinType)) yield return left.Clone();
+            else if (!foundMatch && IsLeftOuter(join.JoinType)) yield return Unmatched(left, combinedSchema, shape);
         }
 
         if (IsRightOuter(join.JoinType))
@@ -879,60 +464,12 @@ public class JoinEngine
                 if (!matchedRight.Contains(right))
                     yield return combinedSchema != null
                         ? CombineRows(new Row(combinedSchema), right, combinedSchema)
-                        : right.Clone();
+                        : shape.Unmatched(right);
             }
         }
     }
 
-    private async Task<List<Row>> PerformHashJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join, List<string> leftKeys, List<string> rightKeys)
-    {
-        TableSchema? schema = leftRows.Count > 0 && rightRows.Count > 0
-            ? BuildCombinedSchema(leftRows[0], rightRows[0]) : null;
-        var results = new List<Row>();
-
-        // For INNER JOIN, build the hash table on the smaller side — smaller hash table = better cache locality.
-        if (join.JoinType.Equals("INNER JOIN", StringComparison.OrdinalIgnoreCase)
-            && leftRows.Count > 0 && leftRows.Count < rightRows.Count)
-        {
-            await foreach (var r in PerformHashJoinBuildOnLeft(leftRows, rightRows.ToAsyncEnumerable(), join, leftKeys, rightKeys, schema))
-                results.Add(r);
-        }
-        else
-        {
-            await foreach (var r in PerformHashJoinStream(leftRows.ToAsyncEnumerable(), rightRows, join, leftKeys, rightKeys, schema))
-                results.Add(r);
-        }
-        return results;
-    }
-
-    // Builds hash table on the smaller left side and probes with the right stream.
-    // Output column order is left-then-right, identical to PerformHashJoinStream — safe for INNER JOIN only.
-    private async IAsyncEnumerable<Row> PerformHashJoinBuildOnLeft(
-        IEnumerable<Row> leftBuild, IAsyncEnumerable<Row> rightProbe, JoinClause join,
-        List<string> leftKeys, List<string> rightKeys, TableSchema? combinedSchema)
-    {
-        var hashTable = new Dictionary<CompoundKey, List<Row>>();
-        foreach (var r in leftBuild)
-        {
-            var key = GetHashKey(r, leftKeys);
-            if (!hashTable.TryGetValue(key, out var list)) { list = new List<Row>(); hashTable[key] = list; }
-            list.Add(r);
-        }
-
-        await foreach (var right in rightProbe)
-        {
-            var key = GetHashKey(right, rightKeys);
-            if (!hashTable.TryGetValue(key, out var matches)) continue;
-            foreach (var left in matches)
-            {
-                var combined = CombineRows(left, right, combinedSchema);
-                if (await _context.EvaluateCondition(join.Condition, combined))
-                    yield return combined;
-            }
-        }
-    }
-
-    private async IAsyncEnumerable<Row> PerformHashJoinStream(IAsyncEnumerable<Row> leftStream, List<Row> rightRows, JoinClause join, List<string> leftKeys, List<string> rightKeys, TableSchema? combinedSchema = null)
+    private async IAsyncEnumerable<Row> PerformHashJoinStream(IAsyncEnumerable<Row> leftStream, List<Row> rightRows, JoinClause join, List<string> leftKeys, List<string> rightKeys, OuterJoinShape shape, TableSchema? combinedSchema = null)
     {
         // Build hash table on the buffered right side
         var hashTable = new Dictionary<CompoundKey, List<Row>>();
@@ -977,7 +514,7 @@ public class JoinEngine
             else if (IsAntiJoin(join.JoinType) && !foundMatch) yield return left.Clone();
             else if (!foundMatch && IsLeftOuter(join.JoinType))
             {
-                var unmatched = left.Clone();
+                var unmatched = Unmatched(left, combinedSchema, shape);
                 AnnotateJoinReplayObservation(unmatched, buildTable, buildSideUnique);
                 yield return unmatched;
             }
@@ -990,12 +527,12 @@ public class JoinEngine
                 if (!matchedRight.Contains(right))
                     yield return combinedSchema != null
                         ? CombineRows(new Row(combinedSchema), right, combinedSchema)
-                        : right.Clone();
+                        : shape.Unmatched(right);
             }
         }
     }
 
-    private async Task<List<Row>> PerformMergeJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join, List<string> leftKeys, List<string> rightKeys)
+    private async Task<List<Row>> PerformMergeJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join, List<string> leftKeys, List<string> rightKeys, OuterJoinShape shape)
     {
         _logger.Debug("  Performing Merge Join (Sorting {LeftCount} and {RightCount} rows)", leftRows.Count, rightRows.Count);
         var sortedLeft = leftRows.OrderBy(r => GetHashKey(r, leftKeys)).ToList();
@@ -1041,7 +578,7 @@ public class JoinEngine
 
         if (IsLeftOuter(join.JoinType))
         {
-            foreach (var left in leftRows) if (!matchedLeft.Contains(left)) nextRows.Add(left.Clone());
+            foreach (var left in leftRows) if (!matchedLeft.Contains(left)) nextRows.Add(Unmatched(left, combinedSchema, shape));
         }
         if (IsRightOuter(join.JoinType))
         {
@@ -1049,7 +586,7 @@ public class JoinEngine
                 if (!matchedRight.Contains(right))
                     nextRows.Add(combinedSchema != null
                         ? CombineRows(new Row(combinedSchema), right, combinedSchema)
-                        : right.Clone());
+                        : shape.Unmatched(right));
         }
 
         return nextRows;
@@ -1105,6 +642,7 @@ public class JoinEngine
     private static Row CombineRows(Row left, Row right, TableSchema? schema = null)
     {
         var combined = schema != null ? new Row(schema) : new Row();
+        combined.MayLackColumns = left.MayLackColumns || right.MayLackColumns;
         combined.DataQualityReplayProvenance = left.DataQualityReplayProvenance;
         left.ForEachColumn((k, v) => combined[k] = v);
 
@@ -1131,6 +669,65 @@ public class JoinEngine
         }
 
         return combined;
+    }
+
+    /// <summary>
+    /// The row an outer join returns for a left row with no match: the left values, and NULL in
+    /// every column of the other side. With a combined schema the row has the same layout as a
+    /// matched row; without one (a side had no rows) <paramref name="shape"/> names the columns.
+    /// </summary>
+    private static Row Unmatched(Row left, TableSchema? schema, OuterJoinShape shape)
+    {
+        if (schema == null) return shape.Unmatched(left);
+
+        var combined = new Row(schema)
+        {
+            MayLackColumns = left.MayLackColumns,
+            DataQualityReplayProvenance = left.DataQualityReplayProvenance,
+        };
+        left.ForEachColumn((k, v) => combined[k] = v);
+        return combined;
+    }
+
+    /// <summary>
+    /// The shape of one join step. Only an outer join returns rows with no match, so only an
+    /// outer join pays for looking up what each side declares.
+    /// </summary>
+    private async Task<OuterJoinShape> ShapeForAsync(JoinClause join, IReadOnlyList<TableReference> leftTables)
+    {
+        var shape = new OuterJoinShape();
+        if (join.IsApply ? join.JoinType.Contains("OUTER", StringComparison.OrdinalIgnoreCase) : IsLeftOuter(join.JoinType))
+            shape.DeclareRight(await OuterJoinShape.DeclaredColumnsAsync(new[] { join.Table }, _context));
+        if (!join.IsApply && IsRightOuter(join.JoinType))
+            shape.DeclareLeft(await OuterJoinShape.DeclaredColumnsAsync(leftTables, _context));
+        return shape;
+    }
+
+    /// <summary>
+    /// The right side of an outer join had no rows and nothing has named its columns yet. A table
+    /// function has already run, and <paramref name="rightSource"/> holds what it returned, so
+    /// that is asked. Anything else is worked out from the table reference: a file reads its
+    /// header, a database its catalog, and a subquery or a PIVOT is read from its own text.
+    /// </summary>
+    private async Task DeclareEmptyRightAsync(JoinClause join, OuterJoinShape shape, IDataSource rightSource)
+    {
+        var table = join.Table;
+        if (shape.RightKnown || !IsLeftOuter(join.JoinType)) return;
+
+        if (table.FunctionCall != null && table.TableOperators.Count == 0)
+        {
+            // What the function returned when it was read. Only a result held in memory is asked
+            // again: a database connection's source would run the function a second time.
+            var columns = _context.ReturnedColumns(table)?.ToList()
+                ?? (rightSource is InMemoryDataSource
+                    ? (await rightSource.GetColumnsAsync(_context.CancellationToken)).ToList()
+                    : null);
+            if (columns is { Count: > 0 })
+                shape.DeclareRight(OuterJoinShape.Qualified(columns, table));
+            return;
+        }
+
+        shape.DeclareRight(await OuterJoinShape.DeclaredColumnsAsync(new[] { table }, _context, askSources: true));
     }
 
     private static void AnnotateJoinReplayObservation(Row row, string buildTable, bool buildSideUnique)

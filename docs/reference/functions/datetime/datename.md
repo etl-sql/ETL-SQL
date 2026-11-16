@@ -21,6 +21,11 @@ Returns the named date part as a `STRING`.
 
 Returns `NULL` when `date` is `NULL`.
 
+## Remarks
+
+- Month and weekday names are English on every server. Use [`FORMAT`](../string/format.md) with a culture for names in another language.
+- Text is read as a date the way [`CAST`](../conversion/cast.md) reads it, on every server: ISO first, then slash dates in the [`SET DATEFORMAT`](../../set-commands/set-dateformat.md) order (default month first: `08/01/2024` is 1 August).
+
 ## Examples
 
 ```sql

@@ -1,8 +1,4 @@
 using System;
-using System.IO;
-using System.Linq;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -12,7 +8,8 @@ using ETL_SQL.Services;
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
 /// Handles the GENERATE JWT_SECRET statement.
-/// Generates a random 256-bit key, encrypts it with the machine key, and updates the portal configuration.
+/// Generates a random 256-bit key and encrypts it with the machine key. It does not change any
+/// configuration file; the operator installs the value.
 /// The secret is returned as a one-row result set and is never passed to a logger: a job's log is
 /// kept, and a result set is only shown to whoever ran the statement.
 /// </summary>
@@ -21,9 +18,6 @@ public class GenerateJwtSecretStatementHandler(ILogger logger) : IStatementHandl
     private readonly ILogger _logger = logger;
 
     public Type SupportedStatementType => typeof(GenerateJwtSecretStatement);
-
-    /// <summary>The configuration file to update. Tests point this away from the running application's own.</summary>
-    internal string? ConfigPath { get; init; }
 
     public async Task Execute(Statement statement, IExecutionContext context)
     {
@@ -54,38 +48,9 @@ public class GenerateJwtSecretStatementHandler(ILogger logger) : IStatementHandl
 
         context.Log("JWT secret generated. Record the Secret value in your password manager: it cannot be recovered from the encrypted value if the machine key changes.", ConsoleColor.Yellow);
 
-        // 4. Update appsettings.json if it exists in the execution directory
-        var configPath = ConfigPath ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
-        if (File.Exists(configPath))
-        {
-            try
-            {
-                string json = await File.ReadAllTextAsync(configPath);
-                var root = JsonNode.Parse(json);
-                if (root != null)
-                {
-                    var security = root["Security"];
-                    if (security == null)
-                    {
-                        root["Security"] = new JsonObject();
-                        security = root["Security"];
-                    }
-                    security!["JwtSecret"] = encryptedSecret;
-
-                    var options = new JsonSerializerOptions { WriteIndented = true };
-                    await File.WriteAllTextAsync(configPath, root.ToJsonString(options));
-                    context.Log("SUCCESS: Updated appsettings.json with the encrypted secret.", ConsoleColor.Green);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error("Failed to update appsettings.json: {Message}", ex, ex.Message);
-                context.Log($"ERROR: Could not update appsettings.json automatically: {ex.Message}", ConsoleColor.Red);
-            }
-        }
-        else
-        {
-            context.Log("NOTE: appsettings.json not found in the application directory. Please update your configuration manually using the encrypted value above.", ConsoleColor.Yellow);
-        }
+        // COMPAT_BREAK: 0.22.0 — the statement no longer rewrites the running application's
+        // appsettings.json. It wrote Security:JwtSecret, which nothing reads, and it let any hosted
+        // script change the service's own configuration. Operators install the value with the CLI.
+        context.Log("To install it, run 'etl-sql config setup-jwt --update' on the Portal host, or set Portal:Jwt:Secret to the encrypted value.", ConsoleColor.Yellow);
     }
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { todaysRuns, renderDayStrip } from '../../src/ETL-SQL.Portal/wwwroot/js/orchestrator-timeline.js';
-import { readScriptChoices, readBundleChoices } from '../../src/ETL-SQL.Portal/wwwroot/js/orchestrator-create-job.js';
+import { readScriptChoices } from '../../src/ETL-SQL.Portal/wwwroot/js/orchestrator-create-job.js';
 
 // Today's strip: placement is a fraction of the local calendar day, and only today's runs are placed.
 const now = new Date(2026, 9, 10, 9, 0, 0);
@@ -34,12 +34,5 @@ assert.deepEqual(readScriptChoices({ files: ['a.etlsql'] }), [{ value: 'a.etlsql
 assert.deepEqual(readScriptChoices({ files: [] }), []);
 for (const invalid of [null, [], {}, { files: 'a' }, { files: [''] }, { files: [1] }])
   assert.throws(() => readScriptChoices(invalid), /Invalid script list response/);
-
-// The service lists published versions; each bundle is offered once, labelled with its newest version.
-assert.deepEqual(readBundleChoices([{ bundleName: 'sales', version: 1 }, { bundleName: 'ops', version: 4 }, { bundleName: 'sales', version: 3 }]),
-  [{ value: 'bundle://sales/latest', label: 'sales (latest: v3)' }, { value: 'bundle://ops/latest', label: 'ops (latest: v4)' }]);
-for (const invalid of [null, {}, [{ bundleName: 'sales' }], [{ bundleName: '', version: 1 }], [{ bundleName: 'sales', version: 0 }],
-  [{ bundleName: 'sales', version: '2' }], [{ bundleName: 'sales', latestVersion: 2 }]])
-  assert.throws(() => readBundleChoices(invalid), /Invalid bundle list response/);
 
 console.log('orchestrator page owner checks passed');

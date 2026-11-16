@@ -48,6 +48,44 @@ namespace ETL_SQL.Tests.Integration.Connectors
             await _container.StartAsync();
             Port = _container.GetMappedPublicPort(21);
             await WaitForGreetingAsync();
+            ReadyAt = DateTimeOffset.UtcNow;
+        }
+
+        /// <summary>When the readiness probe last signed in and listed the root.</summary>
+        public DateTimeOffset ReadyAt { get; private set; }
+
+        // Diagnostics for a failed test: a refusal does not say which port refused, so record which
+        // host ports accept now and what the server itself logged.
+        public async Task<string> DescribeAsync()
+        {
+            var text = new System.Text.StringBuilder();
+            text.AppendLine($"Fixture ready at {ReadyAt:O}; now {DateTimeOffset.UtcNow:O}.");
+            var ports = new List<int> { Port };
+            for (var port = PassiveMinPort; port <= PassiveMaxPort; port++) ports.Add(port);
+            foreach (var port in ports)
+            {
+                using var socket = new System.Net.Sockets.TcpClient();
+                string state;
+                try
+                {
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    await socket.ConnectAsync(Host, port, timeout.Token);
+                    state = "accepts";
+                }
+                catch (Exception ex) { state = ex.Message; }
+                text.AppendLine($"Host {Host}:{port}{(port == Port ? " (control)" : "")}: {state}");
+            }
+            if (_container != null)
+            {
+                text.AppendLine($"Container state: {_container.State}");
+                try
+                {
+                    var (stdout, stderr) = await _container.GetLogsAsync();
+                    text.AppendLine("Container stdout:").AppendLine(stdout).AppendLine("Container stderr:").AppendLine(stderr);
+                }
+                catch (Exception ex) { text.AppendLine($"Container logs unavailable: {ex.Message}"); }
+            }
+            return text.ToString();
         }
 
         // An open mapped port only proves Docker's proxy accepts. On a cold start the first test was

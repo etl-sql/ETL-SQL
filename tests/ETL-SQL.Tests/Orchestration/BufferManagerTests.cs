@@ -123,5 +123,115 @@ namespace ETL_SQL.Tests.Orchestration
             // Second cursor should time out
             await Assert.ThrowsAsync<TimeoutException>(() => bm.AcquireCursorAsync("session2"));
         }
+
+        [Fact]
+        public async Task BufferManager_AbandonedCursorTimeoutAndCancel_LeaveFullCapacityReusable()
+        {
+            using var bm = CreateBufferManager(maxCursors: 1, timeoutSec: 1);
+
+            var cur1 = await bm.AcquireCursorAsync("holder");
+            await Assert.ThrowsAsync<TimeoutException>(() => bm.AcquireCursorAsync("timed_out"));
+
+            using (var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMilliseconds(50)))
+            {
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                    bm.AcquireCursorAsync("cancelled", cts.Token));
+            }
+
+            // Releasing the original cursor must NOT grant a permit to the abandoned waiters.
+            cur1.Dispose();
+
+            using var cur2 = await bm.AcquireCursorAsync("fresh");
+            Assert.NotNull(cur2);
+        }
+
+        [Fact]
+        public async Task BufferManager_AbandonedMemoryTimeoutAndCancel_DoNotLeakBudgetOrStallQueue()
+        {
+            using var bm = CreateBufferManager(maxMemMB: 10, timeoutSec: 1);
+
+            var res1 = await bm.ReserveMemoryAsync("holder", 8L * 1024 * 1024);
+
+            // Queue one waiter that times out and one that cancels.
+            await Assert.ThrowsAsync<TimeoutException>(() =>
+                bm.ReserveMemoryAsync("timed_out", 6L * 1024 * 1024));
+
+            using (var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMilliseconds(50)))
+            {
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                    bm.ReserveMemoryAsync("cancelled", 6L * 1024 * 1024, cts.Token));
+            }
+
+            // Releasing res1 must reclaim the entire 10 MB budget and skip abandoned requests.
+            res1.Dispose();
+
+            using var full = await bm.ReserveMemoryAsync("fresh_full", 10L * 1024 * 1024);
+            Assert.NotNull(full);
+        }
+
+        [Fact]
+        public async Task BufferManager_ConcurrentGrantTimeoutRace_NeverLeaksMemoryOrPermits()
+        {
+            using var bm = CreateBufferManager(maxMemMB: 10, maxCursors: 1, timeoutSec: 1);
+
+            for (var round = 0; round < 20; round++)
+            {
+                var memHolder = await bm.ReserveMemoryAsync($"m_hold_{round}", 10L * 1024 * 1024);
+                var cursorHolder = await bm.AcquireCursorAsync($"c_hold_{round}");
+
+                using var memCts = new System.Threading.CancellationTokenSource();
+                using var curCts = new System.Threading.CancellationTokenSource();
+
+                var memWaiter = bm.ReserveMemoryAsync($"m_race_{round}", 5L * 1024 * 1024, memCts.Token);
+                var curWaiter = bm.AcquireCursorAsync($"c_race_{round}", curCts.Token);
+
+                // Race cancellation directly against concurrent releases across rounds.
+                var releaseTask = Task.Run(() =>
+                {
+                    if (round % 2 == 0) Thread.Yield();
+                    memHolder.Dispose();
+                    cursorHolder.Dispose();
+                });
+                var cancelTask = Task.Run(() =>
+                {
+                    if (round % 2 == 1) Thread.Yield();
+                    memCts.Cancel();
+                    curCts.Cancel();
+                });
+
+                await Task.WhenAll(releaseTask, cancelTask);
+
+                try
+                {
+                    using var won = await memWaiter;
+                }
+                catch (OperationCanceledException)
+                {
+                }
+
+                try
+                {
+                    using var won = await curWaiter;
+                }
+                catch (OperationCanceledException)
+                {
+                }
+
+                // After every round, full memory (10 MB) and full cursor capacity (1) must be available.
+                using var checkMem = await bm.ReserveMemoryAsync($"m_verify_{round}", 10L * 1024 * 1024);
+                using var checkCur = await bm.AcquireCursorAsync($"c_verify_{round}");
+            }
+        }
+
+        [Fact]
+        public async Task BufferManager_WaitFailure_PropagatesOriginalException()
+        {
+            using var bm = CreateBufferManager(timeoutSec: 5);
+            var faultedWait = Task.FromException(new InvalidOperationException("wait boom"));
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                bm.WaitWithFeedbackForTestAsync("faulted_session", "Memory", faultedWait));
+            Assert.Equal("wait boom", ex.Message);
+        }
     }
 }

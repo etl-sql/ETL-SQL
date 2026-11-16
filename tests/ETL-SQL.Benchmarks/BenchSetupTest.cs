@@ -14,7 +14,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task TestSetup()
         {
-            var bench = new TpcHBenchmarks();
+            await using var bench = new TpcHBenchmarks();
             await bench.Setup();
             Assert.NotNull(bench);
         }
@@ -22,7 +22,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task TestRunQ1()
         {
-            var bench = new TpcHBenchmarks();
+            await using var bench = new TpcHBenchmarks();
             await bench.Setup();
             await bench.RunQ1();
             var result = bench.LastResult;
@@ -35,7 +35,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task TestRunQ6()
         {
-            var bench = new TpcHBenchmarks();
+            await using var bench = new TpcHBenchmarks();
             await bench.Setup();
             await bench.RunQ6();
             var result = bench.LastResult;
@@ -47,7 +47,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task TestRunQ3()
         {
-            var bench = new TpcHBenchmarks();
+            await using var bench = new TpcHBenchmarks();
             await bench.Setup();
             await bench.RunQ3();
             var result = bench.LastResult;
@@ -61,7 +61,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task TestRunQ5()
         {
-            var bench = new TpcHBenchmarks();
+            await using var bench = new TpcHBenchmarks();
             await bench.Setup();
             await bench.RunQ5();
             var result = bench.LastResult;
@@ -74,7 +74,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task TestRunQ12()
         {
-            var bench = new TpcHBenchmarks();
+            await using var bench = new TpcHBenchmarks();
             await bench.Setup();
             await bench.RunQ12();
             var result = bench.LastResult;
@@ -88,7 +88,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task TestRunQ14()
         {
-            var bench = new TpcHBenchmarks();
+            await using var bench = new TpcHBenchmarks();
             await bench.Setup();
             await bench.RunQ14();
             var result = bench.LastResult;
@@ -102,7 +102,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task SelectShape_Setup()
         {
-            var bench = new SelectShapeBenchmarks();
+            await using var bench = new SelectShapeBenchmarks();
             await bench.Setup();
             Assert.NotNull(bench);
         }
@@ -110,7 +110,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task SelectShape_SimpleFilter()
         {
-            var bench = new SelectShapeBenchmarks();
+            await using var bench = new SelectShapeBenchmarks();
             await bench.Setup();
             await bench.SimpleFilter();
             var result = bench.LastResult;
@@ -123,7 +123,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task SelectShape_Distinct()
         {
-            var bench = new SelectShapeBenchmarks();
+            await using var bench = new SelectShapeBenchmarks();
             await bench.Setup();
             await bench.Distinct();
             var result = bench.LastResult;
@@ -135,7 +135,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task SelectShape_LimitedSort()
         {
-            var bench = new SelectShapeBenchmarks();
+            await using var bench = new SelectShapeBenchmarks();
             await bench.Setup();
             await bench.LimitedSort();
             var result = bench.LastResult;
@@ -150,7 +150,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task SelectShape_WindowQualify()
         {
-            var bench = new SelectShapeBenchmarks();
+            await using var bench = new SelectShapeBenchmarks();
             await bench.Setup();
             await bench.WindowQualify();
             var result = bench.LastResult;
@@ -163,7 +163,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task SelectShape_UnionAll()
         {
-            var bench = new SelectShapeBenchmarks();
+            await using var bench = new SelectShapeBenchmarks();
             await bench.Setup();
             await bench.UnionAll();
             var result = bench.LastResult;
@@ -289,7 +289,7 @@ namespace ETL_SQL.Benchmarks.Tests
         [Fact]
         public async Task TestQ1DeterministicAtSF01()
         {
-            var bench = new TpcHBenchmarks(0.1);
+            await using var bench = new TpcHBenchmarks(0.1);
             await bench.Setup();
             await bench.RunQ1();
             var result = bench.LastResult;
@@ -317,11 +317,15 @@ namespace ETL_SQL.Benchmarks.Tests
             if (!File.Exists(expected))
             {
                 File.WriteAllText(expected, json);
-                return; // baseline written — pass on first run
+                Assert.Fail($"Baseline {expected} was missing and has been written; review and commit it, then rerun.");
             }
 
+            // The baseline is committed text, so its line endings follow the checkout while the
+            // serializer follows the OS; compare content, not newline style.
             var baseline = File.ReadAllText(expected);
-            Assert.Equal(baseline.Trim(), json.Trim());
+            Assert.Equal(NormalizeNewlines(baseline), NormalizeNewlines(json));
         }
+
+        private static string NormalizeNewlines(string text) => text.Replace("\r\n", "\n").Trim();
     }
 }

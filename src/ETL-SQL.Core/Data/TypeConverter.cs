@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Globalization;
 using ETL_SQL.Common;
 
 namespace ETL_SQL.Core.Data;
@@ -11,32 +12,32 @@ public static class TypeConverter
 {
     private static readonly Dictionary<string, Func<object, object?>> _converters = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["INT"] = v => Math.Truncate(Convert.ToDecimal(v)),
-        ["INTEGER"] = v => Math.Truncate(Convert.ToDecimal(v)),
-        ["DECIMAL"] = v => { var d = Convert.ToDecimal(v); return ((decimal.GetBits(d)[3] >> 16) & 0x7F) == 0 ? d * 1.0m : d; },
-        ["MONEY"] = v => Convert.ToDecimal(v),
-        ["NUMERIC"] = v => { var d = Convert.ToDecimal(v); return ((decimal.GetBits(d)[3] >> 16) & 0x7F) == 0 ? d * 1.0m : d; },
-        ["FLOAT"] = v => Convert.ToDouble(v),
-        ["DOUBLE"] = v => Convert.ToDouble(v),
+        ["INT"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
+        ["INTEGER"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
+        ["DECIMAL"] = v => { var d = Convert.ToDecimal(v, CultureInfo.InvariantCulture); return ((decimal.GetBits(d)[3] >> 16) & 0x7F) == 0 ? d * 1.0m : d; },
+        ["MONEY"] = v => Convert.ToDecimal(v, CultureInfo.InvariantCulture),
+        ["NUMERIC"] = v => { var d = Convert.ToDecimal(v, CultureInfo.InvariantCulture); return ((decimal.GetBits(d)[3] >> 16) & 0x7F) == 0 ? d * 1.0m : d; },
+        ["FLOAT"] = v => Convert.ToDouble(v, CultureInfo.InvariantCulture),
+        ["DOUBLE"] = v => Convert.ToDouble(v, CultureInfo.InvariantCulture),
         ["BIT"] = v => Convert.ToBoolean(v),
         ["BOOLEAN"] = v => Convert.ToBoolean(v),
         ["BOOL"] = v => Convert.ToBoolean(v),
-        ["TINYINT"] = v => Math.Truncate(Convert.ToDecimal(v)),
-        ["SMALLINT"] = v => Math.Truncate(Convert.ToDecimal(v)),
-        ["BIGINT"] = v => Math.Truncate(Convert.ToDecimal(v)),
-        ["REAL"] = v => Convert.ToSingle(v),
-        ["DATETIME"] = v => v is DateTime dt ? dt : (v is DateTimeOffset dto ? dto.DateTime : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2 : DateTime.Parse(v.ToString() ?? ""))),
-        ["DATE"] = v => v is DateTime dt ? dt.Date : (v is DateTimeOffset dto ? dto.DateTime.Date : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2.Date : DateTime.Parse(v.ToString() ?? "").Date)),
-        ["TIMESTAMP"] = v => v is DateTime dt ? dt : (v is DateTimeOffset dto ? dto.DateTime : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2 : DateTime.Parse(v.ToString() ?? ""))),
+        ["TINYINT"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
+        ["SMALLINT"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
+        ["BIGINT"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
+        ["REAL"] = v => Convert.ToSingle(v, CultureInfo.InvariantCulture),
+        ["DATETIME"] = ConvertToDateTime,
+        ["DATE"] = ConvertToDateOnly,
+        ["TIMESTAMP"] = ConvertToDateTime,
 
-        ["TIME"] = v => TimeSpan.Parse(v.ToString() ?? "00:00:00"),
-        ["STRING"] = v => v.ToString(),
-        ["VARCHAR"] = v => v.ToString(),
-        ["NVARCHAR"] = v => v.ToString(),
-        ["TEXT"] = v => v.ToString(),
-        ["NTEXT"] = v => v.ToString(),
-        ["CHAR"] = v => v.ToString(),
-        ["NCHAR"] = v => v.ToString(),
+        ["TIME"] = v => v is DateOnly ? TimeSpan.Zero : TimeSpan.Parse(v.ToString() ?? "00:00:00"),
+        ["STRING"] = v => ToInvariantText(v),
+        ["VARCHAR"] = v => ToInvariantText(v),
+        ["NVARCHAR"] = v => ToInvariantText(v),
+        ["TEXT"] = v => ToInvariantText(v),
+        ["NTEXT"] = v => ToInvariantText(v),
+        ["CHAR"] = v => ToInvariantText(v),
+        ["NCHAR"] = v => ToInvariantText(v),
         ["JSON"] = v =>
         {
             var s = v.ToString() ?? "";
@@ -44,7 +45,7 @@ public static class TypeConverter
             System.Text.Json.JsonDocument.Parse(s); // Validates JSON structure
             return s;
         },
-        ["VARCHAR2"] = v => v.ToString(),
+        ["VARCHAR2"] = v => ToInvariantText(v),
         ["XML"] = v =>
         {
             var s = v.ToString() ?? "";
@@ -83,6 +84,8 @@ public static class TypeConverter
         ["UUID"] = v => v is Guid g ? g : Guid.Parse(v.ToString() ?? Guid.Empty.ToString()),
         ["DATETIMEOFFSET"] = v => v is DateTimeOffset dto ? dto : (v is DateTime dt
             ? new DateTimeOffset(dt)
+            : v is DateOnly dateOnly
+            ? new DateTimeOffset(dateOnly.ToDateTime(TimeOnly.MinValue))
             : (EvaluationUtils.SafeTryParseDateTimeOffset(v.ToString() ?? "", out var parsed)
                 ? parsed
                 : DateTimeOffset.Parse(v.ToString() ?? "", System.Globalization.CultureInfo.InvariantCulture))),
@@ -136,6 +139,53 @@ public static class TypeConverter
             }
         }
         return value;
+    }
+
+    /// <summary>
+    /// The text a value becomes when cast to a string type. It never depends on the server's
+    /// locale, so the same query returns the same text on every host: DATE values are ISO
+    /// <c>yyyy-MM-dd</c>, DATETIME/TIMESTAMP values are <c>yyyy-MM-dd HH:mm:ss</c> (fractional
+    /// seconds only when present, then the offset for a DATETIMEOFFSET), and numbers use
+    /// invariant digits. Locale-aware text is FORMAT's job.
+    /// </summary>
+    public static string? ToInvariantText(object? value) => value switch
+    {
+        null => null,
+        // A database NULL is NULL, not an empty string: `5 + NULL` concatenated to '5'.
+        DBNull => null,
+        string text => text,
+        DateOnly dateOnly => dateOnly.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        DateTime dateTime => FormatDateTime(dateTime),
+        DateTimeOffset offset => FormatDateTime(offset.DateTime) + offset.ToString(" zzz", CultureInfo.InvariantCulture),
+        IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
+        _ => value.ToString()
+    };
+
+    private static object ConvertToDateTime(object v) => v switch
+    {
+        DateTime dt => dt,
+        DateOnly d => d.ToDateTime(TimeOnly.MinValue),
+        DateTimeOffset dto => dto.DateTime,
+        _ => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2)
+            ? dt2
+            : DateTime.Parse(v.ToString() ?? "", CultureInfo.InvariantCulture)
+    };
+
+    private static object ConvertToDateOnly(object v) => v switch
+    {
+        DateOnly d => d,
+        DateTime dt => DateOnly.FromDateTime(dt),
+        DateTimeOffset dto => DateOnly.FromDateTime(dto.DateTime),
+        _ => DateOnly.FromDateTime(EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2)
+            ? dt2
+            : DateTime.Parse(v.ToString() ?? "", CultureInfo.InvariantCulture))
+    };
+
+    private static string FormatDateTime(DateTime value)
+    {
+        var text = value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        var fraction = value.Ticks % TimeSpan.TicksPerSecond;
+        return fraction == 0 ? text : text + "." + fraction.ToString("D7", CultureInfo.InvariantCulture).TrimEnd('0');
     }
 
     /// <summary>Registers a custom type converter.</summary>

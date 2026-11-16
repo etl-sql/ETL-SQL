@@ -74,13 +74,18 @@ namespace ETL_SQL.Tests.Statements
 
             var res = await ev.EvaluateSelect((SelectStatement)Parse("SELECT Grp, Val, FIRST_VALUE(Val) OVER(PARTITION BY Grp ORDER BY Val) AS First, LAST_VALUE(Val) OVER(PARTITION BY Grp ORDER BY Val) AS Last FROM #T;").Statements[0]).FirstAsync();
 
+            // With ORDER BY and no frame clause the frame ends at the current row, so LAST_VALUE
+            // is the current row's value and not the last value of the partition.
             // Grp 1
             Assert.Equal(10m, res.Rows[0]["First"]);
-            Assert.Equal(20m, res.Rows[0]["Last"]);
+            Assert.Equal(10m, res.Rows[0]["Last"]);
+            Assert.Equal(10m, res.Rows[1]["First"]);
+            Assert.Equal(20m, res.Rows[1]["Last"]);
 
             // Grp 2
             Assert.Equal(100m, res.Rows[2]["First"]);
-            Assert.Equal(200m, res.Rows[2]["Last"]);
+            Assert.Equal(100m, res.Rows[2]["Last"]);
+            Assert.Equal(200m, res.Rows[3]["Last"]);
         }
 
         [Fact]

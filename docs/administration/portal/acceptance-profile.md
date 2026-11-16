@@ -57,7 +57,9 @@ Publishing a report requires the `.rptsql` file to already exist under the Porta
 `ScriptRootPath`. An HTTP client cannot put a file there.
 
 - **When the root is reachable from the machine running the script** — a local run, or a container
-  with the root bind-mounted — pass `-ScriptRootPath` and the script writes the file itself.
+  with the root bind-mounted — pass `-ScriptRootPath` and the script writes the file itself. If the
+  Portal then refuses to publish it, "seeded report is listed" **fails**: the script set the file
+  up, so the refusal is the Portal's.
 - **When it is not**, the report is reported as **skipped**, not failed. A check that fails for
   something the script itself said it could not set up is noise, and noise is what stops people
   reading output.

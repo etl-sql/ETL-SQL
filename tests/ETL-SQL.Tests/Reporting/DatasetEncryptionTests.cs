@@ -47,6 +47,107 @@ namespace ETL_SQL.Tests.Reporting
                 () => MachineBoundCrypto.Unprotect(protected_));
         }
 
+        // Windows in-memory payloads use DPAPI, so the current-format header is Unix-only.
+        [UnixFact]
+        [Trait("Category", "Integration")]
+        [Trait("Platform", "Unix")]
+        public void MachineBoundCrypto_UsesTheCurrentFormat()
+        {
+            var protected_ = MachineBoundCrypto.Protect("new payload"u8.ToArray());
+            Assert.Equal("ETLSQLM3", System.Text.Encoding.ASCII.GetString(protected_, 0, 8));
+            Assert.Throws<System.Security.Cryptography.CryptographicException>(
+                () => MachineBoundCrypto.Unprotect("ETLSQLM2"u8.ToArray().Concat(new byte[40]).ToArray()));
+        }
+
+        [Fact]
+        public async Task MachineBoundCrypto_FileFormat_UsesSeparateEncryptionAndMacKeys()
+        {
+            var plain = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            var encrypted = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            try
+            {
+                File.WriteAllText(plain, "id,amount\n1,100\n");
+                await MachineBoundCrypto.EncryptFileAsync(plain, encrypted);
+                var bytes = File.ReadAllBytes(encrypted);
+                Assert.Equal("ETLSQLMF4", System.Text.Encoding.ASCII.GetString(bytes, 0, 9));
+
+                var keys = ((byte[] EncryptionKey, byte[] MacKey))typeof(MachineBoundCrypto)
+                    .GetMethod("GetMachineFileKeys", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+                    .Invoke(null, null)!;
+                Assert.False(keys.EncryptionKey.SequenceEqual(keys.MacKey));
+
+                // The trailing tag is HMAC-SHA256(magic || iv || ciphertext) under the MAC key only.
+                var authenticated = bytes.AsSpan(0, bytes.Length - 32).ToArray();
+                var tag = bytes.AsSpan(bytes.Length - 32).ToArray();
+                Assert.Equal(tag, System.Security.Cryptography.HMACSHA256.HashData(keys.MacKey, authenticated));
+                Assert.NotEqual(tag, System.Security.Cryptography.HMACSHA256.HashData(keys.EncryptionKey, authenticated));
+
+                // A file in the retired single-key v3 format is refused, not misread.
+                bytes[8] = (byte)'3';
+                File.WriteAllBytes(encrypted, bytes);
+                using var stream = File.OpenRead(encrypted);
+                var refused = Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(() => MachineBoundCrypto.DecryptStream(stream));
+                Assert.Contains("Unsupported", refused.Message);
+            }
+            finally
+            {
+                foreach (var f in new[] { plain, encrypted })
+                    if (File.Exists(f)) File.Delete(f);
+            }
+        }
+
+        [Fact]
+        public async Task StreamDecryption_RefusesATamperedFile()
+        {
+            var dir = Path.GetTempPath();
+            var plain = Path.Combine(dir, Path.GetRandomFileName());
+            var machine = Path.Combine(dir, Path.GetRandomFileName());
+            var password = Path.Combine(dir, Path.GetRandomFileName());
+            try
+            {
+                File.WriteAllText(plain, "id,amount\n1,100\n2,200\n");
+                await MachineBoundCrypto.EncryptFileAsync(plain, machine);
+                ETL_SQL.Common.CryptoUtils.EncryptFile(plain, password, "correct horse battery", overwrite: true);
+
+                foreach (var path in new[] { machine, password })
+                {
+                    var bytes = File.ReadAllBytes(path);
+                    bytes[bytes.Length - 40] ^= 0x01; // a ciphertext byte, before the 32-byte tag
+                    File.WriteAllBytes(path, bytes);
+                }
+
+                using (var stream = File.OpenRead(machine))
+                    Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(() => MachineBoundCrypto.DecryptStream(stream));
+                using (var stream = File.OpenRead(password))
+                    Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(() => ETL_SQL.Common.CryptoUtils.DecryptStream(stream, "correct horse battery"));
+            }
+            finally
+            {
+                foreach (var f in new[] { plain, machine, password })
+                    if (File.Exists(f)) File.Delete(f);
+            }
+        }
+
+        [Fact]
+        public async Task MachineBoundCrypto_StreamRoundTrip_ReturnsTheContent()
+        {
+            var plain = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            var encrypted = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            try
+            {
+                File.WriteAllText(plain, "id,amount\n1,100\n");
+                await MachineBoundCrypto.EncryptFileAsync(plain, encrypted);
+                using var input = File.OpenRead(encrypted);
+                using var reader = new StreamReader(MachineBoundCrypto.DecryptStream(input));
+                Assert.Equal("id,amount\n1,100\n", reader.ReadToEnd());
+            }
+            finally
+            {
+                foreach (var f in new[] { plain, encrypted })
+                    if (File.Exists(f)) File.Delete(f);
+            }
+        }
+
         [Fact]
         public async Task MachineBoundCrypto_FileRoundTrip_ProducesIdenticalContent()
         {

@@ -120,5 +120,5 @@ Your Portal administrator must add your external application's origin to the Por
 ## Related Guides
 
 - [Browsing and Running Reports](browsing-and-running-reports.md) — Portal navigation basics
-- [Saved Views and Bookmarks](saved-views-and-bookmarks.md) — save parameter presets for sharing
+- [Saved Views and Bookmarks](saved-views-and-bookmarks.md) — save personal parameter presets
 - [Portal Administration](../../../administration/portal/README.md) — CORS config, share-link revocation, and audit logs

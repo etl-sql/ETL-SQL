@@ -123,8 +123,10 @@ namespace ETL_SQL.Tests.Hardening
             encrypted[^1] ^= 0x01;
             File.WriteAllBytes(_encryptedFile, encrypted);
 
-            await Assert.ThrowsAnyAsync<CryptographicException>(() =>
+            // FO06: tampering is reported by name rather than as a raw CryptographicException.
+            var error = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() =>
                 CryptoUtils.DecryptFileWithSshAsync(_encryptedFile, _decryptedFile, _privateKeyFile, true));
+            Assert.Contains("changed after it was encrypted", error.Message);
         }
 
         [Fact]

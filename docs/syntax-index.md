@@ -494,17 +494,24 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `XMLFOREST(value1, ...)` | XML | [XMLFOREST.md](reference/functions/json-xml/xmlforest.md) | Forest of XML elements |
 | `FILE_EXISTS(path)` | File | [FILE_EXISTS.md](reference/functions/file-path/file_exists.md) | 1 if file exists, 0 otherwise |
 | `FILE_SIZE(path)` | File | [FILE_SIZE.md](reference/functions/file-path/file_size.md) | Returns local file size in bytes |
+| `FILE_CREATED(path)` | File | [FILE_CREATED.md](reference/functions/file-path/file_created.md) | Returns local file creation timestamp |
 | `FILE_MODIFIED(path)` | File | [FILE_MODIFIED.md](reference/functions/file-path/file_modified.md) | Returns local file last modified timestamp |
+| `FILE_LINE_COUNT(path, [header_rows])` | File | [FILE_LINE_COUNT.md](reference/functions/file-path/file_line_count.md) | Counts lines in a local file with optional header exclusion |
 | `FILE_HASH(path, [algorithm])` | File | [FILE_HASH.md](reference/functions/file-path/file_hash.md) | Computes cryptographic hash of a file |
 | `DIRECTORY_EXISTS(path)` | File | [DIRECTORY_EXISTS.md](reference/functions/file-path/directory_exists.md) | 1 if directory exists, 0 otherwise |
 | `FILE_LIST(path, [mask])` | File | [FILE_LIST.md](reference/functions/file-path/file_list.md) | Returns table of files in path |
 | `REMOTE_FILE_LIST(connection, path)` | File | [REMOTE_FILE_LIST.md](reference/functions/file-path/remote_file_list.md) | Table of files on remote connection |
 | `REMOTE_FILE_EXISTS(connection, path)` | File | [REMOTE_FILE_EXISTS.md](reference/functions/file-path/remote_file_exists.md) | 1 if remote file exists, 0 otherwise |
+| `REMOTE_DIRECTORY_EXISTS(connection, path)` | File | [REMOTE_DIRECTORY_EXISTS.md](reference/functions/file-path/remote_directory_exists.md) | 1 if remote directory exists, 0 otherwise |
+| `REMOTE_FILE_SIZE(connection, path)` | File | [REMOTE_FILE_SIZE.md](reference/functions/file-path/remote_file_size.md) | Returns remote file size in bytes |
+| `REMOTE_FILE_MODIFIED(connection, path)` | File | [REMOTE_FILE_MODIFIED.md](reference/functions/file-path/remote_file_modified.md) | Returns remote file last modified timestamp |
 | `DIRECTORY(path)` | File | [DIRECTORY.md](reference/functions/file-path/directory.md) | Returns directory metadata |
 | `PATH_COMBINE(path1, path2, ...)` | File | [PATH_COMBINE.md](reference/functions/file-path/path_combine.md) | Combines multiple path segments |
 | `PATH_DIRECTORY(path)` | File | [PATH_DIRECTORY.md](reference/functions/file-path/path_directory.md) | Extracts directory path from a full path |
 | `PATH_EXTENSION(path)` | File | [PATH_EXTENSION.md](reference/functions/file-path/path_extension.md) | Extracts file extension from a path |
 | `PATH_FILENAME(path)` | File | [PATH_FILENAME.md](reference/functions/file-path/path_filename.md) | Extracts filename from a full path |
+| `PATH_FILENAME_NO_EXT(path)` | File | [PATH_FILENAME_NO_EXT.md](reference/functions/file-path/path_filename_no_ext.md) | Extracts filename without its extension |
+| `PATH_CHANGE_EXTENSION(path, extension)` | File | [PATH_CHANGE_EXTENSION.md](reference/functions/file-path/path_change_extension.md) | Replaces or removes the file extension in a path |
 | `SUM(expression)` | Aggregate | [SUM.md](reference/functions/aggregate/sum.md) | Sum of values |
 | `COUNT(expression)` | Aggregate | [COUNT.md](reference/functions/aggregate/count.md) | Count of non-null values |
 | `AVG(expression)` | Aggregate | [AVG.md](reference/functions/aggregate/avg.md) | Average of values |
@@ -765,6 +772,7 @@ Options configured via `SET <Option> = <Value>` or `SET <Option> ON|OFF`.
 | `TEMP_TABLE_SPILL_THRESHOLD` | Performance | 1,000,000 | [SET TEMP_TABLE_SPILL_THRESHOLD](reference/set-commands/set-temp-table-spill-threshold.md) |
 | `MAX_PARALLEL_DEGREE` | Performance | CPU Count | [SET MAX_PARALLEL_DEGREE](reference/set-commands/set-max-parallel-degree.md) |
 | `WEEK_START_DAY` | Localization | Monday | [SET WEEK_START_DAY](reference/set-commands/set-week-start-day.md) |
+| `DATEFORMAT` | Localization | MDY (`Engine:DateFormat`) | [SET DATEFORMAT](reference/set-commands/set-dateformat.md) |
 | `REPORT TIME_ZONE` | Report | `UTC` | [SET REPORT](reference/set-commands/set-report.md) |
 | `REPORT LOCALE` | Report | invariant | [SET REPORT](reference/set-commands/set-report.md) |
 | `REPORT NULL_LABEL` | Report | `-` | [SET REPORT](reference/set-commands/set-report.md) |
@@ -1088,7 +1096,7 @@ see the [Lifecycle Capability Matrix](reference/statements/lifecycle-matrix.md).
 - [Report Runtime Contract](reference/visuals-reporting/report-runtime-contract.md) — The report canvas is shared infrastructure. ReportPlayer, Portal, and the VS Code previ...
 - [Report-SQL](reference/visuals-reporting/report/index.md) — Report-SQL extends ETL-SQL with components for building interactive dashboards: dataset...
 - [CREATE THEME](reference/visuals-reporting/report/theme.md) — Defines a renderer-neutral color theme applied to visuals or pages with `STYLE (THEME = name)`.
-- [ETL-SQL Performance Reference](reference/performance/performance.md) — **Applies to ETL-SQL 0.21.0**
+- [ETL-SQL Performance Reference](reference/performance/performance.md) — **Applies to ETL-SQL 0.22.0**
 - [Large Data Certification](reference/performance/large-data-certification.md) — This document describes which large-data scenarios are certified, at which scale tiers,...
 
 ## 9. Portal & Orchestrator Admin
@@ -1515,7 +1523,6 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql studio` | Launch the modern ETL-SQL Studio visual & script workbench on local loopback | [studio](reference/cli/studio.md) |
 | `etl-sql test` | Run native ETL-SQL test suites (*.test.etlsql) and table assertions | [test](reference/cli/test.md) |
 | `etl-sql ui edit` | Start the modern windowed Terminal IDE (default) | [ui edit](reference/cli/ui-edit.md) |
-| `etl-sql ui old` | Start the legacy Spectre-based console editor | [ui old](reference/cli/ui-old.md) |
 | `etl-sql ui repl` | Start the JSON-based REPL protocol for IDE integration | [ui repl](reference/cli/ui-repl.md) |
 | `etl-sql ui simple` | Start the simple interactive menu UI | [ui simple](reference/cli/ui-simple.md) |
 | `etl-sql ui` | Interactive user interface commands | [ui](reference/cli/ui.md) |
@@ -1707,6 +1714,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `ALLOW_RECURSIVE_LAYERS` | Settings & Engine Configuration | Canonical language token |
 | `CASE_SENSITIVE` | Settings & Engine Configuration | Canonical language token |
 | `CONFIG` | Settings & Engine Configuration | Canonical language token |
+| `DATEFORMAT` | Settings & Engine Configuration | Canonical language token |
 | `EXTERNAL_HASH_PARTITIONS` | Settings & Engine Configuration | Canonical language token |
 | `EXTERNAL_SORT_CHUNK_SIZE` | Settings & Engine Configuration | Canonical language token |
 | `FOREACH_PAGE_SIZE` | Settings & Engine Configuration | Canonical language token |
@@ -2114,6 +2122,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `DEFAULT_EXPAND` | General | Canonical language token |
 | `DEFAULT_SORT` | General | Canonical language token |
 | `DELETE_EXTRA` | General | Canonical language token |
+| `DELETE_SOURCE` | General | Canonical language token |
 | `DEPENDS_ON` | General | Canonical language token |
 | `DIRECTED` | General | Canonical language token |
 | `DISABLE` | General | Canonical language token |
@@ -2297,6 +2306,8 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `SHOW_VIOLIN` | General | Canonical language token |
 | `SHUTDOWN` | General | Canonical language token |
 | `SIGMA` | General | Canonical language token |
+| `SIGNING_KEY` | General | Canonical language token |
+| `SIGNING_PASSWORD` | General | Canonical language token |
 | `SIZE_RANGE` | General | Canonical language token |
 | `SKIP_ERROR` | General | Canonical language token |
 | `SLICE_BORDER_COLOR` | General | Canonical language token |
@@ -2341,6 +2352,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `VALUE_COLOR` | General | Canonical language token |
 | `VARIABLES` | General | Canonical language token |
 | `VERIFY` | General | Canonical language token |
+| `VERIFY_KEY` | General | Canonical language token |
 | `VIOLIN` | General | Canonical language token |
 | `VIOLIN_COLOR` | General | Canonical language token |
 | `VOLUME` | General | Canonical language token |
@@ -2448,8 +2460,10 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `END_OF_WEEK` | Function | Canonical built-in function |
 | `EXP` | Function | Canonical built-in function |
 | `EXTRACTVALUE` | Function | Canonical built-in function |
+| `FILE_CREATED` | Function | Canonical built-in function |
 | `FILE_EXISTS` | Function | Canonical built-in function |
 | `FILE_HASH` | Function | Canonical built-in function |
+| `FILE_LINE_COUNT` | Function | Canonical built-in function |
 | `FILE_LIST` | Function | Canonical built-in function |
 | `FILE_MODIFIED` | Function | Canonical built-in function |
 | `FILE_SIZE` | Function | Canonical built-in function |
@@ -2505,10 +2519,12 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `NVL` | Function | Canonical built-in function |
 | `NVL2` | Function | Canonical built-in function |
 | `OPENJSON` | Function | Canonical built-in function |
+| `PATH_CHANGE_EXTENSION` | Function | Canonical built-in function |
 | `PATH_COMBINE` | Function | Canonical built-in function |
 | `PATH_DIRECTORY` | Function | Canonical built-in function |
 | `PATH_EXTENSION` | Function | Canonical built-in function |
 | `PATH_FILENAME` | Function | Canonical built-in function |
+| `PATH_FILENAME_NO_EXT` | Function | Canonical built-in function |
 | `PATINDEX` | Function | Canonical built-in function |
 | `PERCENT_RANK` | Function | Canonical built-in function |
 | `PERCENTILE_CONT` | Function | Canonical built-in function |
@@ -2530,6 +2546,11 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `REGEXP_SPLIT_TO_TABLE` | Function | Canonical built-in function |
 | `REGEXP_SUBSTR` | Function | Canonical built-in function |
 | `RELDATE` | Function | Canonical built-in function |
+| `REMOTE_DIRECTORY_EXISTS` | Function | Canonical built-in function |
+| `REMOTE_FILE_EXISTS` | Function | Canonical built-in function |
+| `REMOTE_FILE_LIST` | Function | Canonical built-in function |
+| `REMOTE_FILE_MODIFIED` | Function | Canonical built-in function |
+| `REMOTE_FILE_SIZE` | Function | Canonical built-in function |
 | `REMOVE_FROM_LIST` | Function | Canonical built-in function |
 | `REMOVE_HIDDEN_CHARACTERS` | Function | Canonical built-in function |
 | `REMOVE_HTML_CHARACTERS` | Function | Canonical built-in function |
@@ -2676,7 +2697,6 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `@pii` | Tag | Standard governance tag |
 | `@quality` | Tag | Standard governance tag |
 | `@sensitive` | Tag | Standard governance tag |
-| `@sensitivity` | Tag | Standard governance tag |
 | `@sla` | Tag | Standard governance tag |
 | `@source_column` | Tag | Standard governance tag |
 | `@source_system` | Tag | Standard governance tag |

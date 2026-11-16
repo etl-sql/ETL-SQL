@@ -45,9 +45,25 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly List<FixedWidthColumn>? _fixedColumns;
         private readonly bool _trim = true;
         private readonly CultureInfo _culture = CultureInfo.InvariantCulture;
+        private readonly bool _cultureNamed;
         private readonly ILogger? _logger;
         private readonly IExecutionContext? _context; // Optional for backward compatibility, but required for security enforcement
         private bool _hasValidatedAccess = false;
+        /// <summary>
+        /// A cell as the file holds it, the same on every host: DATE_FORMAT for dates when set, then
+        /// the CULTURE option's format when named, otherwise the CAST AS STRING text (ISO dates,
+        /// invariant numbers). The reader parses with the same settings.
+        /// </summary>
+        private string FormatCell(object? value) => value switch
+        {
+            null => "",
+            DateOnly date when _dateFormat != null => date.ToString(_dateFormat, _culture),
+            DateOnly date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            DateTime date when _dateFormat != null => date.ToString(_dateFormat, _culture),
+            DateTimeOffset offset when _dateFormat != null => offset.ToString(_dateFormat, _culture),
+            IFormattable formattable when _cultureNamed => formattable.ToString(null, _culture),
+            _ => ETL_SQL.Core.Data.TypeConverter.ToInvariantText(value) ?? ""
+        };
         private readonly bool _transactional = false;
 
         private class FixedWidthColumn
@@ -219,7 +235,7 @@ namespace ETL_SQL.Connectors.FlatFile
                 // Culture is already initialized to InvariantCulture
                 if (options.TryGetValue("CULTURE", out var cult))
                 {
-                    try { _culture = new CultureInfo(cult); }
+                    try { _culture = new CultureInfo(cult); _cultureNamed = true; }
                     catch { _logger?.Debug("[FlatFileDataSource] Invalid culture '{Culture}', falling back to Invariant.", cult); }
                 }
 
@@ -909,15 +925,28 @@ namespace ETL_SQL.Connectors.FlatFile
 
             try
             {
-                if (append && System.IO.File.Exists(_filePath) && !_compress && !_encryption.Enabled)
+                bool appendToExisting = append && System.IO.File.Exists(_filePath);
+                if (appendToExisting)
                 {
                     effectiveCancellationToken.ThrowIfCancellationRequested();
-                    System.IO.File.Copy(_filePath, tempFile, true);
+                    if (!_compress && !_encryption.Enabled)
+                    {
+                        System.IO.File.Copy(_filePath, tempFile, true);
+                    }
+                    else
+                    {
+                        // A compressed or encrypted file is staged as its plain content, so the new
+                        // rows are appended to the existing rows and the whole file is re-packed.
+                        // Copying nothing here published a file holding only the new batch.
+                        await using var existing = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".csv");
+                        await using var staged = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None);
+                        await existing.CopyToAsync(staged, effectiveCancellationToken);
+                    }
                 }
 
-                using (var writer = new StreamWriter(tempFile, append, _encoding))
+                using (var writer = new StreamWriter(tempFile, appendToExisting, _encoding))
                 {
-                    bool headersWritten = append && System.IO.File.Exists(_filePath) && new System.IO.FileInfo(_filePath).Length > 0;
+                    bool headersWritten = appendToExisting && new System.IO.FileInfo(tempFile).Length > 0;
                     int totalRows = 0;
 
                     await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
@@ -972,7 +1001,7 @@ namespace ETL_SQL.Connectors.FlatFile
                                 var sb = new System.Text.StringBuilder();
                                 foreach (var col in _fixedColumns)
                                 {
-                                    var raw = row[col.Name]?.ToString() ?? "";
+                                    var raw = FormatCell(row[col.Name]);
 
                                     // A sign constraint is a domain rule, not a width rule, so it is
                                     // checked before overflow: INT(N,+) rejects negatives outright
@@ -1047,7 +1076,7 @@ namespace ETL_SQL.Connectors.FlatFile
                                     if ((cellVal == null || cellVal == DBNull.Value) && _nullAsWriteValue != null)
                                         fieldStr = _nullAsWriteValue;
                                     else
-                                        fieldStr = cellVal?.ToString() ?? "";
+                                        fieldStr = FormatCell(cellVal);
                                     values.Add(FormatField(fieldStr));
                                 }
                                 line = string.Join(_delimiter.ToString(), values);

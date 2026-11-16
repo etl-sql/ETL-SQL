@@ -34,10 +34,11 @@
     "globals": "^17.7.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.62.0",
-    "vite": "^8.1.5",
-    "vitest": "^4.1.11"
+    "vite": "^8.3.5",
+    "vitest": "^4.1.12"
   },
   "overrides": {
-    "brace-expansion": ">=5.0.12"
+    "brace-expansion": ">=5.0.12",
+    "minimatch": "^11.0.1"
   }
 }

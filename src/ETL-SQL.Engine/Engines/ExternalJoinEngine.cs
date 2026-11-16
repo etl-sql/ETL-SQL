@@ -42,6 +42,12 @@ public class ExternalJoinEngine
         _bufferManager = _context.ServiceProvider?.GetService<IBufferManager>();
     }
 
+    /// <summary>
+    /// The column names of both sides, used to give a row with no match the other side's columns
+    /// as NULL. The engine records each side from the first row it reads.
+    /// </summary>
+    internal OuterJoinShape Shape { get; init; } = new();
+
     /// <summary>Performs an external hash join by partitioning both left and right streams to disk before join processing.</summary>
     public async IAsyncEnumerable<Row> ApplyHashJoinExternal(IAsyncEnumerable<Row> leftStream, IAsyncEnumerable<Row> rightStream, JoinClause join, List<string> leftKeys, List<string> rightKeys, long? knownBuildRowCount = null, long? knownBuildBytes = null)
     {
@@ -60,6 +66,7 @@ public class ExternalJoinEngine
                 rightSample.Add(row);
                 sampledBytes = checked(sampledBytes + row.EstimateHeapBytes());
             }
+            if (rightSample.Count > 0) Shape.SeeRight(rightSample[0]);
             ConfigurePartitionCount(rightSample, rightKeys, knownBuildRowCount, knownBuildBytes);
             PlanDecisionRecorder.Record(_context, "external-join", "ExternalJoin",
                 PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
@@ -339,8 +346,12 @@ public class ExternalJoinEngine
     /// <summary>Streams the probe (left) side against a packed build table, emitting join results.</summary>
     private async IAsyncEnumerable<Row> ProbeJoin(string leftName, PackedBuildTable table, JoinClause join, List<string> leftKeys)
     {
-        bool isLeftJoin = join.JoinType.Contains("LEFT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase);
-        bool isRightJoin = join.JoinType.Contains("RIGHT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase);
+        // SEMI and ANTI return left rows only, each at most once. "LEFT SEMI JOIN" is not an outer join.
+        bool isSemi = join.JoinType.Contains("SEMI", StringComparison.OrdinalIgnoreCase);
+        bool isAnti = join.JoinType.Contains("ANTI", StringComparison.OrdinalIgnoreCase);
+        bool leftOnly = isSemi || isAnti;
+        bool isLeftJoin = !leftOnly && (join.JoinType.Contains("LEFT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase));
+        bool isRightJoin = !leftOnly && (join.JoinType.Contains("RIGHT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase));
         // Track matched build rows by physical index (one bit per packed blob) for RIGHT/FULL outer.
         var matched = isRightJoin ? new bool[table.Rows.Count] : null;
 
@@ -366,14 +377,20 @@ public class ExternalJoinEngine
                                 var combined = CombineRows(left, right);
                                 if (await _context.EvaluateCondition(join.Condition, combined))
                                 {
-                                    yield return combined;
                                     producedMatch = true;
+                                    if (leftOnly) break;
+                                    yield return combined;
                                     if (matched != null) matched[idx] = true;
                                 }
                             }
                         }
-                        if (!producedMatch && isLeftJoin)
-                            yield return (left ?? RowPacker.MaterializeBatchRow(batch, rowIndex)).Clone();
+                        if (leftOnly)
+                        {
+                            if (producedMatch == isSemi)
+                                yield return left ?? RowPacker.MaterializeBatchRow(batch, rowIndex);
+                        }
+                        else if (!producedMatch && isLeftJoin)
+                            yield return Shape.Unmatched(left ?? RowPacker.MaterializeBatchRow(batch, rowIndex));
                     }
                 }
             }
@@ -393,15 +410,20 @@ public class ExternalJoinEngine
                         var combined = CombineRows(left, right);
                         if (await _context.EvaluateCondition(join.Condition, combined))
                         {
-                            yield return combined;
                             producedMatch = true;
+                            if (leftOnly) break;
+                            yield return combined;
                             if (matched != null) matched[idx] = true;
                         }
                     }
                 }
 
-                if (!producedMatch && isLeftJoin)
-                    yield return left.Clone();
+                if (leftOnly)
+                {
+                    if (producedMatch == isSemi) yield return left;
+                }
+                else if (!producedMatch && isLeftJoin)
+                    yield return Shape.Unmatched(left);
             }
         }
 
@@ -410,7 +432,11 @@ public class ExternalJoinEngine
             for (int idx = 0; idx < table.Rows.Count; idx++)
             {
                 if (!matched[idx])
-                    yield return CombineRows(null, RowPacker.Unpack(table.Rows[idx], table.Columns));
+                {
+                    var unmatched = CombineRows(null, RowPacker.Unpack(table.Rows[idx], table.Columns));
+                    Shape.Complete(unmatched);
+                    yield return unmatched;
+                }
             }
         }
     }
@@ -442,7 +468,7 @@ public class ExternalJoinEngine
         {
             names[i] = $"{uniquePrefix}_{prefix}_{i}.tmp";
             tempFiles.Add(names[i]);
-            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i]);
+            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
         }
 
         try
@@ -496,13 +522,15 @@ public class ExternalJoinEngine
         {
             names[i] = $"{uniquePrefix}_{prefix}_{i}.tmp";
             tempFiles.Add(names[i]);
-            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i]);
+            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
         }
 
         try
         {
+            bool isLeftInput = depth == 0 && prefix == "left";
             await foreach (var row in stream)
             {
+                if (isLeftInput) Shape.SeeLeft(row);
                 int pIdx = GetPartitionIndex(row, keys, depth);
                 counts[pIdx]++;
                 await writers[pIdx].WriteRowAsync(row);
@@ -571,6 +599,7 @@ public class ExternalJoinEngine
     private Row CombineRows(Row? left, Row right)
     {
         var combined = new Row();
+        combined.MayLackColumns = (left?.MayLackColumns ?? false) || right.MayLackColumns;
         combined.DataQualityReplayProvenance = left?.DataQualityReplayProvenance;
         left?.ForEachColumn((name, value) => combined[name] = value);
         right.ForEachColumn((name, value) => combined[name] = value);

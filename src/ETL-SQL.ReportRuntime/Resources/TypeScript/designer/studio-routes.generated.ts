@@ -30,6 +30,7 @@ export const STUDIO_ROUTES = Object.freeze({
     queryFilter: "/api/designer/query-filter",
     run: "/api/designer/run",
     schema: "/api/designer/schema",
+    seal: "/api/designer/seal",
     sessionMetadata: "/api/session/metadata",
 } as const);
 

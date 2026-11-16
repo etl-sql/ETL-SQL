@@ -286,47 +286,6 @@ public sealed class SecurityEventOutbox : ISecurityEventOutbox
                 ON security_events(status, next_attempt_utc, locked_until_utc, created_utc);
             """;
         command.ExecuteNonQuery();
-
-        using var columns = connection.CreateCommand();
-        columns.CommandText = "PRAGMA table_info(security_events);";
-        using var reader = columns.ExecuteReader();
-        var hasSeverity = false;
-        while (reader.Read())
-            hasSeverity |= string.Equals(reader.GetString(1), "severity", StringComparison.OrdinalIgnoreCase);
-        reader.Close();
-        if (!hasSeverity)
-        {
-            using var transaction = connection.BeginTransaction(deferred: false);
-            using var migrate = connection.CreateCommand();
-            migrate.Transaction = transaction;
-            migrate.CommandText =
-                "ALTER TABLE security_events ADD COLUMN severity INTEGER NOT NULL DEFAULT 0;";
-            migrate.ExecuteNonQuery();
-
-            using var existing = connection.CreateCommand();
-            existing.Transaction = transaction;
-            existing.CommandText = "SELECT event_id, payload_json FROM security_events;";
-            using var existingReader = existing.ExecuteReader();
-            var severities = new List<(string EventId, SecurityEventSeverity Severity)>();
-            while (existingReader.Read())
-            {
-                var securityEvent = SecurityEventContract.Deserialize(existingReader.GetString(1));
-                severities.Add((existingReader.GetString(0), securityEvent.Severity));
-            }
-            existingReader.Close();
-
-            foreach (var (eventId, severity) in severities)
-            {
-                using var update = connection.CreateCommand();
-                update.Transaction = transaction;
-                update.CommandText =
-                    "UPDATE security_events SET severity = $severity WHERE event_id = $eventId;";
-                update.Parameters.AddWithValue("$severity", (int)severity);
-                update.Parameters.AddWithValue("$eventId", eventId);
-                update.ExecuteNonQuery();
-            }
-            transaction.Commit();
-        }
     }
 
     private SqliteConnection OpenConnection()

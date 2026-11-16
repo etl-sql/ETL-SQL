@@ -60,9 +60,10 @@ public sealed class GatewaySessionClient(
 {
     /// <summary>
     /// Runs one session to completion. Returns the number of operations served, which lets a host
-    /// distinguish "connected and idle" from "served work".
+    /// distinguish "connected and idle" from "served work". <paramref name="onEstablished"/> runs once
+    /// the broker has acknowledged the session, which is the first moment the Gateway is connected.
     /// </summary>
-    public async Task<int> RunAsync(CancellationToken cancellationToken)
+    public async Task<int> RunAsync(CancellationToken cancellationToken, Action? onEstablished = null)
     {
         options.Validate();
 
@@ -107,6 +108,7 @@ public sealed class GatewaySessionClient(
             throw new GatewayProtocolException(ack?.Reason ?? "The broker refused the Gateway session.");
         }
 
+        onEstablished?.Invoke();
         var served = 0;
         while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
         {
@@ -117,14 +119,54 @@ public sealed class GatewaySessionClient(
                 .DispatchAsync(frame, options.TenantId, options.GatewayId, cancellationToken, options.EffectiveNodeId)
                 .ConfigureAwait(false);
 
-            foreach (var response in responses)
-                await SendAsync(socket, response, cancellationToken).ConfigureAwait(false);
+            await SendResponsesAsync(socket, responses, cancellationToken).ConfigureAwait(false);
 
             served++;
         }
 
         await CloseAsync(socket, "Session complete.", cancellationToken).ConfigureAwait(false);
         return served;
+    }
+
+    /// <summary>
+    /// Sends an operation's response frames, splitting a row batch that would exceed the frame limit
+    /// into several. The dispatcher returns a whole result as one batch, and refusing to send it
+    /// ended the session after the outcome was already recorded, so no result over the limit could
+    /// ever be returned. The broker already accumulates any number of batches before Complete.
+    /// </summary>
+    private async Task SendResponsesAsync(
+        WebSocket socket, IReadOnlyList<GatewayFrame> responses, CancellationToken cancellationToken)
+    {
+        var batches = new List<GatewayFrame>();
+        foreach (var response in responses)
+        {
+            batches.Clear();
+            if (!TrySplitToFit(response, batches))
+            {
+                // One row alone is over the limit. Report it against the operation instead of
+                // ending the session, and send nothing else for it.
+                await SendAsync(socket, GatewayFrame.Fault(response.OperationId,
+                    "A single result row exceeds the Gateway frame size limit."), cancellationToken).ConfigureAwait(false);
+                return;
+            }
+            foreach (var batch in batches)
+                await SendAsync(socket, batch, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private bool TrySplitToFit(GatewayFrame frame, List<GatewayFrame> output)
+    {
+        if (Encoding.UTF8.GetByteCount(frame.Serialize()) <= options.MaxFrameBytes
+            || frame.Kind != GatewayFrameKind.RowBatch)
+        {
+            output.Add(frame);
+            return true;
+        }
+        var rows = frame.Rows ?? [];
+        if (rows.Count <= 1) return false;
+        var half = rows.Count / 2;
+        return TrySplitToFit(frame with { Rows = rows.Take(half).ToList() }, output)
+            && TrySplitToFit(frame with { Rows = rows.Skip(half).ToList() }, output);
     }
 
     private static string? ExportPublicKey(string? privateKeyBase64)

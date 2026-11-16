@@ -2,14 +2,39 @@
 # ETL-SQL Linux Package Builder
 # Usage: ./build-linux-packages.sh <version>
 
-VERSION=${1:-"0.21.0"}
+set -euo pipefail
+if ! command -v dpkg-deb >/dev/null; then
+    echo '[ERROR] dpkg-deb is required to build the Linux package.' >&2
+    exit 1
+fi
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+INSTALLER_ROOT="$(cd "$REPO_ROOT/src/ETL-SQL.Installer" && pwd -P)"
+if [[ "$INSTALLER_ROOT" != "$REPO_ROOT/src/ETL-SQL.Installer" ]]; then
+    echo '[ERROR] Installer staging must stay inside the repository.' >&2
+    exit 1
+fi
+cd "$REPO_ROOT"
+
+VERSION=${1:-"0.22.0"}
 PUBLISHED_BIN_DIR=${2:-"release/linux-x64/bin"}
 ARCH="amd64"
 PKG_NAME="etl-sql"
-BASE_DIR="src/ETL-SQL.Installer/linux"
-BUILD_ROOT="src/ETL-SQL.Installer/linux/build"
+BASE_DIR="$(cd "$INSTALLER_ROOT/linux" && pwd -P)"
+if [[ "$BASE_DIR" != "$INSTALLER_ROOT/linux" ]]; then
+    echo '[ERROR] Linux installer staging must stay inside the repository.' >&2
+    exit 1
+fi
+BUILD_ROOT="$BASE_DIR/build"
+if [[ -L "$BUILD_ROOT" ]]; then
+    echo '[ERROR] Linux staging output must not be a symbolic link.' >&2
+    exit 1
+fi
 
 echo "--- ETL-SQL Linux Package Builder ---"
+
+source "$REPO_ROOT/scripts/lib/native-publish-input.sh"
+assert_clean_native_publish "$PUBLISHED_BIN_DIR"
 
 # 1. Cleanup and Create Structure
 rm -rf "$BUILD_ROOT"
@@ -30,15 +55,6 @@ if [ ! -f "$PUBLISHED_BIN_DIR/ETL-SQL" ]; then
     exit 1
 fi
 
-# A host that was started from the publish folder leaves its runtime state there. Packaged, a key
-# ring or database would be shared by every installation and overwritten on every upgrade.
-for state in portal.db portal.db-wal portal.db-shm etlsql.db .portal-keys logs data Reports Snapshots; do
-    if [ -e "$PUBLISHED_BIN_DIR/$state" ]; then
-        echo "[ERROR] Runtime state in the publish folder: $PUBLISHED_BIN_DIR/$state. Publish again into a clean folder."
-        exit 1
-    fi
-done
-
 echo "Copying published linux-x64 binaries from $PUBLISHED_BIN_DIR..."
 # The single self-contained publish already contains every host executable
 # (CLI, TUI, LSP, Report, Player, Portal, Service). Install it once instead of
@@ -47,6 +63,9 @@ echo "Copying published linux-x64 binaries from $PUBLISHED_BIN_DIR..."
 # hosts directly from bin/ (see the *.service ExecStart paths) while keeping
 # their own empty working directories below for runtime-writable state.
 cp -a "$PUBLISHED_BIN_DIR/." "$BUILD_ROOT/usr/lib/etl-sql/bin/"
+# COMPAT_BREAK: 0.22 — published program files must not retain group/other write access.
+# Preserve executable/read-only bits while removing write access from non-owner accounts.
+chmod -R go-w "$BUILD_ROOT/usr/lib/etl-sql/bin"
 cp "LICENSE.md" "$BUILD_ROOT/usr/share/doc/etl-sql/LICENSE.md"
 cp "NOTICE.md" "$BUILD_ROOT/usr/share/doc/etl-sql/NOTICE.md"
 cp "THIRD-PARTY-NOTICES.md" "$BUILD_ROOT/usr/share/doc/etl-sql/THIRD-PARTY-NOTICES.md"
@@ -97,6 +116,8 @@ if not stat.S_ISREG(os.lstat(path).st_mode):
     sys.exit(f"[ETL-SQL] {path} is not a regular file; refusing to rewrite it.")
 with open(path, encoding="utf-8-sig") as f:
     data = json.load(f)
+if not isinstance(data, dict):
+    sys.exit("[ETL-SQL] Installer settings must be a JSON object.")
 changed = False
 # An upgrade replaced this file with the package's defaults; preinst kept the installed one. Its
 # values win (the operator's settings and the generated secrets), and keys new in this release are
@@ -110,6 +131,8 @@ def root_owned_file(p):
 if root_owned_file(saved):
     with open(saved, encoding="utf-8-sig") as f:
         installed = json.load(f)
+    if not isinstance(installed, dict):
+        sys.exit("[ETL-SQL] Saved installer settings must be a JSON object.")
     def keep(target, source):
         for key, value in source.items():
             if isinstance(value, dict) and isinstance(target.get(key), dict):
@@ -134,7 +157,10 @@ def read_secrets(p):
     fd = os.open(p, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(fd, encoding="utf-8-sig") as f:
         loaded = json.load(f)
-    return loaded if isinstance(loaded, dict) else {}
+    # COMPAT_BREAK: 0.22 — invalid document roots must not regenerate installed keys.
+    if not isinstance(loaded, dict):
+        sys.exit("[ETL-SQL] Protected installer settings must be a JSON object.")
+    return loaded
 def lookup(root, dotted):
     node = root
     for part in dotted.split(":")[:-1]:
@@ -162,14 +188,15 @@ if isinstance(dataset, dict) and not (dataset.get("AtRestKey") or "").strip():
 # A fresh install has no administrator, and the Portal will not create one without a bootstrap
 # password. Generate a one-time password; the Portal forces a change at first sign-in.
 first_run = portal.get("FirstRun")
+sign_in = None
 if (not previous_version and isinstance(first_run, dict)
-        and not (first_run.get("AdminPassword") or "").strip() and not os.path.exists(first_run_file)):
-    password = base64.urlsafe_b64encode(os.urandom(18)).decode("ascii") + "9!"
+        and not os.path.isfile(first_run_file)):
+    # A retry can have saved its password before publishing the root-only sign-in file.
+    password = first_run.get("AdminPassword") or ""
+    if not password.strip():
+        password = base64.urlsafe_b64encode(os.urandom(18)).decode("ascii") + "9!"
     first_run["AdminPassword"] = password
-    os.makedirs(os.path.dirname(first_run_file), exist_ok=True)
-    fd = os.open(first_run_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(f"{first_run.get('AdminUsername') or 'admin'}\n{password}\n")
+    sign_in = f"{first_run.get('AdminUsername') or 'admin'}\n{password}\n"
     changed = True
 # Portal sub-choices / module enablement via ETLSQL_PORTAL_MODULES env var (e.g. Reporting,Designer,Scheduling,Operations)
 env_modules = os.environ.get("ETLSQL_PORTAL_MODULES")
@@ -223,7 +250,8 @@ if isinstance(sec, dict) and "/usr/lib/etl-sql/bin" not in (zones if isinstance(
     sec["ApprovedSafeZones"] = (zones if isinstance(zones, list) else []) + ["/usr/lib/etl-sql/bin"]
     changed = True
 # Move every generated secret out of the shared file, leaving its empty default behind.
-secrets = {}
+# Preserve operator-owned protected settings without copying them into the shared document.
+secrets = installed_secrets
 for dotted in SECRET_PATHS:
     node, key = lookup(data, dotted)
     if not isinstance(node, dict) or key not in node:
@@ -248,6 +276,12 @@ def write_json(target, document, mode, gid):
 import grp
 write_json(secrets_path, secrets, 0o640, grp.getgrnam("etlsql").gr_gid)
 write_json(path, data, 0o644, 0)
+# COMPAT_BREAK: 0.22 — failed settings writes must not publish unusable sign-in credentials.
+if sign_in is not None:
+    os.makedirs(os.path.dirname(first_run_file), exist_ok=True)
+    fd = os.open(first_run_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(sign_in)
 PY
     rm -rf /var/lib/etl-sql-upgrade
 else
@@ -255,7 +289,25 @@ else
     echo "[ETL-SQL] NOTE: the Orchestrator binds to a network address and will NOT start without Orchestrator:ApiKey set." >&2
 fi
 
-chown -R etlsql:etlsql /usr/lib/etl-sql
+# Shipped binaries and configuration belong to root: a service account that can rewrite them can
+# change its own code or security settings. The bin folder is group-writable with the sticky bit,
+# so the services still create their databases, logs and data there, but cannot delete or rename a
+# file root owns. Anything the services created before this release stays theirs.
+BIN=/usr/lib/etl-sql/bin
+dpkg-query -L etl-sql 2>/dev/null | while IFS= read -r shipped; do
+    case "$shipped" in
+        /usr/lib/etl-sql|/usr/lib/etl-sql/*)
+            if [ -e "$shipped" ] && [ ! -L "$shipped" ]; then chown root:root "$shipped"; fi ;;
+    esac
+done
+chown root:root /usr/lib/etl-sql
+chmod 755 /usr/lib/etl-sql
+chown root:etlsql "$BIN"
+chmod 1775 "$BIN"
+if [ -f "$CFG" ] && [ ! -L "$CFG" ]; then
+    chown root:root "$CFG"
+    chmod 644 "$CFG"
+fi
 # Readable by the services, not writable by them, and closed to every other account.
 SECRETS=/usr/lib/etl-sql/bin/appsettings.secrets.json
 if [ -f "$SECRETS" ] && [ ! -L "$SECRETS" ]; then
@@ -320,12 +372,8 @@ POSTRM
 chmod 755 "$BUILD_ROOT/DEBIAN/postrm"
 
 # 6. Build .deb
-if command -v dpkg-deb &> /dev/null; then
-    echo "Building .deb package..."
-    dpkg-deb --build "$BUILD_ROOT" "${PKG_NAME}_${VERSION}_${ARCH}.deb"
-    echo "[SUCCESS] Package created: ${PKG_NAME}_${VERSION}_${ARCH}.deb"
-else
-    echo "[WARNING] dpkg-deb not found. Skipping .deb creation."
-fi
+echo "Building .deb package..."
+dpkg-deb --root-owner-group --build "$BUILD_ROOT" "${PKG_NAME}_${VERSION}_${ARCH}.deb"
+echo "[SUCCESS] Package created: ${PKG_NAME}_${VERSION}_${ARCH}.deb"
 
 echo -e "\nLinux package build process complete."

@@ -24,6 +24,50 @@ function New-Base64Secret {
     return [Convert]::ToBase64String($bytes)
 }
 
+function Write-ProtectedFile {
+    param([string]$Path, [byte[]]$Bytes)
+    $acl = New-Object System.Security.AccessControl.FileSecurity
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($sid in 'S-1-5-18', 'S-1-5-32-544') {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            (New-Object System.Security.Principal.SecurityIdentifier $sid), 'FullControl', 'Allow')))
+    }
+    # The invoking installer must be able to rename its staged file after closing the handle.
+    # MSI runs as SYSTEM (already present); local fixtures/manual elevated runs may own the file.
+    $workingAcl = New-Object System.Security.AccessControl.FileSecurity
+    $workingAcl.SetSecurityDescriptorBinaryForm($acl.GetSecurityDescriptorBinaryForm(), [System.Security.AccessControl.AccessControlSections]::Access)
+    $workingAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+        ([System.Security.Principal.WindowsIdentity]::GetCurrent().User), 'FullControl', 'Allow')))
+    $temporary = $Path + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
+    $backup = $Path + '.' + [Guid]::NewGuid().ToString('N') + '.recovery'
+    try {
+        # Stage with access limited to SYSTEM, Administrators and this installer identity.
+        $stream = [System.IO.File]::Create($temporary, 4096, [System.IO.FileOptions]::None, $workingAcl)
+        try {
+            $stream.Write($Bytes, 0, $Bytes.Length)
+            $stream.Flush($true)
+        } finally { $stream.Dispose() }
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            # ReplaceFile retains the destination DACL, so restrict it before replacement.
+            [System.IO.File]::SetAccessControl($Path, $workingAcl)
+            [System.IO.File]::Replace($temporary, $Path, $backup)
+            Remove-Item -LiteralPath $backup -Force
+        } else {
+            [System.IO.File]::Move($temporary, $Path)
+        }
+    } finally {
+        if (Test-Path -LiteralPath $temporary) {
+            Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+        }
+        foreach ($published in $Path, $backup) {
+            if (Test-Path -LiteralPath $published -PathType Leaf) {
+                [System.IO.File]::SetAccessControl($published, $acl)
+            }
+        }
+        # A failed replacement can leave the original under .recovery. Never delete that copy.
+    }
+}
+
 # Installed values win; objects merge so keys only the new defaults have are kept.
 function Merge-InstalledSettings {
     param($Target, $Source)
@@ -57,14 +101,26 @@ function Test-EmptySetting($Value) {
     return $false
 }
 
+function Read-SettingsObject([string]$Path) {
+    $text = Get-Content -LiteralPath $Path -Raw
+    $document = ConvertFrom-Json -InputObject $text
+    # COMPAT_BREAK: 0.22 — invalid document roots must not regenerate installed keys.
+    # Windows PowerShell unwraps JSON arrays; check the source root as well as its parsed type.
+    if (-not $text.TrimStart().StartsWith('{') -or
+        $document -isnot [System.Management.Automation.PSCustomObject]) {
+        throw 'Installer settings must be a JSON object.'
+    }
+    return $document
+}
+
 try {
     $parts = $CustomData.Split('|')
     $installDir = if ($parts.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($parts[0])) { $parts[0] } else { $PSScriptRoot }
     $cfgPath = Join-Path $installDir 'appsettings.json'
-    if (-not (Test-Path -LiteralPath $cfgPath)) {
-        $cfgPath = Join-Path $PSScriptRoot 'appsettings.json'
+    if (-not (Test-Path -LiteralPath $cfgPath -PathType Leaf)) { throw 'Installer settings are missing.' }
+    if (@(Get-ChildItem -LiteralPath $installDir -Filter 'appsettings.secrets.json.*.recovery' -File -Force).Count -gt 0) {
+        throw 'Protected installer recovery requires administrator review before retrying.'
     }
-    if (-not (Test-Path -LiteralPath $cfgPath)) { return }
 
     $moduleOpts = @{}
     foreach ($part in $parts) {
@@ -73,7 +129,7 @@ try {
         }
     }
 
-    $json = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
+    $json = Read-SettingsObject $cfgPath
     $changed = $false
 
     # A major upgrade removed the installed appsettings.json and laid down the package's defaults;
@@ -82,7 +138,7 @@ try {
     # make cached datasets unreadable.
     $savedPath = Join-Path $installDir 'appsettings.pre-upgrade.json'
     if (Test-Path -LiteralPath $savedPath -PathType Leaf) {
-        $installed = Get-Content -LiteralPath $savedPath -Raw | ConvertFrom-Json
+        $installed = Read-SettingsObject $savedPath
         Merge-InstalledSettings -Target $json -Source $installed
         $changed = $true
     }
@@ -93,8 +149,9 @@ try {
     # Keep in sync with build-linux-packages.sh (InstallerConfigurationScriptTests compares them).
     $secretPaths = @('Portal:Jwt:Secret', 'Portal:Jwt:PreviousSecrets', 'Portal:Dataset:AtRestKey', 'Portal:Dataset:PreviousAtRestKeys', 'Portal:FirstRun:AdminPassword', 'Orchestrator:ApiKey', 'Orchestrator:PreviousApiKeys', 'Orchestrator:IdentitySigningSecret', 'Portal:Orchestrator:ApiKey', 'Portal:Orchestrator:IdentitySigningSecret')
     $secretsPath = Join-Path $installDir 'appsettings.secrets.json'
+    $existingSecrets = [pscustomobject]@{}
     if (Test-Path -LiteralPath $secretsPath -PathType Leaf) {
-        $existingSecrets = Get-Content -LiteralPath $secretsPath -Raw | ConvertFrom-Json
+        $existingSecrets = Read-SettingsObject $secretsPath
         foreach ($dotted in $secretPaths) {
             $source = Get-JsonParent -Root $existingSecrets -Dotted $dotted
             $target = Get-JsonParent -Root $json -Dotted $dotted
@@ -124,31 +181,19 @@ try {
     # password. Generate a one-time password readable only by Administrators and SYSTEM; the Portal
     # forces a change at first sign-in.
     $firstRunPath = Join-Path $installDir 'first-run-password.txt'
+    $passwordBytes = $null
     if ([string]::IsNullOrWhiteSpace($moduleOpts['UPGRADE']) -and $null -ne $json.Portal -and `
         $null -ne $json.Portal.FirstRun -and `
-        [string]::IsNullOrWhiteSpace([string]$json.Portal.FirstRun.AdminPassword) -and `
         -not (Test-Path -LiteralPath (Join-Path $installDir 'portal.db')) -and `
-        -not (Test-Path -LiteralPath $firstRunPath)) {
-        $password = (New-Base64Secret).Substring(0, 24).Replace('/', 'x').Replace('+', 'y') + '9!'
-        $json.Portal.FirstRun | Add-Member -MemberType NoteProperty -Name 'AdminPassword' -Value $password -Force
+        -not (Test-Path -LiteralPath $firstRunPath -PathType Leaf)) {
+        $password = [string]$json.Portal.FirstRun.AdminPassword
+        if ([string]::IsNullOrWhiteSpace($password)) {
+            $password = (New-Base64Secret).Substring(0, 24).Replace('/', 'x').Replace('+', 'y') + '9!'
+            $json.Portal.FirstRun | Add-Member -MemberType NoteProperty -Name 'AdminPassword' -Value $password -Force
+        }
         $user = if ([string]::IsNullOrWhiteSpace([string]$json.Portal.FirstRun.AdminUsername)) { 'admin' } else { [string]$json.Portal.FirstRun.AdminUsername }
-        # Created with its final ACL (SYSTEM and Administrators, nothing inherited) and written through
-        # the creating handle, so no other account can ever read it.
-        $acl = New-Object System.Security.AccessControl.FileSecurity
-        $acl.SetAccessRuleProtection($true, $false)
-        foreach ($sid in 'S-1-5-18', 'S-1-5-32-544') {
-            $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
-                (New-Object System.Security.Principal.SecurityIdentifier $sid), 'FullControl', 'Allow')))
-        }
-        $stream = [System.IO.File]::Create($firstRunPath, 4096, [System.IO.FileOptions]::None, $acl)
-        try {
-            $writer = New-Object System.IO.StreamWriter($stream, (New-Object System.Text.ASCIIEncoding))
-            $writer.WriteLine($user)
-            $writer.WriteLine($password)
-            $writer.Flush()
-        } finally {
-            $stream.Dispose()
-        }
+        # Publish only after settings persist. A retry reuses the password already saved in secrets.
+        $passwordBytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($user + "`r`n" + $password + "`r`n")
         $changed = $true
     }
 
@@ -273,7 +318,8 @@ try {
     }
 
     # Move every generated secret out of the shared file, leaving its empty default behind.
-    $secrets = [pscustomobject]@{}
+    # Preserve operator-owned protected settings without copying them into the shared document.
+    $secrets = $existingSecrets
     foreach ($dotted in $secretPaths) {
         $node = Get-JsonParent -Root $json -Dotted $dotted
         $key = $dotted.Split(':')[-1]
@@ -302,28 +348,20 @@ try {
 
     # Written through a handle opened with the final ACL (SYSTEM and Administrators, nothing
     # inherited from Program Files), so the secrets are never readable by another account.
-    $secretsAcl = New-Object System.Security.AccessControl.FileSecurity
-    $secretsAcl.SetAccessRuleProtection($true, $false)
-    foreach ($sid in 'S-1-5-18', 'S-1-5-32-544') {
-        $secretsAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
-            (New-Object System.Security.Principal.SecurityIdentifier $sid), 'FullControl', 'Allow')))
-    }
-    # Recreated rather than rewritten, so an existing file cannot keep a wider ACL. This step runs
-    # before the services start, so nothing reads the file while it is briefly absent.
-    if (Test-Path -LiteralPath $secretsPath) { Remove-Item -LiteralPath $secretsPath -Force }
-    $stream = [System.IO.File]::Create($secretsPath, 4096, [System.IO.FileOptions]::None, $secretsAcl)
-    try {
-        $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes(($secrets | ConvertTo-Json -Depth 64))
-        $stream.Write($bytes, 0, $bytes.Length)
-    } finally {
-        $stream.Dispose()
-    }
+    $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes(($secrets | ConvertTo-Json -Depth 64))
+    Write-ProtectedFile -Path $secretsPath -Bytes $bytes
 
     if ($changed) {
         ($json | ConvertTo-Json -Depth 64) | Set-Content -LiteralPath $cfgPath -Encoding UTF8
     }
+    # COMPAT_BREAK: 0.22 — failed settings writes must not publish unusable sign-in credentials.
+    if ($null -ne $passwordBytes) {
+        Write-ProtectedFile -Path $firstRunPath -Bytes $passwordBytes
+    }
     if (Test-Path -LiteralPath $savedPath) { Remove-Item -LiteralPath $savedPath -Force }
 } catch {
-    # Non-fatal: a genuinely missing secret or safe zone surfaces when the service runs, rather
-    # than aborting the whole installation here.
+    # COMPAT_BREAK: 0.22 — failed configuration must stop installation before services start.
+    # Provider/file exceptions can include secrets or settings; report only a fixed diagnostic.
+    Write-Error 'ETL-SQL installer configuration failed.' -ErrorAction Continue
+    exit 1
 }

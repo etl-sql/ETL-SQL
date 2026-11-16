@@ -81,9 +81,9 @@ public partial class ExpressionParser
     public Expression ParseExpressionNoLogical() => ParseComparison();
 
     /// <summary>
-    /// Parses an expression at additive precedence — the level SQL's own
-    /// <c>BETWEEN &lt;a&gt; AND &lt;b&gt;</c> uses for its bounds, so a bound cannot swallow the
-    /// <c>AND</c> that separates it from the upper bound.
+    /// Parses an expression at additive precedence, for the bounds of a column rule's
+    /// <c>EXPECT BETWEEN &lt;a&gt; AND &lt;b&gt;</c>, so a bound cannot swallow the <c>AND</c> that
+    /// separates it from the upper bound.
     /// </summary>
     public Expression ParseExpressionTerm() => ParseTerm();
 
@@ -137,14 +137,11 @@ public partial class ExpressionParser
         if (_parser.Match(TokenType.NOT))
         {
             var notToken = _parser.Previous;
-            if (_parser.Match(TokenType.EXISTS))
-            {
-                _parser.Consume(TokenType.LPAREN, "Expected '(' after EXISTS");
-                var subq = _parser.ParseQuery();
-                _parser.Consume(TokenType.RPAREN, "Expected ')' after subquery");
-                return new ExistsExpression(subq, true) { Line = notToken.Line, Column = notToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
-            }
             var expr = ParseNot();
+            // A bare NOT EXISTS (...) is the negated EXISTS node. The operand is parsed in full first,
+            // so NOT EXISTS (...) = TRUE negates the comparison, as NOT does for any other operand.
+            if (expr is ExistsExpression { IsNot: false } exists)
+                return new ExistsExpression(exists.Subquery, true) { Line = notToken.Line, Column = notToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             return new UnaryExpression(TokenType.NOT, expr) { Line = notToken.Line, Column = notToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
         }
         return ParseComparison();
@@ -198,7 +195,7 @@ public partial class ExpressionParser
                 if (_parser.Match(TokenType.DISTINCT))
                 {
                     _parser.Consume(TokenType.FROM, "Expected 'FROM' after IS [NOT] DISTINCT");
-                    var rightExpr = ParseShift();
+                    var rightExpr = ParseCoalesce();
                     left = new IsDistinctFromExpression(left, rightExpr, not) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
                 }
                 else
@@ -212,7 +209,7 @@ public partial class ExpressionParser
                 Expression rightExpr;
                 if (_parser.Match(TokenType.LPAREN))
                 {
-                    if (_parser.Current.Type == TokenType.SELECT)
+                    if (_parser.IsQueryStart())
                     {
                         var subq = _parser.ParseQuery();
                         rightExpr = new SubqueryExpression(subq);
@@ -238,7 +235,7 @@ public partial class ExpressionParser
                 }
                 else
                 {
-                    rightExpr = ParseTerm();
+                    rightExpr = ParseCoalesce();
                 }
                 left = new InExpression(left, rightExpr, isNot) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             }
@@ -270,20 +267,22 @@ public partial class ExpressionParser
                 }
                 else
                 {
-                    var right = ParseTerm();
+                    var right = ParseCoalesce();
                     Expression? escapeChar = null;
                     if (_parser.Match(TokenType.ESCAPE))
                     {
-                        escapeChar = ParseTerm();
+                        escapeChar = ParseCoalesce();
                     }
                     left = new LikeExpression(left, right, isNot, escapeChar, ilike) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
                 }
             }
             else if (op == TokenType.BETWEEN)
             {
-                var start = ParseTerm();
+                // A bound is read at coalesce level, like any other comparison operand: nothing at
+                // that level consumes AND, so `x BETWEEN a || 'b' AND c ?? 0` still splits at AND.
+                var start = ParseCoalesce();
                 _parser.Consume(TokenType.AND, "Expected 'AND' after BETWEEN start expression");
-                var end = ParseTerm();
+                var end = ParseCoalesce();
                 left = new BetweenExpression(left, start, end, isNot) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             }
             else
@@ -498,7 +497,7 @@ public partial class ExpressionParser
         if (_parser.Match(TokenType.NUMBER))
         {
             var t = _parser.Previous;
-            return new LiteralExpression(decimal.Parse(t.Value), TokenType.NUMBER) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
+            return new LiteralExpression(decimal.Parse(t.Value, System.Globalization.CultureInfo.InvariantCulture), TokenType.NUMBER) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
         }
         if (_parser.Match(TokenType.TRUE))
         {
@@ -616,6 +615,9 @@ public partial class ExpressionParser
                 {
                     if (_parser.Current.Type == TokenType.STAR)
                     {
+                        // COUNT(DISTINCT *) is not SQL; it was accepted and ignored the DISTINCT.
+                        if (isFuncDistinct)
+                            throw new SyntaxException($"DISTINCT cannot be applied to * in {name}(...); name the columns", _parser.Current.Line, _parser.Current.Column);
                         var starToken = _parser.Advance();
                         args.Add(new IdentifierExpression("*") { Line = starToken.Line, Column = starToken.Column });
                     }
@@ -686,7 +688,7 @@ public partial class ExpressionParser
                         bool descending = false;
                         if (_parser.Match(TokenType.DESC)) descending = true;
                         else _parser.Match(TokenType.ASC);
-                        orderBy.Add(new OrderByClause(orderExpr, descending));
+                        orderBy.Add(new OrderByClause(orderExpr, descending, _parser.ParseNullsPlacement()));
                     } while (_parser.Match(TokenType.COMMA));
 
                     _parser.Consume(TokenType.RPAREN, "Expected ')' to close WITHIN GROUP");
@@ -721,7 +723,7 @@ public partial class ExpressionParser
         if (_parser.Match(TokenType.LPAREN))
         {
             var parenToken = _parser.Previous;
-            if (_parser.Current.Type == TokenType.SELECT)
+            if (_parser.IsQueryStart())
             {
                 var select = _parser.ParseQuery();
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after subquery");
@@ -825,7 +827,7 @@ public partial class ExpressionParser
                 bool descending = false;
                 if (_parser.Match(TokenType.DESC)) descending = true;
                 else _parser.Match(TokenType.ASC);
-                orderBy.Add(new OrderByClause(orderExpr, descending));
+                orderBy.Add(new OrderByClause(orderExpr, descending, _parser.ParseNullsPlacement()));
             } while (_parser.Match(TokenType.COMMA));
         }
 

@@ -160,7 +160,7 @@ public sealed class StudioChartTileWidthTests(StudioSurfaceFixture fixture) : IA
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.WaitForSelectorAsync(".story-link", new PageWaitForSelectorOptions
         {
             State = WaitForSelectorState.Attached,

@@ -138,7 +138,7 @@ function commitResolvedState(state: ViewState, opts?: ViewOptions | null): void 
 function applyPresentationState(state: ViewState): void {
     if (state.visible) {
         Object.entries(state.visible).forEach(([objName, on]) => {
-            const el = document.getElementById(objName) || document.querySelector<HTMLElement>(`[data-name="${objName}"]`);
+            const el = document.getElementById(objName) || document.querySelector<HTMLElement>(`[data-name="${CSS.escape(objName)}"]`);
             if (el) {
                 el.style.display = on ? '' : 'none';
                 _uiStates[objName] = Object.assign({}, _uiStates[objName], { visible: !!on });
@@ -147,7 +147,7 @@ function applyPresentationState(state: ViewState): void {
     }
     if (state.collapsed) {
         Object.entries(state.collapsed).forEach(([objName, on]) => {
-            const el = document.getElementById(objName) || document.querySelector<HTMLElement>(`[data-name="${objName}"]`);
+            const el = document.getElementById(objName) || document.querySelector<HTMLElement>(`[data-name="${CSS.escape(objName)}"]`);
             if (!el) return;
             const container = el.closest('.collapsible-drawer')
                            || el.closest('.collapsible-inline')

@@ -137,7 +137,8 @@ public record DesignerDataPreviewResponse(
 public record SaveDesignerRequest(
     int ReportId,
     string ScriptText,
-    string? BaseRevision = null);
+    string? BaseRevision = null,
+    string? SealPassword = null);
 
 /// <param name="Parameters">Answers to the report's INPUT prompts, keyed by name with or without '@'.</param>
 /// <param name="RunEveryPage">
@@ -152,7 +153,18 @@ public record PreviewDesignerRequest(
 
 public record SaveDesignerResponse(
     long Version,
-    string? SourceRevision = null);
+    string? SourceRevision = null,
+    string? ScriptText = null);
+
+public record SealDesignerRequest(
+    string Script,
+    string? Password = null);
+
+public record SealDesignerResponse(
+    string SealedScript,
+    bool Changed,
+    bool RequiresPassword,
+    bool AllowsPlaintextSecrets);
 
 public record GenerateDesignerRequest(DesignerStateDto DesignState, string? Script = null);
 

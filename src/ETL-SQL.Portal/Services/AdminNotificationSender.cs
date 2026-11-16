@@ -38,7 +38,7 @@ public sealed class SmtpAdminNotificationSender(
         SharedConnectionDefinition definition;
         try
         {
-            definition = await catalog.ResolveDefinitionAsync(notification.SmtpAlias, identity: null, ct);
+            definition = await catalog.ResolveSystemDefinitionAsync(notification.SmtpAlias, ct);
         }
         catch (KeyNotFoundException)
         {
@@ -60,7 +60,14 @@ public sealed class SmtpAdminNotificationSender(
             : Option(options, "DEFAULT_FROM") ?? Option(options, "USERNAME") ?? "etlsql@localhost";
 
         var script = ComposeScript(options, fromAddr, notification);
-        var (success, error) = await runner.RunAsync(script, $"{notification.SessionPrefix}-{Guid.NewGuid():N}", ct);
+        var systemIdentity = new ExecutionIdentity
+        {
+            EffectiveUser = "portal-system-notification",
+            RealUser = "portal-system-notification",
+            IsAdmin = true
+        };
+        var (success, error) = await runner.RunAsync(
+            script, $"{notification.SessionPrefix}-{Guid.NewGuid():N}", ct, systemIdentity);
         if (success)
             return (true, null);
 

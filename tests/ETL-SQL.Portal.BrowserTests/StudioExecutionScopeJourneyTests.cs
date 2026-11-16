@@ -163,7 +163,7 @@ public sealed class StudioExecutionScopeJourneyTests(StudioAuthoringFixture fixt
             await File.WriteAllTextAsync(file, "SELECT 1;");
             var host = WorkstationEditorApp.Create([], new WorkstationEditorOptions(workspace.Root, file, 0, false, "scope-token", StudioMode: true));
             await host.StartAsync();
-            await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=scope-token");
+            await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=scope-token");
             await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__?.state.editorInstance)");
             await page.Locator("[data-projection='split']").ClickAsync();
             return host;
@@ -178,7 +178,7 @@ public sealed class StudioExecutionScopeJourneyTests(StudioAuthoringFixture fixt
         var report = await page.EvaluateAsync<JsonElement>("async data => { const {studioApi} = await import('/js/api.js'); return studioApi.createReport(data); }",
             new { folderId = folder.Id, name = "Scope", scriptText = "SELECT 1 AS A INTO #t; CREATE VISUAL T AS TABLE (SOURCE = #t); CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = T));" });
         var reportId = report.GetProperty("id").GetInt32();
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await page.WaitForFunctionAsync("id => Boolean(window.__STUDIO__?.state.editorInstance) && window.__STUDIO__.state.documents.some(d => Number(d.reportId) === id)", reportId);
         await page.Locator("[data-projection='split']").ClickAsync();
         return null;

@@ -151,6 +151,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public bool IsMockMode { get; set; }
     public List<object?>? Parameters { get; set; }
     public DayOfWeek WeekStartDay { get; set; } = DayOfWeek.Monday;
+    public ETL_SQL.Core.Data.DateOrder DateOrder { get; set; } = ETL_SQL.Core.Data.DateTextOrder.Default;
     public string ScriptHashPolicy { get; set; } = "Warn";
     public bool CaseSensitiveComparison { get; set; }
     public bool DataQualityDryRun { get; set; }

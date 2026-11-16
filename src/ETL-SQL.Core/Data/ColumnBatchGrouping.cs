@@ -12,7 +12,24 @@ namespace ETL_SQL.Core.Data;
 
 public readonly record struct NativeGroupKey<T>(bool IsNull, T Value) where T : unmanaged;
 
-public readonly record struct NativeStringGroupKey(bool IsNull, object? Value);
+/// <summary>
+/// A text group key. <see cref="Value"/> is the normalized value the group is compared by;
+/// <see cref="Text"/> is the first text the group saw and is not part of equality.
+/// </summary>
+public readonly struct NativeStringGroupKey(bool isNull, object? value, string? text = null)
+    : IEquatable<NativeStringGroupKey>
+{
+    public bool IsNull { get; } = isNull;
+    public object? Value { get; } = value;
+    public string? Text { get; } = text;
+
+    /// <summary>The value to return for the grouping column: the text as it was stored.</summary>
+    public object? Original => Text ?? Value;
+
+    public bool Equals(NativeStringGroupKey other) => IsNull == other.IsNull && Equals(Value, other.Value);
+    public override bool Equals(object? obj) => obj is NativeStringGroupKey other && Equals(other);
+    public override int GetHashCode() => HashCode.Combine(IsNull, Value);
+}
 
 /// <summary>Memory-accounted COUNT(*) grouping over normalized UTF-8 keys.</summary>
 public sealed class NativeStringGroupCountResult : IDisposable
@@ -47,8 +64,8 @@ public sealed class NativeStringGroupCountResult : IDisposable
             {
                 var encoded = keys.GetUtf8Bytes(row);
                 keyBytes = encoded.Length;
-                key = new NativeStringGroupKey(
-                    false, CompoundKey.NormalizeValue(Encoding.UTF8.GetString(encoded)));
+                var text = Encoding.UTF8.GetString(encoded);
+                key = new NativeStringGroupKey(false, CompoundKey.NormalizeValue(text), text);
             }
             if (!groups.TryGetValue(key, out var count))
             {
@@ -135,8 +152,8 @@ public sealed class NativeStringGroupAggregateResult<TValue> : IDisposable
             {
                 var encoded = keys.GetUtf8Bytes(row);
                 keyBytes = encoded.Length;
-                key = new NativeStringGroupKey(
-                    false, CompoundKey.NormalizeValue(Encoding.UTF8.GetString(encoded)));
+                var text = Encoding.UTF8.GetString(encoded);
+                key = new NativeStringGroupKey(false, CompoundKey.NormalizeValue(text), text);
             }
             if (!groups.TryGetValue(key, out var state))
             {

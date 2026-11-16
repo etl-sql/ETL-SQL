@@ -37,6 +37,7 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 | `Engine:ExternalSortChunkSize` | integer | `10000` | `SET EXTERNAL_SORT_CHUNK_SIZE = n` | Run size in rows for sorting buffers spilled to disk. |
 | `Engine:WindowSpillThreshold` | integer | `10000` | `SET WINDOW_SPILL_THRESHOLD = n` | Rows in a partition before window functions spill to disk. |
 | `Engine:TempTableSpillThresholdRows` | integer | `1000000` | `SET TEMP_TABLE_SPILL_THRESHOLD = n` | Rows stored in `#temp` tables before shifting from memory to disk. |
+| `Engine:SpillMinimumFreeDiskMB` | integer | `256` | — | Free space the spill volume keeps in reserve. A new spill extent is refused below it, so a filling disk fails one statement with a low-space error before writing, rather than failing every writer on the host. `0` disables the check. |
 
 ---
 
@@ -63,10 +64,12 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 | :--- | :--- | :--- | :--- | :--- |
 | `Engine:ScriptHashPolicy` | string | `Warn` | — | Behavior when running scripts with modified hashes: `Warn`, `Block`, or `Ignore`. |
 | `Engine:CaseSensitiveComparison` | boolean | `false` | `SET CASE_SENSITIVE = ON\|OFF` | Controls case sensitivity inside in-memory engine expressions. |
-| `Engine:AllowPlaintextSecrets` | boolean | `false` | `SET ALLOW_PLAINTEXT_SECRETS = ON\|OFF` | Blocks scripts from containing raw plaintext connection strings. |
-| `Engine:NoSaveSensitive` | boolean | `false` | `SET NO_SAVE_SENSITIVE = ON\|OFF` | Blocks storing credentials in workspace memory caches. |
-| `Engine:NoSaveConnection` | boolean | `false` | `SET NO_SAVE_CONNECTION = ON\|OFF` | Blocks saving connections to file or database stores. |
-| `Engine:ConnectionEncryption` | boolean | `false` | `SET CONNECTION_ENCRYPTION = ON\|OFF` | Encrypts local connection configuration keys. |
+| `Engine:AllowPlaintextSecrets` | boolean | `false` | `SET ALLOW_PLAINTEXT_SECRETS = ON\|OFF` | When `true`, allows literal `USE PASSWORD = '...'` to stay in saved source while still encrypting connection secrets (`ENC:...`). |
+| `Engine:NoSaveSensitive` | boolean | `false` | `SET NO_SAVE_SENSITIVE = ON\|OFF` | Replaces sensitive credential options and `SENSITIVE`/`ENCRYPTED` variable literals with `<secret>` placeholders on save. |
+| `Engine:NoSaveConnection` | boolean | `false` | `SET NO_SAVE_CONNECTION = ON\|OFF` | Superset of `NoSaveSensitive`; replaces `CREATE CONNECTION` targets, quoted options, and sensitive literals with placeholders on save. |
+| `Engine:ConnectionEncryption` | boolean | `false` | `SET CONNECTION_ENCRYPTION = ON\|OFF` | Encrypts all `CREATE CONNECTION` targets and quoted options on save using the script/master password. |
+| `Governance:Docker:AllowedImages` | string array | empty | — | Docker images a standalone host approves for `USE DOCKER`, `START_DOCKER` and `RESUME_DOCKER` (container tools are also checked against it when set). Empty approves nothing. Entries are `repository[:tag][@sha256:digest]`, `registry/*`, or `*`. See [Image Approval](../../../reference/statements/use-docker.md#image-approval). |
+| `Governance:Docker:RequirePinnedDigest` | boolean | `false` | — | Accept only Docker images given by `@sha256:` digest. |
 
 ---
 
@@ -86,6 +89,7 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 
 | Key | Type | Default | Ad-Hoc SET Command | Description |
 | :--- | :--- | :--- | :--- | :--- |
+| `Engine:DateFormat` | string | `MDY` | `SET DATEFORMAT = 'DMY'` | How slash dates in text are read: `MDY` (08/01/2026 is 1 August, as in SQL Server and PostgreSQL) or `DMY` (8 January). ISO text reads the same either way. Any other value stops the engine from starting. |
 | `Engine:StartOfWeek` | string | `Monday` | `SET WEEK_START_DAY = 'day'` | Start day used by date calculations (e.g., `DATEPART(WEEK, ...)`). |
 
 ---

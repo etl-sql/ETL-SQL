@@ -1,6 +1,6 @@
 # REMOTE_FILE_EXISTS
 
-Checks whether a file or directory exists on a remote connection (SFTP, FTP, or Azure Blob).
+Checks whether a file (or, for backward compatibility, a directory) exists on a remote connection (SFTP, FTP, S3, Azure Blob, or SharePoint). Prefer [REMOTE_DIRECTORY_EXISTS](remote_directory_exists.md) when checking specifically for a directory.
 
 ## Syntax
 

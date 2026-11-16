@@ -86,13 +86,20 @@ namespace ETL_SQL.Connectors.SqlServer
             var host = GetHost(connectionString);
             if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
 
-            await using var conn = new SqlConnection(connectionString);
-            await conn.OpenAsync();
-            var procs = new List<string>();
-            await using var cmd = new SqlCommand("SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_TYPE = 'PROCEDURE'", conn);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync()) procs.Add(reader.GetString(0));
-            return procs;
+            try
+            {
+                await using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync();
+                var procs = new List<string>();
+                await using var cmd = new SqlCommand("SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_TYPE = 'PROCEDURE'", conn);
+                await using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync()) procs.Add(reader.GetString(0));
+                return procs;
+            }
+            catch (Exception ex) when (ex is SqlException or InvalidOperationException or ArgumentException)
+            {
+                throw ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.Wrap("SQL Server", ex);
+            }
         }
 
         public string BuildConnectionString(Dictionary<string, string> properties) =>
@@ -126,7 +133,7 @@ namespace ETL_SQL.Connectors.SqlServer
                 await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
                 return [new DiagnosticStep("AUTH", DiagnosticStatus.Ok, "MSSQL authentication succeeded.")];
             }
-            catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException or OperationCanceledException)
+            catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException or OperationCanceledException or ArgumentException)
             {
                 return
                 [
@@ -137,9 +144,13 @@ namespace ETL_SQL.Connectors.SqlServer
             }
         }
 
-        private string BuildDiagnosticConnectionString(string target, IReadOnlyDictionary<string, string>? options)
+        // ConnectionDiagnosticEngine authorizes GetHost(target, options) before this probe runs, and
+        // GetHost prefers the SERVER option. The probe must dial that same host: building from
+        // options that lack SERVER would drop the target's server and let the driver fall back to
+        // a local instance the policy never checked.
+        internal string BuildDiagnosticConnectionString(string target, IReadOnlyDictionary<string, string>? options)
         {
-            if (options is { Count: > 0 } && (options.ContainsKey("SERVER") || options.ContainsKey("DATABASE") || options.ContainsKey("USER")))
+            if (options is { Count: > 0 } && options.ContainsKey("SERVER"))
                 return BuildConnectionString(new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase));
             return target;
         }

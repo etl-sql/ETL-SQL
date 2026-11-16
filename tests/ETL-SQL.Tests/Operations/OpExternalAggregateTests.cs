@@ -53,6 +53,80 @@ namespace ETL_SQL.Tests.Operations.Operations
             }
         }
 
+        // A scalar aggregate keeps one running state, so partitioning its input to disk buys nothing.
+        // It did: a 1e9-row COUNT(*) in the hosted HA soak (run 43669451423) wrote every row to agg_
+        // partitions once the admission probe passed JoinSpillThreshold.
+        [Fact]
+        public async Task ScalarConstantMemoryAggregateStreamsPastTheProbeWithoutSpilling()
+        {
+            var (eval, _) = BuildContext();
+            eval.JoinSpillThreshold = 100;
+            var expected = Enumerable.Range(1, 5000).Where(v => v % 7 == 3).ToList();
+
+            await eval.Evaluate(TestHelpers.Parse(
+                "SELECT COUNT(*) AS c, SUM(value) AS s, MIN(value) AS mn, MAX(value) AS mx, AVG(value * 1.0) AS a, " +
+                "STDEV(value) AS sd FROM GENERATE_SERIES(1, 5000) WHERE value % 7 = 3;"));
+
+            var row = Assert.Single(eval.LastResult!.Rows);
+            Assert.Equal(expected.Count, Convert.ToInt32(row["c"]));
+            Assert.Equal(expected.Sum(), Convert.ToInt64(row["s"]));
+            Assert.Equal(expected.Min(), Convert.ToInt32(row["mn"]));
+            Assert.Equal(expected.Max(), Convert.ToInt32(row["mx"]));
+            Assert.Equal(expected.Average(), Convert.ToDouble(row["a"]), 6);
+            // Asserted on the routing, not on total spill bytes: the spill-certification lane caps
+            // in-memory batches, so the GENERATE_SERIES input may spill on its own.
+            Assert.Contains(eval.Telemetry.PlanDecisions,
+                d => d.OperatorId == "select.aggregate-stream" && d.Outcome == PlanDecisionOutcome.Accepted);
+            Assert.DoesNotContain(eval.Telemetry.PlanDecisions, d => d.CandidatePath == "ExternalAggregate");
+        }
+
+        // Streaming a scalar aggregate in memory must still honour a cancel: the hosted HA soak
+        // (run 43684479666) killed a 1e9-row COUNT(*) and the run did not end within 300 s. Nested
+        // bodies are dispatched without a token, which used to reset the run's to None.
+        private const string BillionRowCount =
+            "DECLARE @n BIGINT = (SELECT COUNT(*) FROM (SELECT (a.value - 1) * 1000 + b.value AS value " +
+            "FROM GENERATE_SERIES(1, 1000000) a CROSS JOIN GENERATE_SERIES(1, 1000) b) s WHERE value % 7 = 3);";
+
+        [Theory]
+        [InlineData("{0}")]
+        [InlineData("BEGIN {0} END;")]
+        [InlineData("IF 1 = 1 BEGIN {0} END;")]
+        public async Task StreamingScalarAggregateStopsPromptlyWhenCancelled(string shape)
+        {
+            var (eval, _) = BuildContext();
+            // Late enough to land in the streaming loop: a 1 s cancel lands while the million-value
+            // series is still being built, which already stopped promptly and hid the hang.
+            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            var error = await Record.ExceptionAsync(() => eval.Evaluate(
+                TestHelpers.Parse(string.Format(shape, BillionRowCount)), cts.Token));
+
+            stopwatch.Stop();
+            // A missed cancel streams 1e9 rows for many minutes; an honoured one ends seconds after
+            // the 10 s cancel, so 120 s leaves a wide gap either side.
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(120), // flaky-time-bound-ok: hang guard, minutes vs seconds
+                $"cancel took {stopwatch.Elapsed}");
+            // 1e9 rows cannot finish in that time, so a run that returned without an error ignored the cancel.
+            Assert.NotNull(error);
+        }
+
+        // DISTINCT, STRING_AGG and percentiles hold every value, so they still go to the external engine.
+        [Theory]
+        [InlineData("COUNT(DISTINCT value)", 714)]
+        [InlineData("COUNT(*) AS c, COUNT(DISTINCT value)", 714)]
+        public async Task ScalarAggregateHoldingEveryValueStillRoutesExternal(string select, int distinct)
+        {
+            var (eval, _) = BuildContext();
+            eval.JoinSpillThreshold = 100;
+
+            await eval.Evaluate(TestHelpers.Parse(
+                $"SELECT {select} AS d FROM GENERATE_SERIES(1, 5000) WHERE value % 7 = 3;"));
+
+            Assert.Equal(distinct, Convert.ToInt32(Assert.Single(eval.LastResult!.Rows)["d"]));
+            Assert.Contains(eval.Telemetry.PlanDecisions, d => d.CandidatePath == "ExternalAggregate");
+        }
+
         [Fact]
         public async Task ApplyAggregationExternal_GroupBy_ProducesCorrectGroups()
         {

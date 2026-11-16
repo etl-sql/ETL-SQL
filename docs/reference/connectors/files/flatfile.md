@@ -17,9 +17,9 @@ Aliases: `CSV`, `TSV`
 | `TEXT_QUALIFIER` | Quote character: `DOUBLEQUOTE`, `SINGLEQUOTE`, or a literal char | No |
 | `ESCAPE_CHAR` | Character used to escape delimiters within fields (e.g. `'\\'`) | No |
 | `ENCODING` | `UTF8`, `ANSI`, `UTF16`, `LATIN1`, `UNICODE` (default: `UTF8`) | No |
-| `CULTURE` | Locale for date/number parsing (e.g. `en-US`, `de-DE`) | No |
+| `CULTURE` | Locale for reading and writing dates and numbers (e.g. `en-US`, `de-DE`). Without it, files are read and written the same on every host: dates as ISO `yyyy-MM-dd HH:mm:ss`, numbers with `.` | No |
 | `NULL_AS` | How nulls are represented. **No default** — when omitted, blank and other field values pass through unchanged. Single token: `NULL` · `EMPTY` · `BACKSLASH_N`. Multi-value list: `NULL_AS=['NULL','EMPTY']` (see [NULL_AS defaults and multi-value syntax](#null_as-defaults-and-multi-value-syntax)). | No |
-| `DATE_FORMAT` | Custom date parsing pattern (e.g. `'yyyy-MM-dd'`) | No |
+| `DATE_FORMAT` | Custom date pattern for reading and writing (e.g. `'yyyy-MM-dd'`) | No |
 | `START_AT` | 1-based line number to start reading | No |
 | `END_AT` | 1-based line number to stop reading | No |
 | `TRIM` | `ON`/`OFF` — remove leading/trailing whitespace from fields | No |
@@ -30,7 +30,7 @@ Aliases: `CSV`, `TSV`
 | `MAP_BY_HEADER_NAME` | `ON`/`OFF` — align by case-insensitive header name instead of position; requires unique source headers | No |
 | `FORMAT` | `DELIMITED` (default) or `FIXED` | No |
 | `TEMPLATE` | Name of a `#temp` table defining fixed-width offsets (required if `FORMAT=FIXED`) | Conditional |
-| `COMPRESS` | `ON`/`OFF` — transparent GZip read/write (default: `OFF`) | No |
+| `COMPRESS` | `ON`/`OFF` — store the file as a ZIP archive (one entry); `.zip` is added to the path if it does not end in `.zip` (default: `OFF`) | No |
 | `ENCRYPT` | `ON`/`OFF` — AES file encryption (default: `OFF`) | No |
 | `PASSWORD` | Password for encryption/decryption (required if `ENCRYPT=ON`) | Conditional |
 | `ALGORITHM` | Hash algorithm: `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |
@@ -109,7 +109,7 @@ Flat file operations use local file system permissions or storage connector cred
 CREATE CONNECTION csv_in AS FLATFILE(PATH='C:\Data\employees.csv', HEADER=ON, DELIMITER='PIPE', ENCODING='UTF8');
 
 -- Encrypted and GZip-compressed
-CREATE CONNECTION secure_file AS FLATFILE(PATH='C:\Data\payroll.csv.gz', COMPRESS=ON, ENCRYPT=ON, PASSWORD='s3cr3t');
+CREATE CONNECTION secure_file AS FLATFILE(PATH='C:\Data\payroll.csv.zip', COMPRESS=ON, ENCRYPT=ON, PASSWORD='s3cr3t');
 
 -- European locale with semicolon delimiter and custom date format
 CREATE CONNECTION eu_data AS FLATFILE(PATH='C:\Data\german_sales.csv', DELIMITER='SEMICOLON', CULTURE='de-DE', DATE_FORMAT='dd.MM.yyyy');

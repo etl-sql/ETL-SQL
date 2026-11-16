@@ -34,9 +34,10 @@ namespace ETL_SQL.Reporting
                 {
                     null => null,
                     string or decimal or double or float or int or long or bool => item,
-                    _ => (object?)item.ToString()
+                    _ => (object?)ReportValueText.Of(item)
                 })),
-            _ => value.ToString() ?? ""
+            // ISO dates and invariant numbers, the same text on every host (ReportValueText).
+            _ => ReportValueText.Of(value) ?? ""
         };
 
         /// <summary>

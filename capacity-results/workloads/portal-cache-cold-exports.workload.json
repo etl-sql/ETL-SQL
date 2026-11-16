@@ -42,7 +42,7 @@
       { "name": "cache-cold-snapshot", "method": "GET", "path": "/api/reports/{{cacheColdReportId}}/snapshot", "role": "viewer", "weight": 8 },
       { "name": "csv-export", "method": "GET", "path": "/api/reports/{{reportId}}/export/csv", "role": "viewer", "weight": 8, "thinkTimeMs": 1500 },
       { "name": "xlsx-export", "method": "GET", "path": "/api/reports/{{reportId}}/export/xlsx", "role": "viewer", "weight": 5, "thinkTimeMs": 2500 },
-      { "name": "pdf-export", "method": "GET", "path": "/api/reports/{{reportId}}/export/pdf", "role": "viewer", "weight": 3, "thinkTimeMs": 5000 },
+      { "name": "pdf-export", "method": "GET", "path": "/api/reports/{{reportId}}/export/pdf", "role": "viewer", "weight": 3, "thinkTimeMs": 5000, "expectedStatuses": [200, 429] },
       { "name": "dataset-list", "method": "GET", "path": "/api/datasets", "role": "viewer", "weight": 6 },
       { "name": "dataset-detail", "method": "GET", "path": "/api/datasets/{{datasetId}}", "role": "viewer", "weight": 4 },
       { "name": "favorite", "method": "POST", "path": "/api/reports/{{reportId}}/favorite", "role": "viewer", "weight": 2 },

@@ -32,7 +32,7 @@ public class PrintStatementHandler : IStatementHandler
             // Security: Mask sensitive variables if SHOW_PASSWORD is OFF
             if (!context.ShowPassword && arg is VariableExpression varExpr)
             {
-                if (context.VarContext.VariableMetadata.TryGetValue(varExpr.Name, out var meta) && (meta.IsSensitive || meta.IsSecret))
+                if (context.VarContext.TryGetVariableMetadata(varExpr.Name, out var meta) && (meta.IsSensitive || meta.IsSecret))
                 {
                     strVal = "*******";
                 }

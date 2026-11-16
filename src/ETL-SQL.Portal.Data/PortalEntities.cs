@@ -434,8 +434,6 @@ public class SavedReportView
     public int UserId { get; set; }
     public PortalUser User { get; set; } = null!;
     public string Name { get; set; } = "";
-    public string? ParametersJson { get; set; }
-    public string? FiltersJson { get; set; }
     public string? StateJson { get; set; }
     public string? ScriptHash { get; set; }
     public bool IsDefault { get; set; }
@@ -446,6 +444,13 @@ public class SavedReportView
 public class ReportAlert
 {
     public int Id { get; set; }
+
+    /// <summary>
+    /// The owning report's tenant, carried on the row so alert names can be unique per tenant at the
+    /// database: a name is the alert's address (ALTER ALERT, GET alerts/by-name), and equal names in
+    /// two tenants are two different alerts.
+    /// </summary>
+    public string TenantId { get; set; } = "portal-host";
     public int ReportId { get; set; }
     public Report Report { get; set; } = null!;
     public int OwnerId { get; set; }
@@ -457,9 +462,7 @@ public class ReportAlert
     public string VisualName { get; set; } = "";
     public string Operator { get; set; } = ">=";
     public decimal Threshold { get; set; }
-    // Legacy inline delivery fields. New scripts use AlertNotifications instead.
-    public string? Recipient { get; set; }
-    public string? SmtpAlias { get; set; }
+    // COMPAT_BREAK: 0.22 — alert delivery is represented only by named notification attachments.
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
@@ -685,9 +688,10 @@ public class PortalSharedConnection : IVersionedEntity
 public enum SharedConnectionPermission { Use = 0 }
 
 /// <summary>
-/// A per-connection use grant (group-scoped, like <see cref="DatasetAcl"/>). An entry with no
-/// grants is usable by any caller; an entry with grants requires an admin, its owner, or a
-/// member of a granted group — and a caller without an injected identity is denied.
+/// A per-connection use grant (group-scoped, like <see cref="DatasetAcl"/>). Shared connections are
+/// deny-by-default: an entry with no grants is usable only by an admin or its owner, and an entry
+/// with grants requires an admin, its owner, or a member of a granted group. Callers without an
+/// injected identity are denied.
 /// </summary>
 public class SharedConnectionAcl
 {

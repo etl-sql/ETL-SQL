@@ -22,6 +22,7 @@ namespace ETL_SQL.Reporting
             bool isInteraction = false,
             string? sourceVisual = null)
         {
+            ETL_SQL.Core.Data.DateTextOrder.Bind(context);
             if (!isInteraction)
                 return await RefreshAtomicallyAsync(context, manifest, updates);
 

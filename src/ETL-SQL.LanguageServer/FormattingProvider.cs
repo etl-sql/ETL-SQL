@@ -158,21 +158,16 @@ namespace ETL_SQL.LSP
             var lines = state.Text.Split('\n');
             var selectedLines = new List<string>();
 
-            for (int lineIdx = range.Start.Line; lineIdx <= range.End.Line; lineIdx++)
+            for (int lineIdx = Math.Max(0, range.Start.Line); lineIdx <= range.End.Line; lineIdx++)
             {
                 if (lineIdx >= lines.Length) break;
                 var lineText = lines[lineIdx];
-                if (lineIdx == range.Start.Line && lineIdx == range.End.Line)
+                // Clamp columns to the synced line: a stale or malformed range must not throw.
+                int startChar = lineIdx == range.Start.Line ? Math.Clamp(range.Start.Character, 0, lineText.Length) : 0;
+                int endChar = lineIdx == range.End.Line ? Math.Clamp(range.End.Character, startChar, lineText.Length) : lineText.Length;
+                if (lineIdx == range.Start.Line || lineIdx == range.End.Line)
                 {
-                    selectedLines.Add(lineText.Substring(range.Start.Character, Math.Max(0, range.End.Character - range.Start.Character)));
-                }
-                else if (lineIdx == range.Start.Line)
-                {
-                    selectedLines.Add(lineText.Substring(range.Start.Character));
-                }
-                else if (lineIdx == range.End.Line)
-                {
-                    selectedLines.Add(lineText.Substring(0, Math.Min(lineText.Length, range.End.Character)));
+                    selectedLines.Add(lineText.Substring(startChar, endChar - startChar));
                 }
                 else
                 {

@@ -64,7 +64,7 @@ public class FileOperationStatementHandler(
                 return;
             }
 
-            bool remoteOverwrite = true; // Default to true for backward compatibility with underscore functions
+            bool remoteOverwrite = true; // OVERWRITE defaults to ON, as it does for local files.
             if (stmt.Overwrite != null)
             {
                 var ovrVal = await context.EvaluateValue(stmt.Overwrite, new Row());
@@ -135,6 +135,7 @@ public class FileOperationStatementHandler(
                 else if (string.Equals(ovrVal.ToString(), "FALSE", StringComparison.OrdinalIgnoreCase)) overwrite = false;
             }
         }
+        bool deleteSourceAfter = stmt.DeleteSource != null && await EvaluateOnOffAsync(stmt.DeleteSource, "DELETE_SOURCE", context);
 
         // Bridge Remote <-> Local / Remote <-> Remote connections
         if (sourceOperand.IsRemote || destOperand.IsRemote)
@@ -154,6 +155,10 @@ public class FileOperationStatementHandler(
             : FileSystemAccessKind.Read;
         source = pathAuthorizer.Authorize(context, source, sourceAccess,
             validateFileType: stmt.Type != FileOpType.Compress || !Directory.Exists(source)).CanonicalPath;
+        if (dest == null && stmt.Destination == null && stmt.Type is FileOpType.Encrypt or FileOpType.Decrypt)
+        {
+            dest = DeriveDefaultCryptoDestination(stmt, source, sourceVal);
+        }
         if (dest != null && stmt.Type != FileOpType.Rename)
         {
             var destinationAccess = stmt.Type == FileOpType.Decompress
@@ -163,11 +168,23 @@ public class FileOperationStatementHandler(
                 validateFileType: destinationAccess != FileSystemAccessKind.Extract).CanonicalPath;
         }
 
+        if (deleteSourceAfter)
+        {
+            // Refuse before anything runs: deleting a source that is also the output would destroy
+            // the result, and a directory source is DELETE DIRECTORY's job, not a side effect.
+            if (Directory.Exists(source))
+                throw new ExecutionException($"DELETE_SOURCE deletes a file, and '{sourceVal}' is a directory. Remove it with DELETE DIRECTORY after this statement.", null, stmt.Line, stmt.Column);
+            if (dest != null && string.Equals(Path.GetFullPath(source), Path.GetFullPath(dest), StringComparison.OrdinalIgnoreCase))
+                throw new ExecutionException($"DELETE_SOURCE would delete the output: the destination is the source file '{sourceVal}'. Write to another path.", null, stmt.Line, stmt.Column);
+        }
+
         // Security Hardening: Count this as a file operation for runaway protection
         context.IncrementOperationCount(OperationType.FileSystem, source, 1);
         if (context.IsWhatIf)
         {
-            context.Log($"WHAT IF: Would perform {stmt.Type}_FILE", ConsoleColor.Yellow);
+            var target = dest != null ? $" -> {dest}" : "";
+            var cleanup = deleteSourceAfter && dest != null ? $" and then delete the source {source}" : "";
+            context.Log($"WHAT IF: Would perform {stmt.Type}_FILE: {source}{target}{cleanup}", ConsoleColor.Yellow);
             return;
         }
 
@@ -340,7 +357,14 @@ public class FileOperationStatementHandler(
                         {
                             string pgpKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
                             pgpKeyPath = pathAuthorizer.Authorize(context, pgpKeyPath, FileSystemAccessKind.Read).CanonicalPath;
-                            await CryptoUtils.EncryptFileWithPgp(source, dest, pgpKeyPath, overwrite);
+                            string? signingKeyPath = null, signingPassword = null;
+                            if (stmt.SigningKey != null)
+                            {
+                                signingKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.SigningKey, new Row()))?.ToString() ?? "");
+                                signingKeyPath = pathAuthorizer.Authorize(context, signingKeyPath, FileSystemAccessKind.Read).CanonicalPath;
+                                signingPassword = stmt.SigningPassword != null ? (await context.EvaluateValue(stmt.SigningPassword, new Row(), decryptSensitive: true))?.ToString() : null;
+                            }
+                            await CryptoUtils.EncryptFileWithPgp(source, dest, pgpKeyPath, overwrite, signingKeyPath, signingPassword);
                         }
                         else if (stmt.KeyFile != null)
                         {
@@ -351,9 +375,8 @@ public class FileOperationStatementHandler(
                         else
                         {
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                            pwd ??= context.SecurityService.MasterPassword;
                             if (string.IsNullOrEmpty(pwd))
-                                throw new ExecutionException("ENCRYPT FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
+                                throw new ExecutionException("ENCRYPT FILE requires a PASSWORD, KEYFILE or PGP_KEY clause. The script's master password is not used for files.", null, stmt.Line, stmt.Column);
                             CryptoUtils.EncryptFile(source, dest, pwd, overwrite);
                         }
                     }
@@ -370,7 +393,13 @@ public class FileOperationStatementHandler(
                             string pgpKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
                             pgpKeyPath = pathAuthorizer.Authorize(context, pgpKeyPath, FileSystemAccessKind.Read).CanonicalPath;
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                            await CryptoUtils.DecryptFileWithPgp(source, dest, pgpKeyPath, pwd, overwrite);
+                            string? verifyKeyPath = null;
+                            if (stmt.VerifyKey != null)
+                            {
+                                verifyKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.VerifyKey, new Row()))?.ToString() ?? "");
+                                verifyKeyPath = pathAuthorizer.Authorize(context, verifyKeyPath, FileSystemAccessKind.Read).CanonicalPath;
+                            }
+                            await CryptoUtils.DecryptFileWithPgp(source, dest, pgpKeyPath, pwd, overwrite, verifyKeyPath);
                         }
                         else if (stmt.KeyFile != null)
                         {
@@ -382,13 +411,22 @@ public class FileOperationStatementHandler(
                         else
                         {
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                            pwd ??= context.SecurityService.MasterPassword;
                             if (string.IsNullOrEmpty(pwd))
-                                throw new ExecutionException("DECRYPT FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
+                                throw new ExecutionException("DECRYPT FILE requires a PASSWORD, KEYFILE or PGP_KEY clause. The script's master password is not used for files.", null, stmt.Line, stmt.Column);
                             CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
                         }
                     }
                     break;
+            }
+
+            // Only after the operation returned and its output exists: a failure above throws past this.
+            if (deleteSourceAfter && dest != null && (File.Exists(dest) || Directory.Exists(dest)))
+            {
+                var deleteTarget = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Delete);
+                context.SecurityService.ValidateWriteAccess(deleteTarget.CanonicalPath);
+                context.SecurityService.ValidateFileType(deleteTarget.CanonicalPath);
+                pathAuthorizer.DeleteValidatedFile(context, deleteTarget);
+                context.Log($"Source deleted after {stmt.Type.ToString().ToUpperInvariant()} FILE: {deleteTarget.CanonicalPath}", ConsoleColor.Green);
             }
         }
         catch (ExecutionException) { throw; }
@@ -398,6 +436,46 @@ public class FileOperationStatementHandler(
             throw new ExecutionException($"File operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
         }
         await Task.CompletedTask;
+    }
+
+    private static string DeriveDefaultCryptoDestination(FileOperationStatement stmt, string source, string sourceDisplay)
+    {
+        if (stmt.Type == FileOpType.Encrypt)
+        {
+            return stmt.PgpKey != null ? source + ".pgp" : source + ".enc";
+        }
+
+        const string pgpSuffix = ".pgp";
+        const string encSuffix = ".enc";
+        string? derived = null;
+        if (source.EndsWith(pgpSuffix, StringComparison.OrdinalIgnoreCase))
+            derived = source[..^pgpSuffix.Length];
+        else if (source.EndsWith(encSuffix, StringComparison.OrdinalIgnoreCase))
+            derived = source[..^encSuffix.Length];
+
+        if (string.IsNullOrEmpty(derived) || string.IsNullOrEmpty(Path.GetFileName(derived)))
+        {
+            throw new ExecutionException(
+                $"DECRYPT FILE without TO requires a '.pgp' or '.enc' file extension on '{sourceDisplay}', or specify TO '<destination>'.",
+                null, stmt.Line, stmt.Column);
+        }
+
+        return derived;
+    }
+
+    private static async Task<bool> EvaluateOnOffAsync(Expression expression, string option, IExecutionContext context)
+    {
+        var value = await context.EvaluateValue(expression, new Row());
+        return value switch
+        {
+            bool b => b,
+            null => false,
+            _ when string.Equals(value.ToString(), "ON", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value.ToString(), "TRUE", StringComparison.OrdinalIgnoreCase) => true,
+            _ when string.Equals(value.ToString(), "OFF", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value.ToString(), "FALSE", StringComparison.OrdinalIgnoreCase) => false,
+            _ => throw new ExecutionException($"{option} must be ON or OFF, not '{value}'."),
+        };
     }
 
     private async Task ExecuteRemoteBridgedFileOperationAsync(

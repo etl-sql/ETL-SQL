@@ -255,6 +255,7 @@ public class GrammarLanguageService : LanguageService
             .Select(m => m.Value)
             .Distinct();
         results.AddRange(tempTables.Select(t => new Suggestion(t, SuggestionType.Table, Priority: 15)));
+        results.AddRange(context.VirtualSchemas.Keys.Select(cte => new Suggestion(cte, SuggestionType.Table, Priority: 12)));
 
         foreach (var conn in conns)
         {
@@ -288,7 +289,10 @@ public class GrammarLanguageService : LanguageService
         {
             try
             {
-                var cols = await _metadata.GetColumnsAsync(info.ConnectionName ?? info.TableName, info.BaseTableName ?? info.TableName, context.DocumentUri);
+                var cols = (await _metadata.GetColumnsAsync(info.ConnectionName ?? info.TableName, info.BaseTableName ?? info.TableName, context.DocumentUri)).ToList();
+                if (cols.Count == 0 && context.VirtualSchemas.TryGetValue(info.TableName, out var vCols))
+                    cols.AddRange(vCols);
+
                 foreach (var col in cols)
                 {
                     results.Add(new Suggestion(col, SuggestionType.Column, Priority: 5));
@@ -301,6 +305,15 @@ public class GrammarLanguageService : LanguageService
             catch (Exception ex) when (!GrammarDiagnostics.StrictMode)
             {
                 context.Logger?.Error($"GrammarLanguageService: column suggestions for '{info.TableName}' failed: {ex.Message}");
+            }
+        }
+
+        foreach (var (cteName, cteCols) in context.VirtualSchemas)
+        {
+            foreach (var col in cteCols)
+            {
+                results.Add(new Suggestion(col, SuggestionType.Column, Priority: 5));
+                results.Add(new Suggestion($"{cteName}.{col}", SuggestionType.Column, Priority: 10));
             }
         }
     }

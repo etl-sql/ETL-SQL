@@ -149,15 +149,12 @@ public sealed class DataQualityController(
             ? latestRate.Value - priorRated.Average(r => r.QuarantineRate!.Value)
             : null;
 
-        // Grouped including CountsOnly, so a legacy run's counts are never folded into a structured
-        // row: the two agree on column and rule and are silent about everything else, and summing
-        // them would attribute failures to a target table the legacy run never named.
         var topFailures = runs
             .SelectMany(r => r.RuleFailures)
-            .GroupBy(f => (f.TargetTable, f.Column, f.Rule, f.Action, f.Owner, f.CountsOnly))
+            .GroupBy(f => (f.TargetTable, f.Column, f.Rule, f.Action, f.Owner))
             .Select(g => new DataQualityRuleFailureDto(
                 g.Key.Column, g.Key.Rule, g.Sum(f => f.Count),
-                g.Key.TargetTable, g.Key.Action, g.Key.Owner, g.Key.CountsOnly))
+                g.Key.TargetTable, g.Key.Action, g.Key.Owner))
             .OrderByDescending(f => f.Count)
             .ThenBy(f => f.Column, StringComparer.OrdinalIgnoreCase)
             .Take(20)
@@ -325,41 +322,13 @@ public sealed class DataQualityController(
             entry.RowsWarned,
             quarantineRate,
             warnRate,
-            normalizedFailures.Count > 0
-                ? normalizedFailures.Select(failure => new DataQualityRuleFailureDto(
-                    failure.ColumnName,
-                    failure.Rule,
-                    failure.FailureCount,
-                    failure.TargetTable,
-                    failure.Action,
-                    failure.Owner)).ToList()
-                : ParseRuleFailures(entry.DataQualityFailures));
-    }
-
-    /// <summary>
-    /// Parses the compact <c>column:rule=count;…</c> history payload. Rule text can itself contain
-    /// ':' and '=' (a MATCHES regex, for instance), so the column is taken up to the first ':' and
-    /// the count from the last '='.
-    /// </summary>
-    private static IReadOnlyList<DataQualityRuleFailureDto> ParseRuleFailures(string? payload)
-    {
-        if (string.IsNullOrWhiteSpace(payload)) return [];
-
-        var failures = new List<DataQualityRuleFailureDto>();
-        foreach (var entry in payload.Split(';', StringSplitOptions.RemoveEmptyEntries))
-        {
-            int colon = entry.IndexOf(':');
-            int equals = entry.LastIndexOf('=');
-            if (colon <= 0 || equals <= colon) continue;
-            if (!long.TryParse(entry[(equals + 1)..], out var count)) continue;
-
-            failures.Add(new DataQualityRuleFailureDto(
-                entry[..colon],
-                entry[(colon + 1)..equals],
-                count,
-                CountsOnly: true));
-        }
-        return failures;
+            normalizedFailures.Select(failure => new DataQualityRuleFailureDto(
+                failure.ColumnName,
+                failure.Rule,
+                failure.FailureCount,
+                failure.TargetTable,
+                failure.Action,
+                failure.Owner)).ToList());
     }
 
     [HttpGet("quarantine/rows")]

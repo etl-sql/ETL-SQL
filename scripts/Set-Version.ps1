@@ -16,7 +16,7 @@
 
 param(
     [Parameter(Mandatory)]
-    [ValidatePattern('^\d+\.\d+\.\d+$')]
+    [ValidatePattern('\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\z')]
     [string]$Version
 )
 
@@ -30,16 +30,16 @@ function Update-File {
         [string]$Replacement
     )
     $FullPath = Join-Path $Root $RelPath
-    if (-not (Test-Path $FullPath)) {
+    if (-not (Test-Path -LiteralPath $FullPath)) {
         Write-Warning "  SKIP  $RelPath (file not found)"
         return
     }
-    $Original = Get-Content $FullPath -Raw
+    $Original = Get-Content -LiteralPath $FullPath -Raw
     $Updated  = $Original -replace $Pattern, $Replacement
     if ($Original -eq $Updated) {
         Write-Host "  OK    $RelPath" -ForegroundColor DarkGray
     } else {
-        Set-Content $FullPath $Updated -NoNewline
+        Set-Content -LiteralPath $FullPath $Updated -NoNewline
         Write-Host "  UPDATED  $RelPath" -ForegroundColor Green
     }
 }
@@ -60,22 +60,19 @@ Update-File "src/etl-sql-vscode/package.json" `
     '("version":\s*")\d+\.\d+\.\d+(")' `
     "`${1}$Version`${2}"
 
-# VS Code extension README version badge
-Update-File "src/etl-sql-vscode/README.md" `
-    '(ETL--SQL-v)\d+\.\d+\.\d+(-5C6BC0)' `
-    "`${1}$Version`${2}"
+# VS Code extension README version badge updates automatically via shields.io Marketplace badge
 
 
 # VS Code extension lock file — only update the etl-sql-vscode name+version blocks
 # (root and packages[""] entry). Third-party package versions are left untouched.
 $LockPath = Join-Path $Root "src/etl-sql-vscode/package-lock.json"
-if (Test-Path $LockPath) {
-    $LockOrig = Get-Content $LockPath -Raw
+if (Test-Path -LiteralPath $LockPath) {
+    $LockOrig = Get-Content -LiteralPath $LockPath -Raw
     $LockNew  = $LockOrig -replace '("name": "etl-sql-vscode",\r?\n\s+"version": ")\d+\.\d+\.\d+', "`${1}$Version"
     if ($LockOrig -eq $LockNew) {
         Write-Host "  OK    src/etl-sql-vscode/package-lock.json" -ForegroundColor DarkGray
     } else {
-        Set-Content $LockPath $LockNew -NoNewline
+        Set-Content -LiteralPath $LockPath $LockNew -NoNewline
         Write-Host "  UPDATED  src/etl-sql-vscode/package-lock.json" -ForegroundColor Green
     }
 }
@@ -102,10 +99,6 @@ Update-File "scripts/Master-Release.ps1" `
     '(Master-Release\.ps1 -Version ")\d+\.\d+\.\d+(")' `
     "`${1}$Version`${2}"
 
-Update-File "scripts/publish-release.ps1" `
-    '(\} else \{ ")\d+\.\d+\.\d+(" \})' `
-    "`${1}$Version`${2}"
-
 Update-File "scripts/build-msi.ps1" `
     '(\} else \{ ")\d+\.\d+\.\d+(" \})' `
     "`${1}$Version`${2}"
@@ -127,10 +120,6 @@ Update-File "docs/releases/release-checklist.md" `
 
 Update-File "docs/guides/onboarding/migration-guide.md" `
     '(ETL-SQL Migration Guide \(v)\d+\.\d+\.\d+(\))' `
-    "`${1}$Version`${2}"
-
-Update-File "docs/guides/onboarding/migration-guide.md" `
-    '(ETL-SQL v)\d+\.\d+\.\d+( is the current release baseline)' `
     "`${1}$Version`${2}"
 
 Update-File "docs/reference/performance/performance.md" `
@@ -181,10 +170,17 @@ Update-File "docs/architecture/README.md" `
 
 # Portal page cache-busting query strings ("?v=X.Y.Z"). A stale value lets an upgraded browser keep
 # the previous release's scripts; v0.20.1 bumped these by hand and v0.21.0's first run missed them.
-foreach ($page in Get-ChildItem (Join-Path $Root "src/ETL-SQL.Portal/wwwroot") -Filter *.html) {
+foreach ($page in Get-ChildItem -LiteralPath (Join-Path $Root "src/ETL-SQL.Portal/wwwroot") -Filter *.html) {
     Update-File "src/ETL-SQL.Portal/wwwroot/$($page.Name)" `
         '(\?v=)\d+\.\d+\.\d+' `
         "`${1}$Version"
+}
+# The Portal builds its report frame document in TypeScript, so its stamps live in source too.
+$browserSources = Join-Path $Root "src/ETL-SQL.Portal/BrowserSources"
+if (Test-Path -LiteralPath $browserSources) {
+    foreach ($source in Get-ChildItem -LiteralPath $browserSources -Filter *.ts -File -Recurse) {
+        Update-File ([IO.Path]::GetRelativePath($Root, $source.FullName)) '(\?v=)\d+\.\d+\.\d+' "`${1}$Version"
+    }
 }
 
 Write-Host ""

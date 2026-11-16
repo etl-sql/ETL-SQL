@@ -40,7 +40,7 @@ public sealed class AdminPanelFailureStateTests(PortalAdminFixture fixture)
         await CreateFolderAsync(page, first);
         await CreateFolderAsync(page, second);
 
-        await page.GotoAsync("/admin.html");
+        await page.GotoWithDiagnosticsAsync("/admin.html");
         await page.ClickAsync("[data-tab='folders']");
         await page.WaitForTimeoutAsync(600);
 
@@ -82,7 +82,7 @@ public sealed class AdminPanelFailureStateTests(PortalAdminFixture fixture)
         var group = $"grp{Guid.NewGuid():N}"[..12];
         await CreateGroupAsync(page, group);
 
-        await page.GotoAsync("/admin.html");
+        await page.GotoWithDiagnosticsAsync("/admin.html");
         await page.ClickAsync("[data-tab='groups']");
         await page.WaitForTimeoutAsync(800);
 

@@ -431,4 +431,4 @@ re-monolithises the dependency graph and pushes a provider SDK onto hosts that n
 
 ---
 
-*Refer to [Connectors.md](../Connectors.md) for technical implementation details and [Data Connectors](../../reference/connectors/README.md) for connector syntax.*
+*Refer to [Connectors.md](../connectors.md) for technical implementation details and [Data Connectors](../../reference/connectors/README.md) for connector syntax.*

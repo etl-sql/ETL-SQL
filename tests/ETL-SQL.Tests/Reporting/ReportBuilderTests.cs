@@ -224,7 +224,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         }
 
         [Fact]
-        public async Task SnapshotStore_DefaultPath_IsPartitionedAndLoadsLegacyFlatSnapshot()
+        public async Task SnapshotStore_DefaultPath_IsPartitionedAndRoundTrips()
         {
             var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "snapshot_partition_" + Guid.NewGuid().ToString("N"));
             var scriptPath = System.IO.Path.Combine(root, "dashboards", "sales.rptsql");
@@ -242,8 +242,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
                 Assert.Equal(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(scriptPath)!, ".etlsnap"), partitionRoot);
                 Assert.Equal("sales.etlsnap", System.IO.Path.GetFileName(defaultPath));
 
-                var legacyPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(scriptPath)!, "sales.etlsnap");
-                await store.SaveAsync(manifest, legacyPath);
+                await store.SaveAsync(manifest, defaultPath);
 
                 var loaded = await store.LoadAsync(defaultPath);
 

@@ -201,7 +201,7 @@ public sealed class DatasetAdminPageTests(DatasetAdminFixture fixture)
 
     private static async Task OpenAsync(IPage page)
     {
-        await page.GotoAsync("/admin.html");
+        await page.GotoWithDiagnosticsAsync("/admin.html");
         await page.Locator("[data-tab='datasets']").ClickAsync();
         await Expect(page.Locator("#datasetsTableWrap tbody tr")).Not.ToHaveCountAsync(0);
     }

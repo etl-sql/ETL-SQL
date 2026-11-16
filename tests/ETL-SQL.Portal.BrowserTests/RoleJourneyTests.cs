@@ -177,7 +177,7 @@ public sealed class RoleJourneyTests(PortalJourneyFixture fixture)
 
         // Deep links get shared and bookmarked, so this path is reached by people whoever sent it
         // never thought about. Hiding the nav entry does nothing for them.
-        await page.GotoAsync($"/index.html#governance/{view}");
+        await page.GotoWithDiagnosticsAsync($"/index.html#governance/{view}");
         await page.ReloadAsync();
         await page.WaitForLoadStateAsync(LoadState.NetworkIdle,
             new PageWaitForLoadStateOptions { Timeout = 20_000 });
@@ -204,7 +204,7 @@ public sealed class RoleJourneyTests(PortalJourneyFixture fixture)
         // those to the report library and reported a defect that was not there.
         var before = session.FailedRequests.Count;
 
-        await page.GotoAsync("/index.html");
+        await page.GotoWithDiagnosticsAsync("/index.html");
         await page.ReloadAsync();
         await page.WaitForLoadStateAsync(LoadState.NetworkIdle,
             new PageWaitForLoadStateOptions { Timeout = 20_000 });
@@ -261,7 +261,7 @@ public sealed class RoleJourneyTests(PortalJourneyFixture fixture)
             Assert.True(created.Ok, $"Creating {role} failed: {await created.TextAsync()}");
         }
 
-        await page.GotoAsync("/login.html");
+        await page.GotoWithDiagnosticsAsync("/login.html");
         await page.FillAsync("#username", username);
         await page.FillAsync("#password", initial);
         await page.ClickAsync("#loginBtn");
@@ -276,7 +276,7 @@ public sealed class RoleJourneyTests(PortalJourneyFixture fixture)
         await page.FillAsync("#confirmPwd", password);
         await page.ClickAsync("#changeBtn");
 
-        await page.WaitForURLAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
+        await page.WaitForURLWithDiagnosticsAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
         await page.WaitForLoadStateAsync(LoadState.NetworkIdle,
             new PageWaitForLoadStateOptions { Timeout = 20_000 });
         return username;

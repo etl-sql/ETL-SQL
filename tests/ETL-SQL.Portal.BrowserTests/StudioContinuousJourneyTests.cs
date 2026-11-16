@@ -57,9 +57,10 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
             await CreateSharedConnectionAsync(setup.Page, alias);
         }
         var authorId = await SignInAsPublisherAsync(page);
+        await GrantConnectionUseAsync(alias, authorId);
         var reportId = await CreateReportAsync(page, alias, authorId);
 
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await WaitForStudioAsync(session);
 
         var expected = await DriveJourneyAsync(session, alias, "-- continuous Portal journey");
@@ -87,7 +88,7 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
         StudioCertification.Certify(
             new CertifiedArtifact("continuous authoring", StudioHost.Portal, $"report-{reportId}.rptsql", expected),
             reloaded);
-        await page.GotoAsync($"/index.html#report-{reportId}");
+        await page.GotoWithDiagnosticsAsync($"/index.html#report-{reportId}");
         var execute = page.Locator("#execBtn");
         var refresh = page.Locator("#refreshBtn");
         await Microsoft.Playwright.Assertions.Expect(execute.Or(refresh).First).ToBeVisibleAsync(new() { Timeout = 30_000 });
@@ -114,7 +115,7 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=journey-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=journey-token");
         await WaitForStudioAsync(session);
 
         var expected = await DriveJourneyAsync(session, "sample_data", "-- continuous desktop journey");
@@ -293,6 +294,21 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
 
     private static string NormalizeEndings(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal);
 
+    // Shared connections are deny-by-default: an author who is neither an admin nor the owner
+    // needs a group grant, the way a deployment hands a connection to its report authors.
+    private async Task GrantConnectionUseAsync(string alias, int userId)
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var connection = db.PortalSharedConnections.Single(c => c.Alias == alias);
+        var group = new Group { Name = $"journey_authors_{Guid.NewGuid():N}" };
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+        db.UserGroups.Add(new UserGroup { UserId = userId, GroupId = group.Id });
+        db.SharedConnectionAcls.Add(new SharedConnectionAcl { SharedConnectionId = connection.Id, GroupId = group.Id });
+        await db.SaveChangesAsync();
+    }
+
     private async Task<int> SignInAsPublisherAsync(IPage page)
     {
         var name = $"studio_author_{Guid.NewGuid():N}"[..28];
@@ -313,11 +329,11 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
             Assert.Equal("Publisher", Assert.Single(await users.GetRolesAsync(user)));
             userId = user.Id;
         }
-        await page.GotoAsync("/login.html");
+        await page.GotoWithDiagnosticsAsync("/login.html");
         await page.FillAsync("#username", name);
         await page.FillAsync("#password", password);
         await page.ClickAsync("#loginBtn");
-        await page.WaitForURLAsync("**/index.html");
+        await page.WaitForURLWithDiagnosticsAsync("**/index.html");
         return userId;
     }
 

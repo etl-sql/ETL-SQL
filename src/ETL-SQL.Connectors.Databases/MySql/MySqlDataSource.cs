@@ -129,8 +129,10 @@ namespace ETL_SQL.Connectors.MySql
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
 
+                var noRows = true;
                 while (await reader.ReadAsync(effectiveCancellationToken))
                 {
+                    noRows = false;
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
@@ -146,7 +148,8 @@ namespace ETL_SQL.Connectors.MySql
                     }
                 }
 
-                if (currentBatch.Rows.Count > 0)
+                // An empty result still names its columns, so an outer join can name an empty side.
+                if (currentBatch.Rows.Count > 0 || noRows)
                 {
                     yield return currentBatch;
                 }
@@ -204,7 +207,10 @@ namespace ETL_SQL.Connectors.MySql
                         var dataRow = dt.NewRow();
                         foreach (var col in batch.ColumnNames)
                         {
-                            dataRow[col] = row[col] ?? DBNull.Value;
+                            var val = row[col];
+                            dataRow[col] = val is DateOnly dateOnly
+                                ? dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                                : val ?? DBNull.Value;
                         }
                         dt.Rows.Add(dataRow);
                     }

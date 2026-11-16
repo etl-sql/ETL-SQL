@@ -35,15 +35,17 @@ namespace ETL_SQL.LSP
             int col = (int)request.Position.Character + 1;
 
             var lines = state.Text.Split('\n');
-            if (line > lines.Length)
+            if (line < 1 || line > lines.Length)
                 return Task.FromResult<LocationOrLocationLinks?>(default);
 
             var currentLine = lines[line - 1];
+            // A client a keystroke ahead of the synced text can send a column past the line end.
+            var character = Math.Clamp((int)request.Position.Character, 0, currentLine.Length);
 
             // Find word boundaries around cursor
-            int start = (int)request.Position.Character;
+            int start = character;
             while (start > 0 && (char.IsLetterOrDigit(currentLine[start - 1]) || currentLine[start - 1] == '@' || currentLine[start - 1] == '#' || currentLine[start - 1] == '_')) start--;
-            int end = (int)request.Position.Character;
+            int end = character;
             while (end < currentLine.Length && (char.IsLetterOrDigit(currentLine[end]) || currentLine[end] == '@' || currentLine[end] == '#' || currentLine[end] == '_')) end++;
 
             var word = currentLine.Substring(start, end - start);

@@ -155,8 +155,10 @@ namespace ETL_SQL.Connectors.SqlServer
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
 
+                var noRows = true;
                 while (await reader.ReadAsync(effectiveCancellationToken))
                 {
+                    noRows = false;
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
@@ -172,7 +174,8 @@ namespace ETL_SQL.Connectors.SqlServer
                     }
                 }
 
-                if (currentBatch.Rows.Count > 0)
+                // An empty result still names its columns, so an outer join can name an empty side.
+                if (currentBatch.Rows.Count > 0 || noRows)
                 {
                     yield return currentBatch;
                 }
@@ -189,6 +192,7 @@ namespace ETL_SQL.Connectors.SqlServer
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            if (_context != null && _context.IsWhatIf) return;
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for SQL Server data source write.");
 
@@ -226,7 +230,10 @@ namespace ETL_SQL.Connectors.SqlServer
                         var dataRow = dt.NewRow();
                         foreach (var col in batch.ColumnNames)
                         {
-                            dataRow[col] = row[col] ?? DBNull.Value;
+                            var val = row[col];
+                            dataRow[col] = val is DateOnly dateOnly
+                                ? dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                                : val ?? DBNull.Value;
                         }
                         dt.Rows.Add(dataRow);
                     }
@@ -687,6 +694,7 @@ namespace ETL_SQL.Connectors.SqlServer
 
         private async Task TruncateAsync(CancellationToken cancellationToken)
         {
+            if (_context != null && _context.IsWhatIf) return;
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for SQL Server truncate.");
 

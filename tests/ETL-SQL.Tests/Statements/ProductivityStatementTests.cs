@@ -122,15 +122,17 @@ USING FILL_DATES (
         var rows = batches.SelectMany(b => b.Rows).ToList();
 
         Assert.Equal(6, rows.Count);
+        // A DATE column stays DATE: gap rows carry DateOnly like the source rows.
+        Assert.All(rows, r => Assert.IsType<DateOnly>(r["OrderDate"]));
 
         var eastGap = rows.Single(r =>
             r["Region"]?.ToString() == "East"
-            && Convert.ToDateTime(r["OrderDate"]).Date == new DateTime(2026, 5, 2));
+            && AsDate(r["OrderDate"]) == new DateTime(2026, 5, 2));
         Assert.Equal(0, Convert.ToInt32(eastGap["Quantity"]));
 
         var westGap = rows.Single(r =>
             r["Region"]?.ToString() == "West"
-            && Convert.ToDateTime(r["OrderDate"]).Date == new DateTime(2026, 5, 3));
+            && AsDate(r["OrderDate"]) == new DateTime(2026, 5, 3));
         Assert.Equal(0, Convert.ToInt32(westGap["Quantity"]));
     }
 
@@ -312,15 +314,15 @@ USING PERIOD_COMPARISON (
 
         Assert.Equal(3, rows.Count);
 
-        var r1 = rows.Single(r => Convert.ToDateTime(r["Dt"]).Date == new DateTime(2026, 1, 1));
+        var r1 = rows.Single(r => AsDate(r["Dt"]) == new DateTime(2026, 1, 1));
         Assert.Null(r1["Val_Diff"]);
         Assert.Null(r1["Val_Pct"]);
 
-        var r2 = rows.Single(r => Convert.ToDateTime(r["Dt"]).Date == new DateTime(2026, 1, 2));
+        var r2 = rows.Single(r => AsDate(r["Dt"]) == new DateTime(2026, 1, 2));
         Assert.Equal(50m, Convert.ToDecimal(r2["Val_Diff"]));
         Assert.Equal(50m, Convert.ToDecimal(r2["Val_Pct"]));
 
-        var r3 = rows.Single(r => Convert.ToDateTime(r["Dt"]).Date == new DateTime(2026, 1, 3));
+        var r3 = rows.Single(r => AsDate(r["Dt"]) == new DateTime(2026, 1, 3));
         Assert.Equal(-30m, Convert.ToDecimal(r3["Val_Diff"]));
         Assert.Equal(-20m, Convert.ToDecimal(r3["Val_Pct"]));
     }
@@ -429,4 +431,11 @@ USING ROLLING_AGGREGATE (
         Assert.Equal(15m, Convert.ToDecimal(rows.Single(r => Convert.ToInt32(r["Seq"]) == 2)["Val_Rolling"]));
         Assert.Equal(25m, Convert.ToDecimal(rows.Single(r => Convert.ToInt32(r["Seq"]) == 3)["Val_Rolling"]));
     }
+
+    // A DATE column holds DateOnly; DATETIME holds DateTime.
+    private static DateTime AsDate(object? value) => value switch
+    {
+        DateOnly date => date.ToDateTime(TimeOnly.MinValue),
+        _ => Convert.ToDateTime(value).Date
+    };
 }

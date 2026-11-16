@@ -182,7 +182,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             _logger.WriteLine($"Refresh job for '{stmt.ReportName}' created in Orchestrator.", ConsoleColor.Green);
         }
@@ -237,7 +237,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             _logger.WriteLine($"Job '{stmt.JobName}' created in Orchestrator.", ConsoleColor.Green);
         }
@@ -265,7 +265,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             _logger.WriteLine($"Schedule '{stmt.Name}' created in Orchestrator.", ConsoleColor.Green);
         }
@@ -286,7 +286,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             _logger.WriteLine($"Schedule '{stmt.TargetName}' {(stmt.Action == JobAttachmentAction.Add ? "attached to" : "detached from")} job '{stmt.JobName}'.", ConsoleColor.Green);
         }
@@ -510,7 +510,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
 
             var jobs = await resp.Content.ReadFromJsonAsync<JobDefinition[]>(_json) ?? [];
@@ -550,7 +550,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
 
             var history = await resp.Content.ReadFromJsonAsync<JobHistoryEntry[]>(_json) ?? [];
@@ -591,7 +591,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             var entries = await resp.Content.ReadFromJsonAsync<LineageHistoryEntryDto[]>(_json) ?? [];
             var table = await BuildLineageHistoryTableAsync(entries);
@@ -607,7 +607,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             var entries = await resp.Content.ReadFromJsonAsync<LineageHistoryEntryDto[]>(_json) ?? [];
             var table = await BuildLineageHistoryTableAsync(entries);
@@ -621,7 +621,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             var entries = await resp.Content.ReadFromJsonAsync<LineageMissingMetadataEntryDto[]>(_json) ?? [];
             var table = await BuildMissingMetadataTableAsync(entries);
@@ -636,7 +636,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             var table = stmt.Suggestions
                 ? await BuildProtectedDataSuggestionsTableAsync(
@@ -825,7 +825,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             var version = await resp.Content.ReadFromJsonAsync<BundleVersionInfo>(_json);
             _logger.WriteLine($"Published bundle '{stmt.BundleName}' version {version?.Version ?? 0} to Orchestrator.", ConsoleColor.Green);
@@ -999,7 +999,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode && resp.StatusCode != System.Net.HttpStatusCode.NotFound)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             _logger.WriteLine($"Refresh job for '{stmt.ReportName}' removed from Orchestrator.", ConsoleColor.Green);
         }
@@ -1025,7 +1025,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             _logger.WriteLine($"Job '{stmt.JobName}' altered in Orchestrator.", ConsoleColor.Green);
         }
@@ -1041,7 +1041,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             _logger.WriteLine($"Job '{jobName}' {(enable ? "enabled" : "disabled")} in Orchestrator.", ConsoleColor.Green);
         }
@@ -1055,7 +1055,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             _logger.WriteLine($"Job '{jobName}' triggered for immediate execution.", ConsoleColor.Green);
         }
@@ -1065,7 +1065,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             await EnsureIdentityAsync();
             try { return await send(); }
             catch (HttpRequestException ex)
-            { throw new ExecutionException($"Orchestrator connection error: {ex.Message}", ex); }
+            { throw new ExecutionException($"Orchestrator connection error: {SanitizeBody(ex.Message)}"); }
         }
 
         /// <summary>

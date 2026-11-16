@@ -21,4 +21,4 @@ SELECT * FROM db.Employee;
 -- Metadata discovery
 HELP CONNECTION POSTGRES;
 
-DOCKER CLOSE dpg;
+CLOSE DOCKER dpg;

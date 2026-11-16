@@ -101,5 +101,13 @@ namespace ETL_SQL.Tests.Connectors
                 new BigQueryDataSource(mock.Object, "project=fake-project;", null,
                     new Dictionary<string, string> { ["PROJECT_ID"] = "fake-project" }));
         }
+
+        [Theory]
+        [InlineData("orders", "`orders`")]
+        [InlineData("ds.orders", "`ds`.`orders`")]
+        [InlineData("a\\", "`a\\\\`")]
+        [InlineData("a`b", "`a\\`b`")]
+        public void QuoteIdentifier_EscapesBackslashBeforeBacktick(string name, string expected) =>
+            Assert.Equal(expected, BigQueryDataSource.QuoteIdentifier(name));
     }
 }

@@ -217,7 +217,7 @@ public sealed class GovernanceDashboardUiTests(PortalAdminFixture fixture)
 
     private static async Task OpenGovernanceOverviewAsync(IPage page)
     {
-        await page.GotoAsync("/index.html#governance/overview");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/overview");
         await page.ReloadAsync();
         await Expect(page.Locator(".gov-container")).ToBeVisibleAsync(
             new LocatorAssertionsToBeVisibleOptions { Timeout = 20_000 });

@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json.Nodes;
@@ -53,10 +54,10 @@ public sealed class InstalledSecretsConfigurationTests : IDisposable
         Assert.Single(builder.Sources);
     }
 
-    [Fact]
+    [WindowsFact] // On Linux the test user may be root, who reads anything.
+    [SupportedOSPlatform("windows")]
     public void UnreadableFile_IsSkipped_SoAnOrdinaryUserCanStillRunTheCli()
     {
-        if (!OperatingSystem.IsWindows()) return; // On Linux the test user may be root, who reads anything.
         Write("appsettings.json", """{ "Portal": { "Jwt": { "Secret": "" } } }""");
         var secrets = Write(ConfigurationExtensions.InstalledSecretsFileName, """{ "Portal": { "Jwt": { "Secret": "hidden" } } }""");
         DenyCurrentUserRead(secrets);

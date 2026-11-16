@@ -1,0 +1,11 @@
+appsettings.secrets.json*
+appsettings.pre-upgrade.json
+first-run-password
+first-run-password.txt
+portal.db*
+etlsql.db*
+.portal-keys
+logs
+data
+Reports
+Snapshots

@@ -40,7 +40,7 @@ public sealed class StudioPipelineRunJourneyTests(PortalJourneyFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await SignInAsync(page, author.UserName);
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
 
         // Create and save, as the author.
         var pipelineId = await CreatePipelineInStudioAsync(page, author);
@@ -95,7 +95,7 @@ public sealed class StudioPipelineRunJourneyTests(PortalJourneyFixture fixture)
         Assert.Equal("FAILURE", (await HistoryAsync(job)).Single(entry => entry.Id == failedRunId).Status);
 
         // Reopened in a fresh page, the same document runs again from the catalog.
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         var open = page.Locator($"[data-open-report='{pipelineId}'][data-open-proj='code']");
         await Expect(open).ToBeVisibleAsync(new() { Timeout = 20_000 });
         await open.ClickAsync();
@@ -125,7 +125,7 @@ public sealed class StudioPipelineRunJourneyTests(PortalJourneyFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await SignInAsync(page, author.UserName);
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         var pipelineId = await CreatePipelineInStudioAsync(page, author);
         var job = $"PIPELINE:{pipelineId}";
         await OperatorProvisionsAsync(job);
@@ -173,7 +173,7 @@ public sealed class StudioPipelineRunJourneyTests(PortalJourneyFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await SignInAsync(page, author.UserName);
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         var pipelineId = await CreatePipelineInStudioAsync(page, author);
         var job = $"PIPELINE:{pipelineId}";
         await SetAndSaveAsync(page, pipelineId, Passing);
@@ -305,11 +305,11 @@ public sealed class StudioPipelineRunJourneyTests(PortalJourneyFixture fixture)
 
     private static async Task SignInAsync(IPage page, string userName)
     {
-        await page.GotoAsync("/login.html");
+        await page.GotoWithDiagnosticsAsync("/login.html");
         await page.FillAsync("#username", userName);
         await page.FillAsync("#password", AuthorPassword);
         await page.ClickAsync("#loginBtn");
-        await page.WaitForURLAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
+        await page.WaitForURLWithDiagnosticsAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
     }
 
     // ── The people involved ──────────────────────────────────────────────────

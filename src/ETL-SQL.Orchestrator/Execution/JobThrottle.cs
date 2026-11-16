@@ -91,8 +91,6 @@ namespace ETL_SQL.Orchestrator.Execution
                 using var conn = _dialect.CreateConnection();
                 await conn.OpenAsync();
                 using var cmd = conn.CreateCommand();
-                await OrchestratorSchemaMigration.MigrateLegacyTableAsync(_dialect, conn, "ThrottleSlots", "throttle_slots");
-
                 cmd.CommandText = $@"
                     CREATE TABLE IF NOT EXISTS throttle_slots (
                         id          {_dialect.AutoIncrementPrimaryKey},
@@ -102,13 +100,6 @@ namespace ETL_SQL.Orchestrator.Execution
                         machine_name TEXT    DEFAULT ''
                     );";
                 await cmd.ExecuteNonQueryAsync();
-
-                var columns = await _dialect.GetColumnNamesAsync(conn, "throttle_slots");
-                if (!columns.Contains("machine_name"))
-                {
-                    cmd.CommandText = "ALTER TABLE throttle_slots ADD COLUMN machine_name TEXT DEFAULT '';";
-                    await cmd.ExecuteNonQueryAsync();
-                }
 
                 _tableReady = true;
             }

@@ -13,7 +13,7 @@ messages from a topic as a table; `INSERT` publishes messages to a topic.
 | `AUTO_OFFSET_RESET` | Offset position to start from if no committed offset exists (`Earliest`, `Latest`) | No |
 | `TIMEOUT_MS` | Maximum duration in milliseconds to poll the topic for new messages (default: `5000`) | No |
 | `MAX_MESSAGES` | Maximum number of messages to consume in a single batch (default: `1000`) | No |
-| `SECURITY_PROTOCOL` | Security/transport protocol (`Plaintext`, `SaslPlaintext`, `SaslSsl`, `Ssl`) | No |
+| `SECURITY_PROTOCOL` | Security/transport protocol (`Plaintext`, `SaslPlaintext`, `SaslSsl`, `Ssl`; `SASL_SSL`-style spellings are accepted). Applies with or without SASL credentials; an unknown value is an error | No |
 | `SASL_MECHANISM` | SASL authentication mechanism (`Plain`, `ScramSha256`, `ScramSha512`) | No |
 | `SASL_USERNAME` | Username for SASL authentication | No |
 | `SASL_PASSWORD` | Password for SASL authentication (supports `ENC:`) | No |

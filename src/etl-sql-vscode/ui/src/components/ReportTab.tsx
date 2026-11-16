@@ -5,17 +5,15 @@ import { clsx } from 'clsx';
 
 type ContextMenuArgs = { x: number; y: number; visual: VisualManifest; rowData?: unknown[] };
 
-interface VsCodeWindow {
-    vscode?: { postMessage: (message: unknown) => void };
-}
-
 interface ReportTabProps {
     manifest: ReportManifest;
     onRefresh: (parameters?: Record<string, string | null>) => void;
     onExport?: (format: 'markdown' | 'pdf' | 'text') => void;
+    /** Opens the interactive report in the browser. The host posts `serve`. */
+    onServe?: () => void;
 }
 
-export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh, onExport }) => {
+export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh, onExport, onServe }) => {
     const [activePageName, setActivePageName] = useState<string | null>(
         manifest.pages?.[0]?.name || null
     );
@@ -86,7 +84,7 @@ export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh, onExp
                     
                     <div className="flex items-center border border-[var(--border)] bg-[var(--vscode-toolbar-hoverBackground,transparent)]/20">
                         <button
-                            onClick={() => (window as Window & VsCodeWindow).vscode?.postMessage({ type: 'serve' })}
+                            onClick={() => onServe?.()}
                             className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-[var(--text)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))]"
                             title="Open interactive report"
                         >
@@ -503,22 +501,9 @@ const ReportChart: React.FC<{
     return <div ref={chartRef} className="w-full h-full min-h-[350px]" dangerouslySetInnerHTML={{ __html: visual.nativeSvg || "" }} onContextMenu={event => { if (visual.actions?.some(action => action.type === "DRILL_DOWN")) { event.preventDefault(); onShowContextMenu(event.clientX, event.clientY); } }} />;
 };
 
-/**
- * Reads the resolved interaction contract a v0.19+ manifest carries, falling back to the pre-v0.19
- * authored map for older manifests. The fallback is the only place a mapping option is still
- * consulted for a filter column.
- */
+/** The resolved interaction contract; a visual without one takes part in no interaction. */
 function resolveInteraction(visual: VisualManifest): InteractionManifest {
-    if (visual.interaction) return visual.interaction;
-    const mode = visual.interactions?.ON_SELECT?.toUpperCase();
-    const active = !!mode && mode !== "NONE";
-    return {
-        key: visual.interactions?.MATCHING || visual.options?.["mapping:x"] || visual.columns?.[0],
-        valueKey: visual.options?.["mapping:y"],
-        select: active ? "MULTIPLE" : "NONE",
-        effect: mode === "FILTER" ? "FILTER" : "HIGHLIGHT",
-        highlight: active ? "CATEGORICAL" : "NONE"
-    };
+    return visual.interaction ?? { select: "NONE", effect: "HIGHLIGHT", highlight: "NONE" };
 }
 
 function parseHexColor(hex: string): [number, number, number] {

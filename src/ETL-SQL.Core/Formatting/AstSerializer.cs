@@ -63,6 +63,7 @@ public static class AstSerializer
         DropProcedureStatement s => $"DROP PROCEDURE {(s.IfExists ? "IF EXISTS " : "")}{s.ProcedureName};",
         DropFunctionStatement s => $"DROP FUNCTION {(s.IfExists ? "IF EXISTS " : "")}{s.FunctionName};",
         DropViewStatement s => $"DROP VIEW {(s.IfExists ? "IF EXISTS " : "")}{s.ViewName};",
+        ReindexStatement s => $"REINDEX {s.Name};",
         DropIndexStatement s => $"DROP INDEX {(s.IfExists ? "IF EXISTS " : "")}{s.IndexName}{(s.Table != null ? " ON " + s.Table.ToSql() : "")};",
         TruncateTableStatement s => $"TRUNCATE TABLE {s.TargetTable.ToSql()};",
         CreateIndexStatement s => FormatCreateIndex(s),
@@ -100,7 +101,7 @@ public static class AstSerializer
         DirectoryOperationStatement s => FormatDirectoryOperation(s),
         FileTransferStatement s => FormatFileTransfer(s),
         WaitForFileStatement s => $"WAITFOR FILE UNLOCKED {s.Path.ToSql()}" + (s.Timeout != null ? $" TIMEOUT {s.Timeout.ToSql()}" : "") + (s.PollInterval != null ? $" POLL_INTERVAL_MS {s.PollInterval.ToSql()}" : "") + ";",
-        ConvertFileEncodingStatement s => $"CONVERT FILE ENCODING {s.Source.ToSql()} TO {s.Destination.ToSql()} FROM_ENCODING {s.FromEncoding.ToSql()} TO_ENCODING {s.ToEncoding.ToSql()}" + (s.Overwrite != null ? $" WITH(OVERWRITE={s.Overwrite.ToSql()})" : "") + ";",
+        ConvertFileEncodingStatement s => $"CONVERT FILE ENCODING {s.Source.ToSql()} TO {s.Destination.ToSql()} WITH(FROM_ENCODING={s.FromEncoding.ToSql()}, TO_ENCODING={s.ToEncoding.ToSql()}" + (s.Overwrite != null ? $", OVERWRITE={s.Overwrite.ToSql()}" : "") + ");",
         SplitFileStatement s => $"SPLIT FILE {s.Source.ToSql()} TO {s.DestinationDir.ToSql()} WITH(LIMIT_TYPE={s.LimitType.ToSql()}, LIMIT_VALUE={s.LimitValue.ToSql()}" + (s.Prefix != null ? $", PREFIX={s.Prefix.ToSql()}" : "") + (s.Overwrite != null ? $", OVERWRITE={s.Overwrite.ToSql()}" : "") + ");",
         MergeFilesStatement s => $"MERGE FILES {s.Source.ToSql()} TO {s.Destination.ToSql()}" + (s.Header != null || s.Overwrite != null ? " WITH(" + string.Join(", ", new[] { s.Header != null ? $"HEADER={s.Header.ToSql()}" : null, s.Overwrite != null ? $"OVERWRITE={s.Overwrite.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
         SyncDirectoryStatement s => $"SYNC DIRECTORY {s.Source.ToSql()} TO {s.Destination.ToSql()}" + (s.DeleteExtra != null || s.Overwrite != null || s.Recursive != null ? " WITH(" + string.Join(", ", new[] { s.DeleteExtra != null ? $"DELETE_EXTRA={s.DeleteExtra.ToSql()}" : null, s.Overwrite != null ? $"OVERWRITE={s.Overwrite.ToSql()}" : null, s.Recursive != null ? $"RECURSIVE={s.Recursive.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
@@ -337,6 +338,7 @@ public static class AstSerializer
         SetNoSaveConnectionStatement s => $"SET NO_SAVE_CONNECTION {(s.Enabled ? "ON" : "OFF")};",
         SetConnectionEncryptionStatement s => $"SET CONNECTION_ENCRYPTION {(s.Enabled ? "ON" : "OFF")};",
         SetWeekStartDayStatement s => $"SET WEEK_START_DAY = '{s.DayName}';",
+        SetDateFormatStatement s => $"SET DATEFORMAT = '{s.Order.ToUpperInvariant()}';",
         SetScriptHashPolicyStatement s => $"SET SCRIPT_HASH_POLICY = '{s.Policy}';",
         SetPersistStatement s => $"SET PERSIST = {(s.Enabled ? "ON" : "OFF")};",
         SetSpillOptionStatement s => s.ToSql(),
@@ -370,7 +372,7 @@ public static class AstSerializer
         InExpression e => $"{e.Left.ToSql()} {(e.IsNot ? "NOT " : "")}IN {e.Right.ToSql()}",
         BetweenExpression e => FormatBetween(e),
         LikeExpression e => FormatLike(e),
-        ExistsExpression e => $"{(e.IsNot ? "NOT " : "")}EXISTS ({e.Subquery.ToSql()})",
+        ExistsExpression e => $"{(e.IsNot ? "NOT " : "")}EXISTS ({e.Subquery.ToSql().TrimEnd(';')})",
         CaseExpression e => FormatCase(e),
         AtTimeZoneExpression e => $"{e.Left.ToSql()} AT TIME ZONE {e.TimeZone.ToSql()}",
 
@@ -395,7 +397,7 @@ public static class AstSerializer
         TableForeignKeyConstraint n => $"{(n.ConstraintName != null ? $"CONSTRAINT {n.ConstraintName} " : "")}FOREIGN KEY ({string.Join(", ", n.Columns)}) {n.Reference.ToSql()}",
         TableCheckConstraint n => $"{(n.ConstraintName != null ? $"CONSTRAINT {n.ConstraintName} " : "")}CHECK ({n.Expression.ToSql()})",
         ColumnDefinition n => FormatColumnDefinition(n),
-        OrderByClause n => n.Expression.ToSql() + (n.Descending ? " DESC" : " ASC"),
+        OrderByClause n => Format(n),
         JoinClause n => FormatJoin(n),
         GroupingSetClause n => FormatGroupingSet(n),
         Assignment n => $"{n.ColumnName} = {n.Value.ToSql()}",
@@ -442,7 +444,9 @@ public static class AstSerializer
     // ── Public overloads for non-AstNode types ──────────────────────────
 
     public static string Format(JoinClause join) => FormatJoin(join);
-    public static string Format(OrderByClause o) => o.Expression.ToSql() + (o.Descending ? " DESC" : " ASC");
+    public static string Format(OrderByClause o) =>
+        o.Expression.ToSql() + (o.Descending ? " DESC" : " ASC")
+        + (o.NullsFirst switch { true => " NULLS FIRST", false => " NULLS LAST", null => "" });
     public static string Format(GroupingSetClause g) => FormatGroupingSet(g);
     public static string Format(ColumnDefinition col) => FormatColumnDefinition(col);
     public static string Format(ExecuteParameter p) => p.Expression.ToSql() + (p.IsOutput ? " OUTPUT" : "") + (p.IsInput ? " INPUT" : "");
@@ -478,12 +482,20 @@ public static class AstSerializer
             : "(" + string.Join(", ", targets) + ")";
     }
 
+    private static string FormatWithClause(IReadOnlyList<CteDefinition>? ctes, bool isRecursive = false)
+    {
+        if (ctes == null || ctes.Count == 0) return "";
+        var recursive = isRecursive ? "RECURSIVE " : "";
+        return $"WITH {recursive}" + string.Join(", ", ctes.Select(c =>
+        {
+            var cols = c.ColumnNames is { Count: > 0 } ? $"({string.Join(", ", c.ColumnNames)})" : "";
+            return $"{c.Name}{cols} AS ({c.Query.ToSql().TrimEnd(';')})";
+        })) + " ";
+    }
+
     private static string FormatSelect(SelectStatement s)
     {
-        var recursive = s.IsRecursive ? "RECURSIVE " : "";
-        var with = (s.Ctes != null && s.Ctes.Count > 0)
-            ? $"WITH {recursive}" + string.Join(", ", s.Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " "
-            : "";
+        var with = FormatWithClause(s.Ctes, s.IsRecursive);
         var distinct = s.IsDistinct ? "DISTINCT " : "";
         var top = "";
         if (s.TopCount != null)
@@ -574,6 +586,7 @@ public static class AstSerializer
 
     private static string FormatSetOperation(SetOperationStatement s)
     {
+        var with = FormatWithClause(s.Ctes, s.IsRecursive);
         string op = s.Operation switch
         {
             SetOpType.UNION => "UNION",
@@ -583,12 +596,12 @@ public static class AstSerializer
             _ => "UNION"
         };
         if (s.ByName) op += " BY NAME";
-        return $"({s.Left.ToSql().TrimEnd(';')}) {op} ({s.Right.ToSql().TrimEnd(';')});";
+        return $"{with}({s.Left.ToSql().TrimEnd(';')}) {op} ({s.Right.ToSql().TrimEnd(';')});";
     }
 
     private static string FormatInsert(InsertStatement s)
     {
-        var with = (s.Ctes != null && s.Ctes.Count > 0) ? "WITH " + string.Join(", ", s.Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
+        var with = FormatWithClause(s.Ctes);
         var cols = s.Columns != null && s.Columns.Count > 0 ? "(" + string.Join(", ", s.Columns) + ") " : "";
         var output = s.Output != null ? " " + s.Output.ToSql() : "";
         if (s.SelectQuery != null)
@@ -599,7 +612,7 @@ public static class AstSerializer
 
     private static string FormatUpdate(UpdateStatement s)
     {
-        var with = (s.Ctes != null && s.Ctes.Count > 0) ? "WITH " + string.Join(", ", s.Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
+        var with = FormatWithClause(s.Ctes);
         var sets = string.Join(", ", s.Assignments.Select(a => a.ToSql()));
         var from = s.FromTable != null ? $" FROM {s.FromTable.ToSql()}" : "";
         var joins = s.Joins != null && s.Joins.Count > 0 ? " " + string.Join(" ", s.Joins.Select(j => j.ToSql())) : "";
@@ -610,7 +623,7 @@ public static class AstSerializer
 
     private static string FormatDelete(DeleteStatement s)
     {
-        var with = (s.Ctes != null && s.Ctes.Count > 0) ? "WITH " + string.Join(", ", s.Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
+        var with = FormatWithClause(s.Ctes);
         var out_ = s.Output != null ? " " + s.Output.ToSql() : "";
         var where = s.WhereClause != null ? $" WHERE {s.WhereClause.ToSql()}" : "";
         return $"{with}DELETE FROM {s.TargetTable.ToSql()}{out_}{where};";
@@ -618,7 +631,7 @@ public static class AstSerializer
 
     private static string FormatMerge(MergeStatement s)
     {
-        var with = (s.Ctes != null && s.Ctes.Count > 0) ? "WITH " + string.Join(", ", s.Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
+        var with = FormatWithClause(s.Ctes);
         var sb = new System.Text.StringBuilder();
         sb.Append(with);
         sb.AppendLine($"MERGE INTO {s.TargetTable.ToSql()}{(s.TargetAlias != null ? " AS " + s.TargetAlias : "")}");
@@ -831,15 +844,22 @@ public static class AstSerializer
     {
         var op = s.Type.ToString().ToUpper() + " FILE";
         var dest = s.Destination != null ? " TO " + (s.DestinationIsDirectory ? "DIRECTORY " : "") + s.Destination.ToSql() : "";
+        // Keys are clauses, not WITH options: the parser rejects PASSWORD, KEYFILE and PGP_KEY inside WITH.
+        var keys = (s.PgpKey != null ? " PGP_KEY " + s.PgpKey.ToSql() : "")
+            + (s.KeyFile != null ? " KEYFILE " + s.KeyFile.ToSql() : "")
+            + (s.Password != null ? " PASSWORD " + s.Password.ToSql() : "")
+            + (s.SigningKey != null ? " SIGNING_KEY " + s.SigningKey.ToSql() : "")
+            + (s.SigningPassword != null ? " SIGNING_PASSWORD " + s.SigningPassword.ToSql() : "")
+            + (s.VerifyKey != null ? " VERIFY_KEY " + s.VerifyKey.ToSql() : "");
         var opts = new List<string>();
         if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
-        if (s.Password != null) opts.Add($"PASSWORD={s.Password.ToSql()}");
-        if (s.KeyFile != null) opts.Add($"KEYFILE={s.KeyFile.ToSql()}");
-        if (s.PgpKey != null) opts.Add($"PGP_KEY={s.PgpKey.ToSql()}");
+        if (s.DeleteSource != null) opts.Add($"DELETE_SOURCE={s.DeleteSource.ToSql()}");
         if (s.DateSuffix != null) opts.Add($"DATE_SUFFIX={s.DateSuffix.ToSql()}");
         if (s.SuffixSeparator != null) opts.Add($"SUFFIX_SEPARATOR={s.SuffixSeparator.ToSql()}");
         var options = opts.Count > 0 ? " WITH(" + string.Join(", ", opts) + ")" : "";
-        return $"{op} {s.Source.ToSql()}{dest}{options};";
+        var ifExists = s.IfExists ? " IF EXISTS" : "";
+        var at = s.ConnectionName != null ? " AT " + s.ConnectionName : "";
+        return $"{op}{ifExists} {s.Source.ToSql()}{dest}{keys}{options}{at};";
     }
 
     private static string FormatDirectoryOperation(DirectoryOperationStatement s)
@@ -848,14 +868,15 @@ public static class AstSerializer
             ? "DELETE DIRECTORY_CONTENTS"
             : s.Type.ToString().ToUpper() + " DIRECTORY";
         var extra = s.Destination != null ? " TO " + s.Destination.ToSql() : "";
+        // Directories take PASSWORD only, as a clause; the parser rejects KEYFILE and PGP_KEY.
+        var password = s.Password != null ? " PASSWORD " + s.Password.ToSql() : "";
         var opts = new List<string>();
         if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
         if (s.Recursive != null) opts.Add($"RECURSIVE={s.Recursive.ToSql()}");
-        if (s.Password != null) opts.Add($"PASSWORD={s.Password.ToSql()}");
-        if (s.KeyFile != null) opts.Add($"KEYFILE={s.KeyFile.ToSql()}");
-        if (s.PgpKey != null) opts.Add($"PGP_KEY={s.PgpKey.ToSql()}");
         var with = opts.Count > 0 ? " WITH(" + string.Join(", ", opts) + ")" : "";
-        return $"{op} {s.Path.ToSql()}{extra}{with};";
+        var ifExists = s.IfExists ? " IF EXISTS" : "";
+        var at = s.ConnectionName != null ? " AT " + s.ConnectionName : "";
+        return $"{op}{ifExists} {s.Path.ToSql()}{extra}{password}{with}{at};";
     }
 
     private static string FormatFileTransfer(FileTransferStatement s)
@@ -1190,6 +1211,8 @@ public static class AstSerializer
         var valStr = e.Value.ToString() ?? "";
         if (e.Type == TokenType.TRUE) return "TRUE";
         if (e.Type == TokenType.FALSE) return "FALSE";
+        if (e.Type == TokenType.ON) return "ON";
+        if (e.Type == TokenType.OFF) return "OFF";
         if (e.Type == TokenType.STRING_LITERAL) return $"'{valStr.Replace("'", "''")}'";
         return valStr;
     }

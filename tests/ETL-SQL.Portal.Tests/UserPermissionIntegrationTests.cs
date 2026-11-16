@@ -210,8 +210,8 @@ namespace ETL_SQL.Portal.Tests
                     db.Reports.AddRange(rRevenue, rInvoices, rSysLogs, rErrorAudit);
                     await db.SaveChangesAsync();
 
-                    var snapshotPath = Path.Combine(_factory.TempDir, "snapshots", "RevenueReport.snapshot.json");
-                    await new SnapshotStore().SaveAsync(new ReportManifest
+                    var snapshotPath = Path.Combine(scope.ServiceProvider.GetRequiredService<PortalConfig>().SnapshotDirectory, "RevenueReport.etlsnap");
+                    await scope.ServiceProvider.GetRequiredService<SnapshotPackageService>().SaveAsync(new ReportManifest
                     {
                         Source = pRevenue,
                         Title = "Revenue Report",
@@ -225,7 +225,7 @@ namespace ETL_SQL.Portal.Tests
                                 Rows = [ [ "North", "100" ] ]
                             }
                         }
-                    }, snapshotPath);
+                    }, "RevenueReport.etlsnap");
                     db.ReportSnapshots.Add(new ReportSnapshot
                     {
                         ReportId = rRevenue.Id,
@@ -299,8 +299,7 @@ namespace ETL_SQL.Portal.Tests
                         ReportId = rRevenue.Id,
                         UserId = uFinRead.Id,
                         Name = "Default Finance View",
-                        ParametersJson = "{}",
-                        FiltersJson = "{}",
+                        StateJson = """{"schemaVersion":1,"parameters":{}}""",
                         IsDefault = true
                     });
 
@@ -325,7 +324,6 @@ namespace ETL_SQL.Portal.Tests
                         VisualName = "Card1",
                         Operator = ">=",
                         Threshold = 10000,
-                        Recipient = "finance_read@test.local",
                         IsActive = true
                     });
 
@@ -334,7 +332,7 @@ namespace ETL_SQL.Portal.Tests
                     {
                         ReportId = rRevenue.Id,
                         CreatedBy = uFinPub.Id,
-                        Token = "fin-share-token-xyz123",
+                        Token = AnonymousReportTokens.Hash("fin-share-token-xyz123"),
                         ExpiresAt = DateTime.UtcNow.AddDays(7)
                     });
 
@@ -344,7 +342,7 @@ namespace ETL_SQL.Portal.Tests
                         ReportId = rRevenue.Id,
                         CreatedBy = uFinPub.Id,
                         Name = "Intranet Embed",
-                        Token = "fin-embed-token-abc987",
+                        Token = AnonymousReportTokens.Hash("fin-embed-token-abc987"),
                         ExpiresAt = DateTime.UtcNow.AddDays(30)
                     });
 
@@ -790,12 +788,16 @@ namespace ETL_SQL.Portal.Tests
                 rSysLogsId = (await db.Reports.SingleAsync(r => r.Name == "SystemLogs")).Id;
             }
 
-            var exportSnapshotPath = Path.Combine(_factory.TempDir, "snapshots", $"RevenueReport_export_{Guid.NewGuid():N}.snapshot.json");
-            await new SnapshotStore().SaveAsync(new ReportManifest
+            var exportSnapshotKey = $"RevenueReport_export_{Guid.NewGuid():N}.etlsnap";
+            string exportSnapshotPath;
+            using (var packageScope = _factory.Services.CreateScope())
             {
-                Source = invoiceScriptPath,
-                Title = "Revenue Report",
-                Visuals =
+                exportSnapshotPath = Path.Combine(packageScope.ServiceProvider.GetRequiredService<PortalConfig>().SnapshotDirectory, exportSnapshotKey);
+                await packageScope.ServiceProvider.GetRequiredService<SnapshotPackageService>().SaveAsync(new ReportManifest
+                {
+                    Source = invoiceScriptPath,
+                    Title = "Revenue Report",
+                    Visuals =
                 {
                     new VisualManifest
                     {
@@ -805,7 +807,8 @@ namespace ETL_SQL.Portal.Tests
                         Rows = [ [ "North", "100" ] ]
                     }
                 }
-            }, exportSnapshotPath);
+                }, exportSnapshotKey);
+            }
             using (var scope = _factory.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
@@ -841,8 +844,7 @@ namespace ETL_SQL.Portal.Tests
             var savedView = await AuthPost(tFinRead, $"/api/reports/{rRevenueId}/saved-views", new
             {
                 name = "Finance workflow view",
-                parameters = new Dictionary<string, string>(),
-                filters = new Dictionary<string, string>(),
+                stateJson = """{"schemaVersion":1,"parameters":{}}""",
                 isDefault = false
             });
             Assert.Equal(HttpStatusCode.Created, savedView.StatusCode);
@@ -852,8 +854,7 @@ namespace ETL_SQL.Portal.Tests
                 name = "Read-only alert",
                 visualName = "Card1",
                 @operator = ">=",
-                threshold = 1,
-                recipient = "finance_read@test.local"
+                threshold = 1
             })).StatusCode);
 
             Assert.Equal(HttpStatusCode.Created, (await AuthPost(tFinPub, $"/api/reports/{rRevenueId}/alerts", new
@@ -861,8 +862,7 @@ namespace ETL_SQL.Portal.Tests
                 name = "Publisher alert",
                 visualName = "Card1",
                 @operator = ">=",
-                threshold = 1,
-                recipient = "finance_pub@test.local"
+                threshold = 1
             })).StatusCode);
 
             Assert.Equal(HttpStatusCode.Created, (await AuthPost(tFinRead, "/api/subscriptions", new

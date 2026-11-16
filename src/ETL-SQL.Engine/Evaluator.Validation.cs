@@ -52,20 +52,35 @@ public partial class Evaluator
 
         // Security Hardening: Always return full paths and validate
         // If the path contains a placeholder, we skip full-path resolution to avoid breaking the placeholder
-        if (resolved.Contains("${"))
-        {
-            if (StorageCapability is not null)
-                throw new ETL_SQL.Services.SecurityException(
-                    "Tenant-scoped execution cannot authorize a path with unresolved placeholders.");
-            return resolved;
-        }
-
         string basePath = WorkingDirectory;
         if (!string.IsNullOrEmpty(CurrentScriptPath) &&
             !BundleUri.TryParse(CurrentScriptPath, out _))
         {
             var scriptDir = Path.GetDirectoryName(CurrentScriptPath);
             if (!string.IsNullOrEmpty(scriptDir)) basePath = scriptDir;
+        }
+
+        if (resolved.Contains("${"))
+        {
+            if (StorageCapability is not null)
+                throw new ETL_SQL.Services.SecurityException(
+                    "Tenant-scoped execution cannot authorize a path with unresolved placeholders.");
+            // The placeholder is kept for use-time expansion, but the path as written is still
+            // validated: an undeclared ${x} stays literal, and "C:\Windows\${x}\..\win.ini"
+            // would otherwise reach the file system with no check at all.
+            string probe;
+            try
+            {
+                probe = Path.IsPathRooted(resolved)
+                    ? Path.GetFullPath(resolved)
+                    : Path.GetFullPath(resolved, basePath);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                return resolved; // not a file-system path (e.g. a URL template)
+            }
+            _securityService?.ValidatePath(ETL_SQL.Services.SecurityService.ResolvePathSymlinks(probe));
+            return resolved;
         }
 
         var fullPath = Path.IsPathRooted(resolved)

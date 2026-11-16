@@ -314,7 +314,7 @@ namespace ETL_SQL.Connectors.Xml
             {
                 if (singleXml != null)
                 {
-                    await System.IO.File.WriteAllTextAsync(tempFile, singleXml, effectiveCancellationToken);
+                    await System.IO.File.WriteAllTextAsync(tempFile, singleXml, WriteEncoding, effectiveCancellationToken);
                 }
                 else
                 {
@@ -329,12 +329,23 @@ namespace ETL_SQL.Connectors.Xml
                         Async = true,
                         Indent = true,
                         OmitXmlDeclaration = true,
-                        Encoding = new UTF8Encoding(false)
+                        // The reader decodes with ENCODING; the writer has to encode with it too, or a
+                        // Latin-1 or UTF-16 round trip comes back as different characters.
+                        Encoding = WriteEncoding
                     };
+
+                    // INSERT INTO an XML file arrives with append: true. The existing row elements
+                    // under ROOT_PATH are copied through ahead of the new rows; the file used to be
+                    // overwritten with only the new rows.
+                    var existingRows = append ? await ReadExistingRowElementsAsync(pathParts, effectiveCancellationToken) : null;
                     await using (var stream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
                     await using (var writer = System.Xml.XmlWriter.Create(stream, settings))
                     {
                         foreach (var part in pathParts) writer.WriteStartElement(part);
+                        if (existingRows != null)
+                        {
+                            foreach (var existingRow in existingRows) existingRow.WriteTo(writer);
+                        }
 
                         while (hasBatch)
                         {
@@ -413,6 +424,35 @@ namespace ETL_SQL.Connectors.Xml
                 TempFileHelper.SafeDelete(zippedTemp, _logger);
                 TempFileHelper.SafeDelete(tempFile, _logger);
             }
+        }
+
+        private Encoding WriteEncoding =>
+            _encoding.CodePage == Encoding.UTF8.CodePage ? new UTF8Encoding(false) : _encoding;
+
+        /// <summary>
+        /// The row elements of the existing file under ROOT_PATH, or null when there is no file.
+        /// A file whose element path does not match ROOT_PATH is refused rather than overwritten.
+        /// </summary>
+        private async Task<List<XElement>?> ReadExistingRowElementsAsync(string[] pathParts, CancellationToken cancellationToken)
+        {
+            if (!System.IO.File.Exists(_filePath) || new System.IO.FileInfo(_filePath).Length == 0) return null;
+
+            XDocument document;
+            await using (var stream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".xml"))
+            using (var textReader = new StreamReader(stream, _encoding))
+            {
+                document = await XDocument.LoadAsync(textReader, LoadOptions.None, cancellationToken);
+            }
+
+            XElement? container = document.Root;
+            if (container == null || container.Name.LocalName != pathParts[0])
+                throw new ExecutionException("Cannot append to this XML file: its root element does not match ROOT_PATH. Write to a new file instead.");
+            foreach (var part in pathParts.Skip(1))
+            {
+                container = container.Element(part)
+                    ?? throw new ExecutionException("Cannot append to this XML file: its element path does not match ROOT_PATH. Write to a new file instead.");
+            }
+            return container.Elements().ToList();
         }
 
         public Task<IEnumerable<string>> GetColumnsAsync() => GetColumnsAsync(CancellationToken.None);

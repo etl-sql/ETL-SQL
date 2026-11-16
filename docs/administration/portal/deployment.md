@@ -73,8 +73,8 @@ They are in `appsettings.secrets.json` beside it: root and the `etlsql` service 
 (`640 root:etlsql`); Administrators and SYSTEM only on Windows. The services read it after
 `appsettings.json` and before environment variables, so an environment variable still overrides it.
 Keep your own service secrets, such as SMTP or database passwords, in that file too. Back it up with
-the databases (`etl-sql admin backup` includes it). It holds the at-rest key, and losing that key
-makes every cached dataset unreadable.
+the databases (`etl-sql admin backup` includes it, and `admin restore` writes the installer-managed
+secrets back to it). It holds the at-rest key, and losing that key makes every cached dataset unreadable.
 
 **You must log in as `admin` immediately and change the password.** The portal enforces this by default — no API calls will succeed until the password has been changed. `Portal:FirstRun:MustChangePassword=false` is intended only for disposable automation environments that generate a strong per-run admin password.
 

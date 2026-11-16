@@ -30,13 +30,21 @@ namespace ETL_SQL.Tests.Integration
         public async Task DisposeAsync()
         {
             var manager = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<IDockerManager>();
-            await manager.CloseContainers(null);
+            await manager.CloseContainers("", null);
         }
     }
 
     [Trait("Category", "Integration")]
     public class DockerTests : IClassFixture<DockerCleanupFixture>
     {
+        private static IServiceProvider BuildDockerTestServices() =>
+            DependencyInjectionSetup.BuildServiceProvider(new Dictionary<string, string?>
+            {
+                ["Governance:Docker:AllowedImages:0"] = "mcr.microsoft.com/mssql/server:2022-latest",
+                ["Governance:Docker:AllowedImages:1"] = "postgres:15-alpine",
+                ["Governance:Docker:AllowedImages:2"] = "gvenzl/oracle-free:latest"
+            });
+
         private static Script Parse(string sql)
         {
             var lexer = new Lexer(sql);
@@ -106,7 +114,7 @@ namespace ETL_SQL.Tests.Integration
                 SELECT Val FROM ds.DockerTest;
             ";
 
-            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var evaluator = BuildDockerTestServices().GetRequiredService<Evaluator>();
             try
             {
                 var script = Parse(sql);
@@ -135,7 +143,7 @@ namespace ETL_SQL.Tests.Integration
                 SELECT Val FROM ds.DockerTest;
             ";
 
-            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var evaluator = BuildDockerTestServices().GetRequiredService<Evaluator>();
             try
             {
                 var script = Parse(sql);
@@ -163,20 +171,20 @@ namespace ETL_SQL.Tests.Integration
             using var client = await CreateDockerClient();
             try
             {
-                await manager.StartContainer("postgres:15-alpine", alias);
+                await manager.StartContainer("", "postgres:15-alpine", alias);
 
                 var beforePause = await InspectContainerByName(client, containerName);
                 Assert.True(beforePause.State.Running);
                 Assert.False(beforePause.State.Paused);
 
-                await manager.PauseContainer(alias);
+                await manager.PauseContainer("", alias);
                 paused = true;
 
                 var afterPause = await InspectContainerByName(client, containerName);
                 Assert.True(afterPause.State.Running);
                 Assert.True(afterPause.State.Paused);
 
-                await manager.ResumeContainer(alias);
+                await manager.ResumeContainer("", alias);
                 paused = false;
 
                 var afterResume = await InspectContainerByName(client, containerName);
@@ -186,8 +194,8 @@ namespace ETL_SQL.Tests.Integration
             finally
             {
                 if (paused)
-                    await manager.ResumeContainer(alias);
-                await manager.CloseContainers(alias);
+                    await manager.ResumeContainer("", alias);
+                await manager.CloseContainers("", alias);
             }
         }
 
@@ -199,7 +207,7 @@ namespace ETL_SQL.Tests.Integration
                 DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
             ";
 
-            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var evaluator = BuildDockerTestServices().GetRequiredService<Evaluator>();
             try
             {
                 // Initialize the container and variable once
@@ -263,7 +271,7 @@ namespace ETL_SQL.Tests.Integration
                 SELECT * FROM ds2;
             ";
 
-            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var evaluator = BuildDockerTestServices().GetRequiredService<Evaluator>();
             try
             {
                 var script = Parse(sql);
@@ -296,7 +304,7 @@ END
 
 SELECT 1";
 
-            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var evaluator = BuildDockerTestServices().GetRequiredService<Evaluator>();
             try
             {
                 var script = Parse(sql);
@@ -327,7 +335,7 @@ EXECUTE (
 
 SELECT 1";
 
-            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var evaluator = BuildDockerTestServices().GetRequiredService<Evaluator>();
             try
             {
                 var script = Parse(sql);
@@ -360,7 +368,7 @@ SELECT 1";
                 CLOSE DOCKER dpost;
             ";
 
-            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var evaluator = BuildDockerTestServices().GetRequiredService<Evaluator>();
             try
             {
                 var script = Parse(sql);

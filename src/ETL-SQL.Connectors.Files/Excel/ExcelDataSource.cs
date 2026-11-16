@@ -388,8 +388,22 @@ namespace ETL_SQL.Connectors.Excel
             bool append,
             CancellationToken cancellationToken)
         {
-            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
+            try
+            {
+                await WriteBatchesCore(batches, append, EffectiveCancellationToken(cancellationToken));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                throw ConnectorExceptionWrapper.Wrap("Excel", ex);
+            }
+        }
+
+        private async Task WriteBatchesCore(
+            IAsyncEnumerable<ETL_SQL.Data.DataTable> batches,
+            bool append,
+            CancellationToken effectiveCancellationToken)
+        {
 
             var existingRows = new List<Dictionary<string, object?>>();
             var existingColumns = new List<string>();
@@ -649,10 +663,27 @@ namespace ETL_SQL.Connectors.Excel
             return GetViewsAsync();
         }
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync(tableName, CancellationToken.None);
-        public Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken) =>
-            string.IsNullOrEmpty(tableName) || string.Equals(tableName, _sheetName, StringComparison.OrdinalIgnoreCase)
-                ? GetColumnsAsync(cancellationToken)
-                : GetColumnsAsync(cancellationToken);
+        /// <summary>
+        /// Columns of the named sheet. Both branches used to return the configured sheet's columns,
+        /// so asking about another sheet in the workbook answered for the wrong one. A name that is
+        /// not a sheet of this workbook keeps the configured sheet, as before.
+        /// </summary>
+        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(tableName) || string.Equals(tableName, _sheetName, StringComparison.OrdinalIgnoreCase) || _context == null)
+                return await GetColumnsAsync(cancellationToken);
+
+            var sheets = await GetTablesAsync(cancellationToken);
+            var sheet = sheets.FirstOrDefault(s => string.Equals(s, tableName, StringComparison.OrdinalIgnoreCase));
+            if (sheet == null) return await GetColumnsAsync(cancellationToken);
+
+            var options = _options == null
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(_options, StringComparer.OrdinalIgnoreCase);
+            options["SHEET"] = sheet;
+            options.Remove("RANGE");
+            return await new ExcelDataSource(_context, _filePath, options, _templateSchema).GetColumnsAsync(cancellationToken);
+        }
 
         public async ValueTask DisposeAsync() => await Task.CompletedTask;
 
@@ -728,20 +759,40 @@ namespace ETL_SQL.Connectors.Excel
             }
         }
 
-        private async Task<Stream> GetSeekableStreamAsync(Stream stream, CancellationToken cancellationToken = default)
+        // Takes ownership of the stream: on failure or cancellation while buffering, the source
+        // (an open file handle, possibly a zip or decrypt chain) is disposed instead of leaked.
+        private static async Task<Stream> GetSeekableStreamAsync(Stream stream, CancellationToken cancellationToken = default)
         {
             if (stream.CanSeek) return stream;
             var ms = new MemoryStream();
-            await stream.CopyToAsync(ms, cancellationToken);
+            try
+            {
+                await stream.CopyToAsync(ms, cancellationToken);
+            }
+            catch
+            {
+                await ms.DisposeAsync();
+                await stream.DisposeAsync();
+                throw;
+            }
             ms.Position = 0;
             return new ChainedStream(ms, stream);
         }
 
-        private Stream GetSeekableStream(Stream stream)
+        private static Stream GetSeekableStream(Stream stream)
         {
             if (stream.CanSeek) return stream;
             var ms = new MemoryStream();
-            stream.CopyTo(ms);
+            try
+            {
+                stream.CopyTo(ms);
+            }
+            catch
+            {
+                ms.Dispose();
+                stream.Dispose();
+                throw;
+            }
             ms.Position = 0;
             return new ChainedStream(ms, stream);
         }

@@ -17,7 +17,7 @@ public sealed class SandboxStoryFixture : IAsyncLifetime
                 throw new InvalidOperationException($"Playwright could not install Chromium (exit code {exitCode}).");
         }
         playwright = await Playwright.CreateAsync();
-        try { browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true }); }
+        try { browser = await BrowserTestLaunch.LaunchAsync(playwright); }
         catch { playwright.Dispose(); throw; }
     }
 

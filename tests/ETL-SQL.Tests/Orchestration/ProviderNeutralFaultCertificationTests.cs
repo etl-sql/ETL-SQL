@@ -10,8 +10,14 @@ namespace ETL_SQL.Tests.Orchestration;
 public sealed class ProviderNeutralFaultCertificationTests
 {
     [Fact]
-    public void CatalogPinsEveryRequiredProviderNeutralScenario()
+    public async Task CatalogPinsEveryRequiredProviderNeutralScenario()
     {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "ETL-SQL.slnx"))) root = root.Parent;
+        Assert.NotNull(root);
+        using var matrix = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root.FullName, "tests", "fixtures", "provider-neutral-fault-matrix.json")));
+        Assert.Equal(Enum.GetValues<FaultScenarioId>().Select(value => value.ToString()),
+            matrix.RootElement.GetProperty("scenarioIds").EnumerateArray().Select(value => value.GetString()));
         Assert.Equal(Enum.GetValues<FaultScenarioId>().Length, ProviderNeutralFaultScenarios.All.Count);
         Assert.Equal(ProviderNeutralFaultScenarios.All.Count,
             ProviderNeutralFaultScenarios.All.Select(scenario => scenario.Id).Distinct().Count());

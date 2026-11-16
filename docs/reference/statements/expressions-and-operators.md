@@ -198,7 +198,7 @@ COPY FILE 'C:\data\input.csv' TO 'C:\data\backup\data_${date_str}.csv';
 ```
 
 - Supports both `${@var}` and `${var}` formats.
-- Sensitive variables declared with `PASSWORD` / `ENC:` decrypt automatically during string interpolation.
+- An `ENC:` value in a `SENSITIVE` variable is decrypted only where the string is used as a credential (for example a connection `PASSWORD` option). Elsewhere, such as `PRINT` or `SELECT`, the encrypted value is substituted unchanged.
 - Unmatched variables remain intact as literal strings (avoiding conflicts with regexes or external templates).
 
 ---

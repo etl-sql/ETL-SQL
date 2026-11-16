@@ -150,29 +150,21 @@ public class AggregateEngine
         // sampling the GC heap, which was process-wide and reactive.
         var budget = new MemoryBudgetGuard(memoryCeilingBytes);
 
-        await foreach (var row in inputStream)
+        // A scalar aggregate streams its whole input here, which can be billions of rows. Pass the
+        // run's token to the source and check it ourselves too, since not every source observes it.
+        var cancellationToken = _context.CancellationToken;
+        long rowsSeen = 0;
+        await foreach (var row in inputStream.WithCancellation(cancellationToken))
         {
+            if ((++rowsSeen & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
             CompoundKey key;
             if (groupBy != null && groupBy.Count > 0)
             {
-                if (groupBy.Count == 1)
-                {
-                    key = new CompoundKey(await EvaluateGroupExpr(groupBy[0], finalColumns, row));
-                }
-                else if (groupBy.Count == 2)
-                {
-                    key = new CompoundKey(await EvaluateGroupExpr(groupBy[0], finalColumns, row), await EvaluateGroupExpr(groupBy[1], finalColumns, row));
-                }
-                else if (groupBy.Count == 3)
-                {
-                    key = new CompoundKey(await EvaluateGroupExpr(groupBy[0], finalColumns, row), await EvaluateGroupExpr(groupBy[1], finalColumns, row), await EvaluateGroupExpr(groupBy[2], finalColumns, row));
-                }
-                else
-                {
-                    var vals = new object?[groupBy.Count];
-                    for (int i = 0; i < groupBy.Count; i++) vals[i] = await EvaluateGroupExpr(groupBy[i], finalColumns, row);
-                    key = new CompoundKey(vals);
-                }
+                // The key remembers the text it was built from, so a grouped VARCHAR '123' is
+                // returned as text and not as the number it was compared as.
+                var vals = new object?[groupBy.Count];
+                for (int i = 0; i < groupBy.Count; i++) vals[i] = await EvaluateGroupExpr(groupBy[i], finalColumns, row);
+                key = CompoundKey.ForGroup(vals);
             }
             else key = new CompoundKey("GLOBAL");
 
@@ -231,29 +223,8 @@ public class AggregateEngine
                 resRow[$"AGG_{aggregateSpecs[i].Function.ToSql().ToUpperInvariant()}"] = val;
             }
 
-            // Check HAVING
-            if (havingClause != null)
-            {
-                var havingContext = resRow.Clone(); // Use finalized aggregates
-                for (int i = 0; i < havingAggSpecs.Count; i++)
-                {
-                    var val = await states.HavingStates[i].Finalize(this);
-                    havingContext[$"AGG_{havingAggSpecs[i].Function.ToSql().ToUpperInvariant()}"] = val;
-                }
-                // For grouping columns in HAVING
-                if (groupBy != null)
-                {
-                    for (int i = 0; i < groupBy.Count; i++)
-                    {
-                        var colName = groupBy[i] is IdentifierExpression id ? id.Name.Split('.').Last() : groupBy[i].ToSql();
-                        havingContext[colName] = key[i];
-                    }
-                }
-
-                if (!await _context.EvaluateCondition(havingClause, havingContext)) continue;
-            }
-
-            // Fill non-aggregate columns (grouping columns)
+            // Fill non-aggregate columns (grouping columns). This runs before HAVING so that HAVING
+            // can name a SELECT alias of a grouping expression.
             for (int i = 0; i < finalColumns.Count; i++)
             {
                 if (aggregateSpecs.Any(spec => spec.ColumnIndex == i)) continue; // Already filled by aggregate
@@ -270,7 +241,7 @@ public class AggregateEngine
 
                 if (groupIdx >= 0 && groupIdx < key.Length)
                 {
-                    resRow[i] = key[groupIdx];
+                    resRow[i] = key.Original(groupIdx);
                 }
                 else if (IsWindowFunction(finalColumns[i].Expression)) { /* Handled later */ }
                 else if (IsAggregate(finalColumns[i].Expression))
@@ -289,6 +260,32 @@ public class AggregateEngine
                         resRow[i] = null;
                     }
                 }
+            }
+
+            // Check HAVING
+            if (havingClause != null)
+            {
+                var havingContext = resRow.Clone(); // Use finalized aggregates
+                for (int i = 0; i < havingAggSpecs.Count; i++)
+                {
+                    var val = await states.HavingStates[i].Finalize(this);
+                    havingContext[$"AGG_{havingAggSpecs[i].Function.ToSql().ToUpperInvariant()}"] = val;
+                }
+                // For grouping columns in HAVING
+                if (groupBy != null)
+                {
+                    for (int i = 0; i < groupBy.Count; i++)
+                    {
+                        var colName = groupBy[i] is IdentifierExpression id ? id.Name.Split('.').Last() : groupBy[i].ToSql();
+                        havingContext[colName] = key.Original(i);
+                        // A grouping expression that is a function call, such as UPPER(region), is
+                        // looked up by its text like a finished aggregate. Its arguments are gone.
+                        if (groupBy[i] is FunctionCallExpression groupFunction)
+                            havingContext[$"AGG_{groupFunction.ToSql().ToUpperInvariant()}"] = key.Original(i);
+                    }
+                }
+
+                if (!await _context.EvaluateCondition(havingClause, havingContext)) continue;
             }
 
             resultRows.Add(resRow);
@@ -401,6 +398,27 @@ public class AggregateEngine
 
     public bool IsWindowFunction(Expression expr) => WindowEngine.ContainsWindowFunction(expr);
 
+    /// <summary>
+    /// True when the expressions hold at least one aggregate and every aggregate keeps a fixed-size
+    /// running state (no <c>DISTINCT</c>, <c>STRING_AGG</c> or percentile, which hold every value).
+    /// Without GROUP BY such an aggregate needs O(1) memory whatever the input length.
+    /// </summary>
+    public bool HasOnlyConstantMemoryAggregates(IEnumerable<Expression?> expressions)
+    {
+        var aggregates = new List<FunctionCallExpression>();
+        foreach (var expression in expressions)
+            if (expression != null) CollectAggregates(expression, aggregates);
+        return aggregates.Count > 0 && aggregates.All(IsConstantMemoryAggregate);
+    }
+
+    private static bool IsConstantMemoryAggregate(FunctionCallExpression f)
+        => !f.IsDistinct && f.FunctionName.ToUpperInvariant() is
+            "COUNT" or "SUM" or "TOTAL" or "AVG" or "MIN" or "MAX" or "EVERY" or "ANY" or "SOME"
+            or "APPROX_COUNT_DISTINCT"
+            or "VAR" or "VARP" or "VAR_SAMP" or "VAR_POP"
+            or "STDEV" or "STDEVP" or "STDDEV" or "STDDEV_SAMP" or "STDDEV_POP"
+            or "CORR" or "COVAR_SAMP" or "COVAR_POP";
+
     private static bool IsAggregateFunction(FunctionCallExpression f)
     {
         return f.Window == null && IsAggregateFunctionName(f.FunctionName);
@@ -507,7 +525,7 @@ public class AggregateEngine
                 case "COUNT":
                     if (f.Arguments.Count == 0) return (decimal)rows.Count;
                     var countVals = f.IsDistinct ? valsByArg[0].Distinct() : valsByArg[0];
-                    return (decimal)countVals.Count(v => v != null || (f.Arguments[0] is IdentifierExpression id && id.Name == "*"));
+                    return (decimal)countVals.Count(v => v is not null and not DBNull || (f.Arguments[0] is IdentifierExpression id && id.Name == "*"));
                 case "APPROX_COUNT_DISTINCT":
                     var approxState = new HyperLogLogState();
                     foreach (var val in valsByArg[0])
@@ -516,14 +534,14 @@ public class AggregateEngine
                 case "SUM":
                     {
                         var sumVals = f.IsDistinct ? valsByArg[0].Distinct() : valsByArg[0];
-                        var nonNulls = sumVals.Where(v => v != null).ToList();
+                        var nonNulls = sumVals.Where(v => v is not null and not DBNull).ToList();
                         if (nonNulls.Count == 0) return null;
                         return (decimal)nonNulls.Sum(v => SafeToDecimal(v, _context));
                     }
                 case "AVG":
                     {
                         var avgVals = f.IsDistinct ? valsByArg[0].Distinct() : valsByArg[0];
-                        var nonNulls = avgVals.Where(v => v != null).ToList();
+                        var nonNulls = avgVals.Where(v => v is not null and not DBNull).ToList();
                         if (nonNulls.Count == 0) return null;
                         var avg = nonNulls.Average(v => SafeToDecimal(v, _context));
                         bool allIntsVal = true;
@@ -543,13 +561,13 @@ public class AggregateEngine
                     }
                 case "MIN":
                     {
-                        var nonNulls = valsByArg[0].Where(v => v != null).ToList();
+                        var nonNulls = valsByArg[0].Where(v => v is not null and not DBNull).ToList();
                         if (nonNulls.Count == 0) return null;
                         return nonNulls.Min();
                     }
                 case "MAX":
                     {
-                        var nonNulls = valsByArg[0].Where(v => v != null).ToList();
+                        var nonNulls = valsByArg[0].Where(v => v is not null and not DBNull).ToList();
                         if (nonNulls.Count == 0) return null;
                         return nonNulls.Max();
                     }
@@ -559,8 +577,12 @@ public class AggregateEngine
                 case "SOME":
                     return EvaluateBooleanAggregate(valsByArg[0], requireAll: false);
                 case "STRING_AGG":
-                    return string.Join(f.Arguments.Count >= 2 ? (await _context.EvaluateValue(f.Arguments[1], new Row()))?.ToString() ?? "" : ",",
-                        f.WithinGroupOrderBy != null ? await SortRows(rows, f.WithinGroupOrderBy) : valsByArg[0].Select(v => v?.ToString() ?? ""));
+                    {
+                        var separator = f.Arguments.Count >= 2 ? (await _context.EvaluateValue(f.Arguments[1], new Row()))?.ToString() ?? "" : ",";
+                        if (f.WithinGroupOrderBy != null) return string.Join(separator, await SortRows(rows, f.WithinGroupOrderBy));
+                        var joined = valsByArg[0].Where(v => v != null && v != DBNull.Value).Select(v => v!.ToString()).ToList();
+                        return joined.Count == 0 ? null : string.Join(separator, joined);
+                    }
                 case "GROUP_CONCAT":
                     {
                         if (valsByArg.Count == 0) return null;
@@ -613,7 +635,7 @@ public class AggregateEngine
 
     private decimal? CalculateVariance(List<object?> vals, bool population)
     {
-        var numbers = vals.Where(v => v != null).Select(v => SafeToDecimal(v, _context)).ToList();
+        var numbers = vals.Where(v => v is not null and not DBNull).Select(v => SafeToDecimal(v, _context)).ToList();
         int n = numbers.Count;
         if (n == 0 || (!population && n == 1)) return null;
 
@@ -654,7 +676,7 @@ public class AggregateEngine
         var yNums = new List<decimal>();
         for (int i = 0; i < xVals.Count; i++)
         {
-            if (xVals[i] != null && yVals[i] != null)
+            if (xVals[i] is not null and not DBNull && yVals[i] is not null and not DBNull)
             {
                 xNums.Add(SafeToDecimal(xVals[i], _context));
                 yNums.Add(SafeToDecimal(yVals[i], _context));
@@ -685,7 +707,7 @@ public class AggregateEngine
         var yNums = new List<decimal>();
         for (int i = 0; i < xVals.Count; i++)
         {
-            if (xVals[i] != null && yVals[i] != null)
+            if (xVals[i] is not null and not DBNull && yVals[i] is not null and not DBNull)
             {
                 xNums.Add(SafeToDecimal(xVals[i], _context));
                 yNums.Add(SafeToDecimal(yVals[i], _context));
@@ -719,8 +741,8 @@ public class AggregateEngine
         {
             for (int i = 0; i < orderBy.Count; i++)
             {
-                int res = _context.CompareConstants(a.keys[i], b.keys[i]);
-                if (res != 0) return orderBy[i].Descending ? -res : res;
+                int res = orderBy[i].OutputOrder(_context.CompareConstants(a.keys[i], b.keys[i]), a.keys[i], b.keys[i]);
+                if (res != 0) return res;
             }
             return 0;
         });
@@ -752,7 +774,7 @@ public class AggregateEngine
         foreach (var r in rows)
         {
             var v = await _context.EvaluateValue(sortExpr, r);
-            if (v != null) sortedVals.Add(SafeToDecimal(v, _context));
+            if (v is not null and not DBNull) sortedVals.Add(SafeToDecimal(v, _context));
         }
         if (sortedVals.Count == 0) return null;
 
@@ -788,7 +810,7 @@ public class AggregateEngine
         foreach (var r in rows)
         {
             var v = await _context.EvaluateValue(sortExpr, r);
-            if (v != null) sortedVals.Add(SafeToDecimal(v, _context));
+            if (v is not null and not DBNull) sortedVals.Add(SafeToDecimal(v, _context));
         }
         if (sortedVals.Count == 0) return null;
 
@@ -805,17 +827,14 @@ public class AggregateEngine
     }
     private static decimal SafeToDecimal(object? v, IExecutionContext? context = null)
     {
-        if (v == null) return 0m;
+        if (v is null or DBNull) return 0m;
         if (v is System.Numerics.BigInteger bi) return (decimal)bi;
         if (v is DateTime dt) throw new ExecutionException($"Cannot perform numeric aggregation on a date value: '{dt:yyyy-MM-dd HH:mm:ss}'. Ensure you are not summing a grouping column like 'month'.");
+        if (v is DateOnly d) throw new ExecutionException($"Cannot perform numeric aggregation on a date value: '{d:yyyy-MM-dd}'. Ensure you are not summing a grouping column like 'month'.");
         if (v is TimeSpan ts) throw new ExecutionException($"Cannot perform numeric aggregation on a time duration: '{ts}'.");
         try { return Convert.ToDecimal(v, System.Globalization.CultureInfo.InvariantCulture); }
         catch (Exception ex)
         {
-            if (context?.SecurityService?.IsTestMode == true)
-            {
-                return 0m;
-            }
             throw new ExecutionException($"Invalid numeric value for aggregation: '{v}'. Details: {ex.Message}");
         }
     }
@@ -844,7 +863,7 @@ public class AggregateEngine
             "VAR" or "VAR_SAMP" or "VARP" or "VAR_POP"
                 or "STDEV" or "STDDEV" or "STDDEV_SAMP" or "STDEVP" or "STDDEV_POP" => new VarianceState(name),
             "COVAR_SAMP" or "COVAR_POP" or "CORR" => new CovarianceState(name),
-            "STRING_AGG" or "LIST_AGG" or "GROUP_CONCAT" => new StringCollectionState(name),
+            "STRING_AGG" or "LIST_AGG" or "GROUP_CONCAT" => new StringCollectionState(),
             "PERCENTILE_CONT" or "PERCENTILE_DISC" => new PercentileState(name == "PERCENTILE_CONT"),
             _ => new GenericState(f)
         };
@@ -872,7 +891,7 @@ public class AggregateEngine
         {
             if (!await PassesFilter(row, f, context)) return;
             var val = await context.EvaluateValue(f.Arguments[0], row);
-            if (val != null)
+            if (val is not null and not DBNull)
             {
                 if (_isDistinct)
                 {
@@ -909,7 +928,7 @@ public class AggregateEngine
         {
             if (!await PassesFilter(row, f, context)) return;
             var val = await context.EvaluateValue(f.Arguments[0], row);
-            if (val != null)
+            if (val is not null and not DBNull)
             {
                 if (_isDistinct)
                 {
@@ -947,7 +966,7 @@ public class AggregateEngine
             }
 
             var val = await context.EvaluateValue(f.Arguments[0], row);
-            if (val != null)
+            if (val is not null and not DBNull)
             {
                 if (_isDistinct)
                 {
@@ -974,7 +993,7 @@ public class AggregateEngine
         {
             if (!await PassesFilter(row, f, context)) return;
             var val = await context.EvaluateValue(f.Arguments[0], row);
-            if (val != null)
+            if (val is not null and not DBNull)
             {
                 if (_allIntegers)
                 {
@@ -1020,7 +1039,7 @@ public class AggregateEngine
         {
             if (!await PassesFilter(row, f, context)) return;
             var val = await context.EvaluateValue(f.Arguments[0], row);
-            if (val != null)
+            if (val is not null and not DBNull)
             {
                 if (_min == null || ((IComparable)CompoundKey.NormalizeValue(val)!).CompareTo(CompoundKey.NormalizeValue(_min!)) < 0)
                     _min = val;
@@ -1038,7 +1057,7 @@ public class AggregateEngine
         {
             if (!await PassesFilter(row, f, context)) return;
             var val = await context.EvaluateValue(f.Arguments[0], row);
-            if (val != null)
+            if (val is not null and not DBNull)
             {
                 if (_max == null || ((IComparable)CompoundKey.NormalizeValue(val)!).CompareTo(CompoundKey.NormalizeValue(_max!)) > 0)
                     _max = val;
@@ -1170,7 +1189,7 @@ public class AggregateEngine
         }
     }
 
-    private sealed class StringCollectionState(string functionName) : IAggregateState
+    private sealed class StringCollectionState : IAggregateState
     {
         private readonly List<CollectedValue> _values = new();
         private HashSet<object?>? _distinct;
@@ -1182,7 +1201,8 @@ public class AggregateEngine
             if (!await PassesFilter(row, f, context)) return;
             _function ??= f;
             var value = f.Arguments.Count == 0 ? null : await context.EvaluateValue(f.Arguments[0], row);
-            if (functionName == "GROUP_CONCAT" && (value == null || value == DBNull.Value)) return;
+            // Aggregates skip NULL. STRING_AGG and LIST_AGG joined it as an empty string ('a,,b').
+            if (value == null || value == DBNull.Value) return;
             if (f.IsDistinct && !(_distinct ??= new HashSet<object?>()).Add(value)) return;
             if (_separator == null && f.Arguments.Count >= 2)
                 _separator = (await context.EvaluateValue(f.Arguments[1], row))?.ToString();
@@ -1198,17 +1218,19 @@ public class AggregateEngine
 
         public ValueTask<object?> Finalize(AggregateEngine engine)
         {
+            // No non-NULL value gives NULL, as for SUM or MAX, not an empty string.
             if (_values.Count == 0)
-                return new ValueTask<object?>(functionName == "GROUP_CONCAT" ? null : string.Empty);
+                return new ValueTask<object?>((object?)null);
             if (_values[0].OrderKeys != null)
             {
                 _values.Sort((left, right) =>
                 {
                     for (var index = 0; index < left.OrderKeys!.Length; index++)
                     {
-                        var order = engine._context.CompareConstants(left.OrderKeys[index], right.OrderKeys![index]);
-                        if (order != 0)
-                            return engineOrderDescending(index) ? -order : order;
+                        var order = _function!.WithinGroupOrderBy![index].OutputOrder(
+                            engine._context.CompareConstants(left.OrderKeys[index], right.OrderKeys![index]),
+                            left.OrderKeys[index], right.OrderKeys[index]);
+                        if (order != 0) return order;
                     }
                     return left.Sequence.CompareTo(right.Sequence);
                 });
@@ -1216,9 +1238,6 @@ public class AggregateEngine
             var separator = _separator ?? ",";
             var values = _values.Select(item => item.Value?.ToString() ?? string.Empty);
             return new ValueTask<object?>(string.Join(separator, values));
-
-            bool engineOrderDescending(int index)
-                => _function!.WithinGroupOrderBy![index].Descending;
         }
 
         private FunctionCallExpression? _function;
@@ -1242,7 +1261,7 @@ public class AggregateEngine
                 _descending = f.WithinGroupOrderBy[0].Descending;
             }
             var value = await context.EvaluateValue(f.WithinGroupOrderBy[0].Expression, row);
-            if (value != null) _values.Add(SafeToDecimal(value, context));
+            if (value is not null and not DBNull) _values.Add(SafeToDecimal(value, context));
         }
 
         public ValueTask<object?> Finalize(AggregateEngine engine)
@@ -1291,7 +1310,7 @@ public class AggregateEngine
         {
             if (!await PassesFilter(row, f, context)) return;
             var val = await context.EvaluateValue(f.Arguments[0], row);
-            if (val == null) return;
+            if (val is null or DBNull) return;
             double x = (double)SafeToDecimal(val, context);
             _n++;
             double delta = x - _mean;
@@ -1337,7 +1356,7 @@ public class AggregateEngine
             if (!await PassesFilter(row, f, context)) return;
             var xv = await context.EvaluateValue(f.Arguments[0], row);
             var yv = await context.EvaluateValue(f.Arguments[1], row);
-            if (xv == null || yv == null) return;
+            if (xv is null or DBNull || yv is null or DBNull) return;
             double x = (double)SafeToDecimal(xv, context);
             double y = (double)SafeToDecimal(yv, context);
             _n++;

@@ -26,6 +26,7 @@ Treats `NULL` arguments as empty strings.
 
 - `NULL` arguments do not propagate `NULL`, unlike the `+` operator.
 - Non-string arguments are implicitly coerced to `STRING`.
+- A date or number turns into the same text as [`CAST`](../conversion/cast.md) to `STRING` (`2024-01-08 09:30:05`, `1.5`), on every server.
 - Use the `||` operator when either `NULL` operand should make the whole expression `NULL`.
 
 ## Examples

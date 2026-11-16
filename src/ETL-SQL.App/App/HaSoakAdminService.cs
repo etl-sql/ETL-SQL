@@ -143,7 +143,7 @@ namespace ETL_SQL.App
             var metadata = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["generatedAt"] = DateTime.UtcNow.ToString("o"),
                 ["commit"] = GetGitCommit(),
                 ["runId"] = runId,
@@ -281,7 +281,7 @@ namespace ETL_SQL.App
             var runbook = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["generatedAt"] = DateTime.UtcNow.ToString("o"),
                 ["runId"] = runId,
                 ["mode"] = mode,
@@ -324,7 +324,7 @@ namespace ETL_SQL.App
             var plan = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["generatedAt"] = DateTime.UtcNow.ToString("o"),
                 ["runId"] = runId,
                 ["topologyMetadataPath"] = RelativeLabel(metadataPath),
@@ -411,7 +411,7 @@ namespace ETL_SQL.App
             var plan = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["generatedAt"] = DateTime.UtcNow.ToString("o"),
                 ["runId"] = metadata["runId"]!.DeepClone(),
                 ["mode"] = mode,
@@ -466,7 +466,7 @@ namespace ETL_SQL.App
             var report = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["runId"] = runId,
                 ["mode"] = mode,
                 ["status"] = passed ? "Passed" : "Failed",
@@ -675,7 +675,7 @@ namespace ETL_SQL.App
             var plan = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["generatedAt"] = DateTime.UtcNow.ToString("o"),
                 ["runId"] = metadata["runId"]!.DeepClone(),
                 ["mode"] = ctx.HaSoakMode ?? "CiSmoke",
@@ -728,7 +728,7 @@ namespace ETL_SQL.App
             var report = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["runId"] = runId,
                 ["mode"] = mode,
                 ["status"] = passed ? "Passed" : "Failed",
@@ -964,7 +964,7 @@ namespace ETL_SQL.App
             var metrics = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["runId"] = metadata["runId"]!.DeepClone(),
                 ["capturedAt"] = DateTime.UtcNow.ToString("o"),
                 ["topologyMetadataPath"] = RelativeLabel(Path.Combine(runRoot, "topology-metadata.json")),
@@ -1022,7 +1022,7 @@ namespace ETL_SQL.App
             WriteJson(summaryPath, new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["runId"] = metadata["runId"]!.DeepClone(),
                 ["capturedAt"] = DateTime.UtcNow.ToString("o"),
                 ["diagnosticsRoot"] = RelativeLabel(outputRoot),
@@ -1070,7 +1070,7 @@ namespace ETL_SQL.App
             var summary = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["generatedAt"] = DateTime.UtcNow.ToString("o"),
                 ["runId"] = runId,
                 ["requiredGate"] = requiredGate,
@@ -1094,17 +1094,42 @@ namespace ETL_SQL.App
             TryReadJsonObject(Path.Combine(dir, "postgres-ha-metrics.json"), "PostgreSQL metrics snapshot", issues, checkedArtifacts);
             RequireArtifact(Path.Combine(dir, "postgres-ha-metrics.md"), "PostgreSQL metrics Markdown report", issues, checkedArtifacts);
             if (capacity == null) return;
+            // Gated on errors only (owner decision 2026-11-14): latency and throughput depend on the
+            // host, so a latency breach is reported as a warning.
+            var criteria = capacity["breachCriteria"];
+            var maxErrorRate = criteria?["maxErrorRatePct"]?.GetValue<double>() ?? 1;
+            var maxContention = criteria?["maxSqliteContentionCount"]?.GetValue<double>() ?? 0;
+            var steps = 0;
             foreach (var service in new[] { "portal", "orchestrator" })
             {
                 foreach (var step in capacity[service]?.AsArray() ?? new JsonArray())
                 {
-                    if (step?["passed"]?.GetValue<bool>() != true)
-                        AddIssue(issues, "Error", "capacity-breach", $"{service} step at concurrency {step?["concurrency"]} did not pass.");
-                    var breaches = step?["breaches"]?.AsArray();
-                    if (breaches is { Count: > 0 })
-                        AddIssue(issues, "Error", "capacity-breach", $"{service} step at concurrency {step?["concurrency"]} reported breaches.");
+                    steps++;
+                    var label = $"{service} step at concurrency {step?["concurrency"]}";
+                    var errorRate = step?["errorRatePct"]?.GetValue<double>() ?? double.NaN;
+                    if (!(errorRate <= maxErrorRate))
+                        AddIssue(issues, "Error", "capacity-errors", $"{label}: error rate {errorRate}% exceeds {maxErrorRate}%.");
+                    if ((step?["requestCount"]?.GetValue<long>() ?? 0) < 1)
+                        AddIssue(issues, "Error", "capacity-errors", $"{label}: no requests completed.");
+                    if ((step?["sqliteContentionCount"]?.GetValue<double>() ?? 0) > maxContention)
+                        AddIssue(issues, "Error", "capacity-errors", $"{label}: SQLite contention reported.");
+                    if (step?["unexpectedStatusCounts"] is not JsonObject unexpected)
+                    {
+                        AddIssue(issues, "Error", "capacity-errors", $"{label}: the report does not classify failed requests.");
+                    }
+                    else
+                    {
+                        foreach (var (status, count) in unexpected)
+                            if ((status == "0" || (int.TryParse(status, out var code) && code >= 500)) && (count?.GetValue<long>() ?? 0) > 0)
+                                AddIssue(issues, "Error", "capacity-errors", $"{label}: {count} request(s) failed with status {status}.");
+                    }
+                    foreach (var breach in step?["breaches"]?.AsArray() ?? new JsonArray())
+                        if (breach?.GetValue<string>() is { } text && text.StartsWith("p95", StringComparison.Ordinal))
+                            AddIssue(issues, "Warning", "capacity-latency", $"{label}: {text} (reported, not gated).");
                 }
             }
+            if (steps == 0)
+                AddIssue(issues, "Error", "capacity-errors", "The capacity report has no measured steps.");
         }
 
         private static void ValidatePassedReportSet(string dir, string kind, string planBase, string reportBase, List<JsonObject> issues, List<string> checkedArtifacts)
@@ -1119,6 +1144,22 @@ namespace ETL_SQL.App
                 AddIssue(issues, "Error", "evidence-scope-mismatch", $"{kind} bounded native report cannot certify a physical topology run.");
             if (report["passed"]?.GetValue<bool>() == false)
                 AddIssue(issues, "Error", "failed-report", $"{kind} report did not pass.");
+            // Every planned scenario or fault must be in the report and must have passed on its own.
+            var plan = TryReadJsonObject(Path.Combine(dir, $"{planBase}.json"), $"{kind} plan", issues, new List<string>());
+            var (itemsKey, idKey) = kind == "fault-injection" ? ("faults", "faultId") : ("scenarios", "scenarioId");
+            var results = (report[itemsKey]?.AsArray() ?? new JsonArray())
+                .Where(item => item?[idKey] is not null)
+                .GroupBy(item => item![idKey]!.GetValue<string>())
+                .ToDictionary(group => group.Key, group => group.First()!);
+            foreach (var planned in plan?[itemsKey]?.AsArray() ?? new JsonArray())
+            {
+                var id = planned?[idKey]?.GetValue<string>();
+                if (id is null) continue;
+                if (!results.TryGetValue(id, out var result))
+                    AddIssue(issues, "Error", "missing-result", $"{kind} report has no result for {id}.");
+                else if (result["passed"]?.GetValue<bool>() != true)
+                    AddIssue(issues, "Error", "failed-report", $"{kind} {id} did not pass.");
+            }
             var status = report["status"]?.GetValue<string>();
             if (!string.IsNullOrWhiteSpace(status) && status is not ("Passed" or "Pass" or "Succeeded" or "Success"))
                 AddIssue(issues, "Error", "failed-report", $"{kind} report status is {status}.");
@@ -1289,9 +1330,11 @@ namespace ETL_SQL.App
         private static JsonArray GetDirectoryInventory(string root)
         {
             var result = new JsonArray();
-            foreach (var dir in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories))
+            // A mounted spill volume carries a root-owned lost+found; diagnostics must not stop on it.
+            var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 };
+            foreach (var dir in Directory.EnumerateDirectories(root, "*", options))
             {
-                var files = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Select(p => new FileInfo(p)).ToArray();
+                var files = Directory.EnumerateFiles(dir, "*", options).Select(p => new FileInfo(p)).ToArray();
                 result.Add(new JsonObject
                 {
                     ["path"] = RelativeLabel(dir),

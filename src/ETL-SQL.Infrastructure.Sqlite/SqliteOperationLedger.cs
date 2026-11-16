@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Execution;
 using Microsoft.Data.Sqlite;
 
@@ -13,7 +14,10 @@ public class SqliteOperationLedger : IOperationLedger, IDisposable
 
     public SqliteOperationLedger(string directory, string sessionId)
     {
-        _dbPath = Path.Combine(directory, sessionId, "ledger.db");
+        var resolvedRoot = Path.GetFullPath(directory);
+        var candidatePath = Path.Combine(resolvedRoot, sessionId, "ledger.db");
+        if (!SafePath.TryResolveWithinRoot(resolvedRoot, candidatePath, out _dbPath))
+            throw new ArgumentException("Session ledger path escapes the configured session root.", nameof(sessionId));
     }
 
     public async Task InitializeAsync()

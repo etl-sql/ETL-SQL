@@ -44,6 +44,7 @@ public sealed class GovernanceEnforcementAuditTests
             ["Connectors:AllowedTypes"] = (Boundary.EnterpriseSnapshot, "ConnectorPolicyAuthorizer.EnforceAllowedTypes"),
             ["Security:RequireWhatIfForDestructiveStatements"] = (Boundary.EnterpriseSnapshot, "MutationGuardrailPolicy.Enforce (statement dispatch)"),
             ["Security:RequireTransactionForMutations"] = (Boundary.EnterpriseSnapshot, "MutationGuardrailPolicy.Enforce (statement dispatch)"),
+            ["Security:RequireSpillEncryption"] = (Boundary.EnterpriseSnapshot, "SetSpillOptionStatementHandler + Evaluator startup (SpillEncryptionPolicy)"),
             ["Security:AllowedExecutionModes"] = (Boundary.EnterpriseSnapshot, "OperationPolicyBoundary.EnforceAllowedExecutionMode (execution start)"),
 
             // ── Enforced via config precedence by a named local/Portal boundary ──

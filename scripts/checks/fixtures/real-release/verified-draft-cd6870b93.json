@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "sourceSha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+  "tag": "v0.22.0",
+  "assets": {
+    "ETL-SQL-v0.22.0-linux-x64.zip": {
+      "size": 1127430982,
+      "sha256": "d82c84622302a201e147b6417fbc47b6e1e1e397600ecbfa545b2f534b1f0c94"
+    },
+    "ETL-SQL-v0.22.0-osx-arm64.zip": {
+      "size": 1029400886,
+      "sha256": "f18314a58fbc2dc664342b39d8e7956f7dc6b5cbd9b30fd01dde66f84665b044"
+    },
+    "ETL-SQL-v0.22.0-osx-x64.zip": {
+      "size": 1087399607,
+      "sha256": "9f55ce50bf87ecc0fe222a5ff341bc6998033db0e05f289eb578756a9e4975af"
+    },
+    "ETL-SQL-v0.22.0-win-x64.zip": {
+      "size": 1085105651,
+      "sha256": "5ae3232419bc604240245626078d444b4757255b7f27138ad05f047744dd54a7"
+    },
+    "ETL-SQL-v0.22.0-x64-Setup.msi": {
+      "size": 776750027,
+      "sha256": "6bf44c432aeff449a4185a31e1d423f78754633e340b45bf477b79bee3d3ce83"
+    },
+    "ETL-SQL_v0.22.0.dmg": {
+      "size": 1140265468,
+      "sha256": "c23529ffb5a255ec0b4c7ca1deadeec211bb254695a537e4ffaa05ae22b34d55"
+    },
+    "certified-osx-arm64-selection.json": {
+      "size": 701,
+      "sha256": "1991e4fb583e3c85761cc314d84de8962d991ca37317af6e713ab65262c2e4e8"
+    },
+    "certified-osx-x64-selection.json": {
+      "size": 697,
+      "sha256": "9204367101b9fe5e47c121898548731a5ef139dc0c03cd04052c9acf9121eea8"
+    },
+    "certified-windows-selection.json": {
+      "size": 768,
+      "sha256": "eb546da23768b3be04bd5501310f3be90e036c527fe3feddee7d60701f306265"
+    },
+    "deb-certification-inputs.json": {
+      "size": 416,
+      "sha256": "a91439fcacd007a667d6689702760bb8753cd8c11ebadb9a87d8feee04bb71e7"
+    },
+    "deb-certification.json": {
+      "size": 612,
+      "sha256": "94782237078ca28d7d21d0b2cc1d88fa4f25ff64835e60a45e5b7dc2cd9161e1"
+    },
+    "etl-sql-vscode-0.22.0-darwin-arm64.vsix": {
+      "size": 509839467,
+      "sha256": "6a7b86a190ca7085d5c48b841b44fed8b5941c99a0996cdf0cf233eaef140a5b"
+    },
+    "etl-sql-vscode-0.22.0-darwin-x64.vsix": {
+      "size": 537212398,
+      "sha256": "3956c20292a6ccfba07641a969dae2620353542af6d1eb42089dd1879428c6a6"
+    },
+    "etl-sql-vscode-0.22.0-linux-x64.vsix": {
+      "size": 557146539,
+      "sha256": "9f5fc5b9eeb1d15aa2cf60115c8e949440b980cd65257c1a0f4e3236e2e71f3f"
+    },
+    "etl-sql-vscode-0.22.0-win32-x64.vsix": {
+      "size": 522541378,
+      "sha256": "1bbbd000128fbdfe7cad4291cc2e5b27f09b2f353f7f48af9c271c4ae62be0c5"
+    },
+    "etl-sql_0.22.0_amd64.deb": {
+      "size": 900276522,
+      "sha256": "207e9f726683f53fc717a8400ea5e51d73d2ea41dc8e52b179fd6ee47b3369be"
+    },
+    "hosted-release-evidence.json": {
+      "size": 11729,
+      "sha256": "85b82525930af50d71086dd21e576be5d090d3c70473ce1cf8d7e08c2c8079e3"
+    },
+    "msi-certification-inputs.json": {
+      "size": 443,
+      "sha256": "9a038499b5190676fd2fe09a3f7b98ed2bce01742c2b41df1efed95f062dc1f7"
+    },
+    "msi-certification.json": {
+      "size": 269,
+      "sha256": "e271ea5453abf79a93ea532bf83458594ec30164046bb576b2d5393745a920ef"
+    },
+    "osx-arm64-package-inputs.json": {
+      "size": 374,
+      "sha256": "48e8257ff2e7bdf3fd727a3391a467270200a1506b96aa4b8baebfcc804ba29a"
+    },
+    "osx-x64-package-inputs.json": {
+      "size": 463,
+      "sha256": "f5208861da0abac7656c94c4ec0c09a205151d41bf204fbaebb15ba3839028dd"
+    },
+    "sbom.json": {
+      "size": 31102,
+      "sha256": "053d3a4fd3b63a6c6e198caebc2c43eabd7a296243315e6bc971f5505fa7e770"
+    },
+    "sha256sums.txt": {
+      "size": 2117,
+      "sha256": "6c0bec7c6ac7a1c4707626ec5eb56032a0efb78d8a490fdcbb574c3b21c198e2"
+    },
+    "windows-package-inputs.json": {
+      "size": 367,
+      "sha256": "2b8e718d0cdfb8e9e31bae2a222242b179399cef80ed5a7006e64f0b10f1a62f"
+    }
+  }
+}

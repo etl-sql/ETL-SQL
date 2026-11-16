@@ -75,17 +75,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        // Detail starts with the single-value filter Studio wrote before selections could hold
-        // several values.
-        var reportId = await OpenStudioAsync(page, script =>
-        {
-            const string plain = "CREATE VISUAL Detail AS TABLE (\n  SOURCE = #sales\n)";
-            script = script.ReplaceLineEndings("\n");
-            Assert.Contains(plain, script, StringComparison.Ordinal);
-            return "DECLARE @Region VARCHAR(20) = 'All';\n" + script.Replace(plain,
-                "CREATE VISUAL Detail AS TABLE (\n  SOURCE = (SELECT * FROM #sales WHERE @Region = 'All' OR Region = @Region)\n)",
-                StringComparison.Ordinal);
-        });
+        var reportId = await OpenStudioAsync(page);
 
         await SelectVisualAsync(page, "ByRegion");
         await page.SelectOptionAsync("#pp-interaction-on-select", "HIGHLIGHT");
@@ -94,11 +84,11 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         await SelectVisualAsync(page, "Detail");
         await page.SelectOptionAsync("#pp-interaction-on-select", "FILTER");
         await WaitForScriptAsync(page, "CREATE VISUAL Detail", "INTERACTIONS (ON_SELECT = FILTER)");
-        await Expect(page.Locator("[data-single-pick='Region']")).ToContainTextAsync("one selected Region at a time");
-        await page.Locator("[data-filter-several='Region']").ClickAsync();
+        await Expect(page.Locator("[data-unread-key='Region']")).ToContainTextAsync("arrives as @Region");
+        await page.Locator("[data-filter-on='Region']").ClickAsync();
         await WaitForScriptAsync(page, "CREATE VISUAL Detail", "WHERE 'All' IN @Region OR Region IN @Region");
         await WaitForScriptAsync(page, "DECLARE @Region", "LIST = 'All'");
-        await Expect(page.Locator("[data-single-pick]")).ToHaveCountAsync(0);
+        await Expect(page.Locator("[data-filter-on='Region']")).ToHaveCountAsync(0);
 
         await SaveAsync(page, reportId);
 
@@ -107,8 +97,8 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         var first = await ClickChartMarkAsync(report, "ByRegion");
         await WaitForRegionsAsync(report, "Detail", regions => regions.SetEquals([first]),
             $"Detail should show only {first} after the first click");
-        var second = await RegionOfMarkAsync(marks.Nth(1));
-        await marks.Nth(1).ClickAsync(new() { Modifiers = [KeyboardModifier.Control], Force = true });
+        var second = await RegionOfMarkAsync(report, "ByRegion", 1);
+        await marks.Nth(1).ClickAsync(new() { Modifiers = [KeyboardModifier.Control] });
 
         await WaitForRegionsAsync(report, "Detail", regions => regions.SetEquals([first, second]),
             $"Detail should show {first} and {second} after the Ctrl+click");
@@ -179,8 +169,8 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         var report = await RunReportAsync(page, reportId);
         Assert.True((await RegionsShownAsync(report, "Orders")).Count > 1, "Orders should start unfiltered.");
         var mark = report.Locator("[data-visual-name='RegionDrill'] [data-row-index]").First;
-        var region = await RegionOfMarkAsync(mark);
-        await mark.ClickAsync(new() { Button = MouseButton.Right, Force = true });
+        var region = await RegionOfMarkAsync(report, "RegionDrill");
+        await mark.ClickAsync(new() { Button = MouseButton.Right });
         await report.Locator(".report-ctx-menu [data-click-action='SET_PARAMETER']").ClickAsync();
 
         await WaitForRegionsAsync(report, "Orders", regions => regions.Count == 1 && regions.Contains(region),
@@ -254,8 +244,8 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
 
         var report = await RunReportAsync(studio, reportId);
         var mark = report.Locator("[data-visual-name='ByRegion'] [data-row-index]").First;
-        var region = await RegionOfMarkAsync(mark);
-        await mark.HoverAsync(new() { Force = true });
+        var region = await RegionOfMarkAsync(report, "ByRegion");
+        await mark.HoverAsync();
         var tooltip = report.Locator(".report-chart-tooltip");
         await Expect(tooltip).ToBeVisibleAsync(new() { Timeout = 15_000 });
         await Expect(tooltip).ToContainTextAsync("Region mix");
@@ -285,8 +275,8 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
 
         var report = await RunReportAsync(studio, reportId);
         var mark = report.Locator("[data-visual-name='RegionDrill'] [data-row-index]").First;
-        var region = await RegionOfMarkAsync(mark);
-        await mark.ClickAsync(new() { Force = true });
+        var region = await RegionOfMarkAsync(report, "RegionDrill");
+        await mark.ClickAsync();
         var popover = report.Locator(".report-chart-tooltip.report-chart-detail-pinned");
         await Expect(popover).ToBeVisibleAsync(new() { Timeout = 15_000 });
         await Expect(report.Locator(".report-chart-tooltip-loading")).ToHaveCountAsync(0, new() { Timeout = 15_000 });
@@ -416,20 +406,61 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         ["West"] = "240",
     };
 
-    private static Task<string> RegionOfMarkAsync(ILocator mark) =>
-        // Resolve the mark and read its card in one browser evaluation. A retained element handle
-        // can be detached by a chart redraw between locator resolution and EvaluateAsync.
-        mark.EvaluateAllAsync<string>(
+    [Fact]
+    public async Task ChartRegionProbeWaitsForTheAttachedMarkAfterRedraw()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        await session.Page.SetContentAsync("<iframe id='region-probe'></iframe>");
+        var report = session.Page.FrameLocator("#region-probe");
+        await report.Locator("body").EvaluateAsync(
             """
-            marks => {
-                const mark = marks[0];
-                if (!mark) throw new Error('The chart mark is not rendered.');
-                const card = mark.closest('[data-visual-name]');
-                const data = card._visualData || card.closest('.visual-card')?._visualData;
-                const index = (data.columns || []).findIndex(c => c.toLowerCase() === 'region');
-                return String(data.rows[Number(mark.dataset.rowIndex)][index]);
+            body => {
+                body.innerHTML = '<div class="visual-card" data-visual-name="Probe"><svg><rect data-row-index="0" /></svg></div>';
+                window.regionProbeFirstRead = new Promise(resolve => {
+                    Object.defineProperty(body.firstElementChild, '_visualData', {
+                        get() { resolve(); return undefined; }
+                    });
+                });
             }
             """);
+        var region = RegionOfMarkAsync(report, "Probe");
+        await report.Locator("body").EvaluateAsync("() => window.regionProbeFirstRead")
+            .WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(await report.Locator("body").EvaluateAsync<bool>(
+            """
+            body => {
+                const originalMark = body.querySelector('[data-row-index]');
+                body.innerHTML = '<div class="visual-card" data-visual-name="Probe"><svg><rect data-row-index="0" /></svg></div>';
+                body.firstElementChild._visualData = { columns: ['Region'], rows: [['West']] };
+                return !originalMark.isConnected;
+            }
+            """));
+        Assert.Equal("West", await region);
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static async Task<string> RegionOfMarkAsync(IFrameLocator report, string visual, int markIndex = 0)
+    {
+        // Query and read inside one synchronous browser callback. Locator resolution can retain
+        // a mark that a redraw detaches before a second browser command reads its parent.
+        return (await ETL_SQL.TestSupport.LoadAwareWait.UntilAsync<string?>(
+            $"{visual} mark {markIndex} to have attached region data",
+            cancellationToken => report.Locator("body").EvaluateAsync<string?>(
+                """
+                (body, { visual, markIndex }) => {
+                    const card = body.querySelector(`[data-visual-name="${CSS.escape(visual)}"]`);
+                    const mark = card?.querySelectorAll('[data-row-index]')[markIndex];
+                    const data = card?._visualData || card?.closest('.visual-card')?._visualData;
+                    if (!body.isConnected || !mark?.isConnected || !data) return null;
+                    const index = (data.columns || []).findIndex(c => c.toLowerCase() === 'region');
+                    const row = data.rows?.[Number(mark.dataset.rowIndex)];
+                    return index >= 0 && row ? String(row[index]) : null;
+                }
+                """, new { visual, markIndex }).WaitAsync(cancellationToken),
+            region => region is not null,
+            TimeSpan.FromSeconds(15),
+            describe: region => region ?? "Chart is re-rendering"))!;
+    }
 
     // ── Studio ───────────────────────────────────────────────────────────────
 
@@ -437,7 +468,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
     {
         await fixture.SignInAsync(page);
         var reportId = await CreateReportAsync(page, editScript);
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await page.WaitForFunctionAsync(
             "() => (window.__STUDIO__?.state?.designerInstance?.getState()?.pages || []).some(p => (p.visuals || []).length > 0)",
             null, new PageWaitForFunctionOptions { Timeout = 30_000 });
@@ -517,7 +548,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
 
     private static async Task<IFrameLocator> RunReportAsync(IPage page, int reportId)
     {
-        await page.GotoAsync($"/index.html#report-{reportId}");
+        await page.GotoWithDiagnosticsAsync($"/index.html#report-{reportId}");
         var execute = page.Locator("#execBtn");
         var refresh = page.Locator("#refreshBtn");
         await Expect(execute.Or(refresh).First).ToBeVisibleAsync(new() { Timeout = 30_000 });
@@ -534,8 +565,8 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
     private static async Task<string> ClickChartMarkAsync(IFrameLocator report, string visual)
     {
         var mark = report.Locator($"[data-visual-name='{visual}'] [data-row-index]").First;
-        var region = await RegionOfMarkAsync(mark);
-        await mark.ClickAsync(new() { Force = true });
+        var region = await RegionOfMarkAsync(report, visual);
+        await mark.ClickAsync();
         return region;
     }
 

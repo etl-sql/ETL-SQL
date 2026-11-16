@@ -52,6 +52,9 @@ installed on the machine running ETL-SQL.
 | Snowflake | **Yes** — use [`SNOWFLAKE`](snowflake.md) | n/a |
 | BigQuery | **Yes** — use [`BIGQUERY`](bigquery.md) | n/a |
 
+`${NAME}` placeholders read host environment variables. Each name must be listed in
+`Security:AllowedEnvVars`.
+
 ```sql
 -- Amazon Redshift (DSN-less)
 CREATE CONNECTION redshift AS ODBC(DRIVER='{Amazon Redshift ODBC Driver (x64)}',

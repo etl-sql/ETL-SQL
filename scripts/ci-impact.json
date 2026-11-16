@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "lanes": [
+    "source-preflight",
+    "build-and-test",
+    "browser-consumer-contracts",
+    "build-vscode",
+    "sample-scripts",
+    "portal-browser-journey",
+    "studio-performance-budgets",
+    "enterprise-certification",
+    "docker-integration-tests",
+    "engine-certification",
+    "msi-upgrade"
+  ],
+  "always": ["source-preflight"],
+  "rules": [
+    {
+      "name": "Planning and release documentation",
+      "pattern": "^(?:(?:TODO|ROADMAP|CHANGELOG|AGENTS|CLAUDE|GEMINI)\\.md|docs/(?:releases|architecture)/.+\\.md)$",
+      "lanes": [],
+      "nativePackages": false
+    },
+    {
+      "name": "Release evidence collectors and release workflow checks",
+      "pattern": "^scripts/(?:collect-[\\w-]+\\.mjs|checks/test-(?:release|hosted|operator|collected|certified)[\\w-]*\\.mjs)$",
+      "lanes": [],
+      "nativePackages": false
+    },
+    {
+      "name": "VS Code extension source and tests",
+      "pattern": "^src/etl-sql-vscode/(?:src|test|tests)/",
+      "lanes": ["build-vscode"],
+      "nativePackages": true
+    },
+    {
+      "name": "VS Code UI source and browser consumers",
+      "pattern": "^src/etl-sql-vscode/ui/src/",
+      "lanes": ["browser-consumer-contracts", "build-vscode", "portal-browser-journey", "studio-performance-budgets"],
+      "nativePackages": true
+    },
+    {
+      "name": "Portal browser tests and their performance consumers",
+      "pattern": "^tests/ETL-SQL\\.Portal\\.BrowserTests/.*\\.cs$",
+      "lanes": ["portal-browser-journey", "studio-performance-budgets"],
+      "nativePackages": false
+    },
+    {
+      "name": "MSI authoring and source validation",
+      "pattern": "^(?:src/ETL-SQL\\.Installer/Installer\\.wxs|scripts/(?:Test-InstallerSources\\.ps1|checks/test-installer-sources\\.mjs))$",
+      "lanes": ["msi-upgrade"],
+      "nativePackages": false
+    },
+    {
+      "name": "MSI certification scripts and focused fixtures",
+      "pattern": "^scripts/(?:Test-Msi(?:Portal)?Upgrade\\.ps1|checks/(?:Test-Msi(?:Checkpoint|BackupEvidence)\\.ps1|test-msi-(?:candidate|build-watchdog)\\.mjs))$",
+      "lanes": ["msi-upgrade"],
+      "nativePackages": false
+    },
+    {
+      "name": "Core, runtime, shared UI, dependencies and unclassified files",
+      "pattern": "^",
+      "lanes": "*",
+      "nativePackages": true
+    }
+  ]
+}

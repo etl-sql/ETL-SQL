@@ -197,8 +197,13 @@ namespace ETL_SQL.Tests.Operations.Operations
             eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
             eval.MemoryArbiter = new MemoryGrantArbiter(64 * 1024);
 
+            // The engine sizes fan-out from the 20 sampled keys (32 partitions), and which keys share a
+            // partition depends on CompoundKey's per-process hash seed. Each key's build alone must
+            // therefore exceed the ceiling: 250 rows of ~540 packed bytes is about 2x 64 KiB. With
+            // 128-character padding a key fit (~46 KB), and the test failed whenever no two keys
+            // happened to share a partition (about 1 run in 2,500).
             var left = JoinRows(500, 20, "lval");
-            var right = JoinRows(5000, 20, "rval", padChars: 128);
+            var right = JoinRows(5000, 20, "rval", padChars: 512);
             var engine = new ExternalJoinEngine(eval, logger);
 
             var results = await engine.ApplyHashJoinExternal(
@@ -206,7 +211,8 @@ namespace ETL_SQL.Tests.Operations.Operations
                 new List<string> { "id" }, new List<string> { "id" }).ToListAsync();
 
             Assert.Equal(125000, results.Count);
-            Assert.True(engine.ColumnarRepartitionRows > 0);
+            // Every partition was oversized, so every probe and build row was rewritten natively.
+            Assert.True(engine.ColumnarRepartitionRows >= 5500, $"Rewrote {engine.ColumnarRepartitionRows} rows.");
         }
 
         // Note: no "SpillOrFail throws" test here. That path requires the heap-growth guard to trip

@@ -76,6 +76,11 @@ try {
     assert.equal(fs.existsSync(path.join(root, emitted)), true);
     reset();
 
+    // An inventory with no outputs would regenerate nothing and prove nothing.
+    write(inventoryPath, inventory({}));
+    await assert.rejects(run(preparing({})), /lists no outputs/);
+    reset();
+
     fs.rmSync(path.join(root, inventoryPath));
     await assert.rejects(run(preparing(good)), /inventory is missing.*sync-assets/);
     console.log('source-only preparation proof checks passed');

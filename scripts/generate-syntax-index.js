@@ -58,15 +58,13 @@ function extractStewardshipTags(source) {
   }
 
   const tags = [];
-  const definitionPattern = /new\("([^"]+)"\s*,\s*StewardshipTagValueKind\.\w+\s*,\s*(?:\w+|\[[^\]]*\])\s*,\s*\[[^\]]*\]\s*,\s*\[([^\]]*)\]/g;
+  const definitionPattern = /new\(\s*"([^"]+)"\s*,\s*StewardshipTagValueKind\.\w+\s*,\s*(?:\w+|\[[^\]]*\])\s*,\s*\[[^\]]*\]\s*\)/g;
   let match;
   while ((match = definitionPattern.exec(definitions[1])) !== null) {
     tags.push(match[1]);
-    const aliasPattern = /"([^"]+)"/g;
-    let alias;
-    while ((alias = aliasPattern.exec(match[2])) !== null) tags.push(alias[1]);
   }
-  if (tags.length === 0) {
+  const expected = [...definitions[1].matchAll(/new\(\s*"/g)].length;
+  if (tags.length === 0 || tags.length !== expected) {
     throw new Error('Unable to extract stewardship tags from StewardshipTagCatalog.cs');
   }
   return tags;
@@ -79,7 +77,7 @@ function renderRows(tokens, family, notePrefix) {
 function renderGeneratedSection(data) {
   const CATEGORIES = {
     "Settings & Engine Configuration": [
-        "WEEK_START_DAY", "SCRIPT_HASH_POLICY", "CASE_SENSITIVE", "PROFILING", "PROFILE",
+        "WEEK_START_DAY", "DATEFORMAT", "SCRIPT_HASH_POLICY", "CASE_SENSITIVE", "PROFILING", "PROFILE",
         "WHAT_IF", "ALLOW_FILE_OPERATIONS", "ALLOW_RECURSIVE_LAYERS", "TELEMETRY",
         "INTERACTIVE_MODE", "LINT", "VERSION", "CONFIG", "MAX_RECURSIVE_DEPTH",
         "MAX_IN_MEMORY_BATCHES", "FOREACH_PAGE_SIZE", "MAX_MESSAGES", "MAX_FILE_OPERATIONS",
@@ -284,4 +282,5 @@ function main() {
   }
 }
 
-main();
+module.exports = { extractStewardshipTags };
+if (require.main === module) main();

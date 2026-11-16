@@ -157,7 +157,7 @@ if (-not $NoDocker) {
 
 $summary = [ordered]@{
     schemaVersion = 1
-    phase = 'v0.15.0 Phase 6'
+    phase = 'High availability soak'
     runId = $metadata.runId
     capturedAt = (Get-Date).ToUniversalTime().ToString('o')
     diagnosticsRoot = Get-RelativeLabel $OutputRoot

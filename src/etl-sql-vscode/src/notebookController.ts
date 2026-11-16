@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ReplManager, EngineMessage } from './ReplManager';
 import { getExecutablePath } from './extension';
+import { formatNotebookTable } from './htmlEscape';
 
 export class ETLNotebookController {
     readonly controllerId = 'etl-sql-notebook-controller-id';
@@ -61,7 +62,7 @@ export class ETLNotebookController {
             
             const messageHandler = (msg: EngineMessage) => {
                 if (msg.type === 'results') {
-                    const html = this._formatTable(msg.columns || [], msg.rows || []);
+                    const html = formatNotebookTable(msg.columns || [], msg.rows || []);
                     outputs.push(vscode.NotebookCellOutputItem.text(html, 'text/html'));
                     execution.replaceOutput(new vscode.NotebookCellOutput(outputs));
                 } else if (msg.type === 'visual') {
@@ -97,25 +98,6 @@ export class ETLNotebookController {
         } finally {
             (repl as unknown as { _onCellMessage?: (msg: EngineMessage) => void })._onCellMessage = undefined;
         }
-    }
-
-    private _formatTable(columns: string[], rows: Record<string, unknown>[]): string {
-        let html = '<div style="max-height: 400px; overflow: auto; border: 1px solid #444; border-radius: 4px;">';
-        html += '<table style="border-collapse: collapse; width: 100%; font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size);">';
-        html += '<thead><tr>';
-        for (const col of columns) {
-            html += `<th style="border: 1px solid #444; padding: 8px; text-align: left; background-color: #333;">${col}</th>`;
-        }
-        html += '</tr></thead><tbody>';
-        for (const row of rows) {
-            html += '<tr>';
-            for (const col of columns) {
-                html += `<td style="border: 1px solid #444; padding: 8px;">${row[col] ?? ''}</td>`;
-            }
-            html += '</tr>';
-        }
-        html += '</tbody></table></div>';
-        return html;
     }
 
 

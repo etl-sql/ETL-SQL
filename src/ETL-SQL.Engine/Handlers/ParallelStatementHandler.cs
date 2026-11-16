@@ -22,7 +22,8 @@ public class ParallelStatementHandler : IStatementHandler
         int adaptiveLimit = Math.Max(1, context.EffectiveMaxParallelDegree);
         int safetyLimit = Math.Min(limit, adaptiveLimit);
 
-        var semaphore = new System.Threading.SemaphoreSlim(safetyLimit);
+        using var semaphore = new System.Threading.SemaphoreSlim(safetyLimit);
+        var cancellationToken = context.CancellationToken;
 
         // Mark the current tree node so the renderer shows it as a collapsible parallel block.
         if (context.CurrentNodeId.HasValue)
@@ -34,11 +35,11 @@ public class ParallelStatementHandler : IStatementHandler
         // Phase 2: Launch all statements with throttling and index-based tracking
         var indexedTasks = stmt.Body.Statements.Select(async (s, index) =>
         {
-            await semaphore.WaitAsync();
+            await semaphore.WaitAsync(cancellationToken);
             try
             {
                 var fork = context.Fork();
-                await fork.EvaluateStatement(s);
+                await fork.EvaluateStatement(s, cancellationToken);
                 return (index, fork);
             }
             finally

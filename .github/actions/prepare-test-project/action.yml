@@ -1,0 +1,40 @@
+name: Prepare a focused test project
+description: Prepare pinned browser assets, restore and build one test project with retained deadlines.
+inputs:
+  project:
+    description: Repository-relative test project path
+    required: true
+  evidence:
+    description: Supervisor evidence directory
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 22
+    - uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: 10.0.x
+    - name: Install browser compiler
+      shell: pwsh
+      env:
+        TEST_EVIDENCE: ${{ inputs.evidence }}
+      run: ./scripts/Invoke-CertificationProcess.ps1 -Command pwsh -CommandArguments @('-NoProfile', '-Command', 'npm ci --prefix scripts/typecheck; exit $LASTEXITCODE') -EvidenceDirectory "$env:TEST_EVIDENCE/compiler" -TimeoutSeconds 360
+    - name: Prepare browser assets
+      shell: pwsh
+      env:
+        TEST_EVIDENCE: ${{ inputs.evidence }}
+      run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/sync-assets.js') -EvidenceDirectory "$env:TEST_EVIDENCE/assets" -TimeoutSeconds 360
+    - name: Restore focused test project
+      shell: pwsh
+      env:
+        TEST_PROJECT: ${{ inputs.project }}
+        TEST_EVIDENCE: ${{ inputs.evidence }}
+      run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('restore', $env:TEST_PROJECT) -EvidenceDirectory "$env:TEST_EVIDENCE/restore" -TimeoutSeconds 600
+    - name: Build focused test project
+      shell: pwsh
+      env:
+        TEST_PROJECT: ${{ inputs.project }}
+        TEST_EVIDENCE: ${{ inputs.evidence }}
+      run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', $env:TEST_PROJECT, '--configuration', 'Release', '--no-restore', '-m:1', '-nr:false') -EvidenceDirectory "$env:TEST_EVIDENCE/build" -TimeoutSeconds 900

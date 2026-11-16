@@ -116,11 +116,8 @@ public sealed record DataQualityRunDto(
 /// <summary>
 /// One rule's failure count for a run.
 ///
-/// <para>Normally read from the structured per-rule rows the engine writes, which carry the target
-/// table, the action the rule took, and the rule's owner. Runs that predate that capture have only
-/// the compact <c>column:rule=count;…</c> history string, which cannot express those three — such a
-/// row is marked <see cref="CountsOnly"/> so a blank owner reads as "not recorded by this run"
-/// rather than as "nobody owns this rule".</para>
+/// <para>Read from the structured per-rule rows the engine writes, which carry the target table,
+/// the action the rule took, and the rule's owner.</para>
 /// </summary>
 public sealed record DataQualityRuleFailureDto(
     string Column,
@@ -128,14 +125,7 @@ public sealed record DataQualityRuleFailureDto(
     long Count,
     string? TargetTable = null,
     string? Action = null,
-    string? Owner = null,
-    /// <summary>
-    /// True when this row came from the legacy display string rather than structured capture, so
-    /// <see cref="TargetTable"/>, <see cref="Action"/> and <see cref="Owner"/> are unavailable
-    /// rather than empty. Counts-only rows are never merged with structured ones: two rules that
-    /// differ only in a field one side cannot see are not the same rule.
-    /// </summary>
-    bool CountsOnly = false);
+    string? Owner = null);
 
 /// <summary>One rule protecting a script output column, including rules that have not failed.</summary>
 public sealed record DataQualityRuleDefinitionDto(

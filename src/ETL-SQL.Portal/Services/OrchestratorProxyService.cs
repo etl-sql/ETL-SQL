@@ -34,14 +34,6 @@ public class OrchestratorProxyService(
     PortalDbContext? portalDb = null,
     OrchestratorAssertionIssuer? assertionIssuer = null) : ISharedTenantLifecycleOrchestratorClient
 {
-    /// <summary>
-    /// Retired caller-controlled attribution header. Signed identity assertions now carry both
-    /// attribution and authorization identity; retaining this constant only prevents source-level
-    /// surprises for integrations while ensuring it is never emitted or trusted.
-    /// </summary>
-    [Obsolete("Use the signed X-Orchestrator-Identity assertion. This header has no authority and is no longer emitted.")]
-    public const string ActorHeader = "X-Orchestrator-Actor";
-
     public bool IsConfigured => !string.IsNullOrWhiteSpace(settings.ApiUrl);
 
     public async Task<bool> IsOnlineAsync()

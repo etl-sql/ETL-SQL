@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace ETL_SQL.Portal.BrowserTests;
 
@@ -9,7 +10,7 @@ public sealed class FilterControlBehaviourTests(DetailSurfaceHarnessFixture fixt
     private async Task<IPage> OpenAsync(BrowserSession session)
     {
         var page = session.Page;
-        await page.GotoAsync($"{fixture.BaseUrl}/tools/ui-sandbox/filter-controls.html");
+        await page.GotoWithDiagnosticsAsync($"{fixture.BaseUrl}/tools/ui-sandbox/filter-controls.html");
         await page.Locator("input[type='search']").WaitForAsync();
         return page;
     }
@@ -27,8 +28,8 @@ public sealed class FilterControlBehaviourTests(DetailSurfaceHarnessFixture fixt
 
         await clear.ClickAsync();
 
-        Assert.Equal("", await input.InputValueAsync());
-        Assert.False(await clear.IsVisibleAsync());
+        await Expect(input).ToHaveValueAsync("");
+        await Expect(clear).ToBeHiddenAsync();
         Assert.True(await input.EvaluateAsync<bool>("element => element === document.activeElement"));
     }
 

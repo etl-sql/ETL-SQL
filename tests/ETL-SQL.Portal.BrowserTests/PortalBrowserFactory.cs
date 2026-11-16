@@ -150,7 +150,10 @@ public class PortalBrowserFactory : PortalWebFactory
         {
             // Synchronous disposal cannot await the stop, so callers should prefer DisposeAsync.
             // Kept working rather than throwing, because xunit disposes fixtures either way.
-            kestrelHost?.StopAsync(TimeSpan.FromSeconds(15)).GetAwaiter().GetResult();
+            // Same bounded stop as DisposeAsync: a timed-out stop must not skip the host dispose
+            // and base.Dispose (which deletes the temp directory).
+            try { kestrelHost?.StopAsync(TimeSpan.FromSeconds(15)).GetAwaiter().GetResult(); }
+            catch (OperationCanceledException) { }
             kestrelHost?.Dispose();
             kestrelHost = null;
         }

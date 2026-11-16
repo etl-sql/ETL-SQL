@@ -1,0 +1,25 @@
+/* @owner: 'Capacity Certification'; @steward: 'Capacity Certification';
+   @contact: 'capacity@example.test'; @classification: 'public'; @quality: 'bronze'; */
+
+SET REPORT TITLE = 'Capacity Cache-Cold Report';
+SET REPORT DESCRIPTION = 'Dataset-backed report refreshed during capacity runs to exercise cache-cold execution.';
+
+CREATE OR ALTER DATASET &capacity_cold ACCESS PUBLIC AS (
+    WITH numbers AS (
+        SELECT 1 AS n
+        UNION ALL
+        SELECT n + 1 FROM numbers WHERE n < 5000
+    )
+    SELECT n AS Id, n % 10 AS Bucket, n * 3 AS Amount
+    FROM numbers
+);
+
+CREATE VISUAL ColdTotals AS TABLE (
+    SOURCE = (SELECT Bucket, SUM(Amount) AS Total FROM &capacity_cold GROUP BY Bucket),
+    MAPPINGS (Bucket = Bucket, Total = Total)
+);
+
+CREATE PAGE Overview AS DASHBOARD (
+    STRUCTURE = 'A',
+    MAP ('A' = ColdTotals)
+);

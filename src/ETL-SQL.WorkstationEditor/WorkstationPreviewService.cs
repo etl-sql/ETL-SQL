@@ -9,6 +9,7 @@ namespace ETL_SQL.WorkstationEditor;
 
 public sealed class WorkstationPreviewService(IServiceProvider services, ETL_SQL.Common.ILogger logger)
 {
+    internal const string PreviewSourceName = "preview.rptsql";
     private const int TimeoutSeconds = 30;
     private const int OperatorGrantMb = 128;
     private const long SessionCeilingBytes = 256L * 1024 * 1024;
@@ -29,6 +30,16 @@ public sealed class WorkstationPreviewService(IServiceProvider services, ETL_SQL
         if (string.IsNullOrWhiteSpace(scriptText))
             throw new ArgumentException("Nothing to preview — the script is empty.");
 
+        // A preview executes the whole script. Run stops for confirmation before destroying
+        // persistent data; a preview has no confirmation step, so it refuses instead.
+        var destructive = WorkstationRunGuard.FindDestructiveStatements(scriptText);
+        if (destructive.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Preview does not run statements that destroy persistent data: " + string.Join("; ", destructive) +
+                ". Run the script with confirmation first, or move this work to a #temp table.");
+        }
+
         var script =
             $"SET OPERATOR_MEMORY_GRANT = {OperatorGrantMb};\n" +
             $"SET MAX_SESSION_SIZE = {SessionCeilingBytes};\n" +
@@ -45,7 +56,8 @@ public sealed class WorkstationPreviewService(IServiceProvider services, ETL_SQL
         };
         ApplyParameters(sessionContext, parameters);
 
-        var session = new ExecutionSession(services, sessionContext, logger);
+        // Disposed once the manifest is built; the builder still reads the session's evaluator.
+        await using var session = new ExecutionSession(services, sessionContext, logger);
         var result = await session.ExecuteAsync(script, timeout.Token, "workstation-preview");
 
         if (!result.Success)
@@ -59,7 +71,9 @@ public sealed class WorkstationPreviewService(IServiceProvider services, ETL_SQL
         var evaluator = session.LastEvaluator
             ?? throw new InvalidOperationException("Preview produced no report context.");
 
-        return await new ManifestBuilder(evaluator).BuildAsync(scriptText, deferPaginatedPages: !runEveryPage);
+        // scriptSource names the report (PDF title fallback, Markdown "Source:"); every file-based
+        // host passes a path. An unsaved buffer has none, so name it after the preview.
+        return await new ManifestBuilder(evaluator).BuildAsync(PreviewSourceName, deferPaginatedPages: !runEveryPage);
     }
 
     /// <summary>

@@ -26,7 +26,7 @@ public class AlterTableStatementHandler : IStatementHandler
     {
         var stmt = (AlterTableStatement)statement;
 
-        var destination = await context.ResolveDataSourceAsync(stmt.TargetTable);
+        var destination = await context.ResolveReadSourceAsync(stmt.TargetTable);
         if (destination == null)
             throw new ExecutionException($"Unknown table/connection: {stmt.TargetTable.TableName} at Line {stmt.Line}");
 

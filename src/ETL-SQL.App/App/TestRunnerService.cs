@@ -146,6 +146,7 @@ public static class TestRunnerService
             // Create a fresh scope for test isolation
             await using var scope = Program.ServiceProvider.CreateAsyncScope();
             var evaluator = scope.ServiceProvider.GetRequiredService<Evaluator>();
+            evaluator.SealScriptOnFirstRun = false;
             evaluator.CurrentScriptPath = filePath;
             evaluator.SessionId = Guid.NewGuid().ToString("N");
             evaluator.IsVerbose = ctx.IsVerbose;

@@ -1,4 +1,7 @@
 ﻿-- @requires: postgres
+-- Verifies System A after its setup, so it also runs on its own against an empty database.
+RUN SCRIPT 'system_a/setup_db.etlsql';
+DROP CONNECTION IF EXISTS system_a;
 CREATE CONNECTION system_a AS POSTGRES(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
 SELECT COUNT(*) AS row_count FROM system_a.hr_01_employees;
 SELECT COUNT(*) AS row_count FROM system_a.hr_02_demographics;

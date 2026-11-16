@@ -113,6 +113,15 @@ public sealed class SqliteSessionMetadataStoreTests
     }
 
     [Fact]
+    public void OperationLedger_RejectsSessionIdTraversal()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "etlsql-session-root-" + Guid.NewGuid().ToString("N"));
+
+        Assert.Throws<ArgumentException>(() =>
+            new ETL_SQL.Infrastructure.Sqlite.SqliteOperationLedger(root, Path.Combine("..", "escape")));
+    }
+
+    [Fact]
     public async Task InitializeAsync_AllowsSemicolonInSessionRootPath()
     {
         var root = Path.Combine(Path.GetTempPath(), "etlsql-session;root-" + Guid.NewGuid().ToString("N"));

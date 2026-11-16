@@ -46,7 +46,10 @@ namespace ETL_SQL.Tests.Integration.Integration
             var sessionManager = new SessionStateManager(NullLogger.Instance, security, config, new SqliteSessionMetadataStoreFactory(), _sessionDir);
 
             // 1. Load Session
-            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider(new Dictionary<string, string?>
+            {
+                ["Governance:Docker:AllowedImages:0"] = "mcr.microsoft.com/mssql/server:2022-latest"
+            }).GetRequiredService<Evaluator>();
             evaluator.IsPersistentSession = true;
             evaluator.SessionId = _sessionId;
             evaluator.SessionRoot = _sessionDir;

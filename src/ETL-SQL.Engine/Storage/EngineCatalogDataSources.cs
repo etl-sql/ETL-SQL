@@ -275,6 +275,7 @@ public sealed class VariablesDataSource : IDataSource
     {
         null => null,
         string text => text,
+        DateOnly dateOnly => dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
         IFormattable formattable => formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
         _ => value.ToString()
     };
@@ -285,6 +286,7 @@ public sealed class VariablesDataSource : IDataSource
         if (value is int || value is long) return "INT";
         if (value is bool) return "BOOLEAN";
         if (value is double || value is decimal) return "DECIMAL";
+        if (value is DateOnly) return "DATE";
         if (value is DateTime) return "DATETIME";
         if (value is string) return "STRING";
         if (value is IEnumerable<object>) return "LIST";
@@ -405,7 +407,9 @@ public sealed class ProfileDataSource : IDataSource
         // reached the profile, so the surface an operator profiles with described the pre-spill
         // engine: it reported bytes written and never bytes read back, partitions and never passes.
         "spill_read_bytes", "spill_extents", "partition_passes",
-        "aggregate_groups", "aggregate_expansion_ratio", "sort_spills", "cpu_time_ms"
+        "aggregate_groups", "aggregate_expansion_ratio", "sort_spills", "cpu_time_ms",
+        // Spill volume health: write cost per MB, and adaptive scale-downs it caused.
+        "spill_write_ms_per_mb", "storage_pressure_events"
     ];
 
     public ProfileDataSource(IExecutionContext context)
@@ -467,7 +471,9 @@ public sealed class ProfileDataSource : IDataSource
                 ["aggregate_groups"] = metric.AggregateGroupsCount,
                 ["aggregate_expansion_ratio"] = metric.AggregateExpansionRatio,
                 ["sort_spills"] = metric.SortSpillCount,
-                ["cpu_time_ms"] = metric.CpuTimeMs
+                ["cpu_time_ms"] = metric.CpuTimeMs,
+                ["spill_write_ms_per_mb"] = metric.SpillWriteMsPerMB,
+                ["storage_pressure_events"] = metric.StoragePressureEvents
             });
 
             if (rows.Count >= batchSize)
@@ -1332,15 +1338,6 @@ public sealed class LocksDataSource : IDataSource
                 );";
             await cmd.ExecuteNonQueryAsync(cancellationToken);
 
-            try
-            {
-                cmd.CommandText = "ALTER TABLE throttle_slots ADD COLUMN machine_name TEXT DEFAULT '';";
-                await cmd.ExecuteNonQueryAsync(cancellationToken);
-            }
-            catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.SqliteErrorCode == 1)
-            {
-                // Column already exists, ignore
-            }
         }
 
         using (var cmd = conn.CreateCommand())

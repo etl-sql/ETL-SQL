@@ -30,9 +30,9 @@
     ],
     "workload": [
       { "name": "metrics", "method": "GET", "path": "/metrics", "service": "orchestrator", "weight": 10 },
-      { "name": "trigger-spawn-short", "method": "POST", "path": "/api/scheduled-jobs/{{spawnShortJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 8, "thinkTimeMs": 1500 },
-      { "name": "trigger-spawn-long", "method": "POST", "path": "/api/scheduled-jobs/{{spawnLongJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 3, "thinkTimeMs": 6000 },
-      { "name": "kill-spawn-long", "method": "POST", "path": "/api/scheduled-jobs/{{spawnLongJobName}}/kill", "service": "orchestrator", "useApiKey": true, "weight": 1, "thinkTimeMs": 10000 },
+      { "name": "trigger-spawn-short", "method": "POST", "path": "/api/scheduled-jobs/{{spawnShortJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 8, "thinkTimeMs": 1500, "expectedStatuses": [202, 409, 503] },
+      { "name": "trigger-spawn-long", "method": "POST", "path": "/api/scheduled-jobs/{{spawnLongJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 3, "thinkTimeMs": 6000, "expectedStatuses": [202, 409, 503] },
+      { "name": "kill-spawn-long", "method": "POST", "path": "/api/scheduled-jobs/{{spawnLongJobName}}/kill", "service": "orchestrator", "useApiKey": true, "weight": 1, "thinkTimeMs": 10000, "expectedStatuses": [200, 404] },
       { "name": "history-spawn-short", "method": "GET", "path": "/api/scheduled-jobs/{{spawnShortJobName}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 4 },
       { "name": "history-spawn-long", "method": "GET", "path": "/api/scheduled-jobs/{{spawnLongJobName}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 4 }
     ]

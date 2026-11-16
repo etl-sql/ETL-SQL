@@ -16,8 +16,19 @@ A timeout reports the condition, elapsed time, baseline and scaled budgets, cali
 attempt count, and last state. Set `ETLSQL_WAIT_TIMING_EVIDENCE` to a JSONL path to retain the same
 data for successful waits.
 
-Do not add retries around a flaky test. Retries hide intermittent product defects as effectively as
-they hide scheduler noise.
+Do not add retries inside a test or around an assertion. Retries there hide intermittent product
+defects as effectively as they hide scheduler noise.
+
+**Lane retry-once (owner decision, 2026-11-08).** The engine, browser and plain `dotnet test` lanes
+rerun a failed test once, alone, on the same build (`scripts/TestRetry.Helpers.ps1`). A test that
+then passes is a flake. It does not fail the lane, but it is recorded: a `Flaky test (passed on
+retry)` job warning, a line in `flaky-tests.jsonl` beside the TRX, and `flakyMethods` in the shard
+receipt or manifest. A flake is still an open defect to fix at its cause. A test that fails again,
+more than three failing methods in one run, or a failed run with no failed result (crash, timeout,
+discovery) still fails the lane. Why: on release/v0.22.0, CI passed 16 of 28 runs from 2026-10-25
+to 2026-11-08, and about 13 different tests or steps caused the failures, most of them only once. With a gate that needs every lane
+green in one round, a long tail of rare flakes fails most rounds even though no single test is
+common.
 
 ## Reference pattern
 
@@ -73,6 +84,50 @@ class load and shared background-service state from its startup/shutdown observa
 
 ## History and outcomes
 
+- **v0.22.0 — Windows Chromium loopback mitigation:** the test browser backports
+  [Playwright's accepted mitigation](https://github.com/microsoft/playwright/pull/43605) for
+  intermittent TCP port-allocation failures. Windows launches disable `TcpPortRandomizationWin`.
+  One probe reads the pinned driver's effective feature list; the final launch preserves that list
+  in a single switch. Other platforms keep their defaults. No request retry or assertion timeout
+  changes. A real-browser regression checks every original disabled feature and other fixed switch.
+  Local stress completes 1,600 default page loads without reproducing the error; its occupancy
+  safeguard truncates later comparison arms. This does not establish the historical hosted
+  cause. At proposal `fbcbccf85`, [CI](https://github.com/etl-sql/ETL-SQL/actions/runs/41267322023),
+  [second inventory](https://github.com/etl-sql/ETL-SQL/actions/runs/41268947571) and
+  [third inventory](https://github.com/etl-sql/ETL-SQL/actions/runs/41270889034) each pass all
+  557 methods / 1,016 cases without retries, skips or overlapping shards. This establishes
+  consecutive hosted stability for the mitigation, without establishing every historical
+  timeout's cause. The [development evidence summary](../../certification-results/release-process-development-2026-11-01.json)
+  retains original run identities and receipt hashes. Raw probes and shard audits:
+  `release-validation/current-ci-review/`.
+- **v0.22.0 — missing-chart timeout evidence:** CI `41205139235` times out waiting for the
+  missing-chart message in shard 3. The plain locator wait did not capture a snapshot. It now
+  retains the existing bounded, sanitized request history and own-process resource counts before
+  teardown, then rethrows the original exception under the same timeout. A controlled missing-element
+  regression covers HTTP failure history, caller identity and token removal. The original test and
+  its 23-case class pass locally, which does not explain the hosted failure. Retained baseline and
+  follow-up evidence: `release-validation/current-ci-review/`. No retries or timeout increases were added.
+- **v0.22.0 — Studio startup and reload evidence:** hosted Portal-shard rehearsal `40609095598`
+  on `c9003c12dfb5d8d7914f0bc7b6a32e4e9da58227` includes two startup timeouts in
+  `StudioPersistenceTests` and one empty editor read after reload. Existing snapshots cover failed
+  navigation, but successful document navigation can still leave a failed module or startup API.
+  Studio persistence now waits for its requested active report and editor text. Failed condition
+  waits and script transport failures retain bounded process/transport/HTTP evidence, with URL
+  credentials, queries, fragments and response bodies excluded. Three controlled browser probes
+  fail against the previous helper and pass with this behavior; the full focused slice passes
+  32 cases. The hosted cause remains unproven. A local baseline passes all three hosted cases but
+  separately records a dataset-picker timeout after which Users appears in the failure text.
+  Original failures and recovery: `release-validation/studio-hosted-failures/`.
+- **v0.22.0 — desktop dataset-picker schema work:** the existing picker regression fails both in
+  a 335/336 baseline shard and in isolation. Bounded request timings show completed analysis calls
+  followed by a schema request that outlasts the 15-second wait. Constructing each MOCKDB source
+  eagerly generated the million-row fixture even for declared-schema lookups. Row initialization
+  is now deferred and shared; declared metadata does not start it. The same picker passes in about
+  three seconds, or five seconds with a private empty schema cache, alongside all 33 focused browser
+  cases and 31 connector cases. Initialization
+  regressions cover concurrent/cancelled readers, metadata fallback and truncation before reading.
+  They also expose and fix a P0: completed failed seeding could return partial rows. Failed seeds
+  now reject reads with a sanitized error. Hosted verification of this source change remains open.
 - **v0.15.0:** Eight scheduler tests used a fixed 500 ms delay before positive assertions. They
   moved to condition polling. A cluster-lock failure was separately diagnosed as a production
   lock-release defect and fixed with bounded release retry and ownership verification.
@@ -330,6 +385,18 @@ class load and shared background-service state from its startup/shutdown observa
   waited 10 s for the first host's `ApplicationStopping` after "Exit Without Saving" and timed out.
   It passed 3 of 3 locally the same day (9–11 s each). New, not yet diagnosed; same deferral.
 
+  **v0.22.0 investigation:** an aborted final heartbeat reproduces that shutdown wait timeout in
+  the desktop browser journey. The shell awaited the heartbeat before requesting shutdown, even
+  after the user confirmed a forced exit. Confirmed forced exits now send the shutdown request
+  without that heartbeat. Ordinary exits still refresh dirty state, including when the server's
+  last heartbeat said dirty and the browser has since saved. The deterministic regression fails
+  before the change and passes after it; the original desktop journey and the sandbox's
+  discard/cancel confirmation also pass locally. Shutdown-wait failures retain the existing bounded
+  transport/resource snapshot. The [original job log](https://github.com/etl-sql/ETL-SQL/actions/runs/39131831664/job/117688413031)
+  records only the wait timeout, with no failed-request detail, so it cannot establish that a
+  heartbeat failure caused that hosted incident. Hosted diagnosis and consecutive-run evidence
+  remain required before closure.
+
   The release candidate's first CI attempt (`cd1770eac`, run 39143534977) failed single browser
   tests on timeouts; the rerun of the failed jobs passed. Same deferral.
 
@@ -365,7 +432,7 @@ class load and shared background-service state from its startup/shutdown observa
   timeout cannot tell a refused sign-in from a library page still loading on a starved runner, so
   the helper now reports the URL and the page text when it gives up. Its wait is unchanged.
 
-  **Open: `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` in the Docker lane.** It failed in
+  **v0.21.0 FTP failure: `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` in the Docker lane.** It failed in
   2 ms with "Failed to connect to host" in three runs on 2026-10-11 and passed in the two before
   them, while the other FTP tests in the same class passed each time. A 2 ms refusal means nothing
   was accepting on the mapped port when that test, the first to run, connected. The fixture waited
@@ -381,6 +448,127 @@ class load and shared background-service state from its startup/shutdown observa
   writes. The test now waits for the job to carry both values, as
   `JobSchedulingIntegrationTests` already did for the same reason.
 
+## Docker follow-up closure (v0.22.0)
+
+Reviewed the retained GitHub job logs on 2026-10-24. These three consecutive CI run numbers on
+`release/v0.21.0` each executed the full Release integration lane. Counts below are passed/failed/skipped.
+
+| CI Docker job | Candidate | Engine integration | Portal integration |
+| :--- | :--- | :---: | :---: |
+| [247](https://github.com/etl-sql/ETL-SQL/actions/runs/39131831664/job/117688413174) | `7141a5df3390178c5aa3b81a9b6dc6eebd52d280` | 224 / 0 / 0 | 63 / 0 / 0 |
+| [248](https://github.com/etl-sql/ETL-SQL/actions/runs/39137736693/job/117705594862) | `e26936db7e6aa07ec90901f3e48fa2d97a647578` | 224 / 0 / 0 | 63 / 0 / 0 |
+| [249, original attempt](https://github.com/etl-sql/ETL-SQL/actions/runs/39143534977/job/117722627004) | `cd1770eacd17b988c57b96c6f398af45093ada9a` | 224 / 0 / 0 | 63 / 0 / 0 |
+
+Every checkout contains the mapped-port wait (`c7586fe26`), passive sign-in/list readiness
+(`5344e3e6a`) and scheduled-job last/next-run wait (`373cdf980`). The FTP fixture, FTP integration
+tests and platform Docker integration tests are unchanged through this review. The frozen lane
+selects `Category=Integration` in both projects; both named regressions are ordinary facts in that
+category. The original workflow retained console summaries, so these are full-lane results rather
+than individual TRX timings.
+
+Run 249 retried its browser job. Its later Docker job ID has the original execution timestamps and
+a decoded log identical to the first attempt, so it counts once. Later completed Docker executions
+in CI 251 and 254 also passed; [CI 258 at the current base](https://github.com/etl-sql/ETL-SQL/actions/runs/39171524120/job/117805403570)
+passed the same 287 cases without skips. Cancelled executions do not add successful samples.
+
+The [historical evidence record](../../certification-results/flaky-docker-stability-2026-10-24.json)
+retains candidate identities, original job links, log hashes and limitations. This closes the FTP
+and scheduled-job stability follow-up. It does not certify the eventual release candidate or prove
+that a timing defect can never recur. The browser transport and desktop exit investigations remain open.
+
+
+## Browser navigation failure diagnostics (v0.22.0)
+
+Transport failures may never produce an HTTP response, so the existing browser session's 4xx/5xx
+history cannot explain `net::ERR_NO_BUFFER_SPACE`. Each browser context now records up to 100
+transport failures separately. Records include timestamp, method, resource type, navigation flag,
+sanitized URL and Chromium error code. User information, query strings and fragments are removed;
+request headers, bodies and raw provider messages are never collected.
+
+`GotoWithDiagnosticsAsync` and `WaitForURLWithDiagnosticsAsync` preserve Playwright options,
+responses and original exceptions, collecting diagnostics on failures. Failed navigation requests
+also trigger collection, including on additional pages or click-driven navigation. Collection is
+bounded to eight snapshots per context and a four-second collection budget. A failed process lookup
+retains the test host and an explicit unavailable reason. Diagnostic errors cannot replace the
+original navigation failure.
+
+Snapshots identify only the test host and processes reported by that Chromium instance's
+[`SystemInfo.getProcessInfo`](https://chromedevtools.github.io/devtools-protocol/tot/SystemInfo/).
+Windows snapshots collect handle counts and per-owner-PID TCP/UDP endpoint counts for both IPv4 and
+IPv6 using [IP Helper TCP tables](https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable)
+and [UDP tables](https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedudptable).
+Addresses and ports are discarded. An exited/inaccessible process or unavailable table is recorded
+explicitly; unsupported platforms do not report fabricated socket counts.
+
+`Test-BrowserShard.ps1` puts JSON snapshots in its retained evidence directory's
+`navigation-diagnostics/` folder. Records carry candidate/run/attempt/shard identity when available,
+plus the navigation wrapper's caller name. Direct test runs can set `ETLSQL_BROWSER_DIAGNOSTICS_DIR`;
+the default is `TestResults/navigation-diagnostics/` under the test output directory. Synthetic
+diagnostic tests retain their deliberate-failure snapshots under `diagnostic-tests/`.
+
+This instrumentation does not establish the cause or fix the Windows CI flake. Capture the next
+hosted failure, correlate transport errors and process resource counts with its TRX, and retain
+consecutive-run evidence before closing the TODO.
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
 diagnostics belong in generated evidence, not a new release-specific tracking file.
+## Release-candidate flakes and supervised reruns (v0.22.0)
+
+These failures on 2026-11-03/04 candidates are intermittent on unchanged code. A green rerun does not
+close them; the table under "Root causes found (2026-11-09)" records which are fixed.
+
+| Test | Failure | Job |
+| :--- | :--- | :--- |
+| `StudioPerformanceBudgetTests.CanonicalStudioFixture_StaysWithinPlatformBudgets` | Studio startup measured 5757.64 ms; budget is 5000.00 ms | [Release Certification 41710847926, Portal Browser Journey (1/3)](https://github.com/etl-sql/ETL-SQL/actions/runs/41710847926/job/126181482465) |
+| `StudioDocumentLimitJourneyTests.PortalRateLimitedAnalysisExplainsStaleDiagnosticsAndRetriesTheKeptBuffer` | Locator expected to contain text 'Previous diagnostics are stale' | [Release Certification 41710847926, Portal Browser Journey (2/3)](https://github.com/etl-sql/ETL-SQL/actions/runs/41710847926/job/126181482741) |
+| Source preflight `test-workflows` | FAIL test-workflows (60.0s): the preflight per-check watchdog | [CI 41676267442, Source preflight](https://github.com/etl-sql/ETL-SQL/actions/runs/41676267442/job/126057603643) |
+| `PortalBrowserFixture.SignInAsync` (first sign-in of a collection, in `StudioPersistenceTests.ConnectionWizard_UsesProductionRegistryAndInsertsParserValidMockDb`) | Timeout 20000ms exceeded waiting for `#changeForm` to be visible; the next test took 19 s. Passed on 2026-11-03 rounds 4 and 5 with no Portal change | [CI 41744076759, Portal Browser Journey (3/3)](https://github.com/etl-sql/ETL-SQL/actions/runs/41744076759) |
+| `SandboxStoryTests.Studio_FilterPane_RendersCategoricalNumericAndDateControls` | `[data-filter-sidebar] [data-filter-min='total_amount']` not visible within 5000 ms; passed when rerun alone. 2026-11-09 | [CI 42660977082 attempt 1, Portal Browser Journey (2/3)](https://github.com/etl-sql/ETL-SQL/actions/runs/42660977082/job/129314627170) |
+
+That 2026-11-09 failure also exposed a defect in `scripts/Test-BrowserShard.ps1`: the in-shard retry
+passed, but the shard failed anyway with "Browser shard result verification failed." The retry runs
+through `Process.Start`, which never updates `$LASTEXITCODE`, and the result verifier runs no native
+command, so the check after it read the first run's failed exit code. A browser shard whose flake
+cleared on retry therefore always failed. The driver now clears the code before verification.
+
+The Release Candidate Supervisor (`.github/workflows/candidate-supervisor.yml`) reruns a failed job
+once when its log matches one of these signatures in
+`scripts/lib/candidate-failure-signatures.mjs`. This is a job-level rerun on unchanged inputs, not a
+retry inside the test, so the policy above still applies to the tests themselves. Each supervised
+rerun appears in the supervisor's run log. Record new occurrences here. A second failure of the
+same job on the same candidate is treated as a defect.
+
+### Root causes found (2026-11-09)
+
+A scan of 207 runs from 2026-11-03 to 2026-11-09 found every intermittent failure below. Each
+fix was checked by making the failure happen on purpose first, unless the row says otherwise.
+
+| Failure | Root cause | Fix |
+| :--- | :--- | :--- |
+| `StudioPerformanceBudgetTests` startup over 5000 ms | One sample per run; a single slow start on a shared runner failed it. Twelve CI runs peaked at 3027 ms. | `69d9fd5f2`: the budget applies to the median of three fresh rounds |
+| `StudioDocumentLimitJourneyTests` "Previous diagnostics are stale" | Studio retries after Retry-After (2 s) and clears the message on success; a slow test looked after the retry. A 2.5 s pause failed it every time. | `031d71d0b`: the retry is held until the test has seen the stale state |
+| `SandboxStoryTests.Studio_FilterPane…` | A script change makes Studio re-sample 400 ms later; the story mock answered with untyped rows, so the numeric filter vanished. It failed every time once that re-sample was awaited. | `9da165c03`: the story keeps its typed sample; the test waits for the re-sample |
+| `LedgerBackedSandboxAdmissionControllerTests` heartbeat and lost fence | Fixed sleeps (150 ms, 450 ms) and a 3 s guard raced SQLite renewals on a slow runner. | `5b8d29b11`: condition polling with a 30 s hang guard |
+| `PortalReaderJourneyTests.TwoReaders…` | The report frame loaded the runtime under a second URL, so every report rendered twice and the late render closed the open menu. | `678770d9b` |
+| `StudioInteractionJourneyTests` drill-down and Ctrl+click | Forced clicks on bars still being drawn; state read once after an action. | `b0e05b498` |
+| `ExternalJoinTests.OversizedPartitionsAreRewrittenAsNativeBatches` | The partition count depended on the string hash seed. | `bdcf9ac46` |
+| MSI preflight: every pwsh check aborts | All pwsh processes share one multicore-JIT startup profile; once it is corrupt every later pwsh aborts. Hand-corrupting it reproduces the abort. What corrupts it on the runner was not reproduced. | `de65ec028`: checks run with `DOTNET_MultiCoreJitMinNumCpus=100000`, so pwsh never reads or writes the profile |
+| Preflight `test-workstation-certification-driver` | The fixture read the clock twice; a phase completed 1 ms after its state was generated is rejected. A forced 2 ms gap failed it every time. | `ec75ab073` |
+| Preflight `test-workflows` at 60.0 s | Not slow code: across 39 CI preflights its median was 47.5 s and two other checks reached 55 s, against a 60 s deadline. | `2e15fbc36`: the deadline is 180 s, a hang guard |
+| Browser shard fails after its retry passed | `$LASTEXITCODE` kept the first run's code (see above). | `cd6870b93` |
+| CI red after an engine shard's retry passed (CI 43302334001, shard 7) | `test-lane.ps1` recorded the flake in `flakyMethods`, but `Merge-EngineCoverage.ps1` still rejected the first `Failed` result. Replaying that run's artifacts reproduced it. | `a882240cd`: the merge accepts a listed method only when every case passed in the shard's retry TRX, and lists it in `flakyTests` |
+| `SandboxAdmissionReconciliationServiceTests.AbandonedQueueEntryIsReclaimedWhileALiveWaiterKeepsItsPlace` (expected 1 cancelled, got 2) | The sweep used the clock after the live waiter's poll, against a 200 ms horizon; a runner stall over 200 ms aged the live waiter out too. | `51931f4f7`: the sweep runs as of the moment before the poll |
+
+Instrumented, root cause not yet found. Each now fails with the state needed to diagnose it:
+
+- `ReportLibrarySandboxTests.TheFolderTreeShowsSubfoldersAndOpensThemByMouseAndKeyboard` (CI 42609393604): no
+  reproduction in 80 local runs, including under full CPU load. `3fcdacd27` reports visibility, the
+  view transition, the page text and the reader mock's calls.
+- `PortalBrowserFixture.SignInAsync` first sign-in (CI 41744076759): `55381a37d` says whether the
+  login request was still pending or was refused.
+- `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` (CI 42502883560): `7f2553f48` names the
+  port that refused.
+
+Not test flakes: checkout and disk-cleanup action timeouts, lost runners, a full disk, and the
+2026-11-03 `documentation`, `flaky-delays` and `DocSanityTests…DeveloperSpecificPaths` failures,
+which were real defects on those commits and are fixed.

@@ -22,11 +22,7 @@ namespace ETL_SQL.Connectors.Mongodb
                 return "MongoDB Connector v1.0 (Offline - No Connection String Specified)";
             }
 
-            var host = GetHost(connectionString);
-            if (!string.IsNullOrEmpty(host))
-            {
-                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
-            }
+            EnforceAllHosts(context, connectionString, null);
 
             try
             {
@@ -100,12 +96,9 @@ namespace ETL_SQL.Connectors.Mongodb
                 }
             }
 
-            // Egress Security Hardening: Validate host against egress policies
-            var host = GetHost(connectionString, options);
-            if (!string.IsNullOrEmpty(host))
-            {
-                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
-            }
+            // Egress Security Hardening: every seed host in the URL is a destination the driver
+            // will dial, so each one is validated, not only the first.
+            EnforceAllHosts(context, connectionString, options);
 
             return new MongodbDataSource(context, connectionString, db ?? "test", collection, options);
         }
@@ -148,6 +141,35 @@ namespace ETL_SQL.Connectors.Mongodb
             }
 
             return builder.ToString();
+        }
+
+        internal void EnforceAllHosts(IExecutionContext context, string connectionString, Dictionary<string, string>? options)
+        {
+            foreach (var host in GetHosts(connectionString, options))
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
+        }
+
+        /// <summary>All seed hosts of a mongodb:// URL (mongodb://h1,h2,h3/db), in order.</summary>
+        internal IReadOnlyList<string> GetHosts(string connectionString, Dictionary<string, string>? options = null)
+        {
+            string connStr = connectionString;
+            if (string.IsNullOrEmpty(connStr) && options != null)
+            {
+                connStr = BuildConnectionString(options);
+            }
+            if (string.IsNullOrEmpty(connStr)) return Array.Empty<string>();
+            try
+            {
+                return new MongoUrl(connStr).Servers
+                    .Select(s => s.Host)
+                    .Where(h => !string.IsNullOrEmpty(h))
+                    .ToList();
+            }
+            catch
+            {
+                var single = GetHost(connStr);
+                return string.IsNullOrEmpty(single) ? Array.Empty<string>() : new[] { single };
+            }
         }
 
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null)

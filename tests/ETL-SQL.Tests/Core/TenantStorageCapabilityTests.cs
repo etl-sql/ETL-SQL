@@ -64,6 +64,7 @@ public sealed class TenantStorageCapabilityTests
                 "run-7",
                 [("input", root, TenantStorageAccess.Read)]);
             var context = new Mock<IExecutionContext>();
+            context.SetupGet(value => value.AdaptiveMetrics).Returns(new global::ETL_SQL.Core.Adaptive.AdaptiveRuntimeMetrics());
             context.SetupProperty(value => value.ExecutionPolicy,
                 ExecutionPolicySnapshot.Capture(
                     EffectiveEnterprisePolicy.Standalone,
@@ -129,6 +130,7 @@ public sealed class TenantStorageCapabilityTests
             "run-spill",
             [("scratch", scratch, TenantStorageAccess.All)]);
         var context = new Mock<IExecutionContext>();
+        context.SetupGet(value => value.AdaptiveMetrics).Returns(new global::ETL_SQL.Core.Adaptive.AdaptiveRuntimeMetrics());
         context.SetupProperty(value => value.StorageCapability, capability);
 
         using (var spill = new SpillStore(context.Object))

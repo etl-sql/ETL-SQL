@@ -40,7 +40,7 @@ public sealed class StudioDesktopRecoveryTests(StudioAuthoringFixture fixture)
             await using (var crashed = await fixture.NewSessionAsync())
             {
                 var page = crashed.Page;
-                await page.GotoAsync(studio);
+                await page.GotoWithDiagnosticsAsync(studio);
                 await WaitForEditorAsync(page);
                 var kept = page.WaitForResponseAsync(response =>
                     response.Url.EndsWith("/api/drafts", StringComparison.Ordinal)
@@ -58,7 +58,7 @@ public sealed class StudioDesktopRecoveryTests(StudioAuthoringFixture fixture)
 
             await using var session = await fixture.NewSessionAsync();
             var reopened = session.Page;
-            await reopened.GotoAsync(studio);
+            await reopened.GotoWithDiagnosticsAsync(studio);
             await WaitForEditorAsync(reopened);
             Assert.Equal(0, await reopened.EvaluateAsync<int>(
                 "() => Object.keys(localStorage).filter(key => key.startsWith('etlsql_studio_draft')).length"));

@@ -91,89 +91,27 @@ namespace ETL_SQL.TUI.UI
                     pid = System.Diagnostics.Process.GetCurrentProcess().Id
                 });
 
-                Task? activeExecutionTask = null;
+                // stdin is read on its own task so "ping" and "cancel" are answered while a script
+                // runs. Every other command (run, rollback, export, exit) is queued and handled in
+                // arrival order, so a piped "run … exit" still finishes the run before exiting.
+                var queue = System.Threading.Channels.Channel.CreateUnbounded<ReplCommand>(
+                    new System.Threading.Channels.UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+                var reader = Task.Run(() => ReadCommands(queue.Writer));
 
-                while (true)
+                await foreach (var cmd in queue.Reader.ReadAllAsync())
                 {
-                    var line = Console.In.ReadLine();
-                    if (line == null) break;
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-
                     try
                     {
-                        var cmd = JsonSerializer.Deserialize<ReplCommand>(line, _deserializeOptions);
-                        if (cmd == null) continue;
-
-                        if (cmd.Action == "ping")
-                        {
-                            WriteJson(new { type = "pong" });
-                            continue;
-                        }
-
-                        if (cmd.Action == "exit")
-                        {
-                            lock (_execLock) _currentCts?.Cancel();
-                            break;
-                        }
-
-                        if (cmd.Action == "cancel")
-                        {
-                            lock (_execLock)
-                            {
-                                if (_currentCts != null)
-                                {
-                                    _currentCts.Cancel();
-                                    WriteJson(new { type = "message", level = "warning", text = "Execution cancellation requested." });
-                                }
-                                else
-                                {
-                                    WriteJson(new { type = "message", level = "info", text = "No active execution to cancel." });
-                                }
-                            }
-                        }
-                        else if (cmd.Action == "rollback")
-                        {
-                            if (_evaluator != null)
-                            {
-                                await _evaluator.RollbackAllTransactions();
-                                WriteJson(new { type = "message", level = "warning", text = "All active transactions rolled back." });
-                            }
-                        }
-                        else if (cmd.Action == "ping")
-                        {
-                            WriteJson(new { type = "pong" });
-                            continue;
-                        }
-                        else if (cmd.Action == "run")
-                        {
-                            if (activeExecutionTask != null && !activeExecutionTask.IsCompleted)
-                            {
-                                WriteJson(new { type = "message", level = "warning", text = "Another script is already running. Please wait or cancel." });
-                                continue;
-                            }
-
-                            if (cmd.WorkspaceRoot != null)
-                                _evaluator!.WorkingDirectory = cmd.WorkspaceRoot;
-                            if (cmd.ScriptPath != null)
-                                _evaluator!.CurrentScriptPath = cmd.ScriptPath;
-                            if (!string.IsNullOrEmpty(cmd.MasterPassword))
-                                _evaluator!.MasterPassword = cmd.MasterPassword;
-
-                            _evaluator!.InteractiveMode = cmd.InteractiveMode;
-
-                            activeExecutionTask = ExecuteScript(cmd.Script ?? "");
-                            await activeExecutionTask;
-                        }
-                        else if (cmd.Action == "export")
-                        {
-                            await HandleExport(cmd);
-                        }
+                        if (cmd.Action == "exit") break;
+                        await HandleQueuedCommand(cmd);
                     }
                     catch (Exception ex)
                     {
                         WriteJson(new { type = "message", level = "error", text = ex.Message });
                     }
                 }
+                // The reader stops after "exit" or EOF; it may still be blocked on a real console.
+                if (reader.IsCompleted) await reader;
             }
             catch (Exception ex)
             {
@@ -183,7 +121,107 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
-        private async Task ExecuteScript(string source)
+        /// <summary>Reads stdin, answering out-of-band commands at once and queueing the rest.</summary>
+        private void ReadCommands(System.Threading.Channels.ChannelWriter<ReplCommand> queue)
+        {
+            try
+            {
+                while (true)
+                {
+                    var line = Console.In.ReadLine();
+                    if (line == null) break;
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+
+                    ReplCommand? cmd;
+                    try
+                    {
+                        cmd = JsonSerializer.Deserialize<ReplCommand>(line, _deserializeOptions);
+                    }
+                    catch (JsonException ex)
+                    {
+                        WriteJson(new { type = "message", level = "error", text = ex.Message });
+                        continue;
+                    }
+                    if (cmd == null) continue;
+
+                    if (cmd.Action == "ping")
+                    {
+                        WriteJson(new { type = "pong" });
+                        continue;
+                    }
+                    if (cmd.Action == "cancel")
+                    {
+                        RequestCancel();
+                        continue;
+                    }
+
+                    queue.TryWrite(cmd);
+                    if (cmd.Action == "exit") break;
+                }
+            }
+            finally
+            {
+                queue.TryComplete();
+            }
+        }
+
+        private void RequestCancel()
+        {
+            lock (_execLock)
+            {
+                if (_currentCts != null)
+                {
+                    _currentCts.Cancel();
+                    WriteJson(new { type = "message", level = "warning", text = "Execution cancellation requested." });
+                }
+                else
+                {
+                    WriteJson(new { type = "message", level = "info", text = "No active execution to cancel." });
+                }
+            }
+        }
+
+        private async Task HandleQueuedCommand(ReplCommand cmd)
+        {
+            if (cmd.Action == "rollback")
+            {
+                if (_evaluator != null)
+                {
+                    await _evaluator.RollbackAllTransactions();
+                    WriteJson(new { type = "message", level = "warning", text = "All active transactions rolled back." });
+                }
+            }
+            else if (cmd.Action == "run")
+            {
+                if (cmd.WorkspaceRoot != null)
+                    _evaluator!.WorkingDirectory = cmd.WorkspaceRoot;
+                if (cmd.ScriptPath != null)
+                    _evaluator!.CurrentScriptPath = cmd.ScriptPath;
+                if (!string.IsNullOrEmpty(cmd.MasterPassword))
+                    _evaluator!.MasterPassword = cmd.MasterPassword;
+
+                _evaluator!.InteractiveMode = cmd.InteractiveMode;
+
+                // Published before lexing so a "cancel" that arrives at any point of the run lands.
+                var cts = new CancellationTokenSource();
+                lock (_execLock) _currentCts = cts;
+                try
+                {
+                    await ExecuteScript(cmd.Script ?? "", cts.Token);
+                }
+                finally
+                {
+                    lock (_execLock) _currentCts = null;
+                    cts.Dispose();
+                }
+            }
+            else if (cmd.Action == "export")
+            {
+                await HandleExport(cmd);
+            }
+        }
+
+        private async Task ExecuteScript(string source, CancellationToken cancellationToken)
         {
             try
             {
@@ -247,11 +285,6 @@ namespace ETL_SQL.TUI.UI
                 // Initialize telemetry timing
                 var execTime = Stopwatch.StartNew();
 
-                lock (_execLock)
-                {
-                    _currentCts = new CancellationTokenSource();
-                }
-
                 using var treeCts = new CancellationTokenSource();
 
                 // Start heartbeat for real-time graphical progress (10Hz)
@@ -275,7 +308,7 @@ namespace ETL_SQL.TUI.UI
 
                 try
                 {
-                    await _evaluator.Evaluate(script, _currentCts.Token);
+                    await _evaluator.Evaluate(script, cancellationToken);
                 }
                 finally
                 {
@@ -287,12 +320,6 @@ namespace ETL_SQL.TUI.UI
                     _evaluator.LastParseTimeMs = parseTime.ElapsedMilliseconds;
                     _evaluator.OnResultSet = originalOnResultSet;
                     _evaluator.OnMessage = null;
-
-                    lock (_execLock)
-                    {
-                        _currentCts?.Dispose();
-                        _currentCts = null;
-                    }
                 }
 
                 // Final status ensures we see the completed nodes
@@ -332,15 +359,9 @@ namespace ETL_SQL.TUI.UI
                 WriteJson(new { type = "message", level = "info", text = "Finalizing execution..." });
 
                 // Emit current variable state for the IDE Variable Explorer (User Params only)
-                var userVars = _evaluator.Variables
-                    .Where(kvp => kvp.Key.StartsWith("@") && !kvp.Key.StartsWith("@@"))
-                    .Select(kvp => new
-                    {
-                        name = kvp.Key,
-                        value = kvp.Value?.ToString() ?? "NULL",
-                        type = kvp.Value?.GetType().Name ?? "Object"
-                    }).ToList();
-
+                var userVars = BuildUserVariables(
+                    _evaluator.Variables,
+                    name => _evaluator.VarContext.TryGetVariableMetadata(name, out var meta) ? meta : null);
                 WriteJson(new { type = "variables", data = userVars });
 
                 // Emit cell-level lineage
@@ -353,6 +374,39 @@ namespace ETL_SQL.TUI.UI
                 WriteJson(new { type = "message", level = "error", text = ex.Message });
                 WriteJson(new { type = "done", exitCode = 1 });
             }
+        }
+
+        /// <summary>
+        /// User variables for the IDE Variable Explorer. SECRET and SENSITIVE values are masked
+        /// and the rest redacted before they leave the process on stdout.
+        /// </summary>
+        internal static List<ReplVariable> BuildUserVariables(
+            IDictionary<string, object?> variables,
+            Func<string, VariableMetadata?> metadataFor) =>
+            variables
+                .Where(kvp => kvp.Key.StartsWith('@') && !kvp.Key.StartsWith("@@", StringComparison.Ordinal))
+                .Select(kvp => new ReplVariable(
+                    kvp.Key,
+                    ETL_SQL.Core.Common.SecretRedactor.VariableDisplayValue(kvp.Value, metadataFor(kvp.Key), "NULL"),
+                    kvp.Value?.GetType().Name ?? "Object"))
+                .ToList();
+
+        internal sealed record ReplVariable(
+            [property: System.Text.Json.Serialization.JsonPropertyName("name")] string Name,
+            [property: System.Text.Json.Serialization.JsonPropertyName("value")] string Value,
+            [property: System.Text.Json.Serialization.JsonPropertyName("type")] string Type);
+
+        /// <summary>
+        /// Resolves an export target the way a script path resolves (workspace/script relative) and
+        /// runs it through the shared filesystem policy for a write, so an export can never
+        /// overwrite a script file or land in a protected location.
+        /// </summary>
+        internal static string AuthorizeExportPath(Evaluator evaluator, string path)
+        {
+            var resolved = evaluator.ResolvePath(path);
+            return new ETL_SQL.Core.Governance.FileSystemPolicyAuthorizer(evaluator.SecurityService)
+                .Authorize(evaluator, resolved, ETL_SQL.Core.Governance.FileSystemAccessKind.Write)
+                .CanonicalPath;
         }
 
         private void EmitCellLineage()
@@ -405,23 +459,30 @@ namespace ETL_SQL.TUI.UI
 
             try
             {
-                switch (cmd.Format?.ToLowerInvariant())
+                var format = cmd.Format?.ToLowerInvariant();
+                if (format is not ("csv" or "markdown" or "md" or "json"))
+                {
+                    WriteJson(new { type = "message", level = "error", text = $"Unsupported export format: {cmd.Format ?? "null"}" });
+                    return;
+                }
+                var path = AuthorizeExportPath(_evaluator!, cmd.Path);
+                switch (format)
                 {
                     case "csv":
-                        await ExportToCsv(_lastResult, cmd.Path);
+                        await ExportToCsv(_lastResult, path);
                         break;
                     case "markdown":
                     case "md":
-                        await ExportToMarkdown(_lastResult, cmd.Path);
+                        await ExportToMarkdown(_lastResult, path);
                         break;
                     case "json":
-                        await ExportToJson(_lastResult, cmd.Path);
+                        await ExportToJson(_lastResult, path);
                         break;
                     default:
                         WriteJson(new { type = "message", level = "error", text = $"Unsupported export format: {cmd.Format ?? "null"}" });
                         return;
                 }
-                WriteJson(new { type = "message", level = "info", text = $"Successfully exported results to {cmd.Path}" });
+                WriteJson(new { type = "message", level = "info", text = $"Successfully exported results to {path}" });
             }
             catch (Exception ex)
             {

@@ -27,13 +27,18 @@ public sealed class OrchestratorScopeCeilingTests
     private const string ApiKey = "test-orch-key-12345";
     private const string ReadScope = "orchestrator.read";
     private const string PublishScope = "orchestrator.publish";
+    private const string ExecuteScope = "orchestrator.execute";
 
     [Fact]
-    public async Task ReadScopedServiceToken_CannotCreate_AtEitherDoor()
+    public async Task ExecuteScopedServiceToken_CannotCreate_AtEitherDoor()
     {
         using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
         using var client = factory.CreateClient();
-        var reader = Service("1", ReadScope);
+        // A read-scoped token cannot run a script at all; an execute-scoped one can, but sits below
+        // the MANAGE ceiling creation needs.
+        using (var readOnly = Request(HttpMethod.Post, "/jobs", Service("1", ReadScope), new { scriptText = "SELECT 1;" }))
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(readOnly)).StatusCode);
+        var reader = Service("3", ExecuteScope);
 
         using (var create = Request(HttpMethod.Post, "/api/scheduled-jobs", reader, NewJob("read_scoped_job")))
             Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(create)).StatusCode);
@@ -101,15 +106,15 @@ public sealed class OrchestratorScopeCeilingTests
     }
 
     /// <summary>
-    /// The ceiling still bites where it should: owning the object does not lift it. A read-scoped
-    /// token that owns a schedule still cannot alter it, from either door.
+    /// The ceiling still bites where it should: owning the object does not lift it. An
+    /// execute-scoped token that owns a schedule still cannot alter it from script.
     /// </summary>
     [Fact]
-    public async Task ReadScopedServiceToken_CannotAlterEvenItsOwnObject_FromScript()
+    public async Task ExecuteScopedServiceToken_CannotAlterEvenItsOwnObject_FromScript()
     {
         using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
         using var client = factory.CreateClient();
-        var reader = Service("1", ReadScope);
+        var reader = Service("1", ExecuteScope);
 
         using (var scope = factory.Services.CreateScope())
         {

@@ -8,6 +8,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
@@ -34,9 +35,11 @@ public class LintStatementHandler : IStatementHandler
 
         if (lintStmt.ScriptPath != null)
         {
-            var fullPath = Path.IsPathRooted(lintStmt.ScriptPath)
-                ? lintStmt.ScriptPath
-                : Path.Combine(Directory.GetCurrentDirectory(), lintStmt.ScriptPath);
+            // Read through the same authorization RUN SCRIPT uses: LINT reads a file, and its
+            // findings can quote what is in it.
+            var fullPath = new FileSystemPolicyAuthorizer(context.SecurityService)
+                .Authorize(context, context.ResolvePath(lintStmt.ScriptPath), FileSystemAccessKind.Read, validateFileType: false)
+                .CanonicalPath;
 
             if (!File.Exists(fullPath))
             {

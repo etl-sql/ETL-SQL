@@ -147,39 +147,6 @@ CREATE VISUAL WF AS WATERFALL (
             Assert.Contains(results, r => r.Message.Contains("Y / VALUE"));
         }
 
-        [Fact]
-        public async Task TestDeprecatedConnectionSyntaxRule_FileConnector_IsMigrationWarning()
-        {
-            var linter = new Linter();
-            linter.AddRule(new DeprecatedConnectionSyntaxRule());
-
-            // FILE is deprecated, FLATFILE should be used
-            var sql = "CREATE CONNECTION my_conn AS FILE('data.csv');";
-            var script = Parse(sql);
-            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
-
-            Assert.Single(results);
-            Assert.Equal(DeprecatedConnectionSyntaxRule.FileConnectorDiagnosticCode, results[0].Code);
-            Assert.Equal(LintSeverity.Warning, results[0].Severity);
-            Assert.Contains("Connection type 'FILE' is deprecated", results[0].Message);
-            Assert.Contains("FLATFILE", results[0].Message);
-        }
-
-        [Fact]
-        public async Task TestDeprecatedConnectionSyntaxRule_AlterFileConnector_IsMigrationWarning()
-        {
-            var linter = new Linter();
-            linter.AddRule(new DeprecatedConnectionSyntaxRule());
-
-            var sql = "ALTER CONNECTION my_conn AS FILE('new_data.csv');";
-            var script = Parse(sql);
-            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
-
-            Assert.Single(results);
-            Assert.Equal(DeprecatedConnectionSyntaxRule.FileConnectorDiagnosticCode, results[0].Code);
-            Assert.Equal(LintSeverity.Warning, results[0].Severity);
-        }
-
         // ── New rules added in code review batch ──────────────────────────────────
 
         [Fact]

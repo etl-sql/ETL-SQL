@@ -1,6 +1,6 @@
 # ETL-SQL Connectors Architecture & Engineering Reference
 
-**Applies to ETL-SQL 0.21.0**
+**Applies to ETL-SQL 0.22.0**
 
 This document describes the internal mechanics of the ETL-SQL data access layer. It is the primary reference for understanding the connection lifecycle, the registry system, the batching pipeline, and the threading and security contracts that all connectors must honour. It is written for engineers who need to understand not just what the system does but why it is designed the way it is.
 
@@ -99,6 +99,12 @@ This document describes the internal mechanics of the ETL-SQL data access layer.
 ---
 
 ## 2. Core Interface Contracts
+
+MOCKDB table lists and table-specific declared columns use `IMockDataSeeder.GetDeclaredSchema()`
+without generating rows. It shares one deferred initialization across data reads and truncation.
+Metadata requests that require inferred schema also initialize rows. Every data read observes initialization
+failure as `ExecutionException("MOCKDB data initialization failed.")`; partial rows and provider
+details do not escape. Cancelling a waiting reader leaves shared initialization available to others.
 
 ### 2.1 `IConnector` — The Stateless Factory
 

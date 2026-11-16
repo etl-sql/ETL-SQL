@@ -62,7 +62,7 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Throws<SecurityException>(() => _security.ValidatePath(root));
         }
 
-        [Fact]
+        [SymlinkFact]
         public void ValidatePath_ShouldDetectSymlinkEscapes()
         {
             // Only runs if we can create a symlink (might require admin on Windows)
@@ -76,15 +76,7 @@ namespace ETL_SQL.Tests.Hardening
                     ? @"C:\Windows"
                     : "/etc";
 
-                // Attempt to create symlink (might fail if no permission, we skip if so)
-                try
-                {
-                    Directory.CreateSymbolicLink(linkPath, targetPath);
-                }
-                catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException)
-                {
-                    return; // Skip test on restricted environments
-                }
+                Directory.CreateSymbolicLink(linkPath, targetPath);
 
                 // Act & Assert
                 // Even though the link itself is in a 'safe' temp dir, it points to a blocked system dir.
@@ -118,12 +110,102 @@ namespace ETL_SQL.Tests.Hardening
             }
         }
 
+        [Theory]
+        [InlineData("api.example.com", true)]
+        [InlineData("a.b.example.com", true)]
+        [InlineData("example.com", true)]
+        [InlineData("evil-example.com", false)]
+        [InlineData("notexample.com", false)]
+        public void ValidateHost_WildcardMatchesOnlyAtALabelBoundary(string host, bool allowed)
+        {
+            _security.AllowedHosts.Clear();
+            _security.AllowedHosts.Add("*.example.com");
+
+            if (allowed) _security.ValidateHost(host);
+            else Assert.Throws<SecurityException>(() => _security.ValidateHost(host));
+        }
+
         [Fact]
-        public void ValidateHost_ShouldAllowLocalhostExplicity()
+        public void ValidatePath_BlocksMultiSegmentSensitiveDirectory()
+        {
+            var path = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? @"C:\Users\Public\Documents\test.csv"
+                : "/data/Users/Public/Documents/test.csv";
+            var ex = Assert.Throws<SecurityException>(() => _security.ValidatePath(path));
+            Assert.Contains("Users/Public", ex.Message);
+
+            // A single segment that merely shares a name does not match.
+            var near = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? @"C:\Projects\Public\test.csv"
+                : "/data/Projects/Public/test.csv";
+            _security.ValidatePath(near);
+        }
+
+        [SymlinkFact]
+        public void ValidatePath_ResolvesADanglingSymlinkToItsTarget()
+        {
+            string zone = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(zone);
+            try
+            {
+                string linkPath = Path.Combine(zone, "out.csv");
+                string target = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    ? $@"C:\Windows\etl-sql-dangling-{Guid.NewGuid():N}.csv"
+                    : $"/etc/etl-sql-dangling-{Guid.NewGuid():N}.csv";
+                File.CreateSymbolicLink(linkPath, target);
+
+                // The target does not exist: the link dangles, and a write through it would create it.
+                Assert.Equal(Path.GetFullPath(target), SecurityService.ResolvePathSymlinks(linkPath), ignoreCase: true);
+
+                _security.ApprovedSafeZones.Add(zone);
+                Assert.Throws<SecurityException>(() => _security.ValidatePath(linkPath));
+            }
+            finally
+            {
+                if (Directory.Exists(zone)) Directory.Delete(zone, true);
+            }
+        }
+
+        [SymlinkFact]
+        public void SafeZoneOverride_DoesNotFollowASymlinkOutOfTheZone()
+        {
+            string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            string zone = Path.Combine(root, "zone");
+            string outside = Path.Combine(root, "outside");
+            Directory.CreateDirectory(zone);
+            Directory.CreateDirectory(outside);
+            try
+            {
+                string escape = Path.Combine(zone, "escape");
+                Directory.CreateSymbolicLink(escape, outside);
+
+                _security.ApprovedSafeZones.Add(zone);
+                var over = _security.MaxFileOperations + 1;
+
+                // A script really inside the zone may raise the limit...
+                _security.CheckRunawayProtection(OperationType.FileSystem, over, 0, allowLargeCount: true,
+                    path: Path.Combine(zone, "job.etlsql"));
+                // ...one reached through a link that leaves the zone may not.
+                Assert.Throws<SecurityException>(() => _security.CheckRunawayProtection(
+                    OperationType.FileSystem, over, 0, allowLargeCount: true, path: Path.Combine(escape, "job.etlsql")));
+            }
+            finally
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
+        }
+
+        [Fact]
+        public void ValidateHost_LoopbackIsGovernedByTheAllowlist()
         {
             _security.AllowedHosts.Clear(); // Strict mode
-            _security.ValidateHost("localhost"); // Should pass (hardcoded loopback exception)
-            _security.ValidateHost("127.0.0.1"); // Should pass
+            Assert.Throws<SecurityException>(() => _security.ValidateHost("localhost"));
+            Assert.Throws<SecurityException>(() => _security.ValidateHost("127.0.0.1"));
+            Assert.Throws<SecurityException>(() => _security.ValidateHost("::1"));
+
+            _security.AllowedHosts.Add("localhost");
+            _security.ValidateHost("localhost");
+            Assert.Throws<SecurityException>(() => _security.ValidateHost("127.0.0.1"));
         }
 
         [Theory]

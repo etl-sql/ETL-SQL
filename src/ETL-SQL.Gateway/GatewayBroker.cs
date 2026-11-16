@@ -125,18 +125,25 @@ public sealed class GatewayBroker(
             _meteringLedger,
             helloFrame.PublishedResources ?? []);
 
-        if (!sessionRegistry.TryRegister(session))
+        if (!sessionRegistry.TryRegister(session, out var displaced))
         {
             await SendFrameAsync(socket, GatewayFrame.Fault(null, "Another session is already active for this Gateway node."), cancellationToken).ConfigureAwait(false);
             await CloseSocketAsync(socket, "Conflict.", cancellationToken).ConfigureAwait(false);
             await session.DisposeAsync().ConfigureAwait(false);
             return;
         }
+        // The same node reconnected before its old connection was noticed as dropped. Closing a
+        // half-open socket can wait a long time, so the new session does not wait for it.
+        if (displaced is not null)
+            _ = Task.Run(async () => { try { await displaced.DisposeAsync().ConfigureAwait(false); } catch { } }, CancellationToken.None);
 
         try
         {
-            // 4. Acknowledge only after the session is routable through the registry.
-            await SendFrameAsync(socket, new GatewayFrame
+            // 4. Acknowledge only after the session is routable through the registry. The session
+            // holds every operation send until this frame is on the wire, so a caller that routes to
+            // it the moment it is registered can neither overtake the acknowledgement nor write to
+            // the socket at the same time.
+            await session.AcknowledgeAsync(new GatewayFrame
             {
                 Kind = GatewayFrameKind.HelloAck,
                 TenantId = helloFrame.TenantId,
@@ -242,10 +249,16 @@ internal sealed class ActiveGatewaySession : IGatewaySession
             SingleWriter = true
         });
     private readonly TaskCompletionSource _closeTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    // Completed once HelloAck has been sent. Operation sends wait on it, because the session is
+    // registered (and so routable) before the acknowledgement goes out.
+    private readonly TaskCompletionSource _acknowledged = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _sessionCts = new();
     private readonly Task _pumpTask;
     private readonly ITenantMeteringLedger? _meteringLedger;
     private long _lastSeenUtcTicks;
+    // The operation a caller is waiting on. Row frames for any other operation are dropped as they
+    // arrive, so a caller that gave up cannot leave an unbounded backlog in the inbound channel.
+    private string? _activeOperationId;
 
     public string TenantId { get; }
     public string GatewayId { get; }
@@ -323,16 +336,24 @@ internal sealed class ActiveGatewaySession : IGatewaySession
 
             var serialized = opFrame.Serialize();
             egressBytes = Encoding.UTF8.GetByteCount(serialized);
+            Volatile.Write(ref _activeOperationId, operation.OperationId);
             dispatchAttempted = true;
             await SendFrameInternalAsync(opFrame, cancellationToken).ConfigureAwait(false);
 
             var columns = new List<string>();
             var rows = new List<IReadOnlyList<string?>>();
             var truncated = false;
+            long resultBytes = 0;
 
             while (true)
             {
                 var frame = await _inboundChannel.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                // Replies arrive on one channel for every operation this session has sent. A caller that
+                // stopped waiting (cancelled or timed out) leaves its late frames behind, and they must
+                // never be read as this operation's rows — the next caller can be a different viewer.
+                if (frame.OperationId is not null
+                    && !string.Equals(frame.OperationId, operation.OperationId, StringComparison.Ordinal))
+                    continue;
                 ingressBytes += Encoding.UTF8.GetByteCount(frame.Serialize());
 
                 if (frame.Kind == GatewayFrameKind.Fault)
@@ -347,7 +368,19 @@ internal sealed class ActiveGatewaySession : IGatewaySession
                         columns.AddRange(frame.Columns);
 
                     if (frame.Rows is not null)
+                    {
                         rows.AddRange(frame.Rows);
+                        // Measured the way the Gateway measures it, so a result it stopped at the
+                        // limit is accepted here. A Gateway that ignores the bounds cannot make the
+                        // broker buffer more than they allow.
+                        foreach (var row in frame.Rows)
+                            foreach (var value in row)
+                                resultBytes += (value?.Length ?? 0) * sizeof(char);
+                        if (rows.Count > operation.Bounds.MaxRows || resultBytes > operation.Bounds.MaxResponseBytes)
+                            throw new GatewayProtocolException(
+                                "The Gateway returned more than the operation's row or size limit.",
+                                operationId: operation.OperationId);
+                    }
                 }
                 else if (frame.Kind == GatewayFrameKind.Complete)
                 {
@@ -374,6 +407,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
         finally
         {
             sw.Stop();
+            Volatile.Write(ref _activeOperationId, null);
             _executeGate.Release();
 
             if (_meteringLedger is not null)
@@ -433,7 +467,11 @@ internal sealed class ActiveGatewaySession : IGatewaySession
                     stream.Write(buffer, 0, result.Count);
                     if (stream.Length > _maxFrameBytes)
                     {
+                        // The rest of this message is still on the socket, so nothing after it can be
+                        // framed reliably, and the part already read is over the limit. Report it and
+                        // end the session rather than decode the oversized frame.
                         _inboundChannel.Writer.TryWrite(GatewayFrame.Fault(null, "Inbound frame exceeded max size."));
+                        closed = true;
                         break;
                     }
                     if (result.EndOfMessage) break;
@@ -443,7 +481,10 @@ internal sealed class ActiveGatewaySession : IGatewaySession
                 if (stream.Length > 0)
                 {
                     var frame = GatewayFrame.Deserialize(Encoding.UTF8.GetString(stream.ToArray()));
-                    if (frame != null)
+                    if (frame != null
+                        && !(frame.Kind is GatewayFrameKind.RowBatch or GatewayFrameKind.Complete
+                             && frame.OperationId is not null
+                             && !string.Equals(frame.OperationId, Volatile.Read(ref _activeOperationId), StringComparison.Ordinal)))
                     {
                         _inboundChannel.Writer.TryWrite(frame);
                     }
@@ -461,8 +502,27 @@ internal sealed class ActiveGatewaySession : IGatewaySession
         }
     }
 
+    /// <summary>Sends the session acknowledgement, then releases operation sends held behind it.</summary>
+    internal async Task AcknowledgeAsync(GatewayFrame ack, CancellationToken cancellationToken)
+    {
+        await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes(ack.Serialize());
+            if (bytes.Length > _maxFrameBytes)
+                throw new GatewayProtocolException("Outbound frame exceeded max frame size.");
+            await _socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _sendGate.Release();
+        }
+        _acknowledged.TrySetResult();
+    }
+
     private async Task SendFrameInternalAsync(GatewayFrame frame, CancellationToken cancellationToken)
     {
+        await _acknowledged.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -482,6 +542,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
     {
         await _sessionCts.CancelAsync().ConfigureAwait(false);
         _closeTcs.TrySetResult();
+        _acknowledged.TrySetException(new GatewayProtocolException("The Gateway session closed before it was acknowledged."));
         if (_socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
         {
             try

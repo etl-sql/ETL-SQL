@@ -101,7 +101,7 @@ public sealed class StudioRecoveryJourneyTests(StudioAuthoringFixture fixture)
 
     private static async Task OpenReportAsync(IPage page, int reportId)
     {
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await page.WaitForFunctionAsync(
             "id => (window.__STUDIO__?.state?.documents || []).some(d => String(d.reportId) === String(id)) && window.__STUDIO__.state.editorInstance",
             reportId, new PageWaitForFunctionOptions { Timeout = 30_000 });

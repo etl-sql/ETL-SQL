@@ -57,6 +57,17 @@ namespace ETL_SQL.Orchestrator.Scheduling
         IdentityNotCarried
     }
 
+    /// <summary>How a cancel request reached its run.</summary>
+    public enum RunCancelDelivery
+    {
+        /// <summary>This node runs it and signalled it.</summary>
+        Signalled,
+        /// <summary>Another node runs it; the request is recorded for that node to apply.</summary>
+        Recorded,
+        /// <summary>This node does not run it and has no shared store to record the request in.</summary>
+        NotRunningHere,
+    }
+
     /// <summary><see cref="RunId"/> is the history id of the run, set only when it was accepted.</summary>
     public sealed record RevisionRunResult(RevisionRunStatus Status, long? RunId = null);
 
@@ -152,6 +163,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private DateTime _lastSessionReap = DateTime.MinValue;
         private DateTime _lastHistoryPrune = DateTime.MinValue;
         private Task? _runTask;
+        private Task? _cancelPollTask;
 
         /// <summary>Starts the background scheduler loop.</summary>
         public void Start()
@@ -161,6 +173,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
             _lastSessionReap = DateTime.Now;
             _lastHistoryPrune = DateTime.Now;
             _runTask = Task.Run(() => RunAsync(_cts.Token));
+            if (_store is IJobRunCancelStore cancels)
+                _cancelPollTask = Task.Run(() => PollRunCancelsAsync(cancels, _cts.Token));
             _ = _runTask.ContinueWith(t =>
                 _logger.LogError(t.Exception, "Scheduler background task terminated unexpectedly."),
                 TaskContinuationOptions.OnlyOnFaulted);
@@ -214,6 +228,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         _logger.LogWarning(ex, "Scheduler loop terminated with an error during shutdown.");
                     }
                 }
+                if (_cancelPollTask != null)
+                    await _cancelPollTask.WaitAsync(shutdown.Token).ConfigureAwait(false);
                 await Task.WhenAll(_jobTasks.Values).WaitAsync(shutdown.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -691,6 +707,61 @@ namespace ETL_SQL.Orchestrator.Scheduling
         }
 
         /// <summary>
+        /// Cancels a run wherever it is executing. This node signals it directly when it runs it;
+        /// otherwise the request is recorded in the shared store, and the node running the job
+        /// picks it up within <c>Scheduler:CancelPollSeconds</c>.
+        /// </summary>
+        public async Task<RunCancelDelivery> RequestRunCancelAsync(long historyId, string requestedBy)
+        {
+            if (CancelRun(historyId)) return RunCancelDelivery.Signalled;
+            if (_store is not IJobRunCancelStore cancels) return RunCancelDelivery.NotRunningHere;
+            await cancels.RequestRunCancelAsync(historyId, requestedBy);
+            _logger.LogInformation(
+                "Run {HistoryId} is not running on this node; its cancel request was recorded for the node running it.",
+                historyId);
+            return RunCancelDelivery.Recorded;
+        }
+
+        private TimeSpan RunCancelPollInterval =>
+            TimeSpan.FromSeconds(Math.Clamp(_configuration.GetValue("Scheduler:CancelPollSeconds", 5), 1, 300));
+
+        /// <summary>Signals the runs on this node that another node recorded a cancel request for.</summary>
+        internal async Task<int> ApplyRecordedRunCancelsAsync(IJobRunCancelStore cancels, CancellationToken cancellationToken)
+        {
+            var running = _runningJobs.Keys.ToArray();
+            if (running.Length == 0) return 0;
+            var applied = 0;
+            foreach (var historyId in await cancels.GetRequestedRunCancelsAsync(running, cancellationToken))
+            {
+                if (_cancelRequested.ContainsKey(historyId) || !CancelRun(historyId)) continue;
+                applied++;
+                _logger.LogInformation("Run {HistoryId} cancelled by a request recorded on another node.", historyId);
+            }
+            return applied;
+        }
+
+        private async Task PollRunCancelsAsync(IJobRunCancelStore cancels, CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(RunCancelPollInterval, cancellationToken);
+                    await ApplyRecordedRunCancelsAsync(cancels, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // A store outage delays remote cancels; it must not stop the poll.
+                    _logger.LogWarning(ex, "Reading recorded run cancel requests failed; retrying.");
+                }
+            }
+        }
+
+        /// <summary>
         /// The recorded status of an attempt that did not succeed. A run someone asked to cancel
         /// ended because of that request, whatever error the interrupted statement reported.
         /// </summary>
@@ -1090,6 +1161,15 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     _runningJobs.TryRemove(lastHistoryId, out _);
                     _runSubmitters.TryRemove(lastHistoryId, out _);
                     _cancelRequested.TryRemove(lastHistoryId, out _);
+                    if (_store is IJobRunCancelStore cancels)
+                    {
+                        try { await cancels.ClearRunCancelAsync(lastHistoryId); }
+                        catch (Exception ex)
+                        {
+                            // The request ages out of the store; it can no longer match a running job.
+                            _logger.LogDebug(ex, "Clearing the cancel request of run {HistoryId} failed.", lastHistoryId);
+                        }
+                    }
                 }
 
                 if (!cycleCts.IsCancellationRequested)
@@ -1109,12 +1189,14 @@ namespace ETL_SQL.Orchestrator.Scheduling
             var nextRun = revision is not null
                 ? job.NextRun
                 : await AdvanceScheduleLinksAsync(job, _clock.GetUtcNow().UtcDateTime) ?? CalculateNextRun(job);
+            var fencedOut = false;
             try
             {
                 // Fenced write: if this node was paused past its lease and another instance took over the
                 // job (advancing the fence token), this update matches zero rows and we skip rescheduling
                 // rather than overwrite the new owner's state (P1.8).
-                if (!await _store.TryUpdateJobLastRunFencedAsync(job.Id, DateTime.Now, nextRun, fenceToken))
+                fencedOut = !await _store.TryUpdateJobLastRunFencedAsync(job.Id, DateTime.Now, nextRun, fenceToken);
+                if (fencedOut)
                     _logger.LogWarning(
                         "Job {JobName}: skipped the last-run/next-run update — the execution lease was reclaimed " +
                         "by another instance (fenced out, token {Token}).", job.Name, fenceToken);
@@ -1124,8 +1206,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 _logger.LogError(ex, "Failed to update last run info for {JobName}.", job.Name);
             }
 
-            // An author's failing draft must not disable the job for everyone else.
-            if (revision is null)
+            // An author's failing draft must not disable the job for everyone else, and a node that
+            // lost the job's lease no longer decides its state: the new owner does.
+            if (revision is null && !fencedOut)
                 await QuarantineIfRepeatedlyFailingAsync(job);
         }
 
@@ -1231,7 +1314,13 @@ namespace ETL_SQL.Orchestrator.Scheduling
             var reason = $"Job quarantined after {threshold} consecutive failures.";
             try
             {
-                await _store.SaveJobAsync(job with { IsEnabled = false, NextRun = null });
+                // From the stored job, not the snapshot this run started with: writing the snapshot back
+                // reverted any edit made while the job ran, and its stale last-run time with it. A job
+                // changed between the read and the write is left for the next failing run to judge.
+                var current = await _store.GetJobByIdAsync(job.Id);
+                if (current is null || !current.IsEnabled
+                    || !await _store.TrySaveJobAsync(current with { IsEnabled = false, NextRun = null }, current.Version))
+                    return;
                 var quarantineId = await _store.LogJobStartAsync(job.Id);
                 await _store.LogJobEndAsync(quarantineId, "QUARANTINED", reason);
                 _logger.LogError("Job {JobName}: {Reason}", job.Name, reason);

@@ -61,7 +61,9 @@ try {
         Write-Host 'Checking the report payload against the reviewed budget...' -ForegroundColor Cyan
     }
 
-    dotnet test $testProject --filter 'FullyQualifiedName~ReportPayloadBudgetTests' --verbosity minimal --nologo
+    # A filter that matches no test exits 0 by default, which would report a budget nobody measured.
+    dotnet test $testProject --filter 'FullyQualifiedName~ReportPayloadBudgetTests' --verbosity minimal --nologo `
+        -- RunConfiguration.TreatNoTestsAsError=true
 
     if ($LASTEXITCODE -ne 0) {
         throw "Report payload budget check failed with exit code $LASTEXITCODE."

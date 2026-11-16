@@ -17,7 +17,7 @@ SELECT [DISTINCT] [TOP n [PERCENT] [WITH TIES]]
   [HAVING <group_filter_predicate>]
   [WINDOW <window_name> AS (<window_specification>) [, ...]]
   [QUALIFY <window_filter_predicate>]
-  [ORDER BY [ALL] <sort_expressions...> [ASC | DESC]]
+  [ORDER BY ALL [ASC | DESC] | <sort_expression> [ASC | DESC] [NULLS FIRST | NULLS LAST] [, ...]]
   [OFFSET n ROWS]
   [FETCH NEXT n ROWS ONLY | LIMIT n]
   [ON FAILURE <failure_action>];
@@ -33,6 +33,7 @@ SELECT [DISTINCT] [TOP n [PERCENT] [WITH TIES]]
 | `INTO @variable` | Assigns a scalar query result (single row, single column) directly to a script variable. |
 | `WINDOW name AS (...)` | Defines a reusable named window clause for multiple `OVER name` function projections. |
 | `QUALIFY <cond>` | Filters calculated window function outputs without wrapping in a subquery or CTE. |
+| `ORDER BY ... NULLS FIRST \| NULLS LAST` | Places `NULL` first or last for one sort key, after `ASC` or `DESC`: `ORDER BY amount DESC NULLS LAST`. Without it `NULL` sorts lowest: first for `ASC` and last for `DESC`. Also valid in a window `ORDER BY` and in `WITHIN GROUP (ORDER BY ...)`. |
 | `ON FAILURE ...` | Routes records violating inline `EXPECT` data quality rules (e.g. `QUARANTINE` or `WARN`). |
 
 ---
@@ -125,6 +126,7 @@ FROM #departments;
 
 - **Engine Context**: Queries against `#temp` tables, files, or multi-source cross-joins execute inside the ETL-SQL engine. Features like star modifiers (`* EXCLUDE`), `QUALIFY`, and `EXPECT` rules are evaluated in-engine.
 - **Remote Pushdown**: Single-source queries against database connections (`MSSQL`, `POSTGRES`, `ORACLE`, `SNOWFLAKE`) are pushed down to the target database when syntax is compatible. Use `EXECUTE <conn> BEGIN ... END` for vendor-proprietary SQL statements.
+- **`NULLS FIRST` / `NULLS LAST`**: PostgreSQL and Oracle connections are sent the placement. For other connections the engine reads the rows and sorts them itself.
 
 ---
 

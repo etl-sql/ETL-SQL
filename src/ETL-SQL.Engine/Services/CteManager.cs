@@ -14,151 +14,175 @@ public class CteManager(ILogger logger)
 {
     private readonly ILogger _logger = logger;
 
-    public async Task RegisterCtes(List<CteDefinition> ctes, IExecutionContext context)
+    /// <summary>
+    /// Evaluates the CTEs and registers each one under its name in <see cref="IExecutionContext.LocalSources"/>.
+    /// Dispose the returned scope when the statement finishes: it disposes the CTE results and puts back
+    /// whatever the names meant before (a <c>#temp</c> table, an outer CTE), or removes them.
+    /// </summary>
+    public async Task<CteScope> RegisterCtes(List<CteDefinition> ctes, IExecutionContext context)
     {
-        foreach (var cte in ctes)
+        var scope = new CteScope(context);
+        try
         {
-            if (IsRecursive(cte, out var anchor, out var recursive, out var isDistinct))
+            foreach (var cte in ctes)
             {
-                await EvaluateRecursiveCte(cte, anchor!, recursive!, isDistinct, context);
+                if (IsRecursive(cte, out var anchor, out var recursive, out var isDistinct))
+                {
+                    await EvaluateRecursiveCte(cte, anchor!, recursive!, isDistinct, context, scope);
+                }
+                else
+                {
+                    await EvaluateStandardCte(cte, context, scope);
+                }
             }
-            else
-            {
-                await EvaluateStandardCte(cte, context);
-            }
+            return scope;
+        }
+        catch
+        {
+            await scope.DisposeAsync();
+            throw;
         }
     }
 
-    private async Task EvaluateRecursiveCte(CteDefinition cte, Statement anchor, Statement recursive, bool isDistinct, IExecutionContext context)
+    private async Task EvaluateRecursiveCte(CteDefinition cte, Statement anchor, Statement recursive, bool isDistinct, IExecutionContext context, CteScope scope)
     {
         _logger.Debug("Evaluating RECURSIVE CTE: {CteName} ({UnionType})", cte.Name, isDistinct ? "UNION" : "UNION ALL");
         var finalResult = new DataTable();
         var currentStep = new DataTable();
         var seenKeys = isDistinct ? new HashSet<CompoundKey>() : null;
-
-        // 1. Evaluate Anchor Member
-        await foreach (var batch in context.ExecuteQuery(anchor))
-        {
-            if (cte.ColumnNames != null && cte.ColumnNames.Count > 0)
-            {
-                var oldNames = batch.ColumnNames.ToList();
-                if (oldNames.Count != cte.ColumnNames.Count)
-                    throw new ExecutionException($"CTE '{cte.Name}' has {cte.ColumnNames.Count} columns specified, but the anchor query returns {oldNames.Count} columns.", null, cte.Line, cte.Column);
-                for (int i = 0; i < oldNames.Count; i++) batch.RenameColumn(oldNames[i], cte.ColumnNames[i]);
-            }
-
-            if (finalResult.ColumnNames.Count == 0) finalResult.SetColumns(batch.ColumnNames);
-            if (currentStep.ColumnNames.Count == 0) currentStep.SetColumns(finalResult.ColumnNames);
-
-            foreach (var r in batch.Rows)
-            {
-                await finalResult.AddRowAsync(r);
-                await currentStep.AddRowAsync(r);
-                seenKeys?.Add(MakeRowKey(r, finalResult.ColumnNames));
-            }
-        }
-
-        // 2. Iterative Recursive Member
-        int depth = 0;
-        var colDefs = new List<ColumnDefinition>();
-        var previousRecursiveDepth = context.CurrentRecursiveDepth;
+        var innerScope = cte.Query.Ctes is { Count: > 0 }
+            ? await RegisterCtes(cte.Query.Ctes, context)
+            : null;
 
         try
         {
-            while (currentStep.Rows.Count > 0 && depth < context.MaxRecursiveDepth)
+            // 1. Evaluate Anchor Member
+            await foreach (var batch in context.ExecuteQuery(anchor))
             {
-                depth++;
-                context.CurrentRecursiveDepth = previousRecursiveDepth + depth;
-
-                // Register currentStep as the CTE source for this iteration
-                var mem = new InMemoryDataSource();
-                mem.Validator = context as IDataValidator;
-                mem.ExecutionContext = context;
-                mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
-
-                // Type inference (only on first iteration to establish schema)
-                if (depth == 1 && currentStep.Rows.Count > 0)
+                if (cte.ColumnNames != null && cte.ColumnNames.Count > 0)
                 {
-                    var firstRow = currentStep.Rows[0];
-                    foreach (var colName in currentStep.ColumnNames)
-                    {
-                        var val = firstRow[colName];
-                        string type = "STRING";
-                        // Intermediate iterations use DECIMAL for every numeric column. The schema is
-                        // locked from the first iteration but later iterations can produce fractional
-                        // values; typing INT here would Math.Truncate them mid-recursion (TypeConverter
-                        // "INT" cast) and corrupt the result. DECIMAL holds integers losslessly. The
-                        // final result is re-typed below once all values are known.
-                        if (val is int || val is long || val is decimal || val is double || val is float) type = "DECIMAL";
-                        else if (val is DateTime) type = "DATETIME";
-                        else if (val is bool) type = "BOOLEAN";
-                        colDefs.Add(new ColumnDefinition(colName, type, true));
-                    }
-                }
-                else if (depth == 1)
-                {
-                    foreach (var colName in currentStep.ColumnNames) colDefs.Add(new ColumnDefinition(colName, "STRING", true));
+                    var oldNames = batch.ColumnNames.ToList();
+                    if (oldNames.Count != cte.ColumnNames.Count)
+                        throw new ExecutionException($"CTE '{cte.Name}' has {cte.ColumnNames.Count} columns specified, but the anchor query returns {oldNames.Count} columns.", null, cte.Line, cte.Column);
+                    for (int i = 0; i < oldNames.Count; i++) batch.RenameColumn(oldNames[i], cte.ColumnNames[i]);
                 }
 
-                mem.SetSchema(colDefs);
-                await mem.WriteBatches(new[] { currentStep }.ToAsyncEnumerable());
-                if (context.LocalSources.TryGetValue(cte.Name, out var prev)) await prev.DisposeAsync();
-                context.LocalSources[cte.Name] = mem;
+                if (finalResult.ColumnNames.Count == 0) finalResult.SetColumns(batch.ColumnNames);
+                if (currentStep.ColumnNames.Count == 0) currentStep.SetColumns(finalResult.ColumnNames);
 
-                var nextStep = new DataTable();
-                nextStep.SetColumns(currentStep.ColumnNames);
-
-                await foreach (var batch in context.ExecuteQuery(recursive))
+                foreach (var r in batch.Rows)
                 {
-                    // Aligned by index to anchor schema
-                    var alignedBatch = context.AlignColumns(new[] { batch }.ToAsyncEnumerable(), currentStep.ColumnNames.ToList());
-                    await foreach (var aligned in alignedBatch)
+                    await finalResult.AddRowAsync(r);
+                    await currentStep.AddRowAsync(r);
+                    seenKeys?.Add(MakeRowKey(r, finalResult.ColumnNames));
+                }
+            }
+
+            // 2. Iterative Recursive Member
+            int depth = 0;
+            var colDefs = new List<ColumnDefinition>();
+            var previousRecursiveDepth = context.CurrentRecursiveDepth;
+
+            try
+            {
+                while (currentStep.Rows.Count > 0 && depth < context.MaxRecursiveDepth)
+                {
+                    depth++;
+
+                    // Register currentStep as the CTE source for this iteration
+                    var mem = new InMemoryDataSource();
+                    mem.Validator = context as IDataValidator;
+                    mem.ExecutionContext = context;
+                    mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
+
+                    // Type inference (only on first iteration to establish schema)
+                    if (depth == 1 && currentStep.Rows.Count > 0)
                     {
-                        foreach (var r in aligned.Rows)
+                        var firstRow = currentStep.Rows[0];
+                        foreach (var colName in currentStep.ColumnNames)
                         {
-                            if (isDistinct)
+                            var val = firstRow[colName];
+                            string type = "STRING";
+                            // Intermediate iterations use DECIMAL for every numeric column. The schema is
+                            // locked from the first iteration but later iterations can produce fractional
+                            // values; typing INT here would Math.Truncate them mid-recursion (TypeConverter
+                            // "INT" cast) and corrupt the result. DECIMAL holds integers losslessly. The
+                            // final result is re-typed below once all values are known.
+                            if (val is int || val is long || val is decimal || val is double || val is float) type = "DECIMAL";
+                            else if (val is DateOnly) type = "DATE";
+                            else if (val is DateTime) type = "DATETIME";
+                            else if (val is bool) type = "BOOLEAN";
+                            colDefs.Add(new ColumnDefinition(colName, type, true));
+                        }
+                    }
+                    else if (depth == 1)
+                    {
+                        foreach (var colName in currentStep.ColumnNames) colDefs.Add(new ColumnDefinition(colName, "STRING", true));
+                    }
+
+                    mem.SetSchema(colDefs);
+                    await mem.WriteBatches(new[] { currentStep }.ToAsyncEnumerable());
+                    await scope.SetAsync(cte.Name, mem);
+
+                    var nextStep = new DataTable();
+                    nextStep.SetColumns(currentStep.ColumnNames);
+
+                    await foreach (var batch in context.ExecuteQuery(recursive))
+                    {
+                        // Aligned by index to anchor schema
+                        var alignedBatch = context.AlignColumns(new[] { batch }.ToAsyncEnumerable(), currentStep.ColumnNames.ToList());
+                        await foreach (var aligned in alignedBatch)
+                        {
+                            foreach (var r in aligned.Rows)
                             {
-                                var key = MakeRowKey(r, nextStep.ColumnNames);
-                                if (seenKeys!.Add(key))
+                                if (isDistinct)
+                                {
+                                    var key = MakeRowKey(r, nextStep.ColumnNames);
+                                    if (seenKeys!.Add(key))
+                                    {
+                                        await finalResult.AddRowAsync(r);
+                                        await nextStep.AddRowAsync(r);
+                                    }
+                                }
+                                else
                                 {
                                     await finalResult.AddRowAsync(r);
                                     await nextStep.AddRowAsync(r);
                                 }
                             }
-                            else
-                            {
-                                await finalResult.AddRowAsync(r);
-                                await nextStep.AddRowAsync(r);
-                            }
                         }
                     }
+                    currentStep = nextStep;
                 }
-                currentStep = nextStep;
+
+                if (depth >= context.MaxRecursiveDepth && currentStep.Rows.Count > 0)
+                    throw new ExecutionException($"The maximum recursion {context.MaxRecursiveDepth} has been exhausted before statement completion for CTE '{cte.Name}'.", null, cte.Line, cte.Column);
+            }
+            finally
+            {
+                context.CurrentRecursiveDepth = previousRecursiveDepth;
             }
 
-            if (depth >= context.MaxRecursiveDepth && currentStep.Rows.Count > 0)
-                throw new ExecutionException($"The maximum recursion {context.MaxRecursiveDepth} has been exhausted before statement completion for CTE '{cte.Name}'.", null, cte.Line, cte.Column);
+            var finalMem = new InMemoryDataSource();
+            finalMem.Validator = context as IDataValidator;
+            finalMem.ExecutionContext = context;
+            finalMem.MaxInMemoryBatches = context.MaxInMemoryBatches;
+            // Now that the full result is known, narrow each DECIMAL column to INT only if every
+            // value across all iterations is integral. This keeps integer-valued recursive results
+            // (e.g. hierarchy depths) displaying as integers while preserving any genuinely
+            // fractional values as DECIMAL — without the mid-recursion truncation INT would cause.
+            finalMem.SetSchema(NarrowIntegralColumns(colDefs, finalResult));
+            await finalMem.WriteBatches(new[] { finalResult }.ToAsyncEnumerable());
+            await scope.SetAsync(cte.Name, finalMem);
         }
         finally
         {
-            context.CurrentRecursiveDepth = previousRecursiveDepth;
+            if (innerScope != null)
+                await innerScope.DisposeAsync();
         }
-
-        var finalMem = new InMemoryDataSource();
-        finalMem.Validator = context as IDataValidator;
-        finalMem.ExecutionContext = context;
-        finalMem.MaxInMemoryBatches = context.MaxInMemoryBatches;
-        // Now that the full result is known, narrow each DECIMAL column to INT only if every
-        // value across all iterations is integral. This keeps integer-valued recursive results
-        // (e.g. hierarchy depths) displaying as integers while preserving any genuinely
-        // fractional values as DECIMAL — without the mid-recursion truncation INT would cause.
-        finalMem.SetSchema(NarrowIntegralColumns(colDefs, finalResult));
-        await finalMem.WriteBatches(new[] { finalResult }.ToAsyncEnumerable());
-        if (context.LocalSources.TryGetValue(cte.Name, out var prevFinal)) await prevFinal.DisposeAsync();
-        context.LocalSources[cte.Name] = finalMem;
     }
 
-    private async Task EvaluateStandardCte(CteDefinition cte, IExecutionContext context)
+    private async Task EvaluateStandardCte(CteDefinition cte, IExecutionContext context, CteScope scope)
     {
         var cteResult = new DataTable();
         await foreach (var batch in context.ExecuteQuery(cte.Query))
@@ -180,8 +204,7 @@ public class CteManager(ILogger logger)
         mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
         mem.SetSchema(cteResult.ColumnNames.Select(c => new ColumnDefinition(c, "STRING", false)));
         await mem.WriteBatches(new[] { cteResult }.ToAsyncEnumerable());
-        if (context.LocalSources.TryGetValue(cte.Name, out var prevStd)) await prevStd.DisposeAsync();
-        context.LocalSources[cte.Name] = mem;
+        await scope.SetAsync(cte.Name, mem);
     }
 
     private static CompoundKey MakeRowKey(Row r, IList<string> columnNames)
@@ -246,5 +269,53 @@ public class CteManager(ILogger logger)
             }
         }
         return false;
+    }
+}
+
+/// <summary>
+/// The CTE names one statement registered. Disposing it disposes the CTE results and restores the
+/// entries the names shadowed, so a CTE is visible only to its own statement.
+/// </summary>
+public sealed class CteScope(IExecutionContext context) : IAsyncDisposable
+{
+    private readonly IExecutionContext _context = context;
+    // Name -> (the entry it shadowed, if any; the CTE result registered now). Ordered so restore is LIFO.
+    private readonly List<(string Name, IDataSource? Shadowed, IDataSource Current)> _entries = [];
+    private bool _disposed;
+
+    /// <summary>Registers <paramref name="source"/> under <paramref name="name"/>, disposing an earlier result of this scope.</summary>
+    public async Task SetAsync(string name, IDataSource source)
+    {
+        int i = _entries.FindIndex(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (i >= 0)
+        {
+            var entry = _entries[i];
+            if (!ReferenceEquals(entry.Current, source)) await entry.Current.DisposeAsync();
+            _entries[i] = entry with { Current = source };
+        }
+        else
+        {
+            _context.LocalSources.TryGetValue(name, out var shadowed);
+            _entries.Add((name, shadowed, source));
+        }
+        _context.LocalSources[name] = source;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        for (int i = _entries.Count - 1; i >= 0; i--)
+        {
+            var (name, shadowed, current) = _entries[i];
+            // Put the name back only if the statement left our entry in place.
+            if (_context.LocalSources.TryGetValue(name, out var now) && ReferenceEquals(now, current))
+            {
+                if (shadowed != null) _context.LocalSources[name] = shadowed;
+                else _context.LocalSources.Remove(name);
+            }
+            try { await current.DisposeAsync(); } catch { /* cleanup must not mask the statement's own error */ }
+        }
+        _entries.Clear();
     }
 }

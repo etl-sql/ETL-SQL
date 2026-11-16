@@ -171,6 +171,25 @@ public sealed class FileSystemPolicyEnforcementTests : IDisposable
     }
 
     [Fact]
+    public async Task SpillCeiling_StillEnforcedWhenScriptTurnsTelemetryOff()
+    {
+        // The ceiling is a security control; a script must not be able to disable it by
+        // turning telemetry off.
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root, maxSpillBytes: 4096));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            "SET TELEMETRY = OFF;\n" +
+            "SET TEMP_TABLE_SPILL_THRESHOLD = 10;\n" +
+            "CREATE TABLE #big (id INT, payload VARCHAR);\n" +
+            "DECLARE @i INT = 0;\n" +
+            "WHILE @i < 2000 BEGIN\n" +
+            "  INSERT INTO #big VALUES (@i, 'padding-value-to-grow-spill-bytes');\n" +
+            "  SET @i = @i + 1;\n" +
+            "END"));
+        Assert.Contains("MaxSpillBytesPerScript", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Standalone_Unenrolled_RemainsUnrestrictedByOrganizationPolicy()
     {
         var src = Path.Combine(_root, "merge_standalone.csv");

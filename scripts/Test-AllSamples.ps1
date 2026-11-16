@@ -42,13 +42,28 @@ $solutionRoot = Split-Path -Path $PSScriptRoot -Parent
 Set-Location $solutionRoot
 
 $samplesDir = Join-Path $solutionRoot "samples"
-$etlScripts = Get-ChildItem -Path $samplesDir -Include "*.etlsql", "*.rptsql" -Recurse
-$total = $etlScripts.Count * $Passes
 $validatorStateRoot = Join-Path $solutionRoot "release-validation\sample-validator-$PID"
 $securityEventOutboxPath = Join-Path $validatorStateRoot "security-events.db"
 $sessionRoot = Join-Path $validatorStateRoot "sessions"
 $orchestratorDatabasePath = Join-Path $validatorStateRoot "orchestrator.db"
 New-Item -ItemType Directory -Path $validatorStateRoot -Force | Out-Null
+
+# Run a copy of the samples, never the repository files: the first run of a script with a literal
+# USE PASSWORD or plaintext secret seals it on disk (USE PASSWORD PROMPT, ENC:...). Every pass runs
+# the same copy with ETL_SQL_MASTER_PASSWORD set, so a later pass proves a sealed script runs
+# unattended. Paths inside samples resolve against the working directory (the repository root), so
+# the copy reads and writes the same data files. samples/output is generated and not copied.
+$sampleCopyRoot = Join-Path $validatorStateRoot "samples"
+$sampleSealPassword = "etlsql-sample-gate"
+foreach ($file in Get-ChildItem -Path $samplesDir -File -Recurse) {
+    $relative = [IO.Path]::GetRelativePath($samplesDir, $file.FullName)
+    if ($relative -like "output[\/]*") { continue }
+    $destination = Join-Path $sampleCopyRoot $relative
+    New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force | Out-Null
+    Copy-Item -LiteralPath $file.FullName -Destination $destination
+}
+$etlScripts = Get-ChildItem -Path $sampleCopyRoot -Include "*.etlsql", "*.rptsql" -Recurse
+$total = $etlScripts.Count * $Passes
 
 $pgContainerName = "etlsql-sample-pg-$PID"
 $orchContainerName = "etlsql-sample-orch-$PID"
@@ -211,7 +226,7 @@ Write-Host "=======================================================" -Foreground
 Write-Host " ETL-SQL SAMPLE VALIDATOR STARTING..." -ForegroundColor Cyan
 Write-Host " Configuration: $Configuration" -ForegroundColor Cyan
 Write-Host " Mode         : $(if ($ReleaseMode) { 'Release (Docker services + Performance enabled)' } else { 'Standard (Fast / Unit)' })" -ForegroundColor Cyan
-Write-Host " Found $($etlScripts.Count) scripts to validate in '$samplesDir'." -ForegroundColor Cyan
+Write-Host " Found $($etlScripts.Count) scripts to validate in '$samplesDir' (run from a copy)." -ForegroundColor Cyan
 if ($Passes -gt 1) {
     Write-Host " Running $Passes passes to prove the samples are re-runnable." -ForegroundColor Cyan
 }
@@ -266,6 +281,18 @@ foreach ($script in $etlScripts) {
                 $available = ($LASTEXITCODE -eq 0 -and $osType -eq 'linux')
             }
         }
+        # Release mode needs Docker and starts PostgreSQL, the Orchestrator and the Portal itself. If one
+        # of them is not there, its samples fail instead of passing the run as skipped.
+        if (-not $available -and $ReleaseMode -and $service -in @('docker', 'postgres', 'postgresql', 'portal', 'orchestrator')) {
+            Write-Host "FAILED ($service did not start in release mode)" -ForegroundColor Red
+            $failed++
+            $failedScripts += [PSCustomObject]@{
+                Name     = if ($Passes -gt 1) { "$($script.Name) (pass $pass)" } else { $script.Name }
+                ExitCode = -1
+                Output   = "Release mode requires $service, but its container was not reachable. See the [ReleaseMode] warnings above."
+            }
+            continue
+        }
         if (-not $available) {
             Write-Host "SKIPPED ($service unavailable)" -ForegroundColor Yellow
             $skipped++
@@ -305,6 +332,9 @@ foreach ($script in $etlScripts) {
         $procInfo.Environment["ETLSQL_SECURITY_EVENT_OUTBOX_PATH"] = $securityEventOutboxPath
         $procInfo.Environment["Session__Root"] = $sessionRoot
         $procInfo.Environment["Orchestrator__DatabasePath"] = $orchestratorDatabasePath
+        $procInfo.Environment["ETL_SQL_MASTER_PASSWORD"] = $sampleSealPassword
+        # The gate is the host administrator here: approve exactly the images the samples start.
+        $procInfo.Environment["Governance__Docker__AllowedImages"] = 'mcr.microsoft.com/mssql/server:2022-latest,postgres:15-alpine'
 
         $proc = New-Object System.Diagnostics.Process
         $proc.StartInfo = $procInfo

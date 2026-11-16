@@ -59,7 +59,7 @@ Portal uses Entity Framework Core to support both SQLite (`src/ETL-SQL.Portal.Da
 ### 3.2 Provider Migrations
 
 Both SQLite and PostgreSQL migration assemblies must remain in sync:
-- Migrations are generated against both providers (`PortalDbContext` for SQLite, `PostgresPortalDbContext` for Postgres).
+- Migrations are generated against `PortalDbContext` with each provider. SQLite migrations live in `ETL-SQL.Portal.Data`; PostgreSQL migrations live in `ETL-SQL.Portal.Migrations.Postgres`.
 - Breaking renames must be registered in `MigrationConvergenceTests.PreDeploymentBreakingMigrations` so automated blue-green convergence tests accept them.
 
 ---

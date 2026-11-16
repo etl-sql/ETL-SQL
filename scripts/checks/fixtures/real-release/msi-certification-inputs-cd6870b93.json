@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "windowsPayload": {
+    "version": "0.22.0",
+    "manifestSha256": "99aff7ab85a35c3dc7da9b25242ffac78850b2daa890162ae3c353141d82bac8",
+    "sourceSha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803"
+  },
+  "sourceSha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+  "files": [
+    {
+      "sha256": "6BF44C432AEFF449A4185A31E1D423F78754633E340B45BF477B79BEE3D3CE83",
+      "name": "current.msi"
+    }
+  ]
+}

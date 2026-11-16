@@ -51,8 +51,21 @@ public partial class SecurityService
             info: "etl-sql-machine-password"u8.ToArray())));
 
     private readonly ILogger _logger;
-    [GeneratedRegex(@"(CREATE\s+CONNECTION\s+\w+\s+AS\s+\w+\s*\()(.*?)(\))", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    // Named groups number after the unnamed ones, so groups 1-3 stay prefix, content and ')'.
+    [GeneratedRegex(@"(CREATE\s+CONNECTION\s+\w+\s+AS\s+(?<type>\w+)\s*\()(.*?)(\))", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex ConnRegex();
+    [GeneratedRegex(@"^[a-z][a-z0-9+.\-]*://[^/@\s]+:[^/@\s]*@", RegexOptions.IgnoreCase)]
+    private static partial Regex UrlWithPasswordRegex();
+
+    /// <summary>
+    /// Connectors whose positional value is a file-system path (as in
+    /// <c>ConnectionStringBuilder</c>). A path is not a credential, so sealing leaves it readable
+    /// unless it carries one. MOCKDB is left out on purpose: its value is an opaque token.
+    /// </summary>
+    private static readonly HashSet<string> FilePathConnectorTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "FLATFILE", "CSV", "EXCEL", "JSON", "XML", "PARQUET", "AVRO", "DIRECTORY"
+    };
     [GeneratedRegex(@"((?:PASSWORD|API_KEY|APIKEY)\s*=\s*)(['""])(.*?)\2", RegexOptions.IgnoreCase)]
     private static partial Regex PasswordOptionRegex();
     [GeneratedRegex(@"(['""])ENC:[A-Za-z0-9+/=]*\1")]
@@ -205,7 +218,7 @@ public partial class SecurityService
     }
 
     // Data formats a script is expected to read or write. Any other extension is denied by default.
-    private static readonly string[] AllowedExtensions = { ".csv", ".json", ".parquet", ".avro", ".db", ".enc", ".pgp", ".asc", ".gpg", ".key", ".gz", ".7z", ".txt", ".sql", ".log", ".xlsx", ".xml", ".yaml", ".yml", ".ini", ".md", ".zip", ".dat", ".tsv", ".psv", ".fixed", ".etlds", ".etlsnap" };
+    private static readonly string[] AllowedExtensions = { ".csv", ".json", ".parquet", ".avro", ".db", ".enc", ".pgp", ".asc", ".gpg", ".key", ".pub", ".pem", ".gz", ".7z", ".txt", ".sql", ".log", ".xlsx", ".xml", ".yaml", ".yml", ".ini", ".md", ".zip", ".dat", ".tsv", ".psv", ".fixed", ".etlds", ".etlsnap" };
     // Executables and code-signing certificates: a compromised script must not be able to drop or
     // overwrite binaries, installers, or trust-store certs (.pfx/.cer) that could escalate privilege.
     private static readonly string[] BlockedExtensions = { ".dll", ".exe", ".bat", ".cmd", ".sh", ".msi", ".sys", ".com", ".pfx", ".cer" };
@@ -247,7 +260,17 @@ public partial class SecurityService
 
     public int MaxFileOperations { get; set; } = DefaultMaxFileOperations;
     public int MaxInternalOperations { get; set; } = 100000;
+    /// <summary>
+    /// Nesting depth for <c>RUN SCRIPT</c>, procedures, <c>EXEC</c> and directory recursion
+    /// (<c>Security:MaxRecursiveNestingDepth</c>). Not the CTE iteration limit.
+    /// </summary>
     public int MaxRecursiveDepth { get; set; } = DefaultMaxRecursiveDepth;
+
+    /// <summary>
+    /// The configured CTE iteration ceiling (<c>Engine:MaxRecursiveDepth</c>). A script's
+    /// <c>SET MAX_RECURSIVE_DEPTH</c> above it needs an approved safe zone.
+    /// </summary>
+    public int MaxCteRecursionDepth { get; set; } = 10000;
     public int MaxParallelDegree { get; set; } = DefaultMaxParallelDegree;
     public long MaxStringResultSize { get; set; } = DefaultMaxStringResultSize;
     public int MaxSmtpEmailsPerScript { get; set; } = DefaultMaxSmtpEmailsPerScript;
@@ -325,22 +348,19 @@ public partial class SecurityService
 
         if (IsTestMode) return;
 
-        // Always allow local loopback
-        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-            host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
-            host.Equals("::1", StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
+        // Loopback gets no exemption: on a shared host it reaches the host's own services,
+        // so an administrator who narrows AllowedHosts must list "localhost" to allow it.
         if (AllowedHosts.Contains("*")) return;
 
         foreach (var allowed in AllowedHosts)
         {
-            if (allowed.StartsWith("*."))
+            if (allowed.StartsWith("*.", StringComparison.Ordinal))
             {
-                var domain = allowed.Substring(2);
-                if (host.EndsWith(domain, StringComparison.OrdinalIgnoreCase)) return;
+                // "*.example.com" matches example.com and its subdomains, but not "evil-example.com":
+                // the suffix must start at a label boundary.
+                var suffix = allowed.Substring(1);
+                if (host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(host, allowed.Substring(2), StringComparison.OrdinalIgnoreCase)) return;
             }
 
             if (string.Equals(host, allowed, StringComparison.OrdinalIgnoreCase)) return;
@@ -370,6 +390,7 @@ public partial class SecurityService
         // 0. Internal Bypass
         if (IsInternalOperation) return;
 
+        EnforceApplicationFileProtection(fullPath);
         EnforceAdditionalBlockedPaths(fullPath);
 
         // 0.1 Unrestricted Mode Bypass
@@ -443,8 +464,7 @@ public partial class SecurityService
         }
         foreach (var blocked in SensitiveDirectories)
         {
-            var blockedClean = blocked.Trim('/');
-            if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase)))
+            if (ContainsSegmentSequence(segments, blocked))
             {
                 throw new SecurityException($"Unauthorized access to protected system/environment directory: {blocked} in path {fullPath}");
             }
@@ -472,6 +492,32 @@ public partial class SecurityService
         }
     }
 
+    /// <summary>
+    /// True when a path (after symlink resolution) is a drive root, lies in a critical system or
+    /// credential directory, or is one of the application's own files — places no configuration
+    /// makes safe to read on a script author's behalf. For callers with no execution context, such
+    /// as static analysis, that must not read such files while inspecting a script. Fails closed.
+    /// </summary>
+    public static bool IsProtectedLocation(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return true;
+        try
+        {
+            var fullPath = ResolvePathSymlinks(Path.GetFullPath(path));
+            if (string.Equals(fullPath, Path.GetPathRoot(fullPath), StringComparison.OrdinalIgnoreCase)) return true;
+            var normalizedPath = fullPath.Replace('\\', '/');
+            var segments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (CriticalSystemDirectories.Any(blocked => IsBlockedDirectoryMatch(normalizedPath, segments, blocked))) return true;
+            if (SensitiveDirectories.Any(blocked => ContainsSegmentSequence(segments, blocked))) return true;
+            EnforceApplicationFileProtection(fullPath);
+            return false;
+        }
+        catch (Exception ex) when (ex is SecurityException or ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            return true;
+        }
+    }
+
     private bool IsSensitivePath(string fullPath)
     {
         var normalizedPath = fullPath.Replace('\\', '/');
@@ -483,10 +529,71 @@ public partial class SecurityService
         }
         foreach (var blocked in SensitiveDirectories)
         {
-            var blockedClean = blocked.Trim('/');
-            if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase))) return true;
+            if (ContainsSegmentSequence(segments, blocked)) return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Refuses a script access to the application's own files, whatever the safe zones or protection
+    /// mode say. The installers approve the install folder as a safe zone so the services can keep
+    /// their data under it, and the services run user-authored scripts in-process, so without this a
+    /// script could read the Portal database, the Data Protection key ring or the installed secrets
+    /// file (the JWT signing key), or rewrite the service's configuration.
+    /// </summary>
+    private static void EnforceApplicationFileProtection(string fullPath)
+    {
+        var fileName = Path.GetFileName(fullPath);
+        var segments = fullPath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var protectedFile =
+            string.Equals(fileName, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName, StringComparison.OrdinalIgnoreCase)
+            || segments.Any(segment => string.Equals(segment, ".portal-keys", StringComparison.OrdinalIgnoreCase))
+            || IsMachineKeyFile(fullPath, fileName)
+            || (IsDirectlyInApplicationDirectory(fullPath) && IsApplicationFileName(fileName));
+        if (protectedFile)
+        {
+            throw new SecurityException(
+                $"Unauthorized access to an ETL-SQL application file: {fileName}. Scripts cannot read or write the application's configuration, keys, databases or binaries.");
+        }
+    }
+
+    // The engine's machine key: <LocalApplicationData>/etl-sql/machine.key, or a mounted key file.
+    private static bool IsMachineKeyFile(string fullPath, string fileName)
+    {
+        if (string.Equals(fileName, "machine.key", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Path.GetFileName(Path.GetDirectoryName(fullPath)), "etl-sql", StringComparison.OrdinalIgnoreCase))
+            return true;
+        var mounted = Environment.GetEnvironmentVariable("ETLSQL_MACHINE_KEY_FILE");
+        return !string.IsNullOrWhiteSpace(mounted)
+            && Path.IsPathFullyQualified(mounted)
+            && string.Equals(Path.GetFullPath(mounted), fullPath, PathComparison);
+    }
+
+    private static bool IsDirectlyInApplicationDirectory(string fullPath)
+    {
+        var parent = Path.GetDirectoryName(fullPath);
+        if (string.IsNullOrEmpty(parent)) return false;
+        var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        return string.Equals(
+            Path.TrimEndingDirectorySeparator(parent),
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(baseDir)),
+            PathComparison);
+    }
+
+    private static bool IsApplicationFileName(string fileName)
+    {
+        var name = fileName.ToLowerInvariant();
+        return (name.StartsWith("appsettings", StringComparison.Ordinal) && name.EndsWith(".json", StringComparison.Ordinal))
+            || name.StartsWith("portal.db", StringComparison.Ordinal)
+            || name.StartsWith("etlsql.db", StringComparison.Ordinal)
+            || name.StartsWith("first-run-password", StringComparison.Ordinal)
+            || name.EndsWith(".deps.json", StringComparison.Ordinal)
+            || name.EndsWith(".runtimeconfig.json", StringComparison.Ordinal)
+            || name.EndsWith(".dll", StringComparison.Ordinal)
+            || name.EndsWith(".exe", StringComparison.Ordinal)
+            || name.EndsWith(".so", StringComparison.Ordinal)
+            || name.EndsWith(".dylib", StringComparison.Ordinal)
+            || name.EndsWith(".pdb", StringComparison.Ordinal);
     }
 
     private void EnforceAdditionalBlockedPaths(string fullPath)
@@ -516,6 +623,24 @@ public partial class SecurityService
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// True when <paramref name="blocked"/> — one segment (".ssh") or several ("Users/Public") —
+    /// appears as consecutive whole segments of the path.
+    /// </summary>
+    private static bool ContainsSegmentSequence(string[] segments, string blocked)
+    {
+        var parts = blocked.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return false;
+        for (var start = 0; start + parts.Length <= segments.Length; start++)
+        {
+            var match = true;
+            for (var i = 0; i < parts.Length && match; i++)
+                match = string.Equals(segments[start + i], parts[i], StringComparison.OrdinalIgnoreCase);
+            if (match) return true;
+        }
+        return false;
     }
 
     private static bool IsBlockedDirectoryMatch(string normalizedPath, string[] segments, string blocked)
@@ -663,7 +788,9 @@ public partial class SecurityService
         int maxOps = (type == OperationType.FileSystem) ? MaxFileOperations : MaxInternalOperations;
         int maxDepth = MaxRecursiveDepth;
 
-        bool isSafeZone = IsWithinSafeZone(path) || IsTestMode;
+        if (count <= maxOps && depth <= maxDepth) return;
+
+        bool isSafeZone = IsTestMode || IsWithinSafeZone(path);
 
         if (count > maxOps && !allowLargeCount)
         {
@@ -748,8 +875,8 @@ public partial class SecurityService
                 globalLimit = MaxFileOperations;
                 break;
             case ThresholdType.MaxRecursiveDepth:
-                isExceeding = Convert.ToInt32(newValue) > MaxRecursiveDepth;
-                globalLimit = MaxRecursiveDepth;
+                isExceeding = Convert.ToInt32(newValue) > MaxCteRecursionDepth;
+                globalLimit = MaxCteRecursionDepth;
                 break;
             case ThresholdType.MaxGenerateRows:
                 isExceeding = Convert.ToInt32(newValue) > 1000000;
@@ -857,8 +984,8 @@ public partial class SecurityService
     {
         if (string.IsNullOrEmpty(text)) return null;
         var cleanText = StripComments(text);
-        var match = LiteralUsePasswordRegex().Match(cleanText);
-        if (!match.Success) return null;
+        var match = MatchesOutsideStringLiterals(LiteralUsePasswordRegex(), cleanText).FirstOrDefault();
+        if (match is null) return null;
         var raw = match.Value;
         var quoteIndex = raw.IndexOf(match.Groups[1].Value, StringComparison.Ordinal);
         var lastQuoteIndex = raw.LastIndexOf(match.Groups[1].Value, StringComparison.Ordinal);
@@ -870,9 +997,9 @@ public partial class SecurityService
     {
         if (string.IsNullOrEmpty(text)) return false;
         if (NoSaveConnectionEnabled(text)) return false;
-        if (ConnectionEncryptionEnabled(text) && ConnRegex().IsMatch(text)) return true;
+        if (ConnectionEncryptionEnabled(text) && MatchesOutsideStringLiterals(ConnRegex(), text).Any()) return true;
         if (NoSaveSensitiveEnabled(text)) return false;
-        return !AllowsPlaintextSecrets(text) && NeedsEncryption(text);
+        return NeedsEncryption(text);
     }
 
     /// <summary>
@@ -881,7 +1008,7 @@ public partial class SecurityService
     public string SanitizeUsePasswordForSave(string text)
     {
         if (string.IsNullOrEmpty(text) || AllowsPlaintextSecrets(text)) return text;
-        return LiteralUsePasswordRegex().Replace(text, "USE PASSWORD PROMPT;");
+        return ReplaceOutsideStringLiterals(LiteralUsePasswordRegex(), text, _ => "USE PASSWORD PROMPT;");
     }
 
     /// <summary>
@@ -896,30 +1023,165 @@ public partial class SecurityService
         var connectionEncryption = ConnectionEncryptionEnabled(text);
         var allowPlaintext = AllowsPlaintextSecrets(text);
 
-        if (allowPlaintext && !noSaveSensitive && !noSaveConnection && !connectionEncryption)
-            return text;
-
-        var secured = (allowPlaintext && !noSaveSensitive)
+        var secured = (allowPlaintext && !noSaveSensitive && !noSaveConnection)
             ? text
-            : LiteralUsePasswordRegex().Replace(text, "USE PASSWORD PROMPT;");
+            : ReplaceOutsideStringLiterals(LiteralUsePasswordRegex(), text, _ => "USE PASSWORD PROMPT;");
 
         if (noSaveConnection)
         {
-            secured = ScrubConnectionDetails(secured);
+            secured = ScrubSensitiveLiterals(secured);
+            return ScrubConnectionDetails(secured);
         }
-        else if (connectionEncryption && !string.IsNullOrEmpty(password))
+
+        if (connectionEncryption && !string.IsNullOrEmpty(password))
         {
             secured = EncryptConnectionDetails(secured, password);
         }
-        else if (!allowPlaintext && !string.IsNullOrEmpty(password))
+        else if (!noSaveSensitive && !string.IsNullOrEmpty(password))
         {
             secured = EncryptScript(secured, password);
         }
 
         if (noSaveSensitive)
-            secured = ScrubSensitiveLiterals(secured);
+            secured = ScrubSensitiveLiterals(ScrubConnectionTargetSecrets(secured));
 
         return secured;
+    }
+
+    private static readonly string[] CredentialKeyFragments =
+        ["password", "pwd", "key", "secret", "token", "signature", "credential", "passphrase"];
+
+    private static bool IsCredentialKey(string key)
+    {
+        var k = key.Trim();
+        return k.Equals("sas", StringComparison.OrdinalIgnoreCase)
+            || CredentialKeyFragments.Any(f => k.Contains(f, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Scrubs, in each connection's positional target, every credential <see cref="EncryptScript"/>
+    /// would have sealed: URL userinfo passwords, connection-string keys that name a credential
+    /// (not only <c>Password</c>/<c>Pwd</c>), and opaque values of connectors that take no file
+    /// path. Hosts, databases and file paths stay readable.
+    /// </summary>
+    private static string ScrubConnectionTargetSecrets(string text)
+    {
+        return ReplaceOutsideStringLiterals(ConnRegex(), text, m =>
+        {
+            var isFilePathConnector = FilePathConnectorTypes.Contains(m.Groups["type"].Value);
+            var newContent = ReplaceFirstQuotedString(m.Groups[2].Value, (q, inner) =>
+            {
+                if (IsSealedOrIndirectCredential(inner)) return $"{q}{inner}{q}";
+                var url = UrlWithPasswordRegex().Match(inner);
+                if (url.Success)
+                {
+                    var schemeEnd = inner.IndexOf("://", StringComparison.Ordinal) + 3;
+                    var colon = inner.IndexOf(':', schemeEnd);
+                    var at = url.Index + url.Length - 1;
+                    return $"{q}{inner[..(colon + 1)]}<secret>{inner[at..]}{q}";
+                }
+                if (inner.Contains('='))
+                {
+                    var parts = inner.Split(';');
+                    for (var i = 0; i < parts.Length; i++)
+                    {
+                        var eq = parts[i].IndexOf('=');
+                        if (eq > 0 && IsCredentialKey(parts[i][..eq]))
+                            parts[i] = parts[i][..(eq + 1)] + "<secret>";
+                    }
+                    return $"{q}{string.Join(';', parts)}{q}";
+                }
+                if (!isFilePathConnector && !Path.HasExtension(inner))
+                    return $"{q}<secret>{q}";
+                return $"{q}{inner}{q}";
+            });
+            return m.Groups[1].Value + newContent + m.Groups[3].Value;
+        });
+    }
+
+    /// <summary>
+    /// Marks each character inside a string literal (<c>'...'</c> with <c>''</c> escapes, or
+    /// <c>"..."</c>). Comments are skipped so an apostrophe in <c>-- don't</c> does not open a
+    /// literal. The sealing rewrites ignore matches that start inside a literal: a
+    /// <c>CREATE CONNECTION</c> or <c>USE PASSWORD</c> in dynamic SQL is data, and rewriting it
+    /// breaks the script's quoting so the script no longer parses.
+    /// </summary>
+    private static bool[] StringLiteralMask(string text)
+    {
+        var mask = new bool[text.Length];
+        var i = 0;
+        while (i < text.Length)
+        {
+            var c = text[i];
+            if (c == '-' && i + 1 < text.Length && text[i + 1] == '-')
+            {
+                while (i < text.Length && text[i] != '\n') i++;
+            }
+            else if (c == '/' && i + 1 < text.Length && text[i + 1] == '*')
+            {
+                var end = text.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                i = end < 0 ? text.Length : end + 2;
+            }
+            else if (c == '\'' || c == '"')
+            {
+                mask[i++] = true;
+                while (i < text.Length)
+                {
+                    mask[i] = true;
+                    if (text[i] != c) { i++; continue; }
+                    if (i + 1 < text.Length && text[i + 1] == c)
+                    {
+                        mask[i + 1] = true;
+                        i += 2;
+                        continue;
+                    }
+                    i++;
+                    break;
+                }
+            }
+            else
+            {
+                i++;
+            }
+        }
+        return mask;
+    }
+
+    /// <summary>
+    /// Matches of <paramref name="regex"/> that start outside string literals. A match that starts
+    /// inside one is skipped and the search resumes one character later, so a skipped match cannot
+    /// swallow a real statement that follows it.
+    /// </summary>
+    private static IEnumerable<Match> MatchesOutsideStringLiterals(Regex regex, string text)
+    {
+        var mask = StringLiteralMask(text);
+        var match = regex.Match(text);
+        while (match.Success)
+        {
+            if (!mask[match.Index])
+            {
+                yield return match;
+                match = match.NextMatch();
+            }
+            else
+            {
+                match = regex.Match(text, match.Index + 1);
+            }
+        }
+    }
+
+    private static string ReplaceOutsideStringLiterals(Regex regex, string text, MatchEvaluator evaluator)
+    {
+        var result = new System.Text.StringBuilder(text.Length);
+        var copied = 0;
+        var replaced = false;
+        foreach (var match in MatchesOutsideStringLiterals(regex, text))
+        {
+            result.Append(text, copied, match.Index - copied).Append(evaluator(match));
+            copied = match.Index + match.Length;
+            replaced = true;
+        }
+        return replaced ? result.Append(text, copied, text.Length - copied).ToString() : text;
     }
 
     private static string StripComments(string text)
@@ -986,7 +1248,7 @@ public partial class SecurityService
 
     private static string ScrubConnectionDetails(string text)
     {
-        return ConnRegex().Replace(text, m =>
+        return ReplaceOutsideStringLiterals(ConnRegex(), text, m =>
         {
             var parenContent = m.Groups[2].Value;
             var newContent = ReplaceFirstQuotedString(parenContent, (q, _) => $"{q}<connection>{q}");
@@ -996,20 +1258,29 @@ public partial class SecurityService
         });
     }
 
+    /// <summary>A connection string (<c>key=value</c>) or a URL with <c>user:password@</c>.</summary>
+    private static bool CarriesCredential(string value) =>
+        value.Contains('=') || UrlWithPasswordRegex().IsMatch(value);
+
+    private static bool IsSealedOrIndirectCredential(string value) =>
+        value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("SHARED:", StringComparison.OrdinalIgnoreCase);
+
     private static string EncryptConnectionDetails(string text, string password)
     {
-        return ConnRegex().Replace(text, m =>
+        return ReplaceOutsideStringLiterals(ConnRegex(), text, m =>
         {
             var parenContent = m.Groups[2].Value;
             var newContent = ReplaceFirstQuotedString(parenContent, (q, inner) =>
             {
-                if (inner.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)) return $"{q}{inner}{q}";
+                if (IsSealedOrIndirectCredential(inner)) return $"{q}{inner}{q}";
                 return $"{q}{CryptoUtils.Encrypt(inner, password)}{q}";
             });
             newContent = StringOptionRegex().Replace(newContent, opt =>
             {
                 var value = opt.Groups[3].Value;
-                if (value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)) return opt.Value;
+                if (IsSealedOrIndirectCredential(value)) return opt.Value;
                 return $"{opt.Groups[1].Value}{opt.Groups[2].Value}{CryptoUtils.Encrypt(value, password)}{opt.Groups[2].Value}";
             });
             return m.Groups[1].Value + newContent + m.Groups[3].Value;
@@ -1023,18 +1294,20 @@ public partial class SecurityService
     {
         if (string.IsNullOrEmpty(password)) return text;
 
-        return ConnRegex().Replace(text, m =>
+        return ReplaceOutsideStringLiterals(ConnRegex(), text, m =>
         {
             var parenContent = m.Groups[2].Value;
 
             if (parenContent.Contains("ENCRYPT=OFF", StringComparison.OrdinalIgnoreCase))
                 return m.Value;
 
-            // 1. Encrypt positional target if it looks like a connection string
+            // 1. Encrypt the positional target when it carries a credential, or when it is an opaque
+            //    value (no file extension) of a connector that does not take a file-system path.
+            var isFilePathConnector = FilePathConnectorTypes.Contains(m.Groups["type"].Value);
             var newContent = ReplaceFirstQuotedString(parenContent, (q, inner) =>
             {
-                if (inner.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)) return $"{q}{inner}{q}";
-                if (inner.Contains("=") || !Path.HasExtension(inner))
+                if (IsSealedOrIndirectCredential(inner)) return $"{q}{inner}{q}";
+                if (CarriesCredential(inner) || (!isFilePathConnector && !Path.HasExtension(inner)))
                     return $"{q}{CryptoUtils.Encrypt(inner, password)}{q}";
                 return $"{q}{inner}{q}";
             });
@@ -1043,7 +1316,7 @@ public partial class SecurityService
             newContent = PasswordOptionRegex().Replace(newContent, pm =>
             {
                 var pwd = pm.Groups[3].Value;
-                if (!string.IsNullOrEmpty(pwd) && !pwd.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrEmpty(pwd) && !IsSealedOrIndirectCredential(pwd))
                     return pm.Groups[1].Value + pm.Groups[2].Value + CryptoUtils.Encrypt(pwd, password) + pm.Groups[2].Value;
                 return pm.Value;
             });
@@ -1060,7 +1333,7 @@ public partial class SecurityService
     /// </summary>
     public bool NeedsEncryption(string text)
     {
-        foreach (Match m in ConnRegex().Matches(text))
+        foreach (var m in MatchesOutsideStringLiterals(ConnRegex(), text))
         {
             var parenContent = m.Groups[2].Value;
 
@@ -1072,7 +1345,7 @@ public partial class SecurityService
             if (firstQuoted != null && firstQuoted.Length >= 2)
             {
                 var inner = firstQuoted[1..^1];
-                if (!inner.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase) && inner.Contains("="))
+                if (!IsSealedOrIndirectCredential(inner) && CarriesCredential(inner))
                     return true;
             }
 
@@ -1081,7 +1354,7 @@ public partial class SecurityService
             {
                 var pm = PasswordOptionRegex().Match(parenContent);
                 var pwd = pm.Groups[3].Value;
-                if (!string.IsNullOrEmpty(pwd) && !pwd.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrEmpty(pwd) && !IsSealedOrIndirectCredential(pwd))
                     return true;
             }
         }
@@ -1142,6 +1415,8 @@ public partial class SecurityService
             foreach (var part in parts)
             {
                 current = Path.Combine(current, part);
+                // .NET's File.Exists/Directory.Exists report the link itself, so a dangling symlink
+                // (target not created yet) still counts as existing here and is resolved below.
                 if (File.Exists(current) || Directory.Exists(current))
                 {
                     try
@@ -1172,15 +1447,31 @@ public partial class SecurityService
     private bool IsWithinSafeZone(string? path)
     {
         if (string.IsNullOrEmpty(path)) return false;
-        var fullPath = Path.GetFullPath(path);
+        // Canonicalize like ValidatePath does, so a symlink inside a zone that points outside it does
+        // not count as inside. Zones are matched as written and canonicalized, so a zone configured
+        // through a symlinked directory still matches its real location.
+        var fullPath = ResolvePathSymlinks(Path.GetFullPath(path));
         var current = fullPath;
+        var zones = new HashSet<string>(ApprovedSafeZones, (IEqualityComparer<string>?)ApprovedSafeZones.Comparer);
+        foreach (var zone in ApprovedSafeZones)
+        {
+            try
+            {
+                zones.Add(ResolvePathSymlinks(Path.GetFullPath(zone))
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+            {
+                // An unusable zone entry stays matched only as written.
+            }
+        }
 
         _logger.Debug("[SECURITY] Checking if path is within safe zone: {Path}", fullPath);
 
         while (!string.IsNullOrEmpty(current))
         {
             var normalized = current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            if (ApprovedSafeZones.Contains(normalized))
+            if (zones.Contains(normalized))
             {
                 _logger.Debug("[SECURITY] Path AUTHORIZED via safe zone: {Zone}", normalized);
                 return true;
@@ -1193,7 +1484,37 @@ public partial class SecurityService
         _logger.Debug("[SECURITY] Path DENIED — not within any approved safe zone: {Path}", fullPath);
         return false;
     }
+
+    public ScriptSealOutcome TrySealScriptForSave(string scriptText, string? password = null)
+    {
+        var allowPlaintext = AllowsPlaintextSecrets(scriptText);
+        var effectivePassword = !string.IsNullOrEmpty(password)
+            ? password
+            : ExtractLiteralUsePassword(scriptText);
+
+        if (RequiresSavePassword(scriptText) && string.IsNullOrEmpty(effectivePassword))
+        {
+            return new ScriptSealOutcome(
+                scriptText,
+                Changed: false,
+                RequiresPassword: true,
+                AllowsPlaintextSecrets: allowPlaintext);
+        }
+
+        var secured = SecureScriptForSave(scriptText, effectivePassword ?? "");
+        return new ScriptSealOutcome(
+            secured,
+            !string.Equals(secured, scriptText, StringComparison.Ordinal),
+            RequiresPassword: false,
+            AllowsPlaintextSecrets: allowPlaintext);
+    }
 }
+
+public sealed record ScriptSealOutcome(
+    string ScriptText,
+    bool Changed,
+    bool RequiresPassword,
+    bool AllowsPlaintextSecrets);
 
 public class SecurityException : Exception
 {

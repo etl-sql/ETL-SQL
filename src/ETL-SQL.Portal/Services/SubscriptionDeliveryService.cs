@@ -32,7 +32,9 @@ public interface ISubscriptionScriptRunner
         ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null);
 }
 
-public sealed class EngineSubscriptionScriptRunner(IScriptExecutor executor) : ISubscriptionScriptRunner
+internal interface ITrustedSubscriptionScriptRunner : ISubscriptionScriptRunner;
+
+public sealed class EngineSubscriptionScriptRunner(IScriptExecutor executor) : ITrustedSubscriptionScriptRunner
 {
     public async Task<(bool Success, string? Error)> RunAsync(string scriptText, string sessionId, CancellationToken ct,
         ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
@@ -241,7 +243,7 @@ public class SubscriptionDeliveryService(
         {
             try
             {
-                var definition = await connectionCatalog.ResolveDefinitionAsync(smtpAlias, identity: null, ct);
+                var definition = await connectionCatalog.ResolveSystemDefinitionAsync(smtpAlias, ct);
                 if (!definition.ConnectorType.Equals("SMTP", StringComparison.OrdinalIgnoreCase))
                     return await RecordFailureAsync(sub, recipient,
                         $"Connection '{smtpAlias}' is a {definition.ConnectorType} connection, not SMTP.",
@@ -306,6 +308,46 @@ public class SubscriptionDeliveryService(
                 if (!dispatch.Success)
                     return await RecordFailureAsync(
                         sub, recipient, Sanitize(dispatch.Error), correlationId, ct);
+            }
+            else if (runner is ITrustedSubscriptionScriptRunner)
+            {
+                var systemMailIdentity = new ETL_SQL.Core.Governance.ExecutionIdentity
+                {
+                    EffectiveUser = "portal-system-subscription",
+                    RealUser = "portal-system-subscription",
+                    IsAdmin = true
+                };
+
+                if (sub.Format != SubscriptionFormat.Link)
+                {
+                    var exportScript = ComposeExportScript(
+                        sub,
+                        reportScriptPath,
+                        Path.GetTempPath(),
+                        out exportPath);
+                    var export = await RunDeliveryScriptAsync(
+                        exportScript,
+                        sub.Id,
+                        recipient,
+                        cts.Token,
+                        recipientIdentity,
+                        ct);
+                    if (!export.Success)
+                        return await RecordFailureAsync(
+                            sub, recipient, Sanitize(export.Error), correlationId, ct);
+                }
+
+                var mailScript = ComposeSmtpSendScript(sub, recipient, exportPath, smtp!);
+                var delivery = await RunDeliveryScriptAsync(
+                    mailScript,
+                    sub.Id,
+                    recipient,
+                    cts.Token,
+                    systemMailIdentity,
+                    ct);
+                if (!delivery.Success)
+                    return await RecordFailureAsync(
+                        sub, recipient, Sanitize(delivery.Error), correlationId, ct);
             }
             else
             {
@@ -556,55 +598,50 @@ public class SubscriptionDeliveryService(
         IReadOnlyDictionary<string, string> smtp,
         out string? exportPath)
     {
-        var fromAddr = SmtpOption(smtp, "DEFAULT_FROM") ?? SmtpOption(smtp, "USERNAME") ?? "etlsql@localhost";
         var sb = new StringBuilder();
-
-        var parameters = DeserializeParams(sub.ParametersJson);
-        if (parameters is { Count: > 0 })
-        {
-            // RELDATE values are stored as-is and resolved fresh by the engine on each run.
-            foreach (var (k, v) in parameters)
-            {
-                var varName = k.StartsWith('@') ? k : "@" + k;
-                sb.AppendLine($"DECLARE {varName} STRING = '{Esc(v)}';");
-            }
-            sb.AppendLine();
-        }
+        AppendParameters(sb, sub);
 
         if (sub.Format != SubscriptionFormat.Link)
         {
-            var (ext, formatName) = sub.Format switch
-            {
-                SubscriptionFormat.CSV => ("csv", "CSV"),
-                SubscriptionFormat.Markdown => ("md", "MARKDOWN"),
-                _ => ("pdf", "PDF")
-            };
+            var (ext, formatName) = FormatInfo(sub.Format);
             exportPath = Path.Combine(Path.GetTempPath(), $"sub_{sub.Id}_{Guid.NewGuid():N}.{ext}");
-
             sb.AppendLine($"EXPORT REPORT '{reportScriptPath.Replace("\\", "/")}' FORMAT {formatName} TO '{exportPath.Replace("\\", "/")}';");
             sb.AppendLine();
-            AppendSmtpConnection(sb, smtp);
-            sb.AppendLine("SEND EMAIL");
-            sb.AppendLine($"    TO      '{Esc(recipient)}'");
-            sb.AppendLine($"    FROM    '{Esc(fromAddr)}'");
-            sb.AppendLine($"    SUBJECT 'Report: {Esc(sub.Report.Name)}'");
-            sb.AppendLine($"    BODY    'Please find the attached report: {Esc(sub.Report.Name)}.'");
-            sb.AppendLine($"    ATTACH '{exportPath.Replace("\\", "/")}'");
-            sb.AppendLine("    AT __sub_smtp;");
         }
         else
         {
             exportPath = null;
-            var portalUrl = $"{{portal_url}}/index.html#report/{sub.ReportId}";
-            AppendSmtpConnection(sb, smtp);
-            sb.AppendLine("SEND EMAIL");
-            sb.AppendLine($"    TO      '{Esc(recipient)}'");
-            sb.AppendLine($"    FROM    '{Esc(fromAddr)}'");
-            sb.AppendLine($"    SUBJECT 'Report ready: {Esc(sub.Report.Name)}'");
-            sb.AppendLine($"    BODY    'Your report is ready. View it here: {portalUrl}'");
-            sb.AppendLine("    AT __sub_smtp;");
         }
 
+        sb.Append(ComposeSmtpSendScript(sub, recipient, exportPath, smtp));
+        return sb.ToString();
+    }
+
+    private static string ComposeSmtpSendScript(
+        Subscription sub,
+        string recipient,
+        string? exportPath,
+        IReadOnlyDictionary<string, string> smtp)
+    {
+        var fromAddr = SmtpOption(smtp, "DEFAULT_FROM") ?? SmtpOption(smtp, "USERNAME") ?? "etlsql@localhost";
+        var sb = new StringBuilder();
+        AppendSmtpConnection(sb, smtp);
+        sb.AppendLine("SEND EMAIL");
+        sb.AppendLine($"    TO      '{Esc(recipient)}'");
+        sb.AppendLine($"    FROM    '{Esc(fromAddr)}'");
+        if (exportPath is not null)
+        {
+            sb.AppendLine($"    SUBJECT 'Report: {Esc(sub.Report.Name)}'");
+            sb.AppendLine($"    BODY    'Please find the attached report: {Esc(sub.Report.Name)}.'");
+            sb.AppendLine($"    ATTACH '{exportPath.Replace("\\", "/")}'");
+        }
+        else
+        {
+            var portalUrl = $"{{portal_url}}/index.html#report/{sub.ReportId}";
+            sb.AppendLine($"    SUBJECT 'Report ready: {Esc(sub.Report.Name)}'");
+            sb.AppendLine($"    BODY    'Your report is ready. View it here: {portalUrl}'");
+        }
+        sb.AppendLine("    AT __sub_smtp;");
         return sb.ToString();
     }
 
@@ -615,7 +652,29 @@ public class SubscriptionDeliveryService(
         out string? exportPath)
     {
         var sb = new StringBuilder();
+        AppendParameters(sb, sub);
 
+        var (ext, formatName) = FormatInfo(sub.Format);
+        var exportRoot = string.IsNullOrWhiteSpace(exportRootPath)
+            ? Path.GetTempPath()
+            : exportRootPath;
+        var exportDir = Path.Combine(exportRoot, "subscription-delivery");
+        Directory.CreateDirectory(exportDir);
+        exportPath = Path.Combine(exportDir, $"sub_{sub.Id}_{Guid.NewGuid():N}.{ext}");
+        sb.AppendLine($"EXPORT REPORT '{reportScriptPath.Replace("\\", "/")}' FORMAT {formatName} TO '{exportPath.Replace("\\", "/")}';");
+
+        return sb.ToString();
+    }
+
+    private static (string Ext, string FormatName) FormatInfo(SubscriptionFormat format) => format switch
+    {
+        SubscriptionFormat.CSV => ("csv", "CSV"),
+        SubscriptionFormat.Markdown => ("md", "MARKDOWN"),
+        _ => ("pdf", "PDF")
+    };
+
+    private static void AppendParameters(StringBuilder sb, Subscription sub)
+    {
         var parameters = DeserializeParams(sub.ParametersJson);
         if (parameters is { Count: > 0 })
         {
@@ -627,22 +686,6 @@ public class SubscriptionDeliveryService(
             }
             sb.AppendLine();
         }
-
-        var (ext, formatName) = sub.Format switch
-        {
-            SubscriptionFormat.CSV => ("csv", "CSV"),
-            SubscriptionFormat.Markdown => ("md", "MARKDOWN"),
-            _ => ("pdf", "PDF")
-        };
-        var exportRoot = string.IsNullOrWhiteSpace(exportRootPath)
-            ? Path.GetTempPath()
-            : exportRootPath;
-        var exportDir = Path.Combine(exportRoot, "subscription-delivery");
-        Directory.CreateDirectory(exportDir);
-        exportPath = Path.Combine(exportDir, $"sub_{sub.Id}_{Guid.NewGuid():N}.{ext}");
-        sb.AppendLine($"EXPORT REPORT '{reportScriptPath.Replace("\\", "/")}' FORMAT {formatName} TO '{exportPath.Replace("\\", "/")}';");
-
-        return sb.ToString();
     }
 
     /// <summary>

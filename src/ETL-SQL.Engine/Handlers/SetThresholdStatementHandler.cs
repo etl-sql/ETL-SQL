@@ -22,7 +22,6 @@ public class SetThresholdStatementHandler : IStatementHandler
     {
         ThresholdType.MaxParallelDegree => "Security:MaxParallelDegree",
         ThresholdType.MaxFileOperations => "Security:MaxFileOperationsPerScript",
-        ThresholdType.MaxRecursiveDepth => "Security:MaxRecursiveNestingDepth",
         ThresholdType.MaxSmtpEmailsPerScript => "Security:MaxSmtpEmailsPerScript",
         ThresholdType.MaxStringResultSize => "Security:MaxStringResultSize",
         _ => null

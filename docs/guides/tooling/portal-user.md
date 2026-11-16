@@ -16,7 +16,7 @@ The Portal is a web application that lets you browse, run, and subscribe to repo
 | [Browsing and Running Reports](portal/browsing-and-running-reports.md) | Catalog navigation, search, opening reports, interactive parameters (slicers, date pickers, multi-select), and freshness badges |
 | [Exporting and Subscriptions](portal/exporting-and-subscriptions.md) | Generating PDF/CSV/Excel snapshots on-demand and configuring scheduled email subscription delivery |
 | [Sharing and Embed Tokens](portal/sharing-and-embed-tokens.md) | Creating share links, generating embed tokens for external `<iframe>` hosting, and security considerations |
-| [Saved Views and Bookmarks](portal/saved-views-and-bookmarks.md) | Saving named parameter presets, restoring views, sharing defaults with colleagues |
+| [Saved Views and Bookmarks](portal/saved-views-and-bookmarks.md) | Saving personal parameter presets, restoring views, and using author bookmarks |
 
 ---
 

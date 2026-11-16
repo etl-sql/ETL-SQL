@@ -776,8 +776,13 @@ flattened to a quoted string), the active page, and named-object `VISIBLE`/`COLL
   `DEFAULT = ON`), validated statically by `BookmarkValidationRule`, and emitted by `ManifestBuilder`
   into `BookmarkManifest.State` (a `ResolvedReportState`). `DROP BOOKMARK` removes a registration.
 - **Portal saved views** persist the same envelope in `SavedReportView.StateJson` alongside `ScriptHash`,
-  retaining legacy `ParametersJson`/`FiltersJson` for backward compatibility
-  (`ResolvedReportState.FromLegacy`).
+  with no second parameter/filter map. `CREATE SAVED VIEW` sends an envelope and preserves its
+  string-literal assignments as strings. Create/update requests reject retired flat fields,
+  including explicit nulls; the default-view request carries `State`.
+  The v0.22.0 SQLite and PostgreSQL migrations preserve existing envelopes and backfill old flat
+  string maps once before dropping their columns. Filters override parameters by name and missing
+  `@` prefixes are added. Invalid old maps stop the transactional upgrade. Older Portal hosts
+  must stop first; mixed-version operation across this migration is unsupported.
 - **Application** is atomic: parameters are staged and committed as one request before the active page
   and presentation state are applied; a failed parameter request applies nothing (no partial bookmark).
 - **URL/launch precedence:** URLs carry only an identifier (`#bookmark=Name` or `#view=Id`) — never

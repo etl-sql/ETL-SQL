@@ -24,6 +24,10 @@
     Legacy explicit failure threshold for elapsedMs percent increase. When omitted, the comparator
     uses scenario family bands or per-scenario baseline bands.
 
+.PARAMETER PerformanceReportOnly
+    Reports every performance band miss as a warning; only correctness (failed scenarios, row
+    counts, checksums) fails. CI uses it on shared runners, where one run's timing is noise.
+
 .PARAMETER MarkdownReport
     Optional path for a Markdown comparison report.
 #>
@@ -32,6 +36,7 @@ param(
     [string]$Baseline = "",
     [int]$RegressionPct = 150,
     [switch]$AllowHardwareMismatch,
+    [switch]$PerformanceReportOnly,
     [string]$MarkdownReport = ""
 )
 
@@ -270,7 +275,7 @@ function Compare-HigherIsWorse {
 
     if ($delta -gt $FailPct) {
         $level = if ($SuppressFailure) { 'WARN' } else { 'FAIL' }
-        $note = if ($SuppressFailure) { 'Performance failure suppressed because baseline hardware differs.' } else { "Failure band $FailPct%.$spreadText" }
+        $note = if ($SuppressFailure) { $suppressionNote } else { "Failure band $FailPct%.$spreadText" }
         Add-Issue $level $Scenario $Kind ("$BaselineValue$Unit") ("$CurrentValue$Unit") $delta $note
     } elseif ($delta -gt $WarnPct) {
         Add-Issue 'WARN' $Scenario $Kind ("$BaselineValue$Unit") ("$CurrentValue$Unit") $delta "Warning band $WarnPct%.$spreadText"
@@ -304,7 +309,7 @@ function Compare-LowerIsWorse {
 
     if ($delta -gt $FailPct) {
         $level = if ($SuppressFailure) { 'WARN' } else { 'FAIL' }
-        $note = if ($SuppressFailure) { 'Performance failure suppressed because baseline hardware differs.' } else { "Failure band $FailPct%.$spreadText" }
+        $note = if ($SuppressFailure) { $suppressionNote } else { "Failure band $FailPct%.$spreadText" }
         Add-Issue $level $Scenario $Kind ("$BaselineValue$Unit") ("$CurrentValue$Unit") $delta $note
     } elseif ($delta -gt $WarnPct) {
         Add-Issue 'WARN' $Scenario $Kind ("$BaselineValue$Unit") ("$CurrentValue$Unit") $delta "Warning band $WarnPct%.$spreadText"
@@ -429,7 +434,7 @@ if (-not (Test-Path $Baseline)) {
 }
 
 $base = Get-Content $Baseline -Raw | ConvertFrom-Json
-Assert-ScaleCaptureCompatibility -BaselineReport $base -CurrentReport $new
+Assert-ScaleCaptureCompatibility -BaselineReport $base -CurrentReport $new -PerformanceReportOnly:$PerformanceReportOnly
 
 if ((Get-PropValue $base @('tier')) -ne $tier) {
     Write-Warning "Baseline tier '$(Get-PropValue $base @('tier'))' does not match new report tier '$tier' - skipping comparison."
@@ -448,7 +453,8 @@ foreach ($scenario in @($new.scenarios)) {
 $issues = @()
 $hardwareMismatch = Test-HardwareMismatch $base $new
 Test-ReportMetadata $base $new
-$suppressPerformanceFailures = $hardwareMismatch -and -not $AllowHardwareMismatch
+$suppressPerformanceFailures = $PerformanceReportOnly -or ($hardwareMismatch -and -not $AllowHardwareMismatch)
+$suppressionNote = if ($PerformanceReportOnly) { 'Performance is report-only in this run.' } else { 'Performance failure suppressed because baseline hardware differs.' }
 
 $baseMap = @{}
 foreach ($scenario in @($base.scenarios)) {

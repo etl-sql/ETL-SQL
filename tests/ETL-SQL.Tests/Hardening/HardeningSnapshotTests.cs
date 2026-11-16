@@ -78,6 +78,21 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public async Task CorruptPackage_LoadsAsMissing()
+        {
+            var store = new SnapshotStore();
+            var garbage = Path.Combine(_testDir, "garbage.etlsnap");
+            File.WriteAllBytes(garbage, new byte[] { 0x50, 0x4B, 0x03, 0x04, 0x01, 0x02, 0x03 });
+            Assert.Null(await store.LoadAsync(garbage));
+
+            var truncated = Path.Combine(_testDir, "truncated.etlsnap");
+            await store.SaveAsync(new ReportManifest { Source = "Original" }, truncated);
+            var bytes = File.ReadAllBytes(truncated);
+            File.WriteAllBytes(truncated, bytes[..(bytes.Length / 2)]);
+            Assert.Null(await store.LoadAsync(truncated));
+        }
+
+        [Fact]
         public async Task AtomicReplace_CrashSimulation_LeavesOriginalIntact()
         {
             var store = new SnapshotStore();

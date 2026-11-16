@@ -97,7 +97,7 @@ public sealed class FileSystemArtifactStorageTests : ArtifactStorageContractTest
         Assert.Throws<InvalidOperationException>(() => ArtifactStorageFactory.Create("smb", roots, verifyReachable: true));
     }
 
-    [Fact]
+    [SymlinkFact]
     public async Task Write_RejectsDirectorySymlinkEscape()
     {
         var root = Path.Combine(_base, "artifact-root");
@@ -106,8 +106,7 @@ public sealed class FileSystemArtifactStorageTests : ArtifactStorageContractTest
         Directory.CreateDirectory(outside);
 
         var link = Path.Combine(root, "linked");
-        if (!TryCreateDirectorySymlink(link, outside))
-            return;
+        Directory.CreateSymbolicLink(link, outside);
 
         var storage = new LocalArtifactStorage(new Dictionary<ArtifactArea, string>
         {
@@ -117,21 +116,5 @@ public sealed class FileSystemArtifactStorageTests : ArtifactStorageContractTest
         await Assert.ThrowsAsync<ArgumentException>(() =>
             storage.WriteAllTextAsync(ArtifactArea.Scripts, "linked/escape.txt", "escaped"));
         Assert.False(File.Exists(Path.Combine(outside, "escape.txt")));
-    }
-
-    private static bool TryCreateDirectorySymlink(string linkPath, string targetPath)
-    {
-        try
-        {
-            Directory.CreateSymbolicLink(linkPath, targetPath);
-            return true;
-        }
-        catch (Exception ex) when (
-            ex is IOException ||
-            ex is UnauthorizedAccessException ||
-            ex is PlatformNotSupportedException)
-        {
-            return false;
-        }
     }
 }

@@ -103,7 +103,6 @@ public class StatementParser
         _dispatchMap[TokenType.STOP] = () => ExtensionParser.ParseDockerVerb(DockerAction.Stop);
         _dispatchMap[TokenType.PAUSE] = () => ExtensionParser.ParseDockerVerb(DockerAction.Pause);
         _dispatchMap[TokenType.CLOSE] = () => ExtensionParser.ParseDockerVerb(DockerAction.Close);
-        _dispatchMap[TokenType.DOCKER] = () => ExtensionParser.ParseDockerVerb(DockerAction.Start); // Fallback
         _dispatchMap[TokenType.STYLE] = () => { var t = _parser.Previous; return ReportParser.ParseStyleStatement(t); };
         _dispatchMap[TokenType.EXPORT] = () =>
         {
@@ -269,7 +268,7 @@ public class StatementParser
             return FlowParser.ParseFor();
         }
 
-        if (type == TokenType.SELECT) return _parser.ParseQuery();
+        if (type == TokenType.SELECT || type == TokenType.LPAREN) return _parser.ParseQuery();
         if (type == TokenType.PIVOT) return _parser.ParseDuckPivotStatement();
         if (type == TokenType.UNPIVOT) return _parser.ParseDuckUnpivotStatement();
         if (type == TokenType.DESCRIBE)
@@ -350,10 +349,10 @@ public class StatementParser
 
         if (type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("REINDEX", System.StringComparison.OrdinalIgnoreCase))
         {
-            _parser.Advance();
+            var reindexToken = _parser.Advance();
             if (_parser.Current.Type == TokenType.IDENTIFIER)
             {
-                _parser.Advance();
+                return new ReindexStatement(_parser.Advance().Value) { Line = reindexToken.Line, Column = reindexToken.Column };
             }
             return new NoOpStatement();
         }
@@ -410,6 +409,11 @@ public class StatementParser
         if (_parser.Match(TokenType.TEMPLATE_PATH)) return SystemParser.ParseSetTemplatePath();
         if (_parser.Match(TokenType.REPORT)) return SystemParser.ParseSetReportMetadata();
         if (_parser.Match(TokenType.WEEK_START_DAY)) return SystemParser.ParseSetWeekStartDay();
+        if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("DATEFORMAT", System.StringComparison.OrdinalIgnoreCase))
+        {
+            _parser.Advance();
+            return SystemParser.ParseSetDateFormat();
+        }
         if (_parser.Match(TokenType.SCRIPT_HASH_POLICY)) return SystemParser.ParseSetScriptHashPolicy();
 
         if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.StartsWith("ALLOW_", System.StringComparison.OrdinalIgnoreCase))
@@ -661,14 +665,13 @@ public class StatementParser
     {
         bool isRecursive = _parser.Match(TokenType.RECURSIVE);
         var ctes = ParseCtes();
-        var stmt = ParseStatement();
-        stmt = stmt with { Ctes = ctes };
-        if (stmt is SelectStatement select && isRecursive)
-            stmt = select with { IsRecursive = true };
-        return stmt;
+        var stmt = (_parser.Current.Type == TokenType.SELECT || _parser.Current.Type == TokenType.LPAREN)
+            ? _parser.ParseQuery()
+            : ParseStatement();
+        return _parser.AttachCtes(stmt, ctes, isRecursive);
     }
 
-    private List<CteDefinition> ParseCtes()
+    internal List<CteDefinition> ParseCtes()
     {
         var ctes = new List<CteDefinition>();
         do
@@ -707,11 +710,12 @@ public class StatementParser
     {
         int depth = 1;
         string raw = "";
+        var previous = TokenType.BEGIN;
         while (depth > 0 && _parser.Current.Type != TokenType.EOF)
         {
-            if (_parser.Current.Type == TokenType.BEGIN) depth++;
-            if (_parser.Current.Type == TokenType.END) depth--;
+            depth += Parser.RawBlockDepthDelta(previous, _parser.Current.Type);
             if (depth == 0) break;
+            previous = _parser.Current.Type;
 
             var t = _parser.Advance();
             string val = t.Type == TokenType.STRING_LITERAL ? $"'{t.Value.Replace("'", "''")}'" : t.Value;

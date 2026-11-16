@@ -45,8 +45,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 if [ "$NO_BUILD" = true ]; then
     node "$SCRIPT_DIR/sync-assets.js" -Check
-    # Current preparation does not make existing binaries current; they keep the assets they were built with.
-    node "$SCRIPT_DIR/check-built-browser-assets.mjs" --configuration "$CONFIGURATION"
 else
     node "$SCRIPT_DIR/sync-assets.js"
 fi
@@ -58,6 +56,9 @@ invoke_dotnet_test() {
     local filter="$2"
     local project_path="$REPO_ROOT/$project"
 
+    if [ "$NO_BUILD" = true ]; then
+        node "$SCRIPT_DIR/check-built-browser-assets.mjs" --configuration "$CONFIGURATION" --project "$project_path"
+    fi
     args=("test" "$project_path" "--configuration" "$CONFIGURATION" "--logger" "console;verbosity=minimal")
 
     if [ "$NO_RESTORE" = true ]; then

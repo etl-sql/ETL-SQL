@@ -171,6 +171,31 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public async Task KeyFileOutsideThePathGuard_IsDeniedBeforeAnyProbe()
+        {
+            // An auth probe loads the key itself. Without the guard, a test could authenticate
+            // anywhere with the service account's own SSH key.
+            var registry = new TestConnectorRegistry(new AuthProbeConnector());
+            var security = ((IExecutionContext)ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>()).SecurityService;
+            var engine = new ConnectionDiagnosticEngine(registry);
+            var snapshot = ETL_SQL.Core.Governance.ExecutionPolicySnapshot.Capture(
+                ETL_SQL.Core.Governance.EnterprisePolicyRuntime.Current, "unit",
+                ETL_SQL.Core.Governance.ScriptExecutionMode.Batch, "unit-test");
+            var serviceKey = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh", "id_rsa");
+
+            var report = await engine.DiagnoseAsync(
+                "probe", "AUTHMOCK", "127.0.0.1",
+                new Dictionary<string, string> { ["HOST"] = "127.0.0.1", ["PORT"] = "22", ["KEYFILE"] = serviceKey },
+                security, snapshot, 5, default);
+
+            var policy = Assert.Single(report.Steps);
+            Assert.Equal("POLICY", policy.Layer);
+            Assert.Equal(DiagnosticStatus.Denied, policy.Status);
+            Assert.Contains("KEYFILE", policy.Detail);
+        }
+
+        [Fact]
         public async Task NonNetworkConnectionReportsPolicyOkAndNetworkSkipped()
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();

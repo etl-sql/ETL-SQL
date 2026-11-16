@@ -140,7 +140,6 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql test`](test.md) | Run native ETL-SQL test suites (*.test.etlsql) and table assertions |
 | [`etl-sql ui`](ui.md) | Interactive user interface commands |
 | [`etl-sql ui edit`](ui-edit.md) | Start the modern windowed Terminal IDE (default) |
-| [`etl-sql ui old`](ui-old.md) | Start the legacy Spectre-based console editor |
 | [`etl-sql ui repl`](ui-repl.md) | Start the JSON-based REPL protocol for IDE integration |
 | [`etl-sql ui simple`](ui-simple.md) | Start the simple interactive menu UI |
 

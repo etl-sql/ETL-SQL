@@ -28,6 +28,7 @@ namespace ETL_SQL.Engine.Spill;
 /// </summary>
 public partial class SpillStore : ISpillStore
 {
+    private const string DateOnlyPrefix = "\x1Edateonly:";
     private static bool IsDecimalLogicalType(string? logicalType) =>
         logicalType?.StartsWith("DECIMAL", StringComparison.OrdinalIgnoreCase) == true
         || logicalType?.StartsWith("NUMERIC", StringComparison.OrdinalIgnoreCase) == true
@@ -46,15 +47,19 @@ public partial class SpillStore : ISpillStore
             _ => element.GetRawText()
         };
     private string? _cachedRootPath;
+    // Held open while this store owns a disposable temp root; see SpillRootOwnership.
+    private IDisposable? _ownerClaim;
     private byte[]? _cachedSessionKey;
     private string? _cachedSessionId;
     private bool _usingTemporaryFallback;
     private readonly object _initLock = new();
     private readonly object _spillWriteGate = new();
+    private readonly Queue<TaskCompletionSource<bool>> _spillWriteWaiters = new();
     private readonly IExecutionContext _context;
     private bool _disposed;
     private int _activeSpillWrites;
     private int _waitingSpillWrites;
+    private long _bytesSinceReserveCheck;
 
     public bool IsPersistent { get; set; }
 
@@ -149,8 +154,28 @@ public partial class SpillStore : ISpillStore
                 _cachedSessionKey = RandomNumberGenerator.GetBytes(32);
                 Directory.CreateDirectory(_cachedRootPath);
             }
+
+            // A crashed process cannot delete its temp root; the marker lets the Orchestrator's
+            // sweep remove it at once instead of after the 24-hour age-out.
+            if (!IsPersistent && IsSweptTempRoot(_cachedRootPath!))
+            {
+                try
+                {
+                    _ownerClaim?.Dispose();
+                    _ownerClaim = SpillRootOwnership.Claim(_cachedRootPath!);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _context.Logger.Warning("Could not record the owner of spill directory {Path}: {Message}", _cachedRootPath, ex.Message);
+                }
+            }
         }
     }
+
+    private static bool IsSweptTempRoot(string root) => string.Equals(
+        Path.GetDirectoryName(Path.GetFullPath(root)),
+        Path.GetFullPath(Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill")),
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     private bool CacheMatchesContext()
     {
@@ -175,20 +200,23 @@ public partial class SpillStore : ISpillStore
             ? context.SessionRoot
             : Path.Combine(context.SessionRoot, context.SessionId);
 
-    private static byte[] NormalizeAesKey(byte[]? key, string sessionId)
+    private static byte[] NormalizeAesKey(byte[]? key, string _)
     {
         if (key is { Length: 16 or 24 or 32 }) return key;
 
-        using var sha256 = SHA256.Create();
         if (key is { Length: > 0 })
-            return sha256.ComputeHash(key);
+            return SHA256.HashData(key);
 
-        return sha256.ComputeHash(Encoding.UTF8.GetBytes("ETL-SQL-SPILL:" + sessionId));
+        throw new ExecutionException("Persistent spill encryption key is missing or empty.");
     }
 
-    public async Task<ISpillWriter> CreateWriterAsync(string chunkName)
+    public Task<ISpillWriter> CreateWriterAsync(string chunkName) =>
+        CreateWriterAsync(chunkName, _context.EffectiveBatchSize);
+
+    public async Task<ISpillWriter> CreateWriterAsync(string chunkName, int flushBatchRows)
     {
         EnsureInitialized();
+        AdmitNewExtent();
         var path = Path.Combine(_cachedRootPath!, chunkName);
         var encrypt = _context.SpillEncryptionEnabled;
         var compress = _context.SpillCompressionEnabled;
@@ -197,7 +225,7 @@ public partial class SpillStore : ISpillStore
         if (_context.SpillFormat == "Json")
             writer = new SecureSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress);
         else
-            writer = new ArrowSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress);
+            writer = new ArrowSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress, flushBatchRows);
 
         var telemetry = _context.Telemetry;
         if (telemetry != null)
@@ -209,6 +237,48 @@ public partial class SpillStore : ISpillStore
             ? new GatedColumnarSpillWriter(writer, this, _context)
             : new GatedSpillWriter(writer, this, _context);
         return await Task.FromResult(writer);
+    }
+
+    // Refuse a new extent while the spill volume is below its reserve, before any byte is written.
+    // The message names the setting, not the path: it reaches script authors and job history.
+    private void AdmitNewExtent()
+    {
+        var reserve = _context.SpillMinimumFreeBytes;
+        if (reserve <= 0 || TryGetAvailableBytes(_cachedRootPath!) is not long available || available >= reserve)
+            return;
+        const long mb = 1024 * 1024;
+        throw new ExecutionException(
+            $"Spill storage is low on space: {available / mb:N0} MB free, below the {reserve / mb:N0} MB reserve " +
+            "(Engine:SpillMinimumFreeDiskMB). Free space on the spill volume or move the spill root to a larger one.");
+    }
+
+    private static long? TryGetAvailableBytes(string directory)
+    {
+        try
+        {
+            var full = Path.GetFullPath(directory);
+            // On Unix DriveInfo reports the file system holding any path; Windows needs the root.
+            var drive = new DriveInfo(OperatingSystem.IsWindows() ? Path.GetPathRoot(full)! : full);
+            return drive.IsReady ? drive.AvailableFreeSpace : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return null; // Unknown free space never blocks a spill; the write itself still fails on a full disk.
+        }
+    }
+
+    private void TrackBytesWrittenAndCheckReserve(long bytesDelta)
+    {
+        if (bytesDelta <= 0 || _context.SpillMinimumFreeBytes <= 0 || _cachedRootPath == null)
+            return;
+
+        const long checkIntervalBytes = 4L * 1024 * 1024;
+        var accumulated = Interlocked.Add(ref _bytesSinceReserveCheck, bytesDelta);
+        if (accumulated >= checkIntervalBytes)
+        {
+            Interlocked.Exchange(ref _bytesSinceReserveCheck, 0);
+            AdmitNewExtent();
+        }
     }
 
     private ValueTask<SpillWriteSlot> AcquireWriteSlotAsync(CancellationToken cancellationToken)
@@ -233,6 +303,7 @@ public partial class SpillStore : ISpillStore
 
     private async ValueTask<SpillWriteSlot> WaitForWriteSlotAsync(CancellationToken cancellationToken)
     {
+        TaskCompletionSource<bool>? waiter = null;
         try
         {
             while (true)
@@ -244,25 +315,30 @@ public partial class SpillStore : ISpillStore
                     if (_activeSpillWrites < limit)
                     {
                         _activeSpillWrites++;
-                        _waitingSpillWrites--;
-                        if (_context.AdaptiveExecutionEnabled)
-                            _context.AdaptiveMetrics.ReportQueueDepth(_waitingSpillWrites);
                         return new SpillWriteSlot(this);
                     }
+
+                    waiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _spillWriteWaiters.Enqueue(waiter);
                 }
 
-                await Task.Delay(10, cancellationToken);
+                await waiter.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
         }
         catch
         {
+            waiter?.TrySetCanceled(cancellationToken);
+            WakeNextWriteWaiter();
+            throw;
+        }
+        finally
+        {
             lock (_spillWriteGate)
             {
-                _waitingSpillWrites = Math.Max(0, _waitingSpillWrites - 1);
+                _waitingSpillWrites--;
                 if (_context.AdaptiveExecutionEnabled)
                     _context.AdaptiveMetrics.ReportQueueDepth(_waitingSpillWrites);
             }
-            throw;
         }
     }
 
@@ -272,6 +348,24 @@ public partial class SpillStore : ISpillStore
         {
             if (_activeSpillWrites > 0)
                 _activeSpillWrites--;
+        }
+
+        WakeNextWriteWaiter();
+    }
+
+    private void WakeNextWriteWaiter()
+    {
+        while (true)
+        {
+            TaskCompletionSource<bool>? waiter;
+            lock (_spillWriteGate)
+            {
+                if (!_spillWriteWaiters.TryDequeue(out waiter))
+                    return;
+            }
+
+            if (waiter.TrySetResult(true))
+                return;
         }
     }
 
@@ -309,27 +403,35 @@ public partial class SpillStore : ISpillStore
         public async Task WriteRowAsync(Row row)
         {
             using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
-            var collectMetrics = Context.AdaptiveExecutionEnabled;
-            var before = collectMetrics ? Inner.BytesWritten : 0;
-            var started = collectMetrics ? Stopwatch.GetTimestamp() : 0;
+            // Timed whether or not adaptive execution is on: the profile reports spill write cost.
+            var before = Inner.BytesWritten;
+            var started = Stopwatch.GetTimestamp();
             await Inner.WriteRowAsync(row);
-            if (collectMetrics)
-                Context.AdaptiveMetrics.ReportSpillWrite(
-                    Inner.BytesWritten - before,
-                    Stopwatch.GetElapsedTime(started));
+            var delta = Inner.BytesWritten - before;
+            Context.AdaptiveMetrics.ReportSpillWrite(
+                delta,
+                Stopwatch.GetElapsedTime(started));
+            Store.TrackBytesWrittenAndCheckReserve(delta);
         }
 
         public async Task WriteRowsAsync(IEnumerable<Row> rows)
         {
             using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
-            var collectMetrics = Context.AdaptiveExecutionEnabled;
-            var before = collectMetrics ? Inner.BytesWritten : 0;
-            var started = collectMetrics ? Stopwatch.GetTimestamp() : 0;
-            await Inner.WriteRowsAsync(rows);
-            if (collectMetrics)
-                Context.AdaptiveMetrics.ReportSpillWrite(
-                    Inner.BytesWritten - before,
-                    Stopwatch.GetElapsedTime(started));
+            // Timed whether or not adaptive execution is on: the profile reports spill write cost.
+            var before = Inner.BytesWritten;
+            var started = Stopwatch.GetTimestamp();
+            // Keep reserve checks inside enumeration: a caller may stream an entire external
+            // operator through this single call.
+            foreach (var row in rows)
+            {
+                var rowBefore = Inner.BytesWritten;
+                await Inner.WriteRowAsync(row);
+                Store.TrackBytesWrittenAndCheckReserve(Inner.BytesWritten - rowBefore);
+            }
+            var delta = Inner.BytesWritten - before;
+            Context.AdaptiveMetrics.ReportSpillWrite(
+                delta,
+                Stopwatch.GetElapsedTime(started));
         }
 
         public ValueTask DisposeAsync() => Inner.DisposeAsync();
@@ -348,14 +450,15 @@ public partial class SpillStore : ISpillStore
                 throw new NotSupportedException("The underlying spill writer does not support columnar batches.");
 
             using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
-            var collectMetrics = Context.AdaptiveExecutionEnabled;
-            var before = collectMetrics ? Inner.BytesWritten : 0;
-            var started = collectMetrics ? Stopwatch.GetTimestamp() : 0;
+            // Timed whether or not adaptive execution is on: the profile reports spill write cost.
+            var before = Inner.BytesWritten;
+            var started = Stopwatch.GetTimestamp();
             await columnar.WriteBatchAsync(batch);
-            if (collectMetrics)
-                Context.AdaptiveMetrics.ReportSpillWrite(
-                    Inner.BytesWritten - before,
-                    Stopwatch.GetElapsedTime(started));
+            var delta = Inner.BytesWritten - before;
+            Context.AdaptiveMetrics.ReportSpillWrite(
+                delta,
+                Stopwatch.GetElapsedTime(started));
+            Store.TrackBytesWrittenAndCheckReserve(delta);
         }
     }
 
@@ -369,13 +472,13 @@ public partial class SpillStore : ISpillStore
         ISpillReader reader;
         if (_context.SpillFormat == "Json")
         {
-            var jsonReader = new SecureSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress);
+            var jsonReader = new SecureSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress, _context.CancellationToken);
             await jsonReader.InitializeAsync();
             reader = jsonReader;
         }
         else
         {
-            var arrowReader = new ArrowSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress, _context.Logger);
+            var arrowReader = new ArrowSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress, _context.Logger, _context.CancellationToken);
             await arrowReader.InitializeAsync();
             reader = arrowReader;
         }
@@ -420,6 +523,14 @@ public partial class SpillStore : ISpillStore
                 _context.Logger.Warning("Failed to cleanup spill directory {Path}: {Message}", _cachedRootPath, ex.Message);
             }
         }
+        if (!Directory.Exists(_cachedRootPath)) ReleaseOwnership(_cachedRootPath!);
+    }
+
+    private void ReleaseOwnership(string root)
+    {
+        _ownerClaim?.Dispose();
+        _ownerClaim = null;
+        SpillRootOwnership.Release(root);
     }
 
     public void Dispose()
@@ -438,22 +549,29 @@ public partial class SpillStore : ISpillStore
                 _context.Logger.Warning("Failed to cleanup spill directory on dispose {Path}: {Message}", _cachedRootPath, ex.Message);
             }
         }
+        if (!IsPersistent && _cachedRootPath != null && !Directory.Exists(_cachedRootPath))
+            ReleaseOwnership(_cachedRootPath);
+        _ownerClaim?.Dispose();
+        _ownerClaim = null;
 
         if (_cachedSessionKey != null) System.Array.Clear(_cachedSessionKey);
         _disposed = true;
         GC.SuppressFinalize(this);
     }
 
-    // ── JSON (legacy) ────────────────────────────────────────────────────────
+    // ── Typed JSON ───────────────────────────────────────────────────────────
 
     private class SecureSpillWriter : ISpillWriter
     {
         private readonly FileStream _fileStream;
         private readonly CryptoStream? _cryptoStream;
+        private readonly AuthenticatedSpillEncryption.AuthenticationWriter? _authentication;
+        private bool _disposed;
         private readonly GZipStream? _gzipStream;
         private readonly StreamWriter _writer;
         private readonly IExecutionContext _context;
         private readonly string _chunkName;
+        private bool _headerWritten;
 
         public string ChunkName => _chunkName;
         public long BytesWritten { get; private set; }
@@ -470,23 +588,17 @@ public partial class SpillStore : ISpillStore
 
                 if (encrypt)
                 {
-                    using var aes = Aes.Create();
-                    aes.Key = key;
-                    aes.GenerateIV();
-                    _fileStream.Write(aes.IV, 0, aes.IV.Length); // Write IV to start of file
-
-                    var encryptor = aes.CreateEncryptor(key, aes.IV);
-                    _cryptoStream = new CryptoStream(_fileStream, encryptor, CryptoStreamMode.Write);
+                    (_cryptoStream, _authentication) = AuthenticatedSpillEncryption.CreateWriter(_fileStream, key, chunkName, 1, compress, context.CancellationToken);
                     current = _cryptoStream;
                 }
 
                 if (compress)
                 {
-                    _gzipStream = new GZipStream(current, CompressionLevel.Optimal);
+                    _gzipStream = new GZipStream(current, CompressionLevel.Optimal, leaveOpen: true);
                     current = _gzipStream;
                 }
 
-                _writer = new StreamWriter(current, Encoding.UTF8);
+                _writer = new StreamWriter(current, Encoding.UTF8, 1024, leaveOpen: true);
             }
             catch
             {
@@ -497,6 +609,7 @@ public partial class SpillStore : ISpillStore
 
         public async Task WriteRowAsync(Row row)
         {
+            await WriteHeaderAsync();
             var dict = row.Columns;
             // Expand schema aliases into real entries so qualified names survive JSON round-trip.
             if (row.Schema != null)
@@ -508,8 +621,10 @@ public partial class SpillStore : ISpillStore
                         dict.TryAdd(alias, row[i]);
                 }
             }
-            var json = JsonSerializer.Serialize(dict);
-            if (_context.Telemetry?.TelemetryEnabled ?? false)
+            var json = JsonRowCodec.Encode(dict);
+            // Spill accounting runs whatever SET TELEMETRY says: it backs the enterprise
+            // Security:MaxSpillBytesPerScript ceiling, which a script must not be able to switch off.
+            if (_context.Telemetry != null)
             {
                 // Fast approximation (+2 for newline)
                 long inc = json.Length + 2;
@@ -518,7 +633,7 @@ public partial class SpillStore : ISpillStore
                 ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
                     _context, _context.Telemetry.TotalSpilledBytes);
             }
-            await _writer.WriteLineAsync(json);
+            await _writer.WriteLineAsync(json.AsMemory(), _context.CancellationToken);
         }
 
         public async Task WriteRowsAsync(IEnumerable<Row> rows)
@@ -526,12 +641,41 @@ public partial class SpillStore : ISpillStore
             foreach (var r in rows) await WriteRowAsync(r);
         }
 
+        private async Task WriteHeaderAsync()
+        {
+            if (_headerWritten) return;
+            await _writer.WriteLineAsync(JsonRowCodec.Header.AsMemory(), _context.CancellationToken);
+            _headerWritten = true;
+        }
+
         public async ValueTask DisposeAsync()
         {
-            await _writer.DisposeAsync();
-            if (_gzipStream != null) await _gzipStream.DisposeAsync();
-            if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
-            await _fileStream.DisposeAsync();
+            if (_disposed) return;
+            _disposed = true;
+            try
+            {
+                await WriteHeaderAsync();
+                await _writer.DisposeAsync();
+                if (_gzipStream != null) await _gzipStream.DisposeAsync();
+                if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
+                if (_authentication != null) await _authentication.CompleteAsync();
+            }
+            finally
+            {
+                try
+                {
+                    if (_gzipStream != null) await _gzipStream.DisposeAsync();
+                }
+                finally
+                {
+                    try { if (_cryptoStream != null) await _cryptoStream.DisposeAsync(); }
+                    finally
+                    {
+                        _authentication?.Dispose();
+                        await _fileStream.DisposeAsync();
+                    }
+                }
+            }
         }
     }
 
@@ -541,29 +685,32 @@ public partial class SpillStore : ISpillStore
         private readonly byte[] _key;
         private readonly bool _encrypt;
         private readonly bool _compress;
+        private readonly CancellationToken _cancellationToken;
         private readonly string _chunkName;
         private FileStream? _fileStream;
         private CryptoStream? _cryptoStream;
         private GZipStream? _gzipStream;
         private StreamReader? _reader;
+        private bool _headerRead;
 
         public string ChunkName => _chunkName;
 
-        public SecureSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress)
+        public SecureSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress, CancellationToken cancellationToken)
         {
             _path = path;
             _chunkName = chunkName;
             _key = key;
             _encrypt = encrypt;
             _compress = compress;
+            _cancellationToken = cancellationToken;
         }
 
         public async Task InitializeAsync()
         {
             if (!File.Exists(_path))
             {
-                _fileStream = null;
-                return;
+                // COMPAT_BREAK: 0.22 — a missing spill chunk must not silently remove rows.
+                throw new ExecutionException("Spill chunk is missing. Rerun the statement or recreate the saved session.");
             }
 
             _fileStream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
@@ -573,12 +720,7 @@ public partial class SpillStore : ISpillStore
 
                 if (_encrypt)
                 {
-                    byte[] iv = new byte[16];
-                    await _fileStream.ReadExactlyAsync(iv, 0, 16);
-
-                    using var aes = Aes.Create();
-                    var decryptor = aes.CreateDecryptor(_key, iv);
-                    _cryptoStream = new CryptoStream(_fileStream, decryptor, CryptoStreamMode.Read);
+                    _cryptoStream = await AuthenticatedSpillEncryption.CreateReaderAsync(_fileStream, _key, _chunkName, 1, _compress, _cancellationToken);
                     current = _cryptoStream;
                 }
 
@@ -604,14 +746,17 @@ public partial class SpillStore : ISpillStore
         public async Task<Row?> ReadRowAsync()
         {
             if (_reader == null) return null;
-            var line = await _reader.ReadLineAsync();
+            if (!_headerRead)
+            {
+                if (await _reader.ReadLineAsync(_cancellationToken) != JsonRowCodec.Header)
+                    throw new ExecutionException("Unsupported JSON spill format. Rerun the statement or recreate the saved session.");
+                _headerRead = true;
+            }
+            var line = await _reader.ReadLineAsync(_cancellationToken);
             if (line == null) return null;
 
-            var cols = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(line);
-            if (cols == null) return null;
-
             var row = new Row();
-            foreach (var kvp in cols) row[kvp.Key] = UnwrapJsonValue(kvp.Value);
+            foreach (var kvp in JsonRowCodec.Decode(line)) row[kvp.Key] = kvp.Value;
             return row;
         }
 
@@ -643,12 +788,13 @@ public partial class SpillStore : ISpillStore
         private const string SchemaVersion = "1";
         private readonly FileStream _fileStream;
         private readonly CryptoStream? _cryptoStream;
+        private readonly AuthenticatedSpillEncryption.AuthenticationWriter? _authentication;
+        private bool _disposed;
         private readonly GZipStream? _gzipStream;
         private readonly Stream _payloadStream;
         private readonly IExecutionContext _context;
         private readonly string _chunkName;
         private readonly int _flushBatchSize;
-        private readonly string _filePath;
 
         private const string JsonPrefix = "\x1Ejson:";
 
@@ -660,12 +806,11 @@ public partial class SpillStore : ISpillStore
         public string ChunkName => _chunkName;
         public long BytesWritten { get; private set; }
 
-        public ArrowSpillWriter(string path, string chunkName, byte[] key, IExecutionContext context, bool encrypt, bool compress)
+        public ArrowSpillWriter(string path, string chunkName, byte[] key, IExecutionContext context, bool encrypt, bool compress, int flushBatchSize)
         {
             _chunkName = chunkName;
             _context = context;
-            _filePath = path;
-            _flushBatchSize = Math.Max(1, context.EffectiveBatchSize);
+            _flushBatchSize = Math.Max(1, flushBatchSize);
             _fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
 
             try
@@ -674,18 +819,13 @@ public partial class SpillStore : ISpillStore
 
                 if (encrypt)
                 {
-                    using var aes = Aes.Create();
-                    aes.Key = key;
-                    aes.GenerateIV();
-                    _fileStream.Write(aes.IV, 0, aes.IV.Length);
-                    var encryptor = aes.CreateEncryptor(key, aes.IV);
-                    _cryptoStream = new CryptoStream(_fileStream, encryptor, CryptoStreamMode.Write);
+                    (_cryptoStream, _authentication) = AuthenticatedSpillEncryption.CreateWriter(_fileStream, key, chunkName, 2, compress, context.CancellationToken);
                     current = _cryptoStream;
                 }
 
                 if (compress)
                 {
-                    _gzipStream = new GZipStream(current, CompressionLevel.Optimal);
+                    _gzipStream = new GZipStream(current, CompressionLevel.Optimal, leaveOpen: true);
                     current = _gzipStream;
                 }
 
@@ -714,7 +854,7 @@ public partial class SpillStore : ISpillStore
             _buffer.Add(snapshot);
             _acceptedRowCount++;
 
-            if (_context.Telemetry?.TelemetryEnabled ?? false)
+            if (_context.Telemetry != null)
             {
                 // Row.ColumnCount, not Row.Columns.Count — the Columns property materializes a
                 // fresh dictionary per access, which on this per-row path was measurable churn.
@@ -835,7 +975,7 @@ public partial class SpillStore : ISpillStore
                     await FlushBatchAsync();
             }
 
-            if ((_context.Telemetry?.TelemetryEnabled ?? false) && telemetryBytes > 0)
+            if (_context.Telemetry != null && telemetryBytes > 0)
             {
                 _context.Telemetry.TotalSpilledBytes += telemetryBytes;
                 BytesWritten += telemetryBytes;
@@ -861,7 +1001,7 @@ public partial class SpillStore : ISpillStore
 
             using var recordBatch = BuildBatch(batch);
             await _arrowWriter!.WriteRecordBatchAsync(recordBatch);
-            if (_context.Telemetry?.TelemetryEnabled ?? false)
+            if (_context.Telemetry != null)
             {
                 var increment = batch.AllocatedBytes;
                 _context.Telemetry.TotalSpilledBytes += increment;
@@ -916,6 +1056,7 @@ public partial class SpillStore : ISpillStore
             if (elementType == typeof(decimal)) return StringType.Default;
             if (elementType == typeof(double) || elementType == typeof(float)) return DoubleType.Default;
             if (elementType == typeof(bool)) return BooleanType.Default;
+            if (elementType == typeof(DateOnly)) return StringType.Default;
             if (elementType == typeof(DateTime)) return new TimestampType(TimeUnit.Microsecond, "UTC");
             // Arrow timestamps preserve an instant but not the original DateTimeOffset offset. Store
             // the round-trip representation as UTF-8 so spill/reload retains both pieces of information.
@@ -952,6 +1093,7 @@ public partial class SpillStore : ISpillStore
             decimal => "Decimal",
             double or float => "Double",
             bool => "Boolean",
+            DateOnly => "DateOnly",
             DateTime => "Timestamp",
             DateTimeOffset => "DateTimeOffset",
             TimeSpan => "TIME",
@@ -965,6 +1107,7 @@ public partial class SpillStore : ISpillStore
             decimal => StringType.Default,
             double or float => DoubleType.Default,
             bool => BooleanType.Default,
+            DateOnly => StringType.Default,
             DateTime => new TimestampType(TimeUnit.Microsecond, "UTC"),
             _ => StringType.Default
         };
@@ -1011,6 +1154,14 @@ public partial class SpillStore : ISpillStore
                 var builder = new BooleanArray.Builder();
                 for (var i = 0; i < booleans.Count; i++)
                     if (booleans.IsNull(i)) builder.AppendNull(); else builder.Append(booleans.Values.Span[i]);
+                return builder.Build();
+            }
+            if (column is ColumnBuffer<DateOnly> dateOnlyValues)
+            {
+                var builder = new StringArray.Builder();
+                for (var i = 0; i < dateOnlyValues.Count; i++)
+                    if (dateOnlyValues.IsNull(i)) builder.AppendNull();
+                    else builder.Append(dateOnlyValues.Values.Span[i].ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
                 return builder.Build();
             }
             if (column is ColumnBuffer<DateTime> dates)
@@ -1155,7 +1306,7 @@ public partial class SpillStore : ISpillStore
                             if (v == null) b.AppendNull();
                             else
                             {
-                                var dt = ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToDateTime);
+                                var dt = ConvertSpillValue(field, v, firstRowNumber + i, CoerceSpillDateTime);
                                 var dto = dt.Kind == DateTimeKind.Unspecified
                                     ? new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc))
                                     : new DateTimeOffset(dt);
@@ -1172,6 +1323,7 @@ public partial class SpillStore : ISpillStore
                         {
                             var v = row.TryGetValue(field.Name, out var val) ? val : null;
                             if (v == null) b.AppendNull();
+                            else if (v is DateOnly dateOnly) b.Append(DateOnlyPrefix + dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
                             else if (v is string s) b.Append(s);
                             else b.Append(JsonPrefix + JsonSerializer.Serialize(v));
                         }
@@ -1179,6 +1331,14 @@ public partial class SpillStore : ISpillStore
                     }
             }
         }
+
+        private static DateTime CoerceSpillDateTime(object value) => value switch
+        {
+            DateTime dt => dt,
+            DateOnly d => d.ToDateTime(TimeOnly.MinValue),
+            DateTimeOffset dto => dto.DateTime,
+            _ => Convert.ToDateTime(value)
+        };
 
         private T ConvertSpillValue<T>(Field field, object value, long rowNumber, Func<object, T> converter)
         {
@@ -1198,32 +1358,43 @@ public partial class SpillStore : ISpillStore
 
         public async ValueTask DisposeAsync()
         {
+            if (_disposed) return;
+            _disposed = true;
             try
             {
                 await FlushBatchAsync();
+                if (_arrowWriter == null)
+                {
+                    _schema = new Schema.Builder().Build();
+                    _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
+                    await _arrowWriter.WriteStartAsync(_context.CancellationToken);
+                }
                 if (_arrowWriter != null)
                     await _arrowWriter.WriteEndAsync(CancellationToken.None);
+                _arrowWriter?.Dispose();
+                _arrowWriter = null;
+                if (_gzipStream != null) await _gzipStream.DisposeAsync();
+                if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
+                if (_authentication != null) await _authentication.CompleteAsync();
             }
             finally
             {
                 _arrowWriter?.Dispose();
-                if (_gzipStream != null) await _gzipStream.DisposeAsync();
-                if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
-                await _fileStream.DisposeAsync();
-            }
-
-            // Empty partition: delete the file so the reader sees "not found" → null
-            if (_arrowWriter == null)
-            {
                 try
                 {
-                    File.Delete(_filePath);
+                    if (_gzipStream != null) await _gzipStream.DisposeAsync();
                 }
-                catch (Exception ex)
+                finally
                 {
-                    _context.Logger.Warning("Failed to delete empty spill file {Path}: {Message}", _filePath, ex.Message);
+                    try { if (_cryptoStream != null) await _cryptoStream.DisposeAsync(); }
+                    finally
+                    {
+                        _authentication?.Dispose();
+                        await _fileStream.DisposeAsync();
+                    }
                 }
             }
+
         }
     }
 
@@ -1235,6 +1406,7 @@ public partial class SpillStore : ISpillStore
         private readonly byte[] _key;
         private readonly bool _encrypt;
         private readonly bool _compress;
+        private readonly CancellationToken _cancellationToken;
         private readonly string _chunkName;
         private FileStream? _fileStream;
         private CryptoStream? _cryptoStream;
@@ -1254,13 +1426,14 @@ public partial class SpillStore : ISpillStore
         public string ChunkName => _chunkName;
         private readonly ILogger? _logger;
 
-        public ArrowSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress, ILogger? logger = null)
+        public ArrowSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress, ILogger? logger = null, CancellationToken cancellationToken = default)
         {
             _path = path;
             _chunkName = chunkName;
             _key = key;
             _encrypt = encrypt;
             _compress = compress;
+            _cancellationToken = cancellationToken;
             _logger = logger;
         }
 
@@ -1268,8 +1441,8 @@ public partial class SpillStore : ISpillStore
         {
             if (!File.Exists(_path))
             {
-                _fileStream = null;
-                return;
+                // COMPAT_BREAK: 0.22 — empty partitions have files; absence is data loss.
+                throw new ExecutionException("Spill chunk is missing. Rerun the statement or recreate the saved session.");
             }
 
             _fileStream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
@@ -1279,11 +1452,7 @@ public partial class SpillStore : ISpillStore
 
                 if (_encrypt)
                 {
-                    byte[] iv = new byte[16];
-                    await _fileStream.ReadExactlyAsync(iv, 0, 16);
-                    using var aes = Aes.Create();
-                    var decryptor = aes.CreateDecryptor(_key, iv);
-                    _cryptoStream = new CryptoStream(_fileStream, decryptor, CryptoStreamMode.Read);
+                    _cryptoStream = await AuthenticatedSpillEncryption.CreateReaderAsync(_fileStream, _key, _chunkName, 2, _compress, _cancellationToken);
                     current = _cryptoStream;
                 }
 
@@ -1412,6 +1581,9 @@ public partial class SpillStore : ISpillStore
             StringArray values when IsDecimalLogicalType(logicalType)
                 => CopyFixed<decimal>(count, values.IsNull,
                     i => decimal.Parse(values.GetString(i)!, System.Globalization.CultureInfo.InvariantCulture)),
+            StringArray values when IsDateOnlyLogicalType(logicalType)
+                => CopyFixed<DateOnly>(count, values.IsNull,
+                    i => ParseDateOnlyString(values.GetString(i)!)),
             StringArray values when IsDateTimeOffsetLogicalType(logicalType)
                 => CopyFixed<DateTimeOffset>(count, values.IsNull,
                     i => ParseDateTimeOffsetString(values.GetString(i)!)),
@@ -1472,6 +1644,8 @@ public partial class SpillStore : ISpillStore
                 DoubleArray a => ToDecimalOrDouble(a.GetValue(index)),
                 BooleanArray a => (object?)a.GetValue(index),
                 TimestampArray a => (object?)a.GetTimestamp(index)?.UtcDateTime,
+                StringArray a when IsDateOnlyLogicalType(logicalType)
+                    => ParseDateOnlyString(a.GetString(index)!),
                 StringArray a when IsDateTimeOffsetLogicalType(logicalType)
                     => ParseDateTimeOffsetString(a.GetString(index)!),
                 StringArray a when IsGuidLogicalType(logicalType)
@@ -1483,12 +1657,24 @@ public partial class SpillStore : ISpillStore
 
         private const string JsonPrefix = "\x1Ejson:";
 
+        private static bool IsTextLogicalType(string? logicalType)
+        {
+            if (logicalType == null) return false;
+            var paren = logicalType.IndexOf('(');
+            var baseType = (paren < 0 ? logicalType : logicalType[..paren]).Trim().ToUpperInvariant();
+            return baseType is "VARCHAR" or "NVARCHAR" or "CHAR" or "NCHAR" or "TEXT" or "NTEXT" or "VARCHAR2" or "STRING";
+        }
+
         private static object? DecodeArrowString(string? s, string? logicalType, ILogger? logger = null)
         {
             if (s == null) return null;
             if (logicalType == "String") return s;
             if (IsDecimalLogicalType(logicalType))
                 return decimal.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+            if (IsDateOnlyLogicalType(logicalType))
+                return ParseDateOnlyString(s);
+            if (s.StartsWith(DateOnlyPrefix, StringComparison.Ordinal))
+                return ParseDateOnlyString(s);
             if (IsDateTimeOffsetLogicalType(logicalType))
                 return ParseDateTimeOffsetString(s);
             if (s.StartsWith(JsonPrefix, StringComparison.Ordinal))
@@ -1503,11 +1689,18 @@ public partial class SpillStore : ISpillStore
                     logger?.Warning("Failed to deserialize spilled JSON value for logical type {LogicalType}: {Message}", logicalType, ex.Message);
                 }
             }
+            // A column the writer knew to be text is text. Parsing it turned '00123' into 123 and
+            // '2026-01-05' into a date when a temp table spilled.
+            if (IsTextLogicalType(logicalType)) return s;
             // Match JSON reader: try numeric then date parse on plain strings
             if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d)) return d;
             if (DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt)) return dt;
             return s;
         }
+
+        private static bool IsDateOnlyLogicalType(string? logicalType)
+            => logicalType?.Equals("DATE", StringComparison.OrdinalIgnoreCase) == true
+                || logicalType?.Equals("DateOnly", StringComparison.OrdinalIgnoreCase) == true;
 
         private static bool IsDateTimeOffsetLogicalType(string? logicalType)
             => logicalType?.StartsWith("DATETIMEOFFSET", StringComparison.OrdinalIgnoreCase) == true
@@ -1517,6 +1710,18 @@ public partial class SpillStore : ISpillStore
             => logicalType?.Equals("GUID", StringComparison.OrdinalIgnoreCase) == true
                 || logicalType?.Equals("UUID", StringComparison.OrdinalIgnoreCase) == true
                 || logicalType?.Equals("UNIQUEIDENTIFIER", StringComparison.OrdinalIgnoreCase) == true;
+
+        private static DateOnly ParseDateOnlyString(string value)
+        {
+            var payload = value;
+            if (payload.StartsWith(DateOnlyPrefix, StringComparison.Ordinal))
+                payload = payload[DateOnlyPrefix.Length..];
+            else if (payload.StartsWith(JsonPrefix, StringComparison.Ordinal))
+                payload = payload[JsonPrefix.Length..];
+            if (payload.Length >= 2 && payload[0] == '"' && payload[^1] == '"')
+                payload = JsonSerializer.Deserialize<string>(payload) ?? payload;
+            return DateOnly.ParseExact(payload, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        }
 
         private static DateTimeOffset ParseDateTimeOffsetString(string value)
         {

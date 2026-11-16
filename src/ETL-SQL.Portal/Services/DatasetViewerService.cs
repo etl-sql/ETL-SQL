@@ -284,7 +284,7 @@ public class DatasetViewerService(
         Dictionary<string, string>? atRestDecryptOptions;
         if (keyProvider is not null)
         {
-            var version = dataset.AtRestKeyVersion ?? config.Dataset.LegacyAtRestKeyVersion;
+            var version = dataset.AtRestKeyVersion;
             keyLease = await keyProvider.ResolveAsync(
                 new ETL_SQL.Core.Security.KeyMaterialRequest(
                     _tenantScope.TenantId,

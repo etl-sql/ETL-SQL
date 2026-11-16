@@ -24,9 +24,51 @@ namespace ETL_SQL.Reporting
             options ??= PdfExportOptions.Static;
             if (string.IsNullOrWhiteSpace(options.Host))
                 throw new InvalidOperationException("Browser-backed PDF export requires a HOST URL.");
+            if (!IsNavigableHost(options.Host))
+                throw new InvalidOperationException("Browser-backed PDF export HOST must be an absolute http or https URL.");
 
             return ExportAsync(options, cancellationToken);
         }
+
+        /// <summary>
+        /// True when <paramref name="host"/> is an absolute http(s) URL. The headless browser must
+        /// never be pointed at file:, javascript:, data:, or browser-internal pages.
+        /// </summary>
+        public static bool IsNavigableHost(string? host) =>
+            Uri.TryCreate(host, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            && !string.IsNullOrEmpty(uri.Host);
+
+        /// <summary>
+        /// The Chrome, Edge, and Chromium executables found on PATH or in the standard install
+        /// locations — the same set used when no browser path is configured.
+        /// </summary>
+        public static IReadOnlyList<string> DiscoverInstalledBrowsers() =>
+            FindOnPath(BrowserExecutableNames()).Concat(FindCommonBrowserPaths())
+                .Where(File.Exists)
+                .Select(Path.GetFullPath)
+                .Distinct(PathComparer)
+                .ToList();
+
+        /// <summary>
+        /// True when <paramref name="path"/> is one of <see cref="DiscoverInstalledBrowsers"/>.
+        /// A script-supplied BROWSER_PATH must pass this so a script cannot start an arbitrary binary.
+        /// </summary>
+        public static bool IsInstalledBrowser(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            string fullPath;
+            try { fullPath = Path.GetFullPath(path); }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return false; }
+            return DiscoverInstalledBrowsers().Contains(fullPath, PathComparer);
+        }
+
+        private static StringComparer PathComparer =>
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+        private static string[] BrowserExecutableNames() => OperatingSystem.IsWindows()
+            ? new[] { "msedge.exe", "chrome.exe", "chromium.exe" }
+            : new[] { "msedge", "google-chrome", "chrome", "chromium", "chromium-browser" };
 
         private static async Task<byte[]> ExportAsync(PdfExportOptions options, CancellationToken cancellationToken = default)
         {
@@ -163,11 +205,7 @@ namespace ETL_SQL.Reporting
                 throw new InvalidOperationException($"Configured browser path was not found: '{configuredPath}'.");
             }
 
-            var names = OperatingSystem.IsWindows()
-                ? new[] { "msedge.exe", "chrome.exe", "chromium.exe" }
-                : new[] { "msedge", "google-chrome", "chrome", "chromium", "chromium-browser" };
-
-            foreach (var path in FindOnPath(names).Concat(FindCommonBrowserPaths()))
+            foreach (var path in FindOnPath(BrowserExecutableNames()).Concat(FindCommonBrowserPaths()))
             {
                 if (File.Exists(path))
                     return path;

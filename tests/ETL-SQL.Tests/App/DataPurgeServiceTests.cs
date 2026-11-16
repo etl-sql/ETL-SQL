@@ -14,7 +14,8 @@ namespace ETL_SQL.Tests.CliCommands
 
         public DataPurgeServiceTests()
         {
-            _baseDir = Path.Combine(Path.GetTempPath(), "etlsql_purge_test_" + Guid.NewGuid().ToString("N"));
+            // Runtime-owned data is permitted even when the checkout or user's temp folder is in a Git tree.
+            _baseDir = Path.Combine(AppContext.BaseDirectory, "etlsql_purge_test_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_baseDir);
         }
 
@@ -106,6 +107,37 @@ namespace ETL_SQL.Tests.CliCommands
         public void IsUnsafeTarget_AllowsNormalDataDir()
         {
             Assert.False(DataPurgeService.IsUnsafeTarget(Path.Combine(_baseDir, "Snapshots")));
+        }
+
+        [Fact]
+        public void IsUnsafeTarget_RejectsTheInstallFolderAndItsParents()
+        {
+            var appDir = Path.GetFullPath(AppContext.BaseDirectory);
+            Assert.True(DataPurgeService.IsUnsafeTarget(appDir));
+            Assert.True(DataPurgeService.IsUnsafeTarget(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(appDir))!));
+            Assert.False(DataPurgeService.IsUnsafeTarget(Path.Combine(appDir, "logs", "app")));
+        }
+
+        [Fact]
+        public void IsUnsafeTarget_RejectsAGitWorkingTree()
+        {
+            // Source repositories live outside runtime-owned data and must remain protected.
+            var repo = Path.Combine(Path.GetTempPath(), "purge-reports-repo-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(repo, ".git"));
+            Directory.CreateDirectory(Path.Combine(repo, "Reports"));
+            try
+            {
+                Assert.True(DataPurgeService.IsUnsafeTarget(repo));
+                Assert.True(DataPurgeService.IsUnsafeTarget(Path.Combine(repo, "Reports")));
+
+                var results = DataPurgeService.Execute(new[] { new PurgeTarget(Path.Combine(repo, "Reports"), true, "Published reports") }, dryRun: false);
+                Assert.Equal("Refused: unsafe path", Assert.Single(results).Error);
+                Assert.True(Directory.Exists(Path.Combine(repo, "Reports")));
+            }
+            finally
+            {
+                Directory.Delete(repo, recursive: true);
+            }
         }
 
         [Fact]

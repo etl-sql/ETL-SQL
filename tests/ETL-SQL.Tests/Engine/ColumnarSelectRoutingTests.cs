@@ -662,21 +662,21 @@ public sealed class ColumnarSelectRoutingTests
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         var schema = new ColumnBatchSchema(new[]
         {
-            new ColumnBatchField("EventDate", typeof(DateTime), "DATE"),
+            new ColumnBatchField("EventDate", typeof(DateOnly), "DATE"),
             new ColumnBatchField("Amount", typeof(int), "INT")
         });
-        var firstDate = new DateTime(2026, 1, 1);
-        var secondDate = new DateTime(2026, 1, 2);
+        var firstDate = new DateOnly(2026, 1, 1);
+        var secondDate = new DateOnly(2026, 1, 2);
         await using var source = new NativeOnlyDataSource(new[]
         {
             new ColumnBatch(schema, new IColumnBuffer[]
             {
-                new ColumnBuffer<DateTime>(new[] { firstDate, default, secondDate }, 3, new byte[] { 0b0000_0010 }),
+                new ColumnBuffer<DateOnly>(new[] { firstDate, default, secondDate }, 3, new byte[] { 0b0000_0010 }),
                 new ColumnBuffer<int>(new[] { 10, 5, 7 }, 3)
             }, 3),
             new ColumnBatch(schema, new IColumnBuffer[]
             {
-                new ColumnBuffer<DateTime>(new[] { firstDate, default }, 2, new byte[] { 0b0000_0010 }),
+                new ColumnBuffer<DateOnly>(new[] { firstDate, default }, 2, new byte[] { 0b0000_0010 }),
                 new ColumnBuffer<int>(new[] { 20, 3 }, 2)
             }, 2)
         }, throwOnRowRead: true);
@@ -732,7 +732,8 @@ public sealed class ColumnarSelectRoutingTests
 
         Assert.Equal(2m, Assert.Single(rows, row => Equals(row["Category"], "A"))["RowCount"]);
         Assert.Equal(1m, Assert.Single(rows, row => Equals(row["Category"], "a"))["RowCount"]);
-        Assert.Equal(2m, Assert.Single(rows, row => Equals(row["Category"], 1m))["RowCount"]);
+        // '1' and '1.0' are one group, and the group returns the text it saw first.
+        Assert.Equal(2m, Assert.Single(rows, row => Equals(row["Category"], "1"))["RowCount"]);
         Assert.Equal(2m, Assert.Single(rows, row => row["Category"] == null)["RowCount"]);
         Assert.Equal(0, source.RowReadAttempts);
 
@@ -1301,6 +1302,50 @@ public sealed class ColumnarSelectRoutingTests
                 new ColumnBuffer<int>(scores, scores.Length),
                 Utf8ColumnBuffer.FromStrings(labels)
             }, scores.Length);
+    }
+
+    [Theory]
+    // NULL sorts lowest, as in the row sort: first for ASC and last for DESC.
+    [InlineData("ORDER BY Region", "null,A,b,c")]
+    [InlineData("ORDER BY Region ASC", "null,A,b,c")]
+    [InlineData("ORDER BY Region DESC", "c,b,A,null")]
+    [InlineData("ORDER BY Score DESC, Region DESC", "c,b,A,null")]
+    [InlineData("ORDER BY Score, Region DESC", "c,b,A,null")]
+    // A placement the query writes wins over the default.
+    [InlineData("ORDER BY Region NULLS LAST", "A,b,c,null")]
+    [InlineData("ORDER BY Region DESC NULLS FIRST", "null,c,b,A")]
+    public async Task SortPlannerPutsNullWhereTheRowSortPutsIt(string orderBy, string expected)
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.BatchSize = 2;
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Region", typeof(string), "VARCHAR(20)"),
+            new ColumnBatchField("Score", typeof(int), "INT"),
+            new ColumnBatchField("Label", typeof(string), "VARCHAR(20)")
+        });
+        await using var source = new NativeOnlyDataSource(new[]
+        {
+            Batch(new string?[] { "b", null }, new[] { "b", "null" }),
+            Batch(new string?[] { "A", "c" }, new[] { "A", "c" })
+        }, true);
+        evaluator.Connections["native_null_sort"] = source;
+        var statement = ParseSelect($"SELECT Label, Region, Score FROM native_null_sort {orderBy};");
+
+        var labels = (await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(statement, evaluator).ToListAsync()).SelectMany(batch => batch.Rows)
+            .Select(row => row["Label"]?.ToString()).ToArray();
+
+        Assert.Equal(expected, string.Join(",", labels));
+        Assert.Equal(0, source.RowReadAttempts);
+
+        ColumnBatch Batch(string?[] regions, string[] labels)
+            => new(schema, new IColumnBuffer[]
+            {
+                Utf8ColumnBuffer.FromStrings(regions),
+                new ColumnBuffer<int>(new[] { 1, 1 }, 2),
+                Utf8ColumnBuffer.FromStrings(labels)
+            }, 2);
     }
 
     [Fact]

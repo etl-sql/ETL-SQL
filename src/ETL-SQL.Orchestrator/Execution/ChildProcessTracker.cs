@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
+using ETL_SQL.Core.Spill;
 using Microsoft.Extensions.Logging;
 
 namespace ETL_SQL.Orchestrator.Execution
@@ -42,8 +43,16 @@ namespace ETL_SQL.Orchestrator.Execution
         /// </summary>
         public void CleanupOrphans()
         {
-            SweepTempSpillDirectories();
+            try { KillOrphans(); }
+            finally
+            {
+                // After the kill: a root belongs to a dead owner only once that owner is dead.
+                SweepTempSpillDirectories();
+            }
+        }
 
+        private void KillOrphans()
+        {
             if (!File.Exists(_persistPath)) return;
 
             List<PersistedPid>? entries;
@@ -125,6 +134,8 @@ namespace ETL_SQL.Orchestrator.Execution
         {
             _active.TryRemove(pid, out _);
             Persist();
+            // A child that crashed or was killed cannot delete its own spill root.
+            SweepTempSpillDirectories();
         }
 
         /// <summary>Returns the number of currently tracked active child processes.</summary>
@@ -153,45 +164,62 @@ namespace ETL_SQL.Orchestrator.Execution
             }
         }
 
-        private void SweepTempSpillDirectories()
+        private void SweepTempSpillDirectories() =>
+            SweepSpillRoots(Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill"), TimeSpan.FromHours(24), _logger);
+
+        /// <summary>
+        /// Removes disposable spill roots under <paramref name="spillParent"/> whose owning process is
+        /// gone (see <see cref="SpillRootOwnership"/>), and roots older than <paramref name="maxAge"/>
+        /// that carry no owner marker. Returns the number of roots removed.
+        /// </summary>
+        public static int SweepSpillRoots(string spillParent, TimeSpan maxAge, ILogger logger)
         {
+            if (!Directory.Exists(spillParent)) return 0;
+            var pruned = 0;
             try
             {
-                var tempSpillRoot = Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill");
-                if (Directory.Exists(tempSpillRoot))
+                var cutoff = DateTime.UtcNow - maxAge;
+                var trustMarkers = SpillRootOwnership.ParentIsPrivate(spillParent);
+                if (!trustMarkers)
+                    logger.LogWarning(
+                        "Spill directory {Path} is writable by other users; its owner markers are ignored and only roots older than {MaxAge} are removed.",
+                        spillParent, maxAge);
+                foreach (var dir in Directory.GetDirectories(spillParent))
                 {
-                    _logger.LogInformation("Sweeping orphaned temporary spill directories in {Path}...", tempSpillRoot);
-                    var directories = Directory.GetDirectories(tempSpillRoot);
-                    var cutoff = DateTime.UtcNow.AddHours(-24);
-                    int prunedCount = 0;
-
-                    foreach (var dir in directories)
+                    try
                     {
-                        try
-                        {
-                            var lastWrite = Directory.GetLastWriteTimeUtc(dir);
-                            if (lastWrite < cutoff)
-                            {
-                                Directory.Delete(dir, true);
-                                prunedCount++;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogDebug(ex, "Failed to delete orphaned temporary spill directory: {Path}", dir);
-                        }
+                        // Never follow a link out of the spill directory.
+                        if (new DirectoryInfo(dir).LinkTarget is not null) continue;
+                        // A live owner keeps its root whatever its age: a long job is not an orphan.
+                        var marked = trustMarkers && File.Exists(SpillRootOwnership.MarkerPath(dir));
+                        var remove = marked
+                            ? SpillRootOwnership.IsAbandoned(dir)
+                            : Directory.GetLastWriteTimeUtc(dir) < cutoff;
+                        if (!remove) continue;
+                        Directory.Delete(dir, true);
+                        SpillRootOwnership.Release(dir);
+                        pruned++;
                     }
-
-                    if (prunedCount > 0)
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                     {
-                        _logger.LogInformation("Pruned {Count} stale temporary spill directories.", prunedCount);
+                        logger.LogDebug(ex, "Failed to delete orphaned temporary spill directory: {Path}", dir);
                     }
                 }
+
+                // A marker whose root is already gone is left by a cleanup interrupted between the two deletes.
+                foreach (var marker in trustMarkers ? Directory.GetFiles(spillParent, "*" + SpillRootOwnership.MarkerSuffix) : [])
+                {
+                    var root = marker[..^SpillRootOwnership.MarkerSuffix.Length];
+                    if (!Directory.Exists(root)) SpillRootOwnership.Release(root);
+                }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                _logger.LogWarning(ex, "Error sweeping temporary spill directories.");
+                logger.LogWarning(ex, "Error sweeping temporary spill directories.");
             }
+            if (pruned > 0)
+                logger.LogInformation("Removed {Count} orphaned temporary spill directories from {Path}.", pruned, spillParent);
+            return pruned;
         }
 
         private record PersistedPid(int Pid, string ScriptPath, ChildProcessIdentity? Identity = null, string? Owner = null);

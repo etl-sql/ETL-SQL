@@ -3,7 +3,7 @@
     Compares a spill-allocation profile report against its checked-in budget and fails on regression.
 
 .DESCRIPTION
-    v0.15.0 Phase 1 regression budgets for the Gate F #temp round trip. A budget is a blessed
+    Regression budgets for the Gate F #temp round trip. A budget is a blessed
     profile report (same JSON schema, produced by scripts/Test-SpillAllocProfile.ps1) captured on
     the certification workstation. The comparison fails on:
 
@@ -22,13 +22,21 @@
     run is meaningfully better than budget the script suggests re-blessing
     (Test-SpillAllocProfile.ps1 -UpdateBudget).
 
+.PARAMETER MachineMetricsReportOnly
+    Report GC counts, GC pause and peak working set as warnings instead of failing. They depend on
+    the host (cores, memory, GC heap count), and the budget comes from one workstation, so hosted
+    CI gates only what the host does not change: spill evidence and allocated bytes per row. The
+    first hosted run (CI 42725899666) did 77 gen2 collections against a workstation limit of 74
+    while allocation passed.
+
 .PARAMETER Report
     Path to the new profile report JSON.
 
 .PARAMETER Budget
     Path to the budget JSON. Defaults to
     certification-results/spill-alloc-budgets/budget-<rows>rows.json (resolved after reading the
-    report's row count). Missing budget -> warning + exit 0, with instructions to establish one.
+    report's row count). Missing budget -> warning + exit 0, with instructions to establish one;
+    with -MachineMetricsReportOnly (the hosted gate) a missing budget fails.
 #>
 param(
     [Parameter(Mandatory = $true)]
@@ -37,7 +45,8 @@ param(
     [double]$AllocTolerancePct = 10,
     [double]$GcCountTolerancePct = 30,
     [double]$PauseTolerancePct = 35,
-    [double]$PeakTolerancePct = 15
+    [double]$PeakTolerancePct = 15,
+    [switch]$MachineMetricsReportOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -50,6 +59,11 @@ if (-not $Budget) {
     $Budget = Join-Path $repoRoot ("certification-results\spill-alloc-budgets\budget-{0}rows.json" -f $new.rows)
 }
 if (-not (Test-Path $Budget)) {
+    if ($MachineMetricsReportOnly) {
+        # The hosted gate exists to compare against a budget; without one it would pass on nothing.
+        Write-Host "[FAIL] No allocation budget found at '$Budget'. The hosted gate needs a checked-in budget for $($new.rows) rows." -ForegroundColor Red
+        exit 1
+    }
     Write-Host "[WARN] No allocation budget found at '$Budget' - skipping budget check." -ForegroundColor Yellow
     Write-Host "       To establish one from a known-good run:" -ForegroundColor Gray
     Write-Host "       .\scripts\Test-SpillAllocProfile.ps1 -Rows $($new.rows) -UpdateBudget" -ForegroundColor Gray
@@ -58,10 +72,14 @@ if (-not (Test-Path $Budget)) {
 $base = Get-Content $Budget -Raw | ConvertFrom-Json
 
 $regressions = New-Object System.Collections.Generic.List[object]
+$machineWarnings = New-Object System.Collections.Generic.List[object]
 function Add-Regression([string]$kind, $budgetValue, $currentValue) {
-    $script:regressions.Add([pscustomobject]@{
-        Kind = $kind; Budget = $budgetValue; Current = $currentValue
-    })
+    $row = [pscustomobject]@{ Kind = $kind; Budget = $budgetValue; Current = $currentValue }
+    # Call Add directly: assigning an if-expression would unroll an empty list to $null.
+    if ($MachineMetricsReportOnly -and $kind -in @('GC_GEN2_COLLECTIONS', 'GC_PAUSE_MS', 'PEAK_WORKING_SET_MB')) {
+        $script:machineWarnings.Add($row)
+    }
+    else { $script:regressions.Add($row) }
 }
 
 # 1. Same workload + correctness evidence.
@@ -93,6 +111,11 @@ if ($new.gc.pauseMs -gt $pauseLimit) {
 $peakLimit = $base.memory.peakWorkingSetMB * (1 + $PeakTolerancePct / 100)
 if ($new.memory.peakWorkingSetMB -gt $peakLimit) {
     Add-Regression 'PEAK_WORKING_SET_MB' ("{0:N0} (limit {1:N0})" -f $base.memory.peakWorkingSetMB, $peakLimit) ("{0:N0}" -f $new.memory.peakWorkingSetMB)
+}
+
+if ($machineWarnings.Count -gt 0) {
+    Write-Host "`n[WARN] $($machineWarnings.Count) host-dependent metric(s) over the workstation budget (report only):" -ForegroundColor Yellow
+    $machineWarnings | Format-Table Kind, Budget, Current -AutoSize | Out-String | Write-Host
 }
 
 if ($regressions.Count -gt 0) {

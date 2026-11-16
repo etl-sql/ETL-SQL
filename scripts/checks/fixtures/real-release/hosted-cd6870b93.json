@@ -1,0 +1,4286 @@
+{
+ "repository": "etl-sql/ETL-SQL",
+ "sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+ "now": "2026-11-09T21:08:37.059Z",
+ "policy": {
+  "schemaVersion": 1,
+  "maximumAgeHours": 168,
+  "workflows": [
+   {
+    "file": "release-certification.yml",
+    "events": [
+     "workflow_dispatch"
+    ],
+    "jobPrefix": "Full CI / ",
+    "fallback": {
+     "file": "ci.yml",
+     "events": [
+      "push"
+     ],
+     "jobPrefix": ""
+    },
+    "nightlyFallback": {
+     "file": "nightly-release.yml",
+     "events": [
+      "workflow_dispatch"
+     ],
+     "jobPrefix": "Full CI / ",
+     "releaseBranchesOnly": true
+    },
+    "jobs": [
+     "Source preflight",
+     "Build & Test",
+     "Build Verification",
+     "Portal Smoke & Security",
+     "Engine Coverage (1/3)",
+     "Engine Coverage (2/3)",
+     "Engine Coverage (3/3)",
+     "Browser and Consumer Contracts",
+     "Build VS Code Extension",
+     "Sample Scripts (windows)",
+     "Sample Scripts (linux)",
+     "Portal Browser Journey (1/3)",
+     "Portal Browser Journey (2/3)",
+     "Portal Browser Journey (3/3)",
+     "Portal Browser Journey",
+     "Studio Performance Budgets (windows)",
+     "Studio Performance Budgets (linux)",
+     "Studio Performance Budgets (macos)",
+     "Enterprise Certification (windows)",
+     "Enterprise Certification (linux)",
+     "Docker Integration Tests"
+    ]
+   },
+   {
+    "file": "codeql.yml",
+    "events": [
+     "push",
+     "workflow_dispatch"
+    ],
+    "jobs": [
+     "Analyze (csharp)",
+     "Analyze (javascript-typescript)"
+    ]
+   }
+  ]
+ },
+ "responses": {
+  "repos/etl-sql/ETL-SQL/actions/workflows/release-certification.yml/runs?head_sha=cd6870b930f4dbdaecf5aab3f224070ab7afe803&per_page=100": [
+   {
+    "total_count": 1,
+    "workflow_runs": [
+     {
+      "id": 42688068863,
+      "name": "Release Certification",
+      "node_id": "WFR_kwLOSiZFCc8AAAAJ8Gg8_w",
+      "head_branch": "release/v0.22.0",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "path": ".github/workflows/release-certification.yml",
+      "display_title": "Release Certification",
+      "run_number": 14,
+      "event": "workflow_dispatch",
+      "status": "completed",
+      "conclusion": "success",
+      "workflow_id": 405707770,
+      "check_suite_id": 115618898758,
+      "check_suite_node_id": "CS_kwDOSiZFCc8AAAAa62xjRg",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "pull_requests": [],
+      "created_at": "2026-11-09T19:56:02Z",
+      "updated_at": "2026-11-09T20:23:55Z",
+      "actor": {
+       "login": "github-actions[bot]",
+       "id": 41898282,
+       "node_id": "MDM6Qm90NDE4OTgyODI=",
+       "avatar_url": "https://avatars.githubusercontent.com/in/15368?v=4",
+       "gravatar_id": "",
+       "url": "https://api.github.com/users/github-actions%5Bbot%5D",
+       "html_url": "https://github.com/apps/github-actions",
+       "followers_url": "https://api.github.com/users/github-actions%5Bbot%5D/followers",
+       "following_url": "https://api.github.com/users/github-actions%5Bbot%5D/following{/other_user}",
+       "gists_url": "https://api.github.com/users/github-actions%5Bbot%5D/gists{/gist_id}",
+       "starred_url": "https://api.github.com/users/github-actions%5Bbot%5D/starred{/owner}{/repo}",
+       "subscriptions_url": "https://api.github.com/users/github-actions%5Bbot%5D/subscriptions",
+       "organizations_url": "https://api.github.com/users/github-actions%5Bbot%5D/orgs",
+       "repos_url": "https://api.github.com/users/github-actions%5Bbot%5D/repos",
+       "events_url": "https://api.github.com/users/github-actions%5Bbot%5D/events{/privacy}",
+       "received_events_url": "https://api.github.com/users/github-actions%5Bbot%5D/received_events",
+       "type": "Bot",
+       "user_view_type": "public",
+       "site_admin": false
+      },
+      "run_attempt": 1,
+      "referenced_workflows": [
+       {
+        "path": "etl-sql/ETL-SQL/.github/workflows/ci.yml@cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+        "sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+        "ref": "refs/heads/release/v0.22.0"
+       }
+      ],
+      "run_started_at": "2026-11-09T19:56:02Z",
+      "triggering_actor": {
+       "login": "github-actions[bot]",
+       "id": 41898282,
+       "node_id": "MDM6Qm90NDE4OTgyODI=",
+       "avatar_url": "https://avatars.githubusercontent.com/in/15368?v=4",
+       "gravatar_id": "",
+       "url": "https://api.github.com/users/github-actions%5Bbot%5D",
+       "html_url": "https://github.com/apps/github-actions",
+       "followers_url": "https://api.github.com/users/github-actions%5Bbot%5D/followers",
+       "following_url": "https://api.github.com/users/github-actions%5Bbot%5D/following{/other_user}",
+       "gists_url": "https://api.github.com/users/github-actions%5Bbot%5D/gists{/gist_id}",
+       "starred_url": "https://api.github.com/users/github-actions%5Bbot%5D/starred{/owner}{/repo}",
+       "subscriptions_url": "https://api.github.com/users/github-actions%5Bbot%5D/subscriptions",
+       "organizations_url": "https://api.github.com/users/github-actions%5Bbot%5D/orgs",
+       "repos_url": "https://api.github.com/users/github-actions%5Bbot%5D/repos",
+       "events_url": "https://api.github.com/users/github-actions%5Bbot%5D/events{/privacy}",
+       "received_events_url": "https://api.github.com/users/github-actions%5Bbot%5D/received_events",
+       "type": "Bot",
+       "user_view_type": "public",
+       "site_admin": false
+      },
+      "jobs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863/jobs",
+      "logs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863/logs",
+      "check_suite_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-suites/115618898758",
+      "artifacts_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863/artifacts",
+      "cancel_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863/cancel",
+      "rerun_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863/rerun",
+      "previous_attempt_url": null,
+      "workflow_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/workflows/405707770",
+      "repository": {
+       "id": 1244022025,
+       "node_id": "R_kgDOSiZFCQ",
+       "name": "ETL-SQL",
+       "full_name": "etl-sql/ETL-SQL",
+       "private": false,
+       "owner": {
+        "login": "etl-sql",
+        "id": 286155694,
+        "node_id": "U_kgDOEQ5jrg",
+        "avatar_url": "https://avatars.githubusercontent.com/u/286155694?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/etl-sql",
+        "html_url": "https://github.com/etl-sql",
+        "followers_url": "https://api.github.com/users/etl-sql/followers",
+        "following_url": "https://api.github.com/users/etl-sql/following{/other_user}",
+        "gists_url": "https://api.github.com/users/etl-sql/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/etl-sql/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/etl-sql/subscriptions",
+        "organizations_url": "https://api.github.com/users/etl-sql/orgs",
+        "repos_url": "https://api.github.com/users/etl-sql/repos",
+        "events_url": "https://api.github.com/users/etl-sql/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/etl-sql/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+       },
+       "html_url": "https://github.com/etl-sql/ETL-SQL",
+       "description": null,
+       "fork": false,
+       "url": "https://api.github.com/repos/etl-sql/ETL-SQL",
+       "forks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/forks",
+       "keys_url": "https://api.github.com/repos/etl-sql/ETL-SQL/keys{/key_id}",
+       "collaborators_url": "https://api.github.com/repos/etl-sql/ETL-SQL/collaborators{/collaborator}",
+       "teams_url": "https://api.github.com/repos/etl-sql/ETL-SQL/teams",
+       "hooks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/hooks",
+       "issue_events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/events{/number}",
+       "events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/events",
+       "assignees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/assignees{/user}",
+       "branches_url": "https://api.github.com/repos/etl-sql/ETL-SQL/branches{/branch}",
+       "tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/tags",
+       "blobs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/blobs{/sha}",
+       "git_tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/tags{/sha}",
+       "git_refs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/refs{/sha}",
+       "trees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/trees{/sha}",
+       "statuses_url": "https://api.github.com/repos/etl-sql/ETL-SQL/statuses/{sha}",
+       "languages_url": "https://api.github.com/repos/etl-sql/ETL-SQL/languages",
+       "stargazers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/stargazers",
+       "contributors_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contributors",
+       "subscribers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscribers",
+       "subscription_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscription",
+       "commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/commits{/sha}",
+       "git_commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/commits{/sha}",
+       "comments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/comments{/number}",
+       "issue_comment_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/comments{/number}",
+       "contents_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contents/{+path}",
+       "compare_url": "https://api.github.com/repos/etl-sql/ETL-SQL/compare/{base}...{head}",
+       "merges_url": "https://api.github.com/repos/etl-sql/ETL-SQL/merges",
+       "archive_url": "https://api.github.com/repos/etl-sql/ETL-SQL/{archive_format}{/ref}",
+       "downloads_url": "https://api.github.com/repos/etl-sql/ETL-SQL/downloads",
+       "issues_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues{/number}",
+       "pulls_url": "https://api.github.com/repos/etl-sql/ETL-SQL/pulls{/number}",
+       "milestones_url": "https://api.github.com/repos/etl-sql/ETL-SQL/milestones{/number}",
+       "notifications_url": "https://api.github.com/repos/etl-sql/ETL-SQL/notifications{?since,all,participating}",
+       "labels_url": "https://api.github.com/repos/etl-sql/ETL-SQL/labels{/name}",
+       "releases_url": "https://api.github.com/repos/etl-sql/ETL-SQL/releases{/id}",
+       "deployments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/deployments"
+      },
+      "head_repository": {
+       "id": 1244022025,
+       "node_id": "R_kgDOSiZFCQ",
+       "name": "ETL-SQL",
+       "full_name": "etl-sql/ETL-SQL",
+       "private": false,
+       "owner": {
+        "login": "etl-sql",
+        "id": 286155694,
+        "node_id": "U_kgDOEQ5jrg",
+        "avatar_url": "https://avatars.githubusercontent.com/u/286155694?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/etl-sql",
+        "html_url": "https://github.com/etl-sql",
+        "followers_url": "https://api.github.com/users/etl-sql/followers",
+        "following_url": "https://api.github.com/users/etl-sql/following{/other_user}",
+        "gists_url": "https://api.github.com/users/etl-sql/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/etl-sql/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/etl-sql/subscriptions",
+        "organizations_url": "https://api.github.com/users/etl-sql/orgs",
+        "repos_url": "https://api.github.com/users/etl-sql/repos",
+        "events_url": "https://api.github.com/users/etl-sql/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/etl-sql/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+       },
+       "html_url": "https://github.com/etl-sql/ETL-SQL",
+       "description": null,
+       "fork": false,
+       "url": "https://api.github.com/repos/etl-sql/ETL-SQL",
+       "forks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/forks",
+       "keys_url": "https://api.github.com/repos/etl-sql/ETL-SQL/keys{/key_id}",
+       "collaborators_url": "https://api.github.com/repos/etl-sql/ETL-SQL/collaborators{/collaborator}",
+       "teams_url": "https://api.github.com/repos/etl-sql/ETL-SQL/teams",
+       "hooks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/hooks",
+       "issue_events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/events{/number}",
+       "events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/events",
+       "assignees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/assignees{/user}",
+       "branches_url": "https://api.github.com/repos/etl-sql/ETL-SQL/branches{/branch}",
+       "tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/tags",
+       "blobs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/blobs{/sha}",
+       "git_tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/tags{/sha}",
+       "git_refs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/refs{/sha}",
+       "trees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/trees{/sha}",
+       "statuses_url": "https://api.github.com/repos/etl-sql/ETL-SQL/statuses/{sha}",
+       "languages_url": "https://api.github.com/repos/etl-sql/ETL-SQL/languages",
+       "stargazers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/stargazers",
+       "contributors_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contributors",
+       "subscribers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscribers",
+       "subscription_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscription",
+       "commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/commits{/sha}",
+       "git_commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/commits{/sha}",
+       "comments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/comments{/number}",
+       "issue_comment_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/comments{/number}",
+       "contents_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contents/{+path}",
+       "compare_url": "https://api.github.com/repos/etl-sql/ETL-SQL/compare/{base}...{head}",
+       "merges_url": "https://api.github.com/repos/etl-sql/ETL-SQL/merges",
+       "archive_url": "https://api.github.com/repos/etl-sql/ETL-SQL/{archive_format}{/ref}",
+       "downloads_url": "https://api.github.com/repos/etl-sql/ETL-SQL/downloads",
+       "issues_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues{/number}",
+       "pulls_url": "https://api.github.com/repos/etl-sql/ETL-SQL/pulls{/number}",
+       "milestones_url": "https://api.github.com/repos/etl-sql/ETL-SQL/milestones{/number}",
+       "notifications_url": "https://api.github.com/repos/etl-sql/ETL-SQL/notifications{?since,all,participating}",
+       "labels_url": "https://api.github.com/repos/etl-sql/ETL-SQL/labels{/name}",
+       "releases_url": "https://api.github.com/repos/etl-sql/ETL-SQL/releases{/id}",
+       "deployments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/deployments"
+      }
+     }
+    ]
+   }
+  ],
+  "repos/etl-sql/ETL-SQL/actions/runs/42688068863/attempts/1/jobs?per_page=100": [
+   {
+    "total_count": 21,
+    "jobs": [
+     {
+      "id": 129400159560,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeINm9SA",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129400159560",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129400159560",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T19:56:04Z",
+      "started_at": "2026-11-09T19:56:06Z",
+      "completed_at": "2026-11-09T20:00:02Z",
+      "name": "Full CI / Source preflight",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T19:56:07Z",
+        "completed_at": "2026-11-09T19:56:07Z"
+       },
+       {
+        "name": "Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T19:56:07Z",
+        "completed_at": "2026-11-09T19:56:27Z"
+       },
+       {
+        "name": "Run actions/setup-node@v7",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T19:56:27Z",
+        "completed_at": "2026-11-09T19:56:27Z"
+       },
+       {
+        "name": "Select affected lanes or full certification",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T19:56:27Z",
+        "completed_at": "2026-11-09T19:56:29Z"
+       },
+       {
+        "name": "Prepare pinned workflow checker",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T19:56:29Z",
+        "completed_at": "2026-11-09T19:56:29Z"
+       },
+       {
+        "name": "Collect source findings",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T19:56:29Z",
+        "completed_at": "2026-11-09T19:59:59Z"
+       },
+       {
+        "name": "Upload preflight logs",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T19:59:59Z",
+        "completed_at": "2026-11-09T20:00:00Z"
+       },
+       {
+        "name": "Post Run actions/setup-node@v7",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-09T20:00:00Z",
+        "completed_at": "2026-11-09T20:00:00Z"
+       },
+       {
+        "name": "Post Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 14,
+        "started_at": "2026-11-09T20:00:00Z",
+        "completed_at": "2026-11-09T20:00:01Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 15,
+        "started_at": "2026-11-09T20:00:01Z",
+        "completed_at": "2026-11-09T20:00:01Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129400159560",
+      "labels": [
+       "ubuntu-latest"
+      ],
+      "runner_id": 1000005283,
+      "runner_name": "GitHub Actions 1000005283",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348476,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPsjvA",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348476",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348476",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:05Z",
+      "completed_at": "2026-11-09T20:19:19Z",
+      "name": "Full CI / Portal Smoke & Security",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:05Z",
+        "completed_at": "2026-11-09T20:00:06Z"
+       },
+       {
+        "name": "Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:06Z",
+        "completed_at": "2026-11-09T20:00:30Z"
+       },
+       {
+        "name": "Run ./.github/actions/prepare-test-project",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:30Z",
+        "completed_at": "2026-11-09T20:04:32Z"
+       },
+       {
+        "name": "Verify generated browser contracts against registered hosts",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:04:32Z",
+        "completed_at": "2026-11-09T20:05:00Z"
+       },
+       {
+        "name": "Run every Portal smoke and security case",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:05:00Z",
+        "completed_at": "2026-11-09T20:19:12Z"
+       },
+       {
+        "name": "Retain Portal smoke diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:19:12Z",
+        "completed_at": "2026-11-09T20:19:15Z"
+       },
+       {
+        "name": "Post Run ./.github/actions/prepare-test-project",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:19:15Z",
+        "completed_at": "2026-11-09T20:19:15Z"
+       },
+       {
+        "name": "Post Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12,
+        "started_at": "2026-11-09T20:19:15Z",
+        "completed_at": "2026-11-09T20:19:17Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-09T20:19:17Z",
+        "completed_at": "2026-11-09T20:19:17Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348476",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005297,
+      "runner_name": "GitHub Actions 1000005297",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348523,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPsj6w",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348523",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348523",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:04Z",
+      "completed_at": "2026-11-09T20:17:46Z",
+      "name": "Full CI / Browser and Consumer Contracts",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:05Z",
+        "completed_at": "2026-11-09T20:00:06Z"
+       },
+       {
+        "name": "Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:06Z",
+        "completed_at": "2026-11-09T20:00:30Z"
+       },
+       {
+        "name": "Run actions/setup-node@v7",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:30Z",
+        "completed_at": "2026-11-09T20:00:39Z"
+       },
+       {
+        "name": "Run actions/setup-dotnet@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:39Z",
+        "completed_at": "2026-11-09T20:00:42Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:42Z",
+        "completed_at": "2026-11-09T20:00:49Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:00:49Z",
+        "completed_at": "2026-11-09T20:00:57Z"
+       },
+       {
+        "name": "Prove source-only browser asset preparation",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:00:57Z",
+        "completed_at": "2026-11-09T20:01:13Z"
+       },
+       {
+        "name": "Upload browser asset ownership and hashes",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:01:13Z",
+        "completed_at": "2026-11-09T20:01:14Z"
+       },
+       {
+        "name": "Check shared report runtime assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T20:01:14Z",
+        "completed_at": "2026-11-09T20:01:23Z"
+       },
+       {
+        "name": "Check browser asset ownership against the Git index",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10,
+        "started_at": "2026-11-09T20:01:23Z",
+        "completed_at": "2026-11-09T20:01:23Z"
+       },
+       {
+        "name": "Check browser-side types",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:01:23Z",
+        "completed_at": "2026-11-09T20:01:33Z"
+       },
+       {
+        "name": "Install browser lint-gate toolchain",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12,
+        "started_at": "2026-11-09T20:01:33Z",
+        "completed_at": "2026-11-09T20:01:36Z"
+       },
+       {
+        "name": "Install unsigned VSIX verification toolchain",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-09T20:01:36Z",
+        "completed_at": "2026-11-09T20:01:42Z"
+       },
+       {
+        "name": "Audit browser toolchain packages for known vulnerabilities",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 14,
+        "started_at": "2026-11-09T20:01:42Z",
+        "completed_at": "2026-11-09T20:01:46Z"
+       },
+       {
+        "name": "Lint the browser sources",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 15,
+        "started_at": "2026-11-09T20:01:46Z",
+        "completed_at": "2026-11-09T20:01:59Z"
+       },
+       {
+        "name": "Run browser and consumer contract checks",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 16,
+        "started_at": "2026-11-09T20:01:59Z",
+        "completed_at": "2026-11-09T20:17:20Z"
+       },
+       {
+        "name": "Retain consumer contract diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 17,
+        "started_at": "2026-11-09T20:17:20Z",
+        "completed_at": "2026-11-09T20:17:21Z"
+       },
+       {
+        "name": "Verify prepared assets after consumer checks",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 18,
+        "started_at": "2026-11-09T20:17:21Z",
+        "completed_at": "2026-11-09T20:17:30Z"
+       },
+       {
+        "name": "Validate HA soak harness contracts",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 19,
+        "started_at": "2026-11-09T20:17:30Z",
+        "completed_at": "2026-11-09T20:17:41Z"
+       },
+       {
+        "name": "Retain HA contract diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 20,
+        "started_at": "2026-11-09T20:17:41Z",
+        "completed_at": "2026-11-09T20:17:42Z"
+       },
+       {
+        "name": "Post Run actions/setup-dotnet@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 38,
+        "started_at": "2026-11-09T20:17:42Z",
+        "completed_at": "2026-11-09T20:17:42Z"
+       },
+       {
+        "name": "Post Run actions/setup-node@v7",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 39,
+        "started_at": "2026-11-09T20:17:42Z",
+        "completed_at": "2026-11-09T20:17:42Z"
+       },
+       {
+        "name": "Post Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 40,
+        "started_at": "2026-11-09T20:17:42Z",
+        "completed_at": "2026-11-09T20:17:44Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 41,
+        "started_at": "2026-11-09T20:17:44Z",
+        "completed_at": "2026-11-09T20:17:44Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348523",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005293,
+      "runner_name": "GitHub Actions 1000005293",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348531,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPsj8w",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348531",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348531",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:04Z",
+      "completed_at": "2026-11-09T20:10:28Z",
+      "name": "Full CI / Engine Coverage (2/3)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:05Z",
+        "completed_at": "2026-11-09T20:00:06Z"
+       },
+       {
+        "name": "Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:06Z",
+        "completed_at": "2026-11-09T20:00:28Z"
+       },
+       {
+        "name": "Run ./.github/actions/prepare-test-project",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:28Z",
+        "completed_at": "2026-11-09T20:03:33Z"
+       },
+       {
+        "name": "Run assigned engine shards with coverage",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:03:33Z",
+        "completed_at": "2026-11-09T20:10:18Z"
+       },
+       {
+        "name": "Retain engine group results",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:10:18Z",
+        "completed_at": "2026-11-09T20:10:23Z"
+       },
+       {
+        "name": "Retain engine group diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:10:23Z",
+        "completed_at": "2026-11-09T20:10:24Z"
+       },
+       {
+        "name": "Post Run ./.github/actions/prepare-test-project",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:10:24Z",
+        "completed_at": "2026-11-09T20:10:25Z"
+       },
+       {
+        "name": "Post Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12,
+        "started_at": "2026-11-09T20:10:25Z",
+        "completed_at": "2026-11-09T20:10:26Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-09T20:10:26Z",
+        "completed_at": "2026-11-09T20:10:27Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348531",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005291,
+      "runner_name": "GitHub Actions 1000005291",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348566,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPskFg",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348566",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348566",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:04Z",
+      "completed_at": "2026-11-09T20:08:25Z",
+      "name": "Full CI / Enterprise Certification (linux)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:05Z",
+        "completed_at": "2026-11-09T20:00:06Z"
+       },
+       {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:06Z",
+        "completed_at": "2026-11-09T20:00:23Z"
+       },
+       {
+        "name": "Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:23Z",
+        "completed_at": "2026-11-09T20:00:23Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:23Z",
+        "completed_at": "2026-11-09T20:00:24Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:24Z",
+        "completed_at": "2026-11-09T20:00:31Z"
+       },
+       {
+        "name": "Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:00:31Z",
+        "completed_at": "2026-11-09T20:00:31Z"
+       },
+       {
+        "name": "Run enterprise certification",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:00:31Z",
+        "completed_at": "2026-11-09T20:08:19Z"
+       },
+       {
+        "name": "Retain enterprise process diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:08:19Z",
+        "completed_at": "2026-11-09T20:08:20Z"
+       },
+       {
+        "name": "Retain enterprise certification evidence",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T20:08:20Z",
+        "completed_at": "2026-11-09T20:08:22Z"
+       },
+       {
+        "name": "Post Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 16,
+        "started_at": "2026-11-09T20:08:22Z",
+        "completed_at": "2026-11-09T20:08:22Z"
+       },
+       {
+        "name": "Post Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 17,
+        "started_at": "2026-11-09T20:08:22Z",
+        "completed_at": "2026-11-09T20:08:22Z"
+       },
+       {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 18,
+        "started_at": "2026-11-09T20:08:22Z",
+        "completed_at": "2026-11-09T20:08:22Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 19,
+        "started_at": "2026-11-09T20:08:22Z",
+        "completed_at": "2026-11-09T20:08:22Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348566",
+      "labels": [
+       "ubuntu-latest"
+      ],
+      "runner_id": 1000005289,
+      "runner_name": "GitHub Actions 1000005289",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348569,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPskGQ",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348569",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348569",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:04Z",
+      "completed_at": "2026-11-09T20:05:44Z",
+      "name": "Full CI / Studio Performance Budgets (windows)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:05Z",
+        "completed_at": "2026-11-09T20:00:07Z"
+       },
+       {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:07Z",
+        "completed_at": "2026-11-09T20:00:29Z"
+       },
+       {
+        "name": "Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:29Z",
+        "completed_at": "2026-11-09T20:00:35Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:35Z",
+        "completed_at": "2026-11-09T20:00:42Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:42Z",
+        "completed_at": "2026-11-09T20:00:58Z"
+       },
+       {
+        "name": "Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:00:58Z",
+        "completed_at": "2026-11-09T20:01:02Z"
+       },
+       {
+        "name": "Cache Playwright Chromium",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:01:02Z",
+        "completed_at": "2026-11-09T20:01:07Z"
+       },
+       {
+        "name": "Build Studio performance gate",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:01:07Z",
+        "completed_at": "2026-11-09T20:05:23Z"
+       },
+       {
+        "name": "Measure Studio performance",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T20:05:23Z",
+        "completed_at": "2026-11-09T20:05:37Z"
+       },
+       {
+        "name": "Retain Studio performance diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10,
+        "started_at": "2026-11-09T20:05:37Z",
+        "completed_at": "2026-11-09T20:05:39Z"
+       },
+       {
+        "name": "Upload Studio performance evidence",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:05:39Z",
+        "completed_at": "2026-11-09T20:05:40Z"
+       },
+       {
+        "name": "Post Cache Playwright Chromium",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 19,
+        "started_at": "2026-11-09T20:05:40Z",
+        "completed_at": "2026-11-09T20:05:40Z"
+       },
+       {
+        "name": "Post Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 20,
+        "started_at": "2026-11-09T20:05:40Z",
+        "completed_at": "2026-11-09T20:05:40Z"
+       },
+       {
+        "name": "Post Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 21,
+        "started_at": "2026-11-09T20:05:40Z",
+        "completed_at": "2026-11-09T20:05:40Z"
+       },
+       {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 22,
+        "started_at": "2026-11-09T20:05:40Z",
+        "completed_at": "2026-11-09T20:05:43Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 23,
+        "started_at": "2026-11-09T20:05:43Z",
+        "completed_at": "2026-11-09T20:05:43Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348569",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005294,
+      "runner_name": "GitHub Actions 1000005294",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348585,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPskKQ",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348585",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348585",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:05Z",
+      "completed_at": "2026-11-09T20:12:47Z",
+      "name": "Full CI / Engine Coverage (3/3)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:06Z",
+        "completed_at": "2026-11-09T20:00:06Z"
+       },
+       {
+        "name": "Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:06Z",
+        "completed_at": "2026-11-09T20:00:25Z"
+       },
+       {
+        "name": "Run ./.github/actions/prepare-test-project",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:25Z",
+        "completed_at": "2026-11-09T20:04:27Z"
+       },
+       {
+        "name": "Run assigned engine shards with coverage",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:04:27Z",
+        "completed_at": "2026-11-09T20:12:34Z"
+       },
+       {
+        "name": "Retain engine group results",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:12:34Z",
+        "completed_at": "2026-11-09T20:12:41Z"
+       },
+       {
+        "name": "Retain engine group diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:12:41Z",
+        "completed_at": "2026-11-09T20:12:42Z"
+       },
+       {
+        "name": "Post Run ./.github/actions/prepare-test-project",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:12:42Z",
+        "completed_at": "2026-11-09T20:12:43Z"
+       },
+       {
+        "name": "Post Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12,
+        "started_at": "2026-11-09T20:12:43Z",
+        "completed_at": "2026-11-09T20:12:45Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-09T20:12:45Z",
+        "completed_at": "2026-11-09T20:12:45Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348585",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005298,
+      "runner_name": "GitHub Actions 1000005298",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348593,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPskMQ",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348593",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348593",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:05Z",
+      "completed_at": "2026-11-09T20:03:36Z",
+      "name": "Full CI / Studio Performance Budgets (linux)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:05Z",
+        "completed_at": "2026-11-09T20:00:07Z"
+       },
+       {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:07Z",
+        "completed_at": "2026-11-09T20:00:27Z"
+       },
+       {
+        "name": "Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:27Z",
+        "completed_at": "2026-11-09T20:00:28Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:28Z",
+        "completed_at": "2026-11-09T20:00:29Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:29Z",
+        "completed_at": "2026-11-09T20:00:40Z"
+       },
+       {
+        "name": "Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:00:40Z",
+        "completed_at": "2026-11-09T20:00:41Z"
+       },
+       {
+        "name": "Cache Playwright Chromium",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:00:41Z",
+        "completed_at": "2026-11-09T20:00:46Z"
+       },
+       {
+        "name": "Build Studio performance gate",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:00:46Z",
+        "completed_at": "2026-11-09T20:03:21Z"
+       },
+       {
+        "name": "Measure Studio performance",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T20:03:21Z",
+        "completed_at": "2026-11-09T20:03:29Z"
+       },
+       {
+        "name": "Retain Studio performance diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10,
+        "started_at": "2026-11-09T20:03:29Z",
+        "completed_at": "2026-11-09T20:03:31Z"
+       },
+       {
+        "name": "Upload Studio performance evidence",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:03:31Z",
+        "completed_at": "2026-11-09T20:03:32Z"
+       },
+       {
+        "name": "Post Cache Playwright Chromium",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 19,
+        "started_at": "2026-11-09T20:03:32Z",
+        "completed_at": "2026-11-09T20:03:32Z"
+       },
+       {
+        "name": "Post Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 20,
+        "started_at": "2026-11-09T20:03:32Z",
+        "completed_at": "2026-11-09T20:03:32Z"
+       },
+       {
+        "name": "Post Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 21,
+        "started_at": "2026-11-09T20:03:32Z",
+        "completed_at": "2026-11-09T20:03:33Z"
+       },
+       {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 22,
+        "started_at": "2026-11-09T20:03:33Z",
+        "completed_at": "2026-11-09T20:03:33Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 23,
+        "started_at": "2026-11-09T20:03:33Z",
+        "completed_at": "2026-11-09T20:03:33Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348593",
+      "labels": [
+       "ubuntu-latest"
+      ],
+      "runner_id": 1000005288,
+      "runner_name": "GitHub Actions 1000005288",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348621,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPskTQ",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348621",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348621",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:04:08Z",
+      "completed_at": "2026-11-09T20:17:52Z",
+      "name": "Full CI / Engine Coverage (1/3)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:04:09Z",
+        "completed_at": "2026-11-09T20:04:10Z"
+       },
+       {
+        "name": "Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:04:10Z",
+        "completed_at": "2026-11-09T20:04:31Z"
+       },
+       {
+        "name": "Run ./.github/actions/prepare-test-project",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:04:31Z",
+        "completed_at": "2026-11-09T20:08:31Z"
+       },
+       {
+        "name": "Run assigned engine shards with coverage",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:08:31Z",
+        "completed_at": "2026-11-09T20:17:38Z"
+       },
+       {
+        "name": "Retain engine group results",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:17:38Z",
+        "completed_at": "2026-11-09T20:17:46Z"
+       },
+       {
+        "name": "Retain engine group diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:17:46Z",
+        "completed_at": "2026-11-09T20:17:47Z"
+       },
+       {
+        "name": "Post Run ./.github/actions/prepare-test-project",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:17:47Z",
+        "completed_at": "2026-11-09T20:17:48Z"
+       },
+       {
+        "name": "Post Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12,
+        "started_at": "2026-11-09T20:17:48Z",
+        "completed_at": "2026-11-09T20:17:50Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-09T20:17:50Z",
+        "completed_at": "2026-11-09T20:17:51Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348621",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005307,
+      "runner_name": "GitHub Actions 1000005307",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348656,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPskcA",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348656",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348656",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:05Z",
+      "completed_at": "2026-11-09T20:12:22Z",
+      "name": "Full CI / Build Verification",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:06Z",
+        "completed_at": "2026-11-09T20:00:07Z"
+       },
+       {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:07Z",
+        "completed_at": "2026-11-09T20:00:26Z"
+       },
+       {
+        "name": "Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:26Z",
+        "completed_at": "2026-11-09T20:00:31Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:31Z",
+        "completed_at": "2026-11-09T20:00:37Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:37Z",
+        "completed_at": "2026-11-09T20:00:49Z"
+       },
+       {
+        "name": "Verify .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:00:49Z",
+        "completed_at": "2026-11-09T20:00:58Z"
+       },
+       {
+        "name": "Verify Node.js",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:00:58Z",
+        "completed_at": "2026-11-09T20:00:58Z"
+       },
+       {
+        "name": "Restore tools",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:00:58Z",
+        "completed_at": "2026-11-09T20:01:04Z"
+       },
+       {
+        "name": "Restore dependencies",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T20:01:04Z",
+        "completed_at": "2026-11-09T20:03:12Z"
+       },
+       {
+        "name": "Audit NuGet packages for known vulnerabilities",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10,
+        "started_at": "2026-11-09T20:03:12Z",
+        "completed_at": "2026-11-09T20:04:00Z"
+       },
+       {
+        "name": "Verify formatting",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:04:00Z",
+        "completed_at": "2026-11-09T20:07:43Z"
+       },
+       {
+        "name": "Build",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12,
+        "started_at": "2026-11-09T20:07:43Z",
+        "completed_at": "2026-11-09T20:10:29Z"
+       },
+       {
+        "name": "Run engine smoke tests using the existing build",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-09T20:10:29Z",
+        "completed_at": "2026-11-09T20:12:15Z"
+       },
+       {
+        "name": "Run language server tests (Pull Requests)",
+        "status": "completed",
+        "conclusion": "skipped",
+        "number": 14,
+        "started_at": "2026-11-09T20:12:15Z",
+        "completed_at": "2026-11-09T20:12:15Z"
+       },
+       {
+        "name": "Retain build diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 15,
+        "started_at": "2026-11-09T20:12:15Z",
+        "completed_at": "2026-11-09T20:12:17Z"
+       },
+       {
+        "name": "Post Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 29,
+        "started_at": "2026-11-09T20:12:17Z",
+        "completed_at": "2026-11-09T20:12:18Z"
+       },
+       {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 30,
+        "started_at": "2026-11-09T20:12:18Z",
+        "completed_at": "2026-11-09T20:12:20Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 31,
+        "started_at": "2026-11-09T20:12:20Z",
+        "completed_at": "2026-11-09T20:12:20Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348656",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005300,
+      "runner_name": "GitHub Actions 1000005300",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348659,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPskcw",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348659",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348659",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:05Z",
+      "completed_at": "2026-11-09T20:11:54Z",
+      "name": "Full CI / Enterprise Certification (windows)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:06Z",
+        "completed_at": "2026-11-09T20:00:07Z"
+       },
+       {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:07Z",
+        "completed_at": "2026-11-09T20:00:31Z"
+       },
+       {
+        "name": "Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:31Z",
+        "completed_at": "2026-11-09T20:00:36Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:36Z",
+        "completed_at": "2026-11-09T20:00:41Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:41Z",
+        "completed_at": "2026-11-09T20:00:53Z"
+       },
+       {
+        "name": "Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:00:53Z",
+        "completed_at": "2026-11-09T20:00:55Z"
+       },
+       {
+        "name": "Run enterprise certification",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:00:55Z",
+        "completed_at": "2026-11-09T20:11:47Z"
+       },
+       {
+        "name": "Retain enterprise process diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:11:47Z",
+        "completed_at": "2026-11-09T20:11:48Z"
+       },
+       {
+        "name": "Retain enterprise certification evidence",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T20:11:48Z",
+        "completed_at": "2026-11-09T20:11:49Z"
+       },
+       {
+        "name": "Post Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 16,
+        "started_at": "2026-11-09T20:11:49Z",
+        "completed_at": "2026-11-09T20:11:49Z"
+       },
+       {
+        "name": "Post Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 17,
+        "started_at": "2026-11-09T20:11:49Z",
+        "completed_at": "2026-11-09T20:11:50Z"
+       },
+       {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 18,
+        "started_at": "2026-11-09T20:11:50Z",
+        "completed_at": "2026-11-09T20:11:52Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 19,
+        "started_at": "2026-11-09T20:11:52Z",
+        "completed_at": "2026-11-09T20:11:52Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348659",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005292,
+      "runner_name": "GitHub Actions 1000005292",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348683,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPskiw",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348683",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348683",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:04Z",
+      "completed_at": "2026-11-09T20:17:18Z",
+      "name": "Full CI / Portal Browser Journey (3/3)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:05Z",
+        "completed_at": "2026-11-09T20:00:06Z"
+       },
+       {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:06Z",
+        "completed_at": "2026-11-09T20:00:26Z"
+       },
+       {
+        "name": "Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:26Z",
+        "completed_at": "2026-11-09T20:00:32Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:32Z",
+        "completed_at": "2026-11-09T20:00:37Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:37Z",
+        "completed_at": "2026-11-09T20:00:55Z"
+       },
+       {
+        "name": "Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:00:55Z",
+        "completed_at": "2026-11-09T20:00:58Z"
+       },
+       {
+        "name": "Restore VS Code UI dependencies",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:00:58Z",
+        "completed_at": "2026-11-09T20:01:10Z"
+       },
+       {
+        "name": "Build VS Code UI package",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:01:10Z",
+        "completed_at": "2026-11-09T20:01:16Z"
+       },
+       {
+        "name": "Cache Playwright browsers",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T20:01:16Z",
+        "completed_at": "2026-11-09T20:01:20Z"
+       },
+       {
+        "name": "Build browser lane",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10,
+        "started_at": "2026-11-09T20:01:20Z",
+        "completed_at": "2026-11-09T20:05:31Z"
+       },
+       {
+        "name": "Run browser lane",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:05:31Z",
+        "completed_at": "2026-11-09T20:17:12Z"
+       },
+       {
+        "name": "Report browser shard recovery",
+        "status": "completed",
+        "conclusion": "skipped",
+        "number": 12,
+        "started_at": "2026-11-09T20:17:12Z",
+        "completed_at": "2026-11-09T20:17:12Z"
+       },
+       {
+        "name": "Retain browser shard diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-09T20:17:12Z",
+        "completed_at": "2026-11-09T20:17:13Z"
+       },
+       {
+        "name": "Post Cache Playwright browsers",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 23,
+        "started_at": "2026-11-09T20:17:13Z",
+        "completed_at": "2026-11-09T20:17:14Z"
+       },
+       {
+        "name": "Post Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 24,
+        "started_at": "2026-11-09T20:17:14Z",
+        "completed_at": "2026-11-09T20:17:14Z"
+       },
+       {
+        "name": "Post Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 25,
+        "started_at": "2026-11-09T20:17:14Z",
+        "completed_at": "2026-11-09T20:17:14Z"
+       },
+       {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 26,
+        "started_at": "2026-11-09T20:17:14Z",
+        "completed_at": "2026-11-09T20:17:17Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 27,
+        "started_at": "2026-11-09T20:17:17Z",
+        "completed_at": "2026-11-09T20:17:17Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348683",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005290,
+      "runner_name": "GitHub Actions 1000005290",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348684,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPskjA",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348684",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348684",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:46Z",
+      "completed_at": "2026-11-09T20:23:54Z",
+      "name": "Full CI / Docker Integration Tests",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:47Z",
+        "completed_at": "2026-11-09T20:00:48Z"
+       },
+       {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:48Z",
+        "completed_at": "2026-11-09T20:00:57Z"
+       },
+       {
+        "name": "Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:57Z",
+        "completed_at": "2026-11-09T20:00:57Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:57Z",
+        "completed_at": "2026-11-09T20:00:58Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:58Z",
+        "completed_at": "2026-11-09T20:01:05Z"
+       },
+       {
+        "name": "Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:01:05Z",
+        "completed_at": "2026-11-09T20:01:06Z"
+       },
+       {
+        "name": "Verify .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:01:06Z",
+        "completed_at": "2026-11-09T20:01:09Z"
+       },
+       {
+        "name": "Verify Docker",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:01:09Z",
+        "completed_at": "2026-11-09T20:01:09Z"
+       },
+       {
+        "name": "Restore dependencies",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T20:01:09Z",
+        "completed_at": "2026-11-09T20:01:35Z"
+       },
+       {
+        "name": "Build",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10,
+        "started_at": "2026-11-09T20:01:35Z",
+        "completed_at": "2026-11-09T20:04:09Z"
+       },
+       {
+        "name": "Install LDAP client library (Linux only)",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:04:09Z",
+        "completed_at": "2026-11-09T20:04:24Z"
+       },
+       {
+        "name": "Install Microsoft ODBC Driver 18 for SQL Server",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12,
+        "started_at": "2026-11-09T20:04:24Z",
+        "completed_at": "2026-11-09T20:04:27Z"
+       },
+       {
+        "name": "Pre-pull base Docker images",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-09T20:04:27Z",
+        "completed_at": "2026-11-09T20:04:38Z"
+       },
+       {
+        "name": "Build sandbox worker image",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 14,
+        "started_at": "2026-11-09T20:04:38Z",
+        "completed_at": "2026-11-09T20:06:46Z"
+       },
+       {
+        "name": "Enable hardened sandbox runtime (gVisor & local registry)",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 15,
+        "started_at": "2026-11-09T20:06:46Z",
+        "completed_at": "2026-11-09T20:07:08Z"
+       },
+       {
+        "name": "Run Docker Integration Tests",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 16,
+        "started_at": "2026-11-09T20:07:08Z",
+        "completed_at": "2026-11-09T20:23:50Z"
+       },
+       {
+        "name": "Retain Docker integration diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 17,
+        "started_at": "2026-11-09T20:23:50Z",
+        "completed_at": "2026-11-09T20:23:51Z"
+       },
+       {
+        "name": "Post Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 32,
+        "started_at": "2026-11-09T20:23:51Z",
+        "completed_at": "2026-11-09T20:23:51Z"
+       },
+       {
+        "name": "Post Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 33,
+        "started_at": "2026-11-09T20:23:51Z",
+        "completed_at": "2026-11-09T20:23:51Z"
+       },
+       {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 34,
+        "started_at": "2026-11-09T20:23:51Z",
+        "completed_at": "2026-11-09T20:23:52Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 35,
+        "started_at": "2026-11-09T20:23:52Z",
+        "completed_at": "2026-11-09T20:23:52Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348684",
+      "labels": [
+       "ubuntu-latest"
+      ],
+      "runner_id": 1000005304,
+      "runner_name": "GitHub Actions 1000005304",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348691,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPskkw",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348691",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348691",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:06Z",
+      "completed_at": "2026-11-09T20:19:42Z",
+      "name": "Full CI / Sample Scripts (windows)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:07Z",
+        "completed_at": "2026-11-09T20:00:10Z"
+       },
+       {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:10Z",
+        "completed_at": "2026-11-09T20:00:33Z"
+       },
+       {
+        "name": "Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:33Z",
+        "completed_at": "2026-11-09T20:00:37Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:37Z",
+        "completed_at": "2026-11-09T20:00:42Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:42Z",
+        "completed_at": "2026-11-09T20:00:51Z"
+       },
+       {
+        "name": "Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:00:51Z",
+        "completed_at": "2026-11-09T20:00:53Z"
+       },
+       {
+        "name": "Restore application",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:00:53Z",
+        "completed_at": "2026-11-09T20:01:54Z"
+       },
+       {
+        "name": "Build application",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:01:54Z",
+        "completed_at": "2026-11-09T20:02:43Z"
+       },
+       {
+        "name": "Validate samples (Windows)",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T20:02:43Z",
+        "completed_at": "2026-11-09T20:19:36Z"
+       },
+       {
+        "name": "Validate samples (Linux)",
+        "status": "completed",
+        "conclusion": "skipped",
+        "number": 10,
+        "started_at": "2026-11-09T20:19:36Z",
+        "completed_at": "2026-11-09T20:19:36Z"
+       },
+       {
+        "name": "Retain sample diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:19:36Z",
+        "completed_at": "2026-11-09T20:19:38Z"
+       },
+       {
+        "name": "Post Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 20,
+        "started_at": "2026-11-09T20:19:38Z",
+        "completed_at": "2026-11-09T20:19:38Z"
+       },
+       {
+        "name": "Post Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 21,
+        "started_at": "2026-11-09T20:19:38Z",
+        "completed_at": "2026-11-09T20:19:38Z"
+       },
+       {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 22,
+        "started_at": "2026-11-09T20:19:38Z",
+        "completed_at": "2026-11-09T20:19:40Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 23,
+        "started_at": "2026-11-09T20:19:40Z",
+        "completed_at": "2026-11-09T20:19:40Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348691",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005302,
+      "runner_name": "GitHub Actions 1000005302",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348743,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPskxw",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348743",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348743",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:06Z",
+      "completed_at": "2026-11-09T20:04:07Z",
+      "name": "Full CI / Studio Performance Budgets (macos)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:07Z",
+        "completed_at": "2026-11-09T20:00:09Z"
+       },
+       {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:09Z",
+        "completed_at": "2026-11-09T20:00:27Z"
+       },
+       {
+        "name": "Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:27Z",
+        "completed_at": "2026-11-09T20:00:28Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:28Z",
+        "completed_at": "2026-11-09T20:00:28Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:28Z",
+        "completed_at": "2026-11-09T20:00:39Z"
+       },
+       {
+        "name": "Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:00:39Z",
+        "completed_at": "2026-11-09T20:00:41Z"
+       },
+       {
+        "name": "Cache Playwright Chromium",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:00:41Z",
+        "completed_at": "2026-11-09T20:00:50Z"
+       },
+       {
+        "name": "Build Studio performance gate",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:00:50Z",
+        "completed_at": "2026-11-09T20:03:43Z"
+       },
+       {
+        "name": "Measure Studio performance",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T20:03:43Z",
+        "completed_at": "2026-11-09T20:03:53Z"
+       },
+       {
+        "name": "Retain Studio performance diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10,
+        "started_at": "2026-11-09T20:03:53Z",
+        "completed_at": "2026-11-09T20:03:56Z"
+       },
+       {
+        "name": "Upload Studio performance evidence",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:03:56Z",
+        "completed_at": "2026-11-09T20:03:58Z"
+       },
+       {
+        "name": "Post Cache Playwright Chromium",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 19,
+        "started_at": "2026-11-09T20:03:58Z",
+        "completed_at": "2026-11-09T20:03:58Z"
+       },
+       {
+        "name": "Post Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 20,
+        "started_at": "2026-11-09T20:03:58Z",
+        "completed_at": "2026-11-09T20:03:58Z"
+       },
+       {
+        "name": "Post Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 21,
+        "started_at": "2026-11-09T20:03:58Z",
+        "completed_at": "2026-11-09T20:03:58Z"
+       },
+       {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 22,
+        "started_at": "2026-11-09T20:03:58Z",
+        "completed_at": "2026-11-09T20:04:00Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 23,
+        "started_at": "2026-11-09T20:04:00Z",
+        "completed_at": "2026-11-09T20:04:05Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348743",
+      "labels": [
+       "macos-latest"
+      ],
+      "runner_id": 1000005296,
+      "runner_name": "GitHub Actions 1000005296",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348752,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPsk0A",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348752",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348752",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:05Z",
+      "completed_at": "2026-11-09T20:21:16Z",
+      "name": "Full CI / Sample Scripts (linux)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:06Z",
+        "completed_at": "2026-11-09T20:00:07Z"
+       },
+       {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:07Z",
+        "completed_at": "2026-11-09T20:00:27Z"
+       },
+       {
+        "name": "Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:27Z",
+        "completed_at": "2026-11-09T20:00:28Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:28Z",
+        "completed_at": "2026-11-09T20:00:29Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:29Z",
+        "completed_at": "2026-11-09T20:00:39Z"
+       },
+       {
+        "name": "Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:00:39Z",
+        "completed_at": "2026-11-09T20:00:40Z"
+       },
+       {
+        "name": "Restore application",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:00:40Z",
+        "completed_at": "2026-11-09T20:00:53Z"
+       },
+       {
+        "name": "Build application",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:00:53Z",
+        "completed_at": "2026-11-09T20:01:54Z"
+       },
+       {
+        "name": "Validate samples (Windows)",
+        "status": "completed",
+        "conclusion": "skipped",
+        "number": 9,
+        "started_at": "2026-11-09T20:01:54Z",
+        "completed_at": "2026-11-09T20:01:54Z"
+       },
+       {
+        "name": "Validate samples (Linux)",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10,
+        "started_at": "2026-11-09T20:01:54Z",
+        "completed_at": "2026-11-09T20:21:11Z"
+       },
+       {
+        "name": "Retain sample diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:21:11Z",
+        "completed_at": "2026-11-09T20:21:12Z"
+       },
+       {
+        "name": "Post Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 20,
+        "started_at": "2026-11-09T20:21:12Z",
+        "completed_at": "2026-11-09T20:21:12Z"
+       },
+       {
+        "name": "Post Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 21,
+        "started_at": "2026-11-09T20:21:12Z",
+        "completed_at": "2026-11-09T20:21:13Z"
+       },
+       {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 22,
+        "started_at": "2026-11-09T20:21:13Z",
+        "completed_at": "2026-11-09T20:21:13Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 23,
+        "started_at": "2026-11-09T20:21:13Z",
+        "completed_at": "2026-11-09T20:21:13Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348752",
+      "labels": [
+       "ubuntu-latest"
+      ],
+      "runner_id": 1000005295,
+      "runner_name": "GitHub Actions 1000005295",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348769,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPsk4Q",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348769",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348769",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:04Z",
+      "completed_at": "2026-11-09T20:12:38Z",
+      "name": "Full CI / Portal Browser Journey (2/3)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:05Z",
+        "completed_at": "2026-11-09T20:00:06Z"
+       },
+       {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:06Z",
+        "completed_at": "2026-11-09T20:00:28Z"
+       },
+       {
+        "name": "Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:28Z",
+        "completed_at": "2026-11-09T20:00:32Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:32Z",
+        "completed_at": "2026-11-09T20:00:35Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:35Z",
+        "completed_at": "2026-11-09T20:00:46Z"
+       },
+       {
+        "name": "Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:00:46Z",
+        "completed_at": "2026-11-09T20:00:48Z"
+       },
+       {
+        "name": "Restore VS Code UI dependencies",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:00:48Z",
+        "completed_at": "2026-11-09T20:00:54Z"
+       },
+       {
+        "name": "Build VS Code UI package",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:00:54Z",
+        "completed_at": "2026-11-09T20:00:58Z"
+       },
+       {
+        "name": "Cache Playwright browsers",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T20:00:58Z",
+        "completed_at": "2026-11-09T20:01:07Z"
+       },
+       {
+        "name": "Build browser lane",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10,
+        "started_at": "2026-11-09T20:01:07Z",
+        "completed_at": "2026-11-09T20:04:05Z"
+       },
+       {
+        "name": "Run browser lane",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:04:05Z",
+        "completed_at": "2026-11-09T20:12:33Z"
+       },
+       {
+        "name": "Report browser shard recovery",
+        "status": "completed",
+        "conclusion": "skipped",
+        "number": 12,
+        "started_at": "2026-11-09T20:12:33Z",
+        "completed_at": "2026-11-09T20:12:33Z"
+       },
+       {
+        "name": "Retain browser shard diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-09T20:12:33Z",
+        "completed_at": "2026-11-09T20:12:35Z"
+       },
+       {
+        "name": "Post Cache Playwright browsers",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 23,
+        "started_at": "2026-11-09T20:12:35Z",
+        "completed_at": "2026-11-09T20:12:35Z"
+       },
+       {
+        "name": "Post Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 24,
+        "started_at": "2026-11-09T20:12:35Z",
+        "completed_at": "2026-11-09T20:12:35Z"
+       },
+       {
+        "name": "Post Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 25,
+        "started_at": "2026-11-09T20:12:35Z",
+        "completed_at": "2026-11-09T20:12:35Z"
+       },
+       {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 26,
+        "started_at": "2026-11-09T20:12:35Z",
+        "completed_at": "2026-11-09T20:12:37Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 27,
+        "started_at": "2026-11-09T20:12:37Z",
+        "completed_at": "2026-11-09T20:12:37Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348769",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005299,
+      "runner_name": "GitHub Actions 1000005299",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348782,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPsk7g",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348782",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348782",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:18Z",
+      "completed_at": "2026-11-09T20:08:35Z",
+      "name": "Full CI / Portal Browser Journey (1/3)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:19Z",
+        "completed_at": "2026-11-09T20:00:21Z"
+       },
+       {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:21Z",
+        "completed_at": "2026-11-09T20:00:41Z"
+       },
+       {
+        "name": "Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:41Z",
+        "completed_at": "2026-11-09T20:00:47Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:47Z",
+        "completed_at": "2026-11-09T20:00:51Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:51Z",
+        "completed_at": "2026-11-09T20:01:05Z"
+       },
+       {
+        "name": "Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:01:05Z",
+        "completed_at": "2026-11-09T20:01:07Z"
+       },
+       {
+        "name": "Restore VS Code UI dependencies",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:01:07Z",
+        "completed_at": "2026-11-09T20:01:16Z"
+       },
+       {
+        "name": "Build VS Code UI package",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:01:16Z",
+        "completed_at": "2026-11-09T20:01:23Z"
+       },
+       {
+        "name": "Cache Playwright browsers",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T20:01:23Z",
+        "completed_at": "2026-11-09T20:01:34Z"
+       },
+       {
+        "name": "Build browser lane",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10,
+        "started_at": "2026-11-09T20:01:34Z",
+        "completed_at": "2026-11-09T20:05:29Z"
+       },
+       {
+        "name": "Run browser lane",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:05:29Z",
+        "completed_at": "2026-11-09T20:08:25Z"
+       },
+       {
+        "name": "Report browser shard recovery",
+        "status": "completed",
+        "conclusion": "skipped",
+        "number": 12,
+        "started_at": "2026-11-09T20:08:25Z",
+        "completed_at": "2026-11-09T20:08:25Z"
+       },
+       {
+        "name": "Retain browser shard diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-09T20:08:25Z",
+        "completed_at": "2026-11-09T20:08:29Z"
+       },
+       {
+        "name": "Post Cache Playwright browsers",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 23,
+        "started_at": "2026-11-09T20:08:29Z",
+        "completed_at": "2026-11-09T20:08:29Z"
+       },
+       {
+        "name": "Post Set up .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 24,
+        "started_at": "2026-11-09T20:08:29Z",
+        "completed_at": "2026-11-09T20:08:29Z"
+       },
+       {
+        "name": "Post Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 25,
+        "started_at": "2026-11-09T20:08:29Z",
+        "completed_at": "2026-11-09T20:08:30Z"
+       },
+       {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 26,
+        "started_at": "2026-11-09T20:08:30Z",
+        "completed_at": "2026-11-09T20:08:32Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 27,
+        "started_at": "2026-11-09T20:08:32Z",
+        "completed_at": "2026-11-09T20:08:32Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348782",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005303,
+      "runner_name": "GitHub Actions 1000005303",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129402348801,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIPslAQ",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129402348801",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129402348801",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:00:03Z",
+      "started_at": "2026-11-09T20:00:04Z",
+      "completed_at": "2026-11-09T20:02:16Z",
+      "name": "Full CI / Build VS Code Extension",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:00:05Z",
+        "completed_at": "2026-11-09T20:00:06Z"
+       },
+       {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:00:06Z",
+        "completed_at": "2026-11-09T20:00:20Z"
+       },
+       {
+        "name": "Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:00:20Z",
+        "completed_at": "2026-11-09T20:00:20Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:00:20Z",
+        "completed_at": "2026-11-09T20:00:21Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:00:21Z",
+        "completed_at": "2026-11-09T20:00:28Z"
+       },
+       {
+        "name": "Verify .NET",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:00:28Z",
+        "completed_at": "2026-11-09T20:00:30Z"
+       },
+       {
+        "name": "Build engine for integration tests",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:00:30Z",
+        "completed_at": "2026-11-09T20:01:39Z"
+       },
+       {
+        "name": "Verify Node.js",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:01:39Z",
+        "completed_at": "2026-11-09T20:01:39Z"
+       },
+       {
+        "name": "Install dependencies",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T20:01:39Z",
+        "completed_at": "2026-11-09T20:01:42Z"
+       },
+       {
+        "name": "Install UI dependencies",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10,
+        "started_at": "2026-11-09T20:01:42Z",
+        "completed_at": "2026-11-09T20:01:45Z"
+       },
+       {
+        "name": "Audit npm packages for known vulnerabilities",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:01:45Z",
+        "completed_at": "2026-11-09T20:01:45Z"
+       },
+       {
+        "name": "Audit UI npm packages for known vulnerabilities",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12,
+        "started_at": "2026-11-09T20:01:45Z",
+        "completed_at": "2026-11-09T20:01:46Z"
+       },
+       {
+        "name": "Compile extension",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-09T20:01:46Z",
+        "completed_at": "2026-11-09T20:01:54Z"
+       },
+       {
+        "name": "Lint extension",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 14,
+        "started_at": "2026-11-09T20:01:54Z",
+        "completed_at": "2026-11-09T20:01:56Z"
+       },
+       {
+        "name": "Lint UI package",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 15,
+        "started_at": "2026-11-09T20:01:56Z",
+        "completed_at": "2026-11-09T20:01:59Z"
+       },
+       {
+        "name": "Build UI package",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 16,
+        "started_at": "2026-11-09T20:01:59Z",
+        "completed_at": "2026-11-09T20:02:02Z"
+       },
+       {
+        "name": "Run UI vitest",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 17,
+        "started_at": "2026-11-09T20:02:02Z",
+        "completed_at": "2026-11-09T20:02:05Z"
+       },
+       {
+        "name": "Run vitest",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 18,
+        "started_at": "2026-11-09T20:02:05Z",
+        "completed_at": "2026-11-09T20:02:12Z"
+       },
+       {
+        "name": "Retain extension CI diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 19,
+        "started_at": "2026-11-09T20:02:12Z",
+        "completed_at": "2026-11-09T20:02:14Z"
+       },
+       {
+        "name": "Post Set up browser compiler runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 37,
+        "started_at": "2026-11-09T20:02:14Z",
+        "completed_at": "2026-11-09T20:02:14Z"
+       },
+       {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 38,
+        "started_at": "2026-11-09T20:02:14Z",
+        "completed_at": "2026-11-09T20:02:14Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 39,
+        "started_at": "2026-11-09T20:02:14Z",
+        "completed_at": "2026-11-09T20:02:14Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129402348801",
+      "labels": [
+       "ubuntu-latest"
+      ],
+      "runner_id": 1000005301,
+      "runner_name": "GitHub Actions 1000005301",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129412147216,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIZCoEA",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129412147216",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129412147216",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:17:19Z",
+      "started_at": "2026-11-09T20:17:21Z",
+      "completed_at": "2026-11-09T20:17:47Z",
+      "name": "Full CI / Portal Browser Journey",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:17:22Z",
+        "completed_at": "2026-11-09T20:17:23Z"
+       },
+       {
+        "name": "Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:17:23Z",
+        "completed_at": "2026-11-09T20:17:40Z"
+       },
+       {
+        "name": "Run actions/setup-node@v7",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:17:40Z",
+        "completed_at": "2026-11-09T20:17:42Z"
+       },
+       {
+        "name": "Require all browser jobs to pass",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:17:42Z",
+        "completed_at": "2026-11-09T20:17:42Z"
+       },
+       {
+        "name": "Run actions/download-artifact@v8",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:17:42Z",
+        "completed_at": "2026-11-09T20:17:44Z"
+       },
+       {
+        "name": "Verify complete nonoverlapping browser coverage",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:17:44Z",
+        "completed_at": "2026-11-09T20:17:44Z"
+       },
+       {
+        "name": "Post Run actions/setup-node@v7",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-09T20:17:44Z",
+        "completed_at": "2026-11-09T20:17:44Z"
+       },
+       {
+        "name": "Post Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12,
+        "started_at": "2026-11-09T20:17:44Z",
+        "completed_at": "2026-11-09T20:17:44Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-09T20:17:44Z",
+        "completed_at": "2026-11-09T20:17:44Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129412147216",
+      "labels": [
+       "ubuntu-latest"
+      ],
+      "runner_id": 1000005311,
+      "runner_name": "GitHub Actions 1000005311",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129413271837,
+      "run_id": 42688068863,
+      "workflow_name": "Release Certification",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeIaHRHQ",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129413271837",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863/job/129413271837",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T20:19:19Z",
+      "started_at": "2026-11-09T20:19:21Z",
+      "completed_at": "2026-11-09T20:21:45Z",
+      "name": "Full CI / Build & Test",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T20:19:22Z",
+        "completed_at": "2026-11-09T20:19:23Z"
+       },
+       {
+        "name": "Require all selected build and test workers",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T20:19:23Z",
+        "completed_at": "2026-11-09T20:19:24Z"
+       },
+       {
+        "name": "Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T20:19:24Z",
+        "completed_at": "2026-11-09T20:19:44Z"
+       },
+       {
+        "name": "Download all retained engine group attempts",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T20:19:44Z",
+        "completed_at": "2026-11-09T20:19:54Z"
+       },
+       {
+        "name": "Verify the complete engine inventory and merge coverage",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T20:19:54Z",
+        "completed_at": "2026-11-09T20:20:25Z"
+       },
+       {
+        "name": "Restore coverage reporter",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T20:20:25Z",
+        "completed_at": "2026-11-09T20:20:33Z"
+       },
+       {
+        "name": "Enforce the unchanged engine coverage threshold",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T20:20:33Z",
+        "completed_at": "2026-11-09T20:21:20Z"
+       },
+       {
+        "name": "Retain aggregate coverage evidence",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T20:21:20Z",
+        "completed_at": "2026-11-09T20:21:41Z"
+       },
+       {
+        "name": "Post Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 16,
+        "started_at": "2026-11-09T20:21:41Z",
+        "completed_at": "2026-11-09T20:21:43Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 17,
+        "started_at": "2026-11-09T20:21:43Z",
+        "completed_at": "2026-11-09T20:21:43Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129413271837",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005312,
+      "runner_name": "GitHub Actions 1000005312",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     }
+    ]
+   }
+  ],
+  "repos/etl-sql/ETL-SQL/actions/runs/42688068863": [
+   {
+    "id": 42688068863,
+    "name": "Release Certification",
+    "node_id": "WFR_kwLOSiZFCc8AAAAJ8Gg8_w",
+    "head_branch": "release/v0.22.0",
+    "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+    "path": ".github/workflows/release-certification.yml",
+    "display_title": "Release Certification",
+    "run_number": 14,
+    "event": "workflow_dispatch",
+    "status": "completed",
+    "conclusion": "success",
+    "workflow_id": 405707770,
+    "check_suite_id": 115618898758,
+    "check_suite_node_id": "CS_kwDOSiZFCc8AAAAa62xjRg",
+    "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863",
+    "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42688068863",
+    "pull_requests": [],
+    "created_at": "2026-11-09T19:56:02Z",
+    "updated_at": "2026-11-09T20:23:55Z",
+    "actor": {
+     "login": "github-actions[bot]",
+     "id": 41898282,
+     "node_id": "MDM6Qm90NDE4OTgyODI=",
+     "avatar_url": "https://avatars.githubusercontent.com/in/15368?v=4",
+     "gravatar_id": "",
+     "url": "https://api.github.com/users/github-actions%5Bbot%5D",
+     "html_url": "https://github.com/apps/github-actions",
+     "followers_url": "https://api.github.com/users/github-actions%5Bbot%5D/followers",
+     "following_url": "https://api.github.com/users/github-actions%5Bbot%5D/following{/other_user}",
+     "gists_url": "https://api.github.com/users/github-actions%5Bbot%5D/gists{/gist_id}",
+     "starred_url": "https://api.github.com/users/github-actions%5Bbot%5D/starred{/owner}{/repo}",
+     "subscriptions_url": "https://api.github.com/users/github-actions%5Bbot%5D/subscriptions",
+     "organizations_url": "https://api.github.com/users/github-actions%5Bbot%5D/orgs",
+     "repos_url": "https://api.github.com/users/github-actions%5Bbot%5D/repos",
+     "events_url": "https://api.github.com/users/github-actions%5Bbot%5D/events{/privacy}",
+     "received_events_url": "https://api.github.com/users/github-actions%5Bbot%5D/received_events",
+     "type": "Bot",
+     "user_view_type": "public",
+     "site_admin": false
+    },
+    "run_attempt": 1,
+    "referenced_workflows": [
+     {
+      "path": "etl-sql/ETL-SQL/.github/workflows/ci.yml@cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "ref": "refs/heads/release/v0.22.0"
+     }
+    ],
+    "run_started_at": "2026-11-09T19:56:02Z",
+    "triggering_actor": {
+     "login": "github-actions[bot]",
+     "id": 41898282,
+     "node_id": "MDM6Qm90NDE4OTgyODI=",
+     "avatar_url": "https://avatars.githubusercontent.com/in/15368?v=4",
+     "gravatar_id": "",
+     "url": "https://api.github.com/users/github-actions%5Bbot%5D",
+     "html_url": "https://github.com/apps/github-actions",
+     "followers_url": "https://api.github.com/users/github-actions%5Bbot%5D/followers",
+     "following_url": "https://api.github.com/users/github-actions%5Bbot%5D/following{/other_user}",
+     "gists_url": "https://api.github.com/users/github-actions%5Bbot%5D/gists{/gist_id}",
+     "starred_url": "https://api.github.com/users/github-actions%5Bbot%5D/starred{/owner}{/repo}",
+     "subscriptions_url": "https://api.github.com/users/github-actions%5Bbot%5D/subscriptions",
+     "organizations_url": "https://api.github.com/users/github-actions%5Bbot%5D/orgs",
+     "repos_url": "https://api.github.com/users/github-actions%5Bbot%5D/repos",
+     "events_url": "https://api.github.com/users/github-actions%5Bbot%5D/events{/privacy}",
+     "received_events_url": "https://api.github.com/users/github-actions%5Bbot%5D/received_events",
+     "type": "Bot",
+     "user_view_type": "public",
+     "site_admin": false
+    },
+    "jobs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863/jobs",
+    "logs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863/logs",
+    "check_suite_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-suites/115618898758",
+    "artifacts_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863/artifacts",
+    "cancel_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863/cancel",
+    "rerun_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42688068863/rerun",
+    "previous_attempt_url": null,
+    "workflow_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/workflows/405707770",
+    "repository": {
+     "id": 1244022025,
+     "node_id": "R_kgDOSiZFCQ",
+     "name": "ETL-SQL",
+     "full_name": "etl-sql/ETL-SQL",
+     "private": false,
+     "owner": {
+      "login": "etl-sql",
+      "id": 286155694,
+      "node_id": "U_kgDOEQ5jrg",
+      "avatar_url": "https://avatars.githubusercontent.com/u/286155694?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/etl-sql",
+      "html_url": "https://github.com/etl-sql",
+      "followers_url": "https://api.github.com/users/etl-sql/followers",
+      "following_url": "https://api.github.com/users/etl-sql/following{/other_user}",
+      "gists_url": "https://api.github.com/users/etl-sql/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/etl-sql/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/etl-sql/subscriptions",
+      "organizations_url": "https://api.github.com/users/etl-sql/orgs",
+      "repos_url": "https://api.github.com/users/etl-sql/repos",
+      "events_url": "https://api.github.com/users/etl-sql/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/etl-sql/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+     },
+     "html_url": "https://github.com/etl-sql/ETL-SQL",
+     "description": null,
+     "fork": false,
+     "url": "https://api.github.com/repos/etl-sql/ETL-SQL",
+     "forks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/forks",
+     "keys_url": "https://api.github.com/repos/etl-sql/ETL-SQL/keys{/key_id}",
+     "collaborators_url": "https://api.github.com/repos/etl-sql/ETL-SQL/collaborators{/collaborator}",
+     "teams_url": "https://api.github.com/repos/etl-sql/ETL-SQL/teams",
+     "hooks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/hooks",
+     "issue_events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/events{/number}",
+     "events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/events",
+     "assignees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/assignees{/user}",
+     "branches_url": "https://api.github.com/repos/etl-sql/ETL-SQL/branches{/branch}",
+     "tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/tags",
+     "blobs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/blobs{/sha}",
+     "git_tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/tags{/sha}",
+     "git_refs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/refs{/sha}",
+     "trees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/trees{/sha}",
+     "statuses_url": "https://api.github.com/repos/etl-sql/ETL-SQL/statuses/{sha}",
+     "languages_url": "https://api.github.com/repos/etl-sql/ETL-SQL/languages",
+     "stargazers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/stargazers",
+     "contributors_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contributors",
+     "subscribers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscribers",
+     "subscription_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscription",
+     "commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/commits{/sha}",
+     "git_commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/commits{/sha}",
+     "comments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/comments{/number}",
+     "issue_comment_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/comments{/number}",
+     "contents_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contents/{+path}",
+     "compare_url": "https://api.github.com/repos/etl-sql/ETL-SQL/compare/{base}...{head}",
+     "merges_url": "https://api.github.com/repos/etl-sql/ETL-SQL/merges",
+     "archive_url": "https://api.github.com/repos/etl-sql/ETL-SQL/{archive_format}{/ref}",
+     "downloads_url": "https://api.github.com/repos/etl-sql/ETL-SQL/downloads",
+     "issues_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues{/number}",
+     "pulls_url": "https://api.github.com/repos/etl-sql/ETL-SQL/pulls{/number}",
+     "milestones_url": "https://api.github.com/repos/etl-sql/ETL-SQL/milestones{/number}",
+     "notifications_url": "https://api.github.com/repos/etl-sql/ETL-SQL/notifications{?since,all,participating}",
+     "labels_url": "https://api.github.com/repos/etl-sql/ETL-SQL/labels{/name}",
+     "releases_url": "https://api.github.com/repos/etl-sql/ETL-SQL/releases{/id}",
+     "deployments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/deployments"
+    },
+    "head_repository": {
+     "id": 1244022025,
+     "node_id": "R_kgDOSiZFCQ",
+     "name": "ETL-SQL",
+     "full_name": "etl-sql/ETL-SQL",
+     "private": false,
+     "owner": {
+      "login": "etl-sql",
+      "id": 286155694,
+      "node_id": "U_kgDOEQ5jrg",
+      "avatar_url": "https://avatars.githubusercontent.com/u/286155694?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/etl-sql",
+      "html_url": "https://github.com/etl-sql",
+      "followers_url": "https://api.github.com/users/etl-sql/followers",
+      "following_url": "https://api.github.com/users/etl-sql/following{/other_user}",
+      "gists_url": "https://api.github.com/users/etl-sql/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/etl-sql/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/etl-sql/subscriptions",
+      "organizations_url": "https://api.github.com/users/etl-sql/orgs",
+      "repos_url": "https://api.github.com/users/etl-sql/repos",
+      "events_url": "https://api.github.com/users/etl-sql/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/etl-sql/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+     },
+     "html_url": "https://github.com/etl-sql/ETL-SQL",
+     "description": null,
+     "fork": false,
+     "url": "https://api.github.com/repos/etl-sql/ETL-SQL",
+     "forks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/forks",
+     "keys_url": "https://api.github.com/repos/etl-sql/ETL-SQL/keys{/key_id}",
+     "collaborators_url": "https://api.github.com/repos/etl-sql/ETL-SQL/collaborators{/collaborator}",
+     "teams_url": "https://api.github.com/repos/etl-sql/ETL-SQL/teams",
+     "hooks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/hooks",
+     "issue_events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/events{/number}",
+     "events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/events",
+     "assignees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/assignees{/user}",
+     "branches_url": "https://api.github.com/repos/etl-sql/ETL-SQL/branches{/branch}",
+     "tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/tags",
+     "blobs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/blobs{/sha}",
+     "git_tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/tags{/sha}",
+     "git_refs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/refs{/sha}",
+     "trees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/trees{/sha}",
+     "statuses_url": "https://api.github.com/repos/etl-sql/ETL-SQL/statuses/{sha}",
+     "languages_url": "https://api.github.com/repos/etl-sql/ETL-SQL/languages",
+     "stargazers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/stargazers",
+     "contributors_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contributors",
+     "subscribers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscribers",
+     "subscription_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscription",
+     "commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/commits{/sha}",
+     "git_commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/commits{/sha}",
+     "comments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/comments{/number}",
+     "issue_comment_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/comments{/number}",
+     "contents_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contents/{+path}",
+     "compare_url": "https://api.github.com/repos/etl-sql/ETL-SQL/compare/{base}...{head}",
+     "merges_url": "https://api.github.com/repos/etl-sql/ETL-SQL/merges",
+     "archive_url": "https://api.github.com/repos/etl-sql/ETL-SQL/{archive_format}{/ref}",
+     "downloads_url": "https://api.github.com/repos/etl-sql/ETL-SQL/downloads",
+     "issues_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues{/number}",
+     "pulls_url": "https://api.github.com/repos/etl-sql/ETL-SQL/pulls{/number}",
+     "milestones_url": "https://api.github.com/repos/etl-sql/ETL-SQL/milestones{/number}",
+     "notifications_url": "https://api.github.com/repos/etl-sql/ETL-SQL/notifications{?since,all,participating}",
+     "labels_url": "https://api.github.com/repos/etl-sql/ETL-SQL/labels{/name}",
+     "releases_url": "https://api.github.com/repos/etl-sql/ETL-SQL/releases{/id}",
+     "deployments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/deployments"
+    }
+   }
+  ],
+  "repos/etl-sql/ETL-SQL/actions/workflows/codeql.yml/runs?head_sha=cd6870b930f4dbdaecf5aab3f224070ab7afe803&per_page=100": [
+   {
+    "total_count": 1,
+    "workflow_runs": [
+     {
+      "id": 42682736140,
+      "name": "CodeQL Security Analysis",
+      "node_id": "WFR_kwLOSiZFCc8AAAAJ8BbeDA",
+      "head_branch": "release/v0.22.0",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "path": ".github/workflows/codeql.yml",
+      "display_title": "Let a browser shard pass when its flaky test clears on retry",
+      "run_number": 206,
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "workflow_id": 299509872,
+      "check_suite_id": 115604320870,
+      "check_suite_node_id": "CS_kwDOSiZFCc8AAAAa6o3yZg",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42682736140",
+      "pull_requests": [],
+      "created_at": "2026-11-09T19:22:35Z",
+      "updated_at": "2026-11-09T19:36:32Z",
+      "actor": {
+       "login": "etl-sql",
+       "id": 286155694,
+       "node_id": "U_kgDOEQ5jrg",
+       "avatar_url": "https://avatars.githubusercontent.com/u/286155694?v=4",
+       "gravatar_id": "",
+       "url": "https://api.github.com/users/etl-sql",
+       "html_url": "https://github.com/etl-sql",
+       "followers_url": "https://api.github.com/users/etl-sql/followers",
+       "following_url": "https://api.github.com/users/etl-sql/following{/other_user}",
+       "gists_url": "https://api.github.com/users/etl-sql/gists{/gist_id}",
+       "starred_url": "https://api.github.com/users/etl-sql/starred{/owner}{/repo}",
+       "subscriptions_url": "https://api.github.com/users/etl-sql/subscriptions",
+       "organizations_url": "https://api.github.com/users/etl-sql/orgs",
+       "repos_url": "https://api.github.com/users/etl-sql/repos",
+       "events_url": "https://api.github.com/users/etl-sql/events{/privacy}",
+       "received_events_url": "https://api.github.com/users/etl-sql/received_events",
+       "type": "User",
+       "user_view_type": "public",
+       "site_admin": false
+      },
+      "run_attempt": 1,
+      "referenced_workflows": [],
+      "run_started_at": "2026-11-09T19:22:35Z",
+      "triggering_actor": {
+       "login": "etl-sql",
+       "id": 286155694,
+       "node_id": "U_kgDOEQ5jrg",
+       "avatar_url": "https://avatars.githubusercontent.com/u/286155694?v=4",
+       "gravatar_id": "",
+       "url": "https://api.github.com/users/etl-sql",
+       "html_url": "https://github.com/etl-sql",
+       "followers_url": "https://api.github.com/users/etl-sql/followers",
+       "following_url": "https://api.github.com/users/etl-sql/following{/other_user}",
+       "gists_url": "https://api.github.com/users/etl-sql/gists{/gist_id}",
+       "starred_url": "https://api.github.com/users/etl-sql/starred{/owner}{/repo}",
+       "subscriptions_url": "https://api.github.com/users/etl-sql/subscriptions",
+       "organizations_url": "https://api.github.com/users/etl-sql/orgs",
+       "repos_url": "https://api.github.com/users/etl-sql/repos",
+       "events_url": "https://api.github.com/users/etl-sql/events{/privacy}",
+       "received_events_url": "https://api.github.com/users/etl-sql/received_events",
+       "type": "User",
+       "user_view_type": "public",
+       "site_admin": false
+      },
+      "jobs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140/jobs",
+      "logs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140/logs",
+      "check_suite_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-suites/115604320870",
+      "artifacts_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140/artifacts",
+      "cancel_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140/cancel",
+      "rerun_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140/rerun",
+      "previous_attempt_url": null,
+      "workflow_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/workflows/299509872",
+      "repository": {
+       "id": 1244022025,
+       "node_id": "R_kgDOSiZFCQ",
+       "name": "ETL-SQL",
+       "full_name": "etl-sql/ETL-SQL",
+       "private": false,
+       "owner": {
+        "login": "etl-sql",
+        "id": 286155694,
+        "node_id": "U_kgDOEQ5jrg",
+        "avatar_url": "https://avatars.githubusercontent.com/u/286155694?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/etl-sql",
+        "html_url": "https://github.com/etl-sql",
+        "followers_url": "https://api.github.com/users/etl-sql/followers",
+        "following_url": "https://api.github.com/users/etl-sql/following{/other_user}",
+        "gists_url": "https://api.github.com/users/etl-sql/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/etl-sql/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/etl-sql/subscriptions",
+        "organizations_url": "https://api.github.com/users/etl-sql/orgs",
+        "repos_url": "https://api.github.com/users/etl-sql/repos",
+        "events_url": "https://api.github.com/users/etl-sql/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/etl-sql/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+       },
+       "html_url": "https://github.com/etl-sql/ETL-SQL",
+       "description": null,
+       "fork": false,
+       "url": "https://api.github.com/repos/etl-sql/ETL-SQL",
+       "forks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/forks",
+       "keys_url": "https://api.github.com/repos/etl-sql/ETL-SQL/keys{/key_id}",
+       "collaborators_url": "https://api.github.com/repos/etl-sql/ETL-SQL/collaborators{/collaborator}",
+       "teams_url": "https://api.github.com/repos/etl-sql/ETL-SQL/teams",
+       "hooks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/hooks",
+       "issue_events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/events{/number}",
+       "events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/events",
+       "assignees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/assignees{/user}",
+       "branches_url": "https://api.github.com/repos/etl-sql/ETL-SQL/branches{/branch}",
+       "tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/tags",
+       "blobs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/blobs{/sha}",
+       "git_tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/tags{/sha}",
+       "git_refs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/refs{/sha}",
+       "trees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/trees{/sha}",
+       "statuses_url": "https://api.github.com/repos/etl-sql/ETL-SQL/statuses/{sha}",
+       "languages_url": "https://api.github.com/repos/etl-sql/ETL-SQL/languages",
+       "stargazers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/stargazers",
+       "contributors_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contributors",
+       "subscribers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscribers",
+       "subscription_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscription",
+       "commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/commits{/sha}",
+       "git_commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/commits{/sha}",
+       "comments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/comments{/number}",
+       "issue_comment_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/comments{/number}",
+       "contents_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contents/{+path}",
+       "compare_url": "https://api.github.com/repos/etl-sql/ETL-SQL/compare/{base}...{head}",
+       "merges_url": "https://api.github.com/repos/etl-sql/ETL-SQL/merges",
+       "archive_url": "https://api.github.com/repos/etl-sql/ETL-SQL/{archive_format}{/ref}",
+       "downloads_url": "https://api.github.com/repos/etl-sql/ETL-SQL/downloads",
+       "issues_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues{/number}",
+       "pulls_url": "https://api.github.com/repos/etl-sql/ETL-SQL/pulls{/number}",
+       "milestones_url": "https://api.github.com/repos/etl-sql/ETL-SQL/milestones{/number}",
+       "notifications_url": "https://api.github.com/repos/etl-sql/ETL-SQL/notifications{?since,all,participating}",
+       "labels_url": "https://api.github.com/repos/etl-sql/ETL-SQL/labels{/name}",
+       "releases_url": "https://api.github.com/repos/etl-sql/ETL-SQL/releases{/id}",
+       "deployments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/deployments"
+      },
+      "head_repository": {
+       "id": 1244022025,
+       "node_id": "R_kgDOSiZFCQ",
+       "name": "ETL-SQL",
+       "full_name": "etl-sql/ETL-SQL",
+       "private": false,
+       "owner": {
+        "login": "etl-sql",
+        "id": 286155694,
+        "node_id": "U_kgDOEQ5jrg",
+        "avatar_url": "https://avatars.githubusercontent.com/u/286155694?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/etl-sql",
+        "html_url": "https://github.com/etl-sql",
+        "followers_url": "https://api.github.com/users/etl-sql/followers",
+        "following_url": "https://api.github.com/users/etl-sql/following{/other_user}",
+        "gists_url": "https://api.github.com/users/etl-sql/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/etl-sql/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/etl-sql/subscriptions",
+        "organizations_url": "https://api.github.com/users/etl-sql/orgs",
+        "repos_url": "https://api.github.com/users/etl-sql/repos",
+        "events_url": "https://api.github.com/users/etl-sql/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/etl-sql/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+       },
+       "html_url": "https://github.com/etl-sql/ETL-SQL",
+       "description": null,
+       "fork": false,
+       "url": "https://api.github.com/repos/etl-sql/ETL-SQL",
+       "forks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/forks",
+       "keys_url": "https://api.github.com/repos/etl-sql/ETL-SQL/keys{/key_id}",
+       "collaborators_url": "https://api.github.com/repos/etl-sql/ETL-SQL/collaborators{/collaborator}",
+       "teams_url": "https://api.github.com/repos/etl-sql/ETL-SQL/teams",
+       "hooks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/hooks",
+       "issue_events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/events{/number}",
+       "events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/events",
+       "assignees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/assignees{/user}",
+       "branches_url": "https://api.github.com/repos/etl-sql/ETL-SQL/branches{/branch}",
+       "tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/tags",
+       "blobs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/blobs{/sha}",
+       "git_tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/tags{/sha}",
+       "git_refs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/refs{/sha}",
+       "trees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/trees{/sha}",
+       "statuses_url": "https://api.github.com/repos/etl-sql/ETL-SQL/statuses/{sha}",
+       "languages_url": "https://api.github.com/repos/etl-sql/ETL-SQL/languages",
+       "stargazers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/stargazers",
+       "contributors_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contributors",
+       "subscribers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscribers",
+       "subscription_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscription",
+       "commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/commits{/sha}",
+       "git_commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/commits{/sha}",
+       "comments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/comments{/number}",
+       "issue_comment_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/comments{/number}",
+       "contents_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contents/{+path}",
+       "compare_url": "https://api.github.com/repos/etl-sql/ETL-SQL/compare/{base}...{head}",
+       "merges_url": "https://api.github.com/repos/etl-sql/ETL-SQL/merges",
+       "archive_url": "https://api.github.com/repos/etl-sql/ETL-SQL/{archive_format}{/ref}",
+       "downloads_url": "https://api.github.com/repos/etl-sql/ETL-SQL/downloads",
+       "issues_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues{/number}",
+       "pulls_url": "https://api.github.com/repos/etl-sql/ETL-SQL/pulls{/number}",
+       "milestones_url": "https://api.github.com/repos/etl-sql/ETL-SQL/milestones{/number}",
+       "notifications_url": "https://api.github.com/repos/etl-sql/ETL-SQL/notifications{?since,all,participating}",
+       "labels_url": "https://api.github.com/repos/etl-sql/ETL-SQL/labels{/name}",
+       "releases_url": "https://api.github.com/repos/etl-sql/ETL-SQL/releases{/id}",
+       "deployments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/deployments"
+      }
+     }
+    ]
+   }
+  ],
+  "repos/etl-sql/ETL-SQL/actions/runs/42682736140/attempts/1/jobs?per_page=100": [
+   {
+    "total_count": 2,
+    "jobs": [
+     {
+      "id": 129381309537,
+      "run_id": 42682736140,
+      "workflow_name": "CodeQL Security Analysis",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeH7ocYQ",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129381309537",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42682736140/job/129381309537",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T19:22:35Z",
+      "started_at": "2026-11-09T19:22:37Z",
+      "completed_at": "2026-11-09T19:24:54Z",
+      "name": "Analyze (javascript-typescript)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T19:22:38Z",
+        "completed_at": "2026-11-09T19:22:39Z"
+       },
+       {
+        "name": "Checkout repository",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T19:22:39Z",
+        "completed_at": "2026-11-09T19:22:56Z"
+       },
+       {
+        "name": "Set up Node.js",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T19:22:56Z",
+        "completed_at": "2026-11-09T19:23:01Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T19:23:01Z",
+        "completed_at": "2026-11-09T19:23:05Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T19:23:05Z",
+        "completed_at": "2026-11-09T19:23:12Z"
+       },
+       {
+        "name": "Initialize CodeQL",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T19:23:12Z",
+        "completed_at": "2026-11-09T19:23:32Z"
+       },
+       {
+        "name": "Build Production Code",
+        "status": "completed",
+        "conclusion": "skipped",
+        "number": 7,
+        "started_at": "2026-11-09T19:23:32Z",
+        "completed_at": "2026-11-09T19:23:32Z"
+       },
+       {
+        "name": "Autobuild non-compiled languages",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-09T19:23:32Z",
+        "completed_at": "2026-11-09T19:23:35Z"
+       },
+       {
+        "name": "Perform CodeQL Analysis",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T19:23:35Z",
+        "completed_at": "2026-11-09T19:24:49Z"
+       },
+       {
+        "name": "Post Perform CodeQL Analysis",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 15,
+        "started_at": "2026-11-09T19:24:49Z",
+        "completed_at": "2026-11-09T19:24:49Z"
+       },
+       {
+        "name": "Post Initialize CodeQL",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 16,
+        "started_at": "2026-11-09T19:24:49Z",
+        "completed_at": "2026-11-09T19:24:50Z"
+       },
+       {
+        "name": "Post Set up Node.js",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 17,
+        "started_at": "2026-11-09T19:24:50Z",
+        "completed_at": "2026-11-09T19:24:50Z"
+       },
+       {
+        "name": "Post Checkout repository",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 18,
+        "started_at": "2026-11-09T19:24:50Z",
+        "completed_at": "2026-11-09T19:24:52Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 19,
+        "started_at": "2026-11-09T19:24:52Z",
+        "completed_at": "2026-11-09T19:24:52Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129381309537",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005250,
+      "runner_name": "GitHub Actions 1000005250",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     },
+     {
+      "id": 129381309860,
+      "run_id": 42682736140,
+      "workflow_name": "CodeQL Security Analysis",
+      "head_branch": "release/v0.22.0",
+      "run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSiZFCc8AAAAeH7odpA",
+      "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+      "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/jobs/129381309860",
+      "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42682736140/job/129381309860",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-09T19:22:35Z",
+      "started_at": "2026-11-09T19:22:38Z",
+      "completed_at": "2026-11-09T19:36:32Z",
+      "name": "Analyze (csharp)",
+      "steps": [
+       {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-09T19:22:39Z",
+        "completed_at": "2026-11-09T19:22:41Z"
+       },
+       {
+        "name": "Checkout repository",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-09T19:22:41Z",
+        "completed_at": "2026-11-09T19:23:02Z"
+       },
+       {
+        "name": "Set up Node.js",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-09T19:23:02Z",
+        "completed_at": "2026-11-09T19:23:09Z"
+       },
+       {
+        "name": "Install browser compiler",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-09T19:23:09Z",
+        "completed_at": "2026-11-09T19:23:14Z"
+       },
+       {
+        "name": "Prepare browser assets",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-09T19:23:14Z",
+        "completed_at": "2026-11-09T19:23:26Z"
+       },
+       {
+        "name": "Initialize CodeQL",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-09T19:23:26Z",
+        "completed_at": "2026-11-09T19:23:49Z"
+       },
+       {
+        "name": "Build Production Code",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-09T19:23:49Z",
+        "completed_at": "2026-11-09T19:32:23Z"
+       },
+       {
+        "name": "Autobuild non-compiled languages",
+        "status": "completed",
+        "conclusion": "skipped",
+        "number": 8,
+        "started_at": "2026-11-09T19:32:23Z",
+        "completed_at": "2026-11-09T19:32:23Z"
+       },
+       {
+        "name": "Perform CodeQL Analysis",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-09T19:32:23Z",
+        "completed_at": "2026-11-09T19:36:22Z"
+       },
+       {
+        "name": "Post Perform CodeQL Analysis",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 15,
+        "started_at": "2026-11-09T19:36:22Z",
+        "completed_at": "2026-11-09T19:36:22Z"
+       },
+       {
+        "name": "Post Initialize CodeQL",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 16,
+        "started_at": "2026-11-09T19:36:22Z",
+        "completed_at": "2026-11-09T19:36:23Z"
+       },
+       {
+        "name": "Post Set up Node.js",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 17,
+        "started_at": "2026-11-09T19:36:23Z",
+        "completed_at": "2026-11-09T19:36:24Z"
+       },
+       {
+        "name": "Post Checkout repository",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 18,
+        "started_at": "2026-11-09T19:36:24Z",
+        "completed_at": "2026-11-09T19:36:30Z"
+       },
+       {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 19,
+        "started_at": "2026-11-09T19:36:30Z",
+        "completed_at": "2026-11-09T19:36:30Z"
+       }
+      ],
+      "check_run_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-runs/129381309860",
+      "labels": [
+       "windows-latest"
+      ],
+      "runner_id": 1000005251,
+      "runner_name": "GitHub Actions 1000005251",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+     }
+    ]
+   }
+  ],
+  "repos/etl-sql/ETL-SQL/actions/runs/42682736140": [
+   {
+    "id": 42682736140,
+    "name": "CodeQL Security Analysis",
+    "node_id": "WFR_kwLOSiZFCc8AAAAJ8BbeDA",
+    "head_branch": "release/v0.22.0",
+    "head_sha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+    "path": ".github/workflows/codeql.yml",
+    "display_title": "Let a browser shard pass when its flaky test clears on retry",
+    "run_number": 206,
+    "event": "push",
+    "status": "completed",
+    "conclusion": "success",
+    "workflow_id": 299509872,
+    "check_suite_id": 115604320870,
+    "check_suite_node_id": "CS_kwDOSiZFCc8AAAAa6o3yZg",
+    "url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140",
+    "html_url": "https://github.com/etl-sql/ETL-SQL/actions/runs/42682736140",
+    "pull_requests": [],
+    "created_at": "2026-11-09T19:22:35Z",
+    "updated_at": "2026-11-09T19:36:32Z",
+    "actor": {
+     "login": "etl-sql",
+     "id": 286155694,
+     "node_id": "U_kgDOEQ5jrg",
+     "avatar_url": "https://avatars.githubusercontent.com/u/286155694?v=4",
+     "gravatar_id": "",
+     "url": "https://api.github.com/users/etl-sql",
+     "html_url": "https://github.com/etl-sql",
+     "followers_url": "https://api.github.com/users/etl-sql/followers",
+     "following_url": "https://api.github.com/users/etl-sql/following{/other_user}",
+     "gists_url": "https://api.github.com/users/etl-sql/gists{/gist_id}",
+     "starred_url": "https://api.github.com/users/etl-sql/starred{/owner}{/repo}",
+     "subscriptions_url": "https://api.github.com/users/etl-sql/subscriptions",
+     "organizations_url": "https://api.github.com/users/etl-sql/orgs",
+     "repos_url": "https://api.github.com/users/etl-sql/repos",
+     "events_url": "https://api.github.com/users/etl-sql/events{/privacy}",
+     "received_events_url": "https://api.github.com/users/etl-sql/received_events",
+     "type": "User",
+     "user_view_type": "public",
+     "site_admin": false
+    },
+    "run_attempt": 1,
+    "referenced_workflows": [],
+    "run_started_at": "2026-11-09T19:22:35Z",
+    "triggering_actor": {
+     "login": "etl-sql",
+     "id": 286155694,
+     "node_id": "U_kgDOEQ5jrg",
+     "avatar_url": "https://avatars.githubusercontent.com/u/286155694?v=4",
+     "gravatar_id": "",
+     "url": "https://api.github.com/users/etl-sql",
+     "html_url": "https://github.com/etl-sql",
+     "followers_url": "https://api.github.com/users/etl-sql/followers",
+     "following_url": "https://api.github.com/users/etl-sql/following{/other_user}",
+     "gists_url": "https://api.github.com/users/etl-sql/gists{/gist_id}",
+     "starred_url": "https://api.github.com/users/etl-sql/starred{/owner}{/repo}",
+     "subscriptions_url": "https://api.github.com/users/etl-sql/subscriptions",
+     "organizations_url": "https://api.github.com/users/etl-sql/orgs",
+     "repos_url": "https://api.github.com/users/etl-sql/repos",
+     "events_url": "https://api.github.com/users/etl-sql/events{/privacy}",
+     "received_events_url": "https://api.github.com/users/etl-sql/received_events",
+     "type": "User",
+     "user_view_type": "public",
+     "site_admin": false
+    },
+    "jobs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140/jobs",
+    "logs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140/logs",
+    "check_suite_url": "https://api.github.com/repos/etl-sql/ETL-SQL/check-suites/115604320870",
+    "artifacts_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140/artifacts",
+    "cancel_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140/cancel",
+    "rerun_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/runs/42682736140/rerun",
+    "previous_attempt_url": null,
+    "workflow_url": "https://api.github.com/repos/etl-sql/ETL-SQL/actions/workflows/299509872",
+    "repository": {
+     "id": 1244022025,
+     "node_id": "R_kgDOSiZFCQ",
+     "name": "ETL-SQL",
+     "full_name": "etl-sql/ETL-SQL",
+     "private": false,
+     "owner": {
+      "login": "etl-sql",
+      "id": 286155694,
+      "node_id": "U_kgDOEQ5jrg",
+      "avatar_url": "https://avatars.githubusercontent.com/u/286155694?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/etl-sql",
+      "html_url": "https://github.com/etl-sql",
+      "followers_url": "https://api.github.com/users/etl-sql/followers",
+      "following_url": "https://api.github.com/users/etl-sql/following{/other_user}",
+      "gists_url": "https://api.github.com/users/etl-sql/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/etl-sql/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/etl-sql/subscriptions",
+      "organizations_url": "https://api.github.com/users/etl-sql/orgs",
+      "repos_url": "https://api.github.com/users/etl-sql/repos",
+      "events_url": "https://api.github.com/users/etl-sql/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/etl-sql/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+     },
+     "html_url": "https://github.com/etl-sql/ETL-SQL",
+     "description": null,
+     "fork": false,
+     "url": "https://api.github.com/repos/etl-sql/ETL-SQL",
+     "forks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/forks",
+     "keys_url": "https://api.github.com/repos/etl-sql/ETL-SQL/keys{/key_id}",
+     "collaborators_url": "https://api.github.com/repos/etl-sql/ETL-SQL/collaborators{/collaborator}",
+     "teams_url": "https://api.github.com/repos/etl-sql/ETL-SQL/teams",
+     "hooks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/hooks",
+     "issue_events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/events{/number}",
+     "events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/events",
+     "assignees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/assignees{/user}",
+     "branches_url": "https://api.github.com/repos/etl-sql/ETL-SQL/branches{/branch}",
+     "tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/tags",
+     "blobs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/blobs{/sha}",
+     "git_tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/tags{/sha}",
+     "git_refs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/refs{/sha}",
+     "trees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/trees{/sha}",
+     "statuses_url": "https://api.github.com/repos/etl-sql/ETL-SQL/statuses/{sha}",
+     "languages_url": "https://api.github.com/repos/etl-sql/ETL-SQL/languages",
+     "stargazers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/stargazers",
+     "contributors_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contributors",
+     "subscribers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscribers",
+     "subscription_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscription",
+     "commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/commits{/sha}",
+     "git_commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/commits{/sha}",
+     "comments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/comments{/number}",
+     "issue_comment_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/comments{/number}",
+     "contents_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contents/{+path}",
+     "compare_url": "https://api.github.com/repos/etl-sql/ETL-SQL/compare/{base}...{head}",
+     "merges_url": "https://api.github.com/repos/etl-sql/ETL-SQL/merges",
+     "archive_url": "https://api.github.com/repos/etl-sql/ETL-SQL/{archive_format}{/ref}",
+     "downloads_url": "https://api.github.com/repos/etl-sql/ETL-SQL/downloads",
+     "issues_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues{/number}",
+     "pulls_url": "https://api.github.com/repos/etl-sql/ETL-SQL/pulls{/number}",
+     "milestones_url": "https://api.github.com/repos/etl-sql/ETL-SQL/milestones{/number}",
+     "notifications_url": "https://api.github.com/repos/etl-sql/ETL-SQL/notifications{?since,all,participating}",
+     "labels_url": "https://api.github.com/repos/etl-sql/ETL-SQL/labels{/name}",
+     "releases_url": "https://api.github.com/repos/etl-sql/ETL-SQL/releases{/id}",
+     "deployments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/deployments"
+    },
+    "head_repository": {
+     "id": 1244022025,
+     "node_id": "R_kgDOSiZFCQ",
+     "name": "ETL-SQL",
+     "full_name": "etl-sql/ETL-SQL",
+     "private": false,
+     "owner": {
+      "login": "etl-sql",
+      "id": 286155694,
+      "node_id": "U_kgDOEQ5jrg",
+      "avatar_url": "https://avatars.githubusercontent.com/u/286155694?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/etl-sql",
+      "html_url": "https://github.com/etl-sql",
+      "followers_url": "https://api.github.com/users/etl-sql/followers",
+      "following_url": "https://api.github.com/users/etl-sql/following{/other_user}",
+      "gists_url": "https://api.github.com/users/etl-sql/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/etl-sql/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/etl-sql/subscriptions",
+      "organizations_url": "https://api.github.com/users/etl-sql/orgs",
+      "repos_url": "https://api.github.com/users/etl-sql/repos",
+      "events_url": "https://api.github.com/users/etl-sql/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/etl-sql/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+     },
+     "html_url": "https://github.com/etl-sql/ETL-SQL",
+     "description": null,
+     "fork": false,
+     "url": "https://api.github.com/repos/etl-sql/ETL-SQL",
+     "forks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/forks",
+     "keys_url": "https://api.github.com/repos/etl-sql/ETL-SQL/keys{/key_id}",
+     "collaborators_url": "https://api.github.com/repos/etl-sql/ETL-SQL/collaborators{/collaborator}",
+     "teams_url": "https://api.github.com/repos/etl-sql/ETL-SQL/teams",
+     "hooks_url": "https://api.github.com/repos/etl-sql/ETL-SQL/hooks",
+     "issue_events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/events{/number}",
+     "events_url": "https://api.github.com/repos/etl-sql/ETL-SQL/events",
+     "assignees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/assignees{/user}",
+     "branches_url": "https://api.github.com/repos/etl-sql/ETL-SQL/branches{/branch}",
+     "tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/tags",
+     "blobs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/blobs{/sha}",
+     "git_tags_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/tags{/sha}",
+     "git_refs_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/refs{/sha}",
+     "trees_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/trees{/sha}",
+     "statuses_url": "https://api.github.com/repos/etl-sql/ETL-SQL/statuses/{sha}",
+     "languages_url": "https://api.github.com/repos/etl-sql/ETL-SQL/languages",
+     "stargazers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/stargazers",
+     "contributors_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contributors",
+     "subscribers_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscribers",
+     "subscription_url": "https://api.github.com/repos/etl-sql/ETL-SQL/subscription",
+     "commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/commits{/sha}",
+     "git_commits_url": "https://api.github.com/repos/etl-sql/ETL-SQL/git/commits{/sha}",
+     "comments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/comments{/number}",
+     "issue_comment_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues/comments{/number}",
+     "contents_url": "https://api.github.com/repos/etl-sql/ETL-SQL/contents/{+path}",
+     "compare_url": "https://api.github.com/repos/etl-sql/ETL-SQL/compare/{base}...{head}",
+     "merges_url": "https://api.github.com/repos/etl-sql/ETL-SQL/merges",
+     "archive_url": "https://api.github.com/repos/etl-sql/ETL-SQL/{archive_format}{/ref}",
+     "downloads_url": "https://api.github.com/repos/etl-sql/ETL-SQL/downloads",
+     "issues_url": "https://api.github.com/repos/etl-sql/ETL-SQL/issues{/number}",
+     "pulls_url": "https://api.github.com/repos/etl-sql/ETL-SQL/pulls{/number}",
+     "milestones_url": "https://api.github.com/repos/etl-sql/ETL-SQL/milestones{/number}",
+     "notifications_url": "https://api.github.com/repos/etl-sql/ETL-SQL/notifications{?since,all,participating}",
+     "labels_url": "https://api.github.com/repos/etl-sql/ETL-SQL/labels{/name}",
+     "releases_url": "https://api.github.com/repos/etl-sql/ETL-SQL/releases{/id}",
+     "deployments_url": "https://api.github.com/repos/etl-sql/ETL-SQL/deployments"
+    }
+   }
+  ]
+ },
+ "note": "Recorded 2026-11-10 from GitHub for dry run 42699535102 (candidate cd6870b93). head_commit is removed: it carries commit author details the collector never reads. Policy is hosted-release-policy.json at that commit."
+}

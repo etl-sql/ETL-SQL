@@ -24,10 +24,10 @@ public class CompareDatasetsStatementHandler(ILogger logger) : IStatementHandler
         var stmt = (CompareDatasetsStatement)statement;
         _logger.Debug("Executing COMPARE DATASETS {Source} WITH {Baseline} INTO {Target}", stmt.SourceTable.TableName, stmt.BaselineTable.TableName, stmt.TargetTable.TableName);
 
-        var sourceDs = await context.ResolveDataSourceAsync(stmt.SourceTable);
+        var sourceDs = await context.ResolveReadSourceAsync(stmt.SourceTable);
         if (sourceDs == null) throw new ExecutionException($"Could not resolve source dataset: {stmt.SourceTable.TableName}");
 
-        var baselineDs = await context.ResolveDataSourceAsync(stmt.BaselineTable);
+        var baselineDs = await context.ResolveReadSourceAsync(stmt.BaselineTable);
         if (baselineDs == null) throw new ExecutionException($"Could not resolve baseline dataset: {stmt.BaselineTable.TableName}");
 
         var sourceColumns = (await sourceDs.GetColumnsAsync(context.CancellationToken)).ToList();

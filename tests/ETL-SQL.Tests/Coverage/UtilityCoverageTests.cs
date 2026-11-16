@@ -492,11 +492,12 @@ namespace ETL_SQL.Tests.Coverage
         }
 
         [Fact]
-        public void BinaryOp_DatePlusInvalidNumber_ReturnsNull()
+        public void BinaryOp_DatePlusInvalidNumber_Throws()
         {
             var d = new DateTime(2025, 1, 1);
-            var result = BinaryOperatorFactory.Execute(TokenType.PLUS, d, "notanumber");
-            Assert.Null(result);
+            var ex = Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(
+                () => BinaryOperatorFactory.Execute(TokenType.PLUS, d, "notanumber"));
+            Assert.Contains("notanumber", ex.Message);
         }
 
         // ── DmlDetector ───────────────────────────────────────────────────────

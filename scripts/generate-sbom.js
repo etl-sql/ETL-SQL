@@ -4,6 +4,24 @@ const path = require('path');
 const crypto = require('crypto');
 
 const repoRoot = path.resolve(__dirname, '..');
+const args = process.argv.slice(2);
+if (args.length && (args.length !== 2 || args[0] !== '--output-dir' || !args[1])) {
+  throw new Error('Usage: node scripts/generate-sbom.js [--output-dir directory]');
+}
+const outputDirectory = path.resolve(repoRoot, args[1] ?? 'release');
+const outputRelative = path.relative(repoRoot, outputDirectory);
+if (!outputRelative || outputRelative === '..' || outputRelative.startsWith('..' + path.sep) || path.isAbsolute(outputRelative)) {
+  throw new Error('SBOM output must be a directory inside the repository.');
+}
+let outputAncestor = repoRoot;
+function outputStat(file) {
+  try { return fs.lstatSync(file); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+}
+for (const segment of outputRelative.split(path.sep)) {
+  outputAncestor = path.join(outputAncestor, segment);
+  if (outputStat(outputAncestor)?.isSymbolicLink()) throw new Error('SBOM output must not follow links.');
+}
 // Read the version from the single source of truth so the SBOM never goes stale on release.
 const version = (() => {
   const props = fs.readFileSync(path.join(repoRoot, 'Directory.Build.props'), 'utf8');
@@ -13,14 +31,18 @@ const version = (() => {
 })();
 
 const bundledAssets = [
-  {
-    component: 'Tabulator',
-    version: '5.5.0',
-    license: 'MIT',
-    project: 'https://tabulator.info/'
-  },
+  readTabulatorAsset(),
   ...readCodeMirrorLockAssets()
 ];
+
+// The version comes from the shipped file's own banner. A hard-coded 5.5.0 outlived the upgrade
+// to 6.4.0, so the published SBOM named a version the release did not contain.
+function readTabulatorAsset() {
+  const file = path.join(repoRoot, 'src', 'ETL-SQL.ReportRuntime', 'Resources', 'Shared', 'tabulator.min.js');
+  const banner = fs.readFileSync(file, 'utf8').slice(0, 512).match(/^\/\*!\s*Tabulator v(\d+\.\d+\.\d+)\b/);
+  if (!banner) throw new Error(`Could not read the Tabulator version banner from ${path.relative(repoRoot, file)}`);
+  return { component: 'Tabulator', version: banner[1], license: 'MIT', project: 'https://tabulator.info/' };
+}
 
 const npmLicenseFallbacks = {
   '@eslint/js': 'MIT',
@@ -341,13 +363,16 @@ function generateSbom() {
     components: components
   };
 
-  const outDir = path.join(repoRoot, 'release');
+  const outDir = outputDirectory;
   if (!fs.existsSync(outDir)) {
     fs.mkdirSync(outDir, { recursive: true });
   }
 
-  fs.writeFileSync(path.join(outDir, 'sbom.json'), JSON.stringify(sbom, null, 2), 'utf8');
-  console.log('Wrote sbom.json to release/');
+  const outputFile = path.join(outDir, 'sbom.json');
+  const existing = outputStat(outputFile);
+  if (existing && !existing.isFile()) throw new Error('SBOM output must be a regular file.');
+  fs.writeFileSync(outputFile, JSON.stringify(sbom, null, 2), 'utf8');
+  console.log(`Wrote sbom.json to ${path.relative(repoRoot, outDir)}/`);
 }
 
 generateSbom();

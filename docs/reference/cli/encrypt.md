@@ -34,7 +34,7 @@ ETL-SQL encrypt "Server=prod-sql;Database=DW;User Id=sa;Password=S3cr3t!" --pass
 ```
 
 > [!IMPORTANT]
-> The master password must be the same each time you run scripts referencing `ENC:` strings. Pass it at runtime with `--pass MyMasterKey` or set `USE PASSWORD = '...';` at the top of your script.
+> The master password must be the same each time you run scripts referencing `ENC:` strings. For headless or production jobs, pass it at runtime with `--pass MyMasterKey` or `ETL_SQL_MASTER_PASSWORD`, or use a `SECRET:` vault reference. Literal `USE PASSWORD = '...';` is for initial authoring only: when `ALLOW_PLAINTEXT_SECRETS` is `OFF` (default), save tools and first-run execution automatically seal secrets and rewrite it to `USE PASSWORD PROMPT;`.
 
 ## References
 

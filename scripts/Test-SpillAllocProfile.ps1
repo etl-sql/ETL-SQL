@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Runs the v0.15.0 Phase 1 spill allocation/GC/I-O profile of the Gate F #temp round trip.
+    Runs the spill allocation/GC/I-O profile of the Gate F #temp round trip.
 
 .DESCRIPTION
     Executes tests/ETL-SQL.Tests/Scale/SpillAllocationProfilingTests in an isolated Release host at
@@ -30,7 +30,9 @@ param(
     # Bless this run's report as the checked-in budget for this row count (after a verified
     # improvement or on a new certification workstation). Skips the regression comparison.
     [switch]$UpdateBudget,
-    [switch]$SkipBudgetCheck
+    [switch]$SkipBudgetCheck,
+    # Hosted CI: GC counts, pause and peak working set warn instead of fail (see Compare-AllocBudget).
+    [switch]$MachineMetricsReportOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -79,7 +81,7 @@ $report.topAllocations | Select-Object -First 10 | ForEach-Object {
 }
 Write-Host "`nReport: $result" -ForegroundColor Green
 
-# ── Regression budget (v0.15.0 Phase 1) ─────────────────────────────────────
+# ── Regression budget ─────────────────────────────────────────────────────
 $budgetPath = Join-Path $repoRoot ("certification-results\spill-alloc-budgets\budget-{0}rows.json" -f $Rows)
 if ($UpdateBudget) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $budgetPath) | Out-Null
@@ -87,6 +89,6 @@ if ($UpdateBudget) {
     Write-Host "Budget blessed: $budgetPath" -ForegroundColor Cyan
 }
 elseif (-not $SkipBudgetCheck) {
-    & (Join-Path $PSScriptRoot 'Compare-AllocBudget.ps1') -Report $result -Budget $budgetPath
+    & (Join-Path $PSScriptRoot 'Compare-AllocBudget.ps1') -Report $result -Budget $budgetPath -MachineMetricsReportOnly:$MachineMetricsReportOnly
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }

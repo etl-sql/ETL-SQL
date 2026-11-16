@@ -38,6 +38,10 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly ILogger<ProcessJobExecutor> _logger;
         private static readonly object CleanupLock = new();
         private static DateTime _lastTempScriptCleanupUtc = DateTime.MinValue;
+
+        internal const string IdentityNotCarriedMessage =
+            "This Orchestrator runs jobs in a child process, which cannot carry the caller's execution identity, " +
+            "so the run was refused. Identity-bound runs need in-process execution (Jobs:UseProcessSpawning = false).";
         private static readonly ConcurrentDictionary<string, WarmRunnerPool> WarmRunnerPools = new(StringComparer.OrdinalIgnoreCase);
 
         public ProcessJobExecutor(
@@ -121,9 +125,21 @@ namespace ETL_SQL.Orchestrator.Execution
             IReadOnlyDictionary<string, string>? variableOverrides,
             bool resume)
         {
-            // Out-of-process execution does not carry a row-level-security identity across the process
-            // boundary; identity-sensitive scripts therefore fail closed in this path. Subscription
-            // per-recipient delivery uses the in-process ScriptExecutorAdapter. See Docs/Design/RowLevelSecurity.md.
+            // Out-of-process execution does not carry an execution identity across the process
+            // boundary. Dropping it is not failing closed: the identity is also the run's tenant
+            // binding and its per-object authority, and the child has neither, so it would run the
+            // caller's text in the unbound scope with no object checks at all. A run that names an
+            // identity (an ad-hoc submission, a revision run) is refused here instead, as the sandbox
+            // refuses one it cannot carry. Scheduled runs pass no identity and are unaffected.
+            if (executionIdentity is not null)
+            {
+                _logger.LogWarning(
+                    "Job {JobName}: refused because out-of-process execution cannot carry the caller's execution identity.",
+                    jobName ?? "(ad hoc)");
+                return new ScriptExecutionResult(
+                    false, 0, IdentityNotCarriedMessage, SessionId: sessionId, RetryAllowed: false);
+            }
+
             CleanupOldTempScripts(force: false);
 
             // Write script to a temp file — ETL-SQL.exe run expects a file path
@@ -764,29 +780,40 @@ namespace ETL_SQL.Orchestrator.Execution
             };
 
             process.Start();
-            process.BeginErrorReadLine();
-
-            using var startupCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            startupCts.CancelAfter(startupTimeout);
-            while (true)
+            try
             {
-                var line = await process.StandardOutput.ReadLineAsync(startupCts.Token);
-                if (line == null)
-                {
-                    var detail = stderr.Length == 0
-                        ? string.Empty
-                        : $" Stderr: {stderr.ToString().Trim()}";
-                    throw new InvalidOperationException($"Warm runner exited before ready handshake.{detail}");
-                }
+                process.BeginErrorReadLine();
 
-                using var doc = JsonDocument.Parse(line);
-                var root = doc.RootElement;
-                if (root.TryGetProperty("type", out var type) &&
-                    string.Equals(type.GetString(), "ready", StringComparison.OrdinalIgnoreCase))
+                using var startupCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                startupCts.CancelAfter(startupTimeout);
+                while (true)
                 {
-                    logger.LogInformation("Warm job runner PID={Pid} is ready.", process.Id);
-                    return new WarmRunnerClient(process, logger, stderr);
+                    var line = await process.StandardOutput.ReadLineAsync(startupCts.Token);
+                    if (line == null)
+                    {
+                        var detail = stderr.Length == 0
+                            ? string.Empty
+                            : $" Stderr: {stderr.ToString().Trim()}";
+                        throw new InvalidOperationException($"Warm runner exited before ready handshake.{detail}");
+                    }
+
+                    using var doc = JsonDocument.Parse(line);
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("type", out var type) &&
+                        string.Equals(type.GetString(), "ready", StringComparison.OrdinalIgnoreCase))
+                    {
+                        logger.LogInformation("Warm job runner PID={Pid} is ready.", process.Id);
+                        return new WarmRunnerClient(process, logger, stderr);
+                    }
                 }
+            }
+            catch
+            {
+                // No client owns the process until the handshake completes, so a timeout, a
+                // cancellation, or a line that is not JSON would otherwise leave it running untracked.
+                try { process.Kill(entireProcessTree: true); } catch { /* already exited */ }
+                process.Dispose();
+                throw;
             }
         }
 

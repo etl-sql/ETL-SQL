@@ -130,7 +130,7 @@ Connections accept either a **structured** option list (recommended — readable
 > Use `HELP CONNECTION <type>` in the TUI (e.g. `HELP CONNECTION MSSQL`) to see every option and default for a connector.
 
 - **All connector options, auth patterns, and mutually exclusive settings** → [Data Connectors](../../reference/connectors/README.md).
-- **Encrypting credentials** — never commit plaintext passwords. `USE PASSWORD` plus `ENC:` strings let the engine auto-decrypt at connection time; the IDE/CLI can encrypt a script's plaintext strings on save. → [Secrets and Keys](../../administration/platform/secrets.md).
+- **Encrypting credentials** — never commit plaintext passwords or keep literal `USE PASSWORD = '...'` in source control. Literal `USE PASSWORD` is for initial authoring convenience only: when `ALLOW_PLAINTEXT_SECRETS` is `OFF` (default), saving in VS Code, the TUI Editor, or Studio — or running the script from CLI/engine — automatically encrypts secrets to `ENC:...` and rewrites `USE PASSWORD` to `USE PASSWORD PROMPT;`. For headless production jobs, pass `--pass`, set `ETL_SQL_MASTER_PASSWORD`, or use `SECRET:` references. → [Secrets and Keys](../../administration/platform/secrets.md).
 - **Mounting a directory as a connection** (`CREATE CONNECTION raw AS DIRECTORY('C:\Incoming\')`) so file metadata joins against other sources → [Data Connectors](../../reference/connectors/README.md).
 
 ### Running a script

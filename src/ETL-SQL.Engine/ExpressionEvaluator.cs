@@ -277,12 +277,20 @@ public class ExpressionEvaluator
 
         if (expr is SubqueryExpression subq)
         {
+            // try/finally: a consumer that stops early (FOREACH ... BREAK) or throws disposes the
+            // iterator, and the outer-row frame must still come off the stack.
             _context.OuterRowStack.Push(context);
-            await foreach (var batch in _context.ExecuteQuery(subq.Query))
+            try
             {
-                foreach (var row in batch.Rows) yield return row;
+                await foreach (var batch in _context.ExecuteQuery(subq.Query))
+                {
+                    foreach (var row in batch.Rows) yield return row;
+                }
             }
-            _context.OuterRowStack.Pop();
+            finally
+            {
+                _context.OuterRowStack.Pop();
+            }
             yield break;
         }
 
@@ -366,7 +374,7 @@ public class ExpressionEvaluator
                 var val = (decryptSensitive && s.StartsWith("ENC:")) ? _context.DecryptValue(s) : s;
                 if (val is string strVal && strVal.Contains("${"))
                 {
-                    val = InterpolateStringVariables(strVal);
+                    val = InterpolateStringVariables(strVal, decryptSensitive);
                 }
                 return new ValueTask<object?>(val);
             }
@@ -432,6 +440,9 @@ public class ExpressionEvaluator
             }
             catch
             {
+                // A double outside decimal's range negates as a double rather than becoming NULL.
+                if (inner is double dbl && double.IsFinite(dbl)) return -dbl;
+                if (inner is float flt && float.IsFinite(flt)) return -flt;
                 return null;
             }
         }
@@ -461,6 +472,11 @@ public class ExpressionEvaluator
 
         if (inExp.Right is SubqueryExpression subq)
         {
+            // IN compares against the first projected value, so a second column was silently
+            // ignored. `*` is left alone: its width is not known here.
+            if (GetExplicitMultiColumnCount(subq.Query) is int columnCount)
+                throw new ExecutionException($"A subquery used with IN must return one column; this one returns {columnCount}.");
+
             // Use cached stream evaluation for subqueries in IN clauses
             await foreach (var rowVal in EvaluateStreamSubquery(subq, context))
             {
@@ -587,12 +603,12 @@ public class ExpressionEvaluator
     /// <summary>Evaluates an EXISTS clause.</summary>
     private async ValueTask<object?> EvaluateExists(ExistsExpression ex, Row context)
     {
-        if (ex.Subquery is SelectStatement select)
+        if (ex.Subquery is SelectStatement or SetOperationStatement)
         {
-            bool found = await EvaluateExistsSubquery(select, context);
+            bool found = await EvaluateExistsSubquery(ex.Subquery, context);
             return ex.IsNot ? !found : found;
         }
-        throw new ExecutionException("EXISTS subquery must be a SELECT statement.");
+        throw new ExecutionException("EXISTS subquery must be a query statement.");
     }
 
     /// <summary>Evaluates a list of expressions.</summary>
@@ -643,13 +659,13 @@ public class ExpressionEvaluator
         if (fn == "CHARACTER_LENGTH" || fn == "CHAR_LENGTH" || fn == "OCTET_LENGTH")
         {
             var val = await EvaluateInternal(f.Arguments.FirstOrDefault(), context ?? Row.Empty, decryptSensitive);
-            if (val == null) return null;
-            var s = val.ToString() ?? "";
+            if (val.IsNull()) return null;
+            var s = val!.ToString() ?? "";
             return fn == "OCTET_LENGTH" ? System.Text.Encoding.UTF8.GetByteCount(s) : s.Length;
         }
 
         if (fn == "SYSDATE" || fn == "GETDATE" || fn == "CURRENT_TIMESTAMP") return DateTime.Now;
-        if (fn == "CURRENT_DATE") return DateTime.Today;
+        if (fn == "CURRENT_DATE") return DateOnly.FromDateTime(DateTime.Today);
         if (fn == "CURRENT_TIME") return DateTime.Now.TimeOfDay;
 
         var args = new List<object?>(f.Arguments.Count);
@@ -694,7 +710,7 @@ public class ExpressionEvaluator
     {
         var val = await EvaluateInternal(atTz.Left, context, decryptSensitive);
         var zone = await EvaluateInternal(atTz.TimeZone, context, decryptSensitive);
-        if (val == null || zone == null) return val;
+        if (val is null or DBNull || zone is null or DBNull) return null;
 
         DateTimeOffset dto;
         if (val is DateTimeOffset valDto)
@@ -709,6 +725,10 @@ public class ExpressionEvaluator
                 dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
             }
             dto = new DateTimeOffset(dt);
+        }
+        else if (val is DateOnly valDateOnly)
+        {
+            dto = new DateTimeOffset(DateTime.SpecifyKind(valDateOnly.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc));
         }
         else if (val is string text && DateTime.TryParse(
                      text,
@@ -743,12 +763,8 @@ public class ExpressionEvaluator
         }
     }
 
-    /// <summary>Evaluates a scalar subquery.</summary>
-    private async ValueTask<object?> EvaluateSubquery(SubqueryExpression subq, Row context)
+    private SubqueryCacheKey BuildSubqueryCacheKey(Statement query, Row context, SubqueryResultType resultType)
     {
-        object? result = null;
-        var query = (SelectStatement)subq.Query;
-
         if (!_outerRefCache.TryGetValue(query, out var outerRefs))
         {
             var analyzer = new SubqueryAnalyzer();
@@ -766,7 +782,28 @@ public class ExpressionEvaluator
             }
         }
 
-        var cacheKey = new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), SubqueryResultType.Scalar);
+        return new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), resultType);
+    }
+
+    private static int? GetExplicitMultiColumnCount(Statement query) => query switch
+    {
+        SelectStatement sel when sel.Columns.Count > 1 && !sel.Columns.Any(IsStarColumn) => sel.Columns.Count,
+        SetOperationStatement setOp => GetExplicitMultiColumnCount(setOp.Left) ?? GetExplicitMultiColumnCount(setOp.Right),
+        _ => null
+    };
+
+    private static bool HasAnyStarColumn(Statement query) => query switch
+    {
+        SelectStatement sel => sel.Columns.Any(IsStarColumn),
+        SetOperationStatement setOp => HasAnyStarColumn(setOp.Left) || HasAnyStarColumn(setOp.Right),
+        _ => false
+    };
+
+    /// <summary>Evaluates a scalar subquery.</summary>
+    private async ValueTask<object?> EvaluateSubquery(SubqueryExpression subq, Row context)
+    {
+        object? result = null;
+        var cacheKey = BuildSubqueryCacheKey(subq.Query, context, SubqueryResultType.Scalar);
 
         if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
         {
@@ -797,26 +834,13 @@ public class ExpressionEvaluator
         return result;
     }
 
+    private static bool IsStarColumn(SelectColumn column) =>
+        column.Expression is IdentifierExpression { Name: var name } && (name == "*" || name.EndsWith(".*", StringComparison.Ordinal));
+
     private async IAsyncEnumerable<object?> EvaluateStreamSubquery(SubqueryExpression subq, Row context)
     {
-        var query = (SelectStatement)subq.Query;
-        if (!_outerRefCache.TryGetValue(query, out var outerRefs))
-        {
-            var analyzer = new SubqueryAnalyzer();
-            outerRefs = analyzer.GetOuterReferences(query);
-            _outerRefCache[query] = outerRefs;
-        }
-
-        var captureValues = new List<object?>();
-        foreach (var or in outerRefs)
-        {
-            if (IsResolvableInOuterScope(or, context))
-            {
-                captureValues.Add(ResolveIdentifier(or, context));
-            }
-        }
-
-        var cacheKey = new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), SubqueryResultType.Stream);
+        var query = subq.Query;
+        var cacheKey = BuildSubqueryCacheKey(query, context, SubqueryResultType.Stream);
 
         if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
         {
@@ -878,6 +902,9 @@ public class ExpressionEvaluator
                 foreach (var row in batch.Rows)
                 {
                     rowCount++;
+                    // `SELECT *` has no width until it runs; the explicit lists are checked before.
+                    if (rowCount == 1 && row.Schema?.ColumnCount > 1 && HasAnyStarColumn(query))
+                        throw new ExecutionException($"A subquery used with IN must return one column; this one returns {row.Schema.ColumnCount}.");
                     var val = row.Schema?.ColumnCount > 0 ? row[0] : null;
 
                     if (spillStore != null)
@@ -926,25 +953,9 @@ public class ExpressionEvaluator
         }
     }
 
-    private async Task<bool> EvaluateExistsSubquery(SelectStatement query, Row context)
+    private async Task<bool> EvaluateExistsSubquery(Statement query, Row context)
     {
-        if (!_outerRefCache.TryGetValue(query, out var outerRefs))
-        {
-            var analyzer = new SubqueryAnalyzer();
-            outerRefs = analyzer.GetOuterReferences(query);
-            _outerRefCache[query] = outerRefs;
-        }
-
-        var captureValues = new List<object?>();
-        foreach (var or in outerRefs)
-        {
-            if (IsResolvableInOuterScope(or, context))
-            {
-                captureValues.Add(ResolveIdentifier(or, context));
-            }
-        }
-
-        var cacheKey = new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), SubqueryResultType.Exists);
+        var cacheKey = BuildSubqueryCacheKey(query, context, SubqueryResultType.Exists);
 
         if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
         {
@@ -1018,12 +1029,12 @@ public class ExpressionEvaluator
         if (v.Name.Equals("@@IS_ADMIN", StringComparison.OrdinalIgnoreCase)) return _context.ExecutionIdentity?.IsAdmin ?? false;
 
         if (!_context.VarContext.ContainsVariable(v.Name))
-            throw new ExecutionException($"Undeclared: {v.Name}");
+            throw EvaluationUtils.UnknownVariable(v.Name);
 
         var val = _context.VarContext.GetVariable(v.Name);
 
         if (val is string reldateExpr &&
-            _context.VarContext.VariableMetadata.TryGetValue(v.Name, out var relMeta) &&
+            _context.VarContext.TryGetVariableMetadata(v.Name, out var relMeta) &&
             "RELDATE".Equals(relMeta.DataType, StringComparison.OrdinalIgnoreCase))
         {
             return RelDateResolver.ResolveValue(reldateExpr, _context.WeekStartDay);
@@ -1031,7 +1042,7 @@ public class ExpressionEvaluator
 
         if (decryptSensitive && val is string s && s.StartsWith("ENC:"))
         {
-            if (_context.VarContext.VariableMetadata.TryGetValue(v.Name, out var meta) && meta.IsSensitive)
+            if (_context.VarContext.TryGetVariableMetadata(v.Name, out var meta) && meta.IsSensitive)
             {
                 return _context.DecryptValue(s);
             }
@@ -1040,8 +1051,13 @@ public class ExpressionEvaluator
         return val;
     }
 
-    /// <summary>Performs inline variable interpolation for string literals containing ${@var} or ${var}.</summary>
-    private string InterpolateStringVariables(string input)
+    /// <summary>
+    /// Performs inline variable interpolation for string literals containing ${@var} or ${var}.
+    /// An <c>ENC:</c> value of a sensitive variable is decrypted only when the caller is a
+    /// credential consumer (<paramref name="decryptSensitive"/>), the same rule a bare
+    /// <c>@var</c> reference follows; otherwise <c>PRINT '${@pw}'</c> would print plaintext.
+    /// </summary>
+    private string InterpolateStringVariables(string input, bool decryptSensitive)
     {
         if (string.IsNullOrEmpty(input) || !input.Contains("${")) return input;
 
@@ -1058,7 +1074,7 @@ public class ExpressionEvaluator
                 var val = _context.VarContext.GetVariable(varName);
                 if (val != null)
                 {
-                    if (_context.VarContext.VariableMetadata.TryGetValue(varName, out var meta) && meta.IsSensitive)
+                    if (decryptSensitive && _context.VarContext.TryGetVariableMetadata(varName, out var meta) && meta.IsSensitive)
                     {
                         if (val is string enc && enc.StartsWith("ENC:", StringComparison.Ordinal))
                         {
@@ -1142,12 +1158,12 @@ public class ExpressionEvaluator
         if (id.Name.Contains(".CONNECTION_STRING", StringComparison.OrdinalIgnoreCase))
         {
             var alias = id.Name.Replace(".CONNECTION_STRING", "", StringComparison.OrdinalIgnoreCase);
-            var connStr = _context.DockerManager.GetConnectionString(alias);
+            var connStr = _context.DockerManager.GetConnectionString(DockerScope.For(_context), alias);
             if (connStr != null) return connStr;
 
             // Direct fallback for plain DOCKER.CONNECTION_STRING
             if (alias.Equals("DOCKER", StringComparison.OrdinalIgnoreCase))
-                return _context.DockerManager.LastConnectionString;
+                return _context.DockerManager.GetLastConnectionString(DockerScope.For(_context));
         }
 
         // Existing connections
@@ -1162,10 +1178,17 @@ public class ExpressionEvaluator
             return await _context.FunctionRegistry.ExecuteAsync(id.Name, new List<object?>(), _context);
         }
 
-        // For date parts (year, month, etc.) and others, return name if Row is null
-        if (context == null) return id.Name;
+        // A variable that reached here is not declared. System variables answer by name.
+        if (id.Name.StartsWith('@'))
+        {
+            if (SystemVariableProvider.IsSystemVariable(id.Name)) return SystemVariableProvider.Resolve(id.Name, _context);
+            throw EvaluationUtils.UnknownVariable(id.Name);
+        }
 
-        return null;
+        // A row that may lack columns (an outer-join row with no match, a spilled row) reads NULL.
+        if (context is { MayLackColumns: true }) return null;
+
+        throw EvaluationUtils.UnknownName(id.Name, context);
     }
 
     /// <summary>Evaluates a binary operation (arithmetic or logical).</summary>
@@ -1210,8 +1233,9 @@ public class ExpressionEvaluator
         if (bin.Operator == TokenType.CONCAT)
         {
             if (leftVal.IsNull() || rightVal.IsNull()) return null;
-            var leftText = leftVal?.ToString() ?? "";
-            var rightText = rightVal?.ToString() ?? "";
+            // Same text as CAST AS STRING, so a date or number concatenates alike on every host.
+            var leftText = TypeConverter.ToInvariantText(leftVal) ?? "";
+            var rightText = TypeConverter.ToInvariantText(rightVal) ?? "";
             _context.SecurityService.ValidateStringSize(
                 (long)leftText.Length + rightText.Length,
                 _context.MaxStringResultSize,
@@ -1240,7 +1264,7 @@ public class ExpressionEvaluator
             TokenType.LESS_THAN => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)(CompareConstants(leftVal, rightVal) < 0),
             TokenType.GREATER_EQUALS => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)(CompareConstants(leftVal, rightVal) >= 0),
             TokenType.LESS_EQUALS => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)(CompareConstants(leftVal, rightVal) <= 0),
-            TokenType.LIKE => EvaluateLike(leftVal, rightVal),
+            TokenType.LIKE => (leftVal.IsNull() || rightVal.IsNull()) ? null : EvaluateLike(leftVal, rightVal),
             TokenType.REGEX_MATCH => EvaluateRegexMatch(leftVal, rightVal, RegexOptions.None),
             TokenType.REGEX_IMATCH => EvaluateRegexMatch(leftVal, rightVal, RegexOptions.IgnoreCase),
             _ => IsSoftEqual(leftVal, rightVal)
@@ -1280,6 +1304,9 @@ public class ExpressionEvaluator
             var escVal = await EvaluateInternal(like.EscapeChar, context, decryptSensitive);
             escapeStr = escVal?.ToString();
         }
+        // COMPAT_BREAK: 0.22.0 — SQL three-valued logic: LIKE and NOT LIKE with a NULL operand are
+        // UNKNOWN, so a WHERE col NOT LIKE '...' no longer keeps the rows where col is NULL.
+        if (l.IsNull() || r.IsNull()) return null;
         bool res = EvaluateLike(l, r, escapeStr);
         return like.IsNot ? !res : res;
     }
@@ -1342,18 +1369,18 @@ public class ExpressionEvaluator
     private async ValueTask<object?> EvaluateSubstring(SubstringExpression sub, Row context, bool decryptSensitive = false)
     {
         var val = await EvaluateInternal(sub.String, context, decryptSensitive);
-        if (val == null) return null;
-        var s = val.ToString() ?? "";
+        if (val.IsNull()) return null;
+        var s = val!.ToString() ?? "";
 
         var startVal = await EvaluateInternal(sub.Start, context, decryptSensitive);
-        if (startVal == null) return null;
+        if (startVal.IsNull()) return null;
         int start = Convert.ToInt32(startVal);
 
         int? len = null;
         if (sub.Length != null)
         {
             var lenVal = await EvaluateInternal(sub.Length, context, decryptSensitive);
-            if (lenVal == null) return null;
+            if (lenVal.IsNull()) return null;
             len = Convert.ToInt32(lenVal);
             if (len <= 0) return "";
         }
@@ -1374,14 +1401,14 @@ public class ExpressionEvaluator
     {
         var substrVal = await EvaluateInternal(pos.Substring, context, decryptSensitive);
         var strVal = await EvaluateInternal(pos.String, context, decryptSensitive);
-        if (substrVal == null || strVal == null) return 0;
+        if (substrVal is null or DBNull || strVal is null or DBNull) return null;
 
         var substr = substrVal.ToString() ?? "";
         var str = strVal.ToString() ?? "";
 
         // SQL POSITION returns 1-based index, or 0 if not found
         int index = str.IndexOf(substr, StringComparison.OrdinalIgnoreCase);
-        return index + 1;
+        return (decimal)(index + 1);
     }
 
     private async ValueTask<object?> EvaluateExtract(ExtractExpression ext, Row context, bool decryptSensitive = false)
@@ -1389,13 +1416,16 @@ public class ExpressionEvaluator
         var val = await EvaluateInternal(ext.Source, context, decryptSensitive);
         if (val == null) return null;
 
+        if (val is DBNull) return null;
+
+        // A value that is not a date, or a field that does not exist, is an error. Both gave NULL.
         DateTime dt;
-        if (val is DateTime dateTime) dt = dateTime;
-        else if (!DateTime.TryParse(val.ToString(), out dt)) return null;
+        if (!EvaluationUtils.TryToDateTime(val, out dt))
+            throw new ExecutionException($"EXTRACT cannot read '{TypeConverter.ToInvariantText(val)}' as a date.");
 
         return ext.Field.ToUpperInvariant() switch
         {
-            "YEAR" => dt.Year,
+            "YEAR" => (object)dt.Year,   // object, so each field keeps its own numeric type
             "MONTH" => dt.Month,
             "DAY" => dt.Day,
             "HOUR" => dt.Hour,
@@ -1411,7 +1441,7 @@ public class ExpressionEvaluator
             "DECADE" => (int)Math.Floor(dt.Year / 10.0),
             "CENTURY" => (int)Math.Ceiling(dt.Year / 100.0),
             "MILLENNIUM" => (int)Math.Ceiling(dt.Year / 1000.0),
-            _ => null
+            _ => throw new ExecutionException($"EXTRACT does not know the field '{ext.Field}'.")
         };
     }
 
@@ -1421,10 +1451,10 @@ public class ExpressionEvaluator
         var ovlVal = await EvaluateInternal(ovl.Overlay, context, decryptSensitive);
         var startVal = await EvaluateInternal(ovl.Start, context, decryptSensitive);
 
-        if (strVal == null || ovlVal == null || startVal == null) return null;
+        if (strVal.IsNull() || ovlVal.IsNull() || startVal.IsNull()) return null;
 
-        var s = strVal.ToString() ?? "";
-        var o = ovlVal.ToString() ?? "";
+        var s = strVal!.ToString() ?? "";
+        var o = ovlVal!.ToString() ?? "";
         int start = Convert.ToInt32(startVal);
 
         if (start < 1) start = 1;
@@ -1434,7 +1464,9 @@ public class ExpressionEvaluator
         if (ovl.Length != null)
         {
             var lenVal = await EvaluateInternal(ovl.Length, context, decryptSensitive);
-            if (lenVal != null) len = Convert.ToInt32(lenVal);
+            // A NULL length used to mean "the length of the replacement".
+            if (lenVal.IsNull()) return null;
+            len = Convert.ToInt32(lenVal);
         }
 
         if (dotNetStart > s.Length) return s + o;
@@ -1448,14 +1480,16 @@ public class ExpressionEvaluator
     private async ValueTask<object?> EvaluateTrim(TrimExpression trim, Row context, bool decryptSensitive = false)
     {
         var val = await EvaluateInternal(trim.String, context, decryptSensitive);
-        if (val == null) return null;
-        var s = val.ToString() ?? "";
+        if (val.IsNull()) return null;
+        var s = val!.ToString() ?? "";
 
         char[]? chars = null;
         if (trim.Characters != null)
         {
             var cVal = await EvaluateInternal(trim.Characters, context, decryptSensitive);
-            if (cVal != null) chars = cVal.ToString()?.ToCharArray();
+            // NULL trim characters used to mean "trim white space".
+            if (cVal.IsNull()) return null;
+            chars = cVal!.ToString()?.ToCharArray();
         }
 
         return trim.Type switch

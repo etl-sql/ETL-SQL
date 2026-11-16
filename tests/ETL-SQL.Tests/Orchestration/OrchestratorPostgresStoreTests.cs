@@ -33,21 +33,6 @@ namespace ETL_SQL.Tests.Orchestration
         private RelationalJobHistoryStore NewStore() =>
             new(new NpgsqlOrchestratorDialect(_pg.GetConnectionString()));
 
-        [Fact]
-        public async Task LegacyUnquotedHistory_MigratesWithoutLosingRows()
-        {
-            var dialect = new NpgsqlOrchestratorDialect(_pg.GetConnectionString());
-            await using var connection = dialect.CreateConnection();
-            await connection.OpenAsync();
-            await using (var command = connection.CreateCommand())
-            {
-                command.CommandText = OrchestratorSchemaMigrationTests.LegacyHistorySql + OrchestratorSchemaMigrationTests.LegacyJobsSql;
-                await command.ExecuteNonQueryAsync();
-            }
-            await OrchestratorSchemaMigrationTests.VerifyHistoryMigrationAsync(dialect, connection);
-            await OrchestratorSchemaMigrationTests.VerifyLegacyStoreAsync(dialect);
-        }
-
         private RelationalSandboxAdmissionLedger NewAdmissionLedger() =>
             new(new NpgsqlOrchestratorDialect(_pg.GetConnectionString()));
 
@@ -301,6 +286,24 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.True(await store.TryAcquireLockAsync("ttl-lock", "node-A", TimeSpan.FromMilliseconds(40)));
             await Task.Delay(120); // flaky-delay-ok: wall-clock wait for the lease TTL to expire
             Assert.True(await store.TryAcquireLockAsync("ttl-lock", "node-B", TimeSpan.FromMinutes(5)));
+        }
+
+        [Fact]
+        public async Task RunCancel_RecordedOnOneNodeIsReadOnAnother_OnPostgres()
+        {
+            var accepting = NewStore();
+            await accepting.InitializeAsync();
+            var running = NewStore();
+            await running.InitializeAsync();
+
+            await accepting.RequestRunCancelAsync(41, "user:operator");
+            await accepting.RequestRunCancelAsync(41, "user:someone-else"); // repeating is harmless
+
+            Assert.Equal([41L], await running.GetRequestedRunCancelsAsync([40, 41, 42]));
+            Assert.Empty(await running.GetRequestedRunCancelsAsync([]));
+
+            await running.ClearRunCancelAsync(41);
+            Assert.Empty(await accepting.GetRequestedRunCancelsAsync([41]));
         }
 
         [Fact]

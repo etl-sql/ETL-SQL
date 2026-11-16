@@ -9,7 +9,8 @@ Syntax:
       PASSPHRASE = '<passphrase>'
     );
 
-The private key is written to output_path; the public key is written to output_path.pub.
+`output_path` is a folder. The public key is written to `public.asc` and the private key to
+`private.asc` inside it, both ASCII-armored.
 
 Options:
 - **BITS** — key size in bits (default 2048; 4096 recommended for high security)
@@ -25,9 +26,12 @@ CREATE PGP_KEY_PAIR 'C:\keys\internal_pgp'
     PASSPHRASE = @pgp_passphrase
   );
 
--- Use the generated key for file encryption
-ENCRYPT FILE 'data.csv' TO 'data.pgp' 
-  PGP_KEY 'C:\keys\internal_pgp' 
+-- Encrypt to the public key; no passphrase is needed
+ENCRYPT FILE 'data.csv' TO 'data.pgp' PGP_KEY 'C:\keys\internal_pgp\public.asc';
+
+-- Decrypt with the private key and its passphrase
+DECRYPT FILE 'data.pgp' TO 'data_restored.csv'
+  PGP_KEY 'C:\keys\internal_pgp\private.asc'
   PASSWORD @pgp_passphrase;
 ```
 

@@ -27,8 +27,6 @@ namespace ETL_SQL.Tests.Deploy
                 "ETLSQL_ENV=prod\nENV_DATA_ROOT=/srv/etl-sql/prod\nPORT_PORTAL=5010\nPORTAL_JWT_SECRET=s-prod\nORCH_API_KEY=k-prod\n");
 
             var exit = RunVerifier(Path.Combine(dir.Path, "dev.env"), Path.Combine(dir.Path, "prod.env"));
-            if (exit is null) return; // pwsh unavailable — skip
-
             Assert.Equal(0, exit);
         }
 
@@ -43,8 +41,6 @@ namespace ETL_SQL.Tests.Deploy
                 "ETLSQL_ENV=prod\nENV_DATA_ROOT=/srv/etl-sql/prod\nPORT_PORTAL=5000\nPORTAL_JWT_SECRET=shared\nORCH_API_KEY=k-prod\n");
 
             var exit = RunVerifier(Path.Combine(dir.Path, "dev.env"), Path.Combine(dir.Path, "prod.env"));
-            if (exit is null) return; // pwsh unavailable — skip
-
             Assert.Equal(1, exit);
         }
 
@@ -58,12 +54,11 @@ namespace ETL_SQL.Tests.Deploy
             File.WriteAllText(Path.Combine(dir.Path, "prod-node2.env"), body);
 
             var exit = RunVerifier(Path.Combine(dir.Path, "prod-node1.env"), Path.Combine(dir.Path, "prod-node2.env"));
-            if (exit is null) return; // pwsh unavailable — skip
-
             Assert.Equal(0, exit);
         }
 
-        private static int? RunVerifier(params string[] descriptors)
+        // pwsh is required to build and gate this repository, so a missing pwsh fails these tests.
+        private static int RunVerifier(params string[] descriptors)
         {
             var args = new List<string> { "-NoProfile", "-File", ScriptPath };
             args.AddRange(descriptors);
@@ -76,19 +71,11 @@ namespace ETL_SQL.Tests.Deploy
             };
             foreach (var a in args) psi.ArgumentList.Add(a);
 
-            try
-            {
-                using var proc = Process.Start(psi);
-                if (proc is null) return null;
-                proc.StandardOutput.ReadToEnd();
-                proc.StandardError.ReadToEnd();
-                proc.WaitForExit(60_000);
-                return proc.ExitCode;
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-                return null; // pwsh not installed
-            }
+            using var proc = Process.Start(psi) ?? throw new InvalidOperationException("pwsh did not start.");
+            proc.StandardOutput.ReadToEnd();
+            proc.StandardError.ReadToEnd();
+            proc.WaitForExit(60_000);
+            return proc.ExitCode;
         }
 
         private sealed class TempDir : IDisposable

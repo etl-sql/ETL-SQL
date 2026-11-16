@@ -70,7 +70,7 @@ public sealed class DirectoryRemovalRevocationTests
 
         var savedViewId = await CreatedIdAsync(await AuthPost(client, authorToken,
             $"/api/reports/{reportId}/saved-views",
-            new { name = $"view_{suffix}", parameters = new Dictionary<string, string>() }));
+            new { name = $"view_{suffix}", stateJson = """{"schemaVersion":1,"parameters":{}}""" }));
 
         var shareToken = await TokenAsync(await AuthPost(client, authorToken,
             $"/api/reports/{reportId}/share-links", new { }));

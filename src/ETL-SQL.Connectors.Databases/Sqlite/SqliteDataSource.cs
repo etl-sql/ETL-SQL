@@ -63,6 +63,12 @@ namespace ETL_SQL.Connectors.Sqlite
             {
                 dbPath = context.ResolvePath(dbPath);
                 builder.DataSource = dbPath;
+
+                // ResolvePath validates the path for reading. A writable SQLite connection also
+                // creates and modifies the file, so it passes the same script-immutability guard
+                // file writers do: a database must not be created as, or over, a .etlsql/.py file.
+                if (builder.Mode != SqliteOpenMode.ReadOnly)
+                    context.SecurityService.ValidateWriteAccess(dbPath);
             }
             _connectionString = builder.ConnectionString;
         }
@@ -159,8 +165,10 @@ namespace ETL_SQL.Connectors.Sqlite
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
 
+                var noRows = true;
                 while (await reader.ReadAsync(EffectiveCancellationToken(cancellationToken)))
                 {
+                    noRows = false;
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
@@ -176,7 +184,8 @@ namespace ETL_SQL.Connectors.Sqlite
                     }
                 }
 
-                if (currentBatch.Rows.Count > 0)
+                // An empty result still names its columns, so an outer join can name an empty side.
+                if (currentBatch.Rows.Count > 0 || noRows)
                 {
                     yield return currentBatch;
                 }
@@ -239,7 +248,10 @@ namespace ETL_SQL.Connectors.Sqlite
                     {
                         for (int idx = 0; idx < batch.ColumnNames.Count; idx++)
                         {
-                            insertCmd.Parameters[idx].Value = row[idx] ?? DBNull.Value;
+                            var val = row[idx];
+                            insertCmd.Parameters[idx].Value = val is DateOnly dateOnly
+                                ? dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                                : val ?? DBNull.Value;
                         }
                         await insertCmd.ExecuteNonQueryAsync(effectiveCancellationToken);
                     }
@@ -503,8 +515,10 @@ namespace ETL_SQL.Connectors.Sqlite
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
 
+                var noRows = true;
                 while (await reader.ReadAsync(EffectiveCancellationToken(cancellationToken)))
                 {
+                    noRows = false;
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
@@ -520,7 +534,8 @@ namespace ETL_SQL.Connectors.Sqlite
                     }
                 }
 
-                if (currentBatch.Rows.Count > 0)
+                // An empty result still names its columns, so an outer join can name an empty side.
+                if (currentBatch.Rows.Count > 0 || noRows)
                 {
                     yield return currentBatch;
                 }

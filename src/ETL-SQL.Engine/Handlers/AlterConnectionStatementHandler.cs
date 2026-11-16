@@ -19,10 +19,12 @@ namespace ETL_SQL.Engine.Handlers;
 public class AlterConnectionStatementHandler(
     IConnectorRegistry connectorRegistry,
     ILogger logger,
-    ISecretProvider? secretProvider = null) : IStatementHandler
+    ISecretProvider? secretProvider = null,
+    IConnectionCatalogProvider? connectionCatalog = null) : IStatementHandler
 {
     private readonly IConnectorRegistry _connectorRegistry = connectorRegistry;
     private readonly ILogger _logger = logger;
+    private readonly IConnectionCatalogProvider? _connectionCatalog = connectionCatalog;
     private readonly ConnectionSecretResolver _secretResolver = new(secretProvider);
 
     public Type SupportedStatementType => typeof(AlterConnectionStatement);
@@ -39,6 +41,11 @@ public class AlterConnectionStatementHandler(
                 $"Cannot ALTER CONNECTION '{stmt.ConnectionName}': connection does not exist.",
                 null, stmt.Line, stmt.Column);
 
+        if (context.CatalogBackedConnections.ContainsKey(stmt.ConnectionName))
+            throw new ExecutionException(
+                $"Connection '{stmt.ConnectionName}' is backed by a SHARED: catalog entry and cannot be modified with ALTER CONNECTION.",
+                null, stmt.Line, stmt.Column);
+
         // Start from the existing state — type, path, and options are all inherited
         var connectionType = stmt.ConnectionType ?? existingDs.ConnectorType;
         var target = existingDs.Path;
@@ -52,7 +59,7 @@ public class AlterConnectionStatementHandler(
             foreach (var kvp in stmt.Options)
             {
                 var val = StringifyOption(await context.EvaluateValue(kvp.Value, new Row(), decryptSensitive: true));
-                options[kvp.Key] = Interpolate(val);
+                options[kvp.Key] = Interpolate(val, context);
             }
         }
 
@@ -65,9 +72,13 @@ public class AlterConnectionStatementHandler(
         {
             target = context.DecryptValue(target);
         }
-        target = Interpolate(target ?? "");
-        target = await _secretResolver.ResolveTargetAsync(target, context.CancellationToken);
-        options = await _secretResolver.ResolveOptionsAsync(options, context.CancellationToken);
+        target = Interpolate(target ?? "", context);
+        target = await _secretResolver.ResolveTargetAsync(
+            target, context.CancellationToken, connectionType,
+            allowCatalogAuthorizedSecrets: false, identity: context.ExecutionIdentity, connectionCatalog: _connectionCatalog);
+        options = await _secretResolver.ResolveOptionsAsync(
+            options, context.CancellationToken, connectionType,
+            allowCatalogAuthorizedSecrets: false, identity: context.ExecutionIdentity, connectionCatalog: _connectionCatalog);
 
         // Resolve path for file-based connectors
         if (FileConnectorTypes.Contains(connectionType ?? string.Empty))
@@ -112,12 +123,18 @@ public class AlterConnectionStatementHandler(
         context.LastResult = new DataTable();
     }
 
-    private string Interpolate(string value)
+    /// <summary>
+    /// Replaces <c>${NAME}</c> with the host environment variable. COMPAT_BREAK: 0.22.0 — a name
+    /// must be in Security:AllowedEnvVars, the same list ENV() uses; a hosted script could otherwise
+    /// read the service's own secrets (Portal__Jwt__Secret) into a connection it controls.
+    /// </summary>
+    private string Interpolate(string value, IExecutionContext context)
     {
         if (string.IsNullOrEmpty(value)) return value;
         return Regex.Replace(value, @"\${(\w+)}", m =>
         {
             var varName = m.Groups[1].Value;
+            context.SecurityService.ValidateEnvVar(varName);
             var envValue = Environment.GetEnvironmentVariable(varName);
             if (envValue == null)
                 _logger.Warning("ALTER CONNECTION: environment variable '{VarName}' is not set; placeholder left as-is.", varName);

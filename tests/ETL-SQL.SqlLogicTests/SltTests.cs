@@ -16,6 +16,13 @@ namespace ETL_SQL.SqlLogicTests
             var testFiles = GetTestFiles()
                 .Select(f => (string)f[0])
                 .ToList();
+
+            // The lane opted in (ETL_SQL_RUN_SLT=1); a missing corpus or a file filter that matches
+            // nothing must fail, not pass having run zero files.
+            Assert.True(testFiles.Count > 0,
+                "No SLT files found: tests/slt_data is missing or ETL_SQL_SLT_FILE="
+                + $"'{Environment.GetEnvironmentVariable("ETL_SQL_SLT_FILE")}' matched nothing.");
+
             var failures = new System.Collections.Concurrent.ConcurrentBag<(string FilePath, Exception Exception)>();
 
             var failLog = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "slt_failure_debug.log");
@@ -45,6 +52,11 @@ namespace ETL_SQL.SqlLogicTests
 
                     foreach (var record in records)
                     {
+                        if (record.Type == SltRecordType.Halt && record.AppliesTo(SltRunner.OurEngineName))
+                        {
+                            break;
+                        }
+
                         await runner.RunTestAsync(record);
                     }
                 }

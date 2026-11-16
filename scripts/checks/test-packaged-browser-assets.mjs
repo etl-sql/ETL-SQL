@@ -53,6 +53,15 @@ try {
     }
     assert.deepEqual(check().problems, []);
 
+    // An inventory with no output under a published host checks nothing, so it cannot pass.
+    const inventoryFile = path.join(root, 'artifacts/browser-assets.json');
+    const full = fs.readFileSync(inventoryFile, 'utf8');
+    write(inventoryFile, JSON.stringify({ version: 2, outputs: JSON.parse(full).outputs.filter(o => o.path === media || o.path === shared) }));
+    result = check();
+    assert.equal(result.checked, 0);
+    assert.match(result.problems.join('\n'), /names no browser output for the published hosts/);
+    write(inventoryFile, full);
+
     fs.rmSync(path.join(root, 'artifacts/browser-assets.json'));
     assert.throws(check, /inventory is missing/);
     console.log('packaged browser asset checks passed');

@@ -321,5 +321,30 @@ assert.equal(rtVisual.isSafeHtmlVisualUrl('javascript:alert(1)'), false);
 assert.equal(rtVisual.isSafeHtmlVisualUrl('java\0script:alert(1)'), false);
 assert.equal(rtVisual.isSafeHtmlVisualUrl('data:image/png;base64,iVBORw0KGgo='), true);
 assert.equal(rtVisual.isSafeHtmlVisualUrl('data:text/html,<script>alert(1)</script>'), false);
+assert.equal(rtVisual.isSafeHtmlVisualUrl('//evil.example/b.png'), false, 'protocol-relative URLs are refused');
+
+// srcset: every candidate is checked, not just the start of the attribute.
+assert.equal(rtVisual.isSafeHtmlVisualUrl('https://ok.example/a.png 1x, https://ok.example/b.png 2x', 'srcset'), true);
+assert.equal(rtVisual.isSafeHtmlVisualUrl('https://ok.example/a.png 1x, //evil.example/b.png 2x', 'srcset'), false,
+    'a protocol-relative second candidate is refused');
+assert.equal(rtVisual.isSafeHtmlVisualUrl('https://ok.example/a.png 1x,javascript:alert(1) 2x', 'srcset'), false);
+assert.equal(rtVisual.isSafeHtmlVisualUrl('data:image/png;base64,iVBORw0KGgo= 1x, https://ok.example/b.png 2x', 'srcset'), true,
+    'a data: URL keeps its comma inside one candidate');
+assert.equal(rtVisual.isSafeHtmlVisualUrl('   ', 'srcset'), false);
+
+// SVG data: URLs: entity and character-reference tricks, and SMIL href animation.
+const svgUrl = svg => 'data:image/svg+xml,' + encodeURIComponent(svg);
+assert.equal(rtVisual.isSafeHtmlVisualUrl(svgUrl('<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>')), true);
+assert.equal(rtVisual.isSafeHtmlVisualUrl(svgUrl('<!DOCTYPE svg [<!ENTITY x "&#60;script&#62;alert(1)&#60;/script&#62;">]><svg>&x;</svg>')), false,
+    'an internal entity can expand to script');
+assert.equal(rtVisual.isSafeHtmlVisualUrl(svgUrl('<svg><a href="&#106;avascript:alert(1)"><text>x</text></a></svg>')), false,
+    'a character reference cannot spell javascript:');
+assert.equal(rtVisual.isSafeHtmlVisualUrl(svgUrl('<svg><a href="java&#9;script:alert(1)">x</a></svg>')), false,
+    'whitespace inside the scheme does not hide it');
+assert.equal(rtVisual.isSafeHtmlVisualUrl(svgUrl('<svg><a><set attributeName="href" to="data:text/html,x"/>x</a></svg>')), false,
+    'SMIL cannot animate a link target');
+assert.equal(rtVisual.isSafeHtmlVisualUrl('data:image/svg+xml;base64,' + btoa('<svg onload="alert(1)"></svg>')), false);
+assert.equal(rtVisual.isSafeHtmlVisualUrl(svgUrl('<svg><circle r="1"><animate attributeName="r" values="1;2" dur="1s"/></circle></svg>')), true,
+    'ordinary SMIL animation is still allowed');
 
 console.log('runtime visual: card creation, maximization lifecycle, KPI formatting, text interpolation, and sanitization passed');

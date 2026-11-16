@@ -242,7 +242,12 @@ internal static class RowExpressionCompiler
         var match = FindMatch(name, nameList);
         if (match.IsAmbiguous)
             throw new ExecutionException($"Ambiguous identifier '{name}'. Matches: {string.Join(", ", match.Candidates)}");
-        return match.ResolvedKey != null ? row[match.ResolvedKey] : null;
+        if (match.ResolvedKey != null) return row[match.ResolvedKey];
+
+        // Same rule as ExpressionEvaluator.EvaluateIdentifier: a row that may lack columns (an
+        // outer-join row with no match, a spilled row) reads NULL, any other row fails.
+        if (row.MayLackColumns) return null;
+        throw EvaluationUtils.UnknownName(name, row);
     }
 
     private readonly struct MatchResult

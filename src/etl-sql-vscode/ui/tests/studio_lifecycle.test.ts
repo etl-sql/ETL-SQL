@@ -63,20 +63,6 @@ describe('Studio lease and draft lifecycle', () => {
         offline.dispose();
     });
 
-    test('a draft kept in browser storage before v0.20.0 is offered once and then removed', async () => {
-        dom.window.localStorage.setItem('etlsql_studio_draft:report_7', JSON.stringify({ content: '-- old edit', version: 2 }));
-        const onRemoveDraft = vi.fn(async () => undefined);
-        const doc = { id: 'd1', reportId: 7, content: '-- saved', isDirty: false };
-        const handle = lifecycle([doc], { onLoadDraft: async () => null, onRemoveDraft });
-
-        const draft = await handle.getRecoverableDraft(doc);
-        expect(draft).toMatchObject({ content: '-- old edit', baseVersion: 2 });
-        handle.removeDraft(doc);
-        expect(dom.window.localStorage.getItem('etlsql_studio_draft:report_7')).toBeNull();
-        expect(onRemoveDraft).toHaveBeenCalled();
-        handle.dispose();
-    });
-
     test('a draft identical to the document is not offered, and is cleared', async () => {
         const onRemoveDraft = vi.fn(async () => undefined);
         const doc = { id: 'd1', reportId: 7, content: '-- same' };

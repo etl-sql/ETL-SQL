@@ -59,7 +59,7 @@ public class PortalBrowserFixture : IAsyncLifetime
         }
 
         playwright = await Playwright.CreateAsync();
-        browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
+        browser = await BrowserTestLaunch.LaunchAsync(playwright);
     }
 
     /// <summary>
@@ -77,7 +77,7 @@ public class PortalBrowserFixture : IAsyncLifetime
         await signInGate.WaitAsync();
         try
         {
-            await page.GotoAsync("/login.html");
+            await page.GotoWithDiagnosticsAsync("/login.html");
             await page.FillAsync("#username", AdminUsername);
             await page.FillAsync("#password", passwordChanged ? AdminPassword : FirstRunPassword);
             await page.ClickAsync("#loginBtn");
@@ -86,11 +86,24 @@ public class PortalBrowserFixture : IAsyncLifetime
             {
                 // Waiting on the selector rather than polling visibility: the form is rendered by
                 // the login script after the response lands, so an immediate check races it.
-                await page.WaitForSelectorAsync("#changeForm", new PageWaitForSelectorOptions
+                try
                 {
-                    State = WaitForSelectorState.Visible,
-                    Timeout = 20_000
-                });
+                    await page.WaitForSelectorAsync("#changeForm", new PageWaitForSelectorOptions
+                    {
+                        State = WaitForSelectorState.Visible,
+                        Timeout = 20_000
+                    });
+                }
+                catch (TimeoutException ex)
+                {
+                    // CI 41744076759 (2026-11-04) timed out here once with no reason. "Signing in…"
+                    // means the login request was still pending; an error message means it was refused.
+                    var button = await page.Locator("#loginBtn").InnerTextAsync(new LocatorInnerTextOptions { Timeout = 2_000 });
+                    var error = await page.Locator("#errorMsg").InnerTextAsync(new LocatorInnerTextOptions { Timeout = 2_000 });
+                    throw new TimeoutException(
+                        $"The first-run password change did not appear within 20 seconds. URL: {page.Url}. "
+                        + $"Sign-in button: '{button}'. Error shown: '{error}'.", ex);
+                }
                 await page.FillAsync("#currentPwd", FirstRunPassword);
                 await page.FillAsync("#newPwd", AdminPassword);
                 await page.FillAsync("#confirmPwd", AdminPassword);
@@ -100,7 +113,7 @@ public class PortalBrowserFixture : IAsyncLifetime
 
             try
             {
-                await page.WaitForURLAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
+                await page.WaitForURLWithDiagnosticsAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
             }
             catch (TimeoutException ex)
             {
@@ -171,6 +184,7 @@ public class PortalBrowserFixture : IAsyncLifetime
 public sealed class BrowserSession : IAsyncDisposable
 {
     private readonly IBrowserContext context;
+    private readonly BrowserNavigationDiagnostics diagnostics;
     private readonly List<string> pageErrors = [];
 
     private readonly List<string> consoleErrors = [];
@@ -179,6 +193,7 @@ public sealed class BrowserSession : IAsyncDisposable
     private BrowserSession(IBrowserContext context, IPage page)
     {
         this.context = context;
+        diagnostics = new(context);
         Page = page;
         page.PageError += (_, error) => pageErrors.Add(error);
         page.Console += (_, message) =>
@@ -217,5 +232,9 @@ public sealed class BrowserSession : IAsyncDisposable
     internal static async Task<BrowserSession> CreateAsync(IBrowserContext context)
         => new(context, await context.NewPageAsync());
 
-    public async ValueTask DisposeAsync() => await context.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await diagnostics.DisposeAsync();
+        await context.DisposeAsync();
+    }
 }

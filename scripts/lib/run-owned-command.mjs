@@ -6,8 +6,10 @@ import { nodeCommandEnvironment } from './node-command-environment.mjs';
 // Node: https://nodejs.org/docs/latest-v22.x/api/child_process.html#optionsdetached
 // Windows: https://learn.microsoft.com/windows-server/administration/windows-commands/taskkill
 export async function runOwnedCommand(command, args, { cwd, label, capture = false, signal,
-    maxOutputBytes = 32 * 1024 * 1024, stdout = process.stderr, stderr = process.stderr }) {
+    maxOutputBytes = 32 * 1024 * 1024, shutdownTimeoutMs = 5000,
+    stdout = process.stderr, stderr = process.stderr }) {
     signal?.throwIfAborted();
+    if (!Number.isFinite(shutdownTimeoutMs) || shutdownTimeoutMs < 1) throw new Error('Invalid shutdown timeout.');
     process.stderr.write(`[VSIX] ${label}\n`);
     return await new Promise((resolve, reject) => {
         const child = spawn(command, args, { cwd, env: nodeCommandEnvironment(), detached: true,
@@ -17,6 +19,23 @@ export async function runOwnedCommand(command, args, { cwd, label, capture = fal
         let problem;
         let closed = false;
         let shutdown;
+        let settled = false;
+        const finish = error => {
+            if (settled) return;
+            settled = true;
+            signal?.removeEventListener('abort', abort);
+            if (error) reject(error);
+            else resolve({ stdout: Buffer.concat(chunks).toString('utf8') });
+        };
+        const failedShutdown = error => {
+            // A denied or stalled tree terminator must not leave the caller waiting for close.
+            // Direct-child termination is a fallback, not evidence that descendants were stopped.
+            try { child.kill('SIGKILL'); } catch { /* Preserve the shutdown error below. */ }
+            child.stdout.destroy();
+            child.stderr.destroy();
+            child.unref();
+            finish(new Error(`${problem?.message ?? label} Owned command shutdown failed: ${error.message}`, { cause: error }));
+        };
         const stop = () => {
             if (shutdown || closed || !child.pid) return;
             shutdown = new Promise((finish, fail) => {
@@ -25,16 +44,23 @@ export async function runOwnedCommand(command, args, { cwd, label, capture = fal
                     if (!systemRoot) return fail(new Error('Cannot locate Windows process-tree shutdown.'));
                     const terminator = spawn(path.join(systemRoot, 'System32/taskkill.exe'),
                         ['/pid', String(child.pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' });
-                    terminator.once('error', fail);
-                    terminator.once('close', code => code === 0 || closed ? finish() :
-                        fail(new Error(`Could not stop owned command tree (${code}).`)));
+                    const deadline = setTimeout(() => {
+                        terminator.kill('SIGKILL');
+                        terminator.unref();
+                        fail(new Error(`Owned command tree shutdown exceeded ${shutdownTimeoutMs}ms.`));
+                    }, shutdownTimeoutMs);
+                    terminator.once('error', error => { clearTimeout(deadline); fail(error); });
+                    terminator.once('close', code => {
+                        clearTimeout(deadline);
+                        if (code === 0 || closed) finish();
+                        else fail(new Error(`Could not stop owned command tree (${code}).`));
+                    });
                 } else {
                     try { process.kill(-child.pid, 'SIGKILL'); finish(); }
                     catch (error) { if (error.code === 'ESRCH') finish(); else fail(error); }
                 }
             });
-            // Retain shutdown failures for close handling without an unhandled rejection.
-            shutdown.catch(error => { problem = error; });
+            shutdown.catch(failedShutdown);
         };
         const abort = () => { problem ??= signal.reason ?? new Error(`${label} cancelled.`); stop(); };
         signal?.addEventListener('abort', abort, { once: true });
@@ -53,9 +79,9 @@ export async function runOwnedCommand(command, args, { cwd, label, capture = fal
             closed = true;
             signal?.removeEventListener('abort', abort);
             try { await shutdown; } catch (error) { problem = error; }
-            if (problem) reject(problem);
-            else if (code !== 0) reject(new Error(`${label} failed (${exitSignal ?? code}).`));
-            else resolve({ stdout: Buffer.concat(chunks).toString('utf8') });
+            if (problem) finish(problem);
+            else if (code !== 0) finish(new Error(`${label} failed (${exitSignal ?? code}).`));
+            else finish();
         });
     });
 }

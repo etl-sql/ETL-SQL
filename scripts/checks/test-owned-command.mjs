@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Writable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -64,6 +64,30 @@ setInterval(() => {}, 1000);
     await delay(100);
     assert.equal(fs.readFileSync(heartbeat, 'utf8'), stoppedHeartbeat);
     assert.equal(environmentSignature(), environment, 'Child toolchain selection must preserve the caller environment.');
+    if (process.platform === 'win32') {
+        const failureScript = path.join(temporary, 'shutdown-failure.mjs');
+        const ownedPid = path.join(temporary, 'failed-shutdown-pid.txt');
+        fs.writeFileSync(failureScript, `
+import assert from 'node:assert/strict';
+import { runOwnedCommand } from ${JSON.stringify(new URL('../lib/run-owned-command.mjs', import.meta.url).href)};
+import fs from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
+const controller = new AbortController();
+const command = runOwnedCommand(process.execPath, ['-e', ${JSON.stringify(`require('fs').writeFileSync(${JSON.stringify(ownedPid)}, String(process.pid));setInterval(()=>{},1000);`)}], {
+    cwd: ${JSON.stringify(temporary)}, label: 'failed terminator fixture', signal: controller.signal,
+});
+const rejected = assert.rejects(command, /Owned command shutdown failed/);
+const deadline = Date.now() + 5000;
+while (!fs.existsSync(${JSON.stringify(ownedPid)})) { assert.ok(Date.now() < deadline); await delay(25); }
+process.env.SystemRoot = ${JSON.stringify(temporary)};
+controller.abort(new Error('Injected shutdown failure.'));
+await rejected;
+`);
+        const failedTerminator = spawnSync(process.execPath, [failureScript], { encoding: 'utf8', timeout: 10000, windowsHide: true });
+        assert.ifError(failedTerminator.error);
+        assert.equal(failedTerminator.status, 0, failedTerminator.stdout + failedTerminator.stderr);
+        await until(() => !alive(Number(fs.readFileSync(ownedPid, 'utf8'))));
+    }
     console.log('Owned commands: success/failure, missing tools, bounded output, cancellation, descendant shutdown, and unrelated-peer preservation passed.');
 } finally {
     if (peer && peer.exitCode === null) {

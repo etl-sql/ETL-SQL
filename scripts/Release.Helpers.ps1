@@ -1,9 +1,61 @@
 # Side-effect-free release policy shared by the tag and MSI workflows.
 
+function Get-ReleaseCertificationToolchain {
+    function Read-Tool([string]$Name, [string[]]$Arguments) {
+        $output = & $Name @Arguments 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "Cannot snapshot certification $Name inputs." }
+        return ($output -join "`n").Trim()
+    }
+    function Get-TextHash([string]$Value) {
+        return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($Value))).ToLowerInvariant()
+    }
+    $executables = foreach ($name in @('node', 'dotnet', 'docker', 'pwsh')) {
+        $command = Get-Command $name -CommandType Application | Select-Object -First 1
+        "$name=$((Get-FileHash -LiteralPath $command.Source -Algorithm SHA256).Hash)"
+    }
+    $images = (Read-Tool docker @('image', 'ls', '--no-trunc', '--digests', '--format', '{{.Repository}}:{{.Tag}}@{{.Digest}}#{{.ID}}')) -split "`n"
+    $loaderEnvironment = Get-ChildItem Env: | Where-Object {
+        ($_.Name -match '^(NODE_|DOTNET_|COMPlus_|COREHOST_|MSBUILD)' -or
+            $_.Name -in @('PATH', 'NUGET_PACKAGES', 'NUGET_CONFIG_FILE', 'NUGET_FALLBACK_PACKAGES')) -and
+        $_.Name -notmatch 'TOKEN|PASSWORD|SECRET|TELEMETRY_SESSION'
+    } | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" }
+    return [ordered]@{
+        nodeVersion = Read-Tool node @('--version')
+        dotnetVersion = Read-Tool dotnet @('--version')
+        runtimesHash = Get-TextHash (Read-Tool dotnet @('--list-runtimes'))
+        dockerVersionHash = Get-TextHash (Read-Tool docker @('version', '--format', '{{json .Server}}'))
+        dockerImagesHash = Get-TextHash (($images | Sort-Object) -join "`n")
+        executablesHash = Get-TextHash ($executables -join "`n")
+        environmentHash = Get-TextHash ($loaderEnvironment -join "`n")
+        operatingSystem = [Environment]::OSVersion.VersionString
+        architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
+    }
+}
+
 function Test-ReleaseTestOutputExecuted {
     param([AllowEmptyString()][string]$Output)
 
     return $Output -match 'Passed:\s*[1-9][0-9]*\b'
+}
+
+# The TRX counters, unlike the console summary, are the same in every display language. Under a
+# German culture dotnet prints "Bestanden! ... erfolgreich: 16", so the console check alone failed
+# a passing lane (CI 42732273546).
+function Test-ReleaseTrxExecuted {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    try {
+        [xml]$result = Get-Content -LiteralPath $Path -Raw
+        return [int]$result.TestRun.ResultSummary.Counters.passed -gt 0
+    } catch { return $false }
+}
+
+function Test-ReleaseTestExecuted {
+    param([AllowEmptyString()][string]$Output, [string]$TrxPath)
+
+    if (Test-ReleaseTestOutputExecuted -Output $Output) { return $true }
+    return [bool]$TrxPath -and (Test-ReleaseTrxExecuted -Path $TrxPath)
 }
 
 function Test-ReleaseTrxComplete {
@@ -26,6 +78,10 @@ function Test-PreReleasePhaseReusable {
         -not [string]::IsNullOrWhiteSpace($PreviousPhase.log) -and
         (Test-Path -LiteralPath $PreviousPhase.log -PathType Leaf)
     if (-not $eligible -or (Get-Item -LiteralPath $PreviousPhase.log).Length -eq 0) { return $false }
+    $completed = [datetimeoffset]::MinValue
+    if (-not [datetimeoffset]::TryParse([string]$PreviousPhase.completedAt, [ref]$completed)) { return $false }
+    $now = [datetimeoffset]::UtcNow
+    if ($completed -gt $now -or $completed -lt $now.AddDays(-7)) { return $false }
     foreach ($artifact in $PreviousPhase.artifacts) {
         if (-not (Test-Path -LiteralPath $artifact)) { return $false }
     }
@@ -56,6 +112,38 @@ function Get-ReleaseSourceFingerprint {
     } finally {
         [Console]::OutputEncoding = $previousConsoleEncoding
         $OutputEncoding = $previousPipeEncoding
+    }
+}
+
+function Get-ReleaseCertificationSource {
+    param([Parameter(Mandatory)][string]$RepoRoot)
+
+    $commit = ((& git -C $RepoRoot rev-parse HEAD 2>$null) -join '').Trim()
+    if ($LASTEXITCODE -ne 0 -or $commit -cnotmatch '^[a-f0-9]{40}$') {
+        throw 'Cannot establish the certification candidate commit.'
+    }
+    $dirtyPaths = @(& git -C $RepoRoot status --porcelain=v1 --untracked-files=all 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot establish certification candidate cleanliness.' }
+    $fingerprint = Get-ReleaseSourceFingerprint -RepoRoot $RepoRoot
+    if ($dirtyPaths.Count -eq 0) {
+        $cleanFingerprint = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
+                [Text.Encoding]::UTF8.GetBytes($commit))).ToLowerInvariant()
+        if ($fingerprint -cne $cleanFingerprint) { throw 'Certification source changed while capturing its identity.' }
+    }
+    return [pscustomobject]@{ commit = $commit; dirtyPaths = $dirtyPaths; fingerprint = $fingerprint }
+}
+
+function Assert-ReleaseCertificationSourceUnchanged {
+    param(
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [Parameter(Mandatory)][object]$Initial
+    )
+
+    $current = Get-ReleaseCertificationSource -RepoRoot $RepoRoot
+    if ($current.commit -cne $Initial.commit -or $current.fingerprint -cne $Initial.fingerprint -or
+        (ConvertTo-Json -InputObject @($current.dirtyPaths) -Compress) -cne
+        (ConvertTo-Json -InputObject @($Initial.dirtyPaths) -Compress)) {
+        throw 'Candidate source changed during certification; retained partial results cannot certify this candidate.'
     }
 }
 
@@ -99,6 +187,30 @@ function Select-PreviousStableRelease {
         Sort-Object Version -Descending |
         Select-Object -First 1
     if ($null -eq $previous) { throw "No prior stable GitHub release found before $CurrentVersion." }
+    return $previous.TagName
+}
+
+# v0.22.0 is the first public release. No user runs anything older, so nothing older is a release
+# an upgrade must start from.
+$script:FirstPublicRelease = [version]'0.22.0'
+
+# The release an installed upgrade is certified from, or '' when the candidate is the first public
+# release and is certified as a fresh install only. Any later candidate must have a public release
+# before it: a missing one fails, so an incomplete release listing cannot skip the upgrade.
+function Select-UpgradeBaseline {
+    param(
+        [Parameter(Mandatory)][string]$CurrentVersion,
+        [AllowEmptyCollection()][object[]]$Releases = @()
+    )
+
+    $current = ConvertTo-StableReleaseVersion -Tag $CurrentVersion
+    if ($null -eq $current) { throw "Invalid stable release version '$CurrentVersion'." }
+    if ($current -le $script:FirstPublicRelease) { return '' }
+    $previous = Get-PublishedStableReleases -Releases $Releases |
+        Where-Object { $_.Version -lt $current -and $_.Version -ge $script:FirstPublicRelease } |
+        Sort-Object Version -Descending |
+        Select-Object -First 1
+    if ($null -eq $previous) { throw "No public release (v$script:FirstPublicRelease or later) found before $CurrentVersion to upgrade from." }
     return $previous.TagName
 }
 

@@ -47,9 +47,8 @@ public sealed class DatasetKeyPostureService(
                 dataset.Name,
                 dataset.ParquetFilePath,
                 // Mirrors DatasetAtRestKeyRotationService.ResolveSourceVersion: an unstamped row is
-                // whatever the deployment declares its legacy version to be.
+                // under the current key.
                 Version = dataset.AtRestKeyVersion
-                    ?? config.Dataset.LegacyAtRestKeyVersion
                     ?? currentVersion
             })
             .ToList();

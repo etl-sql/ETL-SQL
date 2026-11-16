@@ -183,8 +183,9 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
             || type == typeof(float) || type == typeof(double) || type == typeof(decimal);
 
     private static bool IsSupportedKey(Type type)
-        => IsNumeric(type) || type == typeof(DateTime) || type == typeof(DateTimeOffset)
-            || type == typeof(TimeSpan) || type == typeof(Guid) || type == typeof(string);
+        => IsNumeric(type) || type == typeof(DateOnly) || type == typeof(DateTime)
+            || type == typeof(DateTimeOffset) || type == typeof(TimeSpan)
+            || type == typeof(Guid) || type == typeof(string);
 
     private static bool TryRewriteHaving(
         Expression? expression,
@@ -389,7 +390,7 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
                 existing = table.Rows.ToDictionary(row => row[GetKeyOrdinal(slots)] ?? nullKey);
             foreach (var (key, state) in _result.Groups)
             {
-                var restoredKey = key.IsNull ? null : key.Value;
+                var restoredKey = key.IsNull ? null : key.Original;
                 var row = createRows ? table.NewRow() : existing![restoredKey ?? nullKey];
                 for (var index = 0; index < slots.Count; index++)
                 {
@@ -456,7 +457,7 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
                 {
                     row[index] = slots[index].Kind switch
                     {
-                        SlotKind.Key => key.IsNull ? null : key.Value,
+                        SlotKind.Key => key.IsNull ? null : key.Original,
                         SlotKind.Count when slots[index].CountStar => (decimal)count,
                         _ => null
                     };

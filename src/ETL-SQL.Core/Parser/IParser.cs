@@ -15,10 +15,16 @@ public interface IParser
     Token LookAhead(int distance);
     Token Advance();
     bool Match(TokenType type);
+
+    /// <summary>Reads an optional <c>NULLS FIRST</c> or <c>NULLS LAST</c> after a sort key.</summary>
+    bool? ParseNullsPlacement();
     Token Consume(TokenType type, string message);
     Token ConsumeIdentifier(string message);
     Statement ParseStatement();
     Statement ParseQuery();
+    bool IsQueryStart();
+    bool IsInsertQueryStart();
+    Statement AttachCtes(Statement stmt, System.Collections.Generic.List<CteDefinition> ctes, bool isRecursive);
     Statement ParseDuckPivotStatement();
     Statement ParseDuckUnpivotStatement();
     Expression ParseExpression();

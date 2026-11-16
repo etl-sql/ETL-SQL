@@ -30,7 +30,7 @@ namespace ETL_SQL.Analysis.Explain
 
         private async Task GenerateSelectPlan(SelectStatement select, DataTable plan, PlanCounter id, IExecutionContext context, ExecutionMetrics metrics)
         {
-            var source = await context.ResolveDataSourceAsync(select.FromTable);
+            var source = await context.ResolveReadSourceAsync(select.FromTable);
             var op = "Scan";
             var details = "Source: " + select.FromTable.ToSql();
 
@@ -64,7 +64,7 @@ namespace ETL_SQL.Analysis.Explain
                     var rightAlias = join.Table.Alias ?? join.Table.TableName;
 
                     bool isHash = IsHashJoinPossible(join.Condition, leftAlias, rightAlias, hashKeysLeft, hashKeysRight);
-                    var joinSource = await context.ResolveDataSourceAsync(join.Table);
+                    var joinSource = await context.ResolveReadSourceAsync(join.Table);
 
                     var joinOp = isHash ? "Hash Join" : "Join";
                     var joinDetails = $"Type: {join.JoinType}, Table: {join.Table.ToSql()}, Condition: {join.Condition.ToSql()}";

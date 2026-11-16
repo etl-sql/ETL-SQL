@@ -2,8 +2,8 @@
   "name": "etl-sql-vscode",
   "displayName": "ETL-SQL Tools",
   "description": "SQL-like scripting for multi-source data pipelines. Run scripts against MSSQL, Postgres, Snowflake, BigQuery, SFTP, REST APIs, flat files, and more — with IntelliSense, linting, live results, and interactive report authoring.",
-  "version": "0.21.0",
-  "publisher": "etl-sql",
+  "version": "0.22.0",
+  "publisher": "Octocolee",
   "license": "Apache-2.0",
   "author": "Charles Clemens <etlsqlsoftware@gmail.com>",
   "repository": {
@@ -241,33 +241,10 @@
         "title": "AI",
         "order": 3,
         "properties": {
-          "etlsql.ai.provider": {
-            "type": "string",
-            "enum": [
-              "Gemini",
-              "OpenAI",
-              "Anthropic",
-              "OpenRouter",
-              "VS Code Chat Extensions (Copilot/Claude/etc.)",
-              "Custom"
-            ],
-            "default": "Gemini",
-            "markdownDescription": "The AI provider to use for parsing specifications. Gemini and Anthropic support direct PDF analysis; OpenAI supports text files; VS Code Chat Extensions uses your installed VS Code chat model provider (no API key required)."
-          },
-          "etlsql.ai.apiKey": {
-            "type": "string",
-            "default": "",
-            "markdownDescription": "API Key for the selected AI provider. Not required if using VS Code Chat Extensions."
-          },
           "etlsql.ai.model": {
             "type": "string",
             "default": "",
-            "markdownDescription": "The specific AI model to run (e.g. `gemini-1.5-flash`, `gpt-6-astra`, `claude-3-5-sonnet-latest`). If blank, provider defaults are used; OpenAI uses `gpt-6-astra`."
-          },
-          "etlsql.ai.endpoint": {
-            "type": "string",
-            "default": "",
-            "markdownDescription": "**(Advanced)** Override the default API endpoint URL. Required when using `Custom` provider (e.g., local Ollama, LocalAI, or custom OpenAI gateway)."
+            "markdownDescription": "Chat model family for **ETL-SQL: Generate Script from Spec** (for example `gpt-4o` or `claude-sonnet-4`). The model comes from an installed VS Code chat extension such as GitHub Copilot. Leave blank to use the first available model."
           }
         }
       },
@@ -520,7 +497,7 @@
         {
           "command": "etlsql.generateScriptFromSpec",
           "group": "etlsql",
-          "when": "resourceFilename =~ /\\.(pdf|xlsx|xls|csv|tsv|json|txt|docx|doc)$/i"
+          "when": "resourceFilename =~ /\\.(csv|tsv|json|xml|txt|md)$/i"
         }
       ],
       "etlsql.launchMenu": [
@@ -567,21 +544,23 @@
     "@types/vscode": "^1.91.0",
     "@typescript-eslint/eslint-plugin": "^8.62.0",
     "@typescript-eslint/parser": "^8.62.0",
-    "@vitest/coverage-v8": "^4.1.11",
-    "@vscode/test-electron": "^2.5.2",
+    "@vitest/coverage-v8": "^4.1.12",
+    "@vscode/test-electron": "^3.1.0",
     "eslint": "^10.6.0",
-    "glob": "^13.0.6",
+    "glob": "^14.0.3",
     "globals": "^17.7.0",
     "jsdom": "^29.0.2",
     "mocha": "^11.3.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "overrides": {
-    "serialize-javascript": ">=7.0.5",
+    "serialize-javascript": ">=7.1.4 <8.0.0",
     "diff": ">=8.0.3",
     "brace-expansion": ">=5.0.12",
-    "undici": ">=7.29.1 <8.0.0",
-    "js-yaml": ">=5.4.1"
+    "undici": ">=7.30.1 <8.0.0",
+    "js-yaml": ">=5.4.1",
+    "minimatch": "^11.0.1",
+    "glob": "$glob"
   }
 }

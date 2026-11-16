@@ -96,10 +96,17 @@ public sealed class MigrationConvergenceTests : IDisposable
         }
     }
 
-    [Fact]
-    public async Task PortalMigrations_UpOperationsFollowRollingExpandContract()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("CompatBreak", "0.22")]
+    public async Task PortalMigrations_UpOperationsFollowRollingExpandContract(bool postgres)
     {
-        var options = Options("contract.db");
+        var options = postgres
+            ? new DbContextOptionsBuilder<PortalDbContext>()
+                .UseNpgsql("Host=localhost;Database=contract_only;Username=contract_only",
+                    provider => provider.MigrationsAssembly(PortalDatabase.PostgresMigrationsAssembly)).Options
+            : Options("contract.db");
         await using var db = new PortalDbContext(options);
         var provider = db.Database.ProviderName ?? "Microsoft.EntityFrameworkCore.Sqlite";
         var migrations = db.GetInfrastructure().GetRequiredService<IMigrationsAssembly>();
@@ -111,8 +118,50 @@ public sealed class MigrationConvergenceTests : IDisposable
                 continue;
 
             var migration = migrations.CreateMigration(typeInfo, provider);
+            if (id is "20261025130738_ConsolidateSavedViewState" or "20261025130743_ConsolidateSavedViewState")
+            {
+                // Pre-deployment consolidation backfills the authoritative envelope, then drops
+                // only its two obsolete flat maps. Mixed-version operation is unsupported.
+                Assert.Equal(4, migration.UpOperations.Count);
+                Assert.All(migration.UpOperations.Take(2), operation => Assert.IsType<SqlOperation>(operation));
+                var drops = migration.UpOperations.Skip(2).Select(operation => Assert.IsType<DropColumnOperation>(operation)).ToArray();
+                Assert.All(drops, column =>
+                {
+                    Assert.Equal("saved_report_views", column.Table);
+                    Assert.Null(column.Schema);
+                });
+                Assert.Equal(new[] { "filters_json", "parameters_json" }, drops.Select(column => column.Name).Order(StringComparer.Ordinal).ToArray());
+                continue;
+            }
+            if (id is "20261025111254_RemoveAlertInlineDelivery" or "20261025111259_RemoveAlertInlineDelivery")
+            {
+                // Pre-deployment v0.22 contract cleanup: retaining unused recipient/SMTP fields
+                // would preserve a second delivery model. Only these two reviewed drops are waived;
+                // this migration cannot gain another operation or target another table/schema.
+                var drops = migration.UpOperations.Select(operation => Assert.IsType<DropColumnOperation>(operation)).ToArray();
+                Assert.Equal(2, drops.Length);
+                Assert.All(drops, column =>
+                {
+                    Assert.Equal("report_alerts", column.Table);
+                    Assert.Null(column.Schema);
+                });
+                Assert.Equal(new[] { "recipient", "smtp_alias" }, drops.Select(column => column.Name).Order(StringComparer.Ordinal).ToArray());
+                continue;
+            }
             foreach (var operation in migration.UpOperations)
             {
+                // Historical pre-deployment PostgreSQL naming cleanup. SQLite already used an
+                // unbounded TEXT column, so the former SQLite-only guard never saw this operation.
+                // Approve only the reviewed Name bound; every other alteration remains checked.
+                if (id == "20260729133100_AddShareLinkNames"
+                    && operation is AlterColumnOperation column
+                    && column.Table == "ReportEmbedTokens" && column.Schema is null && column.Name == "Name"
+                    && column.ClrType == typeof(string) && column.ColumnType == "character varying(200)"
+                    && column.MaxLength == 200 && !column.IsNullable
+                    && column.OldColumn.ClrType == typeof(string) && column.OldColumn.ColumnType == "text"
+                    && column.OldColumn.MaxLength is null && !column.OldColumn.IsNullable
+                    && column.DefaultValue is null && column.DefaultValueSql is null && column.ComputedColumnSql is null)
+                    continue;
                 if (IsRollingContractViolation(operation, out var reason))
                     violations.Add($"{id}: {operation.GetType().Name} - {reason}");
             }
@@ -120,6 +169,40 @@ public sealed class MigrationConvergenceTests : IDisposable
 
         Assert.Empty(violations);
         Assert.NotEmpty(migrations.Migrations);
+    }
+
+    /// <summary>
+    /// A migration class without its designer half has no [Migration] attribute, and EF skips it
+    /// silently. The one shipped orphan (PostgreSQL AddRefreshTokenHashIndex) is compensated by
+    /// StandardizeSnakeCaseNaming, which creates ix_refresh_tokens_token where it is missing; any
+    /// other orphan would be a schema change that never runs.
+    /// </summary>
+    [Fact]
+    public void EveryShippedMigrationClass_IsDiscoverableByEf()
+    {
+        static IReadOnlyList<string> Orphans(DbContextOptions<PortalDbContext> options)
+        {
+            using var db = new PortalDbContext(options);
+            var discovered = db.GetInfrastructure().GetRequiredService<IMigrationsAssembly>()
+                .Migrations.Values.Select(type => type.AsType()).ToHashSet();
+            var assembly = discovered.First().Assembly;
+            return [.. assembly.GetTypes()
+                .Where(type => !type.IsAbstract && typeof(Migration).IsAssignableFrom(type))
+                .Where(type => !discovered.Contains(type))
+                .Select(type => type.FullName!)];
+        }
+
+        var sqlite = Orphans(Options("discovery.db"));
+        var postgres = Orphans(new DbContextOptionsBuilder<PortalDbContext>()
+            .UseNpgsql(
+                "Host=localhost;Database=portal_migration_discovery;Username=postgres;Password=unused",
+                npg => npg.MigrationsAssembly(PortalDatabase.PostgresMigrationsAssembly))
+            .Options);
+
+        Assert.Empty(sqlite);
+        Assert.Equal(
+            ["ETLSQL.Portal.Migrations.Postgres.Migrations.AddRefreshTokenHashIndex"],
+            postgres);
     }
 
     [Fact]

@@ -138,7 +138,7 @@ namespace ETL_SQL.Connectors.MySql
                 await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
                 return [new DiagnosticStep("AUTH", DiagnosticStatus.Ok, "MySQL authentication succeeded.")];
             }
-            catch (Exception ex) when (ex is MySqlException or InvalidOperationException or TimeoutException or OperationCanceledException)
+            catch (Exception ex) when (ex is MySqlException or InvalidOperationException or TimeoutException or OperationCanceledException or ArgumentException)
             {
                 return
                 [
@@ -149,9 +149,11 @@ namespace ETL_SQL.Connectors.MySql
             }
         }
 
-        private string BuildDiagnosticConnectionString(string target, IReadOnlyDictionary<string, string>? options)
+        // The diagnostic engine authorizes GetHost(target, options), which prefers HOST then SERVER.
+        // Build from options only when they carry that host, so the probe dials what was authorized.
+        internal string BuildDiagnosticConnectionString(string target, IReadOnlyDictionary<string, string>? options)
         {
-            if (options is { Count: > 0 } && (options.ContainsKey("HOST") || options.ContainsKey("SERVER") || options.ContainsKey("DATABASE") || options.ContainsKey("USER")))
+            if (options is { Count: > 0 } && (options.ContainsKey("HOST") || options.ContainsKey("SERVER")))
                 return BuildConnectionString(new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase));
             return target;
         }

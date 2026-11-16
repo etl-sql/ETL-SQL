@@ -28,6 +28,8 @@ public class DefaultSqlDialect : ISqlDialect
 
     public virtual bool SupportsTop => false;
 
+    public virtual bool SupportsNullsOrdering => false;
+
     public virtual string FormatStringConcat(string left, string right) => $"{left} || {right}";
 
     public virtual string FormatTop(string compiledTop, bool percent, bool withTies) => "";

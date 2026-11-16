@@ -17,7 +17,7 @@ namespace ETL_SQL.Connectors
             "MSSQL", "SQLSERVER", "POSTGRES", "NPSQL", "ORACLE", "ODBC", "MYSQL", "MARIADB",
             "API", "REST", "HTTP",
             "WEBHOOK", "SLACK", "TEAMS",
-            "FTP", "SFTP", "SMTP", "AZURE_BLOB", "BLOB", "EMAIL", "SSH",
+            "FTP", "FTP_CONN", "SFTP", "SMTP", "AZURE_BLOB", "BLOB", "EMAIL", "SSH",
             "FLATFILE", "CSV", "EXCEL", "JSON", "XML", "PARQUET", "AVRO", "DIRECTORY", "MOCKDB"
         };
 
@@ -56,7 +56,7 @@ namespace ETL_SQL.Connectors
             {
                 "ODBC" => BuildOdbc(props),
                 "API" or "REST" or "HTTP" or "WEBHOOK" or "SLACK" or "TEAMS" => BuildRest(props),
-                "FTP" or "SFTP" or "SMTP" or "AZURE_BLOB" or "BLOB" or "EMAIL" or "SSH" => BuildRemote(props),
+                "FTP" or "FTP_CONN" or "SFTP" or "SMTP" or "AZURE_BLOB" or "BLOB" or "EMAIL" or "SSH" => BuildRemote(props),
                 "FLATFILE" or "CSV" or "EXCEL" or "JSON" or "XML" or "PARQUET" or "AVRO" or "DIRECTORY" or "MOCKDB" => BuildFile(props),
                 _ => throw new ArgumentException($"Structured property building is not yet supported for provider: {provider}")
             };
@@ -150,7 +150,7 @@ namespace ETL_SQL.Connectors
             // DSN takes precedence
             if (props.TryGetValue("DSN", out var dsn) && !string.IsNullOrEmpty(dsn))
             {
-                builder.Append($"DSN={dsn}");
+                builder.Append($"DSN={OdbcValue(dsn)}");
             }
             else if (props.TryGetValue("DRIVER", out var driver) && !string.IsNullOrEmpty(driver))
             {
@@ -158,19 +158,19 @@ namespace ETL_SQL.Connectors
                 if (!driver.StartsWith("{")) driver = "{" + driver + "}";
                 builder.Append($"DRIVER={driver}");
 
-                if (props.TryGetValue("SERVER", out var srv)) builder.Append($";SERVER={srv}");
-                if (props.TryGetValue("PORT", out var port)) builder.Append($";PORT={port}");
-                if (props.TryGetValue("DATABASE", out var db)) builder.Append($";DATABASE={db}");
+                if (props.TryGetValue("SERVER", out var srv)) builder.Append($";SERVER={OdbcValue(srv)}");
+                if (props.TryGetValue("PORT", out var port)) builder.Append($";PORT={OdbcValue(port)}");
+                if (props.TryGetValue("DATABASE", out var db)) builder.Append($";DATABASE={OdbcValue(db)}");
             }
 
             if (props.TryGetValue("UID", out var user) || props.TryGetValue("USER", out user))
-                builder.Append($";UID={user}");
+                builder.Append($";UID={OdbcValue(user)}");
 
             if (props.TryGetValue("PASSWORD", out var pass))
-                builder.Append($";PWD={pass}");
+                builder.Append($";PWD={OdbcValue(pass)}");
 
             if (props.TryGetValue("CONNECT_TIMEOUT", out var timeout))
-                builder.Append($";Connect Timeout={timeout}");
+                builder.Append($";Connect Timeout={OdbcValue(timeout)}");
 
             // Allow arbitrary pass-through properties
             foreach (var kvp in props)
@@ -181,10 +181,25 @@ namespace ETL_SQL.Connectors
                     key == "PASSWORD" || key == "CONNECT_TIMEOUT" ||
                     key == "TABLE") continue;
 
-                builder.Append($";{kvp.Key}={kvp.Value}");
+                if (kvp.Key.IndexOfAny(['=', ';', '{', '}']) >= 0)
+                    throw new ArgumentException($"ODBC option name '{kvp.Key}' contains a reserved character.");
+
+                builder.Append($";{kvp.Key}={OdbcValue(kvp.Value)}");
             }
 
             return builder.ToString();
+        }
+
+        /// <summary>
+        /// Quotes an ODBC attribute value in braces when it holds a character that would otherwise
+        /// end the value or start another keyword. A closing brace inside is doubled.
+        /// </summary>
+        public static string OdbcValue(string? value)
+        {
+            value ??= string.Empty;
+            bool needsQuoting = value.IndexOfAny([';', '{', '}', '=']) >= 0
+                || (value.Length > 0 && (char.IsWhiteSpace(value[0]) || char.IsWhiteSpace(value[^1])));
+            return needsQuoting ? "{" + value.Replace("}", "}}") + "}" : value;
         }
 
         private static string BuildRest(Dictionary<string, string> props)

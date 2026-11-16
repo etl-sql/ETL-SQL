@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "scope": "historical-development-process-evidence",
+  "repository": "etl-sql/ETL-SQL",
+  "sourceSha": "fbcbccf85c3f0998dc36cc09faeeda903687623e",
+  "releaseEligible": false,
+  "browserStability": [
+    {
+      "runId": "41267322023",
+      "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/41267322023",
+      "attempt": 1,
+      "createdAt": "2026-11-01T02:58:58Z",
+      "completedAt": "2026-11-01T03:25:29Z",
+      "elapsedSeconds": 1591,
+      "methods": 557,
+      "cases": 1016,
+      "inventoryHash": "721ee51c88c3b054385f7e875828ebeacf72faf2082f6aae43334d3964fc1e50",
+      "shards": [
+        {
+          "shard": 1,
+          "cases": 339,
+          "receiptSha256": "6abffac7f65c1c6513eb918b978febb6afcd86f582b6b56a459c8ad5bcbbd8fe"
+        },
+        {
+          "shard": 2,
+          "cases": 339,
+          "receiptSha256": "4b99ae7e6cc3cfaf03f77151cb3ba3744a6c6b936127f3ae15f5bcfcdbb325f4"
+        },
+        {
+          "shard": 3,
+          "cases": 338,
+          "receiptSha256": "c4f12995ef713ada5239f0eab22c95b6f4b3908576e2db8bbbfd6ae904f55a6c"
+        }
+      ]
+    },
+    {
+      "runId": "41268947571",
+      "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/41268947571",
+      "attempt": 1,
+      "createdAt": "2026-11-01T03:22:53Z",
+      "completedAt": "2026-11-01T03:43:35Z",
+      "elapsedSeconds": 1242,
+      "methods": 557,
+      "cases": 1016,
+      "inventoryHash": "721ee51c88c3b054385f7e875828ebeacf72faf2082f6aae43334d3964fc1e50",
+      "shards": [
+        {
+          "shard": 1,
+          "cases": 339,
+          "receiptSha256": "62afd57c326d3cd53881483eac138cfcc432d608fe54839eefeb4ed9f18dee52"
+        },
+        {
+          "shard": 2,
+          "cases": 339,
+          "receiptSha256": "bf773f8df0fbd93aaa16c236533fe9ae70d0986da5ff236e7b052baadb472277"
+        },
+        {
+          "shard": 3,
+          "cases": 338,
+          "receiptSha256": "51ee8387b0b9df48678c9827fb8dd719aa30451a337886a9528b8d68e02daa46"
+        }
+      ]
+    },
+    {
+      "runId": "41270889034",
+      "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/41270889034",
+      "attempt": 1,
+      "createdAt": "2026-11-01T03:52:46Z",
+      "completedAt": "2026-11-01T04:14:07Z",
+      "elapsedSeconds": 1281,
+      "methods": 557,
+      "cases": 1016,
+      "inventoryHash": "721ee51c88c3b054385f7e875828ebeacf72faf2082f6aae43334d3964fc1e50",
+      "shards": [
+        {
+          "shard": 1,
+          "cases": 339,
+          "receiptSha256": "066f6b7c0d4279b2c0381872977191ff6355d966b4da0ade32324c787be6332a"
+        },
+        {
+          "shard": 2,
+          "cases": 339,
+          "receiptSha256": "9c321535b566ff368cbddc832bb3148743fa483f8368627359e072e4298e76da"
+        },
+        {
+          "shard": 3,
+          "cases": 338,
+          "receiptSha256": "d13d614bf900eced7d885547bffe0b6403a548fea25cc6ab0ed091be5918015e"
+        }
+      ]
+    }
+  ],
+  "retainedMsiDiagnostic": {
+    "runId": "41271704106",
+    "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/41271704106",
+    "scriptSha": "45ea868631a79053c5da8fef5caaaf960631f113",
+    "inputBuildRunId": "41250826912",
+    "inputArtifactId": "13061996390",
+    "installerSha": "3b724e8f418bfc1496aa6f626e7236f113d44ee5",
+    "previousVersion": "0.20.1.0",
+    "currentVersion": "0.21.0.0",
+    "artifactId": "13069936974",
+    "artifactDigest": "sha256:97a28967201920e2e3bca256e96ca503826ea2c82a323f9602730ed04cd0e83f",
+    "conclusion": "success",
+    "installerExits": [
+      "msi 00-fresh process_exited_0",
+      "msi 00-fresh-uninstall process_exited_0",
+      "msi 01-previous process_exited_0",
+      "msi 02-upgrade process_exited_0",
+      "msi 03-rollback-uninstall process_exited_0",
+      "msi 03-rollback-install process_exited_0",
+      "msi 04-cleanup-uninstall process_exited_0"
+    ],
+    "durableCompletion": true,
+    "supervisorResultSha256": "a6423fa16c5107361bc3f38e3ca797039bd7bb99424f16492da5cba0325eb385",
+    "summarySha256": "19ee4457558ee6cad8e40af3e5f7583f81233a50d550183fb139d3d94815100e",
+    "rebuilt": false,
+    "certificationReceiptCreated": false
+  },
+  "limits": [
+    "No frozen-release certification or publication.",
+    "No proof of every historical browser timeout or MSI runner-loss cause.",
+    "Retained MSI bytes test 0.20.1 to 0.21.0, not 0.21.0 to 0.22.0.",
+    "The complete four-hour release path remains unmeasured."
+  ]
+}

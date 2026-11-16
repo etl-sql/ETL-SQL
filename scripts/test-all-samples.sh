@@ -5,6 +5,9 @@
 # passes (default 1) runs the whole suite that many times. More than one pass proves the samples are
 # re-runnable: sample output is gitignored, so a sample that writes to a persistent store passes on
 # a clean checkout and fails for anyone who runs it twice. Mirrors Test-AllSamples.ps1 -Passes.
+#
+# SAMPLES_REQUIRED_SERVICES (space-separated, e.g. "postgres docker") names services the caller
+# started: a sample that requires one of them fails instead of being skipped when it is unreachable.
 
 set -e
 
@@ -25,6 +28,17 @@ SESSION_ROOT="$VALIDATOR_STATE_ROOT/sessions"
 ORCHESTRATOR_DATABASE_PATH="$VALIDATOR_STATE_ROOT/orchestrator.db"
 mkdir -p "$VALIDATOR_STATE_ROOT"
 trap 'rm -rf -- "$VALIDATOR_STATE_ROOT"' EXIT
+
+# Run a copy of the samples, never the repository files: the first run of a script with a literal
+# USE PASSWORD or plaintext secret seals it on disk (USE PASSWORD PROMPT, ENC:...). Every pass runs
+# the same copy with ETL_SQL_MASTER_PASSWORD set, so a later pass proves a sealed script runs
+# unattended. Paths inside samples resolve against the working directory (the repository root), so
+# the copy reads and writes the same data files. samples/output is generated and not copied.
+# Mirrors Test-AllSamples.ps1.
+SAMPLE_COPY_ROOT="$VALIDATOR_STATE_ROOT/samples"
+SAMPLE_SEAL_PASSWORD="etlsql-sample-gate"
+mkdir -p "$SAMPLE_COPY_ROOT"
+tar -C "$SAMPLES_DIR" --exclude=./output -cf - . | tar -C "$SAMPLE_COPY_ROOT" -xf -
 
 # Check port availability (returns 0=open, 1=closed)
 port_open() {
@@ -57,8 +71,8 @@ echo "======================================================="
 echo " ETL-SQL SAMPLE VALIDATOR STARTING..."
 echo " Configuration: $CONFIGURATION"
 
-mapfile -t SCRIPTS < <(find "$SAMPLES_DIR" -type f \( -name "*.etlsql" -o -name "*.rptsql" \) | sort)
-echo " Found ${#SCRIPTS[@]} scripts to validate in '$SAMPLES_DIR'."
+mapfile -t SCRIPTS < <(find "$SAMPLE_COPY_ROOT" -type f \( -name "*.etlsql" -o -name "*.rptsql" \) | sort)
+echo " Found ${#SCRIPTS[@]} scripts to validate in '$SAMPLES_DIR' (run from a copy)."
 if [[ "$PASSES" -gt 1 ]]; then
     echo " Running $PASSES passes to prove the samples are re-runnable."
 fi
@@ -84,6 +98,12 @@ for SCRIPT_FILE in "${SCRIPTS[@]}"; do
     REQUIRES_TAG=$(head -5 "$SCRIPT_FILE" 2>/dev/null | grep -i '@requires:' | head -1 || true)
     if [[ -n "$REQUIRES_TAG" ]]; then
         SERVICE=$(echo "$REQUIRES_TAG" | sed -E 's/.*@requires:[[:space:]]*//' | tr '[:upper:]' '[:lower:]' | tr -d '\r')
+        if ! service_available "$SERVICE" && [[ " ${SAMPLES_REQUIRED_SERVICES:-} " == *" $SERVICE "* ]]; then
+            echo "FAILED $SCRIPT_NAME ($SERVICE is required but unreachable)"
+            FAILED=$((FAILED + 1))
+            FAILED_NAMES+=("$SCRIPT_NAME|-1|$SERVICE is required (SAMPLES_REQUIRED_SERVICES) but was not reachable.")
+            continue
+        fi
         if ! service_available "$SERVICE"; then
             echo "SKIPPED $SCRIPT_NAME ($SERVICE unavailable)"
             SKIPPED=$((SKIPPED + 1))
@@ -102,7 +122,8 @@ for SCRIPT_FILE in "${SCRIPTS[@]}"; do
 
     printf "Starting: %s ... " "$SCRIPT_NAME"
 
-    OUTPUT=$(ETLSQL_SECURITY_EVENT_OUTBOX_PATH="$SECURITY_EVENT_OUTBOX_PATH" Session__Root="$SESSION_ROOT" Orchestrator__DatabasePath="$ORCHESTRATOR_DATABASE_PATH" timeout 180 dotnet run --no-build --configuration "$CONFIGURATION" --project "$PROJECT_PATH" -- run "$SCRIPT_FILE" --silent 2>&1) && EXIT_CODE=$? || EXIT_CODE=$?
+    # The gate is the host administrator here: approve exactly the images the samples start.
+    OUTPUT=$(Governance__Docker__AllowedImages="mcr.microsoft.com/mssql/server:2022-latest,postgres:15-alpine" ETL_SQL_MASTER_PASSWORD="$SAMPLE_SEAL_PASSWORD" ETLSQL_SECURITY_EVENT_OUTBOX_PATH="$SECURITY_EVENT_OUTBOX_PATH" Session__Root="$SESSION_ROOT" Orchestrator__DatabasePath="$ORCHESTRATOR_DATABASE_PATH" timeout 180 dotnet run --no-build --configuration "$CONFIGURATION" --project "$PROJECT_PATH" -- run "$SCRIPT_FILE" --silent 2>&1) && EXIT_CODE=$? || EXIT_CODE=$?
 
     HAS_INTERNAL_ERROR=false
     if [[ "$OUTPUT" =~ "CRITICAL FAILURE" || "$OUTPUT" =~ "Unhandled exception" ]]; then

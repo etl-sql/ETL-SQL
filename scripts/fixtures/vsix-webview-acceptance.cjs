@@ -6,12 +6,15 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const {createHash} = require('node:crypto');
 const {spawn} = require('node:child_process');
+const {getLoadedExtensionModule} = require('../lib/loaded-extension-module.cjs');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 exports.run = async function () {
     const result = {startedAt: new Date().toISOString(), passed: false, views: {}, errors: []};
     const reportPath = process.env.ETLSQL_ACCEPTANCE_REPORT;
     try {
-        const extension = vscode.extensions.getExtension('etl-sql.etl-sql-vscode');
+        const extension = vscode.extensions.getExtension('Octocolee.etl-sql-vscode')
+            || vscode.extensions.getExtension('etl-sql.etl-sql-vscode')
+            || vscode.extensions.all.find(ext => ext.packageJSON?.name === 'etl-sql-vscode');
         assert.ok(extension, 'Packaged extension must be installed.');
         result.extension = extension.extensionPath;
         result.version = extension.packageJSON.version;
@@ -23,14 +26,8 @@ exports.run = async function () {
         }
         result.installedAssets = media.length;
         await extension.activate();
-        const loadedModule = name => {
-            const expected = path.join(extension.extensionPath, 'out', name).toLowerCase();
-            const loaded = Object.keys(require.cache).find(file => file.toLowerCase() === expected);
-            assert.ok(loaded, `Activated extension did not load ${name}`);
-            return require.cache[loaded].exports;
-        };
-        const {ReportDesignerPanel} = loadedModule('reportDesignerPanel.js');
-        const {ReportPreviewPanel} = loadedModule('reportPreviewPanel.js');
+        const {ReportDesignerPanel} = getLoadedExtensionModule(require.cache, extension.extensionPath, 'reportDesignerPanel.js');
+        const {ReportPreviewPanel} = getLoadedExtensionModule(require.cache, extension.extensionPath, 'reportPreviewPanel.js');
         const lspDeadline = Date.now() + 45000;
         while (!ReportDesignerPanel._lspClient && Date.now() < lspDeadline)
             await new Promise(resolve => setTimeout(resolve, 100));

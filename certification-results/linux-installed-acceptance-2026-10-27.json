@@ -1,0 +1,52 @@
+{
+  "scope": "Linux package installation development acceptance",
+  "requirementsVerified": true,
+  "finalReleaseCertified": false,
+  "sourceSha": "755fe3fb3db0d15a2151ccea4945ae7ce6cc4f38",
+  "packageVersion": "0.21.0",
+  "predecessor": "v0.20.1",
+  "runId": 40594065837,
+  "runUrl": "https://github.com/etl-sql/ETL-SQL/actions/runs/40594065837",
+  "passingAssertions": 45,
+  "shippedPathsVerifiedPerInstall": 481,
+  "observations": [
+    "fresh install and installed upgrade",
+    "root:etlsql 1775 install directory",
+    "root-owned protected shipped paths",
+    "both running services use installed executables",
+    "service-owned nonempty Portal and history databases",
+    "both services hold open nonempty service-owned application logs",
+    "service-account runtime data create/read/delete",
+    "runtime ownership and secrets preserved through upgrade",
+    "backup validation, rollback and purge"
+  ],
+  "packages": {
+    "currentSha256": "dd8a3e6da3874a38c82aaabc18c808936e2aea8606212cbec78b435d1127cf57",
+    "previousSha256": "a5f5ca25a7c41d679260d7a08eb3729d0dfb626f59d6032e7e55f0903edfe386",
+    "linuxZipSha256": "36577ef0fb8422eec8e151d45d84aa0a06fe33fac02310c9a015702c7a07c2f0",
+    "linuxVsixSha256": "2775f985e46ce8322cbb3d212a82a59448926fef99f1893b68fecfb8664d4805"
+  },
+  "evidence": {
+    "artifactId": 12777324196,
+    "artifactSha256": "9d05daa96b2c1564e0adbbac1b1775291b521bf71220c0495493ed856c07ab73",
+    "summarySha256": "3f9e302b534669dc3cfd762b8d0de6d65c07a3be45de6af35eb44e3e7e4e3a04",
+    "checksSha256": "4d39d80b3d8debce4f54ea3a13c493d36b71a566695d0e31af3836ae00062d9a",
+    "certificationSha256": "51249325438fcc6479330f1217ac4fc36ad34d1f7d480ec385d6d089de5a0f29"
+  },
+  "jobs": [
+    {
+      "name": "Build DEB candidate",
+      "id": 122505355059,
+      "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/40594065837/job/122505355059",
+      "conclusion": "success",
+      "minutes": 41
+    },
+    {
+      "name": "DEB fresh install, upgrade and rollback",
+      "id": 122522658902,
+      "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/40594065837/job/122522658902",
+      "conclusion": "success",
+      "minutes": 6.23
+    }
+  ]
+}

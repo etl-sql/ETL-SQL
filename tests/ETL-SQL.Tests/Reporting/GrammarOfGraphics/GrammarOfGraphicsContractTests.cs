@@ -14,7 +14,7 @@ public sealed class GrammarOfGraphicsContractTests
         var value = GrammarOfGraphicsContractFixtures.ChartSpec();
         var json = ChartContractSerializer.Serialize(value);
 
-        Assert.Equal("fb16b8da0dddd55dc577afdbf9a64391ff4c55a7fb5a3234b85119024c4794d7", Fingerprint(json));
+        Assert.Equal("5e2806d46818b8a16a4d2d5ee46446e5e68f49ebc2d9e09d7fc30de0cc41ff90", Fingerprint(json));
         Assert.Equal(json, ChartContractSerializer.Serialize(ChartContractSerializer.DeserializeChartSpec(json)));
     }
 
@@ -25,7 +25,7 @@ public sealed class GrammarOfGraphicsContractTests
         var json = ChartContractSerializer.Serialize(value);
         var roundTrip = ChartContractSerializer.DeserializeChartData(json);
 
-        Assert.Equal("cbe5f1d2b2de5652782072f8d3f65ccf50605e5116ef44e295a61c4f3c5df2e3", Fingerprint(json));
+        Assert.Equal("d5a71c729f99833df2597784c7f33bd3f71b1b0c87615c2a09ccb4da522bbed7", Fingerprint(json));
         Assert.Equal(json, ChartContractSerializer.Serialize(roundTrip));
         Assert.Equal(ChartValueKind.Decimal, roundTrip.Columns.Single(column => column.Name == "revenue").ValueKind);
         Assert.Equal(1234.50m, roundTrip.Columns.Single(column => column.Name == "revenue").Values[0].Decimal);
@@ -40,7 +40,7 @@ public sealed class GrammarOfGraphicsContractTests
         var value = GrammarOfGraphicsContractFixtures.PlotPlan();
         var json = ChartContractSerializer.Serialize(value);
 
-        Assert.Equal("597bb68a3043722b1da0057bb93de929f9df0870807f493417bd0edf14186214", Fingerprint(json));
+        Assert.Equal("1e5a2d959955bbb62e623d67aaf6bf7cd5b17e03760d9dd9c22b4d95d806b0bd", Fingerprint(json));
         Assert.Equal(json, ChartContractSerializer.Serialize(ChartContractSerializer.DeserializePlotPlan(json)));
         Assert.Equal(["North", "South"], value.Series.Select(series => series.Key));
         Assert.Equal(["revenue-bars", "target-rule"], value.Layers.Select(layer => layer.Id));
@@ -62,48 +62,23 @@ public sealed class GrammarOfGraphicsContractTests
     public void PlotPlanVersionTwo_MustBeRegeneratedAfterTooltipRemoval()
     {
         var json = ChartContractSerializer.Serialize(GrammarOfGraphicsContractFixtures.PlotPlan())
-            .Replace(ChartContractVersions.PlotPlanSchema, ChartContractVersions.LegacyPlotPlanV2Schema, StringComparison.Ordinal)
+            .Replace(ChartContractVersions.PlotPlanSchema, "https://etl-sql.org/schemas/reporting/plot-plan/v2", StringComparison.Ordinal)
             .Replace("\"version\": 3", "\"version\": 2", StringComparison.Ordinal);
 
         Assert.Throws<InvalidDataException>(() => ChartContractSerializer.DeserializePlotPlan(json));
     }
 
     [Fact]
-    public void Deserialization_MigratesVersionOneChartAndPlotContracts()
+    public void Deserialization_RejectsVersionOneChartAndPlotContracts()
     {
         var chartJson = ChartContractSerializer.Serialize(GrammarOfGraphicsContractFixtures.ChartSpec())
-            .Replace(ChartContractVersions.ChartSpecSchema, ChartContractVersions.LegacyChartSpecSchema, StringComparison.Ordinal)
+            .Replace(ChartContractVersions.ChartSpecSchema, "https://etl-sql.org/schemas/reporting/chart-spec/v1", StringComparison.Ordinal)
             .Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
         var plotJson = ChartContractSerializer.Serialize(GrammarOfGraphicsContractFixtures.PlotPlan())
-            .Replace(ChartContractVersions.PlotPlanSchema, ChartContractVersions.LegacyPlotPlanSchema, StringComparison.Ordinal)
+            .Replace(ChartContractVersions.PlotPlanSchema, "https://etl-sql.org/schemas/reporting/plot-plan/v1", StringComparison.Ordinal)
             .Replace("\"version\": 3", "\"version\": 1", StringComparison.Ordinal);
 
-        Assert.Equal(ChartContractVersions.ChartSpecCurrent, ChartContractSerializer.DeserializeChartSpec(chartJson).Version);
-        Assert.Equal(ChartContractVersions.PlotPlanCurrent, ChartContractSerializer.DeserializePlotPlan(plotJson).Version);
-    }
-
-    [Fact]
-    public void VersionOneGlobalStack_IsExplicitlyMigratedOrRejectedAtTheResolvedBoundary()
-    {
-        var chart = GrammarOfGraphicsContractFixtures.ChartSpec() with
-        {
-            Theme = new ThemeSpec("legacy", [new StyleToken("STACKED", "ON")])
-        };
-        var chartJson = ChartContractSerializer.Serialize(chart)
-            .Replace(ChartContractVersions.ChartSpecSchema, ChartContractVersions.LegacyChartSpecSchema, StringComparison.Ordinal)
-            .Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
-        var migrated = ChartContractSerializer.DeserializeChartSpec(chartJson);
-        Assert.DoesNotContain(migrated.Theme.Tokens, token => token.Name == "STACKED");
-        Assert.Contains(migrated.Layers.SelectMany(layer => layer.Bindings), binding =>
-            binding.Channel is FieldChannel.Y or FieldChannel.Y2 && binding.Stack == StackMode.Zero);
-
-        var plot = GrammarOfGraphicsContractFixtures.PlotPlan() with
-        {
-            Style = [new StyleToken("STACKED", "ON")]
-        };
-        var plotJson = ChartContractSerializer.Serialize(plot)
-            .Replace(ChartContractVersions.PlotPlanSchema, ChartContractVersions.LegacyPlotPlanSchema, StringComparison.Ordinal)
-            .Replace("\"version\": 3", "\"version\": 1", StringComparison.Ordinal);
+        Assert.Throws<InvalidDataException>(() => ChartContractSerializer.DeserializeChartSpec(chartJson));
         Assert.Throws<InvalidDataException>(() => ChartContractSerializer.DeserializePlotPlan(plotJson));
     }
 
@@ -128,6 +103,7 @@ public sealed class GrammarOfGraphicsContractTests
         Assert.Throws<InvalidDataException>(() => reversed.Validate());
     }
 
+    // Line endings normalized: indented JSON uses the platform newline.
     private static string Fingerprint(string value) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.Replace("\r\n", "\n", StringComparison.Ordinal)))).ToLowerInvariant();
 }

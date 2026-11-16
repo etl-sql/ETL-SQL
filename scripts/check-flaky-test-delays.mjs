@@ -25,6 +25,8 @@
 
 import { readFile } from 'node:fs/promises';
 import { glob } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const POSITIVE_ASSERT = /(Assert\.(NotNull|True|Equal|Contains|Single|NotEmpty|IsType|Same)\b|\.Verify\([^)]*\b(AtLeastOnce|Times\.Once|Times\.Exactly|Times\.AtLeast)\b)/;
 const NEGATIVE_ASSERT = /(Assert\.(Empty|Null|False|DoesNotContain|ThrowsAsync|Throws)\b|Times\.Never)/;
@@ -35,12 +37,19 @@ const FRESHNESS_BOUND = /\b(DateTime(?:Offset)?\.(?:Now|UtcNow)|LastRun|CreatedD
 const PERF_OR_SCALE_TEST = /[\\/]ETL-SQL\.PerfTests[\\/]|[\\/]Scale[\\/]|[\\/]Hardening[\\/]Performance[\\/]/;
 const BARE_WAIT_BUDGET = /\bwhile\s*\([^\n]*TotalSeconds\s*<|\b(?:\w*deadline|timeout)\s*=.*(?:Add(?:Milliseconds|Seconds|Minutes)|TickCount64?\s*\+)|\.WaitOne\(\s*TimeSpan\./i;
 
+// Resolve from the repo root, not the caller's directory: run from anywhere else, the glob
+// matched nothing and the check printed OK.
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const files = [];
-for await (const f of glob('tests/**/*.cs')) files.push(f);
+for await (const f of glob('tests/**/*.cs', { cwd: repoRoot })) files.push(f);
+if (files.length === 0) {
+  console.error(`No test files found under ${path.join(repoRoot, 'tests')}; nothing would be checked.`);
+  process.exit(1);
+}
 
 const findings = [];
 for (const file of files.sort()) {
-  const lines = (await readFile(file, 'utf8')).split(/\r?\n/);
+  const lines = (await readFile(path.join(repoRoot, file), 'utf8')).split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     if (!BARE_WAIT_BUDGET.test(lines[i])) continue;
     const annotationWindow = lines.slice(Math.max(0, i - 3), i + 1).join('\n');

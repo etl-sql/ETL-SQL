@@ -37,8 +37,7 @@ export function readQualityJobs(value: unknown): DataQualityJobDto[] {
 }
 function failure(value: unknown): value is DataQualityRuleFailureDto {
   return isObject(value) && name(value.column) && name(value.rule) && count(value.count)
-    && nullableText(value.targetTable) && nullableText(value.action) && nullableText(value.owner)
-    && typeof value.countsOnly === 'boolean';
+    && nullableText(value.targetTable) && nullableText(value.action) && nullableText(value.owner);
 }
 function run(value: unknown, jobName: string): value is DataQualityRunDto {
   if (!isObject(value) || !count(value.historyId) || value.jobName !== jobName || !date(value.startTime)

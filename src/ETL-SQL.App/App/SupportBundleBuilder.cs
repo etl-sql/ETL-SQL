@@ -47,8 +47,7 @@ namespace ETL_SQL.App
         internal static async Task<int> RunAsync(CliContext ctx, ILogger logger)
         {
             var outputPath = ResolveOutputPath(ctx.BundleOutput);
-            var staging = Path.Combine(Path.GetTempPath(), $"etl-sql-support-{Guid.NewGuid():N}");
-            Directory.CreateDirectory(staging);
+            var staging = await CreateStagingDirectoryAsync();
 
             try
             {
@@ -64,6 +63,7 @@ namespace ETL_SQL.App
                 if (File.Exists(outputPath))
                     File.Delete(outputPath);
                 ZipFile.CreateFromDirectory(staging, outputPath, CompressionLevel.Optimal, includeBaseDirectory: false);
+                BackupRestoreService.RestrictToOwner(outputPath, isDirectory: false);
 
                 logger.WriteLine($"Support bundle written to: {Path.GetFullPath(outputPath)}", ConsoleColor.Green);
                 logger.WriteLine("All credentials were redacted. Review the archive before sharing.", ConsoleColor.Gray);
@@ -79,6 +79,18 @@ namespace ETL_SQL.App
                 try { if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true); }
                 catch { /* best-effort cleanup */ }
             }
+        }
+
+        /// <summary>
+        /// Stages under the same per-user, owner-only root as backup and restore: logs and database
+        /// metrics are not for other local users even though credentials are redacted.
+        /// </summary>
+        internal static async Task<string> CreateStagingDirectoryAsync()
+        {
+            var staging = Path.Combine(await BackupRestoreService.SecureTempRootAsync(), $"etl-sql-support-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(staging);
+            BackupRestoreService.RestrictToOwner(staging, isDirectory: true);
+            return staging;
         }
 
         private static string ResolveOutputPath(string? requested)

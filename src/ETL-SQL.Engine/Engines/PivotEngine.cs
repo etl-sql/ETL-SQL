@@ -54,10 +54,12 @@ public class PivotEngine
         }
 
         // 2. Group by grouping columns
-        var groups = new Dictionary<string, List<Row>>();
+        // The key holds the values themselves. Joined text put ('x|y', 'z') and ('x', 'y|z') in
+        // one group, and NULL in the group of the text 'NULL'.
+        var groups = new Dictionary<CompoundKey, List<Row>>();
         foreach (var row in rows)
         {
-            var key = string.Join("|", groupingCols.Select(c => row[c]?.ToString() ?? "NULL"));
+            var key = new CompoundKey(groupingCols.Select(c => row[c]).ToArray());
             if (!groups.TryGetValue(key, out var list)) { list = new List<Row>(); groups[key] = list; }
             list.Add(row);
         }
@@ -69,7 +71,7 @@ public class PivotEngine
 
         foreach (var valExpr in pivot.PivotValues)
         {
-            var val = await _context.EvaluateValue(valExpr, new Row());
+            var val = await PivotValueAsync(valExpr);
             pivotValues.Add(val);
             pivotValueNames.Add(val?.ToString() ?? "NULL");
         }
@@ -117,11 +119,15 @@ public class PivotEngine
         {
             foreach (var unpivotCol in unpivotCols)
             {
+                // A NULL cell is not a value: UNPIVOT leaves it out.
+                var value = FindValue(row, unpivotCol);
+                if (value is null or DBNull) continue;
+
                 var newRow = new Row();
                 foreach (var col in colsToKeep) newRow[col] = row[col];
 
                 newRow[unpivot.NameColumn] = unpivotCol;
-                newRow[unpivot.ValueColumn] = FindValue(row, unpivotCol);
+                newRow[unpivot.ValueColumn] = value;
                 resultRows.Add(newRow);
             }
         }
@@ -188,15 +194,15 @@ public class PivotEngine
         {
             combos = new List<List<object?>>();
             foreach (var v in pivot.InValues)
-                combos.Add(new List<object?> { await _context.EvaluateValue(v, new Row()) });
+                combos.Add(new List<object?> { await PivotValueAsync(v) });
         }
         else
         {
-            var seen = new Dictionary<string, List<object?>>();
+            var seen = new Dictionary<CompoundKey, List<object?>>();
             foreach (var row in rows)
             {
-                var combo = pivot.OnColumns.Select(on => row[on]).ToList();
-                var key = string.Join("", combo.Select(x => x?.ToString() ?? " "));
+                var combo = pivot.OnColumns.Select(on => row[on] is DBNull ? null : row[on]).ToList();
+                var key = new CompoundKey(combo.ToArray());
                 if (!seen.ContainsKey(key)) seen[key] = combo;
             }
             combos = seen.Values.OrderBy(c => c, Comparer<List<object?>>.Create(CompareCombo)).ToList();
@@ -212,7 +218,7 @@ public class PivotEngine
             Expression? comboFilter = null;
             for (int i = 0; i < pivot.OnColumns.Count; i++)
             {
-                var eq = new BinaryExpression(new IdentifierExpression(pivot.OnColumns[i]), TokenType.EQUALS, LiteralFor(combo[i]));
+                var eq = ValueFilter(pivot.OnColumns[i], combo[i]);
                 comboFilter = comboFilter == null ? eq : new BinaryExpression(comboFilter, TokenType.AND, eq);
             }
 
@@ -262,6 +268,18 @@ public class PivotEngine
         return a.Count.CompareTo(b.Count);
     }
 
+    /// <summary>
+    /// A value in the IN list of a PIVOT. <c>[1]</c> or a bare word there is the value by name, not
+    /// a column: it read as NULL, which named every output column <c>NULL</c>.
+    /// </summary>
+    private Task<object?> PivotValueAsync(Expression value) => PivotValueAsync(value, _context);
+
+    /// <summary>The filter that picks the rows of one pivot value. <c>= NULL</c> picks none.</summary>
+    private static Expression ValueFilter(string column, object? value) =>
+        value is null or DBNull
+            ? new IsNullExpression(new IdentifierExpression(column), false)
+            : new BinaryExpression(new IdentifierExpression(column), TokenType.EQUALS, LiteralFor(value));
+
     private static Expression LiteralFor(object? value) => value switch
     {
         null => new LiteralExpression(null, TokenType.NULL),
@@ -298,17 +316,14 @@ public class PivotEngine
 
         foreach (var valueExpression in pivot.PivotValues)
         {
-            var pivotValue = await _context.EvaluateValue(valueExpression, new Row());
+            var pivotValue = await PivotValueAsync(valueExpression);
             var targetName = pivotValue?.ToString() ?? "NULL";
             var arguments = pivot.AggregateColumn == "*"
                 ? new List<Expression>()
                 : new List<Expression> { new IdentifierExpression(pivot.AggregateColumn) };
             var aggregate = new FunctionCallExpression(pivot.AggregateFunction, arguments)
             {
-                Filter = new BinaryExpression(
-                    new IdentifierExpression(pivot.PivotColumn),
-                    TokenType.EQUALS,
-                    valueExpression)
+                Filter = ValueFilter(pivot.PivotColumn, pivotValue)
             };
             finalColumns.Add(new SelectColumn(aggregate, targetName));
             colNames.Add(targetName);
@@ -353,11 +368,14 @@ public class PivotEngine
     {
         foreach (var unpivotCol in unpivotCols)
         {
+            var value = FindValue(row, unpivotCol);
+            if (value is null or DBNull) continue;
+
             var newRow = new Row();
             foreach (var col in colsToKeep) newRow[col] = row[col];
 
             newRow[unpivot.NameColumn] = unpivotCol;
-            newRow[unpivot.ValueColumn] = FindValue(row, unpivotCol);
+            newRow[unpivot.ValueColumn] = value;
             yield return newRow;
         }
     }
@@ -385,6 +403,75 @@ public class PivotEngine
         return fullColName.Equals(targetColName, StringComparison.OrdinalIgnoreCase)
             || fullColName.EndsWith("." + targetColName, StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// The column names a table operator (<c>PIVOT</c>, <c>UNPIVOT</c>, <c>MATCH_RECOGNIZE</c>)
+    /// returns for a source with the given columns, or null when they depend on rows that are not
+    /// known. An outer join uses it to name the columns of a side that returned no rows.
+    /// <para>
+    /// A pivot value written as an expression or <c>@variable</c> is evaluated, as the pivot itself
+    /// does. A DuckDB <c>PIVOT</c> with no <c>IN</c> list takes its values from the rows, so its
+    /// names are known only when <paramref name="inputEmpty"/> says there were none: then it has
+    /// only its grouping columns.
+    /// </para>
+    /// </summary>
+    public static async Task<List<string>?> DeclaredColumnsAsync(
+        IReadOnlyList<string> sourceColumns, AstNode tableOperator, IExecutionContext context, bool inputEmpty = false)
+    {
+        static bool Names(string column, string target) =>
+            column.Equals(target, StringComparison.OrdinalIgnoreCase)
+            || column.EndsWith("." + target, StringComparison.OrdinalIgnoreCase);
+        static string CleanName(string c) => c.Contains('.') ? c.Split('.').Last() : c;
+
+        switch (tableOperator)
+        {
+            case PivotClause pivot:
+                {
+                    var names = sourceColumns
+                        .Where(c => !Names(c, pivot.PivotColumn) && !Names(c, pivot.AggregateColumn)).ToList();
+                    foreach (var value in pivot.PivotValues)
+                        names.Add((await PivotValueAsync(value, context))?.ToString() ?? "NULL");
+                    return names;
+                }
+            case DuckPivotClause duck:
+                {
+                    if (duck.InValues == null && !inputEmpty) return null;
+                    var aggregateColumns = duck.Aggregates.Where(a => a.Column != null && a.Column != "*").Select(a => a.Column!).ToList();
+                    var grouping = duck.GroupByColumns ?? sourceColumns
+                        .Where(c => !duck.OnColumns.Any(on => Names(c, on)) && !aggregateColumns.Any(ac => Names(c, ac)))
+                        .ToList();
+                    var names = grouping.Select(CleanName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                    foreach (var value in duck.InValues ?? new List<Expression>())
+                    {
+                        var comboName = (await PivotValueAsync(value, context))?.ToString() ?? "NULL";
+                        foreach (var aggregate in duck.Aggregates)
+                            names.Add(duck.Aggregates.Count > 1
+                                ? $"{comboName}_{aggregate.Alias ?? aggregate.Function.ToLowerInvariant()}"
+                                : comboName);
+                    }
+                    return names;
+                }
+            case UnpivotClause unpivot:
+                {
+                    var names = unpivot.AllColumnsExcept
+                        ? sourceColumns.Where(c => (unpivot.ExcludeColumns ?? new List<string>()).Any(e => Names(c, e))).ToList()
+                        : sourceColumns.Where(c => !unpivot.UnpivotColumns.Any(u => Names(c, u))).ToList();
+                    names.Add(unpivot.NameColumn);
+                    names.Add(unpivot.ValueColumn);
+                    return names;
+                }
+            case MatchRecognizeClause matchRecognize:
+                return MatchRecognizeEngine.DeclaredColumns(sourceColumns, matchRecognize);
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>A pivot value as the pivot reads it: a bare word is the value by name.</summary>
+    private static async Task<object?> PivotValueAsync(Expression value, IExecutionContext context) =>
+        value is IdentifierExpression id && !id.Name.StartsWith('@')
+            ? id.Name
+            : await context.EvaluateValue(value, new Row());
 
     private bool IsMatch(string fullColName, string targetColName)
     {

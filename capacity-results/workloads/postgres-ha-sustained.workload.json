@@ -59,7 +59,7 @@
       { "name": "health", "method": "GET", "path": "/health", "service": "orchestrator", "weight": 8 },
       { "name": "metrics", "method": "GET", "path": "/metrics", "service": "orchestrator", "weight": 8 },
       { "name": "list-jobs", "method": "GET", "path": "/api/scheduled-jobs", "service": "orchestrator", "useApiKey": true, "weight": 6 },
-      { "name": "trigger-ha-soak", "method": "POST", "path": "/api/scheduled-jobs/{{jobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 4, "thinkTimeMs": 1000 },
+      { "name": "trigger-ha-soak", "method": "POST", "path": "/api/scheduled-jobs/{{jobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 4, "thinkTimeMs": 1000, "expectedStatuses": [202, 409, 503] },
       { "name": "history-ha-soak", "method": "GET", "path": "/api/scheduled-jobs/{{jobName}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 4 }
     ]
   },

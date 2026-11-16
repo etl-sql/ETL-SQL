@@ -901,7 +901,7 @@ public sealed class ColumnQualityValidator
             if (_existsInKeys.ContainsKey(key)) continue;
 
             var keys = new HashSet<string>(KeyComparer(_context.CaseSensitiveComparison));
-            var source = await _context.ResolveDataSourceAsync(new TableReference(reference.Table));
+            var source = await _context.ResolveReadSourceAsync(new TableReference(reference.Table));
             await foreach (var batch in source.ReadBatches(_context.EffectiveBatchSize, cancellationToken))
             {
                 foreach (var row in batch.Rows)
@@ -1299,7 +1299,7 @@ public sealed class ColumnQualityValidator
             for (var i = 0; i < partitionCount; i++)
             {
                 names[i] = $"dq_unique_{operationId}_{i}.tmp";
-                writers[i] = await context.SpillStore.CreateWriterAsync(names[i]);
+                writers[i] = await context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(context.EffectiveBatchSize, partitionCount));
             }
             return new UniqueKeySpill(context, names, writers);
         }

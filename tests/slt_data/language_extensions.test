@@ -341,3 +341,50 @@ SELECT id FROM items ORDER BY id USING SAMPLE 2 ROWS REPEATABLE (42);
 ----
 5
 2
+
+# USING SAMPLE: a sample larger than the table returns every row; a filter applies before sampling.
+query I
+SELECT COUNT(*) FROM (SELECT * FROM items USING SAMPLE 50 ROWS) AS s;
+----
+5
+
+query I
+SELECT COUNT(*) FROM (SELECT * FROM items WHERE category = 'Gear' USING SAMPLE 100 PERCENT) AS s;
+----
+2
+
+# The same seed draws the same rows.
+query I
+SELECT COUNT(*) FROM (SELECT id FROM items USING SAMPLE 2 ROWS REPEATABLE (7)) a
+JOIN (SELECT id FROM items USING SAMPLE 2 ROWS REPEATABLE (7)) b ON a.id = b.id;
+----
+2
+
+statement error
+SELECT * FROM items USING SAMPLE 150 PERCENT;
+
+statement error
+SELECT * FROM items USING SAMPLE -1 ROWS;
+
+statement error
+SELECT * FROM items USING SAMPLE 2;
+
+# GROUP BY ALL with only aggregates groups the whole table into one row.
+query I
+SELECT SUM(quantity) FROM items GROUP BY ALL;
+----
+110
+
+# GROUP BY ALL keys a NULL group like GROUP BY does.
+query TI
+SELECT category, COUNT(*) FROM items_with_nulls GROUP BY ALL ORDER BY category NULLS FIRST;
+----
+NULL
+2
+A
+2
+B
+1
+
+statement error Unknown column
+SELECT categry, SUM(quantity) FROM items GROUP BY ALL;

@@ -18,7 +18,7 @@ Returns `1` when the file exists and `0` when it does not.
 
 ## Null Behavior
 
-`FILE_EXISTS(NULL)` returns `0`.
+`FILE_EXISTS(NULL)` returns `NULL`.
 
 ## Security Notes
 

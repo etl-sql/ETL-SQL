@@ -124,11 +124,16 @@ public sealed class StandaloneRegressionTests : IDisposable
     }
 
     [Fact]
-    public void Standalone_DockerImageIsUnrestricted()
+    public void Standalone_DockerImageRequiresExplicitHostApproval()
     {
         var snapshot = ExecutionPolicySnapshot.Capture(
             EffectiveEnterprisePolicy.Standalone, "operator", ScriptExecutionMode.Batch, "hash");
-        var ex = Record.Exception(() => ProcessPolicyRules.EnforceDockerImage(Ctx(snapshot), "any/image:latest"));
+        Assert.ThrowsAny<Exception>(() => ProcessPolicyRules.EnforceDockerImage(Ctx(snapshot), "any/image:latest"));
+        var hostApprovedConfig = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Governance:Docker:AllowedImages:0"] = "postgres:15-alpine" })
+            .Build();
+        var ex = Record.Exception(() => ProcessPolicyRules.EnforceDockerImage(Ctx(snapshot), "postgres:15-alpine", hostApprovedConfig));
+        Assert.ThrowsAny<Exception>(() => ProcessPolicyRules.EnforceDockerImage(Ctx(snapshot), "evil.registry.example/postgres:15-alpine", hostApprovedConfig));
         Assert.Null(ex);
     }
 

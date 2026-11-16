@@ -81,6 +81,16 @@ $allFailRunner = New-FakeRunner { param($target, $mode) @{ ExitCode = 1; Output 
 Assert-Throws { Invoke-NuGetPackageAudit -Mode "--vulnerable" -Solution "S.slnx" -ProjectFallback @("A.csproj") -Runner $allFailRunner } `
     -MatchMessage "could not run" -Name "Un-auditable vulnerable check throws actionable error"
 
+# 3b. Solution-level failure + SOME projects fail => throw naming them. Auditing the rest would
+#     leave the failed projects' packages unchecked while the phase passed.
+$partialRunner = New-FakeRunner {
+    param($target, $mode)
+    if ($target -in @("S.slnx", "B.csproj")) { return @{ ExitCode = 1; Output = "Unhandled exception: NullReferenceException" } }
+    return @{ ExitCode = 0; Output = $cleanJson }
+}
+Assert-Throws { Invoke-NuGetPackageAudit -Mode "--vulnerable" -Solution "S.slnx" -ProjectFallback @("A.csproj", "B.csproj") -Runner $partialRunner } `
+    -MatchMessage "B.csproj" -Name "A project whose vulnerable audit failed is never skipped"
+
 # 4. --outdated solution failure is a soft skip (informational only).
 $outdatedFail = New-FakeRunner {
     param($target, $mode)

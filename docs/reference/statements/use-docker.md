@@ -24,15 +24,49 @@ DECLARE @conn VARCHAR(500) = mssql_db.CONNECTION_STRING;
 CREATE CONNECTION stage_db AS MSSQL(@conn);
 ```
 
+## Image Approval
+
+A container starts only if the host administrator approved its image. Without an approval the
+statement fails with `Docker image '<image>' is denied: explicit host-admin approval in
+Governance:Docker:AllowedImages is required.` An empty or missing list approves nothing.
+
+Approve images in `appsettings.json`:
+
+```json
+{
+  "Governance": {
+    "Docker": {
+      "AllowedImages": [ "mcr.microsoft.com/mssql/server:2022-latest", "postgres:15-alpine" ]
+    }
+  }
+}
+```
+
+or with an environment variable, comma-separated:
+`Governance__Docker__AllowedImages=mcr.microsoft.com/mssql/server:2022-latest,postgres:15-alpine`.
+
+An entry is `repository[:tag][@sha256:digest]`, `registry/*` for everything under a registry
+path, or `*` for any image. A tag or digest in the entry must match the image. Set
+`Governance:Docker:RequirePinnedDigest` to `true` to accept only images given by `@sha256:` digest.
+Under an enrolled organization policy, the governed `Security:AllowedDockerImages` list applies
+instead. The same approval covers `START_DOCKER` and `RESUME_DOCKER`. A catalog container tool
+always needs an `@sha256:` digest and is checked against this list when one is configured.
+
 ---
 
 ## Supported Images
 
-| Database | Image pattern | Default credentials | Port |
-| :--- | :--- | :--- | :--- |
-| SQL Server | contains `mssql` | `sa` / `Password123!` | 1433 |
-| PostgreSQL | contains `postgres` | `postgres` / `postgres` | 5432 |
-| Oracle | contains `oracle` | `system` / `oracle` | 1521 |
+The database is identified by the image's repository name; registry, tag and digest are ignored.
+An image whose name only contains a database name (`someone/postgres-tools`) is refused.
+
+- **SQL Server** — repository `mssql/server`; user `sa`; port 1433.
+- **PostgreSQL** — repository `postgres`; user `etluser`, database `etldb`; port 5432.
+- **MySQL / MariaDB** — repository `mysql` or `mariadb`; user `etluser`, database `etldb`; port 3306.
+- **Oracle** — repository `oracle-xe` or `oracle-free` (or `database/free`, `database/express`); user `system` on Free images, `oracle` otherwise; port 1521.
+
+Every container gets a generated password. Read it from `<alias>.CONNECTION_STRING`; never hard-code
+it. Ports are published on the loopback interface only, so the container is not reachable from other
+machines.
 
 ---
 

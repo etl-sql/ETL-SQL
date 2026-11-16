@@ -257,18 +257,24 @@ function Compare-GateFBaseline {
         $currentElapsed = Get-MetricValue $currentEvidence 'elapsedMs'
         if ($null -ne $baselineElapsed -and $null -ne $currentElapsed) {
             Compare-HigherIsWorse $scenario 'ELAPSED_MS' $baselineElapsed $currentElapsed $bands.WarnPct $bands.FailPct
+        } elseif ($null -ne $baselineElapsed) {
+            Add-Issue 'FAIL' 'ELAPSED_MS' "$scenario evidence has no ELAPSED_MS to compare with the baseline's $baselineElapsed."
         }
 
         $baselineRowsPerSecond = Get-MetricValue $baselineEvidence 'rowsPerSecond'
         $currentRowsPerSecond = Get-MetricValue $currentEvidence 'rowsPerSecond'
         if ($null -ne $baselineRowsPerSecond -and $null -ne $currentRowsPerSecond) {
             Compare-LowerIsWorse $scenario 'ROWS_PER_SECOND' $baselineRowsPerSecond $currentRowsPerSecond $bands.WarnPct $bands.FailPct
+        } elseif ($null -ne $baselineRowsPerSecond) {
+            Add-Issue 'FAIL' 'ROWS_PER_SECOND' "$scenario evidence has no ROWS_PER_SECOND to compare with the baseline's $baselineRowsPerSecond."
         }
 
         $baselinePeak = Get-MetricValue $baselineEvidence 'peakProcessWorkingSetMB' @('max', 'median', 'value')
         $currentPeak = Get-MetricValue $currentEvidence 'peakProcessWorkingSetMB' @('max', 'median', 'value')
         if ($null -ne $baselinePeak -and $null -ne $currentPeak) {
             Compare-HigherIsWorse $scenario 'PEAK_WORKING_SET_MB' $baselinePeak $currentPeak 10.0 15.0
+        } elseif ($null -ne $baselinePeak) {
+            Add-Issue 'FAIL' 'PEAK_WORKING_SET_MB' "$scenario evidence has no PEAK_WORKING_SET_MB to compare with the baseline's $baselinePeak."
         }
     }
 }

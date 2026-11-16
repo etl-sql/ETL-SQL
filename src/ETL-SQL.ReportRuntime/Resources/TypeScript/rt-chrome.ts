@@ -664,20 +664,28 @@ export function showModalDialog(modalName: string | null | undefined, manifest: 
     });
 
     const onKeyDown = (e: KeyboardEvent): void => {
-        if (e.key === 'Escape') {
-            hideModalDialog(modalName);
-            document.removeEventListener('keydown', onKeyDown);
-        }
+        if (e.key === 'Escape') hideModalDialog(modalName);
     };
     document.addEventListener('keydown', onKeyDown);
+    // Every way of closing goes through hideModalDialog, so it removes the listener; removing it
+    // only on Escape left one behind for each dialog closed with the button or the backdrop.
+    modalKeyListeners.set(modalName.toLowerCase(), onKeyDown);
 
     document.body.appendChild(overlay);
     setTimeout(() => resizeChartsIn(dialog), 50);
 }
 
+const modalKeyListeners = new Map<string, (e: KeyboardEvent) => void>();
+
 export function hideModalDialog(modalName: string | null | undefined): void {
     if (!modalName) return;
-    const overlay = document.getElementById('modal-overlay-' + modalName.toLowerCase());
+    const key = modalName.toLowerCase();
+    const onKeyDown = modalKeyListeners.get(key);
+    if (onKeyDown) {
+        document.removeEventListener('keydown', onKeyDown);
+        modalKeyListeners.delete(key);
+    }
+    const overlay = document.getElementById('modal-overlay-' + key);
     if (overlay) overlay.remove();
 }
 

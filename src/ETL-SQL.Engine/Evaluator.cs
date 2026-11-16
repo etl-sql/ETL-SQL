@@ -144,16 +144,15 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
     public bool AutoRollbackOnFinish { get => _options.AutoRollbackOnFinish; set => _options.AutoRollbackOnFinish = value; }
 
-    [System.Obsolete("Use Telemetry.ExecutionTree")]
-    public ExecutionTree ExecutionTree => Telemetry.ExecutionTree;
-
     public IReportContext ReportContext => _registry.ReportContext;
 
     public long TempTableSpillThresholdRows { get => _options.TempTableSpillThresholdRows; set => _options.TempTableSpillThresholdRows = value; }
     public int MaxRecursiveDepth
     {
         get => _options.MaxRecursiveDepth;
-        set { _options.MaxRecursiveDepth = value; _securityService.MaxRecursiveDepth = value; }
+        // The CTE iteration limit only. It used to overwrite the shared five-level nesting
+        // guardrail (SecurityService.MaxRecursiveDepth), which made that guardrail 10000.
+        set => _options.MaxRecursiveDepth = value;
     }
     public int CurrentRecursiveDepth { get; set; } = 0;
     public string? LastIndexUsedName { get; set; }
@@ -180,6 +179,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         set { _options.RegexMatchTimeoutMs = value; _securityService.RegexMatchTimeout = TimeSpan.FromMilliseconds(value); }
     }
     public string? CurrentScriptPath { get; set; }
+    /// <summary>When true (default), file-backed scripts are sealed via <see cref="SecurityService.SecureScriptForSave"/> on first run.</summary>
+    public bool SealScriptOnFirstRun { get; set; } = true;
     public string? CurrentSectionLabel { get; set; }
     public string WorkingDirectory { get; set; } = Directory.GetCurrentDirectory();
     public int MaxFileOperations
@@ -235,6 +236,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public List<object?>? Parameters { get; set; }
     /// <summary>Start-of-week day for RELDATE W/WS/WE anchors. Settable at runtime via SET WEEK_START_DAY.</summary>
     public DayOfWeek WeekStartDay { get => _options.WeekStartDay; set => _options.WeekStartDay = value; }
+    /// <summary>How slash dates in text are read (MDY or DMY). Settable at runtime via SET DATEFORMAT.</summary>
+    public ETL_SQL.Core.Data.DateOrder DateOrder { get => _options.DateOrder; set => _options.DateOrder = value; }
     /// <summary>Hash-mismatch policy for script integrity checks. Settable at runtime via SET SCRIPT_HASH_POLICY.</summary>
     public string ScriptHashPolicy { get => _options.ScriptHashPolicy; set => _options.ScriptHashPolicy = value; }
     /// <summary>When true, string comparisons are case-sensitive. Defaults to false. Settable at runtime via SET CASE_SENSITIVE.</summary>
@@ -423,6 +426,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public bool SpillEncryptionEnabled { get => _options.SpillEncryptionEnabled; set => _options.SpillEncryptionEnabled = value; }
     public bool SpillCompressionEnabled { get => _options.SpillCompressionEnabled; set => _options.SpillCompressionEnabled = value; }
     public string SpillFormat { get => _options.SpillFormat; set => _options.SpillFormat = value; }
+    public long SpillMinimumFreeBytes { get; set; } = DefaultThresholds.SpillMinimumFreeDiskMB(null) * 1024L * 1024L;
 
     public string? DecryptValue(string? val)
     {
@@ -704,6 +708,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         ExternalHashPartitions = DefaultThresholds.ExternalHashPartitions(config);
         BatchSize = DefaultThresholds.BatchSize(config);
         MaxRecursiveDepth = DefaultThresholds.MaxRecursiveDepth(config);
+        _securityService.MaxCteRecursionDepth = MaxRecursiveDepth;
         ExternalSortChunkSize = DefaultThresholds.ExternalSortChunkSize(config);
         WindowSpillThreshold = DefaultThresholds.WindowSpillThreshold(config);
         OperatorMemoryGrantMB = DefaultThresholds.OperatorMemoryGrantMB(config);
@@ -716,9 +721,13 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         _options.BatchSize = BatchSize;
         _options.SubqueryCacheSize = DefaultThresholds.SubqueryCacheSize(config);
         _options.TempTableSpillThresholdRows = TempTableSpillThresholdRows;
-        SpillEncryptionEnabled = DefaultThresholds.SpillEncryptionEnabled(config);
+        SpillEncryptionEnabled = (ExecutionPolicy?.IsEnrolled == true
+            && ExecutionPolicy.GovernedValues.TryGetValue("Security:RequireSpillEncryption", out var reqSpillEnc)
+            && bool.TryParse(reqSpillEnc, out var reqSpillBool) && reqSpillBool)
+            || DefaultThresholds.SpillEncryptionEnabled(config);
         SpillCompressionEnabled = DefaultThresholds.SpillCompressionEnabled(config);
         SpillFormat = DefaultThresholds.SpillFormat(config);
+        SpillMinimumFreeBytes = DefaultThresholds.SpillMinimumFreeDiskMB(config) * 1024L * 1024L;
         MaxLastResultRows = DefaultThresholds.MaxLastResultRows(config);
         MaxMessages = config?.GetValue<int>("Engine:MaxMessages", 1000) ?? 1000;
         MaxInternalOperations = config?.GetValue<int>("Security:MaxInternalOperations", 100000) ?? 100000;
@@ -728,6 +737,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         MaxVariablesPerScript = Math.Max(0, config?.GetValue<int>("Engine:MaxVariablesPerScript", 100) ?? 100);
         MaxVisualsPerScript = Math.Max(0, config?.GetValue<int>("Engine:MaxVisualsPerScript", 100) ?? 100);
         WeekStartDay = DefaultThresholds.StartOfWeek(config);
+        DateOrder = DefaultThresholds.DateOrder(config);
         ScriptHashPolicy = DefaultThresholds.ScriptHashPolicy(config);
         IsPersistentSession = DefaultThresholds.PersistenceDefault(config);
         CaseSensitiveComparison = DefaultThresholds.CaseSensitiveComparison(config);
@@ -802,7 +812,9 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Math.Max(50, _options.AdaptiveExecutionOptions.SampleMs)));
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
-                _adaptiveController?.Observe(_adaptiveSampler?.Sample() ?? new ResourceSignals(0, 0, 0, 0, 0, 0));
+                var decision = _adaptiveController?.Observe(_adaptiveSampler?.Sample() ?? new ResourceSignals(0, 0, 0, 0, 0, 0));
+                if (decision is { Kind: AdaptiveDecisionKind.ScaleDown, Reason: "spill-latency-high" })
+                    AdaptiveMetrics.ReportStoragePressure();
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -1064,6 +1076,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
     public async Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default)
     {
+        // Text dates follow this session's SET DATEFORMAT for everything this script runs.
+        ETL_SQL.Core.Data.DateTextOrder.Bind(this);
         Script? previousScript = null;
 
         if (CurrentRecursiveDepth == 0)
@@ -1090,7 +1104,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             LastResultSets.Clear();
             ClearResults();
             _nodeReuseMap.Clear();
-            _operationCount = 0;
+            System.Threading.Interlocked.Exchange(ref _operationCounter.Value, 0);
             _smtpEmailsSentThisScript = 0;
             // Lineage and Telemetry are session-persistent; clearing handled by ResetSessionAsync
             _expressionEvaluator.ClearCaches();
@@ -1126,6 +1140,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
                 var firstError = script.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error);
                 throw new ExecutionException($"Syntax error: {firstError.Message} at {firstError.Line}:{firstError.Column}");
             }
+
+            await SealCurrentScriptIfNeededAsync(cancellationToken);
 
             ExecutionNode? scriptNode = null;
             if (Telemetry.TelemetryEnabled)
@@ -1252,7 +1268,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
                 catch (GotoException) { throw; }
                 catch (Exception ex) when (hasBatches)
                 {
+                    // A failed batch stops the script (like sqlcmd -b). Logging and moving on let a
+                    // scheduled script report success after a batch had failed.
                     Log($"Batch {batchNum} failed: {ex.Message}", ConsoleColor.Red);
+                    throw;
                 }
             }
 
@@ -1295,6 +1314,95 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     {
         LastResult?.Clear();
         LastResult = null;
+    }
+
+    /// <summary>
+    /// Rewrites a file-backed script on disk via <see cref="SecurityService.SecureScriptForSave"/>
+    /// when <c>ALLOW_PLAINTEXT_SECRETS</c> is OFF, so secrets and literal <c>USE PASSWORD</c>
+    /// statements are sealed on first run instead of lingering in plaintext on disk.
+    /// </summary>
+    public async Task<bool> SealCurrentScriptIfNeededAsync(CancellationToken cancellationToken = default)
+    {
+        if (!SealScriptOnFirstRun || IsWhatIf || string.IsNullOrWhiteSpace(CurrentScriptPath))
+            return false;
+
+        if (BundleUri.TryParse(CurrentScriptPath, out _))
+            return false;
+
+        var scriptPath = CurrentScriptPath;
+        if (!File.Exists(scriptPath))
+            return false;
+
+        if ((File.GetAttributes(scriptPath) & FileAttributes.ReadOnly) != 0)
+            return false;
+
+        // Keep the file's UTF-8 byte order mark: sealing changes secrets, not the encoding.
+        var bytes = await File.ReadAllBytesAsync(scriptPath, cancellationToken);
+        var hasUtf8Bom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+        var source = System.Text.Encoding.UTF8.GetString(bytes, hasUtf8Bom ? 3 : 0, bytes.Length - (hasUtf8Bom ? 3 : 0));
+        if (string.IsNullOrEmpty(source))
+            return false;
+
+        bool previousDefaultAllow = _securityService.DefaultAllowPlaintextSecrets;
+        bool previousDefaultNoSaveSensitive = _securityService.DefaultNoSaveSensitive;
+        bool previousDefaultNoSaveConnection = _securityService.DefaultNoSaveConnection;
+        bool previousDefaultConnectionEncryption = _securityService.DefaultConnectionEncryption;
+        if (AllowPlaintextSecrets && !previousDefaultAllow)
+            _securityService.DefaultAllowPlaintextSecrets = true;
+        if (NoSaveSensitive && !previousDefaultNoSaveSensitive)
+            _securityService.DefaultNoSaveSensitive = true;
+        if (NoSaveConnection && !previousDefaultNoSaveConnection)
+            _securityService.DefaultNoSaveConnection = true;
+        if (ConnectionEncryption && !previousDefaultConnectionEncryption)
+            _securityService.DefaultConnectionEncryption = true;
+
+        try
+        {
+            string? literalPassword = _securityService.ExtractLiteralUsePassword(source);
+            string? sealPassword = !string.IsNullOrEmpty(ScriptPassword)
+                ? ScriptPassword
+                : !string.IsNullOrEmpty(MasterPassword)
+                    ? MasterPassword
+                    : literalPassword;
+
+            if (string.IsNullOrEmpty(sealPassword) && _securityService.RequiresSavePassword(source))
+            {
+                var promptProvider = _serviceProvider?.GetService<IPasswordPromptProvider>()
+                    ?? (!Console.IsInputRedirected ? ConsolePasswordPromptProvider.Instance : null);
+                if (promptProvider != null)
+                {
+                    sealPassword = promptProvider.ReadPassword("Master password (to seal secrets in script): ");
+                    if (!string.IsNullOrEmpty(sealPassword))
+                    {
+                        MasterPassword = sealPassword;
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(sealPassword))
+                SecretRedactor.RegisterRuntimeSecret(sealPassword);
+            if (!string.IsNullOrEmpty(literalPassword))
+                SecretRedactor.RegisterRuntimeSecret(literalPassword);
+
+            string sealedSource = _securityService.SecureScriptForSave(source, sealPassword ?? "");
+            if (string.Equals(sealedSource, source, StringComparison.Ordinal))
+                return false;
+
+            await File.WriteAllTextAsync(
+                scriptPath,
+                sealedSource,
+                new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: hasUtf8Bom),
+                cancellationToken);
+            Log($"Sealed plaintext secrets in '{Path.GetFileName(scriptPath)}'.");
+            return true;
+        }
+        finally
+        {
+            _securityService.DefaultAllowPlaintextSecrets = previousDefaultAllow;
+            _securityService.DefaultNoSaveSensitive = previousDefaultNoSaveSensitive;
+            _securityService.DefaultNoSaveConnection = previousDefaultNoSaveConnection;
+            _securityService.DefaultConnectionEncryption = previousDefaultConnectionEncryption;
+        }
     }
 
     private async Task CommitPendingJobStateAsync()
@@ -1460,7 +1568,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         }
 
         _variableScopeManager.LoadGlobalState(state.GlobalVariables, state.GlobalMetadata);
-        DockerManager.LoadState(state.DockerConnectionStrings, state.LastDockerConnectionString);
+        DockerManager.LoadState(DockerScope.For(this), state.DockerConnectionStrings, state.LastDockerConnectionString);
 
         var connectionAuthorizer = new ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer(_securityService);
         foreach (var conn in state.Connections)
@@ -1493,7 +1601,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
         foreach (var temp in state.TempTables)
         {
-            _connections[temp.Name] = await _dataSourceManager.RestoreTempTable(temp, ScriptPassword ?? ETL_SQL.Services.SecurityService.GetMachineKey());
+            _connections[temp.Name] = _dataSourceManager.RestoreTempTable(temp);
         }
     }
 
@@ -1502,7 +1610,11 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
     public async Task EvaluateStatement(Statement statement, CancellationToken cancellationToken = default)
     {
-        CancellationToken = cancellationToken;
+        // Evaluate sets the run's token before any statement. Block, IF, loop and procedure handlers
+        // dispatch their bodies without one; overwriting with None there disarmed every
+        // cancellation check inside them, so only a token that can cancel replaces the run's.
+        if (cancellationToken.CanBeCanceled)
+            CancellationToken = cancellationToken;
         // NOTE: ThrowIfCancellationRequested() is intentionally NOT called here for the hot-loop path.
         // The outer batch loop (Evaluate) already checks before dispatching each statement.
         // Callers that need an extra check (e.g., deeply nested recursive calls) may call it
@@ -1583,7 +1695,22 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         {
             try
             {
-                await handler.Execute(statement, this);
+                // A query registers its own CTEs (SelectStatementHandler.EvaluateQuery). A WITH on
+                // INSERT, UPDATE, DELETE or MERGE was parsed and then never registered, so the
+                // statement failed with "Unknown source" on its own CTE. The scope ends with the
+                // statement, so a later statement cannot read the CTE by name.
+                Services.CteScope? cteScope = null;
+                if (statement.Ctes is { Count: > 0 } && statement is not SelectStatement and not SetOperationStatement)
+                    cteScope = await new Services.CteManager(_logger).RegisterCtes(statement.Ctes, this);
+
+                try
+                {
+                    await handler.Execute(statement, this);
+                }
+                finally
+                {
+                    if (cteScope != null) await cteScope.DisposeAsync();
+                }
                 if (node != null) node.Status = ExecutionStatus.Completed;
             }
             catch (Exception ex)
@@ -1635,6 +1762,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     }
 
     public Task<IDataSource> ResolveDataSourceAsync(TableReference table) => _dataSourceManager.ResolveDataSourceAsync(table, _connections, _transactionManager);
+    public Task<IDataSource> ResolveReadSourceAsync(TableReference table) => _dataSourceManager.ResolveDataSourceAsync(table, _connections, _transactionManager, forRead: true);
+    public IReadOnlyList<string>? ReturnedColumns(TableReference table) => _dataSourceManager.ReturnedColumns(table);
     public IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table) => _dataSourceManager.ResolveAndApplyOperators(table, _connections, _transactionManager, BatchSize);
 
 
@@ -1794,7 +1923,20 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             MemoryArbiter = MemoryArbiter,
             _adaptiveController = _adaptiveController,
             _adaptiveAdvisor = _adaptiveAdvisor,
-            _ownsAdaptiveAdvisor = false
+            _ownsAdaptiveAdvisor = false,
+            // Runaway protection spans the whole script: a branch shares the parent's file
+            // operation budget and starts at its recursion depth, or N branches get N budgets.
+            _operationCounter = _operationCounter,
+            CurrentRecursiveDepth = CurrentRecursiveDepth,
+            AllowLargeFileOperationCount = AllowLargeFileOperationCount,
+            AllowDeepRecursion = AllowDeepRecursion,
+            MaxFileOperations = MaxFileOperations,
+            // The fork's constructor reset the shared SecurityService depth to the configured
+            // default; put back the value this script is running with.
+            MaxRecursiveDepth = MaxRecursiveDepth,
+            CurrentScriptPath = CurrentScriptPath,
+            WorkingDirectory = WorkingDirectory,
+            _sessionRoot = _sessionRoot
         };
         fork._options.AdaptiveExecutionEnabled = AdaptiveExecutionEnabled;
         fork._options.AdaptiveExecutionOptions = _options.AdaptiveExecutionOptions;
@@ -1821,10 +1963,11 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         Telemetry.TotalSpilledBytes += spawned.Telemetry.TotalSpilledBytes;
     }
 
-    private int _operationCount = 0;
+    /// <summary>File-operation count for the running script; shared by reference with PARALLEL forks.</summary>
+    private System.Runtime.CompilerServices.StrongBox<int> _operationCounter = new(0);
     public void IncrementOperationCount(OperationType type = OperationType.FileSystem, string? path = null, int count = 1)
     {
-        var total = System.Threading.Interlocked.Add(ref _operationCount, count);
+        var total = System.Threading.Interlocked.Add(ref _operationCounter.Value, count);
         _securityService.CheckRunawayProtection(type, total, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, path);
         // Enterprise ceiling binds regardless of the local Allow*/safe-zone overrides above.
         if (type == OperationType.FileSystem && IsEnterpriseGoverned)
@@ -1838,7 +1981,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public IDisposable EnterRecursiveScope()
     {
         CurrentRecursiveDepth++;
-        _securityService.CheckRunawayProtection(OperationType.FileSystem, _operationCount, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, null);
+        _securityService.CheckRunawayProtection(OperationType.FileSystem, System.Threading.Volatile.Read(ref _operationCounter.Value), CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, null);
         // Enterprise ceiling binds regardless of the local Allow*/safe-zone overrides above.
         if (IsEnterpriseGoverned)
             OperationPolicyBoundary.EnforceCeiling(this, "Security:MaxRecursiveNestingDepth",

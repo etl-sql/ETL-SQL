@@ -39,29 +39,29 @@ WHERE Steward IS NOT NULL
 GROUP BY Steward;
 
 SELECT
-  TargetTable,
-  TargetColumn,
-  ProtectionTags,
+  target_table,
+  target_column,
+  protection_tags,
   Owner,
   Steward,
   Classification,
-  RunAt,
-  JobName
+  run_at,
+  job_name
 INTO #stale_protected
 FROM #protected_data
-WHERE RunAt < @stale_before;
+WHERE run_at < @stale_before;
 
-SELECT 'Report' AS AssetType, TargetTable AS AssetName, COUNT(*) AS LineageRows
+SELECT 'Report' AS AssetType, target_table AS AssetName, COUNT(*) AS LineageRows
 INTO #affected_reports
 FROM #protected_data
-WHERE TargetTable LIKE 'report:%'
-GROUP BY TargetTable;
+WHERE target_table LIKE 'report:%'
+GROUP BY target_table;
 
-SELECT 'Dataset' AS AssetType, TargetTable AS AssetName, COUNT(*) AS LineageRows
+SELECT 'Dataset' AS AssetType, target_table AS AssetName, COUNT(*) AS LineageRows
 INTO #affected_datasets
 FROM #protected_data
-WHERE TargetTable LIKE 'dataset:%'
-GROUP BY TargetTable;
+WHERE target_table LIKE 'dataset:%'
+GROUP BY target_table;
 
 CREATE TABLE #affected_subscriptions (
   SubscriptionId STRING,
@@ -115,20 +115,20 @@ CREATE VISUAL ProtectedInventory AS TABLE (
   TITLE = 'Protected Lineage Inventory',
   SOURCE = (
     SELECT
-      TargetTable,
-      TargetColumn,
-      ProtectionTags,
+      target_table,
+      target_column,
+      protection_tags,
       Owner,
       Steward,
       Contact,
       Domain,
       Classification,
       Quality,
-      JobName,
-      SourceFile,
+      job_name,
+      source_file,
       Line
     FROM #protected_data
-    ORDER BY RunAt DESC
+    ORDER BY run_at DESC
   ),
   STYLE (HEIGHT = '420px')
 );
@@ -143,15 +143,15 @@ CREATE VISUAL ClassifierSuggestions AS TABLE (
   TITLE = 'Classifier Suggestions for Review',
   SOURCE = (
     SELECT
-      TargetTable,
-      TargetColumn,
-      SuggestedTag,
-      SuggestedValue,
+      target_table,
+      target_column,
+      suggested_tag,
+      suggested_value,
       Confidence,
-      EvidenceKind,
+      evidence_kind,
       Evidence,
       Reason,
-      JobName
+      job_name
     FROM #protected_suggestions
     ORDER BY Confidence DESC
   ),

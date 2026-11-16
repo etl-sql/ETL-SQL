@@ -5,17 +5,109 @@ on:
     branches: [ main, 'release/**' ]
   pull_request:
     branches: [ main, 'release/**' ]
+  workflow_dispatch:
+    inputs:
+      lanes:
+        description: Comma-separated diagnostic lane IDs; blank selects all. Never release evidence.
+        type: string
+        default: ''
+      browser_shard:
+        description: Browser diagnostic shard; requires lanes to include portal-browser-journey. Never release evidence.
+        type: choice
+        options: ['all', '1', '2', '3']
+        default: 'all'
+  workflow_call:
+    inputs:
+      release_certification:
+        type: boolean
+        default: false
+      candidate_sha:
+        type: string
+        required: true
 
 permissions:
   contents: read
 
+# New branch/PR revisions replace obsolete validation. Event and full ref keep independent
+# branches and push/PR runs separate; immutable Release/MSI certification uses other workflows.
+concurrency:
+  group: ci-execution-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ !inputs.release_certification }}
+
 jobs:
-  build-and-test:
-    name: Build & Test
+  source-preflight:
+    name: Source preflight
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    outputs:
+      lanes: ${{ steps.impact.outputs.lanes }}
+      browser_shards: ${{ steps.impact.outputs.browser_shards }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 13
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Event values are passed as data, never interpolated into shell source.
+      - name: Select affected lanes or full certification
+        timeout-minutes: 13
+        id: impact
+        shell: pwsh
+        env:
+          IMPACT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          IMPACT_COMPARISON: ${{ github.event_name == 'pull_request' && 'merge-base' || 'direct' }}
+          FULL_CERTIFICATION: ${{ inputs.release_certification }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          DIAGNOSTIC_LANES: ${{ inputs.lanes }}
+          DIAGNOSTIC_BROWSER_SHARD: ${{ inputs.browser_shard }}
+        run: |
+          $arguments = @('--head', $env:GITHUB_SHA, '--output', 'release-validation/preflight/ci-impact.json')
+          if ($env:FULL_CERTIFICATION -eq 'true') {
+            if ($env:CANDIDATE_SHA -cne $env:GITHUB_SHA) { throw 'Release branch moved away from the requested candidate.' }
+            $arguments += @('--base', $env:GITHUB_SHA, '--full')
+          } elseif ($env:DIAGNOSTIC_LANES) {
+            $arguments += @('--base', $env:GITHUB_SHA, '--lanes', $env:DIAGNOSTIC_LANES)
+          } elseif ($env:IMPACT_BASE) {
+            $arguments += @('--base', $env:IMPACT_BASE, '--comparison', $env:IMPACT_COMPARISON)
+          }
+          if ($env:DIAGNOSTIC_BROWSER_SHARD -and $env:DIAGNOSTIC_BROWSER_SHARD -cne 'all') {
+            if ($env:GITHUB_EVENT_NAME -cne 'workflow_dispatch' -or $env:FULL_CERTIFICATION -eq 'true') { throw 'Browser shard selection is diagnostic-only.' }
+            $arguments += @('--browser-shard', $env:DIAGNOSTIC_BROWSER_SHARD)
+          }
+          node scripts/select-ci-lanes.mjs @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $selection = Get-Content release-validation/preflight/ci-impact.json -Raw | ConvertFrom-Json
+          "lanes=$($selection.lanes | ConvertTo-Json -Compress -AsArray)" >> $env:GITHUB_OUTPUT
+          "browser_shards=$($selection.browserShards | ConvertTo-Json -Compress -AsArray)" >> $env:GITHUB_OUTPUT
+      - name: Prepare pinned workflow checker
+        timeout-minutes: 13
+        run: node scripts/setup-actionlint.mjs
+      - name: Collect source findings
+        timeout-minutes: 12
+        env:
+          ETLSQL_RELEASE_BRANCH: ${{ github.base_ref || github.ref_name }}
+        run: node scripts/release-preflight.mjs --release-branch "$ETLSQL_RELEASE_BRANCH"
+      - name: Upload preflight logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: source-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/preflight/
+          if-no-files-found: error
+          retention-days: 30
+
+  build-verification:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
+    name: Build Verification
     runs-on: windows-latest
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
 
       - name: Set up browser compiler runtime
@@ -24,63 +116,312 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
+        timeout-minutes: 15
         run: npm ci --prefix scripts/typecheck
 
       - name: Prepare browser assets
+        timeout-minutes: 15
+        run: node scripts/sync-assets.js
+
+      - name: Verify .NET
+        timeout-minutes: 15
+        run: dotnet --info
+
+      - name: Verify Node.js
+        timeout-minutes: 15
+        run: node --version
+
+      - name: Restore tools
+        timeout-minutes: 15
+        run: dotnet tool restore
+
+      - name: Restore dependencies
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('restore', 'ETL-SQL.slnx') -EvidenceDirectory release-validation/build/restore -TimeoutSeconds 600
+
+      # Needs the restored package cache: license data comes from each package's nuspec.
+      - name: Check third-party inventory drift
+        timeout-minutes: 5
+        run: node scripts/generate-third-party-inventory.js --check
+
+      - name: Audit NuGet packages for known vulnerabilities
+        timeout-minutes: 15
+        shell: pwsh
+        run: .\scripts\Test-VulnerablePackages.ps1
+
+      - name: Verify formatting
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('format', 'ETL-SQL.slnx', '--verify-no-changes', '--no-restore') -EvidenceDirectory release-validation/build/format -TimeoutSeconds 600
+
+      - name: Build
+        shell: pwsh
+        timeout-minutes: 17
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'ETL-SQL.slnx', '--no-restore', '--configuration', 'Release') -EvidenceDirectory release-validation/build/compile -TimeoutSeconds 900
+
+      - name: Run engine smoke tests using the existing build
+        timeout-minutes: 15
+        shell: pwsh
+        env:
+          DOTNET_GCHeapHardLimit: '200000000'
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-smoke.ps1 -ScriptArguments @('-Lane', 'all', '-ProjectGroup', 'engine', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/build/engine-smoke -TimeoutSeconds 1200
+
+      - name: Run language server tests (Pull Requests)
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        timeout-minutes: 22
+        env:
+          DOTNET_GCHeapHardLimit: '200000000'
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('test', 'tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj', '--no-restore', '--no-build', '--configuration', 'Release', '--logger', 'trx;LogFileName=language-server.trx', '--results-directory', 'release-validation/build/language-server') -EvidenceDirectory release-validation/build/language-server-process -TimeoutSeconds 1200
+
+      - name: Retain build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release-validation/build/
+          if-no-files-found: warn
+          retention-days: 30
+
+  portal-smoke:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
+    name: Portal Smoke & Security
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 15
+      - uses: ./.github/actions/prepare-test-project
+        with:
+          project: tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj
+          evidence: release-validation/portal-smoke/prepare
+      - name: Verify generated browser contracts against registered hosts
+        shell: pwsh
+        timeout-minutes: 7
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('test', 'tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj', '--no-restore', '--no-build', '--configuration', 'Release', '--filter', 'FullyQualifiedName~BrowserContractsGeneratorTests') -EvidenceDirectory release-validation/portal-smoke/contracts -TimeoutSeconds 300
+      - name: Run every Portal smoke and security case
+        shell: pwsh
+        timeout-minutes: 27
+        env:
+          DOTNET_GCHeapHardLimit: '200000000'
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-smoke.ps1 -ScriptArguments @('-Lane', 'all', '-ProjectGroup', 'portal', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/portal-smoke/tests -TimeoutSeconds 1500
+      - name: Retain Portal smoke diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: portal-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/portal-smoke/
+          if-no-files-found: error
+          retention-days: 30
+
+  engine-coverage:
+    needs: source-preflight
+    if: github.event_name != 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
+    name: Engine Coverage (${{ matrix.group }}/3)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 15
+      - uses: ./.github/actions/prepare-test-project
+        with:
+          project: tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj
+          evidence: release-validation/engine-prepare
+      - name: Run assigned engine shards with coverage
+        shell: pwsh
+        timeout-minutes: 27
+        env:
+          ENGINE_GROUP: ${{ matrix.group }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'engine', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-CollectCoverage', '-EngineShardCount', '12', '-EngineShardGroup', $env:ENGINE_GROUP, '-EngineShardGroupCount', '3', '-ResultsDirectory', 'release-validation/engine-coverage') -EvidenceDirectory release-validation/engine-process -TimeoutSeconds 1500
+      - name: Retain engine group results
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: engine-coverage-group-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/engine-coverage/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Retain engine group diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: engine-coverage-diagnostics-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release-validation/engine-prepare/
+            release-validation/engine-process/
+          if-no-files-found: error
+          retention-days: 30
+
+  # The corpus a second time with the spill and batch thresholds at a few rows (test-lane -Lane
+  # spill), so every query also runs through the batching, spilling and streaming paths. Results
+  # must match the default run. It ran only on the owner's workstation before (release
+  # reliability W7); skipped on pull requests like Engine Coverage.
+  spill-certification:
+    needs: source-preflight
+    if: github.event_name != 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'engine-certification')
+    name: Spill Certification (${{ matrix.group }}/3)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 15
+      - uses: ./.github/actions/prepare-test-project
+        with:
+          project: tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj
+          evidence: release-validation/spill-prepare
+      - name: Build the SQL logic tests
+        if: matrix.group == 1
+        shell: pwsh
+        timeout-minutes: 15
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj', '--configuration', 'Release', '-m:1', '-nr:false') -EvidenceDirectory release-validation/spill-prepare/slt-build -TimeoutSeconds 840
+      - name: Run assigned engine shards (and SLT in group 1) under low thresholds
+        shell: pwsh
+        timeout-minutes: 55
+        env:
+          SPILL_GROUP: ${{ matrix.group }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'spill', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-EngineShardCount', '12', '-EngineShardGroup', $env:SPILL_GROUP, '-EngineShardGroupCount', '3') -EvidenceDirectory release-validation/spill-process -TimeoutSeconds 3240
+      - name: Retain spill group diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: spill-certification-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release-validation/spill-prepare/
+            release-validation/spill-process/
+            release-validation/spill-lane-*/
+          if-no-files-found: error
+          retention-days: 30
+
+  build-and-test:
+    needs: [source-preflight, build-verification, portal-smoke, engine-coverage]
+    if: always() && needs.source-preflight.result == 'success' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
+    name: Build & Test
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Require all selected build and test workers
+        timeout-minutes: 15
+        shell: pwsh
+        env:
+          BUILD_RESULT: ${{ needs.build-verification.result }}
+          PORTAL_RESULT: ${{ needs.portal-smoke.result }}
+          ENGINE_RESULT: ${{ needs.engine-coverage.result }}
+          CI_EVENT: ${{ github.event_name }}
+        run: |
+          if ($env:BUILD_RESULT -cne 'success' -or $env:PORTAL_RESULT -cne 'success') { throw 'Build or Portal smoke worker did not pass.' }
+          $expectedEngine = if ($env:CI_EVENT -ceq 'pull_request') { 'skipped' } else { 'success' }
+          if ($env:ENGINE_RESULT -cne $expectedEngine) { throw 'Engine coverage workers did not reach the required state.' }
+      - uses: actions/checkout@v6
+        timeout-minutes: 15
+      - name: Download all retained engine group attempts
+        if: github.event_name != 'pull_request'
+        uses: actions/download-artifact@v8
+        with:
+          pattern: engine-coverage-group-*-${{ github.run_id }}-*
+          path: release-validation/engine-groups
+      - name: Verify the complete engine inventory and merge coverage
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        timeout-minutes: 7
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Merge-EngineCoverage.ps1 -ScriptArguments @('-InputDirectory', 'release-validation/engine-groups', '-OutputDirectory', 'coverage', '-Commit', $env:GITHUB_SHA, '-RunId', $env:GITHUB_RUN_ID) -EvidenceDirectory release-validation/coverage-merge -TimeoutSeconds 300
+      - name: Restore coverage reporter
+        timeout-minutes: 15
+        if: github.event_name != 'pull_request'
+        run: dotnet tool restore
+      - name: Enforce the unchanged engine coverage threshold
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        timeout-minutes: 7
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-CoverageGate.ps1 -ScriptArguments @('-CoverageDirectory', 'coverage', '-MinimumLineCoverage', '70') -EvidenceDirectory release-validation/coverage-aggregate -TimeoutSeconds 300
+      - name: Retain aggregate coverage evidence
+        if: always() && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: engine-coverage-aggregate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            coverage/
+            release-validation/coverage-merge/
+            release-validation/coverage-aggregate/
+          if-no-files-found: warn
+          retention-days: 30
+
+  browser-consumer-contracts:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'browser-consumer-contracts')
+    name: Browser and Consumer Contracts
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 15
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Install browser compiler
+        timeout-minutes: 15
+        run: npm ci --prefix scripts/typecheck
+      - name: Prepare browser assets
+        timeout-minutes: 15
         run: node scripts/sync-assets.js
 
       # Deletes every inventoried output and both manifests, prepares again, and requires identical
       # bytes. A checkout that still tracks its outputs proves nothing about a tree without them.
       - name: Prove source-only browser asset preparation
+        timeout-minutes: 15
         run: node scripts/verify-source-only-preparation.mjs --evidence artifacts/browser-assets-source-only.json
 
       - name: Upload browser asset ownership and hashes
         uses: actions/upload-artifact@v7
         with:
-          name: browser-asset-ownership
+          name: browser-asset-ownership-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             artifacts/browser-assets.json
             artifacts/browser-assets-source-only.json
           if-no-files-found: error
           retention-days: 30
 
-      - name: Verify .NET
-        run: dotnet --info
-
-      - name: Verify Node.js
-        run: node --version
-
-      - name: Restore tools
-        run: dotnet tool restore
-
-      - name: Restore dependencies
-        run: dotnet restore ETL-SQL.slnx
-
-      - name: Audit NuGet packages for known vulnerabilities
-        shell: pwsh
-        run: .\scripts\Test-VulnerablePackages.ps1
-
-      - name: Verify formatting
-        run: dotnet format ETL-SQL.slnx --verify-no-changes --no-restore
-
       - name: Check shared report runtime assets
+        timeout-minutes: 15
         shell: pwsh
         run: node .\scripts\sync-assets.js -Check
 
       - name: Check browser asset ownership against the Git index
+        timeout-minutes: 15
         run: node scripts/browser-asset-ownership.mjs --check
 
       - name: Check browser-side types
+        timeout-minutes: 15
         run: node scripts/typecheck-browser.mjs
 
       - name: Install browser lint-gate toolchain
+        timeout-minutes: 15
         run: npm ci --prefix scripts/lint
 
       - name: Install unsigned VSIX verification toolchain
+        timeout-minutes: 15
         working-directory: scripts/vsix
         run: npm ci
 
       - name: Audit browser toolchain packages for known vulnerabilities
+        timeout-minutes: 15
         shell: pwsh
         run: |
           foreach ($root in @('scripts/typecheck', 'scripts/lint', 'scripts/codemirror', 'scripts/vsix')) {
@@ -89,57 +430,53 @@ jobs:
           }
 
       - name: Lint the browser sources
+        timeout-minutes: 15
         run: node scripts/lint-browser.mjs
 
       - name: Run browser and consumer contract checks
-        run: node scripts/check-consumer-contracts.mjs
+        timeout-minutes: 45
+        run: node scripts/check-consumer-contracts.mjs --exclude-preflight
+
+      - name: Retain consumer contract diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: consumer-contracts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/consumer-contracts/
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Verify prepared assets after consumer checks
+        timeout-minutes: 15
         run: node scripts/sync-assets.js -Check
 
-      - name: Check syntax index is up to date with LanguageMetadata.cs
-        run: node scripts/generate-syntax-index.js --check
-
-      - name: Audit syntax index links and reference page coverage
-        run: node scripts/audit-syntax-index.js --strict
-
-      - name: Check for flaky sleep-then-assert test delays
-        run: node scripts/check-flaky-test-delays.mjs
-
-      - name: Check for AI slop and prohibited comments
-        run: node scripts/check-ai-slop-comments.mjs
-
-      - name: Build
-        run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
-
-      - name: Verify generated browser contracts against registered hosts
-        run: dotnet test tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj --no-restore --no-build --configuration Release --filter FullyQualifiedName~BrowserContractsGeneratorTests
-
-      - name: Audit test lanes and structure
-        shell: pwsh
-        run: .\scripts\Get-TestLaneInventory.ps1 -FailOnIssues
-
-      - name: Run fast test lanes (Pull Requests)
-        if: github.event_name == 'pull_request'
-        shell: pwsh
-        run: .\scripts\test-lane.ps1 -Lane fast -Configuration Release -NoRestore -NoBuild
-
-      - name: Run engine tests and enforce coverage (Main & Release Push)
+      # The independent engine coverage lane already executes the HA manifest and CLI .NET tests.
+      - name: Validate HA soak harness contracts
         if: github.event_name != 'pull_request'
         shell: pwsh
-        run: .\scripts\Test-CoverageGate.ps1 -RunEngineLane -Configuration Release -NoRestore -NoBuild -CoverageDirectory coverage -MinimumLineCoverage 70
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-HaSoakContracts.ps1 -ScriptArguments @('-NoDotNet') -EvidenceDirectory release-validation/ha-contracts -TimeoutSeconds 600
 
-      - name: Print coverage summary
-        if: github.event_name != 'pull_request'
-        run: cat ./coverage/report/Summary.txt
-        shell: bash
+      - name: Retain HA contract diagnostics
+        if: always() && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ha-contracts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/ha-contracts/
+          if-no-files-found: warn
+          retention-days: 30
+
 
   build-vscode:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-vscode')
     name: Build VS Code Extension
     runs-on: ubuntu-latest
+    timeout-minutes: 75
 
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
 
       - name: Set up browser compiler runtime
@@ -148,62 +485,103 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          mkdir -p release-validation/vscode
+          npm ci --prefix scripts/typecheck 2>&1 | tee release-validation/vscode/restore-compiler.log
 
       - name: Prepare browser assets
+        timeout-minutes: 8
         run: node scripts/sync-assets.js
 
       - name: Verify .NET
+        timeout-minutes: 15
         run: dotnet --info
 
       - name: Build engine for integration tests
-        run: dotnet build src/ETL-SQL.App/ETL-SQL.App.csproj --configuration Debug
+        timeout-minutes: 17
+        shell: pwsh
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'src/ETL-SQL.App/ETL-SQL.App.csproj', '--configuration', 'Debug') -EvidenceDirectory release-validation/vscode/engine -TimeoutSeconds 900
 
       - name: Verify Node.js
+        timeout-minutes: 15
         run: node --version
 
       - name: Install dependencies
         working-directory: src/etl-sql-vscode
-        run: npm ci
+        timeout-minutes: 8
+        shell: bash
+        run: npm ci 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/restore-extension.log"
 
       - name: Install UI dependencies
         working-directory: src/etl-sql-vscode/ui
-        run: npm ci
+        timeout-minutes: 8
+        shell: bash
+        run: npm ci 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/restore-ui.log"
 
       - name: Audit npm packages for known vulnerabilities
         working-directory: src/etl-sql-vscode
-        run: npm audit
+        timeout-minutes: 6
+        shell: bash
+        run: npm audit 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/audit-extension.log"
 
       - name: Audit UI npm packages for known vulnerabilities
         working-directory: src/etl-sql-vscode/ui
-        run: npm audit
+        timeout-minutes: 6
+        shell: bash
+        run: npm audit 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/audit-ui.log"
 
       - name: Compile extension
         working-directory: src/etl-sql-vscode
-        run: npm run compile
+        timeout-minutes: 10
+        shell: bash
+        run: npm run compile 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/compile-extension.log"
 
       - name: Lint extension
         working-directory: src/etl-sql-vscode
-        run: npm run lint
+        timeout-minutes: 10
+        shell: bash
+        run: npm run lint 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/lint-extension.log"
 
       - name: Lint UI package
         working-directory: src/etl-sql-vscode/ui
-        run: npm run lint
+        timeout-minutes: 10
+        shell: bash
+        run: npm run lint 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/lint-ui.log"
 
       - name: Build UI package
         working-directory: src/etl-sql-vscode/ui
-        run: npm run build
+        timeout-minutes: 10
+        shell: bash
+        run: npm run build 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/build-ui.log"
 
       - name: Run UI vitest
         working-directory: src/etl-sql-vscode/ui
-        run: npm run test:unit
+        timeout-minutes: 15
+        shell: bash
+        run: npm run test:unit 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/test-ui.log"
 
       - name: Run vitest
         working-directory: src/etl-sql-vscode
-        run: npm run test:unit
+        timeout-minutes: 15
+        shell: bash
+        run: npm run test:unit 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/test-extension.log"
+
+      - name: Retain extension CI diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: vscode-checks-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/vscode/
+          if-no-files-found: warn
+          retention-days: 30
 
   sample-scripts:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'sample-scripts')
     name: Sample Scripts (${{ matrix.platform }})
+    timeout-minutes: 65
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -216,6 +594,7 @@ jobs:
 
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
 
       - name: Set up browser compiler runtime
@@ -224,9 +603,11 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
+        timeout-minutes: 15
         run: npm ci --prefix scripts/typecheck
 
       - name: Prepare browser assets
+        timeout-minutes: 15
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
@@ -235,25 +616,69 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore application
-        run: dotnet restore src/ETL-SQL.App/ETL-SQL.App.csproj
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('restore', 'src/ETL-SQL.App/ETL-SQL.App.csproj') -EvidenceDirectory release-validation/samples/restore -TimeoutSeconds 600
 
       - name: Build application
-        run: dotnet build src/ETL-SQL.App/ETL-SQL.App.csproj --configuration Debug --no-restore
+        shell: pwsh
+        timeout-minutes: 17
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'src/ETL-SQL.App/ETL-SQL.App.csproj', '--configuration', 'Debug', '--no-restore') -EvidenceDirectory release-validation/samples/build -TimeoutSeconds 900
 
       - name: Validate samples (Windows)
         if: runner.os == 'Windows' && github.event_name != 'pull_request'
         shell: pwsh
-        run: .\scripts\Test-AllSamples.ps1 -Passes 2
+        timeout-minutes: 27
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-AllSamples.ps1 -ScriptArguments @('-Passes', '2') -EvidenceDirectory release-validation/samples/validation -TimeoutSeconds 1500
+
+      # The PostgreSQL samples ran nowhere in GitHub before this; the Windows runner has no Linux
+      # containers, so they stay skipped there.
+      - name: Start PostgreSQL for the PostgreSQL samples
+        if: runner.os == 'Linux'
+        timeout-minutes: 5
+        run: |
+          docker run -d --name sample-postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16-alpine
+          for attempt in $(seq 1 60); do
+            docker exec sample-postgres pg_isready -U postgres -h 127.0.0.1 && exit 0
+            sleep 2
+          done
+          docker logs sample-postgres
+          exit 1
+
+      # portal_promotion and setup_orchestrator ran nowhere in GitHub before this: nothing listened
+      # on 5000 or 5001, so they were skipped. Both services run from this checkout's source.
+      - name: Start the Portal and Orchestrator for their samples
+        if: runner.os == 'Linux'
+        timeout-minutes: 20
+        run: bash scripts/start-sample-services.sh release-validation/samples/services
 
       - name: Validate samples (Linux)
         if: runner.os == 'Linux'
-        shell: bash
+        shell: pwsh
+        timeout-minutes: 27
+        env:
+          SAMPLES_REQUIRED_SERVICES: postgres postgresql docker portal orchestrator
         run: |
-          PASSES="${{ github.event_name == 'pull_request' && '1' || '2' }}"
-          bash ./scripts/test-all-samples.sh "$PASSES"
+          ./scripts/Invoke-CertificationProcess.ps1 -Command bash -CommandArguments @('./scripts/test-all-samples.sh', '${{ github.event_name == 'pull_request' && '1' || '2' }}') -EvidenceDirectory release-validation/samples/validation -TimeoutSeconds 1500
+
+      - name: Retain sample diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sample-diagnostics-${{ matrix.platform }}-${{ github.run_attempt }}
+          path: release-validation/samples
+          if-no-files-found: warn
+          retention-days: 30
 
   portal-browser-journey:
-    name: Portal Browser Journey
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'portal-browser-journey')
+    name: Portal Browser Journey (${{ matrix.shard }}/3)
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.source-preflight.outputs.browser_shards || '[1,2,3]') }}
     # windows-latest matches the platform the lane is developed and validated on, and the Portal's
     # own build-and-test job. Kept separate from that job so a browser flake never blocks the
     # coverage gate, and so the ~113 MB Chromium download is cached independently.
@@ -261,6 +686,7 @@ jobs:
 
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
 
       - name: Set up browser compiler runtime
@@ -269,28 +695,33 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          mkdir -p artifacts/browser-shard
+          npm ci --prefix scripts/typecheck 2>&1 | tee artifacts/browser-shard/restore-compiler.log
 
       - name: Prepare browser assets
-        run: node scripts/sync-assets.js
+        timeout-minutes: 8
+        shell: pwsh
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/sync-assets.js') -EvidenceDirectory artifacts/browser-shard/preparation -TimeoutSeconds 360
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
       - name: Restore VS Code UI dependencies
         working-directory: src/etl-sql-vscode/ui
-        run: npm ci
+        timeout-minutes: 8
+        shell: bash
+        run: npm ci 2>&1 | tee "$GITHUB_WORKSPACE/artifacts/browser-shard/restore-ui.log"
 
       - name: Build VS Code UI package
         working-directory: src/etl-sql-vscode/ui
-        run: npm run build
+        timeout-minutes: 10
+        shell: bash
+        run: npm run build 2>&1 | tee "$GITHUB_WORKSPACE/artifacts/browser-shard/build-ui.log"
 
       # Keyed on the Microsoft.Playwright version in Directory.Packages.props: bumping the package
       # must fetch a matching browser build rather than reuse the previous one.
@@ -302,15 +733,70 @@ jobs:
           restore-keys: playwright-windows-
 
       - name: Build browser lane
-        run: dotnet build tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj --configuration Release
+        timeout-minutes: 17
+        shell: pwsh
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj', '--configuration', 'Release') -EvidenceDirectory artifacts/browser-shard/build -TimeoutSeconds 900
 
       - name: Run browser lane
+        timeout-minutes: 35
         shell: pwsh
-        run: .\scripts\test-lane.ps1 -Lane browser -Configuration Release -NoRestore -NoBuild
+        run: |
+          ./scripts/Invoke-CertificationProcess.ps1 `
+            -ScriptPath ./scripts/Test-BrowserShard.ps1 `
+            -ScriptArguments @('-Shard', '${{ matrix.shard }}', '-ShardCount', '3', '-Configuration', 'Release', '-NoBuild', '-EvidenceDirectory', 'artifacts/browser-shard') `
+            -EvidenceDirectory artifacts/browser-shard/supervisor `
+            -TimeoutSeconds 1800
+
+      - name: Report browser shard recovery
+        timeout-minutes: 15
+        if: failure()
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          BROWSER_SHARD: ${{ matrix.shard }}
+        run: node scripts/report-browser-shard-recovery.mjs
+
+      - name: Retain browser shard diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/browser-shard/
+          if-no-files-found: error
+          retention-days: 30
+
+  portal-browser-gate:
+    name: Portal Browser Journey
+    timeout-minutes: 12
+    needs: [source-preflight, portal-browser-journey]
+    if: always() && needs.source-preflight.result == 'success' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'portal-browser-journey') && needs.source-preflight.outputs.browser_shards == '[1,2,3]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require all browser jobs to pass
+        timeout-minutes: 3
+        env:
+          SHARD_RESULT: ${{ needs.portal-browser-journey.result }}
+        run: test "$SHARD_RESULT" = success
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: browser-shard-*-${{ github.run_id }}-*
+          path: browser-evidence
+      - name: Verify complete nonoverlapping browser coverage
+        timeout-minutes: 3
+        run: node scripts/verify-browser-shards.mjs browser-evidence "$GITHUB_RUN_ID" 3
 
   studio-performance-budgets:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'studio-performance-budgets')
     name: Studio Performance Budgets (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      STUDIO_PLATFORM: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
@@ -323,6 +809,7 @@ jobs:
             platform: macos
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
 
       - name: Set up browser compiler runtime
@@ -331,10 +818,16 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          mkdir -p release-validation/studio-performance
+          npm ci --prefix scripts/typecheck 2>&1 | tee release-validation/studio-performance/restore-compiler.log
 
       - name: Prepare browser assets
-        run: node scripts/sync-assets.js
+        timeout-minutes: 8
+        shell: pwsh
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/sync-assets.js') -EvidenceDirectory "release-validation/studio-performance/$env:STUDIO_PLATFORM/preparation" -TimeoutSeconds 360
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
@@ -349,29 +842,133 @@ jobs:
           restore-keys: playwright-chromium-${{ matrix.platform }}-
 
       - name: Build Studio performance gate
-        run: dotnet build tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj --configuration Release
+        timeout-minutes: 17
+        shell: pwsh
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj', '--configuration', 'Release') -EvidenceDirectory "release-validation/studio-performance/$env:STUDIO_PLATFORM/build" -TimeoutSeconds 900
 
       - name: Measure Studio performance
+        timeout-minutes: 17
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
         shell: pwsh
-        run: >-
-          ./scripts/Measure-StudioPerformance.ps1
-          -Configuration Release
-          -NoBuild
-          -OutputPath "artifacts/studio-performance/${{ matrix.platform }}.json"
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Measure-StudioPerformance.ps1 -ScriptArguments @('-Configuration', 'Release', '-NoBuild', '-OutputPath', "artifacts/studio-performance/$env:STUDIO_PLATFORM.json") -EvidenceDirectory "release-validation/studio-performance/$env:STUDIO_PLATFORM/measurement" -TimeoutSeconds 900
+
+      - name: Retain Studio performance diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: studio-performance-diagnostics-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/studio-performance/
+          if-no-files-found: warn
 
       - name: Upload Studio performance evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: studio-performance-${{ matrix.platform }}
+          name: studio-performance-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/studio-performance/${{ matrix.platform }}.json
           if-no-files-found: error
 
+  # The engine checks that ran only on the owner's workstation before v0.22.0 (release reliability
+  # W4b). Row counts, checksums, failed scenarios and spill allocation gate; timing against the
+  # workstation baseline is report-only here because Compare-CertBaseline suppresses performance
+  # failures when the hardware differs.
+  engine-certification:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'engine-certification')
+    name: Engine Certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        timeout-minutes: 15
+        uses: actions/checkout@v6
+
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        timeout-minutes: 8
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        timeout-minutes: 8
+        run: node scripts/sync-assets.js
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore dependencies
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('restore', 'ETL-SQL.slnx') -EvidenceDirectory release-validation/engine-certification/restore -TimeoutSeconds 660
+
+      - name: Build
+        shell: pwsh
+        timeout-minutes: 17
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'ETL-SQL.slnx', '--no-restore', '--configuration', 'Release') -EvidenceDirectory release-validation/engine-certification/build -TimeoutSeconds 960
+
+      # The grammar and SQL logic lanes run under a comma-decimal, day-first culture. Windows CI is
+      # en-US and other Linux jobs are invariant, so engine text that follows the host locale
+      # (CI 42705343857) fails here instead of on a developer's machine.
+      - name: EBNF conformance lane
+        shell: pwsh
+        timeout-minutes: 8
+        env:
+          LANG: de_DE.UTF-8
+          LC_ALL: de_DE.UTF-8
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'ebnf', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/engine-certification/ebnf -TimeoutSeconds 420
+
+      - name: SLT lane
+        shell: pwsh
+        timeout-minutes: 10
+        env:
+          LANG: de_DE.UTF-8
+          LC_ALL: de_DE.UTF-8
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'slt', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/engine-certification/slt -TimeoutSeconds 540
+
+      - name: Spill allocation budget (10M rows)
+        shell: pwsh
+        timeout-minutes: 8
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-SpillAllocProfile.ps1 -ScriptArguments @('-Rows', '10000000', '-SkipBuild', '-MachineMetricsReportOnly', '-OutDir', 'release-validation/engine-certification/spill-allocation') -EvidenceDirectory release-validation/engine-certification/spill-process -TimeoutSeconds 420
+
+      - name: Scale certification (smoke)
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ScaleCertification.ps1 -ScriptArguments @('-Tier', 'Smoke', '-SkipBuild', '-OutDir', 'release-validation/engine-certification/scale-smoke') -EvidenceDirectory release-validation/engine-certification/scale-smoke-process -TimeoutSeconds 660
+
+      - name: Scale correctness against baseline (smoke)
+        shell: pwsh
+        timeout-minutes: 3
+        run: ./scripts/Compare-CertBaseline.ps1 -NewReport release-validation/engine-certification/scale-smoke/cert-report.json -Baseline certification-results/baseline-smoke.json -PerformanceReportOnly -MarkdownReport release-validation/engine-certification/baseline-smoke.md
+
+      - name: Scale certification (standard)
+        shell: pwsh
+        timeout-minutes: 20
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ScaleCertification.ps1 -ScriptArguments @('-Tier', 'Standard', '-SkipBuild', '-OutDir', 'release-validation/engine-certification/scale-standard') -EvidenceDirectory release-validation/engine-certification/scale-standard-process -TimeoutSeconds 1140
+
+      - name: Scale correctness against baseline (standard)
+        shell: pwsh
+        timeout-minutes: 3
+        run: ./scripts/Compare-CertBaseline.ps1 -NewReport release-validation/engine-certification/scale-standard/cert-report.json -Baseline certification-results/baseline-standard.json -PerformanceReportOnly -MarkdownReport release-validation/engine-certification/baseline-standard.md
+
+      - name: Retain engine certification evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: engine-certification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/engine-certification/
+          if-no-files-found: warn
+
   enterprise-certification:
+    needs: source-preflight
     name: Enterprise Certification (${{ matrix.platform }})
-    if: github.event_name != 'pull_request'
+    timeout-minutes: 75
+    if: github.event_name != 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'enterprise-certification')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -384,6 +981,7 @@ jobs:
 
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
 
       - name: Set up browser compiler runtime
@@ -392,9 +990,11 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
+        timeout-minutes: 15
         run: npm ci --prefix scripts/typecheck
 
       - name: Prepare browser assets
+        timeout-minutes: 15
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
@@ -404,28 +1004,53 @@ jobs:
 
       - name: Run enterprise certification
         shell: pwsh
+        timeout-minutes: 62
         run: >
-          ./scripts/Test-EnterpriseHardeningCertification.ps1
-          -RunId "ci-${{ github.run_id }}-${{ github.run_attempt }}"
-          -Platform "${{ matrix.platform }}"
+          ./scripts/Invoke-CertificationProcess.ps1
+          -ScriptPath scripts/Test-EnterpriseHardeningCertification.ps1
+          -ScriptArguments @('-RunId', 'ci-${{ github.run_id }}-${{ github.run_attempt }}', '-Platform', '${{ matrix.platform }}')
+          -EvidenceDirectory release-validation/enterprise -TimeoutSeconds 3600
+
+      - name: Retain enterprise process diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: enterprise-diagnostics-${{ matrix.platform }}-${{ github.run_attempt }}
+          path: release-validation/enterprise
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Retain enterprise certification evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: enterprise-certification-${{ matrix.platform }}
+          name: enterprise-certification-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: certification-results/enterprise-hardening/ci-${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.platform }}
           if-no-files-found: error
           retention-days: 30
 
   docker-integration-tests:
+    needs: source-preflight
     name: Docker Integration Tests
-    if: github.event_name != 'pull_request'
+    timeout-minutes: 150
+    if: github.event_name != 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'docker-integration-tests')
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
+
+      # CI 41860496118 (2026-11-04) ran out of disk extracting the .NET SDK image. Remove
+      # preinstalled toolchains this job never uses, and record free space before and after the
+      # tests so the margin is measured rather than guessed.
+      - name: Free runner disk space
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL
+          df -h /
 
       - name: Set up browser compiler runtime
         uses: actions/setup-node@v7
@@ -433,9 +1058,11 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
+        timeout-minutes: 15
         run: npm ci --prefix scripts/typecheck
 
       - name: Prepare browser assets
+        timeout-minutes: 15
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
@@ -444,18 +1071,25 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Verify .NET
+        timeout-minutes: 15
         run: dotnet --info
 
       - name: Verify Docker
+        timeout-minutes: 15
         run: docker info
 
       - name: Restore dependencies
-        run: dotnet restore ETL-SQL.slnx
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('restore', 'ETL-SQL.slnx') -EvidenceDirectory release-validation/integration/restore -TimeoutSeconds 600
 
       - name: Build
-        run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
+        shell: pwsh
+        timeout-minutes: 17
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'ETL-SQL.slnx', '--no-restore', '--configuration', 'Release') -EvidenceDirectory release-validation/integration/build -TimeoutSeconds 900
 
       - name: Install LDAP client library (Linux only)
+        timeout-minutes: 10
         run: |
           sudo apt-get update || true
           sudo apt-get install -y libldap-dev || sudo apt-get install -y libldap2-dev || true
@@ -466,20 +1100,28 @@ jobs:
           fi
 
       # OdbcTransactionCloneTests drives a real SQL Server through Microsoft's ODBC driver.
+      # The runner could not resolve the Ubuntu mirrors for three minutes on 2026-11-11 (Release
+      # Certification 43039101047), which failed the nightly. Try three times, 30 s apart.
       - name: Install Microsoft ODBC Driver 18 for SQL Server
+        timeout-minutes: 20
         run: |
           if ! dpkg -s msodbcsql18 >/dev/null 2>&1; then
             if [ ! -f /etc/apt/sources.list.d/microsoft-prod.list ]; then
               curl -sSL -o /tmp/packages-microsoft-prod.deb "https://packages.microsoft.com/config/ubuntu/$(. /etc/os-release && echo "$VERSION_ID")/packages-microsoft-prod.deb"
               sudo dpkg -i /tmp/packages-microsoft-prod.deb
             fi
-            sudo apt-get update
-            sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+            for attempt in 1 2 3; do
+              if sudo apt-get update && sudo ACCEPT_EULA=Y apt-get install -y -o Acquire::Retries=3 msodbcsql18; then break; fi
+              if [ "$attempt" = 3 ]; then echo "::error::The ODBC driver could not be installed after 3 attempts."; exit 1; fi
+              echo "apt attempt $attempt failed; retrying in 30 s."
+              sleep 30
+            done
           fi
           odbcinst -q -d -n "ODBC Driver 18 for SQL Server"
 
       - name: Pre-pull base Docker images
         shell: pwsh
+        timeout-minutes: 33
         run: |
           $images = @(
             'mcr.microsoft.com/dotnet/sdk:10.0',
@@ -491,7 +1133,8 @@ jobs:
             $pulled = $false
             for ($attempt = 1; $attempt -le 5; $attempt++) {
               Write-Host "Pulling $img (attempt $attempt/5)..."
-              docker pull $img
+              $imageName = $img -replace '[^a-zA-Z0-9.-]', '_'
+              ./scripts/Invoke-CertificationProcess.ps1 -Command docker -CommandArguments @('pull', $img) -EvidenceDirectory "release-validation/integration/pulls/$imageName/$attempt" -TimeoutSeconds 90
               if ($LASTEXITCODE -eq 0) {
                 $pulled = $true
                 break
@@ -505,13 +1148,40 @@ jobs:
 
       - name: Build sandbox worker image
         shell: pwsh
-        run: .\scripts\Test-SandboxWorkerImage.ps1 -Tag etlsql-sandbox-worker-test:local -Keep
+        timeout-minutes: 22
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-SandboxWorkerImage.ps1 -ScriptArguments @('-Tag', 'etlsql-sandbox-worker-test:local', '-Keep') -EvidenceDirectory release-validation/integration/worker -TimeoutSeconds 1200
 
       - name: Enable hardened sandbox runtime (gVisor & local registry)
+        shell: pwsh
+        timeout-minutes: 12
         run: |
-          sudo bash ./scripts/enable-hardened-sandbox-lane.sh etlsql-sandbox-worker-test:local
-          echo "ETLSQL_SANDBOX_WORKER_DIGEST_IMAGE=$(cat /tmp/etlsql-pinned-worker-image)" >> $GITHUB_ENV
+          ./scripts/Invoke-CertificationProcess.ps1 -Command sudo -CommandArguments @('bash', './scripts/enable-hardened-sandbox-lane.sh', 'etlsql-sandbox-worker-test:local') -EvidenceDirectory release-validation/integration/hardened -TimeoutSeconds 600
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "ETLSQL_SANDBOX_WORKER_DIGEST_IMAGE=$((Get-Content /tmp/etlsql-pinned-worker-image -Raw).Trim())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Run Docker Integration Tests
         shell: pwsh
-        run: .\scripts\test-lane.ps1 -Lane integration -Configuration Release -NoRestore -NoBuild
+        timeout-minutes: 42
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'integration', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/integration/tests -TimeoutSeconds 2400
+
+      - name: Local and container smoke parity
+        shell: pwsh
+        timeout-minutes: 20
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Invoke-SmokeParity.ps1 -ScriptArguments @('-ResultsDirectory', 'release-validation/integration/smoke-parity') -EvidenceDirectory release-validation/integration/smoke-parity-process -TimeoutSeconds 1140
+
+      - name: Record free disk space
+        if: always()
+        timeout-minutes: 2
+        run: df -h / && docker system df
+
+      - name: Retain Docker integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-diagnostics-${{ github.run_attempt }}
+          # test-lane-results holds the TRX files and any flaky-tests.jsonl from retry-once.
+          path: |
+            release-validation/integration
+            release-validation/test-lane-results
+          if-no-files-found: warn
+          retention-days: 30

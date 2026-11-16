@@ -28,6 +28,7 @@ data/maps/
 certification-results/postgres-ha-soak/
 certification-results/ha-large-job-soak/
 certification-results/ha-fault-injection/
+certification-results/ha-soak-logs/
 **/node_modules/
 **/.vscode-test/
 src/etl-sql-vscode/out/

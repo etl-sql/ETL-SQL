@@ -49,7 +49,6 @@ public class ConnectionInfo
 public class TempTableInfo
 {
     public string Name { get; set; } = string.Empty;
-    public string DataFilePath { get; set; } = string.Empty;
     public List<string> SpillChunkNames { get; set; } = new();
     public List<ColumnDefinition> Columns { get; set; } = new();
     public List<TableConstraintInfo> Constraints { get; set; } = new();

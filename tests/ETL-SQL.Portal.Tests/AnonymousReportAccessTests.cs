@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Portal.Data;
+using ETL_SQL.Portal.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -185,7 +186,8 @@ public class AnonymousReportAccessTests
 
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-        Assert.NotNull((await db.ReportShareLinks.SingleAsync(link => link.Token == shareToken)).RevokedAt);
+        var stored = await db.ReportShareLinks.SingleAsync(link => link.Token == AnonymousReportTokens.Hash(shareToken));
+        Assert.NotNull(stored.RevokedAt);
     }
 
     private static int Base64UrlDecodedLength(string value)

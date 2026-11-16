@@ -28,7 +28,7 @@ public class AbsolutePathRule : ILintRule
     {
         if (statement is CreateConnectionStatement conn)
         {
-            var typesRequiringAbsolute = new[] { "FILE", "FLATFILE", "EXCEL", "JSON", "XML", "PARQUET", "AVRO", "DIRECTORY" };
+            var typesRequiringAbsolute = new[] { "FLATFILE", "EXCEL", "JSON", "XML", "PARQUET", "AVRO", "DIRECTORY" };
             if (conn.ConnectionType != null && typesRequiringAbsolute.Contains(conn.ConnectionType.ToUpperInvariant()))
             {
                 CheckPathExpression(conn.TargetExpression, results);

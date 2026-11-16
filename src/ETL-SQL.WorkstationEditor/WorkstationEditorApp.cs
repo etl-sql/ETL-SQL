@@ -69,6 +69,22 @@ public static class WorkstationEditorApp
 
         var app = builder.Build();
 
+        // DNS rebinding points an attacker-controlled name at 127.0.0.1, which makes that page
+        // same-origin with this host as far as the browser is concerned. The browser still sends
+        // the attacker's name in Host, so refuse anything that is not a loopback name before any
+        // route, shell, or static asset answers.
+        app.Use(async (ctx, next) =>
+        {
+            if (!IsLoopbackHost(ctx.Request.Host))
+            {
+                ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+                await ctx.Response.WriteAsJsonAsync(new { error = "This editor only answers requests addressed to localhost." }, JsonOptions);
+                return;
+            }
+
+            await next();
+        });
+
         app.Use(async (ctx, next) =>
         {
             ctx.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
@@ -77,13 +93,14 @@ public static class WorkstationEditorApp
             await next();
         });
 
-        // The shell is gated as well as /api. It embeds the session token so the page can call the
-        // API, so serving it unauthenticated would hand the token to anything that can reach the
-        // loopback port and defeat the gate entirely. The printed URL already carries ?token=.
+        // Both shells are gated as well as /api. Each embeds the session token so the page can call
+        // the API, so serving either unauthenticated would hand the token to anything that can reach
+        // the loopback port and defeat the gate entirely. The printed URL already carries ?token=.
         // Static assets under /designer stay open: they are public JS/CSS with no session data, and
         // `<script src>` / module imports cannot send the header.
         app.UseWhen(
             ctx => ctx.Request.Path.StartsWithSegments("/api")
+                   || ctx.Request.Path.StartsWithSegments("/studio")
                    || ctx.Request.Path.Equals("/", StringComparison.Ordinal),
             branch =>
             {
@@ -371,16 +388,26 @@ public static class WorkstationEditorApp
             }
         });
 
-        app.MapPut("/api/files", async (SaveFileRequest request, WorkstationWorkspace workspace, CancellationToken cancellationToken) =>
+        app.MapPut("/api/files", async (SaveFileRequest request, WorkstationWorkspace workspace, ETL_SQL.Services.SecurityService security, CancellationToken cancellationToken) =>
         {
             try
             {
+                var sealOutcome = security.TrySealScriptForSave(request.Content ?? string.Empty, request.SealPassword);
+                if (sealOutcome.RequiresPassword)
+                {
+                    return Results.Json(new
+                    {
+                        error = "Master password is required to seal plaintext secrets before saving.",
+                        code = "SEAL_PASSWORD_REQUIRED"
+                    }, JsonOptions, statusCode: StatusCodes.Status422UnprocessableEntity);
+                }
+
                 var sourceRevision = await workspace.WriteTextAsync(
                     request.Path ?? string.Empty,
-                    request.Content ?? string.Empty,
+                    sealOutcome.ScriptText,
                     request.BaseRevision,
                     cancellationToken);
-                return Results.Json(new { saved = true, path = request.Path, sourceRevision }, JsonOptions);
+                return Results.Json(new { saved = true, path = request.Path, sourceRevision, content = sealOutcome.ScriptText }, JsonOptions);
             }
             catch (WorkspaceSaveConflictException ex)
             {
@@ -1027,6 +1054,16 @@ public static class WorkstationEditorApp
         app.MapPost("/api/designer/format", (FormatRequest request, WorkstationFormatService formatter) =>
             Results.Json(formatter.Format(request), JsonOptions));
 
+        app.MapPost("/api/designer/seal", (SealDesignerAuthoringRequest request, ETL_SQL.Services.SecurityService security) =>
+        {
+            var outcome = security.TrySealScriptForSave(request.Script ?? string.Empty, request.Password);
+            return Results.Json(new SealDesignerAuthoringResponse(
+                outcome.ScriptText,
+                outcome.Changed,
+                outcome.RequiresPassword,
+                outcome.AllowsPlaintextSecrets), JsonOptions);
+        });
+
         // Studio's visual canvas is built on this sample and keeps its palette disabled until one
         // exists, so the desktop host needs it just as much as the Portal does. The service applies
         // the same schema validation and bounded-run governance as the Portal's route.
@@ -1300,6 +1337,18 @@ public static class WorkstationEditorApp
         ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(SystemExecutionContext.Instance, host);
     }
 
+    /// <summary>
+    /// True for the names a browser uses to reach a loopback listener. Kestrel only binds
+    /// 127.0.0.1, so any other name in Host was resolved to it by something other than this host.
+    /// </summary>
+    internal static bool IsLoopbackHost(HostString host)
+    {
+        if (!host.HasValue) return false;
+        var name = host.Host;
+        return string.Equals(name, "localhost", StringComparison.OrdinalIgnoreCase)
+            || (IPAddress.TryParse(name, out var address) && IPAddress.IsLoopback(address));
+    }
+
     private static bool IsAuthorized(HttpContext context, string expectedToken)
     {
         if (context.Request.Headers.TryGetValue("X-ETLSQL-EDITOR-TOKEN", out var headerToken) &&
@@ -1352,7 +1401,9 @@ public static class WorkstationEditorApp
     }
 }
 
-public sealed record SaveFileRequest(string? Path, string? Content, string? BaseRevision = null);
+public sealed record SaveFileRequest(string? Path, string? Content, string? BaseRevision = null, string? SealPassword = null);
+public sealed record SealDesignerAuthoringRequest(string? Script, string? Password = null);
+public sealed record SealDesignerAuthoringResponse(string SealedScript, bool Changed, bool RequiresPassword, bool AllowsPlaintextSecrets);
 public sealed record SaveDraftRequest(string? Path, string? Content, string? BaseSourceRevision = null);
 public sealed record RenameFileRequest(string? Path, string? Name);
 public sealed record CreateWorkspaceFolderRequest(string? Path);

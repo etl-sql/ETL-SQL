@@ -210,4 +210,51 @@ public sealed class ColumnBatchTests
         Assert.Throws<OperationCanceledException>(() =>
             ColumnBatchAdapter.Compact(source, new[] { "Id" }, cancellationToken: cancellation.Token));
     }
+
+    [Fact]
+    public void Dispose_ClearsSensitivePooledArraysBeforeReturningToPool()
+    {
+        // Rent buffers directly, populate sensitive marker patterns inside ColumnBuffer & Utf8ColumnBuffer,
+        // dispose, and confirm no sensitive marker bytes remain when re-renting the same array instance.
+        const int secretMarker = 0x5A5A1234;
+        int[] rawInts = System.Buffers.ArrayPool<int>.Shared.Rent(16);
+        int[] observed = rawInts;
+        System.Buffers.ArrayPool<int>.Shared.Return(rawInts, clearArray: true);
+
+        using (var col = ColumnBuffer<int>.Rent(16))
+        {
+            for (var i = 0; i < col.Count; i++) col.Values.Span[i] = secretMarker;
+        }
+
+        var reRented = System.Buffers.ArrayPool<int>.Shared.Rent(16);
+        try
+        {
+            if (ReferenceEquals(reRented, observed))
+                Assert.DoesNotContain(secretMarker, reRented);
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<int>.Shared.Return(reRented, clearArray: true);
+        }
+
+        byte[] rawBytes = System.Buffers.ArrayPool<byte>.Shared.Rent(64);
+        byte[] observedBytes = rawBytes;
+        System.Buffers.ArrayPool<byte>.Shared.Return(rawBytes, clearArray: true);
+
+        using (var utf8 = Utf8ColumnBuffer.FromStrings(new string?[] { "SUPER_SECRET_TOKEN_VALUE" }))
+        {
+            Assert.Equal("SUPER_SECRET_TOKEN_VALUE", utf8.GetBoxedValue(0));
+        }
+
+        var reRentedBytes = System.Buffers.ArrayPool<byte>.Shared.Rent(64);
+        try
+        {
+            if (ReferenceEquals(reRentedBytes, observedBytes))
+                Assert.All(reRentedBytes, b => Assert.Equal((byte)0, b));
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(reRentedBytes, clearArray: true);
+        }
+    }
 }

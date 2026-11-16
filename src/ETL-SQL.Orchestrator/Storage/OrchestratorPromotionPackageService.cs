@@ -276,7 +276,13 @@ public static partial class OrchestratorPromotionPackageService
 
         var runIds = new Dictionary<long, long>();
         foreach (var run in package.QualityHistory)
-            runIds[run.Id] = await history.ImportJobHistoryAsync(run);
+        {
+            // A run keeps its tenant, and its job id is the source's: re-point it at the target's
+            // job of the same name in the same tenant, or leave it unbound when there is none.
+            var targetJob = await history.GetJobAsync(run.TenantId, run.JobName);
+            var targetJobId = targetJob is { Id.IsAssigned: true } ? targetJob.Id : JobId.None;
+            runIds[run.Id] = await history.ImportJobHistoryAsync(run with { JobId = targetJobId });
+        }
         foreach (var failure in package.QualityFailures)
         {
             if (!runIds.TryGetValue(failure.SourceRunId, out var targetRun)) continue;
@@ -307,7 +313,16 @@ public static partial class OrchestratorPromotionPackageService
                 FunctionsApplied = row.FunctionsApplied,
                 DerivedFromDescriptions = row.DerivedFromDescriptions
             };
-            await lineage.SaveLineageAsync([entry], row.JobName, row.ScriptPath is null ? null : Bind(row.ScriptPath), row.RunAt);
+            var scriptPath = row.ScriptPath is null ? null : Bind(row.ScriptPath);
+            // The untenanted overload writes the host's own partition. A row exported from a tenant
+            // goes back into that tenant, the same authority the package's job rows already carry.
+            if (lineage is ITenantLineageCatalogStore tenantLineage
+                && TenantId.TryParse(row.TenantId, out var rowTenant)
+                && !string.Equals(rowTenant.Value, UntenantedLineagePartition, StringComparison.Ordinal))
+                await tenantLineage.SaveLineageAsync(
+                    TenantContext.FromHostConfiguration(rowTenant.Value), [entry], row.JobName, scriptPath, row.RunAt);
+            else
+                await lineage.SaveLineageAsync([entry], row.JobName, scriptPath, row.RunAt);
             importedLineage++;
         }
 
@@ -437,8 +452,11 @@ public static partial class OrchestratorPromotionPackageService
         await JsonSerializer.DeserializeAsync<Package>(source, JsonOptions, ct)
         ?? throw new InvalidDataException("The Orchestrator promotion package is empty or invalid.");
 
+    /// <summary>The partition the untenanted lineage overload writes (the column's default).</summary>
+    private const string UntenantedLineagePartition = "portal-host";
+
     private static string LineageKey(LineageHistoryEntry row) => string.Join("\u001f",
-        row.RunAt.ToUniversalTime().ToString("O"), row.JobName, row.ScriptPath, row.TargetTable,
+        row.TenantId, row.RunAt.ToUniversalTime().ToString("O"), row.JobName, row.ScriptPath, row.TargetTable,
         row.TargetColumn, row.Operation, row.SourceFile, row.Line.ToString());
 
     private static void AddDuplicateFindings(IEnumerable<string> names, string kind, List<ValidationFinding> findings)

@@ -176,9 +176,41 @@ try {
     console.log('browser compiler: shared-to-Portal imports resolve to typed owners before host generation');
 } finally { fs.rmSync(root, { recursive: true, force: true }); }
 
+for (const scope of ['classic', 'augmentation']) {
+    const isolated = fs.mkdtempSync(path.join(os.tmpdir(), 'etlsql-browser-scope-'));
+    const sharedSource = path.join(isolated, 'src/ETL-SQL.ReportRuntime/Resources/TypeScript/shared-scope.ts');
+    const portalSource = path.join(isolated, 'src/ETL-SQL.Portal/BrowserSources/portal-scope.ts');
+    try {
+        fs.copyFileSync(path.join(repo, 'tsconfig.browser-build.json'), path.join(isolated, 'tsconfig.browser-build.json'));
+        const declaration = type => scope === 'classic' ? `let independentSurfaceValue: ${type};\n` :
+            `export {};\ndeclare global { var independentSurfaceValue: ${type}; }\n`;
+        write(sharedSource, declaration('number'));
+        write(portalSource, declaration('string'));
+        const compileScopes = () => compileBrowser({ root: isolated, toolchain: repo });
+        compileScopes();
+        const sharedOutput = path.join(isolated, 'src/ETL-SQL.ReportRuntime/Resources/Shared/shared-scope.js');
+        const portalOutput = path.join(isolated, 'src/ETL-SQL.Portal/wwwroot/js/portal-scope.js');
+        const expectedShared = fs.readFileSync(sharedOutput), expectedPortal = fs.readFileSync(portalOutput);
+        compileScopes();
+        assert.deepEqual(fs.readFileSync(sharedOutput), expectedShared);
+        assert.deepEqual(fs.readFileSync(portalOutput), expectedPortal);
+        write(sharedSource, declaration('number') + (scope === 'classic' ? 'independentSurfaceValue = "invalid";\n' :
+            'globalThis.independentSurfaceValue = "invalid";\n'));
+        assert.throws(compileScopes, /not assignable/, 'Each independent surface must still receive strict type checking.');
+        assert.deepEqual(fs.readFileSync(sharedOutput), expectedShared);
+        assert.deepEqual(fs.readFileSync(portalOutput), expectedPortal);
+    } finally { fs.rmSync(isolated, { recursive: true, force: true }); }
+}
+console.log('browser compiler: independent classic globals and global augmentations retain separate scopes and strict diagnostics.');
+
 const utilPath = path.join(repo, 'src/ETL-SQL.ReportRuntime/Resources/Shared/rt-util.js');
 const util = await import(`data:text/javascript;base64,${Buffer.from(fs.readFileSync(utilPath, 'utf8')).toString('base64')}`);
 assert.equal(util.safeUrl(' javascript:alert(1) '), '#');
+// The browser drops tab/LF/CR anywhere and C0 controls at the ends before parsing the scheme.
+assert.equal(util.safeUrl('java\tscript:alert(1)'), '#');
+assert.equal(util.safeUrl('java\nscript:alert(1)'), '#');
+assert.equal(util.safeUrl('\u0001javascript:alert(1)'), '#');
+assert.equal(util.safeUrl('https://example.com/a?b=1'), 'https://example.com/a?b=1');
 assert.equal(util.safeUrl('/reports/one'), '/reports/one');
 assert.equal(util.escHtml('<>&"\''), '&lt;&gt;&amp;&quot;&#39;');
 assert.equal(util.escHtml(null), '');
@@ -193,6 +225,21 @@ assert.equal(util.toCssLength(12), '12px');
 assert.equal(util.interpolateColor('#000', '#fff', 0.5), 'rgb(128,128,128)');
 assert.match(util.simpleMarkdown('# Heading\n\n```sql\n<x>\n```'), /&lt;x&gt;/);
 assert.equal(util.renderInlineMarkdown('<img> **safe**'), '&lt;img&gt; <strong>safe</strong>');
+// Link text and URL are escaped once: '&' reaches the page as one character, not "&amp;".
+assert.equal(util.renderInlineMarkdown('[A & B](https://x.test/?a=1&b=2)'),
+    '<a href="https://x.test/?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">A &amp; B</a>');
+assert.ok(!util.renderInlineMarkdown('[x](javascript:alert(1))').includes('<a'));
+assert.ok(!util.renderInlineMarkdown('[x]("onmouseover="alert(1))').includes('<a'));
+// Protocol-relative (and the backslash form browsers treat the same) leaves the site; a site path does not.
+assert.ok(!util.renderInlineMarkdown('[x](//evil.example)').includes('<a'));
+assert.ok(!util.renderInlineMarkdown('[x](/\\evil.example)').includes('<a'));
+assert.equal(util.renderInlineMarkdown('[x](/reports/a)'), '<a href="/reports/a" target="_blank" rel="noopener noreferrer">x</a>');
+// Emphasis markers inside a URL stay in the URL instead of becoming <em> inside href.
+assert.equal(util.renderInlineMarkdown('[x](https://x.test/a*b*c)'),
+    '<a href="https://x.test/a*b*c" target="_blank" rel="noopener noreferrer">x</a>');
+assert.equal(util.renderInlineMarkdown('[**bold** link](https://x.test/`q`) and *em*'),
+    '<a href="https://x.test/`q`" target="_blank" rel="noopener noreferrer"><strong>bold</strong> link</a> and <em>em</em>');
+assert.equal(util.renderInlineMarkdown('\u00000\u0000 text'), '0 text', 'a stray placeholder marker cannot pull in a link');
 console.log('runtime utility pilot: coercion, URL, escaping, formatting and markdown checks passed');
 
 const designerPath = path.join(repo, 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer-util.js');

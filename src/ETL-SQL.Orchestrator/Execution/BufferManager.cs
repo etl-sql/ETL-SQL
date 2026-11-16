@@ -63,8 +63,13 @@ namespace ETL_SQL.Orchestrator.Execution
 
         #region Memory Management
 
-        public async Task<IDisposable> ReserveMemoryAsync(string sessionId, long bytes, bool isOverride = false, object? owner = null)
+        public Task<IDisposable> ReserveMemoryAsync(string sessionId, long bytes, bool isOverride = false, object? owner = null)
+            => ReserveMemoryAsync(sessionId, bytes, CancellationToken.None, isOverride, owner);
+
+        public async Task<IDisposable> ReserveMemoryAsync(string sessionId, long bytes, CancellationToken cancellationToken, bool isOverride = false, object? owner = null)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             if (isOverride)
             {
                 _logger.LogWarning("[POLICY_OVERRIDE] Session {SessionId} bypasses global limit to reserve {Bytes} bytes. User responsibility assumed.", sessionId, bytes);
@@ -91,7 +96,8 @@ namespace ETL_SQL.Orchestrator.Execution
             }
 
             // SLOW PATH: Use queueing logic
-            TaskCompletionSource<bool> tcs = null!;
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var request = new MemoryRequest(bytes, tcs);
 
             lock (_memLock)
             {
@@ -103,20 +109,58 @@ namespace ETL_SQL.Orchestrator.Execution
                 }
 
                 // Queue the request
-                tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                var request = new MemoryRequest(bytes, tcs);
                 _memoryQueue.Enqueue(request);
             }
 
             _logger.LogInformation("Session {SessionId} queued for {Bytes} bytes of memory.", sessionId, bytes);
 
-            if (await WaitWithFeedback(sessionId, "Memory", tcs.Task))
+            using var cancellationRegistration = cancellationToken.Register(() =>
             {
-                // Task was completed (memory freed and counter already incremented by ProcessMemoryQueue)
-                return RegisterReservation(new MemoryRelease(this, sessionId, bytes, ownerRef: owner));
+                lock (_memLock)
+                {
+                    if (request.TryTransitionToAbandoned())
+                    {
+                        request.Tcs.TrySetCanceled(cancellationToken);
+                        ProcessMemoryQueue();
+                    }
+                }
+            });
+
+            var granted = false;
+            try
+            {
+                granted = await WaitWithFeedback(sessionId, "Memory", tcs.Task, cancellationToken);
+                if (granted)
+                {
+                    return RegisterReservation(new MemoryRelease(this, sessionId, bytes, ownerRef: owner));
+                }
+
+                AbandonOrReleaseConcurrentMemoryGrant(request);
+            }
+            catch
+            {
+                AbandonOrReleaseConcurrentMemoryGrant(request);
+                throw;
             }
 
             throw new TimeoutException($"Resource request for memory ({bytes} bytes) timed out after {_options.ResourceWaitTimeoutSeconds} seconds.");
+        }
+
+        private void AbandonOrReleaseConcurrentMemoryGrant(MemoryRequest request)
+        {
+            lock (_memLock)
+            {
+                if (request.TryTransitionToAbandoned())
+                {
+                    request.Tcs.TrySetCanceled();
+                    ProcessMemoryQueue();
+                    return;
+                }
+
+                // Wait for the granting thread to publish its byte reservation before release.
+                if (request.IsGranted)
+                    ReleaseMemory(request.Bytes);
+            }
         }
 
         private bool CanAcquireMemoryInternal(long bytes, long maxBytes)
@@ -262,15 +306,24 @@ namespace ETL_SQL.Orchestrator.Execution
             long maxBytes = (long)_options.MaxGlobalMemoryMB * 1024 * 1024;
             while (_memoryQueue.TryPeek(out var next))
             {
+                if (next.IsAbandoned)
+                {
+                    _memoryQueue.TryDequeue(out _);
+                    continue;
+                }
+
                 // We use Internal call because we are already holding the lock
                 if (CanAcquireMemoryInternal(next.Bytes, maxBytes))
                 {
                     if (_memoryQueue.TryDequeue(out _))
                     {
-                        // Note: We increment the counter here while holding the lock to ensure CanAcquireMemory
-                        // consistency for the next item in the queue.
-                        Interlocked.Add(ref _currentMemoryBytes, next.Bytes);
-                        next.Tcs.SetResult(true);
+                        if (next.TryTransitionToGranted())
+                        {
+                            // Note: We increment the counter here while holding the lock to ensure CanAcquireMemory
+                            // consistency for the next item in the queue.
+                            Interlocked.Add(ref _currentMemoryBytes, next.Bytes);
+                            next.Tcs.TrySetResult(true);
+                        }
                     }
                 }
                 else
@@ -321,10 +374,21 @@ namespace ETL_SQL.Orchestrator.Execution
             }
         }
 
-        private class MemoryRequest(long bytes, TaskCompletionSource<bool> tcs)
+        private sealed class MemoryRequest(long bytes, TaskCompletionSource<bool> tcs)
         {
+            private const int StatePending = 0;
+            private const int StateGranted = 1;
+            private const int StateAbandoned = 2;
+
+            private int _state = StatePending;
+
             public long Bytes { get; } = bytes;
             public TaskCompletionSource<bool> Tcs { get; } = tcs;
+
+            public bool IsGranted => Volatile.Read(ref _state) == StateGranted;
+            public bool IsAbandoned => Volatile.Read(ref _state) == StateAbandoned;
+            public bool TryTransitionToGranted() => Interlocked.CompareExchange(ref _state, StateGranted, StatePending) == StatePending;
+            public bool TryTransitionToAbandoned() => Interlocked.CompareExchange(ref _state, StateAbandoned, StatePending) == StatePending;
         }
 
         private class MemoryRelease : IResourceReservation
@@ -358,8 +422,13 @@ namespace ETL_SQL.Orchestrator.Execution
 
         #region Cursor Management
 
-        public async Task<IDisposable> AcquireCursorAsync(string sessionId, bool isOverride = false, object? owner = null)
+        public Task<IDisposable> AcquireCursorAsync(string sessionId, bool isOverride = false, object? owner = null)
+            => AcquireCursorAsync(sessionId, CancellationToken.None, isOverride, owner);
+
+        public async Task<IDisposable> AcquireCursorAsync(string sessionId, CancellationToken cancellationToken, bool isOverride = false, object? owner = null)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             if (isOverride)
             {
                 _logger.LogWarning("[POLICY_OVERRIDE] Session {SessionId} bypasses cursor limit. Total active cursors may exceed {_Max}.", sessionId, _options.MaxStreamingCursors);
@@ -370,11 +439,24 @@ namespace ETL_SQL.Orchestrator.Execution
             Interlocked.Increment(ref _queuedCursors);
             try
             {
-                if (await WaitWithFeedback(sessionId, "Streaming Cursor", _cursorSemaphore.WaitAsync()))
+                using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                var waitTask = _cursorSemaphore.WaitAsync(waitCts.Token);
+
+                try
                 {
-                    Interlocked.Increment(ref _activeCursors);
-                    return RegisterReservation(new CursorRelease(this, sessionId, owner));
+                    if (await WaitWithFeedback(sessionId, "Streaming Cursor", waitTask, cancellationToken))
+                    {
+                        Interlocked.Increment(ref _activeCursors);
+                        return RegisterReservation(new CursorRelease(this, sessionId, owner));
+                    }
                 }
+                catch
+                {
+                    await CancelAndReleaseOrphanedCursorWaitAsync(waitCts, waitTask);
+                    throw;
+                }
+
+                await CancelAndReleaseOrphanedCursorWaitAsync(waitCts, waitTask);
             }
             finally
             {
@@ -382,6 +464,21 @@ namespace ETL_SQL.Orchestrator.Execution
             }
 
             throw new TimeoutException($"Resource request for streaming cursor timed out after {_options.ResourceWaitTimeoutSeconds} seconds.");
+        }
+
+        private async Task CancelAndReleaseOrphanedCursorWaitAsync(CancellationTokenSource waitCts, Task waitTask)
+        {
+            waitCts.Cancel();
+            try
+            {
+                await waitTask;
+                // ReleaseCursor granted the semaphore permit concurrently with timeout/cancellation.
+                _cursorSemaphore.Release();
+            }
+            catch (OperationCanceledException) when (waitCts.IsCancellationRequested)
+            {
+                // Expected when wait was cancelled before receiving a permit.
+            }
         }
 
         private void ReleaseCursor()
@@ -417,21 +514,29 @@ namespace ETL_SQL.Orchestrator.Execution
 
         #endregion
 
-        private async Task<bool> WaitWithFeedback(string sessionId, string resourceName, Task waitTask)
+        internal Task<bool> WaitWithFeedbackForTestAsync(string sessionId, string resourceName, Task waitTask, CancellationToken cancellationToken = default)
+            => WaitWithFeedback(sessionId, resourceName, waitTask, cancellationToken);
+
+        private async Task<bool> WaitWithFeedback(string sessionId, string resourceName, Task waitTask, CancellationToken cancellationToken = default)
         {
             int timeoutSeconds = _options.ResourceWaitTimeoutSeconds > 0 ? _options.ResourceWaitTimeoutSeconds : int.MaxValue;
             int elapsed = 0;
 
             while (elapsed < timeoutSeconds)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 int nextWait = Math.Min(1, timeoutSeconds - elapsed);
-                var delayTask = Task.Delay(TimeSpan.FromSeconds(nextWait));
+                var delayTask = Task.Delay(TimeSpan.FromSeconds(nextWait), cancellationToken);
                 var completed = await Task.WhenAny(waitTask, delayTask);
 
                 if (completed == waitTask)
                 {
+                    await waitTask;
                     return true;
                 }
+
+                // Propagate caller cancellation from delayTask immediately.
+                await delayTask;
 
                 elapsed += nextWait;
                 int remainingMinutes = (timeoutSeconds - elapsed) / 60;

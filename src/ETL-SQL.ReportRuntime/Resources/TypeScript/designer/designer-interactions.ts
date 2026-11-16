@@ -113,11 +113,6 @@ export function listFilterCondition(column: string): string {
     return `'All' IN @${column} OR ${column} IN @${column}`;
 }
 
-/** The single-value condition Studio wrote before v0.20.0; it cannot match a Ctrl+click on several points. */
-function singleFilterCondition(column: string): string {
-    return `@${column} = 'All' OR ${column} = @${column}`;
-}
-
 /**
  * The source rewritten to keep only the rows matching `@column`, or null when the source is not a
  * shape this can edit safely. A source that already filters, groups, joins, or nests is left for
@@ -125,18 +120,6 @@ function singleFilterCondition(column: string): string {
  */
 export function filterSourceOn(source: string | null | undefined, column: string): string | null {
     return filterSourceWhere(source, listFilterCondition(column));
-}
-
-/**
- * The source with Studio's earlier single-value filter on `@column` replaced by the list form, or
- * null when the source does not contain that exact condition. Only Studio's own text is rewritten,
- * never a hand-written comparison.
- */
-export function filterSourceOnSeveral(source: string | null | undefined, column: string): string | null {
-    const text = String(source || '');
-    const single = singleFilterCondition(column);
-    const at = text.indexOf(single);
-    return at < 0 ? null : text.slice(0, at) + listFilterCondition(column) + text.slice(at + single.length);
 }
 
 /**

@@ -69,9 +69,22 @@ public sealed class GatewayClusterPool
         GatewayId = gatewayId;
     }
 
-    public bool TryAddNode(IGatewaySession session)
+    /// <summary>
+    /// Adds a node. A node id already held by a live session with a different workload key is
+    /// refused: replacing it silently let one node take another's traffic and orphaned the
+    /// original. The same key reconnecting replaces its stale session, returned in
+    /// <paramref name="displaced"/> for the caller to close.
+    /// </summary>
+    public bool TryAddNode(IGatewaySession session, out IGatewaySession? displaced)
     {
         ArgumentNullException.ThrowIfNull(session);
+        displaced = null;
+        if (_nodes.TryGetValue(session.NodeId, out var existing) && !ReferenceEquals(existing, session))
+        {
+            var sameKey = string.Equals(existing.WorkloadPublicKeyThumbprint, session.WorkloadPublicKeyThumbprint, StringComparison.Ordinal);
+            if (existing.IsActive && !sameKey) return false;
+            displaced = existing;
+        }
         _nodes[session.NodeId] = session;
         return true;
     }
@@ -120,12 +133,23 @@ public sealed class GatewaySessionRegistry
 {
     private readonly ConcurrentDictionary<(string TenantId, string GatewayId), GatewayClusterPool> _clusters = new();
 
-    public bool TryRegister(IGatewaySession session)
+    // Register and unregister change pool membership together with the pool's presence in
+    // _clusters. Without one gate, an unregister that saw an empty pool could remove it just after
+    // a register added a live node to it, and that Gateway would read as offline while connected.
+    private readonly Lock _membershipGate = new();
+
+    public bool TryRegister(IGatewaySession session) => TryRegister(session, out _);
+
+    /// <summary>Registers a session; <paramref name="displaced"/> is a stale session it replaced.</summary>
+    public bool TryRegister(IGatewaySession session, out IGatewaySession? displaced)
     {
         ArgumentNullException.ThrowIfNull(session);
         var key = (session.TenantId, session.GatewayId);
-        var pool = _clusters.GetOrAdd(key, k => new GatewayClusterPool(k.TenantId, k.GatewayId));
-        return pool.TryAddNode(session);
+        lock (_membershipGate)
+        {
+            var pool = _clusters.GetOrAdd(key, k => new GatewayClusterPool(k.TenantId, k.GatewayId));
+            return pool.TryAddNode(session, out displaced);
+        }
     }
 
     public bool TryGet(string tenantId, string gatewayId, out IGatewaySession? session)
@@ -149,16 +173,19 @@ public sealed class GatewaySessionRegistry
         ArgumentNullException.ThrowIfNull(session);
 
         var key = (tenantId, gatewayId);
-        if (_clusters.TryGetValue(key, out var pool))
+        lock (_membershipGate)
         {
-            var removed = pool.TryRemoveNode(session.NodeId, session);
-            if (pool.IsEmpty)
+            if (_clusters.TryGetValue(key, out var pool))
             {
-                _clusters.TryRemove(key, out _);
+                var removed = pool.TryRemoveNode(session.NodeId, session);
+                if (pool.IsEmpty)
+                {
+                    _clusters.TryRemove(key, out _);
+                }
+                return removed;
             }
-            return removed;
+            return false;
         }
-        return false;
     }
 
     public IReadOnlyList<GatewaySessionInfo> ListActive(string? tenantId = null)

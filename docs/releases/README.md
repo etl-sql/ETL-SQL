@@ -4,7 +4,11 @@
 
 | Page | Description |
 | :--- | :--- |
+| [ETL-SQL v0.22.0](v0.22.0.md) | Released 2026-11-04: release recovery, installed-package checks and security boundaries. |
+| [Release recovery acceptance](recovery-acceptance.md) | Timing targets, verified recovery cases and remaining hosted acceptance. |
+| [v0.22.0 release tooling review](v0.22.0-tooling-review.md) | Findings and fixes from the review of `scripts/`, the installers and `tests/`. |
 | [v0.21.0 bugs and logic audit](v0.21.0-bug-logic-audit.md) | Defect review and validation evidence. |
+| [v0.21.0 performance results](v0.21.0-performance-results.md) | Scale certification measurements and run-order findings. |
 | [v0.21.0 closed TODO audit](v0.21.0-closed-todo-audit.md) | Completed-item review and validation evidence. |
 | [v0.21.0 browser asset acceptance](v0.21.0-browser-asset-acceptance.md) | Packaged runtime, VS Code webview, watcher and native package acceptance evidence. |
 | [v0.21.0 generated assets progress](v0.21.0-generated-assets-progress.md) | Generated browser asset ownership and preparation progress. |

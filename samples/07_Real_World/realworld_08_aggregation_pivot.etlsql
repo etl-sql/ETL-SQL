@@ -39,6 +39,6 @@ PIVOT (
     FOR Q IN (1, 2, 3, 4)
 ) AS pvt
 -- Filters can be applied to the pivoted result
-WHERE (Q1_Revenue + Q2_Revenue + Q3_Revenue + Q4_Revenue) > 10000;
+WHERE ([1] + [2] + [3] + [4]) > 10000;
 
 PRINT 'Quarterly Pivot Report generation completed.';

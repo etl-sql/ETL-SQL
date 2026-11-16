@@ -25,7 +25,12 @@ public class AuditService(
         string? effectiveScopes = null)
     {
         var occurredAt = DateTime.UtcNow;
-        var tenantId = tenantScope?.TenantId ?? "portal-host";
+        // Read when the row is written, not when the service was built: an anonymous endpoint
+        // establishes its tenant from its own credential after construction, and its audit rows
+        // belong to that tenant. A row with no established tenant stays in the host partition.
+        var tenantId = tenantScope is not null && tenantScope.TryGetTenantId(out var scoped)
+            ? scoped
+            : "portal-host";
         var safeResourceId = SecretRedactor.Redact(resourceId);
         var safeDetail = SecretRedactor.Redact(detail);
         var effectiveCorrelationId = correlationId ?? httpContext.HttpContext?.TraceIdentifier;

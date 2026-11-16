@@ -25,12 +25,13 @@ See the [SET Commands index](README.md) for the full list of options with links 
 
 ### Display & Secret Handling
 - **SHOW_SECRETS = ON|OFF** — unmask SENSITIVE/ENCRYPTED variables in output (alias: `SHOW_PASSWORD`, default OFF).
-- **ALLOW_PLAINTEXT_SECRETS = ON|OFF** — unsafe: allow plaintext secrets in saved source (default OFF).
-- **NO_SAVE_SENSITIVE = ON|OFF** — scrub sensitive literals from saved source (default OFF).
-- **NO_SAVE_CONNECTION = ON|OFF** — replace connection details with placeholders on save (default OFF).
-- **CONNECTION_ENCRYPTION = ON|OFF** — encrypt connection details on save (default OFF).
+- **ALLOW_PLAINTEXT_SECRETS = ON|OFF** — unsafe: keep literal `USE PASSWORD = '...'` in saved source while still encrypting connection secrets (default OFF).
+- **NO_SAVE_SENSITIVE = ON|OFF** — scrub secrets and `SENSITIVE`/`ENCRYPTED` literals to `<secret>` placeholders on save (default OFF).
+- **NO_SAVE_CONNECTION = ON|OFF** — superset of `NO_SAVE_SENSITIVE`: replace connection details and sensitive literals with placeholders on save (default OFF).
+- **CONNECTION_ENCRYPTION = ON|OFF** — encrypt all connection targets and options on save using the script/master password (default OFF).
 
 ### Date & Locale
+- **DATEFORMAT = 'MDY'|'DMY'** — how slash dates in text are read (default MDY, or `Engine:DateFormat`).
 - **WEEK_START_DAY = 'day'** — anchor day for RELDATE week expressions (default Monday).
 
 ### Report Properties

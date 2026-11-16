@@ -36,6 +36,7 @@ video/
 *.vspx
 *.vspscc
 .vscode/
+.vscode-test/
 trouble/
 brain/
 
@@ -196,6 +197,10 @@ certification-results/enterprise-hardening/
 # artifacts/release-evidence/<version>/ via -ReleaseVersion (already ignored); a local run is
 # development evidence and is never release eligible, so it does not belong in source control.
 certification-results/deployment-profiles/
+# Production-canary runs write a timestamped bundle here and then check that the source tree did
+# not change during the run, so a new bundle must not show up as untracked. The tracked
+# 20260906 sample stays tracked.
+certification-results/production-canaries/
 certification-results/postgres-ha-soak/ha-overnight-*/
 certification-results/ha-large-job-soak/ha-overnight-*/
 certification-results/ha-fault-injection/ha-overnight-*/
@@ -217,6 +222,9 @@ release-validation/
 # Sample Output
 samples/output/
 samples/integration/data/
+# The HR conversion's archive and the PGP key pair it generates (a private key) next to main.etlsql.
+samples/09_Conversions/hr_migration.zip
+samples/09_Conversions/keys/
 *.tmp.json
 
 # Ignore large stress test data

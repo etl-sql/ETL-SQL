@@ -1,0 +1,2245 @@
+{
+  "schemaVersion": 1,
+  "status": "failed-calibration-baselines-unchanged",
+  "control": "53a3343d449845c11c7f144cf5b305d07e2e2b7f",
+  "controlTag": "v0.21.0",
+  "candidate": "74f32e8843e122ba79f63f89ad60e9a732295dd8",
+  "method": "Full Smoke and Standard tiers, clean A/B/B/A, ten samples per capture, thirteen fresh-process scenarios per sample",
+  "fixtureDefinitionSha256": "7845fd8e94eb1552a4ba34bff3a97a2675a6e1ebc022216da9b29d4c7001569f",
+  "processIsolation": "single-scenario-process-v1",
+  "scenarioWarmUp": "own-path-untimed-v1",
+  "discardedProcessWarmUp": true,
+  "measuredChecks": 1040,
+  "measuredAssertionsPassed": true,
+  "comparisonsPassed": 23,
+  "comparisonCount": 24,
+  "comparatorUnchanged": true,
+  "baselineFilesChanged": false,
+  "localEvidenceRoot": "release-validation/calibration-preparation-20261023/captures-20261023T125851-b190b150",
+  "captures": [
+    {
+      "tier": "Smoke",
+      "index": 1,
+      "arm": "control",
+      "commit": "53a3343d449845c11c7f144cf5b305d07e2e2b7f",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T13:19:24.6783352Z",
+      "reportSha256": "205b20bcaa9b18af178a1a7923ed48390a6fdcf68cee260e963d164619bd5984",
+      "sourceFingerprint": "9a00cc7969f3e559f4c5c8d3cc965cac46f44b48ba59f2fd5b88f672b9738cac",
+      "configFingerprint": "a652b2358c4e1f7c107d83f9c4ef1de955aed52ae35937d054de16a5c087737a",
+      "samples": 10,
+      "measuredChecks": 130,
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 49.5,
+          "gcPauseMs": 4.5,
+          "peakProcessWorkingSetMB": 120.5,
+          "allocatedMB": 31.6,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_50000_10x5",
+          "rowCount": 50000,
+          "resultRows": 66,
+          "checksum": 5000100000,
+          "elapsedMs": 1323.5,
+          "gcPauseMs": 55.05,
+          "peakProcessWorkingSetMB": 242.4,
+          "allocatedMB": 448.4,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_100000_10grps",
+          "rowCount": 100000,
+          "resultRows": 10,
+          "checksum": 499960000,
+          "elapsedMs": 425.0,
+          "gcPauseMs": 25.75,
+          "peakProcessWorkingSetMB": 193.6,
+          "allocatedMB": 115.15,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_50000_equality",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 2500050000,
+          "elapsedMs": 596.5,
+          "gcPauseMs": 50.65,
+          "peakProcessWorkingSetMB": 229.7,
+          "allocatedMB": 255.1,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_50000_DESC",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 397.5,
+          "gcPauseMs": 9.85,
+          "peakProcessWorkingSetMB": 197.2,
+          "allocatedMB": 88.8,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 35.0,
+          "gcPauseMs": 6.75,
+          "peakProcessWorkingSetMB": 122.0,
+          "allocatedMB": 21.5,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 262.5,
+          "gcPauseMs": 12.35,
+          "peakProcessWorkingSetMB": 224.1,
+          "allocatedMB": 94.2,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_50000_1000keys",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50050000,
+          "elapsedMs": 585.5,
+          "gcPauseMs": 33.05,
+          "peakProcessWorkingSetMB": 225.5,
+          "allocatedMB": 192.3,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_40000",
+          "rowCount": 40000,
+          "resultRows": 0,
+          "checksum": 0,
+          "elapsedMs": 38.0,
+          "gcPauseMs": 3.6,
+          "peakProcessWorkingSetMB": 126.2,
+          "allocatedMB": 24.8,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_50000",
+          "rowCount": 50000,
+          "resultRows": 1,
+          "checksum": 1,
+          "elapsedMs": 46.5,
+          "gcPauseMs": 4.0,
+          "peakProcessWorkingSetMB": 130.2,
+          "allocatedMB": 29.6,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_100000_cap50000",
+          "rowCount": 100000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "elapsedMs": 430.5,
+          "gcPauseMs": 24.2,
+          "peakProcessWorkingSetMB": 180.0,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_50000_SELECT_INTO",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "elapsedMs": 61.5,
+          "gcPauseMs": 7.1,
+          "peakProcessWorkingSetMB": 148.1,
+          "allocatedMB": 30.6,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 965.0,
+          "gcPauseMs": 54.55,
+          "peakProcessWorkingSetMB": 211.3,
+          "allocatedMB": 267.7,
+          "passed": true
+        }
+      ],
+      "tempTableSamples": [
+        {
+          "sampleIndex": 1,
+          "elapsedMs": 60,
+          "gcPauseMs": 6.9,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.7
+        },
+        {
+          "sampleIndex": 2,
+          "elapsedMs": 57,
+          "gcPauseMs": 4.3,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.7
+        },
+        {
+          "sampleIndex": 3,
+          "elapsedMs": 61,
+          "gcPauseMs": 4,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.5
+        },
+        {
+          "sampleIndex": 4,
+          "elapsedMs": 64,
+          "gcPauseMs": 7.3,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.1
+        },
+        {
+          "sampleIndex": 5,
+          "elapsedMs": 71,
+          "gcPauseMs": 8.6,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.5
+        },
+        {
+          "sampleIndex": 6,
+          "elapsedMs": 56,
+          "gcPauseMs": 4.6,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.4
+        },
+        {
+          "sampleIndex": 7,
+          "elapsedMs": 64,
+          "gcPauseMs": 8.1,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.5
+        },
+        {
+          "sampleIndex": 8,
+          "elapsedMs": 67,
+          "gcPauseMs": 8,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.8
+        },
+        {
+          "sampleIndex": 9,
+          "elapsedMs": 61,
+          "gcPauseMs": 8.1,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.7
+        },
+        {
+          "sampleIndex": 10,
+          "elapsedMs": 62,
+          "gcPauseMs": 6.9,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.8
+        }
+      ]
+    },
+    {
+      "tier": "Smoke",
+      "index": 2,
+      "arm": "candidate",
+      "commit": "74f32e8843e122ba79f63f89ad60e9a732295dd8",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T14:04:19.4157015Z",
+      "reportSha256": "051fcdeea53edd9f26b907b84cc806e42c03b4925b03da7ac2187c23c65bae42",
+      "sourceFingerprint": "7ea938fb0f23f8cfeabaa3812a7dada706247dadc4996ca05b53e7a80a7aee94",
+      "configFingerprint": "a652b2358c4e1f7c107d83f9c4ef1de955aed52ae35937d054de16a5c087737a",
+      "samples": 10,
+      "measuredChecks": 130,
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 48.0,
+          "gcPauseMs": 4.5,
+          "peakProcessWorkingSetMB": 121.0,
+          "allocatedMB": 31.6,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_50000_10x5",
+          "rowCount": 50000,
+          "resultRows": 66,
+          "checksum": 5000100000,
+          "elapsedMs": 1356.0,
+          "gcPauseMs": 50.6,
+          "peakProcessWorkingSetMB": 255.9,
+          "allocatedMB": 449.45,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_100000_10grps",
+          "rowCount": 100000,
+          "resultRows": 10,
+          "checksum": 499960000,
+          "elapsedMs": 388.0,
+          "gcPauseMs": 25.8,
+          "peakProcessWorkingSetMB": 196.1,
+          "allocatedMB": 115.4,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_50000_equality",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 2500050000,
+          "elapsedMs": 652.0,
+          "gcPauseMs": 49.4,
+          "peakProcessWorkingSetMB": 234.0,
+          "allocatedMB": 255.0,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_50000_DESC",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 421.0,
+          "gcPauseMs": 10.15,
+          "peakProcessWorkingSetMB": 199.4,
+          "allocatedMB": 88.8,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 36.0,
+          "gcPauseMs": 7.2,
+          "peakProcessWorkingSetMB": 122.4,
+          "allocatedMB": 21.5,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 262.5,
+          "gcPauseMs": 12.45,
+          "peakProcessWorkingSetMB": 219.5,
+          "allocatedMB": 94.55,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_50000_1000keys",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50050000,
+          "elapsedMs": 499.0,
+          "gcPauseMs": 33.05,
+          "peakProcessWorkingSetMB": 221.3,
+          "allocatedMB": 192.3,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_40000",
+          "rowCount": 40000,
+          "resultRows": 0,
+          "checksum": 0,
+          "elapsedMs": 38.0,
+          "gcPauseMs": 3.7,
+          "peakProcessWorkingSetMB": 127.5,
+          "allocatedMB": 24.8,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_50000",
+          "rowCount": 50000,
+          "resultRows": 1,
+          "checksum": 1,
+          "elapsedMs": 46.5,
+          "gcPauseMs": 3.75,
+          "peakProcessWorkingSetMB": 131.2,
+          "allocatedMB": 29.6,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_100000_cap50000",
+          "rowCount": 100000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "elapsedMs": 423.5,
+          "gcPauseMs": 24.45,
+          "peakProcessWorkingSetMB": 180.4,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_50000_SELECT_INTO",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "elapsedMs": 64.0,
+          "gcPauseMs": 6.1,
+          "peakProcessWorkingSetMB": 147.4,
+          "allocatedMB": 30.5,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 1043.5,
+          "gcPauseMs": 53.65,
+          "peakProcessWorkingSetMB": 210.0,
+          "allocatedMB": 267.8,
+          "passed": true
+        }
+      ],
+      "tempTableSamples": [
+        {
+          "sampleIndex": 1,
+          "elapsedMs": 55,
+          "gcPauseMs": 3.7,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.8
+        },
+        {
+          "sampleIndex": 2,
+          "elapsedMs": 73,
+          "gcPauseMs": 7.2,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.8
+        },
+        {
+          "sampleIndex": 3,
+          "elapsedMs": 64,
+          "gcPauseMs": 7.9,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.6
+        },
+        {
+          "sampleIndex": 4,
+          "elapsedMs": 58,
+          "gcPauseMs": 4.1,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.5
+        },
+        {
+          "sampleIndex": 5,
+          "elapsedMs": 107,
+          "gcPauseMs": 2.9,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.4
+        },
+        {
+          "sampleIndex": 6,
+          "elapsedMs": 59,
+          "gcPauseMs": 4.4,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.7
+        },
+        {
+          "sampleIndex": 7,
+          "elapsedMs": 64,
+          "gcPauseMs": 7.5,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.5
+        },
+        {
+          "sampleIndex": 8,
+          "elapsedMs": 64,
+          "gcPauseMs": 7.8,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.4
+        },
+        {
+          "sampleIndex": 9,
+          "elapsedMs": 65,
+          "gcPauseMs": 8.3,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.4
+        },
+        {
+          "sampleIndex": 10,
+          "elapsedMs": 59,
+          "gcPauseMs": 5,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.3
+        }
+      ]
+    },
+    {
+      "tier": "Smoke",
+      "index": 3,
+      "arm": "candidate",
+      "commit": "74f32e8843e122ba79f63f89ad60e9a732295dd8",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T14:28:04.1511931Z",
+      "reportSha256": "37e23f718bfd4a5856d40c4961a1855cd8a88433d6a8420a03af6f2fea87b380",
+      "sourceFingerprint": "7ea938fb0f23f8cfeabaa3812a7dada706247dadc4996ca05b53e7a80a7aee94",
+      "configFingerprint": "a652b2358c4e1f7c107d83f9c4ef1de955aed52ae35937d054de16a5c087737a",
+      "samples": 10,
+      "measuredChecks": 130,
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 47.5,
+          "gcPauseMs": 4.85,
+          "peakProcessWorkingSetMB": 120.9,
+          "allocatedMB": 31.6,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_50000_10x5",
+          "rowCount": 50000,
+          "resultRows": 66,
+          "checksum": 5000100000,
+          "elapsedMs": 1284.0,
+          "gcPauseMs": 52.05,
+          "peakProcessWorkingSetMB": 251.3,
+          "allocatedMB": 448.9,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_100000_10grps",
+          "rowCount": 100000,
+          "resultRows": 10,
+          "checksum": 499960000,
+          "elapsedMs": 407.5,
+          "gcPauseMs": 24.7,
+          "peakProcessWorkingSetMB": 191.1,
+          "allocatedMB": 115.25,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_50000_equality",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 2500050000,
+          "elapsedMs": 627.0,
+          "gcPauseMs": 49.65,
+          "peakProcessWorkingSetMB": 230.5,
+          "allocatedMB": 255.3,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_50000_DESC",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 391.5,
+          "gcPauseMs": 9.8,
+          "peakProcessWorkingSetMB": 199.6,
+          "allocatedMB": 88.8,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 35.0,
+          "gcPauseMs": 6.45,
+          "peakProcessWorkingSetMB": 121.3,
+          "allocatedMB": 21.8,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 267.5,
+          "gcPauseMs": 13.2,
+          "peakProcessWorkingSetMB": 221.8,
+          "allocatedMB": 94.55,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_50000_1000keys",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50050000,
+          "elapsedMs": 493.0,
+          "gcPauseMs": 32.4,
+          "peakProcessWorkingSetMB": 227.1,
+          "allocatedMB": 192.35,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_40000",
+          "rowCount": 40000,
+          "resultRows": 0,
+          "checksum": 0,
+          "elapsedMs": 38.0,
+          "gcPauseMs": 3.75,
+          "peakProcessWorkingSetMB": 127.0,
+          "allocatedMB": 24.85,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_50000",
+          "rowCount": 50000,
+          "resultRows": 1,
+          "checksum": 1,
+          "elapsedMs": 49.0,
+          "gcPauseMs": 6.45,
+          "peakProcessWorkingSetMB": 131.9,
+          "allocatedMB": 29.6,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_100000_cap50000",
+          "rowCount": 100000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "elapsedMs": 439.5,
+          "gcPauseMs": 23.65,
+          "peakProcessWorkingSetMB": 180.2,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_50000_SELECT_INTO",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "elapsedMs": 64.0,
+          "gcPauseMs": 8.1,
+          "peakProcessWorkingSetMB": 147.8,
+          "allocatedMB": 30.6,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 1003.5,
+          "gcPauseMs": 52.5,
+          "peakProcessWorkingSetMB": 210.2,
+          "allocatedMB": 267.8,
+          "passed": true
+        }
+      ],
+      "tempTableSamples": [
+        {
+          "sampleIndex": 1,
+          "elapsedMs": 57,
+          "gcPauseMs": 3.2,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 31.2
+        },
+        {
+          "sampleIndex": 2,
+          "elapsedMs": 58,
+          "gcPauseMs": 4.5,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 31
+        },
+        {
+          "sampleIndex": 3,
+          "elapsedMs": 66,
+          "gcPauseMs": 9.5,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.2
+        },
+        {
+          "sampleIndex": 4,
+          "elapsedMs": 56,
+          "gcPauseMs": 3.4,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.8
+        },
+        {
+          "sampleIndex": 5,
+          "elapsedMs": 59,
+          "gcPauseMs": 4.9,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.1
+        },
+        {
+          "sampleIndex": 6,
+          "elapsedMs": 80,
+          "gcPauseMs": 8.7,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.8
+        },
+        {
+          "sampleIndex": 7,
+          "elapsedMs": 64,
+          "gcPauseMs": 8,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.7
+        },
+        {
+          "sampleIndex": 8,
+          "elapsedMs": 64,
+          "gcPauseMs": 8.9,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.5
+        },
+        {
+          "sampleIndex": 9,
+          "elapsedMs": 65,
+          "gcPauseMs": 8.8,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.5
+        },
+        {
+          "sampleIndex": 10,
+          "elapsedMs": 64,
+          "gcPauseMs": 8.2,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.3
+        }
+      ]
+    },
+    {
+      "tier": "Smoke",
+      "index": 4,
+      "arm": "control",
+      "commit": "53a3343d449845c11c7f144cf5b305d07e2e2b7f",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T15:09:01.2356038Z",
+      "reportSha256": "2fa99c479b20ac6ca8e4c3e1bdf57dee0c46163d5f7b81da3b517a6bf74e7d75",
+      "sourceFingerprint": "9a00cc7969f3e559f4c5c8d3cc965cac46f44b48ba59f2fd5b88f672b9738cac",
+      "configFingerprint": "a652b2358c4e1f7c107d83f9c4ef1de955aed52ae35937d054de16a5c087737a",
+      "samples": 10,
+      "measuredChecks": 130,
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 47.5,
+          "gcPauseMs": 4.2,
+          "peakProcessWorkingSetMB": 120.4,
+          "allocatedMB": 31.6,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_50000_10x5",
+          "rowCount": 50000,
+          "resultRows": 66,
+          "checksum": 5000100000,
+          "elapsedMs": 1223.0,
+          "gcPauseMs": 59.25,
+          "peakProcessWorkingSetMB": 250.7,
+          "allocatedMB": 451.4,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_100000_10grps",
+          "rowCount": 100000,
+          "resultRows": 10,
+          "checksum": 499960000,
+          "elapsedMs": 432.5,
+          "gcPauseMs": 23.75,
+          "peakProcessWorkingSetMB": 197.8,
+          "allocatedMB": 115.55,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_50000_equality",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 2500050000,
+          "elapsedMs": 641.5,
+          "gcPauseMs": 46.5,
+          "peakProcessWorkingSetMB": 233.3,
+          "allocatedMB": 255.25,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_50000_DESC",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 404.5,
+          "gcPauseMs": 9.15,
+          "peakProcessWorkingSetMB": 203.3,
+          "allocatedMB": 88.8,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 34.5,
+          "gcPauseMs": 6.85,
+          "peakProcessWorkingSetMB": 120.1,
+          "allocatedMB": 21.5,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 259.0,
+          "gcPauseMs": 12.65,
+          "peakProcessWorkingSetMB": 218.9,
+          "allocatedMB": 94.8,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_50000_1000keys",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50050000,
+          "elapsedMs": 458.5,
+          "gcPauseMs": 31.8,
+          "peakProcessWorkingSetMB": 222.1,
+          "allocatedMB": 192.3,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_40000",
+          "rowCount": 40000,
+          "resultRows": 0,
+          "checksum": 0,
+          "elapsedMs": 37.5,
+          "gcPauseMs": 3.2,
+          "peakProcessWorkingSetMB": 125.5,
+          "allocatedMB": 24.8,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_50000",
+          "rowCount": 50000,
+          "resultRows": 1,
+          "checksum": 1,
+          "elapsedMs": 47.0,
+          "gcPauseMs": 4.3,
+          "peakProcessWorkingSetMB": 132.7,
+          "allocatedMB": 29.6,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_100000_cap50000",
+          "rowCount": 100000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "elapsedMs": 464.0,
+          "gcPauseMs": 23.75,
+          "peakProcessWorkingSetMB": 182.0,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_50000_SELECT_INTO",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "elapsedMs": 60.0,
+          "gcPauseMs": 6.0,
+          "peakProcessWorkingSetMB": 148.7,
+          "allocatedMB": 30.45,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "elapsedMs": 973.5,
+          "gcPauseMs": 54.75,
+          "peakProcessWorkingSetMB": 211.0,
+          "allocatedMB": 267.8,
+          "passed": true
+        }
+      ],
+      "tempTableSamples": [
+        {
+          "sampleIndex": 1,
+          "elapsedMs": 69,
+          "gcPauseMs": 11.7,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 31.3
+        },
+        {
+          "sampleIndex": 2,
+          "elapsedMs": 64,
+          "gcPauseMs": 7.8,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.7
+        },
+        {
+          "sampleIndex": 3,
+          "elapsedMs": 64,
+          "gcPauseMs": 8.7,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.5
+        },
+        {
+          "sampleIndex": 4,
+          "elapsedMs": 55,
+          "gcPauseMs": 3.6,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.5
+        },
+        {
+          "sampleIndex": 5,
+          "elapsedMs": 57,
+          "gcPauseMs": 0,
+          "gcGen0Collections": 0,
+          "gcGen1Collections": 0,
+          "gcGen2Collections": 0,
+          "allocatedMB": 30.4
+        },
+        {
+          "sampleIndex": 6,
+          "elapsedMs": 69,
+          "gcPauseMs": 9.6,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.4
+        },
+        {
+          "sampleIndex": 7,
+          "elapsedMs": 56,
+          "gcPauseMs": 3.9,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.7
+        },
+        {
+          "sampleIndex": 8,
+          "elapsedMs": 63,
+          "gcPauseMs": 7.5,
+          "gcGen0Collections": 2,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.1
+        },
+        {
+          "sampleIndex": 9,
+          "elapsedMs": 57,
+          "gcPauseMs": 4.5,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.4
+        },
+        {
+          "sampleIndex": 10,
+          "elapsedMs": 57,
+          "gcPauseMs": 4.4,
+          "gcGen0Collections": 1,
+          "gcGen1Collections": 1,
+          "gcGen2Collections": 1,
+          "allocatedMB": 30.4
+        }
+      ]
+    },
+    {
+      "tier": "Standard",
+      "index": 1,
+      "arm": "control",
+      "commit": "53a3343d449845c11c7f144cf5b305d07e2e2b7f",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T15:34:45.8277097Z",
+      "reportSha256": "68c80e37c98bcff84659c253be71b8f120c867f7ec2d88e550d7fcc8220c12af",
+      "sourceFingerprint": "c0d7d76351105ba1efe5a762239b01022298571c47022108fe49cc45872ee0e0",
+      "configFingerprint": "d939dff83209ae0d7cb9c641687ab6704fecb03623bcdb2a8c48f1022be70fd4",
+      "samples": 10,
+      "measuredChecks": 130,
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 370.0,
+          "gcPauseMs": 67.7,
+          "peakProcessWorkingSetMB": 192.9,
+          "allocatedMB": 318.9,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_500000_10x5",
+          "rowCount": 500000,
+          "resultRows": 66,
+          "checksum": 500001000000,
+          "elapsedMs": 6504.5,
+          "gcPauseMs": 509.65,
+          "peakProcessWorkingSetMB": 427.3,
+          "allocatedMB": 4373.55,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_1000000_10grps",
+          "rowCount": 1000000,
+          "resultRows": 10,
+          "checksum": 49999600000,
+          "elapsedMs": 2994.0,
+          "gcPauseMs": 184.65,
+          "peakProcessWorkingSetMB": 318.3,
+          "allocatedMB": 1142.9,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_500000_equality",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 250000500000,
+          "elapsedMs": 4165.5,
+          "gcPauseMs": 359.2,
+          "peakProcessWorkingSetMB": 664.9,
+          "allocatedMB": 2507.65,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_500000_DESC",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 4005.0,
+          "gcPauseMs": 172.65,
+          "peakProcessWorkingSetMB": 446.9,
+          "allocatedMB": 1347.3,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 293.0,
+          "gcPauseMs": 30.75,
+          "peakProcessWorkingSetMB": 172.0,
+          "allocatedMB": 218.95,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 1742.5,
+          "gcPauseMs": 135.2,
+          "peakProcessWorkingSetMB": 589.9,
+          "allocatedMB": 888.65,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_500000_1000keys",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500500000,
+          "elapsedMs": 2057.0,
+          "gcPauseMs": 69.35,
+          "peakProcessWorkingSetMB": 589.3,
+          "allocatedMB": 754.1,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_400000",
+          "rowCount": 400000,
+          "resultRows": 0,
+          "checksum": 0,
+          "elapsedMs": 345.0,
+          "gcPauseMs": 44.05,
+          "peakProcessWorkingSetMB": 203.0,
+          "allocatedMB": 241.1,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_500000",
+          "rowCount": 500000,
+          "resultRows": 1,
+          "checksum": 1,
+          "elapsedMs": 465.0,
+          "gcPauseMs": 56.85,
+          "peakProcessWorkingSetMB": 224.1,
+          "allocatedMB": 299.9,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_1000000_cap50000",
+          "rowCount": 1000000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "elapsedMs": 449.5,
+          "gcPauseMs": 25.35,
+          "peakProcessWorkingSetMB": 180.7,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_500000_SELECT_INTO",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500000,
+          "elapsedMs": 533.5,
+          "gcPauseMs": 50.3,
+          "peakProcessWorkingSetMB": 233.1,
+          "allocatedMB": 317.85,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 5423.0,
+          "gcPauseMs": 288.05,
+          "peakProcessWorkingSetMB": 444.6,
+          "allocatedMB": 2695.4,
+          "passed": true
+        }
+      ],
+      "tempTableSamples": [
+        {
+          "sampleIndex": 1,
+          "elapsedMs": 528,
+          "gcPauseMs": 46.4,
+          "gcGen0Collections": 9,
+          "gcGen1Collections": 6,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.6
+        },
+        {
+          "sampleIndex": 2,
+          "elapsedMs": 513,
+          "gcPauseMs": 50.6,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 4,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.8
+        },
+        {
+          "sampleIndex": 3,
+          "elapsedMs": 499,
+          "gcPauseMs": 46.5,
+          "gcGen0Collections": 9,
+          "gcGen1Collections": 6,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.8
+        },
+        {
+          "sampleIndex": 4,
+          "elapsedMs": 533,
+          "gcPauseMs": 49.3,
+          "gcGen0Collections": 9,
+          "gcGen1Collections": 6,
+          "gcGen2Collections": 3,
+          "allocatedMB": 318
+        },
+        {
+          "sampleIndex": 5,
+          "elapsedMs": 534,
+          "gcPauseMs": 50,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 4,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.8
+        },
+        {
+          "sampleIndex": 6,
+          "elapsedMs": 576,
+          "gcPauseMs": 60.3,
+          "gcGen0Collections": 12,
+          "gcGen1Collections": 4,
+          "gcGen2Collections": 3,
+          "allocatedMB": 318
+        },
+        {
+          "sampleIndex": 7,
+          "elapsedMs": 580,
+          "gcPauseMs": 62,
+          "gcGen0Collections": 11,
+          "gcGen1Collections": 5,
+          "gcGen2Collections": 4,
+          "allocatedMB": 317.9
+        },
+        {
+          "sampleIndex": 8,
+          "elapsedMs": 519,
+          "gcPauseMs": 52.9,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 5,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.5
+        },
+        {
+          "sampleIndex": 9,
+          "elapsedMs": 548,
+          "gcPauseMs": 44.9,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 4,
+          "gcGen2Collections": 3,
+          "allocatedMB": 318.2
+        },
+        {
+          "sampleIndex": 10,
+          "elapsedMs": 583,
+          "gcPauseMs": 51.2,
+          "gcGen0Collections": 9,
+          "gcGen1Collections": 5,
+          "gcGen2Collections": 3,
+          "allocatedMB": 318.1
+        }
+      ]
+    },
+    {
+      "tier": "Standard",
+      "index": 2,
+      "arm": "candidate",
+      "commit": "74f32e8843e122ba79f63f89ad60e9a732295dd8",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T15:47:34.9787398Z",
+      "reportSha256": "0c5dc8c78bd1eb43017b387f0e54c8f852a1f9be96c5a9b98b3a2558992829c2",
+      "sourceFingerprint": "99a14d1c9e4398d7797f3905861697dad9f0caddfce682296ace7074f50f6107",
+      "configFingerprint": "d939dff83209ae0d7cb9c641687ab6704fecb03623bcdb2a8c48f1022be70fd4",
+      "samples": 10,
+      "measuredChecks": 130,
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 426.5,
+          "gcPauseMs": 70.2,
+          "peakProcessWorkingSetMB": 193.2,
+          "allocatedMB": 318.9,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_500000_10x5",
+          "rowCount": 500000,
+          "resultRows": 66,
+          "checksum": 500001000000,
+          "elapsedMs": 6553.5,
+          "gcPauseMs": 506.95,
+          "peakProcessWorkingSetMB": 419.2,
+          "allocatedMB": 4351.5,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_1000000_10grps",
+          "rowCount": 1000000,
+          "resultRows": 10,
+          "checksum": 49999600000,
+          "elapsedMs": 2856.5,
+          "gcPauseMs": 182.1,
+          "peakProcessWorkingSetMB": 303.9,
+          "allocatedMB": 1142.55,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_500000_equality",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 250000500000,
+          "elapsedMs": 4240.5,
+          "gcPauseMs": 342.35,
+          "peakProcessWorkingSetMB": 699.9,
+          "allocatedMB": 2478.45,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_500000_DESC",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 3738.5,
+          "gcPauseMs": 168.15,
+          "peakProcessWorkingSetMB": 440.5,
+          "allocatedMB": 1347.3,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 284.5,
+          "gcPauseMs": 30.95,
+          "peakProcessWorkingSetMB": 173.6,
+          "allocatedMB": 219.1,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 1743.5,
+          "gcPauseMs": 139.0,
+          "peakProcessWorkingSetMB": 603.4,
+          "allocatedMB": 888.95,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_500000_1000keys",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500500000,
+          "elapsedMs": 2072.0,
+          "gcPauseMs": 67.3,
+          "peakProcessWorkingSetMB": 594.0,
+          "allocatedMB": 754.0,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_400000",
+          "rowCount": 400000,
+          "resultRows": 0,
+          "checksum": 0,
+          "elapsedMs": 337.0,
+          "gcPauseMs": 43.2,
+          "peakProcessWorkingSetMB": 199.8,
+          "allocatedMB": 241.1,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_500000",
+          "rowCount": 500000,
+          "resultRows": 1,
+          "checksum": 1,
+          "elapsedMs": 480.5,
+          "gcPauseMs": 56.5,
+          "peakProcessWorkingSetMB": 222.6,
+          "allocatedMB": 299.9,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_1000000_cap50000",
+          "rowCount": 1000000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "elapsedMs": 429.0,
+          "gcPauseMs": 24.7,
+          "peakProcessWorkingSetMB": 184.3,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_500000_SELECT_INTO",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500000,
+          "elapsedMs": 569.5,
+          "gcPauseMs": 58.15,
+          "peakProcessWorkingSetMB": 224.5,
+          "allocatedMB": 317.8,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 5375.5,
+          "gcPauseMs": 299.95,
+          "peakProcessWorkingSetMB": 479.2,
+          "allocatedMB": 2695.4,
+          "passed": true
+        }
+      ],
+      "tempTableSamples": [
+        {
+          "sampleIndex": 1,
+          "elapsedMs": 586,
+          "gcPauseMs": 52.8,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 4,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.8
+        },
+        {
+          "sampleIndex": 2,
+          "elapsedMs": 595,
+          "gcPauseMs": 73.2,
+          "gcGen0Collections": 11,
+          "gcGen1Collections": 6,
+          "gcGen2Collections": 5,
+          "allocatedMB": 317.8
+        },
+        {
+          "sampleIndex": 3,
+          "elapsedMs": 571,
+          "gcPauseMs": 54.1,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 4,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.9
+        },
+        {
+          "sampleIndex": 4,
+          "elapsedMs": 582,
+          "gcPauseMs": 57.9,
+          "gcGen0Collections": 11,
+          "gcGen1Collections": 6,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.8
+        },
+        {
+          "sampleIndex": 5,
+          "elapsedMs": 511,
+          "gcPauseMs": 53.9,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 4,
+          "gcGen2Collections": 3,
+          "allocatedMB": 318
+        },
+        {
+          "sampleIndex": 6,
+          "elapsedMs": 568,
+          "gcPauseMs": 77.5,
+          "gcGen0Collections": 14,
+          "gcGen1Collections": 7,
+          "gcGen2Collections": 6,
+          "allocatedMB": 317.8
+        },
+        {
+          "sampleIndex": 7,
+          "elapsedMs": 556,
+          "gcPauseMs": 58.4,
+          "gcGen0Collections": 11,
+          "gcGen1Collections": 5,
+          "gcGen2Collections": 4,
+          "allocatedMB": 317.5
+        },
+        {
+          "sampleIndex": 8,
+          "elapsedMs": 537,
+          "gcPauseMs": 65.9,
+          "gcGen0Collections": 12,
+          "gcGen1Collections": 8,
+          "gcGen2Collections": 6,
+          "allocatedMB": 318.2
+        },
+        {
+          "sampleIndex": 9,
+          "elapsedMs": 531,
+          "gcPauseMs": 55.6,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 4,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.5
+        },
+        {
+          "sampleIndex": 10,
+          "elapsedMs": 581,
+          "gcPauseMs": 76.8,
+          "gcGen0Collections": 13,
+          "gcGen1Collections": 7,
+          "gcGen2Collections": 5,
+          "allocatedMB": 318
+        }
+      ]
+    },
+    {
+      "tier": "Standard",
+      "index": 3,
+      "arm": "candidate",
+      "commit": "74f32e8843e122ba79f63f89ad60e9a732295dd8",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T16:13:38.1327716Z",
+      "reportSha256": "708fc03f8ede78aa2c617cb142ed866966af3e362dcae569234ef0e1a46ceb9e",
+      "sourceFingerprint": "99a14d1c9e4398d7797f3905861697dad9f0caddfce682296ace7074f50f6107",
+      "configFingerprint": "d939dff83209ae0d7cb9c641687ab6704fecb03623bcdb2a8c48f1022be70fd4",
+      "samples": 10,
+      "measuredChecks": 130,
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 376.0,
+          "gcPauseMs": 65.15,
+          "peakProcessWorkingSetMB": 188.5,
+          "allocatedMB": 318.9,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_500000_10x5",
+          "rowCount": 500000,
+          "resultRows": 66,
+          "checksum": 500001000000,
+          "elapsedMs": 6523.5,
+          "gcPauseMs": 546.7,
+          "peakProcessWorkingSetMB": 426.2,
+          "allocatedMB": 4360.95,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_1000000_10grps",
+          "rowCount": 1000000,
+          "resultRows": 10,
+          "checksum": 49999600000,
+          "elapsedMs": 2943.0,
+          "gcPauseMs": 185.45,
+          "peakProcessWorkingSetMB": 305.2,
+          "allocatedMB": 1143.1,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_500000_equality",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 250000500000,
+          "elapsedMs": 4147.0,
+          "gcPauseMs": 336.95,
+          "peakProcessWorkingSetMB": 654.5,
+          "allocatedMB": 2506.25,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_500000_DESC",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 3828.0,
+          "gcPauseMs": 171.95,
+          "peakProcessWorkingSetMB": 447.0,
+          "allocatedMB": 1347.3,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 265.5,
+          "gcPauseMs": 28.5,
+          "peakProcessWorkingSetMB": 191.7,
+          "allocatedMB": 218.55,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 1796.5,
+          "gcPauseMs": 141.2,
+          "peakProcessWorkingSetMB": 579.4,
+          "allocatedMB": 888.85,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_500000_1000keys",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500500000,
+          "elapsedMs": 2093.0,
+          "gcPauseMs": 67.9,
+          "peakProcessWorkingSetMB": 597.1,
+          "allocatedMB": 754.05,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_400000",
+          "rowCount": 400000,
+          "resultRows": 0,
+          "checksum": 0,
+          "elapsedMs": 349.5,
+          "gcPauseMs": 48.85,
+          "peakProcessWorkingSetMB": 204.3,
+          "allocatedMB": 241.1,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_500000",
+          "rowCount": 500000,
+          "resultRows": 1,
+          "checksum": 1,
+          "elapsedMs": 509.0,
+          "gcPauseMs": 65.95,
+          "peakProcessWorkingSetMB": 227.7,
+          "allocatedMB": 299.95,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_1000000_cap50000",
+          "rowCount": 1000000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "elapsedMs": 431.5,
+          "gcPauseMs": 24.85,
+          "peakProcessWorkingSetMB": 179.0,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_500000_SELECT_INTO",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500000,
+          "elapsedMs": 572.0,
+          "gcPauseMs": 66.9,
+          "peakProcessWorkingSetMB": 253.1,
+          "allocatedMB": 317.8,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 5440.0,
+          "gcPauseMs": 284.25,
+          "peakProcessWorkingSetMB": 456.1,
+          "allocatedMB": 2695.4,
+          "passed": true
+        }
+      ],
+      "tempTableSamples": [
+        {
+          "sampleIndex": 1,
+          "elapsedMs": 600,
+          "gcPauseMs": 57.4,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 5,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.9
+        },
+        {
+          "sampleIndex": 2,
+          "elapsedMs": 545,
+          "gcPauseMs": 66,
+          "gcGen0Collections": 11,
+          "gcGen1Collections": 5,
+          "gcGen2Collections": 4,
+          "allocatedMB": 317.9
+        },
+        {
+          "sampleIndex": 3,
+          "elapsedMs": 599,
+          "gcPauseMs": 82.1,
+          "gcGen0Collections": 12,
+          "gcGen1Collections": 6,
+          "gcGen2Collections": 4,
+          "allocatedMB": 317.8
+        },
+        {
+          "sampleIndex": 4,
+          "elapsedMs": 574,
+          "gcPauseMs": 61.5,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 5,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.9
+        },
+        {
+          "sampleIndex": 5,
+          "elapsedMs": 557,
+          "gcPauseMs": 67.8,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 4,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.8
+        },
+        {
+          "sampleIndex": 6,
+          "elapsedMs": 614,
+          "gcPauseMs": 72.9,
+          "gcGen0Collections": 12,
+          "gcGen1Collections": 8,
+          "gcGen2Collections": 6,
+          "allocatedMB": 318.6
+        },
+        {
+          "sampleIndex": 7,
+          "elapsedMs": 533,
+          "gcPauseMs": 63.8,
+          "gcGen0Collections": 11,
+          "gcGen1Collections": 4,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.8
+        },
+        {
+          "sampleIndex": 8,
+          "elapsedMs": 590,
+          "gcPauseMs": 80.3,
+          "gcGen0Collections": 13,
+          "gcGen1Collections": 7,
+          "gcGen2Collections": 5,
+          "allocatedMB": 317.7
+        },
+        {
+          "sampleIndex": 9,
+          "elapsedMs": 513,
+          "gcPauseMs": 65.3,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 4,
+          "gcGen2Collections": 3,
+          "allocatedMB": 317.8
+        },
+        {
+          "sampleIndex": 10,
+          "elapsedMs": 570,
+          "gcPauseMs": 81.5,
+          "gcGen0Collections": 14,
+          "gcGen1Collections": 8,
+          "gcGen2Collections": 6,
+          "allocatedMB": 317.8
+        }
+      ]
+    },
+    {
+      "tier": "Standard",
+      "index": 4,
+      "arm": "control",
+      "commit": "53a3343d449845c11c7f144cf5b305d07e2e2b7f",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T16:30:46.7915966Z",
+      "reportSha256": "e84f924c68d9a30333244082e107f0fc9969d5a62b3a8e95edac3b6644ac3215",
+      "sourceFingerprint": "c0d7d76351105ba1efe5a762239b01022298571c47022108fe49cc45872ee0e0",
+      "configFingerprint": "d939dff83209ae0d7cb9c641687ab6704fecb03623bcdb2a8c48f1022be70fd4",
+      "samples": 10,
+      "measuredChecks": 130,
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 427.0,
+          "gcPauseMs": 71.8,
+          "peakProcessWorkingSetMB": 196.2,
+          "allocatedMB": 318.9,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_500000_10x5",
+          "rowCount": 500000,
+          "resultRows": 66,
+          "checksum": 500001000000,
+          "elapsedMs": 6639.5,
+          "gcPauseMs": 532.05,
+          "peakProcessWorkingSetMB": 418.7,
+          "allocatedMB": 4373.8,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_1000000_10grps",
+          "rowCount": 1000000,
+          "resultRows": 10,
+          "checksum": 49999600000,
+          "elapsedMs": 2860.0,
+          "gcPauseMs": 195.2,
+          "peakProcessWorkingSetMB": 296.5,
+          "allocatedMB": 1142.5,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_500000_equality",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 250000500000,
+          "elapsedMs": 4276.0,
+          "gcPauseMs": 348.2,
+          "peakProcessWorkingSetMB": 657.2,
+          "allocatedMB": 2478.1,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_500000_DESC",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 3947.0,
+          "gcPauseMs": 174.65,
+          "peakProcessWorkingSetMB": 474.7,
+          "allocatedMB": 1347.3,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 282.5,
+          "gcPauseMs": 28.2,
+          "peakProcessWorkingSetMB": 179.2,
+          "allocatedMB": 218.3,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 1747.0,
+          "gcPauseMs": 136.65,
+          "peakProcessWorkingSetMB": 581.1,
+          "allocatedMB": 889.05,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_500000_1000keys",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500500000,
+          "elapsedMs": 2120.0,
+          "gcPauseMs": 75.0,
+          "peakProcessWorkingSetMB": 623.1,
+          "allocatedMB": 754.0,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_400000",
+          "rowCount": 400000,
+          "resultRows": 0,
+          "checksum": 0,
+          "elapsedMs": 351.0,
+          "gcPauseMs": 44.65,
+          "peakProcessWorkingSetMB": 203.3,
+          "allocatedMB": 241.1,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_500000",
+          "rowCount": 500000,
+          "resultRows": 1,
+          "checksum": 1,
+          "elapsedMs": 482.5,
+          "gcPauseMs": 65.2,
+          "peakProcessWorkingSetMB": 223.1,
+          "allocatedMB": 299.9,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_1000000_cap50000",
+          "rowCount": 1000000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "elapsedMs": 425.5,
+          "gcPauseMs": 23.7,
+          "peakProcessWorkingSetMB": 185.8,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_500000_SELECT_INTO",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500000,
+          "elapsedMs": 574.5,
+          "gcPauseMs": 70.65,
+          "peakProcessWorkingSetMB": 256.0,
+          "allocatedMB": 318.0,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "elapsedMs": 5371.0,
+          "gcPauseMs": 270.45,
+          "peakProcessWorkingSetMB": 493.7,
+          "allocatedMB": 2695.4,
+          "passed": true
+        }
+      ],
+      "tempTableSamples": [
+        {
+          "sampleIndex": 1,
+          "elapsedMs": 540,
+          "gcPauseMs": 51.6,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 4,
+          "gcGen2Collections": 3,
+          "allocatedMB": 318.1
+        },
+        {
+          "sampleIndex": 2,
+          "elapsedMs": 581,
+          "gcPauseMs": 85.2,
+          "gcGen0Collections": 11,
+          "gcGen1Collections": 6,
+          "gcGen2Collections": 5,
+          "allocatedMB": 318
+        },
+        {
+          "sampleIndex": 3,
+          "elapsedMs": 560,
+          "gcPauseMs": 74.9,
+          "gcGen0Collections": 14,
+          "gcGen1Collections": 7,
+          "gcGen2Collections": 6,
+          "allocatedMB": 318
+        },
+        {
+          "sampleIndex": 4,
+          "elapsedMs": 578,
+          "gcPauseMs": 82.3,
+          "gcGen0Collections": 14,
+          "gcGen1Collections": 7,
+          "gcGen2Collections": 6,
+          "allocatedMB": 318
+        },
+        {
+          "sampleIndex": 5,
+          "elapsedMs": 616,
+          "gcPauseMs": 81.8,
+          "gcGen0Collections": 14,
+          "gcGen1Collections": 8,
+          "gcGen2Collections": 6,
+          "allocatedMB": 318
+        },
+        {
+          "sampleIndex": 6,
+          "elapsedMs": 597,
+          "gcPauseMs": 63.4,
+          "gcGen0Collections": 11,
+          "gcGen1Collections": 6,
+          "gcGen2Collections": 5,
+          "allocatedMB": 317.9
+        },
+        {
+          "sampleIndex": 7,
+          "elapsedMs": 571,
+          "gcPauseMs": 80.4,
+          "gcGen0Collections": 13,
+          "gcGen1Collections": 7,
+          "gcGen2Collections": 6,
+          "allocatedMB": 318.2
+        },
+        {
+          "sampleIndex": 8,
+          "elapsedMs": 615,
+          "gcPauseMs": 66.4,
+          "gcGen0Collections": 11,
+          "gcGen1Collections": 7,
+          "gcGen2Collections": 5,
+          "allocatedMB": 318
+        },
+        {
+          "sampleIndex": 9,
+          "elapsedMs": 563,
+          "gcPauseMs": 66.4,
+          "gcGen0Collections": 11,
+          "gcGen1Collections": 6,
+          "gcGen2Collections": 5,
+          "allocatedMB": 317.5
+        },
+        {
+          "sampleIndex": 10,
+          "elapsedMs": 536,
+          "gcPauseMs": 66.4,
+          "gcGen0Collections": 10,
+          "gcGen1Collections": 6,
+          "gcGen2Collections": 4,
+          "allocatedMB": 318.3
+        }
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "tier": "Smoke",
+      "baseline": 1,
+      "current": 2,
+      "exitCode": 0,
+      "logSha256": "bfe9a43c8209f6908a0c1dfe2bb992a19cb733c397050187680007f2dab66137",
+      "markdownSha256": "82e1c2361ee6413d57093037f6126a3c6c360d6d1cb28820fa66d739cd00dec7",
+      "issues": []
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 2,
+      "current": 1,
+      "exitCode": 0,
+      "logSha256": "aa90630eb0bf04f2fe8565da3444e9b3740bbb1517d24a5eab1050435e3836ce",
+      "markdownSha256": "d8967f85a5cd5a8dd519e9d76e8c9a825d08b8c1b86ba3ad36a7f1893b5cb6aa",
+      "issues": []
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 1,
+      "current": 3,
+      "exitCode": 0,
+      "logSha256": "bfe9a43c8209f6908a0c1dfe2bb992a19cb733c397050187680007f2dab66137",
+      "markdownSha256": "beb1f56561488278eafa1821050d8e9c2026b060427f2849b2ceaf663fe11716",
+      "issues": []
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 3,
+      "current": 1,
+      "exitCode": 0,
+      "logSha256": "d9f00de01eac1efb50bb66ac8241dc5cb74352d7cc0bccb45fcbd3d7d90f5f18",
+      "markdownSha256": "ba293543a87cb8204092dc13e5e7c008085ac234a7076b96cf5e16c677bcdd3c",
+      "issues": []
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 1,
+      "current": 4,
+      "exitCode": 0,
+      "logSha256": "bfe9a43c8209f6908a0c1dfe2bb992a19cb733c397050187680007f2dab66137",
+      "markdownSha256": "9bd1830e5fd6ae37e0fc6ecb1a195acd87661876032e3df6cf323a0e3b78fb65",
+      "issues": []
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 4,
+      "current": 1,
+      "exitCode": 0,
+      "logSha256": "792a4c775ea263640d52cb1727ab14c516edc6bad8839cd408e0bc47e2851ae6",
+      "markdownSha256": "6af6fdfb2d03f795a44f4d755dde8278893530f8838e530063186d8a673d3cbc",
+      "issues": []
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 2,
+      "current": 3,
+      "exitCode": 0,
+      "logSha256": "aa90630eb0bf04f2fe8565da3444e9b3740bbb1517d24a5eab1050435e3836ce",
+      "markdownSha256": "05a2f9b8cedf24cd49077d5142bb1188586b0d4cd878f80667e6d004dfd6fe7a",
+      "issues": []
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 3,
+      "current": 2,
+      "exitCode": 0,
+      "logSha256": "d9f00de01eac1efb50bb66ac8241dc5cb74352d7cc0bccb45fcbd3d7d90f5f18",
+      "markdownSha256": "eb53aa257c55b40255f06ee802a3c4cf18ab82445d4187975843dc8d7d7999bb",
+      "issues": []
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 2,
+      "current": 4,
+      "exitCode": 0,
+      "logSha256": "cacf9c7357f5b26c662521fbf4bf7316214e2031e431254ffa248173a4a2ec6f",
+      "markdownSha256": "b496187489cea2811c500e820b5a0e8922d3da0bb4fc352b2b71eb9f61628a48",
+      "issues": [
+        "| WARN | StreamingSelect_100000_cap50000 | ELAPSED_MS | 423.5 ms | 464 ms | 9.6% | Warning band 8%. (Spread: 34.0 ms) |",
+        "| WARN | StreamingSelect_100000_cap50000 | ROWS_PER_SECOND | 236135.75 rows/s | 215518.25 rows/s | 8.7% | Warning band 8%. (Spread: 18,503.2 rows/s) |"
+      ]
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 4,
+      "current": 2,
+      "exitCode": 0,
+      "logSha256": "792a4c775ea263640d52cb1727ab14c516edc6bad8839cd408e0bc47e2851ae6",
+      "markdownSha256": "48049f7419618f5fd33c5fe0958a5bd24f0319e5684a6ad6f478581420752716",
+      "issues": []
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 3,
+      "current": 4,
+      "exitCode": 0,
+      "logSha256": "d9f00de01eac1efb50bb66ac8241dc5cb74352d7cc0bccb45fcbd3d7d90f5f18",
+      "markdownSha256": "2a92ebf6869ab2d9db52cbe8031792c57fb4cce2fe0ce5d9cc8bc388dc563826",
+      "issues": []
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 4,
+      "current": 3,
+      "exitCode": 0,
+      "logSha256": "792a4c775ea263640d52cb1727ab14c516edc6bad8839cd408e0bc47e2851ae6",
+      "markdownSha256": "8195ddde79b557110c2755692e83141ab1c5658189b0ea0ff8505b33ff2d60d5",
+      "issues": []
+    },
+    {
+      "tier": "Standard",
+      "baseline": 1,
+      "current": 2,
+      "exitCode": 0,
+      "logSha256": "821b4c99d3821894b0e48d51a0ec15708e40953364b15552b8bced2e062369af",
+      "markdownSha256": "09680abdd58d080ba448aa392310399a19bdffdacd83825eda601e18e49214bf",
+      "issues": []
+    },
+    {
+      "tier": "Standard",
+      "baseline": 2,
+      "current": 1,
+      "exitCode": 0,
+      "logSha256": "90cc92c6f03b14413fb517368208864f3700734750e3f35cfb9cdf8b27223fcb",
+      "markdownSha256": "2bf970b227ae94f17e7880936030e03818342f724a4b8fc9c58428640f7476e5",
+      "issues": []
+    },
+    {
+      "tier": "Standard",
+      "baseline": 1,
+      "current": 3,
+      "exitCode": 0,
+      "logSha256": "821b4c99d3821894b0e48d51a0ec15708e40953364b15552b8bced2e062369af",
+      "markdownSha256": "75cf1c2d75cb0d7062a7b6037ae646d0aff0dd78f743151983be0c3346f0ad32",
+      "issues": []
+    },
+    {
+      "tier": "Standard",
+      "baseline": 3,
+      "current": 1,
+      "exitCode": 0,
+      "logSha256": "2df3af88c4364b103bf173b19a1a4bed11a34ed5fd5109a45bad9c5edd609ae4",
+      "markdownSha256": "2f8e1d3e5dc881d68410339f34eab8db70297105e12421c5c2d88d5c15b2fe95",
+      "issues": []
+    },
+    {
+      "tier": "Standard",
+      "baseline": 1,
+      "current": 4,
+      "exitCode": 1,
+      "logSha256": "1449492f736eda0d61ea425000e509bfb48e980c47d69c724326e54880ca8ece",
+      "markdownSha256": "c21a9fd098cefbc134086e296bc52f8789716b1e6a6ba7d96955d67376e14875",
+      "issues": [
+        "| FAIL | TempTableSpill_500000_SELECT_INTO | GC_PAUSE_MS | 50.3 ms | 70.65 ms | 40.5% | Failure band 35%. (Spread: 17.1 ms) |",
+        "| WARN | WindowFunction_ROW_NUMBER_500000 | PEAK_WORKING_SET_MB | 444.6 MB | 493.7 MB | 11.0% | Warning band 10%. (Spread: 29.4 MB) |"
+      ]
+    },
+    {
+      "tier": "Standard",
+      "baseline": 4,
+      "current": 1,
+      "exitCode": 0,
+      "logSha256": "d48fff728f891f69f34efdd30063300f4047e5456d6c28ba730ce3ba4417dc4f",
+      "markdownSha256": "527acdced80f9b956d756ea1f3cd5d18ad357fdee1cfd964de756105683fa068",
+      "issues": []
+    },
+    {
+      "tier": "Standard",
+      "baseline": 2,
+      "current": 3,
+      "exitCode": 0,
+      "logSha256": "90cc92c6f03b14413fb517368208864f3700734750e3f35cfb9cdf8b27223fcb",
+      "markdownSha256": "76bac5e041918b5755720b0472ae2f7b4c5d17cce5851129ab02e14979be4298",
+      "issues": []
+    },
+    {
+      "tier": "Standard",
+      "baseline": 3,
+      "current": 2,
+      "exitCode": 0,
+      "logSha256": "2df3af88c4364b103bf173b19a1a4bed11a34ed5fd5109a45bad9c5edd609ae4",
+      "markdownSha256": "332a286c3ca277a567354f532625f8bbfa81dbb57f35cd688b79dfd3b94fff7c",
+      "issues": []
+    },
+    {
+      "tier": "Standard",
+      "baseline": 2,
+      "current": 4,
+      "exitCode": 0,
+      "logSha256": "90cc92c6f03b14413fb517368208864f3700734750e3f35cfb9cdf8b27223fcb",
+      "markdownSha256": "9bfd4fe69a117ba65b9ebb7a84b8fa47c87f489269f276e0aba1d2c9e2c94432",
+      "issues": []
+    },
+    {
+      "tier": "Standard",
+      "baseline": 4,
+      "current": 2,
+      "exitCode": 0,
+      "logSha256": "d48fff728f891f69f34efdd30063300f4047e5456d6c28ba730ce3ba4417dc4f",
+      "markdownSha256": "ace2368a2d3b8b51f67cd74fb085e5a8cd32a4c02562d2f2afa79ab26dd7bcbb",
+      "issues": []
+    },
+    {
+      "tier": "Standard",
+      "baseline": 3,
+      "current": 4,
+      "exitCode": 0,
+      "logSha256": "2df3af88c4364b103bf173b19a1a4bed11a34ed5fd5109a45bad9c5edd609ae4",
+      "markdownSha256": "334921dabeb268749b1335909ac3f2ebf8c335fca9d0a6cf16ce4693d7c6c858",
+      "issues": []
+    },
+    {
+      "tier": "Standard",
+      "baseline": 4,
+      "current": 3,
+      "exitCode": 0,
+      "logSha256": "d48fff728f891f69f34efdd30063300f4047e5456d6c28ba730ce3ba4417dc4f",
+      "markdownSha256": "b0f9847774ac2e28cc805f865fe4b1e9488745aaf88b607667ea4891b1e4caeb",
+      "issues": []
+    }
+  ]
+}

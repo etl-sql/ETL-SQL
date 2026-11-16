@@ -146,6 +146,28 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public void PushdownBlock_CaseEndDoesNotCloseTheBlock()
+        {
+            var parsed = Parse("EXECUTE db BEGIN SELECT CASE WHEN 1=1 THEN 1 ELSE 0 END; END; PRINT 'after';");
+
+            var pushdown = Assert.IsType<ExecutePushdownStatement>(parsed.Statements[0]);
+            Assert.False(pushdown.HasUnbalancedBlocks);
+            Assert.Equal("SELECT CASE WHEN 1=1 THEN 1 ELSE 0 END;", pushdown.SqlText);
+            Assert.Equal(2, parsed.Statements.Count);
+        }
+
+        [Fact]
+        public void PushdownBlock_ProceduralEndCaseClosesOnlyTheCase()
+        {
+            var parsed = Parse("EXECUTE db BEGIN CASE @x WHEN 1 THEN SELECT 1; END CASE; END; PRINT 'after';");
+
+            var pushdown = Assert.IsType<ExecutePushdownStatement>(parsed.Statements[0]);
+            Assert.False(pushdown.HasUnbalancedBlocks);
+            Assert.Equal("CASE @x WHEN 1 THEN SELECT 1; END CASE;", pushdown.SqlText);
+            Assert.Equal(2, parsed.Statements.Count);
+        }
+
+        [Fact]
         public async Task TestComplexNestedPushdown()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

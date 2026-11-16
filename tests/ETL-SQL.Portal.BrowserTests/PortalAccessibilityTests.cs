@@ -396,7 +396,7 @@ public sealed class PortalAccessibilityTests(PortalJourneyFixture fixture)
 
     private static async Task GoToAsync(IPage page, string path)
     {
-        await page.GotoAsync(path);
+        await page.GotoWithDiagnosticsAsync(path);
         // A hash route on an already-loaded document does not re-run the entry script.
         if (path.Contains('#')) await page.ReloadAsync();
         await page.WaitForLoadStateAsync(LoadState.NetworkIdle,

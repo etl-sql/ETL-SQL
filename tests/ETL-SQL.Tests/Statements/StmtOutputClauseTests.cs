@@ -48,6 +48,36 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public async Task Merge_Output_Action_RecordsWhatEachRowDid()
+        {
+            // $action used to read back as NULL on every row: the value was stored, but the
+            // reference resolved to a different name and an unknown name evaluated to NULL.
+            var evaluator = _serviceProvider.GetRequiredService<Evaluator>();
+            var script = @"
+                CREATE TABLE #Target (Id INT, Name VARCHAR);
+                INSERT INTO #Target VALUES (1, 'old');
+                CREATE TABLE #Source (Id INT, Name VARCHAR);
+                INSERT INTO #Source VALUES (1, 'new'), (2, 'added');
+                CREATE TABLE #Audit (Act VARCHAR, Id INT);
+
+                MERGE INTO #Target AS T USING #Source AS S ON T.Id = S.Id
+                WHEN MATCHED THEN UPDATE SET Name = S.Name
+                WHEN NOT MATCHED THEN INSERT (Id, Name) VALUES (S.Id, S.Name)
+                OUTPUT $action AS Act, INSERTED.Id INTO #Audit;
+
+                SELECT Act, Id FROM #Audit ORDER BY Id;
+            ";
+
+            await evaluator.Evaluate(new Lexer(script).TokenizeToScript());
+
+            var audit = evaluator.LastResult;
+            Assert.NotNull(audit);
+            Assert.Equal(2, audit.Rows.Count);
+            Assert.Equal("UPDATE", audit.Rows[0]["Act"]?.ToString());
+            Assert.Equal("INSERT", audit.Rows[1]["Act"]?.ToString());
+        }
+
+        [Fact]
         public async Task Update_Output_Deleted_And_Inserted()
         {
             var evaluator = _serviceProvider.GetRequiredService<Evaluator>();

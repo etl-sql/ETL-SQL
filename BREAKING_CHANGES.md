@@ -17,6 +17,320 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: machine-bound encrypted files use format ETLSQLMF4
+- **What changed**: Machine-bound file encryption (`ENCRYPT = MACHINE`) used one key for both AES and HMAC. It now derives separate keys with HKDF and writes the `ETLSQLMF4` header. Files written with `ETLSQLMF3` are refused.
+- **Who is affected**: Anyone holding machine-bound encrypted export files written before v0.22.0. In-memory machine-bound values are unaffected.
+- **Migration**: Re-export the data with v0.22.0.
+- **Diagnostic**: `Unsupported machine-bound encrypted file format`
+- **Earliest removal**: N/A
+
+### v0.22.0 — Semantic: `${@var}` interpolation keeps sensitive values encrypted
+- **What changed**: Interpolating a SENSITIVE variable holding an `ENC:` value into a string decrypted it, so `PRINT '${@pw}'` showed the plaintext. Interpolation now decrypts only where a credential option asks for the value, the same rule a bare `@var` follows.
+- **Who is affected**: Scripts that built plaintext strings from encrypted variables outside connection options.
+- **Migration**: Pass the variable to the credential option directly.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Syntax: number literals are culture-invariant; malformed hex is an error
+- **What changed**: Number literals and string-to-number casts used the host locale, so `1.234` read as `1234` under `de-DE`. They now always use `.` as the decimal point. `0x` with no digits and hex literals too large for a decimal are syntax errors, and a hex literal with the top bit set reads as unsigned (`0xFFFFFFFFFFFFFFFF` used to read as `-1`).
+- **Who is affected**: Scripts run on hosts with a comma-decimal locale that relied on the locale's separators, and scripts using oversized hex literals.
+- **Migration**: Write decimals with `.`; keep hex literals within decimal range.
+- **Diagnostic**: Parser error at the literal.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Semantic: text from CAST, TO_STR, FOR JSON and FOR XML no longer depends on the host
+- **What changed**: Casting a value to a string type (`CAST`/`CONVERT`/`TRY_CAST` to `STRING`, `VARCHAR`, `NVARCHAR`, `TEXT`, `CHAR` and their variants, and `TO_STR`) used the server's locale, so `CAST(DATEADD(day, 7, '2024-01-01') AS STRING)` gave `1/8/2024 12:00:00 AM` on Windows en-US and `01/08/2024 00:00:00` on Linux. Dates are now ISO `yyyy-MM-dd HH:mm:ss` (`2024-01-08 00:00:00`), with fractional seconds only when present and the offset for a `DATETIMEOFFSET` (`2024-01-08 09:30:05 +05:30`). Numbers use `.` as the decimal point. `FOR JSON` and `FOR XML` used the platform newline (CRLF on Windows); they now always use LF.
+- **Who is affected**: Scripts or downstream systems that parse or compare the text of a date cast to a string, or that hash or compare `FOR JSON`/`FOR XML` output produced on Windows.
+- **Migration**: Expect ISO text. For a locale-specific or custom layout, use `FORMAT(value, pattern [, culture])`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Semantic: concatenation, string functions, casing, text dates and flat-file output no longer depend on the host
+- **What changed**: Four more places followed the server's locale. (1) `||`, `+` with text, `CONCAT`, `CONCAT_WS` and every string function turned a date or number into the locale's text, so `'Run ' || @d` gave `Run 1/8/2024 9:30:05 AM` on Windows en-US and `Run 08.01.2024 09:30:05` on a German server; they now use the `CAST ... AS STRING` text (`Run 2024-01-08 09:30:05`). (2) `UPPER`, `LOWER` and `INITCAP` used the locale's casing, so `UPPER('istanbul')` gave `İSTANBUL` on a Turkish server; casing is now invariant, and `INITCAP` starts a word after any character that is not a letter or digit, as Oracle and PostgreSQL do (`O'Neil`, was `O'neil`). (3) `DATENAME` gave month and weekday names in the server's language (`Januar`); they are now English. (4) Text read as a date: `CAST` fell back to the locale (a German server accepted `8. Januar 2024`), and `DATEPART`, `DATENAME`, `EXTRACT` and `=` parsed with the locale, while `DATEDIFF`, `<`/`>` and `DATETIMEOFFSET` read slash dates month first. Every path now reads text the same way: ISO first, then slash dates month first as SQL Server (us_english) and PostgreSQL do (`08/01/2024` is 1 August; `CAST` read it as 8 January), day first only when the first number cannot be a month (`25/01/2024`). `SET DATEFORMAT DMY` (or `Engine:DateFormat` = `DMY` in appsettings) reads slash dates day first. Reports carry dates in cells, chart labels and parameter text as ISO (`2026-01-01`, or `2026-01-01 14:30:05` when the time is not midnight) instead of the locale's text. (5) `FLATFILE` wrote each cell with the host culture (`1/1/2026 2:30:05 PM` on en-US; `"1,5"` on a German host), although it reads with the invariant culture or `CULTURE`. It now writes the `CAST ... AS STRING` text unless the connection names `CULTURE` (that culture's format) or `DATE_FORMAT` (that pattern for dates).
+- **Who is affected**: Scripts that build text from dates or numbers and parse or compare it; scripts that relied on locale casing or local-language `DATENAME`; scripts that cast ambiguous slash dates (`08/01/2024`) to a date and meant day first, or passed them to `DATEPART`/`DATENAME`/`EXTRACT`/`=` on a day-first host; report consumers that parse chart labels or parameter text; systems that read CSV or fixed-width files ETL-SQL wrote without `CULTURE` and expect locale dates.
+- **Migration**: Write dates as ISO text. For a locale-specific or custom layout or month names in another language, use `FORMAT(value, pattern [, culture])`. For day-first slash dates, add `SET DATEFORMAT DMY;` to the script or set `Engine:DateFormat` to `DMY`. For a locale-formatted file, set `CULTURE` and `DATE_FORMAT` on the `FLATFILE` connection.
+- **Diagnostic**: A date text the engine no longer accepts (local-language month names) fails the cast with `Failed to cast value`.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Security: password and LDAP sign-in are refused on a Shared Tenancy Portal
+- **What changed**: On a Shared Tenancy host, password and LDAP login looked users up across every tenant and then failed with HTTP 500. They now answer 401 ("Use single sign-on") before any lookup.
+- **Who is affected**: Shared Tenancy deployments that tried local or LDAP accounts. Dedicated hosts are unchanged.
+- **Migration**: Sign in through the tenant's OIDC provider.
+- **Diagnostic**: HTTP 401 with `Use single sign-on`.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Connector: loopback is governed by `Security:AllowedHosts`
+- **What changed**: `localhost`, `127.0.0.1` and `::1` were always allowed, even when an administrator narrowed `Security:AllowedHosts`. They now need to be listed like any other host. The default list (`*`) is unchanged.
+- **Who is affected**: Deployments with a narrowed `AllowedHosts` whose scripts connect to a local database, API, Portal or Orchestrator.
+- **Migration**: Add the exact loopback names the scripts use to `Security:AllowedHosts`.
+- **Diagnostic**: `Connection to host 'localhost' is denied.`
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: the five-level nesting guardrail is enforced
+- **What changed**: Every engine instance copied `Engine:MaxRecursiveDepth` (10000, the CTE iteration limit) into `Security:MaxRecursiveNestingDepth`, so the nesting guardrail was 10000. It is 5 again. `EXEC '<sql>'` and `EXECUTE '<file>'` now count as nesting levels, as `RUN SCRIPT` does, and `SYNC DIRECTORY ... RECURSIVE` refuses files more than 5 directories deep. `SET MAX_RECURSIVE_DEPTH` still sets only the CTE limit.
+- **Who is affected**: Scripts nesting `RUN SCRIPT`/`EXEC`/`EXECUTE` or procedures more than 5 deep, and recursive `SYNC DIRECTORY` over deep trees.
+- **Migration**: Raise `Security:MaxRecursiveNestingDepth`, or run from an approved safe zone with `SET ALLOW_RECURSIVE_LAYERS = n;`.
+- **Diagnostic**: `Runaway protection: Recursive operation depth (n) exceeds the safety limit of 5.`
+- **Earliest removal**: N/A
+
+### v0.22.0 — Security: federated Orchestrator checks roles on ad-hoc jobs and bundles
+- **What changed**: In federated mode, `POST /jobs` and `/api/bundles/*` accepted any signed caller. `POST /jobs` now needs the execute scope ceiling and a role other than the read-only Orchestrator roles. Publishing a bundle needs Admin or OrchestratorManager, and reading bundles needs a role and the read ceiling. Legacy API-key mode is unchanged.
+- **Who is affected**: Automations holding only `orchestrator.read`, and users with no role or only `OrchestratorViewer`, `FleetReader` or `StewardshipViewer`, that ran ad-hoc jobs or published bundles.
+- **Migration**: Issue the automation `orchestrator.execute` (jobs) or `orchestrator.publish` with the OrchestratorManager role (bundles), or give the user an executing role.
+- **Diagnostic**: HTTP 403.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: `admin restore` refuses archives with files the manifest does not list
+- **What changed**: Restore copied every file in the data and keys archives, including files `backup-manifest.json` did not attest. Validation (and `--validate`) now fails on an unlisted data file, any keys-archive file other than the manifest, `secrets.json` and `.portal-keys/*`, or a key-ring count that differs from the manifest.
+- **Who is affected**: Operators restoring hand-edited backup archives.
+- **Migration**: Restore archives exactly as `admin backup` wrote them.
+- **Diagnostic**: Restore validation error naming the unattested file.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: OLTP, REST and webhook command timeouts default to 30 seconds
+- **What changed**: Without `TIMEOUT_SECONDS`, MSSQL, Postgres, Oracle, MySQL, SQLite, ODBC, REST and webhook connectors read `Connectors:DataWarehouse:DefaultCommandTimeoutSeconds` (1800 in the shipped `appsettings.json`) and waited up to 30 minutes. They now use their own 30-second default.
+- **Who is affected**: Scripts whose long-running OLTP or HTTP calls relied on the 30-minute wait.
+- **Migration**: Set `TIMEOUT_SECONDS` on the connection.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — TypeSystem: Cloud and messaging connectors return decimal integers and typed SharePoint fields
+- **What changed**: Kafka `Partition`/`Offset` and the S3/Azure Blob listing `Size` column were `int`/`long`; they are now `decimal`, the runtime integer type. SharePoint list numbers and booleans were strings (`"7"`, `"True"`) and JSON null was `''`; they are now `decimal` (double only beyond decimal range), boolean, and `NULL`.
+- **Who is affected**: Scripts reading those columns, especially ones comparing SharePoint fields as text or testing for `''` instead of `IS NULL`.
+- **Migration**: Compare numerically and use `IS NULL`; `CAST` explicitly where text is wanted.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Connector: S3 refuses a malformed ENDPOINT; SMTP and Azure Blob errors are sanitized
+- **What changed**: An S3 `ENDPOINT` that is not an absolute `http://`/`https://` URL used to pass egress validation as `s3.<region>.amazonaws.com`; it now fails. SMTP errors no longer chain the raw MailKit/MimeKit exception, and an empty or malformed Azure Blob connection string is a configuration error with no inner exception.
+- **Who is affected**: S3 connections with a scheme-less endpoint (`minio:9000`); tooling that read `InnerException` on SMTP failures.
+- **Migration**: Write the endpoint as a full URL, for example `ENDPOINT = 'http://minio:9000'`.
+- **Diagnostic**: `S3 ENDPOINT must be an absolute http:// or https:// URL`, `SMTP connector error:`, `Azure Blob connection string is not valid`.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Connector: MOCKDB initializes data on demand and rejects failed seeding
+- **What changed**: Declared metadata no longer starts row generation. Rows initialize once when data access, truncation or inferred schema requires them. A failed initialization now raises a sanitized `ExecutionException` on every data read, including failures that previously exposed partially seeded rows.
+- **Who is affected**: MOCKDB consumers and custom `IMockDataSeeder` implementations that depend on constructor-time side effects or consume data after a failed seed.
+- **Migration**: Keep declared schema available independently of row generation. Await a data read when actual rows are needed; do not rely on constructing a data source to populate it. Fix a failing seeder before reading again. Cancellation of one waiting reader does not cancel shared initialization.
+- **Diagnostic**: `MOCKDB data initialization failed.` Provider details and inner exceptions are not exposed.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Report jobs require a manifest-capable executor
+- **What changed**: Ad-hoc report jobs stay running through manifest and snapshot preparation. Preparation errors fail the job. An executor without an in-process report context now reports failure instead of a completed job with no manifest.
+- **Who is affected**: Clients submitting `IsReport=true` ad-hoc jobs, especially hosts using process-spawned script execution.
+- **Migration**: Check terminal status before consuming the manifest. Route report jobs to a report-capable execution host; retain the isolation boundary required by the deployment profile. The service does not silently fall back to less isolated execution.
+- **Diagnostic**: `Report manifests require an in-process execution context.` This host capability is not detectable by script linting.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: First-sign-in credentials follow saved configuration
+- **What changed**: MSI and DEB publish the protected sign-in file after saving protected and shared settings. A fresh-install retry reuses a saved bootstrap password when its sign-in file is missing. Configured credentials use UTF-8.
+- **Who is affected**: Fresh installs interrupted by settings or sign-in file write failures, and fresh installs with a configured bootstrap password.
+- **Migration**: Resolve the reported file access failure and retry configuration. Preserve existing protected settings. The sign-in file is also created for a configured bootstrap password when absent; normal upgrades do not create it.
+- **Diagnostic**: A failed write stops configuration. Retrying a failed sign-in write preserves saved service keys and produces credentials matching the saved password.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Installer configuration requires JSON objects
+- **What changed**: MSI and DEB configuration reject non-object roots in shared, saved and protected settings before writing configuration. Protected documents retain operator-added settings outside the installer's managed key list.
+- **Who is affected**: Installations with empty, malformed, array, scalar or null settings documents.
+- **Migration**: Restore a valid JSON object from a trusted backup before retrying. Preserve installed keys; do not replace protected settings with empty defaults to bypass validation.
+- **Diagnostic**: MSI reports a fixed configuration failure. DEB rejects invalid document roots. Neither path replaces installed keys on these validation failures.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Release wrapper retains complete native and portable output
+- **What changed**: `Master-Release.ps1` owns the output transaction across portable and native packaging. The portable child stages into a validated live caller transaction. Existing native build outputs are saved before rebuilding and restored after failure. Final checksums include ZIP, VSIX, MSI, DEB, DMG and SBOM files before the complete directory is promoted.
+- **Who is affected**: Packaging through the release wrapper, especially failures after portable publishing or while replacing an earlier native artifact.
+- **Migration**: Continue reading accepted packages from `release/`. Review `native-previous/`, `native-failed/` and the attempt's `transaction.json` for native recovery. Resolve `RecoveryRequired` before retrying. A closed or forged caller transaction cannot direct portable staging.
+- **Diagnostic**: Native failures do not promote portable output. Recovery failures identify the retained attempt; new attempts reject unresolved native backups and recovery records.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Complete portable builds preserve accepted releases
+- **What changed**: Portable packaging builds under `artifacts/portable-release/<attempt>/output` and replaces `release/` only after ZIP, VSIX, certification, SBOM and checksum work succeeds. Previous releases and failed attempts are retained. Failed promotion restores the previous directory; unresolved rollback and concurrent attempts block a new build.
+- **Who is affected**: Local portable-release producers, especially retries after a partial or failed build.
+- **Migration**: Continue consuming accepted files from `release/`. Inspect each retained attempt's `transaction.json`, `output/` and `previous/` when diagnosing a failure. Resolve `RecoveryRequired` before retrying. Keep enough disk space for staging and retained releases; remove reviewed attempts when no longer needed.
+- **Diagnostic**: Lock acquisition or unresolved recovery stops before publishing binaries. Promotion/rollback errors identify the retained previous directory. SBOM output must exist and its component version must match the release version.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Portable release inputs and ZIP contents are verified
+- **What changed**: The portable producer rejects empty, duplicate or unsupported platforms and unsafe version strings before cleanup. Required host files must be nonempty regular files. ZIP promotion requires matching file inventories and SHA-256 hashes, and publish folders cannot contain runtime state. ZIP creation uses .NET and includes hidden files in its verified inventory.
+- **Who is affected**: Release automation using unsupported platforms, malformed versions, contaminated publish output or an archive writer that drops or changes files.
+- **Migration**: Select each supported platform once and use a three-part version. Publish clean binaries and rerun failed packaging. Invalid input and failed build attempts leave accepted release output intact. ZIP-stage failures preserve an existing destination ZIP.
+- **Diagnostic**: Invalid options fail before source preparation. Runtime state and archive inventory/hash mismatches stop packaging; no incomplete ZIP is promoted.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Native packaging rejects runtime state
+- **What changed**: DEB and DMG builders reject protected secrets (including staging/recovery copies), saved installer settings, first-run credentials, SQLite databases/sidecars, key rings and runtime directories before staging cleanup. Broken links to these artifacts also fail.
+- **Who is affected**: Native packaging from a publish directory that was used to run a host or installer.
+- **Migration**: Publish into a clean directory and build from that output. Preserve runtime state outside packaging inputs; the builder does not delete or inspect its contents.
+- **Diagnostic**: `Runtime state in the publish folder. Publish again into a clean folder.` Prior staging and package outputs remain intact on this rejection.
+
+### v0.22.0 — Runtime: Native package staging protects program permissions
+- **What changed**: DEB payloads and macOS application staging strip group/other write access from program trees without changing executable or read-only bits. Builders use strict Bash, require their native packaging tool, and bind cleanup to repository staging paths, rejecting linked ancestors/outputs.
+- **Who is affected**: Packaging from writable publish directories, from another current directory, with missing packaging tools, or through linked staging directories.
+- **Migration**: Run builds with `dpkg-deb` on Linux or `hdiutil` on macOS and keep staging inside the repository. The permission regression builds a synthetic DEB and app bundle; installed-product and real macOS DMG acceptance still use native release lanes.
+- **Diagnostic**: Missing packaging tools and linked staging paths fail before cleanup.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Packaging checks failures and scopes host output
+- **What changed**: `Master-Release.ps1` validates source inputs before packaging, uses the pinned UI lockfile with `npm ci`, and stops on command or missing-artifact failures. It collects the current host's fresh nonempty MSI/DEB/Intel DMG in `release/`, restores caller location/version environment state, and reports packaging completion. Linux/macOS builders execute on their own hosts; WSL is no longer dispatched implicitly.
+- **Who is affected**: Packaging automation relying on ignored command failures, stale artifacts, source-directory native output, implicit WSL execution, or leaked caller state.
+- **Migration**: Use Node.js 22 and a three-part release version with optional prerelease/build metadata. Run native platform lanes separately and read native packages from `release/`. `-SkipTests` and `-IncludeSampleValidation` cannot be combined. Separate certification and publication gates remain required.
+- **Diagnostic**: The failed command or missing native package produces a nonzero result.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Retired source-only installation helpers
+- **What changed**: Removed `scripts/install.ps1`, `scripts/install.sh` and the Orchestrator project's `install-service-windows.ps1`/`install-service-linux.sh`. The workstation templates reported success without downloading or extracting tools. The service helpers used obsolete binary names; the Windows helper could stop/delete an existing service after a failed publish and still report success.
+- **Who is affected**: Source-checkout automation calling these helpers.
+- **Migration**: Use the maintained MSI workstation/server features on Windows, Linux packages and their service units, or native workstation ZIPs/Intel DMG on macOS. See [Installation](docs/administration/platform/installation.md). `Master-Release.ps1` runs the installer source gate before packaging.
+- **Diagnostic**: Installer source validation rejects any restored retired helper.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: MSI configuration failures stop installation
+- **What changed**: MSI settings capture, restoration and service configuration now return checked failures. PowerShell no longer swallows configuration errors. Protected files are fully staged before replacement, existing keys survive failed writes, and retained recovery files block retries that could generate new keys.
+- **Who is affected**: Windows installs/upgrades with inaccessible settings, denied writes, locked key files or incomplete protected-file recovery.
+- **Migration**: Fix the reported installation failure before retrying. Preserve protected `.recovery` files and have an administrator restore the original secrets if needed. Successful installs retain SYSTEM/Administrators-only secret-file permissions. Full installed MSI upgrade certification remains required.
+- **Diagnostic**: `ETL-SQL installer configuration failed.`
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Saved views store one resolved-state envelope
+- **What changed**: Saved-view APIs reject top-level `parameters`/`filters`, including nulls, and responses no longer contain the flat maps. `CREATE SAVED VIEW` sends a resolved-state envelope and preserves string-literal values. SQLite and PostgreSQL migrations backfill old maps into `StateJson` before dropping `parameters_json`/`filters_json`.
+- **Who is affected**: Clients using flat saved-view fields and catalogs containing old flat-only views.
+- **Migration**: Send `stateJson` for create/update or `state` for the default-view route. Stop older Portal hosts before upgrading; mixed-version rolling operation is unsupported. Existing envelopes remain unchanged. Flat string maps gain `@` prefixes and filters override parameters; numeric/boolean-looking strings keep their contents instead of being guessed into native types. Invalid old maps stop the upgrade and must be repaired or replaced with a valid envelope. Downgrading restores empty flat columns while retaining the envelopes.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: JSON spill rows carry explicit scalar types
+- **What changed**: JSON spill rows now use a versioned typed representation. Text such as `'001'` and `'2026-10-25'` stays text; native numbers, dates, offsets, GUIDs and binary values retain their types. Earlier untyped JSON rows are rejected instead of inferring types from their contents.
+- **Who is affected**: Persistent sessions containing JSON spill chunks written before this change, including unencrypted chunks.
+- **Migration**: Recreate affected saved sessions by rerunning their source statements. Empty chunks remain readable. Arrow's representation and complete-file authentication are unchanged.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Alert delivery uses named notifications
+- **What changed**: Alert entities, API responses and create/update requests no longer contain inline `Recipient`/`SmtpAlias` fields. SQLite and PostgreSQL migrations drop the two obsolete columns from `report_alerts`. Requests reject the retired fields, including explicit nulls, and other unknown fields.
+- **Who is affected**: API clients submitting `recipient` or `smtpAlias`, and catalogs retaining old inline alert delivery values.
+- **Migration**: Attach a named Orchestrator notification with `ALTER ALERT <name> ADD NOTIFICATION <orchestrator>.<notification>` or the notification attachment API. Remove the retired fields from requests. Stop older Portal hosts before applying this migration; mixed-version rolling operation across it is unsupported. The migration preserves alert definitions and notification attachments. Downgrading recreates empty inline columns; recovering their discarded values requires a pre-upgrade database backup.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Syntax: Retired forms use canonical commands
+- **What changed**: The `FILE` connector name, `DROP CHART`, `DOCKER <verb>`, `LINEAGE EXPORT`, `@sensitivity` stewardship alias, comma-less TOOLTIP parts, and `ui old` command are removed. Connection completion no longer offers options for the unsupported `ON TYPE … WITH` constructor.
+- **Who is affected**: Scripts and editor workflows using these retired forms.
+- **Migration**: Use `AS FLATFILE(...)` for file connections (the `FILE` table name remains valid), `DROP VISUAL`, `START/STOP/PAUSE/CLOSE DOCKER`, `EXPORT LINEAGE … AS OPENLINEAGE TO …`, `@classification`, commas between TOOLTIP parts, and `ui edit`. Write connection options inside `AS TYPE(...)`. The supported `LINEAGE <table> EXPORT AS …` query form is unchanged.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Encrypted spill files require authentication
+- **What changed**: JSON and Arrow spill files now use a versioned AES-256-CBC/HMAC-SHA256 envelope with separate derived keys. Readers authenticate the complete file before exposing rows. Earlier unauthenticated encrypted files are rejected, and missing chunks fail instead of returning an empty result.
+- **Who is affected**: Persistent sessions containing encrypted spill files written before v0.22.0, or sessions with missing chunks.
+- **Migration**: Recreate affected sessions by rerunning their source statements. Newly written empty partitions remain readable. `Security:SpillFormat` still supports `Arrow` and `Json`; neither provides a legacy encrypted-file fallback.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Connector: An unquoted TRUE turns boolean connection options on
+- **What changed**: `CREATE CONNECTION` stores an unquoted `TRUE` as `ON`, and most connectors only accepted `TRUE`, so `USE_SSL = TRUE` or `ENCRYPT = TRUE` turned the option off. MSSQL connections were built with `Encrypt=False` and Active Directory bound over plain LDAP. Connectors now accept `TRUE`, `ON`, `YES` and `1`.
+- **Who is affected**: Connections that set boolean options without quotes: MSSQL `ENCRYPT`/`USE_SSL`/`TRUST_SERVER_CERTIFICATE`/`TRUSTED_CONNECTION`/`MULTI_SUBNET_FAILOVER`/`POOLING`, Postgres/MySQL/Oracle `POOLING` and `TRUST_SERVER_CERTIFICATE`, MySQL `ALLOW_PUBLIC_KEY_RETRIEVAL`/`ALLOW_USER_VARIABLES`, Active Directory and SMTP `USE_SSL`, S3 `FORCE_PATH_STYLE`, SFTP `ALLOW_UNPINNED_HOST_KEY`, REST `VALIDATE_JSON_BODY`, Neo4j boolean options.
+- **Migration**: A connection that worked only because encryption was silently off now encrypts; a server without TLS needs `USE_SSL = FALSE`, and one with a self-signed certificate needs its certificate trusted or `TRUST_SERVER_CERTIFICATE = TRUE`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Connector: Kafka SECURITY_PROTOCOL applies without SASL and refuses unknown values
+- **What changed**: `SECURITY_PROTOCOL` was read only when SASL credentials were set, so `SECURITY_PROTOCOL = 'Ssl'` alone connected in plaintext, and any unrecognized value (including librdkafka's own `SASL_SSL`) became `SaslPlaintext`. It now always applies, accepts `SASL_SSL`-style names, and an unknown value is an error.
+- **Who is affected**: Kafka connections that set `SECURITY_PROTOCOL` without SASL credentials, or with a misspelled value.
+- **Migration**: Use one of `Plaintext`, `SaslPlaintext`, `SaslSsl`, `Ssl`; a broker without TLS must not be given `Ssl`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Connector: SMTP USE_SSL = TRUE requires TLS on the port's own terms
+- **What changed**: `USE_SSL = TRUE` meant implicit TLS on every port, which fails on 587; `FALSE` meant STARTTLS only if offered. `TRUE` now means implicit TLS on 465 and required STARTTLS on any other port; `FALSE` is unchanged.
+- **Who is affected**: SMTP connections with `USE_SSL = TRUE` on a port other than 465 that speaks implicit TLS.
+- **Migration**: Use port 465 for implicit TLS. A server on a custom implicit-TLS port must move to 465 or offer STARTTLS.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Semantic: LIKE with a NULL operand is UNKNOWN
+- **What changed**: `LIKE` returned false for a NULL operand, so `NOT LIKE` returned true and `WHERE col NOT LIKE 'A%'` kept the rows where `col` is NULL. Both now return NULL, as in SQL and in queries pushed down to a database.
+- **Who is affected**: Engine-side queries using `NOT LIKE` or `NOT (... LIKE ...)` over nullable columns.
+- **Migration**: Add `OR col IS NULL` where the NULL rows were wanted.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — TypeSystem: Arithmetic on doubles outside decimal's range stays numeric
+- **What changed**: A double beyond decimal's range (about 7.9e28), NaN or infinity could not be converted for arithmetic: `+` returned the two values concatenated as text and `-`, `*`, `/`, `%` and unary minus returned NULL. They now compute as doubles; a non-finite result is NULL, as decimal overflow already is.
+- **Who is affected**: Expressions over very large `FLOAT`/`DOUBLE` values.
+- **Migration**: None expected; code that matched the concatenated text must use the numeric value.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Scripts cannot open the application's own files
+- **What changed**: The installers approve the install folder as a safe zone, which let a script read the Portal database, the Data Protection key ring and `appsettings.secrets.json`, or rewrite the service configuration. Configuration, secrets, the Portal and Orchestrator databases and binaries in the application folder, any `appsettings.secrets.json` and any `.portal-keys` folder are now refused in every protection mode.
+- **Who is affected**: Scripts that read or write those files directly.
+- **Migration**: Use `etl-sql admin backup` for the databases and keys; keep script data in a subfolder or another safe zone.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: `${NAME}` in CREATE/ALTER CONNECTION needs an allow-listed variable
+- **What changed**: A `${NAME}` placeholder read any host environment variable. It now reads only names in `Security:AllowedEnvVars`, the list `ENV()` already uses, and any other name is a security error.
+- **Who is affected**: Scripts that build connections from environment variables, such as `PASSWORD='${REDSHIFT_PASSWORD}'`.
+- **Migration**: Add each variable name to `Security:AllowedEnvVars` (or `"*"` on a host where scripts are trusted). Prefer `SECRET:` references for credentials.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: EXECUTE TOOL keeps a parameter value as one argument
+- **What changed**: Parameter values were substituted into the `ARGS` template before it was split on spaces, so a value with spaces became several arguments. The template is now split first; a value is always one argument.
+- **Who is affected**: Tool definitions whose `ARGS` relied on a parameter expanding into several arguments.
+- **Migration**: Give each argument its own placeholder in `ARGS`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: GENERATE JWT_SECRET no longer edits appsettings.json
+- **What changed**: The statement wrote `Security:JwtSecret`, which nothing reads, into the running application's `appsettings.json`. It now only returns the secret and its encrypted value.
+- **Who is affected**: Nobody relied on the written key; operators who expected the file to change.
+- **Migration**: Run `etl-sql config setup-jwt --update` on the Portal host, or set `Portal:Jwt:Secret`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: USE DOCKER accepts official database repositories only
+- **What changed**: The database was picked by a substring of the image name, so any image containing `postgres` or `mssql` was pulled and run. The repository name (registry, tag and digest ignored) must now be `mssql/server`, `postgres`, `mysql`, `mariadb`, `oracle-xe` or `oracle-free`. Containers get generated passwords, Oracle included, and publish ports on loopback only. `<prefix>.CONNECTION_STRING` resolves a partial image name only when it names one container.
+- **Who is affected**: Scripts using a mirrored or custom image under another repository name, scripts that hard-coded `oracle`/`oracle`, and tools that connected to a container from another machine.
+- **Migration**: Mirror the image under its official repository name; read credentials from `<alias>.CONNECTION_STRING`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: LDAP sign-in refuses names qualified with another domain
+- **What changed**: `alice@other.example` and `OTHER\alice` were stripped to `alice` and signed in as this domain's `alice`. With `Identity:Ldap:Domain` set, a qualifier must match it (UPN suffix, or NetBIOS name equal to its first label).
+- **Who is affected**: Multi-domain or trusted-forest directories where users sign in with another domain's qualifier.
+- **Migration**: Sign in with the configured domain or no qualifier. A Portal serving several domains needs one account per domain, which this release does not provide.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Share links and embed tokens are shown once
+- **What changed**: The catalog stored each share link and embed token in plain text and listed it back. It now stores a SHA-256 hash; the token and URL are returned only when the link is created.
+- **Who is affected**: Anyone who copied a link from the Portal list or `eng.share_links()` / `eng.embed_tokens()` after creating it, and API clients that revoke by the listed token.
+- **Migration**: Copy the URL from the create response or `CREATE SHARE LINK ... INTO #t`. Revoke with `DELETE .../share-links/by-id/{id}` (or `REVOKE SHARE LINK ... FOR REPORT`). A lost link is revoked and created again.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Unauthenticated encryption formats are no longer read
+- **What changed**: `ENC:` values (version 1 and unversioned), password-encrypted files, SSH-encrypted files and machine-bound payloads written in the old AES-CBC formats without an authentication tag were still decrypted. They are now refused; only the authenticated formats are read.
+- **Who is affected**: Values and files encrypted by releases before the authenticated formats were introduced.
+- **Migration**: Encrypt the value again with `etl-sql encrypt`, or the file with `ENCRYPT FILE`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Upgrade paths for data written by earlier releases are removed
+- **What changed**: Startup no longer upgrades state written by earlier releases. Removed: the Orchestrator table and column renames and every add-missing-column step (job store, throttle slots, sandbox admission and metering ledgers, security event outbox); plaintext JSON report snapshots and the snapshot migration service; the plaintext PII column upgrade; the plaintext Orchestrator settings sidecar; the Orchestrator database lookup beside the Portal database; the Gateway `outcomes.json` import; `Portal:Dataset:LegacyAtRestKeyVersion`; JSON temp-table session restore; and Studio drafts kept in browser storage.
+- **Who is affected**: Installations with data from an earlier release. There are none.
+- **Migration**: Start from empty state.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Report formats from earlier releases are no longer read
+- **What changed**: The report runtime and the VS Code preview no longer read the pre-v0.19 `interactions` map; a visual without the resolved `interaction` contract takes part in no interaction. Version-one ChartSpec and PlotPlan envelopes are refused instead of migrated. Studio no longer offers to upgrade the single-value selection filter it wrote before v0.20.0. Data-quality trends report only structured per-rule failures; the counts-only rows parsed from the compact history string, and `countsOnly` on `DataQualityRuleFailureDto`, are gone.
+- **Who is affected**: Snapshots, chart contracts and job history produced by earlier releases.
+- **Migration**: Rebuild reports and rerun jobs.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.21.0 — Runtime: Portal and Orchestrator databases use snake_case names
 - **What changed**: Portal and Orchestrator tables and columns were PascalCase (for example `AspNetUsers`). The first v0.21.0 start renames them to snake_case on SQLite and PostgreSQL. Earlier releases cannot open a renamed database.
 - **Who is affected**: Operators who roll back to v0.20.x, and SQL, reports, or tools that query these databases directly.

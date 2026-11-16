@@ -39,7 +39,7 @@ public sealed class LedgerBackedSandboxAdmissionControllerTests : IDisposable
         Assert.False(waiting.IsCompleted);
 
         await firstLease.ReleaseAsync();
-        var secondLease = await waiting.WaitAsync(TimeSpan.FromSeconds(5));
+        var secondLease = await waiting.WaitAsync(HangGuard);
         await secondLease.ReleaseAsync();
     }
 
@@ -50,11 +50,15 @@ public sealed class LedgerBackedSandboxAdmissionControllerTests : IDisposable
         var controller = Controller(
             "node-a", ledger, leaseDuration: TimeSpan.FromMilliseconds(300));
         var lease = await controller.AcquireAsync(Tenant("tenant-a"), Policy());
+        var original = (await ledger.ReadAsync(lease.AdmissionId))!.LeaseExpiresUtc!.Value;
 
-        await Task.Delay(450); // flaky-delay-ok: exceeds the original TTL while allowing multiple 100ms renewals
+        // Wait for a heartbeat to move the lease past its original expiry, then reconcile at that
+        // original instant. A fixed 450 ms sleep raced the renewals on a slow runner; this checks
+        // the same thing however long a renewal takes.
+        await WaitUntilAsync(async () =>
+            (await ledger.ReadAsync(lease.AdmissionId))!.LeaseExpiresUtc > original);
 
-        Assert.Equal(0, await ledger.RetainExpiredAsync(
-            DateTimeOffset.UtcNow, "lease expired"));
+        Assert.Equal(0, await ledger.RetainExpiredAsync(original, "lease expired"));
         Assert.Equal(SandboxAdmissionState.Active, (await ledger.ReadAsync(lease.AdmissionId))!.State);
         await lease.ReleaseAsync();
     }
@@ -74,7 +78,7 @@ public sealed class LedgerBackedSandboxAdmissionControllerTests : IDisposable
             "simulated ownership loss"));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await Task.Delay(Timeout.InfiniteTimeSpan, lease.LeaseLost).WaitAsync(TimeSpan.FromSeconds(3)));
+            await Task.Delay(Timeout.InfiniteTimeSpan, lease.LeaseLost).WaitAsync(HangGuard));
         Assert.True(await controller.ReleaseReconciledAsync(lease.AdmissionId));
         Assert.Equal(
             SandboxAdmissionState.Completed,
@@ -143,7 +147,9 @@ public sealed class LedgerBackedSandboxAdmissionControllerTests : IDisposable
         var waiter = Controller("node-waiter", Ledger());
         var held = await holder.AcquireAsync(Tenant("tenant-a"), Policy());
         var waiting = waiter.AcquireAsync(Tenant("tenant-b"), Policy()).AsTask();
-        await Task.Delay(150); // flaky-delay-ok: lets the second node enqueue and start polling
+        // The second node must have enqueued before its queued work can be revoked; a fixed 150 ms
+        // sleep assumed it had.
+        await WaitUntilAsync(async () => (await ledger.ListTenantOpenAsync(Tenant("tenant-b"))).Count == 1);
         Assert.False(waiting.IsCompleted);
 
         var queued = (await ledger.ListTenantOpenAsync(Tenant("tenant-b"))).Single();
@@ -151,10 +157,25 @@ public sealed class LedgerBackedSandboxAdmissionControllerTests : IDisposable
         Assert.Equal(1, await ledger.CancelTenantQueuedAsync(Tenant("tenant-b")));
 
         var revoked = await Assert.ThrowsAsync<SandboxAdmissionRevokedException>(
-            async () => await waiting.WaitAsync(TimeSpan.FromSeconds(5)));
+            async () => await waiting.WaitAsync(HangGuard));
         Assert.Equal(queued.AdmissionId, revoked.AdmissionId);
         Assert.Equal(SandboxAdmissionState.Cancelled, revoked.State);
         await held.ReleaseAsync();
+    }
+
+    // Every renewal and poll opens the SQLite file without pooling. The coverage lane on a Windows
+    // runner once took over 3 s to observe a 150 ms lease loss (CI 42488694536), so the guards only
+    // catch hangs; the expected paths finish as soon as the state changes.
+    private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(30);
+
+    private static async Task WaitUntilAsync(Func<Task<bool>> condition)
+    {
+        var deadline = DateTime.UtcNow + HangGuard;
+        while (!await condition())
+        {
+            if (DateTime.UtcNow > deadline) throw new TimeoutException($"Condition not met within {HangGuard.TotalSeconds:0} s.");
+            await Task.Delay(25); // flaky-delay-ok: polling interval for a condition with a hang guard
+        }
     }
 
     private RelationalSandboxAdmissionLedger Ledger() => new(

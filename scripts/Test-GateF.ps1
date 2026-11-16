@@ -17,13 +17,16 @@ param(
     [string]$Scenario = 'All',
     [ValidateRange(1000, 1000000000)]
     [long]$Rows = 1000000000,
-    [string]$OutDir = '.\certification-results\gate-f-1b',
+    [string]$OutDir = './certification-results/gate-f-1b',
     [double]$MemoryBoundMB = 16384,
     [int]$MemoryGrantMB = 8192,
     [ValidateRange(1000, 1000000)]
     [int]$TempBatchRows = 25000,
     [double]$MinimumRowsPerSecond = 50000,
     [double]$MinimumFreeDiskGB = 25,
+    # Hosted runs: the AllocProfile scenario reports its machine metrics (elapsed, GC pause, CPU)
+    # without gating them; allocation and retained bytes still gate.
+    [switch]$MachineMetricsReportOnly,
     [switch]$SkipBuild,
     [switch]$Force
 )
@@ -299,8 +302,11 @@ function Invoke-LoggedProcess(
     [string]$filePath,
     [string[]]$arguments,
     [string]$stdoutPath,
-    [string]$stderrPath) {
+    [string]$stderrPath,
+    [string]$resultPath) {
     $script:activeScenario = $name
+    # A result left by an earlier run must not stand in for this one.
+    if (Test-Path -LiteralPath $resultPath) { Remove-Item -LiteralPath $resultPath -Force }
     Write-Status 'running' $name 0 'starting child process'
     $process = Start-Process -FilePath $filePath -ArgumentList $arguments -WorkingDirectory $repoRoot `
         -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -NoNewWindow -PassThru
@@ -318,17 +324,36 @@ function Invoke-LoggedProcess(
         Write-Status 'failed' $name 0 "exit code $($process.ExitCode); see $stdoutPath and $stderrPath"
         throw "$name failed with exit code $($process.ExitCode)."
     }
+    if (-not (Test-Path -LiteralPath $resultPath)) {
+        Write-Status 'failed' $name 0 "exit code 0 but no result at $resultPath"
+        throw "$name exited 0 without writing its result: $resultPath"
+    }
+}
+
+function Get-CurrentResult([string]$resultPath, [string]$keyPath) {
+    # Only a result whose key names this commit and row count is evidence for this report. A file
+    # left in the output directory by another commit is not.
+    if (-not (Test-Path -LiteralPath $resultPath) -or -not (Test-Path -LiteralPath $keyPath)) { return $null }
+    $key = (Get-Content -LiteralPath $keyPath -Raw).Trim()
+    if (-not $key.StartsWith("$commit|$Rows|", [StringComparison]::Ordinal)) { return $null }
+    return Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
 }
 
 try {
     $tempRoot = [System.IO.Path]::GetTempPath()
-    $tempDriveName = [System.IO.Path]::GetPathRoot($tempRoot).TrimEnd(':','\')
-    $tempDrive = Get-PSDrive -Name $tempDriveName
-    $freeDiskGB = $tempDrive.Free / 1GB
+    # The volume holding the temp path: the drive letter on Windows, the longest matching mount
+    # point on Linux and macOS (hosted runners run this too).
+    $tempDrive = [System.IO.DriveInfo]::GetDrives() |
+        Where-Object { $_.IsReady -and $tempRoot.StartsWith($_.RootDirectory.FullName, [StringComparison]::OrdinalIgnoreCase) } |
+        Sort-Object { $_.RootDirectory.FullName.Length } -Descending |
+        Select-Object -First 1
+    if (-not $tempDrive) { throw "Cannot find the volume that holds the temp path $tempRoot." }
+    $tempDriveRoot = $tempDrive.RootDirectory.FullName
+    $freeDiskGB = $tempDrive.AvailableFreeSpace / 1GB
     if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip' -or $Scenario -eq 'AllocProfile' -or $Scenario -eq 'ExternalSort' -or $Scenario -eq 'ExternalJoin' -or $Scenario -eq 'HighCardinalityGrouping' -or $Scenario -eq 'EligibleWindowRowNumber') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
         $message = ("Gate F requires at least {0:N1} GB free on spill drive {1}; only {2:N1} GB is available. " +
             "Free disk space or override -MinimumFreeDiskGB only with a justified measured estimate.") -f `
-            $MinimumFreeDiskGB, $tempDrive.Root, $freeDiskGB
+            $MinimumFreeDiskGB, $tempDriveRoot, $freeDiskGB
         throw $message
     }
 
@@ -380,7 +405,7 @@ try {
         } else { 0 }
     }
     $scenarioManifests = Get-GateFScenarioManifests
-    $admissionResults = Get-GateFAdmissionResults $scenarioManifests $freeDiskGB $tempDrive.Root
+    $admissionResults = Get-GateFAdmissionResults $scenarioManifests $freeDiskGB $tempDriveRoot
 
     $runManifest = [ordered]@{
         schemaVersion = 2
@@ -397,8 +422,8 @@ try {
         rows = $Rows
         requestedScenario = $Scenario
         spillRoot = $tempRoot
-        spillDrive = $tempDrive.Root
-        spillDriveFreeBytesAtStart = [long]$tempDrive.Free
+        spillDrive = $tempDriveRoot
+        spillDriveFreeBytesAtStart = [long]$tempDrive.AvailableFreeSpace
         host = $hostProfile
         scenarioManifests = $scenarioManifests
         admission = $admissionResults
@@ -424,11 +449,13 @@ try {
             $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_OUTPUT = $result
-            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            $testProject = Join-Path $repoRoot 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'
             Invoke-LoggedProcess 'ColumnarCore' 'dotnet' @(
                 'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
-                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.NativeScanFilterProjectionAndLowCardinalityAggregateStayBounded'
-            ) (Join-Path $outRoot 'columnar-core.log') (Join-Path $outRoot 'columnar-core.err.log')
+                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.NativeScanFilterProjectionAndLowCardinalityAggregateStayBounded',
+                # A renamed test would match nothing and exit 0.
+                '--', 'RunConfiguration.TreatNoTestsAsError=true'
+            ) (Join-Path $outRoot 'columnar-core.log') (Join-Path $outRoot 'columnar-core.err.log') $result
             Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
         } else {
             Write-Status 'resuming' 'ColumnarCore' 0 "reusing completed result for commit $commit"
@@ -454,7 +481,7 @@ try {
                 '-Tier', 'Huge', '-Scenario', 'TempTableSpill',
                 '-RowCountScale', $scale.ToString([Globalization.CultureInfo]::InvariantCulture),
                 '-OutDir', $tempOut, '-SkipBuild'
-            ) (Join-Path $outRoot 'temp-table-round-trip.log') (Join-Path $outRoot 'temp-table-round-trip.err.log')
+            ) (Join-Path $outRoot 'temp-table-round-trip.log') (Join-Path $outRoot 'temp-table-round-trip.err.log') $result
             Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
         } else {
             Write-Status 'resuming' 'TempTableRoundTrip' 0 "reusing completed result for commit $commit"
@@ -462,7 +489,7 @@ try {
     }
 
     if ($Scenario -eq 'All' -or $Scenario -eq 'AllocProfile') {
-        # v0.15.0 Phase 1: the 1B certification also captures the allocation/GC profile of the
+        # The 1B certification also captures the allocation/GC profile of the
         # #temp round trip and compares it against the checked-in budget for this row count
         # (certification-results/spill-alloc-budgets). Missing budget warns without failing;
         # establish one with Test-SpillAllocProfile.ps1 -Rows <n> -UpdateBudget.
@@ -474,13 +501,13 @@ try {
             ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
         if ($Force -or -not $reusable) {
             $pwsh = (Get-Process -Id $PID).Path
-            Invoke-LoggedProcess 'AllocProfile' $pwsh @(
+            Invoke-LoggedProcess 'AllocProfile' $pwsh (@(
                 '-NoProfile', '-File', (Join-Path $PSScriptRoot 'Test-SpillAllocProfile.ps1'),
                 '-Rows', $Rows.ToString([Globalization.CultureInfo]::InvariantCulture),
                 '-MemoryGrantMB', $MemoryGrantMB.ToString([Globalization.CultureInfo]::InvariantCulture),
                 '-BatchRows', $TempBatchRows.ToString([Globalization.CultureInfo]::InvariantCulture),
                 '-OutDir', $allocOut, '-SkipBuild'
-            ) (Join-Path $outRoot 'alloc-profile.log') (Join-Path $outRoot 'alloc-profile.err.log')
+            ) + @(if ($MachineMetricsReportOnly) { '-MachineMetricsReportOnly' })) (Join-Path $outRoot 'alloc-profile.log') (Join-Path $outRoot 'alloc-profile.err.log') $result
             Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
         } else {
             Write-Status 'resuming' 'AllocProfile' 0 "reusing completed result for commit $commit"
@@ -488,7 +515,7 @@ try {
     }
 
     if ($Scenario -eq 'ExternalSort') {
-        # v0.15.0 Phase 4 candidate: external sort is intentionally opt-in until an operator-run
+        # External sort is intentionally opt-in until an operator-run
         # artifact passes and the public matrix moves it from Candidate to Certified.
         $result = Join-Path $outRoot 'external-sort.json'
         $resultKey = Join-Path $outRoot 'external-sort.key'
@@ -504,11 +531,13 @@ try {
             $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_EXTERNAL_SORT_OUTPUT = $result
-            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            $testProject = Join-Path $repoRoot 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'
             Invoke-LoggedProcess 'ExternalSort' 'dotnet' @(
                 'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
-                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.ExternalSortMultiKeyCandidateStreamsAndValidatesOrder'
-            ) (Join-Path $outRoot 'external-sort.log') (Join-Path $outRoot 'external-sort.err.log')
+                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.ExternalSortMultiKeyCandidateStreamsAndValidatesOrder',
+                # A renamed test would match nothing and exit 0.
+                '--', 'RunConfiguration.TreatNoTestsAsError=true'
+            ) (Join-Path $outRoot 'external-sort.log') (Join-Path $outRoot 'external-sort.err.log') $result
             Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
         } else {
             Write-Status 'resuming' 'ExternalSort' 0 "reusing completed result for commit $commit"
@@ -516,7 +545,7 @@ try {
     }
 
     if ($Scenario -eq 'ExternalJoin') {
-        # v0.15.0 Phase 4 candidate: external equi-join is opt-in until an operator-run artifact
+        # External equi-join is opt-in until an operator-run artifact
         # passes and the public matrix moves it from Candidate to Certified.
         $result = Join-Path $outRoot 'external-join.json'
         $resultKey = Join-Path $outRoot 'external-join.key'
@@ -533,11 +562,13 @@ try {
             $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_EXTERNAL_JOIN_OUTPUT = $result
-            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            $testProject = Join-Path $repoRoot 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'
             Invoke-LoggedProcess 'ExternalJoin' 'dotnet' @(
                 'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
-                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.ExternalEquiJoinCandidateStreamsAndValidatesControlledOverlap'
-            ) (Join-Path $outRoot 'external-join.log') (Join-Path $outRoot 'external-join.err.log')
+                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.ExternalEquiJoinCandidateStreamsAndValidatesControlledOverlap',
+                # A renamed test would match nothing and exit 0.
+                '--', 'RunConfiguration.TreatNoTestsAsError=true'
+            ) (Join-Path $outRoot 'external-join.log') (Join-Path $outRoot 'external-join.err.log') $result
             Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
         } else {
             Write-Status 'resuming' 'ExternalJoin' 0 "reusing completed result for commit $commit"
@@ -545,7 +576,7 @@ try {
     }
 
     if ($Scenario -eq 'HighCardinalityGrouping') {
-        # v0.15.0 Phase 4 candidate: high-cardinality grouping is opt-in until an operator-run
+        # High-cardinality grouping is opt-in until an operator-run
         # artifact passes and the public matrix moves it from Candidate to Certified.
         $result = Join-Path $outRoot 'high-cardinality-grouping.json'
         $resultKey = Join-Path $outRoot 'high-cardinality-grouping.key'
@@ -562,11 +593,13 @@ try {
             $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_HIGH_CARD_GROUP_OUTPUT = $result
-            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            $testProject = Join-Path $repoRoot 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'
             Invoke-LoggedProcess 'HighCardinalityGrouping' 'dotnet' @(
                 'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
-                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.HighCardinalityGroupingCandidateStreamsAndValidatesAggregateTotals'
-            ) (Join-Path $outRoot 'high-cardinality-grouping.log') (Join-Path $outRoot 'high-cardinality-grouping.err.log')
+                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.HighCardinalityGroupingCandidateStreamsAndValidatesAggregateTotals',
+                # A renamed test would match nothing and exit 0.
+                '--', 'RunConfiguration.TreatNoTestsAsError=true'
+            ) (Join-Path $outRoot 'high-cardinality-grouping.log') (Join-Path $outRoot 'high-cardinality-grouping.err.log') $result
             Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
         } else {
             Write-Status 'resuming' 'HighCardinalityGrouping' 0 "reusing completed result for commit $commit"
@@ -574,7 +607,7 @@ try {
     }
 
     if ($Scenario -eq 'EligibleWindowRowNumber') {
-        # v0.15.0 Phase 4 candidate: ROW_NUMBER window is opt-in until an operator-run
+        # ROW_NUMBER window is opt-in until an operator-run
         # artifact passes and the public matrix moves it from Candidate to Certified.
         $result = Join-Path $outRoot 'eligible-window-row-number.json'
         $resultKey = Join-Path $outRoot 'eligible-window-row-number.key'
@@ -592,11 +625,13 @@ try {
             $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_ELIGIBLE_WINDOW_OUTPUT = $result
-            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            $testProject = Join-Path $repoRoot 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'
             Invoke-LoggedProcess 'EligibleWindowRowNumber' 'dotnet' @(
                 'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
-                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.EligibleWindowRowNumberCandidateStreamsAndValidatesPartitions'
-            ) (Join-Path $outRoot 'eligible-window-row-number.log') (Join-Path $outRoot 'eligible-window-row-number.err.log')
+                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.EligibleWindowRowNumberCandidateStreamsAndValidatesPartitions',
+                # A renamed test would match nothing and exit 0.
+                '--', 'RunConfiguration.TreatNoTestsAsError=true'
+            ) (Join-Path $outRoot 'eligible-window-row-number.log') (Join-Path $outRoot 'eligible-window-row-number.err.log') $result
             Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
         } else {
             Write-Status 'resuming' 'EligibleWindowRowNumber' 0 "reusing completed result for commit $commit"
@@ -621,29 +656,18 @@ try {
         run = $runManifest
         scenarioManifests = $scenarioManifests
         admission = $admissionResults
-        columnarCore = if (Test-Path (Join-Path $outRoot 'columnar-core.json')) {
-            Get-Content (Join-Path $outRoot 'columnar-core.json') -Raw | ConvertFrom-Json
-        } else { $null }
-        tempTableRoundTrip = if (Test-Path (Join-Path $outRoot 'temp-table-round-trip\cert-report.json')) {
-            (Get-Content (Join-Path $outRoot 'temp-table-round-trip\cert-report.json') -Raw | ConvertFrom-Json).scenarios[0]
-        } else { $null }
-        allocProfile = & {
-            $allocReport = Get-ChildItem (Join-Path $outRoot 'alloc-profile') -Filter 'profile-*.json' -ErrorAction SilentlyContinue |
-                Sort-Object LastWriteTime -Descending | Select-Object -First 1
-            if ($allocReport) { Get-Content $allocReport.FullName -Raw | ConvertFrom-Json } else { $null }
+        columnarCore = Get-CurrentResult (Join-Path $outRoot 'columnar-core.json') (Join-Path $outRoot 'columnar-core.key')
+        tempTableRoundTrip = & {
+            $certReport = Get-CurrentResult (Join-Path $outRoot 'temp-table-round-trip/cert-report.json') (Join-Path $outRoot 'temp-table-round-trip.key')
+            if ($certReport) { @($certReport.scenarios)[0] } else { $null }
         }
-        externalSort = if (Test-Path (Join-Path $outRoot 'external-sort.json')) {
-            Get-Content (Join-Path $outRoot 'external-sort.json') -Raw | ConvertFrom-Json
-        } else { $null }
-        externalJoin = if (Test-Path (Join-Path $outRoot 'external-join.json')) {
-            Get-Content (Join-Path $outRoot 'external-join.json') -Raw | ConvertFrom-Json
-        } else { $null }
-        highCardinalityGrouping = if (Test-Path (Join-Path $outRoot 'high-cardinality-grouping.json')) {
-            Get-Content (Join-Path $outRoot 'high-cardinality-grouping.json') -Raw | ConvertFrom-Json
-        } else { $null }
-        eligibleWindowRowNumber = if (Test-Path (Join-Path $outRoot 'eligible-window-row-number.json')) {
-            Get-Content (Join-Path $outRoot 'eligible-window-row-number.json') -Raw | ConvertFrom-Json
-        } else { $null }
+        allocProfile = Get-CurrentResult `
+            (Join-Path $outRoot ("alloc-profile/profile-{0}rows-{1}.json" -f $Rows, (git -C $repoRoot rev-parse --short HEAD).Trim())) `
+            (Join-Path $outRoot 'alloc-profile.key')
+        externalSort = Get-CurrentResult (Join-Path $outRoot 'external-sort.json') (Join-Path $outRoot 'external-sort.key')
+        externalJoin = Get-CurrentResult (Join-Path $outRoot 'external-join.json') (Join-Path $outRoot 'external-join.key')
+        highCardinalityGrouping = Get-CurrentResult (Join-Path $outRoot 'high-cardinality-grouping.json') (Join-Path $outRoot 'high-cardinality-grouping.key')
+        eligibleWindowRowNumber = Get-CurrentResult (Join-Path $outRoot 'eligible-window-row-number.json') (Join-Path $outRoot 'eligible-window-row-number.key')
     }
     $report | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $outRoot 'gate-f-report.json') -Encoding UTF8
     Write-Status 'completed' '' 0 'Gate F completed successfully.'

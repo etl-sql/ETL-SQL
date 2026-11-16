@@ -36,32 +36,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 if [ "$NO_BUILD" = true ]; then
     node "$SCRIPT_DIR/sync-assets.js" -Check
-    # Current preparation does not make existing binaries current; they keep the assets they were built with.
-    node "$SCRIPT_DIR/check-built-browser-assets.mjs" --configuration "$CONFIGURATION"
 else
     node "$SCRIPT_DIR/sync-assets.js"
 fi
-
-# Define lanes and their associated test project and category filters
-declare -A lane_labels
-declare -A lane_projects
-declare -A lane_filters
-
-lane_labels[core]="Core language behavior"
-lane_projects[core]="tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
-lane_filters[core]="Category=Smoke.Core"
-
-lane_labels[security]="Security and path guardrails"
-lane_projects[security]="tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj;tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj"
-lane_filters[security]="Category=Smoke.Security;Category=Smoke.Security"
-
-lane_labels[reporting]="Reporting manifest and runtime behavior"
-lane_projects[reporting]="tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
-lane_filters[reporting]="Category=Smoke.Reporting"
-
-lane_labels[portal]="Portal publish, execute, and snapshot basics"
-lane_projects[portal]="tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj"
-lane_filters[portal]="Category=Smoke.Portal"
 
 if [ "$LANE" = "all" ]; then
     selected_lanes=("core" "security" "reporting" "portal")
@@ -70,22 +47,44 @@ else
 fi
 
 for lane in "${selected_lanes[@]}"; do
-    if [ -z "${lane_labels[$lane]}" ]; then
-        echo "Unknown lane: $lane"
-        exit 1
-    fi
+    case "$lane" in
+        core)
+            label="Core language behavior"
+            project_list="tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
+            filter_list="Category=Smoke.Core"
+            ;;
+        security)
+            label="Security and path guardrails"
+            project_list="tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj;tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj"
+            filter_list="Category=Smoke.Security;Category=Smoke.Security"
+            ;;
+        reporting)
+            label="Reporting manifest and runtime behavior"
+            project_list="tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
+            filter_list="Category=Smoke.Reporting"
+            ;;
+        portal)
+            label="Portal publish, execute, and snapshot basics"
+            project_list="tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj"
+            filter_list="Category=Smoke.Portal"
+            ;;
+        *) echo "Unknown lane: $lane"; exit 1 ;;
+    esac
 
-    echo -e "\n==> Smoke lane: ${lane_labels[$lane]} [$lane]"
+    echo -e "\n==> Smoke lane: $label [$lane]"
 
     # Split projects and filters by semicolon
-    IFS=';' read -ra projects <<< "${lane_projects[$lane]}"
-    IFS=';' read -ra filters <<< "${lane_filters[$lane]}"
+    IFS=';' read -ra projects <<< "$project_list"
+    IFS=';' read -ra filters <<< "$filter_list"
 
     for i in "${!projects[@]}"; do
         project="${projects[$i]}"
         filter="${filters[$i]}"
         project_path="$REPO_ROOT/$project"
 
+        if [ "$NO_BUILD" = true ]; then
+            node "$SCRIPT_DIR/check-built-browser-assets.mjs" --configuration "$CONFIGURATION" --project "$project_path"
+        fi
         args=("test" "$project_path" "--configuration" "$CONFIGURATION" "--filter" "$filter" "--logger" "console;verbosity=minimal")
         if [ "$NO_RESTORE" = true ]; then
             args+=("--no-restore")

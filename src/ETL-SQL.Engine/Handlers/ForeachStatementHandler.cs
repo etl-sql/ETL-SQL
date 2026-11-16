@@ -103,7 +103,7 @@ public class ForeachStatementHandler(IBufferManager bufferManager) : IStatementH
         if (sel == null || sel.IntoTable != null) return false;
 
         // Resolve data source
-        var ds = await context.ResolveDataSourceAsync(sel.FromTable);
+        var ds = await context.ResolveReadSourceAsync(sel.FromTable);
         if (ds is not IDatabaseSource db || !db.SupportsSqlPushdown) return false;
 
         // Request a streaming cursor slot from the BufferManager
@@ -157,7 +157,7 @@ public class ForeachStatementHandler(IBufferManager bufferManager) : IStatementH
         if (sel.OrderBy == null || sel.OrderBy.Count == 0) return false;
 
         // Resolve data source to check if it supports SQL pushdown
-        var ds = await context.ResolveDataSourceAsync(sel.FromTable);
+        var ds = await context.ResolveReadSourceAsync(sel.FromTable);
         if (ds is not IDatabaseSource db || !db.SupportsSqlPushdown) return false;
 
         int pageSize = context.ForeachPageSize > 0 ? context.ForeachPageSize : 10000;

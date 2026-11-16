@@ -12,6 +12,7 @@ namespace ETL_SQL.Tests.Core
         [InlineData("123.45", "DECIMAL", 123.45)]
         [InlineData("true", "BIT", true)]
         [InlineData("2023-01-01", "DATE", "2023-01-01")]
+        [InlineData("2023-01-01", "DATETIME", "2023-01-01")]
         [InlineData("612495f8-8e32-4c4d-993e-17e18a244e6b", "GUID", "612495f8-8e32-4c4d-993e-17e18a244e6b")]
         public void TestSuccessfulCasts(object value, string typeName, object expected)
         {
@@ -19,7 +20,11 @@ namespace ETL_SQL.Tests.Core
 
             if (typeName == "DATE")
             {
-                Assert.Equal(DateTime.Parse(expected.ToString()), (DateTime)result);
+                Assert.Equal(DateOnly.Parse(expected.ToString()!, System.Globalization.CultureInfo.InvariantCulture), (DateOnly)result!);
+            }
+            else if (typeName == "DATETIME")
+            {
+                Assert.Equal(DateTime.Parse(expected.ToString()!, System.Globalization.CultureInfo.InvariantCulture), (DateTime)result!);
             }
             else if (typeName == "GUID")
             {
@@ -105,6 +110,37 @@ namespace ETL_SQL.Tests.Core
             Assert.Equal(1234567, result.Ticks % TimeSpan.TicksPerSecond);
             Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() =>
                 TypeConverter.Cast("2026-01-02T03:04:05Z", "DATETIMEOFFSET(8)"));
+        }
+
+        // CAST to a string type gave the server's locale text ('1/8/2024 12:00:00 AM' on Windows
+        // en-US, '01/08/2024 00:00:00' on Linux), so the same query differed between hosts.
+        // A German culture also turns 1.5 into '1,5'. The text must not depend on the culture.
+        [Theory]
+        [InlineData("en-US")]
+        [InlineData("de-DE")]
+        [InlineData("")]
+        public void StringCastTextDoesNotDependOnCulture(string cultureName)
+        {
+            var previous = System.Globalization.CultureInfo.CurrentCulture;
+            try
+            {
+                System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo(cultureName);
+                Assert.Equal("2024-01-08", TypeConverter.Cast(new DateOnly(2024, 1, 8), "STRING"));
+                Assert.Equal("2024-01-08 00:00:00", TypeConverter.Cast(new DateTime(2024, 1, 8), "STRING"));
+                Assert.Equal("2024-01-08 09:30:05.25", TypeConverter.Cast(new DateTime(2024, 1, 8, 9, 30, 5, 250), "VARCHAR(30)"));
+                Assert.Equal("2024-01-08 09:30:05.0000001", TypeConverter.Cast(new DateTime(2024, 1, 8, 9, 30, 5).AddTicks(1), "NVARCHAR"));
+                Assert.Equal("2024-01-08 09:30:05 +05:30",
+                    TypeConverter.Cast(new DateTimeOffset(2024, 1, 8, 9, 30, 5, TimeSpan.FromHours(5.5)), "STRING"));
+                Assert.Equal("1.5", TypeConverter.Cast(1.5d, "STRING"));
+                Assert.Equal("1234.50", TypeConverter.Cast(1234.50m, "TEXT"));
+                Assert.Equal("01:02:03", TypeConverter.Cast(new TimeSpan(1, 2, 3), "CHAR"));
+                Assert.Equal("already text", TypeConverter.Cast("already text", "VARCHAR2"));
+                Assert.Equal("True", TypeConverter.Cast(true, "STRING"));
+            }
+            finally
+            {
+                System.Globalization.CultureInfo.CurrentCulture = previous;
+            }
         }
 
         // A LIST arrives as text from a report control, a Ctrl+click selection, or --var, and

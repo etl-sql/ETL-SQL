@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Generates a disposable environment file, shared data-root directories, and non-secret run
-    metadata for the v0.15.0 PostgreSQL/Portal/Orchestrator HA soak lanes.
+    metadata for the PostgreSQL/Portal/Orchestrator HA soak lanes.
 
     Docker execution is opt-in. Without -Start, the script only prepares and validates the topology
     inputs so generated secrets stay local and reviewable before any containers are started.
@@ -217,7 +217,7 @@ $composeRelative = Resolve-Path -LiteralPath $composePath -Relative
 $envRelative = Resolve-Path -LiteralPath $envFile -Relative
 $metadata = [ordered]@{
     schemaVersion = 1
-    phase = 'v0.15.0 Phase 6'
+    phase = 'High availability soak'
     generatedAt = (Get-Date).ToUniversalTime().ToString('o')
     commit = Get-GitCommit
     runId = $RunId

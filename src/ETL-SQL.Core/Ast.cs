@@ -307,11 +307,45 @@ public sealed record OrderByClause : AstNode
 {
     public Expression Expression { get; }
     public bool Descending { get; }
-    public OrderByClause(Expression expression, bool descending = false)
+
+    /// <summary>
+    /// <c>NULLS FIRST</c> (true) or <c>NULLS LAST</c> (false). Null when the query wrote neither:
+    /// <c>NULL</c> then sorts lowest, first for <c>ASC</c> and last for <c>DESC</c>.
+    /// </summary>
+    public bool? NullsFirst { get; }
+
+    /// <summary>Where <c>NULL</c> goes in the output, whether written or by default.</summary>
+    public bool PlacesNullsFirst => NullsFirst ?? !Descending;
+
+    public OrderByClause(Expression expression, bool descending = false, bool? nullsFirst = null)
     {
         Expression = expression;
         Descending = descending;
+        NullsFirst = nullsFirst;
     }
+
+    /// <summary>
+    /// Turns an ascending comparison of two keys into their output order: negative when
+    /// <paramref name="left"/> comes first.
+    /// </summary>
+    public int OutputOrder(int ascending, object? left, object? right)
+    {
+        if (NullsFirst is { } first)
+        {
+            bool leftNull = left is null or DBNull;
+            bool rightNull = right is null or DBNull;
+            if (leftNull || rightNull)
+                return leftNull == rightNull ? 0 : leftNull == first ? -1 : 1;
+        }
+        return Descending ? -ascending : ascending;
+    }
+
+    /// <summary>The clause that gives the reverse output order.</summary>
+    public OrderByClause Reversed() =>
+        new(Expression, !Descending, NullsFirst is { } first ? !first : null);
+
+    /// <summary>The same direction and <c>NULL</c> placement on another expression.</summary>
+    public OrderByClause On(Expression expression) => new(expression, Descending, NullsFirst);
 }
 
 public sealed record CteDefinition : AstNode
@@ -464,6 +498,8 @@ public sealed record SetOperationStatement : Statement
     /// <summary>True for <c>UNION [ALL] BY NAME</c>: align inputs by column name rather than position,
     /// filling columns missing from either side with NULL.</summary>
     public bool ByName { get; init; }
+    /// <summary>True when preceded by <c>WITH RECURSIVE</c>.</summary>
+    public bool IsRecursive { get; init; }
 
     public SetOperationStatement(Statement left, SetOpType op, Statement right)
     {
@@ -1227,6 +1263,13 @@ public sealed record DropIndexStatement : Statement
     public DropIndexStatement(string name, TableReference? table, bool ifExists) { IndexName = name; Table = table; IfExists = ifExists; }
 }
 
+/// <summary><c>REINDEX name</c>: the name is an index, a table or a collation. A bare <c>REINDEX</c> parses as a no-op.</summary>
+public sealed record ReindexStatement : Statement
+{
+    public string Name { get; }
+    public ReindexStatement(string name) { Name = name; }
+}
+
 public sealed record DeclareStatement : Statement
 {
     public string VariableName { get; }
@@ -1412,6 +1455,14 @@ public sealed record FileOperationStatement : Statement
     public Expression? Password { get; }
     public Expression? KeyFile { get; }
     public Expression? PgpKey { get; }
+    /// <summary>ENCRYPT FILE with PGP_KEY: our private key, to sign while encrypting (ROADMAP FO11).</summary>
+    public Expression? SigningKey { get; init; }
+    /// <summary>Passphrase for <see cref="SigningKey"/>.</summary>
+    public Expression? SigningPassword { get; init; }
+    /// <summary>DECRYPT FILE with PGP_KEY: the sender's public key the signature must match.</summary>
+    public Expression? VerifyKey { get; init; }
+    /// <summary>ENCRYPT, DECRYPT, COMPRESS, DECOMPRESS: delete the source once the output is written (ROADMAP FO03).</summary>
+    public Expression? DeleteSource { get; init; }
     public Expression? DateSuffix { get; }
     public Expression? SuffixSeparator { get; }
     public bool DestinationIsDirectory { get; }
@@ -2806,6 +2857,11 @@ public sealed record SetConnectionEncryptionStatement(bool Enabled) : Statement
 
 /// <summary>SET WEEK_START_DAY = 'Monday' — configures the start-of-week day for RELDATE W/WS/WE anchors.</summary>
 public sealed record SetWeekStartDayStatement(string DayName) : Statement
+{
+}
+
+/// <summary>SET DATEFORMAT = 'MDY'|'DMY' — how slash dates in text are read for the rest of the script.</summary>
+public sealed record SetDateFormatStatement(string Order) : Statement
 {
 }
 

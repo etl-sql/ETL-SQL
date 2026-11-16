@@ -71,7 +71,6 @@ public static class CryptoUtils
             var hashAlgo = algo ?? HashAlgorithmName.SHA256;
             byte[] fullBytes = Convert.FromBase64String(cipherText.Substring(4));
 
-            int offset = 0;
             int iterations = Iterations;
             int keySize = KeySize;
 
@@ -94,32 +93,8 @@ public static class CryptoUtils
                 return Encoding.UTF8.GetString(plaintext);
             }
 
-            // Legacy AES-CBC payloads used version 1. Keep read compatibility.
-            if (fullBytes.Length > 0 && fullBytes[0] == 1)
-            {
-                offset = 1;
-            }
-
-            if (fullBytes.Length < offset + SaltSize + IvSize)
-                throw new ExecutionException("Invalid encrypted connection string format.");
-
-            byte[] salt = new byte[SaltSize];
-            byte[] iv = new byte[IvSize];
-            byte[] encrypted = new byte[fullBytes.Length - offset - SaltSize - IvSize];
-
-            Buffer.BlockCopy(fullBytes, offset, salt, 0, SaltSize);
-            Buffer.BlockCopy(fullBytes, offset + SaltSize, iv, 0, IvSize);
-            Buffer.BlockCopy(fullBytes, offset + SaltSize + IvSize, encrypted, 0, encrypted.Length);
-
-            byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, hashAlgo, keySize / 8);
-
-            using var aes = Aes.Create();
-            using var decryptor = aes.CreateDecryptor(key, iv);
-            using var ms = new MemoryStream(encrypted);
-            using var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read);
-            using var sr = new StreamReader(cs, Encoding.UTF8);
-
-            return sr.ReadToEnd();
+            // Only the authenticated (AES-GCM) format is accepted.
+            throw new ExecutionException("Unsupported encrypted value format. Encrypt the value again with 'etl-sql encrypt'.");
         }
         catch (CryptographicException)
         {
@@ -192,7 +167,15 @@ public static class CryptoUtils
                     throw new ExecutionException("Invalid encrypted file format.");
 
                 var (encryptionKey, hmacKey) = DeriveFileKeys(password, v2Salt, hashAlgo);
-                VerifyAuthenticatedFile(fsIn, v2Salt, v2Iv, hmacKey, cipherStart, cipherLength);
+                try
+                {
+                    VerifyAuthenticatedFile(fsIn, v2Salt, v2Iv, hmacKey, cipherStart, cipherLength);
+                }
+                catch (CryptographicException)
+                {
+                    throw new ExecutionException(
+                        $"Could not decrypt '{Path.GetFileName(inputFile)}': the password is wrong, or the file was changed after it was encrypted.");
+                }
 
                 fsIn.Position = cipherStart;
                 using var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
@@ -206,21 +189,9 @@ public static class CryptoUtils
                 return;
             }
 
-            fsIn.Position = 0;
-            byte[] salt = new byte[SaltSize];
-            byte[] iv = new byte[IvSize];
-            fsIn.ReadExactly(salt, 0, SaltSize);
-            fsIn.ReadExactly(iv, 0, IvSize);
-
-            byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, KeySize / 8);
-
-            using var aes = Aes.Create();
-            using var decryptor = aes.CreateDecryptor(key, iv);
-            using (var cs = new CryptoStream(fsIn, decryptor, CryptoStreamMode.Read))
-            using (var fsOut = new FileStream(outputFile, FileMode.Create))
-            {
-                cs.CopyTo(fsOut);
-            }
+            throw new ExecutionException(
+                $"Could not decrypt '{Path.GetFileName(inputFile)}': it was not encrypted with PASSWORD by ETL-SQL. " +
+                "It may be plain text, encrypted with KEYFILE or PGP_KEY, or from an older format; decrypt it with the method that encrypted it.");
         }
     }
 
@@ -249,6 +220,7 @@ public static class CryptoUtils
                 throw new ExecutionException("Invalid encrypted file format.");
 
             var (encryptionKey, hmacKey) = DeriveFileKeys(password, salt, hashAlgo);
+            VerifyStreamTag(fsIn, hmacKey, cipherStart, cipherLength, FileMagicV2, salt, iv);
             var limited = new LimitedReadStream(fsIn, cipherLength);
             var aes = Aes.Create();
             aes.Key = encryptionKey;
@@ -257,16 +229,7 @@ public static class CryptoUtils
             return new ChainedStream(new CryptoStream(limited, decryptor, CryptoStreamMode.Read), aes);
         }
 
-        fsIn.Position = 0;
-        byte[] saltV1 = new byte[SaltSize];
-        byte[] ivV1 = new byte[IvSize];
-        fsIn.ReadExactly(saltV1, 0, SaltSize);
-        fsIn.ReadExactly(ivV1, 0, IvSize);
-
-        byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, saltV1, Iterations, hashAlgo, KeySize / 8);
-        var aesV1 = Aes.Create();
-        var decryptorV1 = aesV1.CreateDecryptor(key, ivV1);
-        return new ChainedStream(new CryptoStream(fsIn, decryptorV1, CryptoStreamMode.Read), aesV1);
+        throw new ExecutionException("Unsupported encrypted file format. Encrypt the file again.");
     }
 
     public static Stream DecryptStreamWithSsh(Stream fsIn, string keyFile, string? passphrase = null)
@@ -295,11 +258,13 @@ public static class CryptoUtils
                 throw new ExecutionException("Invalid SSH encrypted file key material.");
 
             byte[] aesKey = keyMaterial.AsSpan(0, 32).ToArray();
+            byte[] hmacKey = keyMaterial.AsSpan(32, 32).ToArray();
             var cipherStart = fsIn.Position;
             var cipherLength = fsIn.Length - cipherStart - FileTagSize;
             if (cipherLength < 0)
                 throw new ExecutionException("Invalid SSH encrypted file format.");
 
+            VerifyStreamTag(fsIn, hmacKey, cipherStart, cipherLength, SshFileMagicV2, lenBytes, encryptedKey, iv);
             var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
             var aes = Aes.Create();
             var decryptor = aes.CreateDecryptor(aesKey, iv);
@@ -369,6 +334,37 @@ public static class CryptoUtils
         fsIn.ReadExactly(expectedTag, 0, expectedTag.Length);
         if (!CryptographicOperations.FixedTimeEquals(hmac.Hash!, expectedTag))
             throw new CryptographicException("Encrypted file authentication failed.");
+    }
+
+    /// <summary>
+    /// Checks the HMAC-SHA256 tag that follows the ciphertext before any of it is decrypted, then
+    /// leaves <paramref name="stream"/> at the start of the ciphertext. The streaming decryptors
+    /// used to return plaintext from a file nobody had authenticated.
+    /// </summary>
+    internal static void VerifyStreamTag(Stream stream, byte[] hmacKey, long cipherStart, long cipherLength, params byte[][] header)
+    {
+        using var hmac = new HMACSHA256(hmacKey);
+        foreach (var part in header)
+            hmac.TransformBlock(part, 0, part.Length, null, 0);
+
+        stream.Position = cipherStart;
+        var buffer = new byte[81920];
+        var remaining = cipherLength;
+        while (remaining > 0)
+        {
+            var read = stream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+            if (read <= 0)
+                throw new CryptographicException("Encrypted stream is truncated.");
+            hmac.TransformBlock(buffer, 0, read, null, 0);
+            remaining -= read;
+        }
+        hmac.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+
+        var expectedTag = new byte[FileTagSize];
+        stream.ReadExactly(expectedTag, 0, expectedTag.Length);
+        if (!CryptographicOperations.FixedTimeEquals(hmac.Hash!, expectedTag))
+            throw new CryptographicException("Encrypted stream authentication failed.");
+        stream.Position = cipherStart;
     }
 
     private static void WriteAndHash(Stream stream, HMAC hmac, byte[] bytes)
@@ -507,7 +503,16 @@ public static class CryptoUtils
                 byte[] ivV2 = new byte[IvSize];
                 await fsIn.ReadExactlyAsync(ivV2, cancellationToken).ConfigureAwait(false);
 
-                byte[] keyMaterial = rsa.Decrypt(encryptedKeyV2, RSAEncryptionPadding.OaepSHA256);
+                byte[] keyMaterial;
+                try
+                {
+                    keyMaterial = rsa.Decrypt(encryptedKeyV2, RSAEncryptionPadding.OaepSHA256);
+                }
+                catch (CryptographicException)
+                {
+                    throw new ExecutionException(
+                        $"Could not decrypt '{Path.GetFileName(inputFile)}': the private key does not match the public key the file was encrypted to.");
+                }
                 if (keyMaterial.Length < 64)
                     throw new ExecutionException("Invalid SSH encrypted file key material.");
 
@@ -518,7 +523,15 @@ public static class CryptoUtils
                 if (cipherLength < 0)
                     throw new ExecutionException("Invalid SSH encrypted file format.");
 
-                await VerifyAuthenticatedSshFileAsync(fsIn, encryptedKeyV2, ivV2, hmacKeyV2, cipherStart, cipherLength, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await VerifyAuthenticatedSshFileAsync(fsIn, encryptedKeyV2, ivV2, hmacKeyV2, cipherStart, cipherLength, cancellationToken).ConfigureAwait(false);
+                }
+                catch (CryptographicException)
+                {
+                    throw new ExecutionException(
+                        $"Could not decrypt '{Path.GetFileName(inputFile)}': the file was changed after it was encrypted.");
+                }
 
                 fsIn.Position = cipherStart;
                 using var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
@@ -530,26 +543,9 @@ public static class CryptoUtils
                 return;
             }
 
-            fsIn.Position = 0;
-            byte[] lenBytes = new byte[4];
-            await fsIn.ReadExactlyAsync(lenBytes, cancellationToken).ConfigureAwait(false);
-            int keyLen = BitConverter.ToInt32(lenBytes, 0);
-
-            byte[] encryptedKey = new byte[keyLen];
-            await fsIn.ReadExactlyAsync(encryptedKey, cancellationToken).ConfigureAwait(false);
-
-            byte[] iv = new byte[IvSize];
-            await fsIn.ReadExactlyAsync(iv, cancellationToken).ConfigureAwait(false);
-
-            byte[] aesKey = rsa.Decrypt(encryptedKey, RSAEncryptionPadding.OaepSHA256);
-
-            using var aes = Aes.Create();
-            using var decryptor = aes.CreateDecryptor(aesKey, iv);
-            await using (var cs = new CryptoStream(fsIn, decryptor, CryptoStreamMode.Read))
-            await using (var fsOut = new FileStream(outputFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
-            {
-                await cs.CopyToAsync(fsOut, cancellationToken).ConfigureAwait(false);
-            }
+            throw new ExecutionException(
+                $"Could not decrypt '{Path.GetFileName(inputFile)}': it was not encrypted with KEYFILE by ETL-SQL. " +
+                "It may be plain text, encrypted with PASSWORD or PGP_KEY, or from an older format; decrypt it with the method that encrypted it.");
         }
     }
 
@@ -725,8 +721,7 @@ public static class CryptoUtils
 
     // Authenticated (encrypt-then-MAC) machine-bound payload format:
     //   [MachineMagicG2 (8)] [IV (16)] [AES-CBC ciphertext] [HMAC-SHA256 tag (32)]
-    // The HMAC covers magic||IV||ciphertext. Pre-magic payloads are legacy CBC-only (no MAC) and are
-    // still read for backward compatibility — see UnprotectGeneric.
+    // The HMAC covers magic||IV||ciphertext.
     private static readonly byte[] MachineMagicG2 = Encoding.ASCII.GetBytes("ETLSQLG2");
 
     internal static byte[] ProtectGeneric(byte[] plainBytes, string? entropy)
@@ -797,23 +792,7 @@ public static class CryptoUtils
             return msOut.ToArray();
         }
 
-        // Legacy CBC-only payloads (IV prepended, no MAC) used the raw machine key directly. Kept for
-        // read compatibility with data protected before authenticated machine encryption was added.
-        if (cipherBytes.Length < 16)
-            throw new ExecutionException("Machine-protected payload is too short.");
-        using var legacyAes = Aes.Create();
-        legacyAes.Key = material;
-        byte[] legacyIv = new byte[16];
-        Buffer.BlockCopy(cipherBytes, 0, legacyIv, 0, legacyIv.Length);
-        legacyAes.IV = legacyIv;
-        using var legacyDecryptor = legacyAes.CreateDecryptor();
-        using var legacyOut = new MemoryStream();
-        using (var msIn = new MemoryStream(cipherBytes, legacyIv.Length, cipherBytes.Length - legacyIv.Length))
-        using (var cs = new CryptoStream(msIn, legacyDecryptor, CryptoStreamMode.Read))
-        {
-            cs.CopyTo(legacyOut);
-        }
-        return legacyOut.ToArray();
+        throw new ExecutionException("Unsupported machine-protected payload format.");
     }
 
     private static (byte[] EncKey, byte[] MacKey) DeriveMachineSubKeys(byte[] material)
@@ -922,29 +901,118 @@ public static class CryptoUtils
         return SHA256.HashData(Encoding.UTF8.GetBytes(key));
     }
     /// <summary>
-    /// Encrypts a file using a PGP public key.
+    /// Encrypts a file to a PGP public key and, when <paramref name="signingKeyFile"/> is given, signs it
+    /// with that private key in the same pass (ROADMAP FO11).
     /// </summary>
-    public static async Task EncryptFileWithPgp(string inputFile, string outputFile, string keyFile, bool overwrite)
+    public static async Task EncryptFileWithPgp(string inputFile, string outputFile, string keyFile, bool overwrite,
+        string? signingKeyFile = null, string? signingPassphrase = null)
     {
         if (File.Exists(outputFile) && !overwrite)
             throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
 
-        var keys = new EncryptionKeys(new FileInfo(keyFile));
-        using var pgp = new PGP(keys);
-        await pgp.EncryptFileAsync(new FileInfo(inputFile), new FileInfo(outputFile));
+        // PgpCore leaves a partial output when signing fails (a wrong passphrase, a public key given
+        // as SIGNING_KEY), so write beside the destination and move into place only on success.
+        var tempFile = outputFile + ".etlsql-encrypt-" + Guid.NewGuid().ToString("N")[..12];
+        try
+        {
+            if (signingKeyFile == null)
+            {
+                using var pgp = new PGP(new EncryptionKeys(new FileInfo(keyFile)));
+                await pgp.EncryptFileAsync(new FileInfo(inputFile), new FileInfo(tempFile));
+            }
+            else
+            {
+                try
+                {
+                    var keys = new EncryptionKeys(new FileInfo(keyFile), new FileInfo(signingKeyFile), signingPassphrase ?? string.Empty);
+                    using var pgp = new PGP(keys);
+                    await pgp.EncryptAndSignAsync(new FileInfo(inputFile), new FileInfo(tempFile));
+                }
+                catch (Exception ex) when (ex is not ExecutionException and not IOException and not OperationCanceledException)
+                {
+                    throw SigningKeyError(signingKeyFile, ex);
+                }
+            }
+            File.Move(tempFile, outputFile, overwrite);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
     }
 
     /// <summary>
-    /// Decrypts a file using a PGP private key.
+    /// PgpCore reports a wrong passphrase with the key id and a public key as "No PGP secret keys";
+    /// name the clause instead. Neither the passphrase nor key material is echoed.
     /// </summary>
-    public static async Task DecryptFileWithPgp(string inputFile, string outputFile, string keyFile, string? passphrase, bool overwrite)
+    private static ExecutionException SigningKeyError(string signingKeyFile, Exception inner)
+    {
+        var name = Path.GetFileName(signingKeyFile);
+        var kind = inner.GetType().Name;
+        if (kind.Contains("Passphrase", StringComparison.Ordinal))
+            return new ExecutionException($"Could not sign with '{name}': the SIGNING_PASSWORD is wrong for this SIGNING_KEY.");
+        if (kind.Contains("KeyMaterial", StringComparison.Ordinal) || inner.Message.Contains("secret key", StringComparison.OrdinalIgnoreCase))
+            return new ExecutionException($"Could not sign with '{name}': SIGNING_KEY must be your PGP private key, not a public key.");
+        return new ExecutionException($"Could not sign with '{name}': it is not a usable PGP private key ({kind}).");
+    }
+
+    /// <summary>
+    /// Decrypts a file using a PGP private key. With <paramref name="verifyKeyFile"/>, the file must be
+    /// signed by that public key; an unsigned file, another signer or a changed file fails (ROADMAP FO11).
+    /// </summary>
+    public static async Task DecryptFileWithPgp(string inputFile, string outputFile, string keyFile, string? passphrase, bool overwrite,
+        string? verifyKeyFile = null)
     {
         if (File.Exists(outputFile) && !overwrite)
             throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
 
-        EncryptionKeys keys = new EncryptionKeys(new FileInfo(keyFile), passphrase ?? string.Empty);
-        using var pgp = new PGP(keys);
-        await pgp.DecryptFileAsync(new FileInfo(inputFile), new FileInfo(outputFile));
+        // Decrypt beside the destination and move it into place only on success, so a wrong key,
+        // a wrong passphrase, a failed signature check or a file that is not PGP data leaves no
+        // partial output (ROADMAP FO06, FO11). PgpCore writes the plaintext before it checks.
+        var tempFile = outputFile + ".etlsql-decrypt-" + Guid.NewGuid().ToString("N")[..12];
+        var name = Path.GetFileName(inputFile);
+        try
+        {
+            try
+            {
+                if (verifyKeyFile == null)
+                {
+                    using var pgp = new PGP(new EncryptionKeys(new FileInfo(keyFile), passphrase ?? string.Empty));
+                    await pgp.DecryptFileAsync(new FileInfo(inputFile), new FileInfo(tempFile));
+                }
+                else
+                {
+                    using var pgp = new PGP(new EncryptionKeys(new FileInfo(verifyKeyFile), new FileInfo(keyFile), passphrase ?? string.Empty));
+                    await pgp.DecryptAndVerifyAsync(new FileInfo(inputFile), new FileInfo(tempFile));
+                }
+            }
+            catch (MessageIntegrityException)
+            {
+                throw new ExecutionException($"Could not decrypt '{name}': the file was changed after it was encrypted.");
+            }
+            catch (Org.BouncyCastle.Bcpg.OpenPgp.PgpException ex) when (ex.InnerException is Org.BouncyCastle.Crypto.InvalidCipherTextException)
+            {
+                // The session key would not decrypt: PgpCore says "exception decrypting secret key",
+                // which reads like a wrong passphrase. It is a key the file was not encrypted to, or damage.
+                throw new ExecutionException(
+                    $"Could not decrypt '{name}': PGP_KEY is not the private key this file was encrypted to, or the file is damaged.");
+            }
+            catch (Org.BouncyCastle.Bcpg.OpenPgp.PgpException ex) when (verifyKeyFile != null && ex.Message.Contains("not signed", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ExecutionException($"Could not verify '{name}': it is not signed. No output was written.");
+            }
+            catch (Org.BouncyCastle.Bcpg.OpenPgp.PgpException ex) when (verifyKeyFile != null && ex.Message.Contains("verify", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ExecutionException(
+                    $"Could not verify '{name}': it was not signed by the VERIFY_KEY '{Path.GetFileName(verifyKeyFile)}', " +
+                    "or it was changed after it was signed. No output was written.");
+            }
+            File.Move(tempFile, outputFile, overwrite);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
     }
 
     /// <summary>

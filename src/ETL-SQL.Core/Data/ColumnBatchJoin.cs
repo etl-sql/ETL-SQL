@@ -119,6 +119,7 @@ public static class ColumnBatchJoinKernels
         if (leftColumn.ElementType == typeof(long)) return Join<long>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
         if (leftColumn.ElementType == typeof(double)) return Join<double>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
         if (leftColumn.ElementType == typeof(decimal)) return Join<decimal>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(DateOnly)) return Join<DateOnly>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
         if (leftColumn.ElementType == typeof(DateTime)) return Join<DateTime>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
         if (leftColumn.ElementType == typeof(DateTimeOffset)) return Join<DateTimeOffset>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
         if (leftColumn.ElementType == typeof(TimeSpan)) return Join<TimeSpan>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);

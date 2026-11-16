@@ -27,6 +27,7 @@ public class CreateConnectionStatementHandler(
     private readonly IConnectorRegistry _connectorRegistry = connectorRegistry;
     private readonly ILogger _logger = logger;
     private readonly IConfiguration? _config = config;
+    private readonly IConnectionCatalogProvider? _connectionCatalog = connectionCatalog;
     private readonly ConnectionSecretResolver _secretResolver = new(secretProvider);
     private readonly SharedConnectionExpander _sharedExpander = new(connectionCatalog);
 
@@ -55,6 +56,11 @@ public class CreateConnectionStatementHandler(
 
         if (IsUpsertMode(effectiveMode) && alreadyExists)
         {
+            if (context.CatalogBackedConnections.ContainsKey(stmt.ConnectionName))
+                throw new ExecutionException(
+                    $"Connection '{stmt.ConnectionName}' is backed by a SHARED: catalog entry and cannot be modified with CREATE OR ALTER CONNECTION.",
+                    null, stmt.Line, stmt.Column);
+
             // CREATE OR ALTER with existing connection — patches and preserves options
             if (existingDataSource == null) throw new ExecutionException($"Connection '{stmt.ConnectionName}' exists but its data source is null.");
             connectionType ??= existingDataSource.ConnectorType;
@@ -65,7 +71,7 @@ public class CreateConnectionStatementHandler(
             {
                 foreach (var kvp in stmt.Options)
                 {
-                    var val = StringifyOption(await context.EvaluateValue(kvp.Value, new Row(), decryptSensitive: true), kvp.Value);
+                    var val = StringifyOption(await context.EvaluateValue(kvp.Value, OptionRow(), decryptSensitive: true), kvp.Value);
                     options[kvp.Key] = val;
                 }
             }
@@ -86,8 +92,8 @@ public class CreateConnectionStatementHandler(
             {
                 foreach (var kvp in stmt.Options)
                 {
-                    var val = StringifyOption(await context.EvaluateValue(kvp.Value, new Row(), decryptSensitive: true), kvp.Value);
-                    options[kvp.Key] = Interpolate(val);
+                    var val = StringifyOption(await context.EvaluateValue(kvp.Value, OptionRow(), decryptSensitive: true), kvp.Value);
+                    options[kvp.Key] = Interpolate(val, context);
                 }
             }
         }
@@ -100,9 +106,10 @@ public class CreateConnectionStatementHandler(
         {
             target = context.DecryptValue(target);
         }
-        target = Interpolate(target ?? "");
+        target = Interpolate(target ?? "", context);
         IReadOnlyCollection<string>? entrySensitiveFields = null;
         GatewayResourceBinding? gatewayBinding = null;
+        bool isCatalogExpanded = false;
         if (SharedConnectionExpander.IsSharedReference(target))
         {
             var expanded = await _sharedExpander.ExpandAsync(
@@ -111,6 +118,7 @@ public class CreateConnectionStatementHandler(
             options = expanded.Options;
             entrySensitiveFields = expanded.SensitiveFields;
             gatewayBinding = expanded.Gateway;
+            isCatalogExpanded = true;
             // Remember that this alias came from the governed catalog. A durable artifact written
             // later in the run (a quarantine replay manifest) can then say its target is reopenable
             // through the same governed path, instead of a reader inferring it from the alias — a
@@ -136,10 +144,12 @@ public class CreateConnectionStatementHandler(
         }
 
         target = await _secretResolver.ResolveTargetAsync(
-            target, context.CancellationToken, connectionType, entrySensitiveFields);
+            target, context.CancellationToken, connectionType, entrySensitiveFields,
+            allowCatalogAuthorizedSecrets: isCatalogExpanded, context.ExecutionIdentity, _connectionCatalog);
         if (options != null)
             options = await _secretResolver.ResolveOptionsAsync(
-                options, context.CancellationToken, connectionType, entrySensitiveFields);
+                options, context.CancellationToken, connectionType, entrySensitiveFields,
+                allowCatalogAuthorizedSecrets: isCatalogExpanded, context.ExecutionIdentity, _connectionCatalog);
 
         var connector = _connectorRegistry.GetConnector(connectionType ?? string.Empty);
         if (connector == null)
@@ -272,6 +282,13 @@ public class CreateConnectionStatementHandler(
         return preview;
     }
 
+    /// <summary>
+    /// The row an option value is read against. An option takes a bare keyword
+    /// (<c>DELIMITER = PIPE</c>), which is not a name anything defines, so it must read as NULL here
+    /// for <see cref="StringifyOption"/> to use the keyword itself.
+    /// </summary>
+    private static Row OptionRow() => new() { MayLackColumns = true };
+
     private string StringifyOption(object? val, Expression? expr = null)
     {
         if (val is bool b) return b ? "ON" : "OFF";
@@ -281,13 +298,19 @@ public class CreateConnectionStatementHandler(
         return "";
     }
 
-    private string Interpolate(string value)
+    /// <summary>
+    /// Replaces <c>${NAME}</c> with the host environment variable. COMPAT_BREAK: 0.22.0 — a name
+    /// must be in Security:AllowedEnvVars, the same list ENV() uses; a hosted script could otherwise
+    /// read the service's own secrets (Portal__Jwt__Secret) into a connection it controls.
+    /// </summary>
+    private string Interpolate(string value, IExecutionContext context)
     {
         if (string.IsNullOrEmpty(value)) return value;
 
         return Regex.Replace(value, @"\${(\w+)}", match =>
         {
             var varName = match.Groups[1].Value;
+            context.SecurityService.ValidateEnvVar(varName);
             var envValue = Environment.GetEnvironmentVariable(varName);
             if (envValue == null)
                 _logger.Warning("CREATE CONNECTION: environment variable '{VarName}' is not set; placeholder left as-is.", varName);

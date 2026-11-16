@@ -185,25 +185,7 @@ public sealed class ScriptDataModelService : IScriptDataModelProjection
 
         public void Visit(Statement statement)
         {
-            // A CTE is scoped to the statement that declares it, and inside that statement its name
-            // is not a table. Registering the CTEs first is what stops `FROM recent` from also
-            // conjuring a table entity called `recent` beside the CTE of the same name.
-            var scope = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var cte in statement.Ctes ?? [])
-            {
-                var cteId = EntityId("cte", cte.Name);
-                Add(new DataModelEntity(
-                    cteId, cte.Name, "cte", null,
-                    (cte.ColumnNames ?? []).Select(name => new DataModelColumn(name)).ToList(),
-                    cte.Line,
-                    "Scoped to the statement that declares it"));
-                if (cte.Query is SelectStatement cteQuery)
-                {
-                    VisitSelect(cteQuery, scope);
-                    foreach (var source in SourcesOf(cteQuery, scope)) AddDerivation(source, cteId, cte.Line);
-                }
-                scope.Add(cte.Name);
-            }
+            var outerScope = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             switch (statement)
             {
@@ -218,8 +200,13 @@ public sealed class ScriptDataModelService : IScriptDataModelProjection
                         connection.ConnectionType));
                     break;
 
-                case SelectStatement select:
-                    VisitSelect(select, scope);
+                case SelectStatement or SetOperationStatement:
+                    VisitQuery(statement, outerScope);
+                    break;
+
+                case InsertStatement { SelectQuery: not null } insert:
+                    var insertScope = RegisterCtes(insert.Ctes, outerScope);
+                    VisitQuery(insert.SelectQuery, insertScope);
                     break;
 
                 // Remote pushdown. The block's SQL is text handed to the database, not something
@@ -227,7 +214,7 @@ public sealed class ScriptDataModelService : IScriptDataModelProjection
                 // connection it was pushed to. Naming tables out of an unparsed string would be the
                 // same invention this projection refuses everywhere else.
                 case ExecutePushdownStatement pushdown when pushdown.IntoTable is { } into:
-                    if (Reference(into, scope) is { } produced
+                    if (Reference(into, outerScope) is { } produced
                         && ConnectionNameOf(pushdown.ConnectionName) is { } pushedTo)
                     {
                         var connectionId = EntityId("connection", pushedTo);
@@ -238,6 +225,49 @@ public sealed class ScriptDataModelService : IScriptDataModelProjection
                             Detail = "Built by SQL pushed down to " + pushedTo,
                         };
                     }
+                    break;
+
+                default:
+                    RegisterCtes(statement.Ctes, outerScope);
+                    break;
+            }
+        }
+
+        private HashSet<string> RegisterCtes(IReadOnlyList<CteDefinition>? ctes, IReadOnlySet<string> outerScope)
+        {
+            // A CTE is scoped to the query or statement that declares it, and inside that scope
+            // its name is not a table. Registering CTEs in order stops `FROM recent` from also
+            // conjuring a table entity called `recent` beside the CTE of the same name.
+            var scope = new HashSet<string>(outerScope, StringComparer.OrdinalIgnoreCase);
+            foreach (var cte in ctes ?? [])
+            {
+                var cteId = EntityId("cte", cte.Name);
+                Add(new DataModelEntity(
+                    cteId, cte.Name, "cte", null,
+                    (cte.ColumnNames ?? []).Select(name => new DataModelColumn(name)).ToList(),
+                    cte.Line,
+                    "Scoped to the statement that declares it"));
+                if (cte.Query is SelectStatement or SetOperationStatement)
+                {
+                    VisitQuery(cte.Query, scope);
+                    foreach (var source in SourcesOf(cte.Query, scope)) AddDerivation(source, cteId, cte.Line);
+                }
+                scope.Add(cte.Name);
+            }
+            return scope;
+        }
+
+        private void VisitQuery(Statement query, IReadOnlySet<string> outerScope)
+        {
+            var scope = RegisterCtes(query.Ctes, outerScope);
+            switch (query)
+            {
+                case SelectStatement select:
+                    VisitSelect(select, scope);
+                    break;
+                case SetOperationStatement setOp:
+                    VisitQuery(setOp.Left, scope);
+                    VisitQuery(setOp.Right, scope);
                     break;
             }
         }
@@ -251,9 +281,12 @@ public sealed class ScriptDataModelService : IScriptDataModelProjection
 
         private void VisitSelect(SelectStatement select, IReadOnlySet<string> scope)
         {
+            if (select.FromTable?.Subquery != null) VisitQuery(select.FromTable.Subquery, scope);
             var from = Reference(select.FromTable, scope);
             foreach (var join in select.Joins ?? [])
             {
+                if (join.Table?.Subquery != null) VisitQuery(join.Table.Subquery, scope);
+                VisitExpressionSubqueries(join.Condition, scope);
                 var target = Reference(join.Table, scope);
                 if (from is null || target is null) continue;
                 foreach (var (leftColumn, rightColumn) in EqualityColumns(join.Condition))
@@ -264,6 +297,11 @@ public sealed class ScriptDataModelService : IScriptDataModelProjection
                 }
             }
 
+            foreach (var col in select.Columns ?? []) VisitExpressionSubqueries(col.Expression, scope);
+            VisitExpressionSubqueries(select.WhereClause, scope);
+            VisitExpressionSubqueries(select.HavingClause, scope);
+            VisitExpressionSubqueries(select.QualifyClause, scope);
+
             // SELECT … INTO #temp is the shape most of an ETL-SQL model is made of.
             if (select.IntoTable is { } into && Reference(into, scope) is { } target2)
             {
@@ -271,12 +309,82 @@ public sealed class ScriptDataModelService : IScriptDataModelProjection
             }
         }
 
-        /// <summary>Every entity a select reads from, its joins included.</summary>
-        private IEnumerable<string> SourcesOf(SelectStatement select, IReadOnlySet<string> scope)
+        private void VisitExpressionSubqueries(Expression? expr, IReadOnlySet<string> scope)
         {
-            if (Reference(select.FromTable, scope) is { } from) yield return from;
-            foreach (var join in select.Joins ?? [])
-                if (Reference(join.Table, scope) is { } joined) yield return joined;
+            switch (expr)
+            {
+                case SubqueryExpression subq: VisitQuery(subq.Query, scope); break;
+                case ExistsExpression exists: VisitQuery(exists.Subquery, scope); break;
+                case InExpression inExpr:
+                    VisitExpressionSubqueries(inExpr.Left, scope);
+                    VisitExpressionSubqueries(inExpr.Right, scope);
+                    break;
+                case BinaryExpression bin:
+                    VisitExpressionSubqueries(bin.Left, scope);
+                    VisitExpressionSubqueries(bin.Right, scope);
+                    break;
+                case UnaryExpression un: VisitExpressionSubqueries(un.Expression, scope); break;
+                case FunctionCallExpression func:
+                    foreach (var arg in func.Arguments) VisitExpressionSubqueries(arg, scope);
+                    VisitExpressionSubqueries(func.Filter, scope);
+                    break;
+                case CaseExpression c:
+                    VisitExpressionSubqueries(c.InputExpression, scope);
+                    foreach (var w in c.WhenClauses)
+                    {
+                        VisitExpressionSubqueries(w.Condition, scope);
+                        VisitExpressionSubqueries(w.Result, scope);
+                    }
+                    VisitExpressionSubqueries(c.ElseResult, scope);
+                    break;
+                case BetweenExpression b:
+                    VisitExpressionSubqueries(b.Left, scope);
+                    VisitExpressionSubqueries(b.Start, scope);
+                    VisitExpressionSubqueries(b.End, scope);
+                    break;
+                case IsNullExpression n: VisitExpressionSubqueries(n.Expression, scope); break;
+                case IsDistinctFromExpression d:
+                    VisitExpressionSubqueries(d.Left, scope);
+                    VisitExpressionSubqueries(d.Right, scope);
+                    break;
+                case LikeExpression l:
+                    VisitExpressionSubqueries(l.Left, scope);
+                    VisitExpressionSubqueries(l.Pattern, scope);
+                    VisitExpressionSubqueries(l.EscapeChar, scope);
+                    break;
+                case ListExpression list:
+                    foreach (var item in list.Items) VisitExpressionSubqueries(item, scope);
+                    break;
+                case AtTimeZoneExpression atz:
+                    VisitExpressionSubqueries(atz.Left, scope);
+                    VisitExpressionSubqueries(atz.TimeZone, scope);
+                    break;
+            }
+        }
+
+        /// <summary>Every entity a query reads from, its joins and set-operation branches included.</summary>
+        private IEnumerable<string> SourcesOf(Statement query, IReadOnlySet<string> outerScope)
+        {
+            IReadOnlySet<string> scope = outerScope;
+            if (query.Ctes is { Count: > 0 })
+            {
+                var extended = new HashSet<string>(outerScope, StringComparer.OrdinalIgnoreCase);
+                foreach (var cte in query.Ctes) extended.Add(cte.Name);
+                scope = extended;
+            }
+
+            switch (query)
+            {
+                case SelectStatement select:
+                    if (Reference(select.FromTable, scope) is { } from) yield return from;
+                    foreach (var join in select.Joins ?? [])
+                        if (Reference(join.Table, scope) is { } joined) yield return joined;
+                    break;
+                case SetOperationStatement setOp:
+                    foreach (var s in SourcesOf(setOp.Left, scope)) yield return s;
+                    foreach (var s in SourcesOf(setOp.Right, scope)) yield return s;
+                    break;
+            }
         }
 
         /// <summary>

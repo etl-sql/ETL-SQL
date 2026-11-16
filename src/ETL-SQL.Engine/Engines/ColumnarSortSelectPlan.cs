@@ -14,13 +14,13 @@ internal sealed class ColumnarSortSelectPlan
     private readonly SelectStatement _statement;
     private readonly string[] _sourceColumns;
     private readonly string[] _outputColumns;
-    private readonly (string Column, bool Descending)[] _orderKeys;
+    private readonly (string Column, bool Descending, bool NullsFirst)[] _orderKeys;
 
     private ColumnarSortSelectPlan(
         SelectStatement statement,
         string[] sourceColumns,
         string[] outputColumns,
-        (string Column, bool Descending)[] orderKeys)
+        (string Column, bool Descending, bool NullsFirst)[] orderKeys)
     {
         _statement = statement;
         _sourceColumns = sourceColumns;
@@ -46,14 +46,14 @@ internal sealed class ColumnarSortSelectPlan
         var outputColumns = statement.Columns.Select((column, index) => column.Alias ?? sourceColumns[index]).ToArray();
         if (outputColumns.Distinct(StringComparer.OrdinalIgnoreCase).Count() != outputColumns.Length) return false;
         var orderKeys = statement.OrderBy.Select(order =>
-            (((IdentifierExpression)order.Expression).Name.Split('.').Last(), order.Descending)).ToArray();
+            (((IdentifierExpression)order.Expression).Name.Split('.').Last(), order.Descending, order.PlacesNullsFirst)).ToArray();
         plan = new ColumnarSortSelectPlan(statement, sourceColumns, outputColumns, orderKeys);
         return true;
     }
 
     public async Task<Execution?> TryOpenAsync(IExecutionContext context)
     {
-        var dataSource = await context.ResolveDataSourceAsync(_statement.FromTable);
+        var dataSource = await context.ResolveReadSourceAsync(_statement.FromTable);
         if (dataSource is not IReplayableColumnarDataSource source
             || dataSource is not IEstimatedCardinalityDataSource estimate)
             return null;
@@ -61,8 +61,10 @@ internal sealed class ColumnarSortSelectPlan
         var operatorBudget = (long)context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
         if (operatorBudget > 0 && estimatedBytes > operatorBudget) return null;
 
+        // Without NULLS FIRST or NULLS LAST, NULL sorts lowest, as in the row sort: first for ASC
+        // and last for DESC.
         var keys = _orderKeys.Select(key => new NativeSortKey(
-            key.Column, key.Descending, NullsFirst: true,
+            key.Column, key.Descending, key.NullsFirst,
             context.CaseSensitiveComparison ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)).ToArray();
         var batches = new List<ColumnBatch>();
         var runs = new List<NativeSortRun>();

@@ -989,7 +989,8 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
                 var type when type == typeof(float) => Convert.ToSingle(converted),
                 var type when type == typeof(double) => Convert.ToDouble(converted),
                 var type when type == typeof(decimal) => Convert.ToDecimal(converted),
-                var type when type == typeof(DateTime) => Convert.ToDateTime(converted),
+                var type when type == typeof(DateOnly) => converted is DateOnly d ? d : DateOnly.FromDateTime(CoerceDateTime(converted)),
+                var type when type == typeof(DateTime) => CoerceDateTime(converted),
                 var type when type == typeof(TimeSpan) => converted is TimeSpan span ? span : TimeSpan.Parse(converted.ToString()!),
                 var type when type == typeof(Guid) => converted is Guid guid ? guid : Guid.Parse(converted.ToString()!),
                 _ => converted.ToString() ?? string.Empty
@@ -997,6 +998,14 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
         }
 
         private object Normalize(object value) => Normalize(value, _definition);
+
+        private static DateTime CoerceDateTime(object value) => value switch
+        {
+            DateTime dt => dt,
+            DateOnly d => d.ToDateTime(TimeOnly.MinValue),
+            DateTimeOffset dto => dto.DateTime,
+            _ => EvaluationUtils.TryToDateTime(value, out var parsed) ? parsed : Convert.ToDateTime(value)
+        };
 
         private static IKeySet CreateKeySet(Type type)
         {
@@ -1007,6 +1016,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
             if (type == typeof(float)) return new KeySet<float>();
             if (type == typeof(double)) return new KeySet<double>();
             if (type == typeof(decimal)) return new KeySet<decimal>();
+            if (type == typeof(DateOnly)) return new KeySet<DateOnly>();
             if (type == typeof(DateTime)) return new KeySet<DateTime>();
             if (type == typeof(TimeSpan)) return new KeySet<TimeSpan>();
             if (type == typeof(Guid)) return new KeySet<Guid>();
@@ -1105,6 +1115,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
                             foreach (var part in decimal.GetBits(item)) writer.Write(part);
                             break;
                         case DateTime item: writer.Write(item.ToBinary()); break;
+                        case DateOnly item: writer.Write(item.DayNumber); break;
                         case TimeSpan item: writer.Write(item.Ticks); break;
                         case Guid item: writer.Write(item.ToByteArray()); break;
                         case string item: writer.Write(item); break;

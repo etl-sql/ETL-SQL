@@ -42,9 +42,11 @@ public class ReportsController : ControllerBase
     private readonly ReportPublishingPolicyService publishingPolicy;
     private readonly DatasetTenantScope datasetScope;
     private readonly PortalTenantCatalogScope catalogScope;
+    private readonly RequestTenantContextAccessor? tenantAccessor;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, PortalTenantLineageCatalog lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies, LineageImpactService lineageImpact, ReportPublishingPolicyService publishingPolicy, DatasetTenantScope? datasetScope = null, PortalTenantCatalogScope? catalogScope = null)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, PortalTenantLineageCatalog lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies, LineageImpactService lineageImpact, ReportPublishingPolicyService publishingPolicy, DatasetTenantScope? datasetScope = null, PortalTenantCatalogScope? catalogScope = null, RequestTenantContextAccessor? tenantAccessor = null)
     {
+        this.tenantAccessor = tenantAccessor;
         this.db = db;
         this.audit = audit;
         this.portalConfig = portalConfig;
@@ -93,6 +95,27 @@ public class ReportsController : ControllerBase
         if (IsAdmin) return true;
         var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
         return permission.AtLeast(FolderPermission.Manage);
+    }
+
+    /// <summary>
+    /// On a Shared host an anonymous share link or embed token is the request's only credential, so
+    /// the tenant comes from the row it located, exactly as a refresh secret locates its session. A
+    /// request that already carries a different verified tenant is refused rather than rescoped.
+    /// </summary>
+    private bool TryEstablishAnonymousTenant(Report report)
+    {
+        if (!portalConfig.SharedTenancy.Enabled) return true;
+        if (tenantAccessor is null) return false;
+        try
+        {
+            tenantAccessor.SetVerifiedCredential(
+                ETL_SQL.Core.Multitenancy.TenantContext.FromVerifiedCredential(report.TenantId));
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private async Task<bool> CreatorCanResolveAsync(
@@ -174,12 +197,14 @@ public class ReportsController : ControllerBase
                 .TrimEnd('=')
                 .Replace('+', '-')
                 .Replace('/', '_');
-            if (!await db.ReportShareLinks.AnyAsync(l => l.Token == token))
+            var hash = AnonymousReportTokens.Hash(token);
+            if (!await db.ReportShareLinks.AnyAsync(l => l.Token == hash))
                 return token;
         }
     }
 
-    private ReportShareLinkDto ToShareLinkDto(ReportShareLink link)
+    /// <param name="token">The raw token, known only in the response that creates the link.</param>
+    private ReportShareLinkDto ToShareLinkDto(ReportShareLink link, string? token = null)
     {
         var report = link.Report;
         var folderPath = report.Folder?.Path ?? "";
@@ -189,8 +214,8 @@ public class ReportsController : ControllerBase
             report.Name,
             folderPath,
             link.Name,
-            link.Token,
-            $"{Request.Scheme}://{Request.Host}/api/share/{link.Token}",
+            token,
+            token is null ? null : $"{Request.Scheme}://{Request.Host}/api/share/{token}",
             link.CreatedBy,
             link.CreatedAt,
             link.ExpiresAt,
@@ -203,12 +228,14 @@ public class ReportsController : ControllerBase
         {
             var bytes = RandomNumberGenerator.GetBytes(32);
             var token = Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-            if (!await db.ReportEmbedTokens.AnyAsync(t => t.Token == token))
+            var hash = AnonymousReportTokens.Hash(token);
+            if (!await db.ReportEmbedTokens.AnyAsync(t => t.Token == hash))
                 return token;
         }
     }
 
-    private ReportEmbedTokenDto ToEmbedTokenDto(ReportEmbedToken token)
+    /// <param name="rawToken">The raw token, known only in the response that creates it.</param>
+    private ReportEmbedTokenDto ToEmbedTokenDto(ReportEmbedToken token, string? rawToken = null)
     {
         var report = token.Report;
         return new ReportEmbedTokenDto(
@@ -216,8 +243,8 @@ public class ReportsController : ControllerBase
             token.ReportId,
             report.Name,
             token.Name,
-            token.Token,
-            $"{Request.Scheme}://{Request.Host}/api/embed/{token.Token}",
+            rawToken,
+            rawToken is null ? null : $"{Request.Scheme}://{Request.Host}/api/embed/{rawToken}",
             token.CreatedBy,
             token.CreatedAt,
             token.ExpiresAt,
@@ -231,8 +258,6 @@ public class ReportsController : ControllerBase
             view.Id,
             view.ReportId,
             view.Name,
-            DeserializeDictionary(view.ParametersJson),
-            DeserializeDictionary(view.FiltersJson),
             view.StateJson,
             view.ScriptHash,
             view.IsDefault,
@@ -243,19 +268,13 @@ public class ReportsController : ControllerBase
     }
 
     /// <summary>
-    /// Reads a saved view as the shared resolved-state envelope. Views written before the envelope
-    /// existed carry only <c>ParametersJson</c>/<c>FiltersJson</c>, so they are converted on read and
-    /// converge on the same typed shape without a data migration.
+    /// Reads the single stored resolved-state envelope. The schema migration upgrades flat maps.
     /// </summary>
     private static ResolvedReportState BuildSavedViewEnvelope(SavedReportView view)
     {
-        if (!string.IsNullOrWhiteSpace(view.StateJson))
-        {
-            var parsed = ResolvedReportState.FromJson(view.StateJson);
-            parsed.ScriptHash ??= view.ScriptHash;
-            return parsed;
-        }
-        return ResolvedReportState.FromLegacy(view.ParametersJson, view.FiltersJson, view.ScriptHash);
+        var parsed = ResolvedReportState.FromJson(view.StateJson);
+        parsed.ScriptHash ??= view.ScriptHash;
+        return parsed;
     }
 
     /// <summary>Normalizes a script hash for comparison; Portal stores them as <c>sha256:hex</c>.</summary>
@@ -282,18 +301,15 @@ public class ReportsController : ControllerBase
     }
 
     /// <summary>
-    /// Produces the canonical <c>StateJson</c> to persist. An explicit envelope from the client wins;
-    /// otherwise a legacy parameter/filter map is upgraded so every stored view carries an envelope.
+    /// Produces the canonical <c>StateJson</c> to persist from a client envelope or empty state.
     /// Returns false when the supplied envelope is not valid JSON.
     /// </summary>
     private static bool TryBuildStateJson(
         string? requestedStateJson,
-        Dictionary<string, string>? parameters,
-        Dictionary<string, string>? filters,
         string? scriptHash,
         out string? stateJson)
     {
-        stateJson = null;
+        stateJson = new ResolvedReportState { ScriptHash = scriptHash }.ToJson();
         if (!string.IsNullOrWhiteSpace(requestedStateJson))
         {
             if (!ResolvedReportState.TryFromJson(requestedStateJson, out var envelope, out _))
@@ -303,12 +319,6 @@ public class ReportsController : ControllerBase
             return true;
         }
 
-        if ((parameters is null || parameters.Count == 0) && (filters is null || filters.Count == 0))
-            return true;
-
-        var legacy = ResolvedReportState
-            .FromLegacy(SerializeDictionary(parameters), SerializeDictionary(filters), scriptHash);
-        stateJson = legacy.ToJson();
         return true;
     }
 
@@ -323,8 +333,6 @@ public class ReportsController : ControllerBase
             alert.VisualName,
             alert.Operator,
             alert.Threshold,
-            alert.Recipient,
-            alert.SmtpAlias,
             alert.IsActive,
             alert.Notifications
                 .OrderBy(n => n.OrchestratorAlias)
@@ -992,12 +1000,14 @@ public class ReportsController : ControllerBase
         if (await catalogScope.ReportShareLinks.AnyAsync(l => l.ReportId == id && l.Name == name))
             return Conflict(new { error = $"A share link named '{name}' already exists for this report." });
 
+        // COMPAT_BREAK: 0.22.0 — only the token's hash is stored; the link is shown once, here.
+        var rawToken = await GenerateUniqueShareTokenAsync();
         var link = new ReportShareLink
         {
             ReportId = id,
             CreatedBy = CurrentUserId,
             Name = name,
-            Token = await GenerateUniqueShareTokenAsync(),
+            Token = AnonymousReportTokens.Hash(rawToken),
             ExpiresAt = expiresAt
         };
         db.ReportShareLinks.Add(link);
@@ -1005,7 +1015,7 @@ public class ReportsController : ControllerBase
         await db.SaveChangesAsync();
 
         link.Report = report;
-        return CreatedAtAction(nameof(ResolveShareLink), new { token = link.Token }, ToShareLinkDto(link));
+        return CreatedAtAction(nameof(ResolveShareLink), new { token = rawToken }, ToShareLinkDto(link, rawToken));
     }
 
     // ── GET /api/reports/{id}/share-links ───────────────────────────────────
@@ -1027,7 +1037,7 @@ public class ReportsController : ControllerBase
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync();
 
-        return Ok(links.Select(ToShareLinkDto));
+        return Ok(links.Select(link => ToShareLinkDto(link)));
     }
 
     // ── DELETE /api/reports/{id}/share-links/{token} ────────────────────────
@@ -1035,9 +1045,27 @@ public class ReportsController : ControllerBase
     [HttpDelete("reports/{id:int}/share-links/{token}")]
     public async Task<IActionResult> RevokeShareLink(int id, string token)
     {
+        var hash = AnonymousReportTokens.Hash(token);
         var link = await catalogScope.ReportShareLinks
             .Include(l => l.Report)
-            .FirstOrDefaultAsync(l => l.ReportId == id && l.Token == token);
+            .FirstOrDefaultAsync(l => l.ReportId == id && l.Token == hash);
+        return await RevokeShareLinkAsync(id, link);
+    }
+
+    // ── DELETE /api/reports/{id}/share-links/by-id/{linkId} ─────────────────
+    // The catalog no longer holds the token, so a link is revoked by its id after creation.
+
+    [HttpDelete("reports/{id:int}/share-links/by-id/{linkId:int}")]
+    public async Task<IActionResult> RevokeShareLinkById(int id, int linkId)
+    {
+        var link = await catalogScope.ReportShareLinks
+            .Include(l => l.Report)
+            .FirstOrDefaultAsync(l => l.ReportId == id && l.Id == linkId);
+        return await RevokeShareLinkAsync(id, link);
+    }
+
+    private async Task<IActionResult> RevokeShareLinkAsync(int id, ReportShareLink? link)
+    {
         if (link is null) return NoContent();
 
         var perm = await GetEffectiveReportPermissionAsync(link.Report);
@@ -1047,7 +1075,7 @@ public class ReportsController : ControllerBase
         {
             link.RevokedAt = DateTime.UtcNow;
             // Staged so the revocation and its audit row share one commit (P1.6).
-            audit.Stage(CurrentUserId, "REVOKE_REPORT_SHARE_LINK", "Report", id.ToString(), token);
+            audit.Stage(CurrentUserId, "REVOKE_REPORT_SHARE_LINK", "Report", id.ToString(), $"shareLinkId={link.Id}");
             await db.SaveChangesAsync();
         }
 
@@ -1062,12 +1090,14 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> ResolveShareLink(string token)
     {
         // COMPAT_BREAK: 0.11
+        var hash = AnonymousReportTokens.Hash(token);
         var link = await db.ReportShareLinks
             .Include(l => l.Report).ThenInclude(r => r.Folder)
-            .FirstOrDefaultAsync(l => l.Token == token);
+            .FirstOrDefaultAsync(l => l.Token == hash);
         if (link is null || link.Report.IsDeleted) return NotFound();
         if (link.RevokedAt is not null) return NotFound();
         if (link.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow) return NotFound();
+        if (!TryEstablishAnonymousTenant(link.Report)) return NotFound();
 
         if (!await CreatorCanResolveAsync(link.CreatedBy, link.Report))
             return NotFound();
@@ -1099,19 +1129,21 @@ public class ReportsController : ControllerBase
         if (await catalogScope.ReportEmbedTokens.AnyAsync(t => t.ReportId == id && t.Name == name))
             return Conflict(new { error = $"An embed token named '{name}' already exists for this report." });
 
+        // COMPAT_BREAK: 0.22.0 — only the token's hash is stored; the token is shown once, here.
+        var rawToken = await GenerateUniqueEmbedTokenAsync();
         var token = new ReportEmbedToken
         {
             ReportId = id,
             CreatedBy = CurrentUserId,
             Name = name,
-            Token = await GenerateUniqueEmbedTokenAsync(),
+            Token = AnonymousReportTokens.Hash(rawToken),
             ExpiresAt = expiresAt
         };
         db.ReportEmbedTokens.Add(token);
         audit.Stage(CurrentUserId, "CREATE_REPORT_EMBED_TOKEN", "Report", id.ToString(), report.Name);
         await db.SaveChangesAsync();
         token.Report = report;
-        return CreatedAtAction(nameof(ResolveEmbedToken), new { token = token.Token }, ToEmbedTokenDto(token));
+        return CreatedAtAction(nameof(ResolveEmbedToken), new { token = rawToken }, ToEmbedTokenDto(token, rawToken));
     }
 
     [HttpGet("reports/{id:int}/embed-tokens")]
@@ -1127,20 +1159,33 @@ public class ReportsController : ControllerBase
             .Where(t => t.ReportId == id)
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
-        return Ok(tokens.Select(ToEmbedTokenDto));
+        return Ok(tokens.Select(token => ToEmbedTokenDto(token)));
     }
 
     [HttpDelete("reports/{id:int}/embed-tokens/{token}")]
     public async Task<IActionResult> RevokeEmbedToken(int id, string token)
     {
-        var embed = await catalogScope.ReportEmbedTokens.Include(t => t.Report).FirstOrDefaultAsync(t => t.ReportId == id && t.Token == token);
+        var hash = AnonymousReportTokens.Hash(token);
+        var embed = await catalogScope.ReportEmbedTokens.Include(t => t.Report).FirstOrDefaultAsync(t => t.ReportId == id && t.Token == hash);
+        return await RevokeEmbedTokenAsync(id, embed);
+    }
+
+    [HttpDelete("reports/{id:int}/embed-tokens/by-id/{tokenId:int}")]
+    public async Task<IActionResult> RevokeEmbedTokenById(int id, int tokenId)
+    {
+        var embed = await catalogScope.ReportEmbedTokens.Include(t => t.Report).FirstOrDefaultAsync(t => t.ReportId == id && t.Id == tokenId);
+        return await RevokeEmbedTokenAsync(id, embed);
+    }
+
+    private async Task<IActionResult> RevokeEmbedTokenAsync(int id, ReportEmbedToken? embed)
+    {
         if (embed is null) return NoContent();
         var perm = await GetEffectiveReportPermissionAsync(embed.Report);
         if (!perm.AtLeast(FolderPermission.Manage)) return Forbid();
         if (embed.RevokedAt is null)
         {
             embed.RevokedAt = DateTime.UtcNow;
-            audit.Stage(CurrentUserId, "REVOKE_REPORT_EMBED_TOKEN", "Report", id.ToString(), token);
+            audit.Stage(CurrentUserId, "REVOKE_REPORT_EMBED_TOKEN", "Report", id.ToString(), $"embedTokenId={embed.Id}");
             await db.SaveChangesAsync();
         }
         return NoContent();
@@ -1151,10 +1196,12 @@ public class ReportsController : ControllerBase
     [HttpGet("embed/{token}")]
     public async Task<IActionResult> ResolveEmbedToken(string token)
     {
-        var embed = await db.ReportEmbedTokens.Include(t => t.Report).ThenInclude(r => r.Folder).FirstOrDefaultAsync(t => t.Token == token);
+        var hash = AnonymousReportTokens.Hash(token);
+        var embed = await db.ReportEmbedTokens.Include(t => t.Report).ThenInclude(r => r.Folder).FirstOrDefaultAsync(t => t.Token == hash);
         if (embed is null || embed.Report.IsDeleted) return NotFound();
         if (embed.RevokedAt is not null) return NotFound();
         if (embed.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow) return NotFound();
+        if (!TryEstablishAnonymousTenant(embed.Report)) return NotFound();
         if (!await CreatorCanResolveAsync(embed.CreatedBy, embed.Report))
             return NotFound();
         await audit.LogAsync(null, "ANONYMOUS_EMBED_TOKEN_VIEW", "Report",
@@ -1284,7 +1331,7 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
         if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { error = "Saved view name is required." });
-        if (!TryBuildStateJson(req.StateJson, req.Parameters, req.Filters, report.PublishedScriptHash, out var stateJson))
+        if (!TryBuildStateJson(req.StateJson, report.PublishedScriptHash, out var stateJson))
             return BadRequest(new { error = "State is not valid JSON." });
         if (req.IsDefault) await ClearDefaultSavedViewsAsync(id);
 
@@ -1293,8 +1340,6 @@ public class ReportsController : ControllerBase
             ReportId = id,
             UserId = CurrentUserId,
             Name = req.Name,
-            ParametersJson = SerializeDictionary(req.Parameters),
-            FiltersJson = SerializeDictionary(req.Filters),
             StateJson = stateJson,
             // Stamp the revision the view was captured against so later drift is detectable.
             ScriptHash = report.PublishedScriptHash,
@@ -1317,14 +1362,12 @@ public class ReportsController : ControllerBase
         var view = await catalogScope.SavedReportViews.FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
         if (view is null) return NotFound();
 
-        var stateChanged = req.StateJson is not null || req.Parameters is not null || req.Filters is not null;
+        var stateChanged = req.StateJson is not null;
         string? stateJson = view.StateJson;
-        if (stateChanged && !TryBuildStateJson(req.StateJson, req.Parameters, req.Filters, report.PublishedScriptHash, out stateJson))
+        if (stateChanged && !TryBuildStateJson(req.StateJson, report.PublishedScriptHash, out stateJson))
             return BadRequest(new { error = "State is not valid JSON." });
 
         if (req.Name is not null) view.Name = req.Name;
-        if (req.Parameters is not null) view.ParametersJson = SerializeDictionary(req.Parameters);
-        if (req.Filters is not null) view.FiltersJson = SerializeDictionary(req.Filters);
         if (stateChanged)
         {
             view.StateJson = stateJson;
@@ -1395,14 +1438,13 @@ public class ReportsController : ControllerBase
 
         var alert = new ReportAlert
         {
+            TenantId = report.TenantId,
             ReportId = id,
             OwnerId = CurrentUserId,
             Name = req.Name,
             VisualName = req.VisualName,
             Operator = req.Operator,
             Threshold = req.Threshold,
-            Recipient = req.Recipient,
-            SmtpAlias = req.SmtpAlias,
             DisplayName = req.DisplayName,
             Description = req.Description,
             OptionsJson = SerializeDictionary(req.Options)
@@ -1429,8 +1471,6 @@ public class ReportsController : ControllerBase
             alert.Operator = req.Operator;
         }
         if (req.Threshold.HasValue) alert.Threshold = req.Threshold.Value;
-        if (req.Recipient is not null) alert.Recipient = req.Recipient;
-        if (req.SmtpAlias is not null) alert.SmtpAlias = req.SmtpAlias;
         if (req.DisplayName is not null) alert.DisplayName = req.DisplayName;
         if (req.Description is not null) alert.Description = req.Description;
         if (req.Options is not null) alert.OptionsJson = SerializeDictionary(req.Options);
@@ -1567,8 +1607,6 @@ public class ReportsController : ControllerBase
             alert.Operator = req.Operator;
         }
         if (req.Threshold.HasValue) alert.Threshold = req.Threshold.Value;
-        if (req.Recipient is not null) alert.Recipient = req.Recipient;
-        if (req.SmtpAlias is not null) alert.SmtpAlias = req.SmtpAlias;
         if (req.DisplayName is not null) alert.DisplayName = req.DisplayName;
         if (req.Description is not null) alert.Description = req.Description;
         if (req.Options is not null) alert.OptionsJson = SerializeDictionary(req.Options);
@@ -1779,6 +1817,11 @@ public class ReportsController : ControllerBase
             ReportScriptSaveStatus.Forbidden => Forbid(),
             ReportScriptSaveStatus.MissingVersion => OptimisticConcurrency.MissingVersion(this),
             ReportScriptSaveStatus.Conflict => OptimisticConcurrency.Conflict(this, ToDto(result.Current!, null)),
+            ReportScriptSaveStatus.SealPasswordRequired => UnprocessableEntity(new
+            {
+                error = "Master password is required to seal plaintext secrets before saving.",
+                code = "SEAL_PASSWORD_REQUIRED"
+            }),
             _ => StatusCode(500, new { error = "Unknown save status." })
         };
     }
@@ -1849,7 +1892,7 @@ public class ReportsController : ControllerBase
     private IActionResult SavedScriptResponse(ReportScriptSaveResult result)
     {
         OptimisticConcurrency.SetETag(Response, result.Version!.Value);
-        return Ok(new SaveDesignerResponse(result.Version.Value, result.SourceRevision));
+        return Ok(new SaveDesignerResponse(result.Version.Value, result.SourceRevision, result.ScriptText));
     }
 
     // ── POST /api/scripts/upload ──────────────────────────────────────────────
@@ -1876,6 +1919,26 @@ public class ReportsController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(portalConfig.ScriptRootPath))
             return StatusCode(503, new { error = "ScriptRootPath is not configured on the portal." });
+
+        // Replacing a script that published reports or pipelines run changes them. Require the same
+        // Author permission on every one of them that saving through the report does; the
+        // published-script hash is only compared after the replaced text has run.
+        if (await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, req.Filename))
+        {
+            var tenantId = datasetScope.TenantId;
+            var dependents = (await catalogScope.Documents.Include(r => r.Folder).Where(r => !r.IsDeleted).ToListAsync())
+                .Where(r => string.Equals(
+                    PortalPathGuard.ToScriptKey(portalConfig, tenantId, r.ScriptPath), req.Filename,
+                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+            foreach (var report in dependents)
+            {
+                if (!(await GetEffectiveReportPermissionAsync(report)).AtLeast(FolderPermission.Author))
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        error = $"'{req.Filename}' is the script of a report you cannot edit. Upload under a new name."
+                    });
+            }
+        }
 
         // Filename-only key (separators already rejected above); written through the guarded Scripts area.
         await artifacts.WriteAllBytesAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, req.Filename, content);
@@ -2070,7 +2133,7 @@ public class ReportsController : ControllerBase
 
     /// <summary>
     /// Saves (or replaces) the current user's default view for a report. The body carries the shared
-    /// resolved-state envelope; the legacy parameter map is still accepted so older clients keep working.
+    /// resolved-state envelope.
     /// </summary>
     [HttpPost("reports/{id:int}/saved-views/default")]
     public async Task<IActionResult> SaveDefaultView(int id, [FromBody] SaveDefaultReportViewRequest? body)
@@ -2084,16 +2147,13 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (!perm.HasValue) return Forbid();
 
-        var parameters = body?.Parameters;
-        var envelope = body?.State ?? ResolvedReportState.FromLegacy(SerializeDictionary(parameters), null);
+        var envelope = body?.State ?? new ResolvedReportState();
         if (envelope.SchemaVersion != ResolvedReportState.CurrentSchemaVersion)
             return BadRequest(new { error = $"Unsupported report-state schema version '{envelope.SchemaVersion}'." });
         envelope.SchemaVersion = ResolvedReportState.CurrentSchemaVersion;
         // The server, not the client, stamps the revision the view was captured against.
         envelope.ScriptHash = report.PublishedScriptHash;
 
-        var paramsJson = System.Text.Json.JsonSerializer.Serialize(
-            parameters ?? envelope.ToParameterStrings());
         const string defaultName = "My Default View";
         var savedViews = await catalogScope.SavedReportViews
             .Where(v => v.ReportId == id && v.UserId == CurrentUserId
@@ -2122,7 +2182,6 @@ public class ReportsController : ControllerBase
         }
 
         defaultView.Name = defaultName;
-        defaultView.ParametersJson = paramsJson;
         defaultView.StateJson = envelope.ToJson();
         defaultView.ScriptHash = report.PublishedScriptHash;
         defaultView.IsDefault = true;

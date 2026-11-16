@@ -79,8 +79,8 @@ internal sealed class ColumnarJoinSelectPlan
 
     public async Task<Execution?> TryOpenAsync(IExecutionContext context)
     {
-        var leftSource = await context.ResolveDataSourceAsync(_statement.FromTable);
-        var rightSource = await context.ResolveDataSourceAsync(_join.Table);
+        var leftSource = await context.ResolveReadSourceAsync(_statement.FromTable);
+        var rightSource = await context.ResolveReadSourceAsync(_join.Table);
         if (leftSource is not IReplayableColumnarDataSource left
             || rightSource is not IReplayableColumnarDataSource right
             || leftSource is not IEstimatedCardinalityDataSource leftEstimate

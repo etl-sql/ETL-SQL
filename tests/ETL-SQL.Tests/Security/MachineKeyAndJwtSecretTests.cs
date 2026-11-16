@@ -47,25 +47,20 @@ public sealed class MachineKeyAndJwtSecretTests
         logger.OnMessage += (message, _, _) => { lock (logged) logged.Add(message); };
         var evaluator = provider.GetRequiredService<Evaluator>();
         evaluator.RedirectOutput = true;
-        var configPath = Path.Combine(Path.GetTempPath(), $"jwt-appsettings-{Guid.NewGuid():N}.json");
-        await File.WriteAllTextAsync(configPath, "{}");
-        try
-        {
-            var handler = new GenerateJwtSecretStatementHandler(logger) { ConfigPath = configPath };
-            await handler.Execute(new GenerateJwtSecretStatement(), evaluator);
+        var configPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+        var configBefore = File.Exists(configPath) ? await File.ReadAllTextAsync(configPath) : null;
 
-            var row = Assert.Single(evaluator.LastResult!.Rows);
-            var secret = Assert.IsType<string>(row["Secret"]);
-            Assert.Equal(32, Convert.FromBase64String(secret).Length);
-            Assert.Equal(secret, CryptoUtils.Decrypt((string)row["EncryptedConfigValue"]!, SecurityService.GetMachineKey()));
+        var handler = new GenerateJwtSecretStatementHandler(logger);
+        await handler.Execute(new GenerateJwtSecretStatement(), evaluator);
 
-            Assert.DoesNotContain(evaluator.Messages, entry => entry.Message.Contains(secret, StringComparison.Ordinal));
-            lock (logged) Assert.DoesNotContain(logged, message => message.Contains(secret, StringComparison.Ordinal));
-            Assert.DoesNotContain(secret, await File.ReadAllTextAsync(configPath), StringComparison.Ordinal);
-        }
-        finally
-        {
-            File.Delete(configPath);
-        }
+        var row = Assert.Single(evaluator.LastResult!.Rows);
+        var secret = Assert.IsType<string>(row["Secret"]);
+        Assert.Equal(32, Convert.FromBase64String(secret).Length);
+        Assert.Equal(secret, CryptoUtils.Decrypt((string)row["EncryptedConfigValue"]!, SecurityService.GetMachineKey()));
+
+        Assert.DoesNotContain(evaluator.Messages, entry => entry.Message.Contains(secret, StringComparison.Ordinal));
+        lock (logged) Assert.DoesNotContain(logged, message => message.Contains(secret, StringComparison.Ordinal));
+        // A script cannot rewrite the application's own configuration.
+        Assert.Equal(configBefore, File.Exists(configPath) ? await File.ReadAllTextAsync(configPath) : null);
     }
 }

@@ -29,6 +29,14 @@ public interface IVariableContext
     IDictionary<string, object?> CurrentVariables { get; }
     IDictionary<string, VariableMetadata> VariableMetadata { get; }
     IDictionary<string, VariableMetadata> CurrentMetadata { get; }
+    /// <summary>
+    /// Finds a variable's metadata in the scope that <see cref="GetVariable"/> would read it from:
+    /// local scopes innermost first, then the session scope. <see cref="VariableMetadata"/> is
+    /// the session scope only, so a <c>SECRET</c> declared inside a procedure is not in it.
+    /// </summary>
+    bool TryGetVariableMetadata(string name,
+        [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out VariableMetadata metadata)
+        => CurrentMetadata.TryGetValue(name, out metadata) || VariableMetadata.TryGetValue(name, out metadata);
     void SetVariable(string name, object? value);
     object? GetVariable(string name);
     void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null);
@@ -56,6 +64,21 @@ public interface IQueryContext
 {
     IAsyncEnumerable<DataTable> ExecuteQuery(Statement query);
     Task<IDataSource> ResolveDataSourceAsync(TableReference table);
+
+    /// <summary>
+    /// Resolves a table a statement reads. Unlike <see cref="ResolveDataSourceAsync"/>, which a
+    /// write target uses and which creates a temp table or dataset that does not exist yet, this
+    /// fails on an unknown <c>#name</c> or <c>&amp;name</c>.
+    /// </summary>
+    Task<IDataSource> ResolveReadSourceAsync(TableReference table) => ResolveDataSourceAsync(table);
+
+    /// <summary>
+    /// The column names a table function or table operator returned, after its operators, when this
+    /// table reference was last read, or null when it has not been read here. An outer join asks
+    /// this for a side that returned no rows, because running a function again to learn its columns
+    /// could repeat a side effect, and a dynamic pivot's names depend on the rows it read.
+    /// </summary>
+    IReadOnlyList<string>? ReturnedColumns(TableReference table) => null;
     IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table);
     IAsyncEnumerable<DataTable> EvaluateForClause(IAsyncEnumerable<DataTable> batches, ForClause forClause);
     IAsyncEnumerable<DataTable> InterceptProgress(IAsyncEnumerable<DataTable> chunks);
@@ -273,6 +296,8 @@ public interface IDataContext
     bool IsResuming { get; set; }
     /// <summary>The start-of-week day used by RELDATE W/WS/WE anchors. Defaults to Monday (ISO 8601).</summary>
     DayOfWeek WeekStartDay { get; set; }
+    /// <summary>How slash dates in text are read (MDY or DMY). Defaults to Engine:DateFormat (MDY). Settable at runtime via SET DATEFORMAT.</summary>
+    ETL_SQL.Core.Data.DateOrder DateOrder { get; set; }
     /// <summary>Hash-mismatch policy for script integrity checks. "Warn" logs and continues; "Block" throws. Defaults to "Warn".</summary>
     string ScriptHashPolicy { get; set; }
     /// <summary>When true, string comparisons are case-sensitive. Defaults to false (SQL Server-style case-insensitive). Settable at runtime via SET CASE_SENSITIVE.</summary>
@@ -471,6 +496,12 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
     bool SpillEncryptionEnabled { get; set; }
     bool SpillCompressionEnabled { get; set; }
     string SpillFormat { get; set; }
+
+    /// <summary>
+    /// Free bytes the spill volume must keep. A new spill extent is refused, with a low-space
+    /// error and before any byte is written, while the volume holds less. Zero disables the check.
+    /// </summary>
+    long SpillMinimumFreeBytes => 0;
     ISpillStore SpillStore { get; }
 
     /// <summary>Decrypts an 'ENC:...' value using the current session context passwords.</summary>
@@ -585,17 +616,32 @@ public interface ILineageTracker
     void Clear();
 }
 
+/// <summary>
+/// Containers started by <c>USE DOCKER</c>. Every member takes a <c>scope</c> (see
+/// <see cref="DockerScope.For"/>): one manager serves a whole host process, and an alias, the last
+/// container or the container itself must never be shared between tenants.
+/// </summary>
 public interface IDockerManager : IAsyncDisposable
 {
     bool HasActiveContainers { get; }
-    string? LastConnectionString { get; }
-    string? LastAlias { get; }
-    Task<string> StartContainer(string imageName, string? alias = null, System.Threading.CancellationToken cancellationToken = default);
-    Task StopContainer(string? alias, System.Threading.CancellationToken cancellationToken = default);
-    Task PauseContainer(string? alias, System.Threading.CancellationToken cancellationToken = default);
-    Task ResumeContainer(string? alias, System.Threading.CancellationToken cancellationToken = default);
-    Task CloseContainers(string? nameOrAlias = null, System.Threading.CancellationToken cancellationToken = default);
-    string? GetConnectionString(string alias);
-    Dictionary<string, string> GetState();
-    void LoadState(Dictionary<string, string> connectionStrings, string? lastConnectionString);
+    string? GetLastConnectionString(string scope);
+    string? GetLastAlias(string scope);
+    Task<string> StartContainer(string scope, string imageName, string? alias = null, System.Threading.CancellationToken cancellationToken = default);
+    Task StopContainer(string scope, string? alias, System.Threading.CancellationToken cancellationToken = default);
+    Task PauseContainer(string scope, string? alias, System.Threading.CancellationToken cancellationToken = default);
+    Task ResumeContainer(string scope, string? alias, System.Threading.CancellationToken cancellationToken = default);
+    Task CloseContainers(string scope, string? nameOrAlias = null, System.Threading.CancellationToken cancellationToken = default);
+    string? GetConnectionString(string scope, string alias);
+    string? GetImageName(string scope, string? alias) => null;
+    Dictionary<string, string> GetState(string scope);
+    void LoadState(string scope, Dictionary<string, string> connectionStrings, string? lastConnectionString);
+}
+
+/// <summary>The Docker scope of an execution: its tenant, or empty for a single-tenant host.</summary>
+public static class DockerScope
+{
+    public static string For(IExecutionContext context) =>
+        context.StorageCapability?.Tenant.Tenant.Value
+        ?? context.ExecutionIdentity?.TenantId
+        ?? string.Empty;
 }

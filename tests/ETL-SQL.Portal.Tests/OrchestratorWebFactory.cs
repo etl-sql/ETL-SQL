@@ -57,6 +57,7 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
                 ["Orchestrator:ScriptRoot"] = scriptRoot,
                 ["Scheduler:MetricsIntervalSeconds"] = "5",
                 ["Scheduler:SleepIntervalSeconds"] = "1",
+                ["Scheduler:CancelPollSeconds"] = "1",
                 ["Orchestrator:ApiKey"] = "test-orch-key-12345",
                 ["Orchestrator:RequireFederatedIdentity"] = requireFederatedIdentity.ToString(),
                 ["Orchestrator:IdentitySigningSecret"] = requireFederatedIdentity ? IdentitySecret : null,

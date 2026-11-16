@@ -19,4 +19,4 @@ SELECT * FROM eng.jobs;
 SELECT * FROM eng.job_history;
 
 -- 4. View history for a specific job
-SELECT * FROM eng.job_history WHERE JobName = 'CleanupTask';
+SELECT * FROM eng.job_history WHERE job_name = 'CleanupTask';

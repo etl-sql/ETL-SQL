@@ -93,7 +93,9 @@ public sealed record ChartColumn(
     public void Validate(int rowCount)
     {
         ChartContractValidation.RequireName(Name, nameof(Name));
-        if (Values.IsDefault || Values.Length != rowCount)
+        if (Values.IsDefault)
+            throw new InvalidDataException($"Column '{Name}' has no values; expected {rowCount}.");
+        if (Values.Length != rowCount)
             throw new InvalidDataException($"Column '{Name}' has {Values.Length} values; expected {rowCount}.");
         if (!DisplayValues.IsDefaultOrEmpty && DisplayValues.Length != rowCount)
             throw new InvalidDataException($"Column '{Name}' display values do not match its raw value count.");
@@ -125,6 +127,7 @@ public sealed record ChartDataSet(
         ChartContractValidation.RequireVersion(Schema, Version, ChartContractVersions.ChartDataSchema, ChartContractVersions.ChartDataCurrent, nameof(ChartDataSet));
         ChartContractValidation.RequireName(Name, nameof(Name));
         if (RowCount < 0) throw new InvalidDataException("Chart data row count cannot be negative.");
+        if (Columns.IsDefault) throw new InvalidDataException("Chart data has no column list.");
         ChartContractValidation.RequireUnique(Columns.Select(column => column.Name), "column name");
         foreach (var column in Columns) column.Validate(RowCount);
     }

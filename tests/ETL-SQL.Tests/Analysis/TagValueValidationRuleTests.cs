@@ -116,12 +116,10 @@ namespace ETL_SQL.Tests.Analysis
         }
 
         [Fact]
-        public async Task DeprecatedAlias_IsWarning()
+        public async Task RemovedSensitivityAlias_IsAnUnknownTag()
         {
-            var results = await Lint("SELECT Id /* @sensitivity: restricted; */ FROM #t;");
-            var r = Assert.Single(results);
-            Assert.Contains("deprecated alias", r.Message);
-            Assert.Contains("@classification", r.Message);
+            var results = await LintUnknownTags("SELECT Id /* @sensitivity: restricted; */ FROM #t;");
+            Assert.Single(results);
         }
 
         [Fact]

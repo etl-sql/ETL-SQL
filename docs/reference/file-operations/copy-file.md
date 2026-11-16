@@ -31,26 +31,23 @@ WITH (
 ```sql
 COPY DIRECTORY 'output/' TO 'archive/2024/';
 
-COPY DIRECTORY 'reports/' TO 'archive/reports/' WITH (
-  OVERWRITE = ON,
-  RECURSE   = ON
-);
+COPY DIRECTORY 'reports/' TO 'archive/reports/' WITH (OVERWRITE = ON);
 ```
 
 ## Options
 | Option | Values | Default |
 |---|---|---|
-| OVERWRITE | ON \| OFF | OFF |
+| OVERWRITE | ON \| OFF | ON |
 | DATE_SUFFIX | .NET date format string, such as `yyyyMMdd` | none |
 | SUFFIX_SEPARATOR | String separator before the date suffix | `_` |
-| RECURSE | ON \| OFF | ON |
 
 ## Notes
 - `COPY` is a local sandboxed file operation. Use `SEND FILE` or `RECEIVE FILE` for connector transfers.
 - `TO DIRECTORY` derives the destination file name from the source file name. With `DATE_SUFFIX = 'yyyyMMdd'`, `vendor.csv` becomes `vendor_20260722.csv` on July 22, 2026.
 - `DATE_SUFFIX` is appended before the file extension and is most useful for archive copies after a send/export step.
 - Paths are resolved via `ResolvePath()` — relative paths are anchored to the script's location.
-- `COPY DIRECTORY` with `RECURSE = OFF` copies only top-level files.
+- `COPY DIRECTORY` always copies subfolders.
+- Any other `WITH` option is a syntax error that lists the accepted options.
 - See: EXPORT, COMPRESS, CREATE CONNECTION
 
 References:

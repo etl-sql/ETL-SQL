@@ -50,6 +50,27 @@ public class OrchestratorStartupTests
         Assert.Equal(expected, OrchestratorStartup.IsNonLoopbackBinding(url));
     }
 
+    [Theory]
+    [InlineData("localhost", true)]
+    [InlineData("LOCALHOST", true)]
+    [InlineData("127.0.0.1", true)]
+    [InlineData("127.0.0.2", true)]
+    [InlineData("[::1]", true)]
+    [InlineData("attacker.example", false)]
+    [InlineData("192.168.1.10", false)]
+    [InlineData("localhost.attacker.example", false)]
+    [InlineData(null, false)]
+    public void IsLoopbackHost_RefusesARebindingHostName(string? host, bool expected) =>
+        Assert.Equal(expected, OrchestratorStartup.IsLoopbackHost(host));
+
+    [Fact]
+    public void IsKeyless_CountsCurrentAndPreviousKeys()
+    {
+        Assert.True(OrchestratorStartup.IsKeyless(Config(("Orchestrator:ApiKey", ""))));
+        Assert.False(OrchestratorStartup.IsKeyless(Config(("Orchestrator:ApiKey", "k"))));
+        Assert.False(OrchestratorStartup.IsKeyless(Config(("Orchestrator:PreviousApiKeys:0", "old"))));
+    }
+
     [Fact]
     public void NoKey_NonLoopbackUrls_Throws()
     {

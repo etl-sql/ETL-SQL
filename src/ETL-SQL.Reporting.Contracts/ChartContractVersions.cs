@@ -55,11 +55,8 @@ public static class ChartContractVersions
     // Radial plans need an envelope older renderers reject; existing plans retain v3.
     public const int RadialPlotPlanVersion = 4;
     public const string RadialPlotPlanSchema = "https://etl-sql.org/schemas/reporting/plot-plan/v4";
-    public const string LegacyChartSpecSchema = "https://etl-sql.org/schemas/reporting/chart-spec/v1";
     public const string ChartSpecSchema = "https://etl-sql.org/schemas/reporting/chart-spec/v2";
     public const string ChartDataSchema = "https://etl-sql.org/schemas/reporting/chart-data/v1";
-    public const string LegacyPlotPlanSchema = "https://etl-sql.org/schemas/reporting/plot-plan/v1";
-    public const string LegacyPlotPlanV2Schema = "https://etl-sql.org/schemas/reporting/plot-plan/v2";
     public const string PlotPlanSchema = "https://etl-sql.org/schemas/reporting/plot-plan/v3";
 }
 

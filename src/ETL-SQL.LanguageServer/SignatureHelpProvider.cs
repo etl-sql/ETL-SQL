@@ -23,6 +23,7 @@ namespace ETL_SQL.LSP
     {
         private readonly ILogger<SignatureHelpProvider> _logger;
         private readonly IMetadataManager _metadata;
+        private readonly DocumentStateStore _store;
 
         // Canonical signatures for every built-in function.
         private static readonly Dictionary<string, (string Label, string Doc, string[] Params)> _builtIns =
@@ -129,17 +130,25 @@ namespace ETL_SQL.LSP
             { "CONNECTION_PROPERTY", ("CONNECTION_PROPERTY(conn_name, prop_name)", "Returns the value of a connection property, masking sensitive properties.", new[] { "conn_name", "prop_name" }) },
 
             // File/directory
-            { "FILE_EXISTS",      ("FILE_EXISTS(path)",                          "Returns true if the file exists.",               new[] { "path" }) },
-            { "DIRECTORY_EXISTS", ("DIRECTORY_EXISTS(path)",                     "Returns true if the directory exists.",          new[] { "path" }) },
-            { "FILE_LIST",        ("FILE_LIST(path [, recursive])",              "Returns a list of files in a directory.",        new[] { "path", "recursive" }) },
-            { "REMOTE_FILE_LIST", ("REMOTE_FILE_LIST(connectionName [, path])", "Returns files from a remote connection.",         new[] { "connectionName", "path" }) },
-            { "FILE_HASH",        ("FILE_HASH(path [, algorithm])",              "Computes the cryptographic hash of a file.",                  new[] { "path", "algorithm" }) },
-            { "FILE_SIZE",        ("FILE_SIZE(path)",                            "Returns the size of a local file in bytes.",                  new[] { "path" }) },
-            { "FILE_MODIFIED",    ("FILE_MODIFIED(path)",                        "Returns the last write timestamp of a file.",                 new[] { "path" }) },
-            { "PATH_COMBINE",     ("PATH_COMBINE(p1, p2 [, ...])",               "Combines multiple path segments into a single path.",         new[] { "p1", "p2" }) },
-            { "PATH_FILENAME",    ("PATH_FILENAME(path)",                        "Extracts the filename and extension from a path.",            new[] { "path" }) },
-            { "PATH_EXTENSION",   ("PATH_EXTENSION(path)",                       "Extracts the extension from a path.",                         new[] { "path" }) },
-            { "PATH_DIRECTORY",   ("PATH_DIRECTORY(path)",                       "Extracts the directory information from a path.",             new[] { "path" }) },
+            { "FILE_EXISTS",             ("FILE_EXISTS(path)",                              "Returns 1 if the file exists.",                            new[] { "path" }) },
+            { "DIRECTORY_EXISTS",        ("DIRECTORY_EXISTS(path)",                         "Returns 1 if the directory exists.",                       new[] { "path" }) },
+            { "FILE_LIST",               ("FILE_LIST(path [, recursive])",                  "Returns a list of files in a directory.",                  new[] { "path", "recursive" }) },
+            { "REMOTE_FILE_LIST",        ("REMOTE_FILE_LIST(connectionName [, path])",      "Returns files from a remote connection.",                  new[] { "connectionName", "path" }) },
+            { "REMOTE_FILE_EXISTS",      ("REMOTE_FILE_EXISTS(connectionName, path)",       "Returns 1 if the remote file exists.",                     new[] { "connectionName", "path" }) },
+            { "REMOTE_DIRECTORY_EXISTS", ("REMOTE_DIRECTORY_EXISTS(connectionName, path)",  "Returns 1 if the remote directory exists.",                new[] { "connectionName", "path" }) },
+            { "REMOTE_FILE_SIZE",        ("REMOTE_FILE_SIZE(connectionName, path)",         "Returns the size of a remote file in bytes.",              new[] { "connectionName", "path" }) },
+            { "REMOTE_FILE_MODIFIED",    ("REMOTE_FILE_MODIFIED(connectionName, path)",     "Returns the last modified timestamp of a remote file.",    new[] { "connectionName", "path" }) },
+            { "FILE_HASH",               ("FILE_HASH(path [, algorithm])",                  "Computes the cryptographic hash of a file.",               new[] { "path", "algorithm" }) },
+            { "FILE_SIZE",               ("FILE_SIZE(path)",                                "Returns the size of a local file in bytes.",               new[] { "path" }) },
+            { "FILE_LINE_COUNT",         ("FILE_LINE_COUNT(path [, header_rows])",          "Counts lines in a local file, skipping header rows.",      new[] { "path", "header_rows" }) },
+            { "FILE_CREATED",            ("FILE_CREATED(path)",                             "Returns the creation timestamp of a local file.",          new[] { "path" }) },
+            { "FILE_MODIFIED",           ("FILE_MODIFIED(path)",                            "Returns the last write timestamp of a file.",              new[] { "path" }) },
+            { "PATH_COMBINE",            ("PATH_COMBINE(p1, p2 [, ...])",                   "Combines multiple path segments into a single path.",      new[] { "p1", "p2" }) },
+            { "PATH_FILENAME",           ("PATH_FILENAME(path)",                            "Extracts the filename and extension from a path.",         new[] { "path" }) },
+            { "PATH_FILENAME_NO_EXT",    ("PATH_FILENAME_NO_EXT(path)",                     "Extracts the filename without its extension from a path.", new[] { "path" }) },
+            { "PATH_EXTENSION",          ("PATH_EXTENSION(path)",                           "Extracts the extension from a path.",                      new[] { "path" }) },
+            { "PATH_CHANGE_EXTENSION",   ("PATH_CHANGE_EXTENSION(path, ext)",               "Replaces or removes the extension of a path.",             new[] { "path", "ext" }) },
+            { "PATH_DIRECTORY",          ("PATH_DIRECTORY(path)",                           "Extracts the directory information from a path.",          new[] { "path" }) },
 
             // List
             { "APPEND_TO_LIST",   ("APPEND_TO_LIST(list, value)",  "Appends a value to a list.",                                   new[] { "list", "value" }) },
@@ -182,25 +191,26 @@ namespace ETL_SQL.LSP
             { "PERCENTILE_DISC",  ("PERCENTILE_DISC(n)",            "Discrete percentile calculation.",                           new[] { "n" }) },
         };
 
-        public SignatureHelpProvider(ILogger<SignatureHelpProvider> logger, IMetadataManager metadata)
+        public SignatureHelpProvider(ILogger<SignatureHelpProvider> logger, IMetadataManager metadata, DocumentStateStore store)
         {
             _logger = logger;
             _metadata = metadata;
+            _store = store;
         }
 
         public Task<SignatureHelp?> Handle(SignatureHelpParams request, CancellationToken cancellationToken)
         {
-            var line = (int)request.Position.Line;
-            var col = (int)request.Position.Character;
+            // Signature help only needs the cursor line of the synced document text.
+            var text = _store.GetDocumentText(request.TextDocument.Uri);
+            if (text == null) return Task.FromResult<SignatureHelp?>(null);
 
-            // Need document text — use metadata or return null gracefully if unavailable
-            // (SignatureHelp operates purely on the prefix line, no parsed state needed)
+            var lines = text.Split('\n');
+            var line = request.Position.Line;
+            if (line < 0 || line >= lines.Length) return Task.FromResult<SignatureHelp?>(null);
 
-            // The document state store is not injected here because signature help only needs the current line.
-            // The caller (VS Code extension) sends the full line context in the request.
-            // We rely on the active parameter count from the prefix text provided by the client.
-            // If we need the text, CompletionProvider or the underlying state is not our concern.
-            return Task.FromResult<SignatureHelp?>(null); // handled below per actual line
+            var lineText = lines[line].TrimEnd('\r');
+            var col = Math.Clamp(request.Position.Character, 0, lineText.Length);
+            return Task.FromResult(Resolve(lineText, col));
         }
 
         /// <summary>
@@ -208,7 +218,7 @@ namespace ETL_SQL.LSP
         /// </summary>
         public SignatureHelp? Resolve(string lineText, int cursorCol)
         {
-            var prefix = cursorCol > 0 && lineText.Length >= cursorCol ? lineText.Substring(0, cursorCol) : lineText;
+            var prefix = cursorCol >= 0 && lineText.Length >= cursorCol ? lineText.Substring(0, cursorCol) : lineText;
 
             int openParen = prefix.LastIndexOf('(');
             if (openParen == -1) return null;
@@ -249,7 +259,7 @@ namespace ETL_SQL.LSP
                 {
                     Signatures = new List<SignatureInformation> { sig },
                     ActiveSignature = 0,
-                    ActiveParameter = Math.Min(activeParam, info.Params.Length - 1)
+                    ActiveParameter = Math.Max(0, Math.Min(activeParam, info.Params.Length - 1))
                 };
             }
 

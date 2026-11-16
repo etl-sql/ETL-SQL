@@ -16,5 +16,5 @@ SELECT
     LAG(amount) OVER(PARTITION BY region ORDER BY amount) AS prev_amount,
     LEAD(amount) OVER(PARTITION BY region ORDER BY amount) AS next_amount,
     FIRST_VALUE(amount) OVER(PARTITION BY region ORDER BY amount) AS first_amt,
-    LAST_VALUE(amount) OVER(PARTITION BY region ORDER BY amount) AS last_amt
+    LAST_VALUE(amount) OVER(PARTITION BY region ORDER BY amount ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_amt
 FROM #sales;

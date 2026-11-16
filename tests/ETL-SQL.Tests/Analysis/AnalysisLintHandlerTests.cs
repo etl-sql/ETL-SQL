@@ -156,6 +156,18 @@ namespace ETL_SQL.Tests.Analysis.Analysis
         }
 
         [Fact]
+        public async Task Lint_ProtectedPath_IsRefusedLikeAnyOtherRead()
+        {
+            // LINT reads the file and its findings can quote it, so it passes the same path guard.
+            var serviceKey = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh", "id_rsa");
+            var eval = NewEval();
+
+            await Assert.ThrowsAnyAsync<ETL_SQL.Services.SecurityException>(async () =>
+                await eval.Evaluate(TestHelpers.Parse($"LINT '{serviceKey.Replace("\\", "/")}';")));
+        }
+
+        [Fact]
         public async Task Lint_WithoutPath_ThrowsExecutionException()
         {
             // LINT without a path — the parser would actually fail here since LINT requires a path.

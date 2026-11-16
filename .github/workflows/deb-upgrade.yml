@@ -1,17 +1,269 @@
 name: DEB Installed Upgrade
+# A run the release-branch push started is titled "(push)" so the candidate supervisor may cancel it.
+run-name: ${{ inputs.from_push && 'DEB Installed Upgrade (push)' || 'DEB Installed Upgrade' }}
 
-# Register the manual entry point while its implementation is certified on release branches.
 on:
   workflow_dispatch:
+    inputs:
+      from_push:
+        description: 'Set by the release-branch push (candidate-supervisor.yml); leave off for a manual run'
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+    outputs:
+      artifact_id:
+        value: ${{ jobs.installed-upgrade.outputs.artifact_id }}
+      receipt_id:
+        value: ${{ jobs.installed-upgrade.outputs.receipt_id }}
 
-permissions: {}
+permissions:
+  contents: read
+
+concurrency:
+  group: deb-certification-${{ inputs.source_sha || github.sha }}
+  cancel-in-progress: false
+
+env:
+  CANDIDATE_SHA: ${{ inputs.source_sha || github.sha }}
 
 jobs:
-  select-release-branch:
+  build:
+    name: Build DEB candidate
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    # Preserve upload time after preparation, publish and package deadlines.
+    timeout-minutes: 140
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
     steps:
-      - name: Require the release branch implementation
+      - uses: actions/checkout@v6
+        timeout-minutes: 7
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+      # The self-contained publish plus its package copy nearly fills a hosted runner: candidate
+      # bbab22fbd's rerun died with "No space left on device" while packaging (run 41744127229),
+      # where the same image passed on a0ba387ca. Remove preinstalled toolchains this job never
+      # uses, and record free space so the margin is measured rather than guessed.
+      - name: Free runner disk space
+        continue-on-error: true
+        timeout-minutes: 5
         run: |
-          echo '::error::Select the matching release branch when dispatching this workflow. The default branch only registers this entry point.'
-          exit 1
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL
+          df -h /
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Source preflight
+        timeout-minutes: 22
+        shell: bash
+        run: |
+          mkdir -p release-validation/deb/preflight
+          timeout --signal=TERM --kill-after=30s 2m node scripts/setup-actionlint.mjs 2>&1 | tee release-validation/deb/preflight/setup.log
+          timeout --signal=TERM --kill-after=30s 18m node scripts/release-preflight.mjs 2>&1 | tee release-validation/deb/preflight/console.log
+      - name: Prepare browser assets
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          mkdir -p release-validation/deb/preparation
+          timeout --signal=TERM --kill-after=30s 4m npm ci --prefix scripts/typecheck 2>&1 | tee release-validation/deb/preparation/restore.log
+          timeout --signal=TERM --kill-after=30s 6m node scripts/sync-assets.js 2>&1 | tee release-validation/deb/preparation/sync.log
+          timeout --signal=TERM --kill-after=30s 2m node scripts/sync-assets.js -Check 2>&1 | tee release-validation/deb/preparation/check.log
+      - name: Check native package file permissions
+        shell: bash
+        timeout-minutes: 2
+        run: bash scripts/checks/test-native-package-permissions.sh
+      - name: Check Linux installer configuration
+        shell: bash
+        timeout-minutes: 2
+        run: sudo python3 scripts/checks/test-linux-installer-config.py
+      - name: Check installed Linux acceptance assertions
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          sudo groupadd --system etlsql
+          sudo useradd --system --gid etlsql --no-create-home etlsql
+          cleanup_fixture_account() {
+            sudo userdel etlsql
+            # userdel can remove the matching group under USERGROUPS_ENAB.
+            if getent group etlsql >/dev/null; then sudo groupdel etlsql; fi
+          }
+          trap cleanup_fixture_account EXIT
+          sudo bash scripts/checks/test-installed-linux-checks.sh
+      - name: Publish candidate binaries
+        shell: pwsh
+        timeout-minutes: 45
+        run: |
+          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/publish-release.ps1 -ScriptArguments @('-Platforms', 'linux-x64') -EvidenceDirectory release-validation/deb/publish -TimeoutSeconds 2400
+      - name: Build package and resolve predecessor
+        shell: pwsh
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . ./scripts/Release.Helpers.ps1
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.VersionPrefix
+          $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Release enumeration failed.' }
+          $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ } | ForEach-Object { $_ })
+          # Empty until a public release exists to upgrade from; then only the fresh install is certified.
+          $previous = Select-UpgradeBaseline -CurrentVersion $version -Releases $releases
+          $previousSha256 = ''
+          New-Item -ItemType Directory -Force candidate | Out-Null
+          if ($previous) {
+            New-Item -ItemType Directory -Force candidate/previous | Out-Null
+            gh release download $previous --dir candidate/previous --pattern '*_amd64.deb'
+            if ($LASTEXITCODE -ne 0) { throw 'Previous DEB download failed.' }
+            $files = @(Get-ChildItem candidate/previous -Filter '*.deb')
+            if ($files.Count -ne 1) { throw 'Expected exactly one previous DEB.' }
+            Move-Item -LiteralPath $files[0].FullName -Destination candidate/previous.deb
+            $previousSha256 = (Get-FileHash candidate/previous.deb -Algorithm SHA256).Hash
+          }
+          bash -euo pipefail scripts/build-linux-packages.sh $version release/linux-x64/bin
+          if ($LASTEXITCODE -ne 0) { throw 'DEB build failed.' }
+          Move-Item "etl-sql_${version}_amd64.deb" candidate/current.deb
+          Copy-Item "release/ETL-SQL-v$version-linux-x64.zip" candidate/current.zip
+          $vsix = @(Get-ChildItem release -Filter '*-linux-x64.vsix' -File)
+          if ($vsix.Count -ne 1) { throw 'Expected exactly one Linux VSIX.' }
+          Copy-Item -LiteralPath $vsix[0].FullName -Destination candidate/current.vsix
+          $sha = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $sha -cne $env:CANDIDATE_SHA) { throw 'Candidate SHA mismatch.' }
+          @{
+            schemaVersion = 1; sourceSha = $sha; version = $version; previousTag = $previous
+            currentSha256 = (Get-FileHash candidate/current.deb -Algorithm SHA256).Hash
+            previousSha256 = $previousSha256
+            linuxZipSha256 = (Get-FileHash candidate/current.zip -Algorithm SHA256).Hash
+            linuxVsixSha256 = (Get-FileHash candidate/current.vsix -Algorithm SHA256).Hash
+          } | ConvertTo-Json | Set-Content candidate/candidate.json
+      - name: Report free disk space
+        if: always()
+        timeout-minutes: 1
+        run: df -h /
+      - name: Retain build diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: deb-build-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/
+          retention-days: 30
+      - name: Retain immutable candidate pair
+        timeout-minutes: 10
+        id: artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: deb-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14
+
+  installed-upgrade:
+    name: DEB fresh install, upgrade and rollback
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    outputs:
+      artifact_id: ${{ needs.build.outputs.artifact_id }}
+      receipt_id: ${{ steps.receipt.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 10
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v8
+        timeout-minutes: 10
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: candidate
+          merge-multiple: true
+      - name: Verify candidate identity and bytes
+        timeout-minutes: 2
+        shell: pwsh
+        run: |
+          $receipt = Get-Content candidate/candidate.json -Raw | ConvertFrom-Json
+          if ($receipt.schemaVersion -ne 1 -or $receipt.sourceSha -cne $env:CANDIDATE_SHA) { throw 'Candidate identity mismatch.' }
+          $names = if ($receipt.previousTag) { @('current', 'previous') } else { @('current') }
+          if (-not $receipt.previousTag -and ($receipt.previousSha256 -or (Test-Path candidate/previous.deb))) { throw 'Candidate records no previous release but carries a previous DEB.' }
+          foreach ($name in $names) {
+            if ((Get-FileHash "candidate/$name.deb" -Algorithm SHA256).Hash -cne $receipt."${name}Sha256") { throw "Candidate hash mismatch: $name" }
+          }
+          foreach ($extension in @('zip', 'vsix')) {
+            $key = if ($extension -eq 'zip') { 'linuxZipSha256' } else { 'linuxVsixSha256' }
+            if ((Get-FileHash "candidate/current.$extension" -Algorithm SHA256).Hash -cne $receipt.$key) { throw "Candidate hash mismatch: $extension" }
+          }
+      - name: Prepare asset comparison sources
+        timeout-minutes: 12
+        shell: bash
+        run: |
+          mkdir -p release-validation/deb/preparation
+          timeout --signal=TERM --kill-after=30s 4m npm ci --prefix scripts/typecheck 2>&1 | tee release-validation/deb/preparation/restore.log
+          timeout --signal=TERM --kill-after=30s 6m node scripts/sync-assets.js 2>&1 | tee release-validation/deb/preparation/sync.log
+      - name: Certify installed packages on disposable runner
+        timeout-minutes: 23
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-validation/deb/installed
+          (while sleep 30; do echo "DEB certification still running: $(date -u +%FT%TZ)"; done) &
+          heartbeat=$!
+          trap 'kill "$heartbeat" 2>/dev/null || true' EXIT
+          previous=
+          if [ -f candidate/previous.deb ]; then previous=candidate/previous.deb; fi
+          sudo env NODE="$(command -v node)" timeout --signal=TERM --kill-after=30s 20m \
+            bash scripts/test-deb-upgrade.sh "$previous" candidate/current.deb "$PWD" \
+            "$PWD/release-validation/deb/installed" 2>&1 | tee release-validation/deb/console.log
+      - name: Record successful certification
+        timeout-minutes: 2
+        shell: pwsh
+        env:
+          CANDIDATE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+        run: |
+          $receipt = Get-Content candidate/candidate.json -Raw | ConvertFrom-Json
+          $receipt | Add-Member status Passed
+          $scope = if ($receipt.previousTag) { 'DEB fresh install, installed upgrade, rollback and purge' } else { 'DEB fresh install and purge' }
+          $receipt | Add-Member scope $scope
+          $receipt | Add-Member runId $env:GITHUB_RUN_ID
+          $receipt | Add-Member runAttempt $env:GITHUB_RUN_ATTEMPT
+          $receipt | Add-Member artifactId $env:CANDIDATE_ARTIFACT_ID
+          $receipt | Add-Member completedAt ([datetimeoffset]::UtcNow.ToString('o'))
+          $receipt | ConvertTo-Json | Set-Content release-validation/deb/certification.json
+      - name: Prepare installation diagnostics
+        if: always()
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          set -euo pipefail
+          report=release-validation/deb/installed/recovery-report.json
+          if sudo test -e "$report" || sudo test -L "$report"; then
+            sudo test -f "$report"
+            sudo test ! -L "$report"
+            sudo chown -- "$(id -u):$(id -g)" "$report"
+          fi
+      - name: Retain installation evidence
+        timeout-minutes: 5
+        id: receipt
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: deb-installed-${{ github.run_id }}-${{ github.run_attempt }}
+          # Backups contain disposable installation secrets; retain diagnostic files only.
+          path: |
+            release-validation/deb/console.log
+            release-validation/deb/certification.json
+            release-validation/deb/preparation/*.log
+            release-validation/deb/installed/*.log
+            release-validation/deb/installed/*.txt
+            release-validation/deb/installed/*.json
+          if-no-files-found: error
+          retention-days: 30

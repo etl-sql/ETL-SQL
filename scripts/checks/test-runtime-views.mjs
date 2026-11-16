@@ -76,9 +76,11 @@ const domById = new Map();
 const fakeDocument = {
     createElement: () => new FakeElement(),
     getElementById: id => domById.get(id) || null,
+    // Strict like the browser: an unescaped quote in the attribute value is a SyntaxError.
     querySelector: selector => {
-        const match = selector.match(/\[data-name="([^"]+)"\]/);
-        return match ? (domById.get(match[1]) || null) : null;
+        const match = selector.match(/^\[data-name="((?:[^"\\]|\\.)*)"\]$/);
+        if (!match) throw new SyntaxError(`'${selector}' is not a valid selector`);
+        return domById.get(match[1].replace(/\\(.)/g, '$1')) || null;
     },
     addEventListener: () => {},
     activeElement: null,
@@ -112,6 +114,7 @@ const dependencies = {
     savedViewsRequest: async () => [],
     document: fakeDocument,
     window: fakeWindow,
+    CSS: { escape: value => String(value).replace(/["\\\]]/g, '\\$&') },
 };
 
 const source = readFileSync(new URL('../../src/ETL-SQL.ReportRuntime/Resources/Shared/rt-views.js', import.meta.url), 'utf8')
@@ -186,6 +189,14 @@ assert.equal(chartEl.style.display, '');
 assert.equal(tableEl.style.display, 'none');
 assert.equal(drawerEl.classList.contains('collapsed'), true);
 assert.equal(replacedHash, '#bookmark=DefaultView');
+fakeWindow.__ETLSNAP__ = false;
+
+// A bookmark naming an object with a quote or bracket in it must not throw out of the restore.
+currentManifest.bookmarks.push({
+    name: 'Quoted', title: 'Quoted', state: { visible: { 'Odd"]Name': false }, collapsed: { 'Odd"]Name': true } },
+});
+fakeWindow.__ETLSNAP__ = true;
+assert.equal(await views.applyBookmark('Quoted'), true);
 fakeWindow.__ETLSNAP__ = false;
 
 // Non-existent bookmark

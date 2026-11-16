@@ -40,10 +40,23 @@ public static class JsonExtractor
         }
     }
 
+    /// <summary>
+    /// The property names (or array indexes) a ROOT_PATH walks. The documented JSONPath form
+    /// <c>$.data.orders</c> and the bare <c>data.orders</c> name the same node; a leading <c>$</c>
+    /// is the document root, not a property called "$".
+    /// </summary>
+    private static string[] RootPathParts(string? rootPath)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath)) return Array.Empty<string>();
+        var parts = rootPath.Trim().Split('.', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length > 0 && parts[0] == "$" ? parts[1..] : parts;
+    }
+
     private static async IAsyncEnumerable<JsonElement> StreamElementsInternal(Stream stream, string? rootPath,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(rootPath) || rootPath == "$")
+        var pathParts = RootPathParts(rootPath);
+        if (pathParts.Length == 0)
         {
             // Root array or object streaming
             await foreach (var element in JsonSerializer.DeserializeAsyncEnumerable<JsonElement>(stream, DefaultOptions, cancellationToken))
@@ -63,8 +76,6 @@ public static class JsonExtractor
         // Deep path navigation requires a more custom approach to stay streaming
         // For simplicity in this engine version, we navigate to the start of the target path
         // and then stream from there.
-
-        var pathParts = rootPath.Split('.', StringSplitOptions.RemoveEmptyEntries);
 
         // We use a small buffer to find the target property start without loading everything.
         // If the structure is complex, we might still need to buffer the branch, but not the whole document.
@@ -132,14 +143,11 @@ public static class JsonExtractor
     {
         JsonElement root = doc.RootElement;
 
-        if (!string.IsNullOrEmpty(rootPath) && rootPath != "$")
+        foreach (var part in RootPathParts(rootPath))
         {
-            foreach (var part in rootPath.Split('.', StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty(part, out var next)) root = next;
-                else if (root.ValueKind == JsonValueKind.Array && int.TryParse(part, out var idx) && idx >= 0 && idx < root.GetArrayLength()) root = root[idx];
-                else yield break;
-            }
+            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty(part, out var next)) root = next;
+            else if (root.ValueKind == JsonValueKind.Array && int.TryParse(part, out var idx) && idx >= 0 && idx < root.GetArrayLength()) root = root[idx];
+            else yield break;
         }
 
         var elements = root.ValueKind == JsonValueKind.Array
@@ -156,14 +164,11 @@ public static class JsonExtractor
     {
         JsonElement root = doc.RootElement;
 
-        if (!string.IsNullOrEmpty(rootPath) && rootPath != "$")
+        foreach (var part in RootPathParts(rootPath))
         {
-            foreach (var part in rootPath.Split('.', StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty(part, out var next)) root = next;
-                else if (root.ValueKind == JsonValueKind.Array && int.TryParse(part, out var idx) && idx >= 0 && idx < root.GetArrayLength()) root = root[idx];
-                else return Enumerable.Empty<string>();
-            }
+            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty(part, out var next)) root = next;
+            else if (root.ValueKind == JsonValueKind.Array && int.TryParse(part, out var idx) && idx >= 0 && idx < root.GetArrayLength()) root = root[idx];
+            else return Enumerable.Empty<string>();
         }
 
         var first = root.ValueKind == JsonValueKind.Array ? root.EnumerateArray().FirstOrDefault() : root;

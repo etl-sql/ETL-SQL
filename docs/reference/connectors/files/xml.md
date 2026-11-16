@@ -10,7 +10,7 @@ Document extraction with XPath addressing for nested elements. When querying an 
 | `PATH` | Absolute path to the file | Yes (structured) |
 | `ROOT_PATH` | XPath to the repeating element (e.g. `/Catalog/Book`) | No |
 | `ENCODING` | Character encoding (default: `UTF8`) | No |
-| `COMPRESS` | `ON`/`OFF` — transparent GZip support | No |
+| `COMPRESS` | `ON`/`OFF` — store the file as a ZIP archive (one entry); `.zip` is added to the path if it does not end in `.zip` | No |
 | `ENCRYPT` | `ON`/`OFF` — AES file encryption (default: `OFF`) | No |
 | `PASSWORD` | Password for encryption/decryption (required if `ENCRYPT=ON`) | Conditional |
 | `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |

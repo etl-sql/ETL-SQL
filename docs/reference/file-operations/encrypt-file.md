@@ -1,127 +1,196 @@
 # ENCRYPT / DECRYPT FILE
 
-Encrypts or decrypts local files and staged datasets on disk using AES-256 or PGP. Also governs session-level credential encryption (`ENC:` strings) and secure password management.
-
----
+Encrypts or decrypts a local file with a password, an SSH RSA key or a PGP key, or every file in a
+directory tree with a password. With PGP, a file can also be signed while it is encrypted and its
+signature checked while it is decrypted.
 
 ## Syntax
 
-### 1. File Encryption
 ```sql
-ENCRYPT FILE '<source_file_path>' TO '<target_encrypted_path>' 
-[WITH (
-  DELETE_SOURCE = ON | OFF,
-  ALGORITHM = 'AES256' | 'PGP',
-  KEYFILE = '<public_key_path>',
-  PASSWORD = '<passphrase>'
-)];
+-- Files
+ENCRYPT FILE '<source>' [TO '<destination>']
+    { PASSWORD '<passphrase>'
+    | KEYFILE '<rsa_public_key.pem>'
+    | PGP_KEY '<recipient_public_key.asc>'
+        [SIGNING_KEY '<your_private_key.asc>' [SIGNING_PASSWORD '<key_passphrase>']] }
+    [WITH (OVERWRITE = ON | OFF, DELETE_SOURCE = ON | OFF)];
+
+DECRYPT FILE '<source>' [TO '<destination>']
+    { PASSWORD '<passphrase>'
+    | KEYFILE '<rsa_private_key.pem>' [PASSWORD '<key_passphrase>']
+    | PGP_KEY '<your_private_key.asc>' [PASSWORD '<key_passphrase>']
+        [VERIFY_KEY '<sender_public_key.asc>'] }
+    [WITH (OVERWRITE = ON | OFF, DELETE_SOURCE = ON | OFF)];
+
+-- Directories (password only)
+ENCRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' [WITH (OVERWRITE = ON | OFF)];
+DECRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' [WITH (OVERWRITE = ON | OFF)];
 ```
 
-### 2. File Decryption
-```sql
-DECRYPT FILE '<encrypted_file_path>' TO '<target_plaintext_path>'
-[WITH (
-  DELETE_SOURCE = ON | OFF,
-  KEYFILE = '<private_key_path>',
-  PASSWORD = '<passphrase>'
-)];
-```
+`PASSWORD` also takes the parenthesized form `PASSWORD('<passphrase>')`. Any value can be a variable.
 
----
+## Semantics
 
-## `ENC:` Encrypted Credentials & Session Passwords
+| Method | `ENCRYPT FILE` uses | `DECRYPT FILE` needs | Format |
+| :--- | :--- | :--- | :--- |
+| `PASSWORD` | the passphrase | the same passphrase | AES-256 with an HMAC-SHA256 tag; the key is derived with PBKDF2-SHA256 (600,000 iterations, random salt). ETL-SQL's own format: decrypt it with `DECRYPT FILE`. |
+| `KEYFILE` | a PEM RSA **public** key | the matching PEM RSA **private** key, plus `PASSWORD` if that key is encrypted | A random AES-256 key, wrapped with RSA-OAEP-SHA256. ETL-SQL's own format. |
+| `PGP_KEY` | an OpenPGP **public** key | the matching OpenPGP **private** key, plus `PASSWORD` for its passphrase | Standard OpenPGP, readable by GnuPG and other PGP tools. |
 
-Connection credentials and sensitive parameters can be stored as pre-encrypted blobs prefixed with `ENC:`. Setting a session password via `USE PASSWORD` unlocks these credentials in-memory at connection time:
+- Give exactly one method. `KEYFILE` with `PGP_KEY`, or `PASSWORD` with a key on `ENCRYPT FILE`, is a
+  syntax error, because the statement would otherwise use one and ignore the other.
+- [CREATE PGP_KEY_PAIR](create-pgp-key-pair.md) writes `public.asc` and `private.asc` into a folder.
+  [CREATE SSH_KEY_PAIR](create-ssh-key-pair.md) with `ALGORITHM = 'RSA'` writes `id_rsa` and
+  `id_rsa.pub`. An ECDSA key cannot be used with `KEYFILE`.
+- `TO` is optional on `ENCRYPT FILE` and `DECRYPT FILE` (and never encrypts in place). When omitted
+  on `ENCRYPT FILE`, it writes next to the source with `.pgp` appended for `PGP_KEY`, or `.enc`
+  appended for `PASSWORD` and `KEYFILE`. When omitted on `DECRYPT FILE`, it removes a `.pgp` or
+  `.enc` suffix and errors on any other file name rather than guessing. Existing destinations follow
+  `OVERWRITE`.
+- The source file is left in place unless `DELETE_SOURCE = ON` (see the vendor-drop example).
+- `ENCRYPT DIRECTORY` encrypts every file, subfolders included, and writes each one as `<name>.enc`
+  under the destination with the same folder layout. `DECRYPT DIRECTORY` decrypts only `.enc` files
+  and removes that suffix.
+- **Signing (PGP only).** `SIGNING_KEY` is your OpenPGP **private** key; the file is encrypted and
+  signed in one pass, the way most partners that require signed files expect. `SIGNING_PASSWORD` is
+  that key's passphrase.
+- **Verifying (PGP only).** `VERIFY_KEY` is the sender's OpenPGP **public** key. `DECRYPT FILE` then
+  fails, and writes nothing, when the file is unsigned, signed by another key, or changed after it
+  was signed. Without `VERIFY_KEY` a signed file decrypts like any other and its signature is not
+  checked.
+- `SIGNING_KEY` and `VERIFY_KEY` with `PASSWORD` or `KEYFILE`, `VERIFY_KEY` on `ENCRYPT FILE`, and
+  `SIGNING_KEY` on `DECRYPT FILE` are syntax errors.
+- The script's master password (`USE PASSWORD` or `--pass`) protects connection strings and secrets
+  in the script. It is never used to encrypt or decrypt files: a file passphrase has to travel with
+  the file, so give `PASSWORD` on the statement.
 
-```sql
--- Establish session decryption context
-USE PASSWORD = 'SECRET:SessionMasterKey';
+## Options
 
--- The engine automatically decrypts the ENC: blob during connection initialization
-CREATE CONNECTION prod_db AS MSSQL(
-    SERVER   = 'sql01.internal',
-    DATABASE = 'Finance',
-    PASSWORD = 'ENC:U2FsdGVkX1+abc123=='
-);
-```
+- **`OVERWRITE`** — `ON` (default) replaces an existing destination; `OFF` fails instead.
+- **`DELETE_SOURCE`** — `OFF` (default) keeps the source; `ON` deletes the source file after the
+  output is written. A failed run or `SET WHAT_IF ON` never deletes it. A destination that is the
+  source itself, or a directory source, is refused before anything runs. Directories (`ENCRYPT DIRECTORY`) do not take it.
 
----
+Any other `WITH` option is a syntax error that lists the accepted options.
 
 ## Examples
 
-### 1. Symmetric File Encryption (AES-256)
+### 1. Password round trip
 
 ```sql
-USE PASSWORD = 'SECRET:FileEncryptionPassphrase';
+DECLARE @pass VARCHAR = 'correct-horse-battery-staple';
 
--- Encrypt sensitive staging CSV and purge plaintext source
-ENCRYPT FILE 'C:\staging\payroll.csv' 
-TO 'C:\staging\payroll.csv.enc' 
-WITH (DELETE_SOURCE = ON);
+ENCRYPT FILE 'staging/payroll.csv' TO 'staging/payroll.csv.enc' PASSWORD @pass;
+DELETE FILE 'staging/payroll.csv';
 
--- Decrypt back to plaintext when needed
-DECRYPT FILE 'C:\staging\payroll.csv.enc' 
-TO 'C:\staging\payroll.csv';
+DECRYPT FILE 'staging/payroll.csv.enc' TO 'staging/payroll.csv' PASSWORD @pass WITH (OVERWRITE = OFF);
 ```
 
-### 2. Production ETL: Secure Vendor Data Drop with Public Key Encryption
-
-Extract sensitive partner records, stage to CSV, compress with GZIP, encrypt using the vendor's public PGP key, transmit via SFTP, and safely delete intermediate files:
+### 2. Vendor drop: compress, encrypt to the partner's PGP key, send, clean up
 
 ```sql
-CREATE CONNECTION dw        AS MSSQL(SERVER='dw.internal', DATABASE='analytics');
 CREATE CONNECTION sftp_drop AS SFTP(HOST='sftp.partner.com', USER='partner_agent', KEYFILE='certs/sftp_id.rsa');
 
-DECLARE @local_csv VARCHAR = 'C:\staging\partner_feed.csv';
-DECLARE @local_gz  VARCHAR = 'C:\staging\partner_feed.csv.gz';
-DECLARE @local_pgp VARCHAR = 'C:\staging\partner_feed.csv.gz.pgp';
+DECLARE @local_csv VARCHAR = 'staging/partner_feed.csv';
+DECLARE @local_zip VARCHAR = 'staging/partner_feed.zip';
+DECLARE @local_pgp VARCHAR = 'staging/partner_feed.zip.pgp';
 
-BEGIN TRY
-  -- 1. Extract and sanitize partner data
-  SELECT customer_id, first_name, last_name, HASHBYTES('SHA256', ssn) AS ssn_hash, reward_balance
-  INTO #partner_stage
-  FROM dw.dbo.CustomerRewards
-  WHERE is_active = 1;
+-- Compress first: encrypted data does not compress. Each step removes its input once its
+-- output is written, so no plaintext copy is left behind.
+COMPRESS FILE @local_csv TO @local_zip WITH (DELETE_SOURCE = ON);
 
-  -- 2. Export table to CSV
-  SELECT * INTO #export_view FROM #partner_stage;
-  COPY FILE '#export_view' TO @local_csv;
+-- Encrypt to the partner's public key; only they can decrypt it
+ENCRYPT FILE @local_zip TO @local_pgp PGP_KEY 'certs/partner_public.asc' WITH (DELETE_SOURCE = ON);
 
-  -- 3. Compress FIRST to maximize entropy reduction
-  COMPRESS FILE @local_csv TO @local_gz WITH (FORMAT = 'GZIP');
-
-  -- 4. Encrypt with partner's public PGP key and remove unencrypted archive
-  ENCRYPT FILE @local_gz TO @local_pgp WITH (
-    ALGORITHM = 'PGP',
-    KEYFILE = 'certs/partner_public.asc',
-    DELETE_SOURCE = ON
-  );
-
-  -- 5. Transmit encrypted archive to remote drop zone
-  SEND FILE @local_pgp TO '/inbound/partner_feed.csv.gz.pgp' AT sftp_drop WITH (OVERWRITE = TRUE);
-
-  PRINT 'Encrypted feed delivered successfully.';
-
-  -- 6. Cleanup local files
-  DELETE FILE @local_csv;
-  DELETE FILE @local_pgp;
-END TRY
-BEGIN CATCH
-  PRINT 'Secure vendor drop failed: ' + ERROR_MESSAGE();
-  THROW;
-END CATCH;
+SEND FILE @local_pgp TO '/inbound/partner_feed.zip.pgp' AT sftp_drop WITH (OVERWRITE = TRUE);
+DELETE FILE @local_pgp;
 ```
 
----
+### 3. Decrypt a file a partner encrypted to your PGP key
 
-## Security Guardrails & Order of Operations
+```sql
+DECRYPT FILE 'inbound/orders.csv.pgp' TO 'staging/orders.csv'
+    PGP_KEY 'certs/our_private.asc' PASSWORD 'private-key-passphrase';
+```
 
-- **Order of Operations**: **Always compress BEFORE encrypting.** Compressing already-encrypted data is ineffective because cryptographic encryption maximizes entropy. The linter issues a warning if compression is executed after encryption.
-- **In-Memory Password Isolation**: Session passwords set by `USE PASSWORD` are held strictly in memory and are automatically redacted from error traces, query plans, and audit outboxes.
+### 4. Signed exchange with a partner
 
----
+Send a file the partner can trust came from you, and accept only files they signed.
 
-## References & Related Recipes
+```sql
+-- Outbound: encrypt to the partner, sign with our key
+ENCRYPT FILE 'staging/remittance.csv' TO 'outbound/remittance.csv.pgp'
+    PGP_KEY 'certs/partner_public.asc'
+    SIGNING_KEY 'certs/our_private.asc' SIGNING_PASSWORD @our_key_passphrase;
+
+-- Inbound: decrypt with our key, refuse anything the partner did not sign
+DECRYPT FILE 'inbound/orders.csv.pgp' TO 'staging/orders.csv'
+    PGP_KEY 'certs/our_private.asc' PASSWORD @our_key_passphrase
+    VERIFY_KEY 'certs/partner_public.asc';
+```
+
+### 5. SSH RSA key pair
+
+```sql
+CREATE SSH_KEY_PAIR 'certs/ledger' WITH (BITS = 4096, ALGORITHM = 'RSA');
+
+ENCRYPT FILE 'staging/ledger.csv' TO 'staging/ledger.csv.enc' KEYFILE 'certs/ledger/id_rsa.pub';
+DECRYPT FILE 'staging/ledger.csv.enc' TO 'restore/ledger.csv' KEYFILE 'certs/ledger/id_rsa';
+```
+
+### 6. A whole directory
+
+```sql
+ENCRYPT DIRECTORY 'exports/2026-11/' TO 'vault/2026-11/' PASSWORD 'archive-passphrase';
+DECRYPT DIRECTORY 'vault/2026-11/' TO 'restore/2026-11/' PASSWORD 'archive-passphrase';
+```
+
+## Guardrails
+
+- **Compress before encrypting.** Compressing encrypted data saves nothing; the linter warns when
+  `COMPRESS FILE` follows `ENCRYPT FILE` on the same path.
+- **Remove the plaintext.** Encryption keeps the source unless `DELETE_SOURCE = ON`.
+- **Keep passphrases out of saved scripts.** A literal password is visible to anyone who can read the
+  script. Prefer an `ENC:` value or a prompted password; see [USE](../variables-parameters/use.md).
+- Destination paths pass the same file-system policy and file-type checks as every other write.
+
+## Errors
+
+- **`DECRYPT FILE without TO requires a '.pgp' or '.enc' file extension on '<source>', or specify TO '<destination>'.`**
+  — the input file does not end in `.pgp` or `.enc`; pass an explicit `TO` path.
+- **`ENCRYPT FILE requires a PASSWORD, KEYFILE or PGP_KEY clause.`** — no method was given. Add one;
+  the master password is not a fallback.
+- **`Destination file already exists and OVERWRITE is OFF: <path>`** — remove the file or set
+  `OVERWRITE = ON`.
+- **`ENCRYPT FILE takes KEYFILE (an SSH RSA key) or PGP_KEY, not both.`** — pick one method.
+- **`ENCRYPT FILE with PGP_KEY encrypts to a public key and takes no PASSWORD.`** — drop `PASSWORD`;
+  it is only the private-key passphrase on `DECRYPT FILE`.
+- **`ENCRYPT DIRECTORY does not support KEYFILE or PGP_KEY.`** — directories use `PASSWORD` only.
+- **`SIGNING_KEY works with PGP_KEY only.`** / **`VERIFY_KEY works with PGP_KEY only.`** —
+  `PASSWORD` and `KEYFILE` files carry no signature.
+- **`Could not sign with '<key>': the SIGNING_PASSWORD is wrong for this SIGNING_KEY.`**
+- **`Could not sign with '<key>': SIGNING_KEY must be your PGP private key, not a public key.`**
+- **`Could not verify '<file>': it is not signed.`** — the sender did not sign it. Ask them to, or
+  drop `VERIFY_KEY` if an unsigned file is acceptable.
+- **`Could not verify '<file>': it was not signed by the VERIFY_KEY '<key>', or it was changed after
+  it was signed.`** — check you have the sender's current public key; otherwise treat the file as
+  untrusted.
+- **`Could not decrypt '<file>': the file was changed after it was encrypted.`** — the PGP integrity
+  check failed.
+- **`ENCRYPT FILE has no WITH option '<key>'.`** — the message lists the accepted options.
+- **`DELETE_SOURCE would delete the output`** / **`DELETE_SOURCE deletes a file, and '<path>' is a
+  directory`** — refused before anything runs; write elsewhere, or use `DELETE DIRECTORY`.
+- **`Could not decrypt '<file>': the password is wrong, or the file was changed after it was encrypted.`**
+- **`Could not decrypt '<file>': the private key does not match the public key the file was encrypted to.`**
+  — the `KEYFILE` is not the partner of the key used to encrypt.
+- **`Could not decrypt '<file>': it was not encrypted with PASSWORD by ETL-SQL.`** (or `KEYFILE`) —
+  the file is plain text or used another method; decrypt it with the method that encrypted it.
+- Other PGP failures name the cause: no matching private key (with the key IDs the file was
+  encrypted to), a wrong passphrase, or input that is not PGP data.
+- A failed decrypt writes no output and leaves an existing destination unchanged. Messages never
+  include passwords or key contents.
+
+## References
 
 - [File Operations Reference](README.md)
 - [COMPRESS FILE](compress-file.md)

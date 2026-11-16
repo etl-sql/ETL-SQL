@@ -36,40 +36,27 @@ public abstract class ParserComponent
         _parser.Current.Type == TokenType.IDENTIFIER &&
         _parser.Current.Value.Equals(value, System.StringComparison.OrdinalIgnoreCase);
 
-    // Shared helpers used by both DataParser and ExtensionParser
-    protected Expression? ParseWithOverwrite()
+    /// <summary>
+    /// Parses <c>( KEY = expr, ... )</c> after WITH. A key the statement does not know is a syntax
+    /// error naming the accepted keys; it used to be parsed and dropped, so a misspelt or unsupported
+    /// option ran the statement as if it were absent (ROADMAP FO02). A repeated key keeps the last value.
+    /// </summary>
+    protected Dictionary<string, Expression> ParseWithOptions(string statement, params string[] accepted)
     {
         Consume(TokenType.LPAREN, "Expected '(' after WITH");
-        Expression? overwrite = null;
+        var options = new Dictionary<string, Expression>(System.StringComparer.OrdinalIgnoreCase);
         while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
         {
-            string key = Advance().Value;
+            var key = Advance();
+            if (System.Array.FindIndex(accepted, a => a.Equals(key.Value, System.StringComparison.OrdinalIgnoreCase)) < 0)
+                throw new SyntaxException(
+                    $"{statement} has no WITH option '{key.Value}'. Accepted options: {string.Join(", ", accepted)}.",
+                    key.Line, key.Column);
             Consume(TokenType.EQUALS, "Expected '=' after option name");
-            if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "OVERWRITE"))
-                overwrite = ParseExpression();
-            else
-                ParseExpression();
+            options[key.Value] = ParseExpression();
             if (!Match(TokenType.COMMA)) break;
         }
         Consume(TokenType.RPAREN, "Expected ')' after WITH options");
-        return overwrite;
-    }
-
-    protected Expression? ParseWithRecursive()
-    {
-        Consume(TokenType.LPAREN, "Expected '(' after WITH");
-        Expression? recursive = null;
-        while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
-        {
-            string key = Advance().Value;
-            Consume(TokenType.EQUALS, "Expected '=' after option name");
-            if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "RECURSIVE"))
-                recursive = ParseExpression();
-            else
-                ParseExpression();
-            if (!Match(TokenType.COMMA)) break;
-        }
-        Consume(TokenType.RPAREN, "Expected ')' after WITH options");
-        return recursive;
+        return options;
     }
 }

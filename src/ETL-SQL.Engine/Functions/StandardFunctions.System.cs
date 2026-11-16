@@ -13,15 +13,6 @@ namespace ETL_SQL.Engine.Functions
 {
     public static partial class StandardFunctions
     {
-        /// <summary>
-        /// Resolves and authorizes a script-selected local path at the canonical filesystem
-        /// policy boundary (safe zones plus enterprise approved roots and policy freshness).
-        /// </summary>
-        private static string AuthorizeLocalPath(IExecutionContext context, string rawPath) =>
-            new FileSystemPolicyAuthorizer(context.SecurityService)
-                .Authorize(context, context.ResolvePath(rawPath), FileSystemAccessKind.Read, validateFileType: false)
-                .CanonicalPath;
-
         private static void RegisterSystemFunctions(IFunctionRegistry registry)
         {
             registry.RegisterWithHelp("APPEND_TO_LIST", AddToList, "APPEND_TO_LIST(@list, value): Adds an item to a list variable. Returns the new list.");
@@ -34,8 +25,6 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("GENERATE_SERIES", GenerateSeries, "GENERATE_SERIES(start, stop[, step]): Generates a series of numbers.");
             registry.RegisterWithHelp("UNNEST", Unnest, "UNNEST(list): Table-valued — expands a list/array into one 'Value' row per element. Use in FROM or CROSS APPLY.");
             registry.RegisterWithHelp("FLATTEN", Flatten, "FLATTEN(list): Like UNNEST but flattens one level of nested lists.");
-            registry.RegisterWithHelp("FILE_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.File.Exists(AuthorizeLocalPath(ctx, args[0]?.ToString() ?? "")) : false, "FILE_EXISTS(path): Returns TRUE if the file exists.");
-            registry.RegisterWithHelp("DIRECTORY_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.Directory.Exists(AuthorizeLocalPath(ctx, args[0]?.ToString() ?? "")) : false, "DIRECTORY_EXISTS(path): Returns TRUE if the directory exists.");
 
             registry.RegisterWithHelp("HASHBYTES", HashBytes, "HASHBYTES('algo', val): Returns a cryptographic hash (MD5, SHA1, SHA256, SHA512).");
             registry.RegisterWithHelp("NEWID", (args, ctx) => NewUuidV7(), "NEWID(): Returns a new unique identifier (UUID v7).");
@@ -230,9 +219,13 @@ namespace ETL_SQL.Engine.Functions
         private static object? GenerateSeries(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 2) return null;
+            // A NULL bound used to read as 0, so GENERATE_SERIES(NULL, 5) returned 0..5.
+            if (args.Take(3).Any(a => a.IsNull())) return null;
             long start = Convert.ToInt64(args[0]);
             long stop = Convert.ToInt64(args[1]);
             long step = args.Count >= 3 ? Convert.ToInt64(args[2]) : 1;
+            // A zero step never reaches stop; it used to return 1,000,001 copies of start.
+            if (step == 0) throw new ExecutionException("GENERATE_SERIES: the step cannot be 0.");
 
             var list = new List<object?>();
             for (long i = start; (step > 0 ? i <= stop : i >= stop); i += step)

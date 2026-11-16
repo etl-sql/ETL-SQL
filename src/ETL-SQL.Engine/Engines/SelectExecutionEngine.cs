@@ -299,54 +299,71 @@ public class SelectExecutionEngine
                 whereApplied = true;
             }
 
-            var bufferedForSpill = new List<Row>();
-            var enumerator = aggInput.GetAsyncEnumerator();
-            bool enumeratorHandedOff = false;
-            try
+            // A scalar aggregate with fixed-size states needs O(1) memory, so it streams the whole input:
+            // partitioning it to disk (the probe below) would write every row for one running count.
+            bool scalarConstantMemory = (stmt.GroupBy == null || stmt.GroupBy.Count == 0)
+                && (stmt.GroupingSet == null || stmt.GroupingSet.Type == GroupingSetType.None)
+                && _aggregateEngine.HasOnlyConstantMemoryAggregates(
+                    finalColumns.Select(c => c.Expression).Append(stmt.HavingClause));
+            if (scalarConstantMemory)
             {
-                int count = 0;
-                long aggGrantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
-                while (count < _context.JoinSpillThreshold && await enumerator.MoveNextAsync())
-                {
-                    bufferedForSpill.Add(enumerator.Current);
-                    count++;
-                    // Early spill if byte grant exceeded before the row-count backstop fires.
-                    if (count % 1000 == 0 && RowWidthEstimator.EstimateTotalBytes(bufferedForSpill) > aggGrantBytes)
-                        break;
-                }
-
-                long aggBufferedBytes = RowWidthEstimator.EstimateTotalBytes(bufferedForSpill);
-                bool aggNeedsSpill = count >= _context.JoinSpillThreshold
-                    || aggBufferedBytes > aggGrantBytes
-                    // Global pressure: spill if holding this buffer would breach the process-wide pool.
-                    || _memLease.RegisterAndCheckSpill(aggBufferedBytes);
-                if (aggNeedsSpill)
-                {
-                    RecordRowPipelineDecision("select.aggregate-stream", PlanDecisionOutcome.Degraded,
-                        "Streaming aggregate admission probe exceeded the in-memory budget; routing to external aggregate.",
-                        ("executionMode", "external-streaming"),
-                        ("stage", "aggregate"),
-                        ("bufferedRows", count.ToString()),
-                        ("bufferedBytes", aggBufferedBytes.ToString()),
-                        ("grantBytes", aggGrantBytes.ToString()),
-                        ("rowThreshold", _context.JoinSpillThreshold.ToString()),
-                        ("fallbackDestination", "ExternalAggregate"));
-                    _logger.Info("[SELECT] Aggregate threshold reached ({Count} rows, grant={GrantMB} MB). Switching to ExternalAggregateEngine.", count, _context.EffectiveOperatorMemoryGrantMB);
-                    var externalAgg = new ExternalAggregateEngine(_context, _logger);
-                    var combinedStream = PrependRows(bufferedForSpill, ContinueStreamAndDispose(enumerator));
-                    enumeratorHandedOff = true;
-                    externalEngineStream = externalAgg.ApplyAggregationExternal(combinedStream, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
-                    allRows = [];
-                }
-                else
-                {
-                    allRows = await _aggregateEngine.ApplyAggregation(bufferedForSpill.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
-                }
+                RecordRowPipelineDecision("select.aggregate-stream", PlanDecisionOutcome.Accepted,
+                    "Scalar aggregate with constant-memory states streams in memory.",
+                    ("executionMode", "streaming"),
+                    ("stage", "scalar-aggregate"));
+                allRows = await _aggregateEngine.ApplyAggregation(aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
             }
-            finally
+            else
             {
-                if (!enumeratorHandedOff)
-                    await enumerator.DisposeAsync();
+                var bufferedForSpill = new List<Row>();
+                var enumerator = aggInput.GetAsyncEnumerator();
+                bool enumeratorHandedOff = false;
+                try
+                {
+                    int count = 0;
+                    long aggGrantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
+                    while (count < _context.JoinSpillThreshold && await enumerator.MoveNextAsync())
+                    {
+                        bufferedForSpill.Add(enumerator.Current);
+                        count++;
+                        // Early spill if byte grant exceeded before the row-count backstop fires.
+                        if (count % 1000 == 0 && RowWidthEstimator.EstimateTotalBytes(bufferedForSpill) > aggGrantBytes)
+                            break;
+                    }
+
+                    long aggBufferedBytes = RowWidthEstimator.EstimateTotalBytes(bufferedForSpill);
+                    bool aggNeedsSpill = count >= _context.JoinSpillThreshold
+                        || aggBufferedBytes > aggGrantBytes
+                        // Global pressure: spill if holding this buffer would breach the process-wide pool.
+                        || _memLease.RegisterAndCheckSpill(aggBufferedBytes);
+                    if (aggNeedsSpill)
+                    {
+                        RecordRowPipelineDecision("select.aggregate-stream", PlanDecisionOutcome.Degraded,
+                            "Streaming aggregate admission probe exceeded the in-memory budget; routing to external aggregate.",
+                            ("executionMode", "external-streaming"),
+                            ("stage", "aggregate"),
+                            ("bufferedRows", count.ToString()),
+                            ("bufferedBytes", aggBufferedBytes.ToString()),
+                            ("grantBytes", aggGrantBytes.ToString()),
+                            ("rowThreshold", _context.JoinSpillThreshold.ToString()),
+                            ("fallbackDestination", "ExternalAggregate"));
+                        _logger.Info("[SELECT] Aggregate threshold reached ({Count} rows, grant={GrantMB} MB). Switching to ExternalAggregateEngine.", count, _context.EffectiveOperatorMemoryGrantMB);
+                        var externalAgg = new ExternalAggregateEngine(_context, _logger);
+                        var combinedStream = PrependRows(bufferedForSpill, ContinueStreamAndDispose(enumerator));
+                        enumeratorHandedOff = true;
+                        externalEngineStream = externalAgg.ApplyAggregationExternal(combinedStream, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                        allRows = [];
+                    }
+                    else
+                    {
+                        allRows = await _aggregateEngine.ApplyAggregation(bufferedForSpill.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                    }
+                }
+                finally
+                {
+                    if (!enumeratorHandedOff)
+                        await enumerator.DisposeAsync();
+                }
             }
         }
         else
@@ -1062,8 +1079,8 @@ public class SelectExecutionEngine
         {
             for (int i = 0; i < orderBy.Count; i++)
             {
-                var res = _context.CompareConstants(a.Keys[i], b.Keys[i]);
-                if (res != 0) return orderBy[i].Descending ? -res : res;
+                var res = orderBy[i].OutputOrder(_context.CompareConstants(a.Keys[i], b.Keys[i]), a.Keys[i], b.Keys[i]);
+                if (res != 0) return res;
             }
             return 0;
         });
@@ -1095,8 +1112,8 @@ public class SelectExecutionEngine
             {
                 for (int i = 0; i < orderBy.Count; i++)
                 {
-                    var res = _context.CompareConstants(a.Keys[i], b.Keys[i]);
-                    if (res != 0) return orderBy[i].Descending ? res : -res; // inverted
+                    var res = orderBy[i].OutputOrder(_context.CompareConstants(a.Keys[i], b.Keys[i]), a.Keys[i], b.Keys[i]);
+                    if (res != 0) return -res; // inverted
                 }
                 return 0;
             }));
@@ -1118,8 +1135,8 @@ public class SelectExecutionEngine
                 bool better = false;
                 for (int i = 0; i < orderBy.Count; i++)
                 {
-                    var res = _context.CompareConstants(keys[i], peekKeys[i]);
-                    if (res != 0) { better = orderBy[i].Descending ? res > 0 : res < 0; break; }
+                    var res = orderBy[i].OutputOrder(_context.CompareConstants(keys[i], peekKeys[i]), keys[i], peekKeys[i]);
+                    if (res != 0) { better = res < 0; break; }
                 }
                 if (better) heap.DequeueEnqueue(entry, entry);
             }

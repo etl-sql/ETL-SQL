@@ -104,7 +104,7 @@ function signature(root) {
         if (!fs.existsSync(directory)) return [];
         return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
             const file = path.join(directory, entry.name);
-            if (['bin', 'obj', 'artifacts', 'build', 'node_modules', 'dist', 'out'].includes(entry.name)) return [];
+            if (['bin', 'obj', 'artifacts', 'build', 'node_modules', 'dist', 'out', '.vscode-test'].includes(entry.name)) return [];
             if (entry.isSymbolicLink()) throw new Error(`Contract source symlink is unsupported: ${path.relative(root, file)}`);
             if (entry.isDirectory()) return sourceFiles(file);
             if (!/\.(?:cs|csproj|props|targets|json)$/.test(entry.name)) return [];

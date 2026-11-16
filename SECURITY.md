@@ -191,9 +191,9 @@ To enforce egress allowlisting, configure a non-empty `Security:AllowedHosts` li
 }
 ```
 
-`localhost`, `127.0.0.1`, and `::1` are always allowed by the configurable host allowlist for local
-tooling and report hosting. Do not treat `AllowedHosts` as a loopback-denial control; use process and
-network isolation if scripts must not reach local services.
+Loopback has no exemption. Once the list is narrowed, `localhost`, `127.0.0.1` and `::1` are denied
+unless listed, the same as any other host. Add the exact names your local tooling uses, such as a
+Portal or Orchestrator connector pointed at `localhost`.
 
 Independently of `AllowedHosts`, the infrastructure egress fence blocks cloud metadata endpoints,
 link-local node services, container-host aliases, and cluster-service discovery names. It is applied
@@ -568,6 +568,6 @@ security detail.
 
 ---
 
-**Policy Version**: 0.21.0
+**Policy Version**: 0.22.0
 **Last Review Date**: 2026-08-29
 **Reference Standards**: NIST SP 800-132 for PBKDF2 parameter guidance, OWASP secure logging principles, and least-privilege service deployment practices.

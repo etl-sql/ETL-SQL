@@ -34,7 +34,7 @@ public sealed class DetailSurfaceBehaviourTests(DetailSurfaceHarnessFixture fixt
     private async Task<IPage> OpenAsync(BrowserSession session, string surface = "popover", string query = "")
     {
         var page = session.Page;
-        await page.GotoAsync($"{fixture.BaseUrl}/tools/ui-sandbox/detail-surface.html?surface={surface}{query}");
+        await page.GotoWithDiagnosticsAsync($"{fixture.BaseUrl}/tools/ui-sandbox/detail-surface.html?surface={surface}{query}");
         await page.WaitForSelectorAsync(Mark, new PageWaitForSelectorOptions { Timeout = 30_000 });
         return page;
     }
@@ -497,10 +497,10 @@ public sealed class DetailSurfaceBehaviourTests(DetailSurfaceHarnessFixture fixt
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{fixture.BaseUrl}/tools/ui-sandbox/detail-surface.html?payload=missing");
+        await page.GotoWithDiagnosticsAsync($"{fixture.BaseUrl}/tools/ui-sandbox/detail-surface.html?payload=missing");
 
         var missing = page.Locator(".missing-chart-payload");
-        await missing.WaitForAsync(new LocatorWaitForOptions { Timeout = 30_000 });
+        await missing.WaitForWithDiagnosticsAsync(new LocatorWaitForOptions { Timeout = 30_000 });
 
         // Explicit, not blank: the message names the visual and its type, and is announced.
         var text = await missing.InnerTextAsync();

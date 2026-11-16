@@ -3,6 +3,7 @@ import { Database, Search, RefreshCw, Layers, Variable, Hash, Plus } from 'lucid
 import type { ProtocolMessage, Connection, Variable as ScriptVar } from '../types';
 import { extractVariables } from '../utils/variable_utils';
 import { MetadataItem } from './MetadataItem';
+import { scriptVariablesFor } from '../utils/metadata_utils';
 
 interface SidebarExplorerProps {
   messages: ProtocolMessage[];
@@ -36,20 +37,18 @@ export const SidebarExplorer: React.FC<SidebarExplorerProps> = ({ messages, post
     }
   }, [messages]);
 
-  useEffect(() => {
-    postMessage({ type: 'ready' });
-  }, [postMessage]);
+  // No 'ready' here: useVsCodeApi already announces the webview once, and a second 'ready' made
+  // the extension push its whole initial state twice.
 
   const variables = useMemo(() => {
     const runtimeMsg = [...messages].reverse().find(m => m.type === 'variables');
     const runtimeVars = extractVariables(runtimeMsg) as ScriptVar[];
-    const scriptMsg = [...messages].reverse().find(m => m.type === 'scriptVariables');
-    const scriptVars = extractVariables(scriptMsg);
+    const scriptVars = scriptVariablesFor(messages, activeUri);
     const merged = new Map<string, ScriptVar>();
     scriptVars.forEach(v => merged.set(v.name.toLowerCase(), { name: v.name, typeName: v.typeName, value: v.value || '(declared)' }));
     runtimeVars.forEach(v => merged.set(v.name.toLowerCase(), v));
     return Array.from(merged.values());
-  }, [messages]);
+  }, [messages, activeUri]);
 
   const filteredConnections = connections.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredVariables = variables.filter(v => v.name.toLowerCase().includes(searchQuery.toLowerCase()));

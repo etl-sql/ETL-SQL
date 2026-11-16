@@ -17,6 +17,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Reporting;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.Portal
@@ -32,6 +33,8 @@ namespace ETL_SQL.Connectors.Portal
         private readonly string _password;
         private readonly ILogger _logger;
         private readonly HttpClient _http;
+        // A WithTable view borrows its parent's client; only the connection that created it disposes it.
+        private readonly bool _ownsHttp = true;
         private readonly string? _tableName;
         private string? _token;
         private DateTime _tokenExpiry = DateTime.MinValue;
@@ -69,6 +72,7 @@ namespace ETL_SQL.Connectors.Portal
             _password = other._password;
             _logger = other._logger;
             _http = other._http;
+            _ownsHttp = false;
             _token = other._token;
             _tokenExpiry = other._tokenExpiry;
             _tableName = tableName;
@@ -306,7 +310,11 @@ namespace ETL_SQL.Connectors.Portal
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
         public IDataSource WithTable(string tableName) => new PortalDataSource(this, tableName);
-        public ValueTask DisposeAsync() { _http.Dispose(); return ValueTask.CompletedTask; }
+        public ValueTask DisposeAsync()
+        {
+            if (_ownsHttp) _http.Dispose();
+            return ValueTask.CompletedTask;
+        }
 
         // ── Authentication ────────────────────────────────────────────────────────
 
@@ -318,11 +326,11 @@ namespace ETL_SQL.Connectors.Portal
             var req = new { Username = _username, Password = _password };
             HttpResponseMessage resp;
             try { resp = await _http.PostAsJsonAsync("api/auth/login", req); }
-            catch (HttpRequestException ex) { throw new ExecutionException($"Portal connection error: {ex.Message}", ex); }
+            catch (HttpRequestException ex) { throw ConnectionError(ex); }
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Portal login failed ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Portal login failed ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             var result = await resp.Content.ReadFromJsonAsync<LoginResponse>(_json)
                 ?? throw new ExecutionException("Portal login returned empty response.");
@@ -499,8 +507,7 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task ShowUsersAsync(IExecutionContext context)
         {
-            var resp = await _http.GetAsync("api/admin/users");
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync("api/admin/users");
             var users = await ReadJsonItemsAsync(resp);
             var table = new DataTable();
             table.SetColumns(["Id", "Username", "Email", "FirstName", "LastName", "IsActive", "Roles"]);
@@ -908,7 +915,7 @@ namespace ETL_SQL.Connectors.Portal
             }
             catch (HttpRequestException ex)
             {
-                throw new ExecutionException($"Portal connection error: {ex.Message}", ex);
+                throw ConnectionError(ex);
             }
 
             if (!resp.IsSuccessStatusCode)
@@ -953,8 +960,7 @@ namespace ETL_SQL.Connectors.Portal
                 url = $"api/folders/{folderId}/reports";
             }
 
-            var resp = await _http.GetAsync(url);
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync(url);
             var reports = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
             var table = new DataTable();
             table.SetColumns(["Id", "Name", "Description", "FolderPath", "ScriptPath", "UpdatedAt"]);
@@ -1043,10 +1049,8 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task RevokeShareLinkAsync(RevokePortalShareLinkStatement stmt, IExecutionContext context)
         {
-            var (reportId, token) = stmt.ReportName is { Length: > 0 }
-                ? await LookupReportTokenByNameAsync("share-links", stmt.ReportName, stmt.Name, "share link")
-                : await LookupReportTokenAsync("share-links", stmt.Name);
-            await CallAsync(HttpMethod.Delete, $"api/reports/{reportId}/share-links/{Uri.EscapeDataString(token)}", null,
+            var (reportId, linkId) = await LookupReportTokenIdByNameAsync("share-links", RequireReportName(stmt.ReportName), stmt.Name, "share link");
+            await CallAsync(HttpMethod.Delete, $"api/reports/{reportId}/share-links/by-id/{linkId}", null,
                 $"Share link '{stmt.Name}' revoked.");
         }
 
@@ -1065,21 +1069,25 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task RevokeEmbedTokenAsync(RevokePortalEmbedTokenStatement stmt, IExecutionContext context)
         {
-            var (reportId, token) = stmt.ReportName is { Length: > 0 }
-                ? await LookupReportTokenByNameAsync("embed-tokens", stmt.ReportName, stmt.Name, "embed token")
-                : await LookupReportTokenAsync("embed-tokens", stmt.Name);
-            await CallAsync(HttpMethod.Delete, $"api/reports/{reportId}/embed-tokens/{Uri.EscapeDataString(token)}", null,
+            var (reportId, tokenId) = await LookupReportTokenIdByNameAsync("embed-tokens", RequireReportName(stmt.ReportName), stmt.Name, "embed token");
+            await CallAsync(HttpMethod.Delete, $"api/reports/{reportId}/embed-tokens/by-id/{tokenId}", null,
                 $"Embed token '{stmt.Name}' revoked.");
         }
 
         private async Task CreateSavedViewAsync(CreatePortalSavedViewStatement stmt, IExecutionContext context)
         {
             var reportId = await LookupReportIdAsync(stmt.ReportName);
+            var state = new ResolvedReportState();
+            foreach (var parameter in stmt.Parameters)
+            {
+                var name = "@" + parameter.Name.TrimStart('@');
+                if (!state.Parameters.TryAdd(name, ReportStateValue.FromString(parameter.Value)))
+                    throw new ExecutionException($"Saved view repeats parameter '{name}'.");
+            }
             var json = await SendJsonAsync(HttpMethod.Post, $"api/reports/{reportId}/saved-views", new
             {
                 Name = stmt.Name,
-                Parameters = BuildParameterDictionary(stmt.Parameters),
-                Filters = (Dictionary<string, string>?)null,
+                StateJson = state.ToJson(),
                 IsDefault = stmt.IsDefault
             });
             await PublishJsonResultAsync(json, stmt.IntoTable, context);
@@ -1465,7 +1473,7 @@ namespace ETL_SQL.Connectors.Portal
             try { resp = await _http.GetAsync("api/admin/configuration/export"); }
             catch (HttpRequestException ex)
             {
-                throw new ExecutionException($"Portal connection error: {ex.Message}", ex);
+                throw ConnectionError(ex);
             }
 
             using var _ = resp;
@@ -1654,8 +1662,7 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task<int?> TryLookupUserIdAsync(string username)
         {
-            var resp = await _http.GetAsync("api/admin/users");
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync("api/admin/users");
             var users = await ReadJsonItemsAsync(resp);
             var user = users.FirstOrDefault(u =>
                 u.TryGetProperty("username", out var v) &&
@@ -1699,10 +1706,10 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task<JsonElement?> TryLookupAlertByNameAsync(string name)
         {
-            using var response = await _http.GetAsync($"api/alerts/by-name/{Uri.EscapeDataString(name)}");
+            using var response = await SendGetAsync($"api/alerts/by-name/{Uri.EscapeDataString(name)}");
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 return null;
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response);
             await using var stream = await response.Content.ReadAsStreamAsync();
             using var document = await JsonDocument.ParseAsync(stream);
             return document.RootElement.Clone();
@@ -1797,8 +1804,7 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task<int?> TryLookupGroupIdAsync(string name)
         {
-            var resp = await _http.GetAsync("api/admin/groups");
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync("api/admin/groups");
             var groups = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
             var group = groups.FirstOrDefault(g =>
                 g.TryGetProperty("name", out var v) &&
@@ -1812,8 +1818,7 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task<int?> TryLookupFolderIdAsync(string path)
         {
-            var resp = await _http.GetAsync("api/folders");
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync("api/folders");
             // Flatten the tree by traversing it
             var tree = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
             var match = FindFolderByPath(tree, path.TrimEnd('/'));
@@ -1844,8 +1849,7 @@ namespace ETL_SQL.Connectors.Portal
         /// An ambiguous name still throws — that is a configuration error, not an absence.</summary>
         private async Task<int?> TryLookupReportIdAsync(string name)
         {
-            var resp = await _http.GetAsync("api/admin/reports");
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync("api/admin/reports");
             var reports = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
             var target = name.Trim();
             var matches = reports.Where(r =>
@@ -1869,8 +1873,7 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task<int> LookupDatasetIdAsync(string name, string folderPath)
         {
-            var resp = await _http.GetAsync("api/datasets");
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync("api/datasets");
             var datasets = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
             var dataset = datasets.FirstOrDefault(d =>
                 d.TryGetProperty("name", out var n) &&
@@ -1903,7 +1906,7 @@ namespace ETL_SQL.Connectors.Portal
             }
             catch (HttpRequestException ex)
             {
-                throw new ExecutionException($"Portal connection error: {ex.Message}", ex);
+                throw ConnectionError(ex);
             }
 
             if (!resp.IsSuccessStatusCode)
@@ -1932,7 +1935,7 @@ namespace ETL_SQL.Connectors.Portal
                 await ApplyVersionHeaderAsync(req);
                 resp = await _http.SendAsync(req);
             }
-            catch (HttpRequestException ex) { throw new ExecutionException($"Portal connection error: {ex.Message}", ex); }
+            catch (HttpRequestException ex) { throw ConnectionError(ex); }
             using var _ = resp;
             var bodyText = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
@@ -2122,32 +2125,6 @@ namespace ETL_SQL.Connectors.Portal
             _ => value.GetRawText()
         };
 
-        private async Task<(int ReportId, string Token)> LookupReportTokenAsync(string tokenKind, string token)
-        {
-            var reports = await SendJsonAsync(HttpMethod.Get, "api/admin/reports", null);
-            var matches = new List<(int ReportId, string Token)>();
-            foreach (var report in reports.EnumerateArray())
-            {
-                var reportId = report.GetProperty("id").GetInt32();
-                var children = await SendJsonAsync(HttpMethod.Get, $"api/reports/{reportId}/{tokenKind}", null);
-                foreach (var child in children.EnumerateArray())
-                {
-                    if (child.TryGetProperty("token", out var tokenProp)
-                        && tokenProp.GetString()?.Equals(token, StringComparison.OrdinalIgnoreCase) == true)
-                    {
-                        matches.Add((reportId, tokenProp.GetString()!));
-                    }
-                }
-            }
-
-            return matches.Count switch
-            {
-                0 => throw new ExecutionException($"Portal {tokenKind} token '{token}' not found."),
-                1 => matches[0],
-                _ => throw new ExecutionException($"Portal {tokenKind} token '{token}' is ambiguous.")
-            };
-        }
-
         private async Task<int> LookupNamedChildIdAsync(string url, string name, string kind)
         {
             var json = await SendJsonAsync(HttpMethod.Get, url, null);
@@ -2194,13 +2171,44 @@ namespace ETL_SQL.Connectors.Portal
                 ConsoleColor.Yellow);
         }
 
+        private static ExecutionException ConnectionError(HttpRequestException ex) =>
+            new($"Portal connection error: {SanitizeBody(ex.Message)}");
+
+        private async Task<HttpResponseMessage> SendGetAsync(string url)
+        {
+            try { return await _http.GetAsync(url); }
+            catch (HttpRequestException ex) { throw ConnectionError(ex); }
+        }
+
+        /// <summary>GET that fails as an ExecutionException with a sanitized body, never a raw
+        /// HttpRequestException from EnsureSuccessStatusCode.</summary>
+        private async Task<HttpResponseMessage> GetCheckedAsync(string url)
+        {
+            var resp = await SendGetAsync(url);
+            await EnsureSuccessAsync(resp);
+            return resp;
+        }
+
+        private static async Task EnsureSuccessAsync(HttpResponseMessage resp)
+        {
+            if (resp.IsSuccessStatusCode) return;
+            var status = resp.StatusCode;
+            string bodyText;
+            using (resp) bodyText = await resp.Content.ReadAsStringAsync();
+            throw new ExecutionException($"Portal API error ({(int)status} {status}): {SanitizeBody(bodyText)}");
+        }
+
         private static string SanitizeBody(string body)
         {
             var redacted = SecretRedactor.Redact(body) ?? string.Empty;
             return redacted.Length > 500 ? redacted[..500] + "..." : redacted;
         }
 
-        private async Task<(int ReportId, string Token)> LookupReportTokenByNameAsync(
+        // The Portal stores only a hash of each token, so a token is revoked by its id.
+        private static string RequireReportName(string? reportName) =>
+            reportName is { Length: > 0 } ? reportName : throw new ExecutionException("Revoking a share link or embed token requires FOR REPORT.");
+
+        private async Task<(int ReportId, int Id)> LookupReportTokenIdByNameAsync(
             string tokenKind,
             string reportName,
             string name,
@@ -2216,7 +2224,7 @@ namespace ETL_SQL.Connectors.Portal
                 throw new ExecutionException($"Portal {kind} '{name}' not found for report '{reportName}'.");
             if (matches.Count > 1)
                 throw new ExecutionException($"Portal {kind} '{name}' is ambiguous for report '{reportName}'.");
-            return (reportId, matches[0].GetProperty("token").GetString()!);
+            return (reportId, matches[0].GetProperty("id").GetInt32());
         }
 
         private static object? TryGet(JsonElement el, string prop)

@@ -49,7 +49,7 @@ export function packagingIdentity(root, requested) {
         /<VersionSuffix>[^<]+<\/VersionSuffix>/.test(properties)) throw new Error('A single explicit release version is required in Directory.Build.props.');
     if (manifest.version !== version || lock.version !== version || lock.packages?.['']?.version !== version ||
         (requested !== undefined && requested !== version)) throw new Error(`Extension, lockfile, requested version, and .NET version must agree (${version}).`);
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(manifest.name ?? '') || !/^[a-z0-9][a-z0-9-]*$/.test(manifest.publisher ?? ''))
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(manifest.name ?? '') || !/^[a-zA-Z0-9][a-zA-Z0-9-]*$/.test(manifest.publisher ?? ''))
         throw new Error('Extension name and publisher must be explicit package identities.');
     return { name: manifest.name, publisher: manifest.publisher, version };
 }
@@ -70,7 +70,7 @@ export function packagingInputSignature(root) {
     for (const relative of ['Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props',
         'global.json', 'NuGet.Config', 'LICENSE.md', 'NOTICE.md', 'THIRD-PARTY-NOTICES.md', 'THIRD-PARTY-INVENTORY.md',
         'src/etl-sql-vscode/package.json', 'src/etl-sql-vscode/package-lock.json', 'src/etl-sql-vscode/.vscodeignore',
-        'src/etl-sql-vscode/README.md', 'src/etl-sql-vscode/language-configuration.json', 'src/etl-sql-vscode/tsconfig.json',
+        'src/etl-sql-vscode/README.md', 'src/etl-sql-vscode/CHANGELOG.md', 'src/etl-sql-vscode/language-configuration.json', 'src/etl-sql-vscode/tsconfig.json',
         'scripts/package-vsix.mjs', 'certification-results/ha-large-job-soak-scenarios.json']) {
         const file = safeAssetPath(root, relative);
         if (fs.existsSync(file)) selected.add(file);

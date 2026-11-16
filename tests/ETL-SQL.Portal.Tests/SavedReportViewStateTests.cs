@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using ETL_SQL.Portal.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Portal.Tests;
 
@@ -29,6 +32,87 @@ namespace ETL_SQL.Portal.Tests;
 public sealed class SavedReportViewStateTests
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("CompatBreak", "0.22")]
+    public async Task CreateSavedViewScriptSendsAnEnvelopeAndPreservesStringLiterals(bool withOptions)
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var token = await AdminTokenAsync(client);
+        var reportId = await CreateReportAsync(factory, client, token, "scripted");
+        var report = await Send(client, HttpMethod.Get, token, $"/api/reports/{reportId}", null);
+        var name = (await report.Content.ReadFromJsonAsync<JsonObject>(Json))!["name"]!.GetValue<string>();
+        var parameters = withOptions
+            ? "WITH (PARAMETERS = '@Code=001,@Year=2026,@Live=true')"
+            : "PARAMETERS (@Code = '001', @Year = '2026', @Live = 'true')";
+        var script = $"CREATE SAVED VIEW 'Scripted' FOR REPORT '{name}' DEFAULT {parameters};";
+        var parsed = new ETL_SQL.Core.Parser.Parser(new ETL_SQL.Core.Parser.Lexer(script).Tokenize()).Parse();
+        var statement = Assert.IsType<ETL_SQL.Core.CreatePortalSavedViewStatement>(Assert.Single(parsed.Statements));
+        var context = ETL_SQL.Core.Common.SystemExecutionContext.Instance;
+        using var connectorClient = factory.CreateClient();
+        var connector = new ETL_SQL.Connectors.Portal.PortalDataSource(connectorClient, "admin", "Admin@Tests99!", context.Logger);
+        await connector.ExecuteAdminStatementAsync(statement, context);
+        var response = await Send(client, HttpMethod.Get, token, $"/api/reports/{reportId}/saved-views/default", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var view = (await response.Content.ReadFromJsonAsync<JsonObject>(Json))!;
+        Assert.Equal("001", view["state"]!["parameters"]!["@Code"]!.GetValue<string>());
+        Assert.Equal("2026", view["state"]!["parameters"]!["@Year"]!.GetValue<string>());
+        Assert.Equal("true", view["state"]!["parameters"]!["@Live"]!.GetValue<string>());
+        Assert.False(view.ContainsKey("parameters"));
+        Assert.False(view.ContainsKey("filters"));
+        Assert.False(string.IsNullOrWhiteSpace(view["scriptHash"]!.GetValue<string>()));
+    }
+
+    [Theory]
+    [InlineData("create", "parameters", false)]
+    [InlineData("create", "parameters", true)]
+    [InlineData("create", "filters", false)]
+    [InlineData("create", "filters", true)]
+    [InlineData("update", "parameters", false)]
+    [InlineData("update", "parameters", true)]
+    [InlineData("update", "filters", false)]
+    [InlineData("update", "filters", true)]
+    [InlineData("default", "parameters", false)]
+    [InlineData("default", "parameters", true)]
+    [InlineData("default", "filters", false)]
+    [InlineData("default", "filters", true)]
+    [Trait("CompatBreak", "0.22")]
+    public async Task RetiredFlatMapsAreRejectedWithoutChangingSavedViews(string route, string field, bool explicitNull)
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var token = await AdminTokenAsync(client);
+        var reportId = await CreateReportAsync(factory, client, token, "retired-map");
+        const string stateJson = """{"schemaVersion":1,"parameters":{"@Code":"001"}}""";
+        var created = await Send(client, HttpMethod.Post, token, $"/api/reports/{reportId}/saved-views",
+            new { name = "Original", stateJson, isDefault = true });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var original = (await created.Content.ReadFromJsonAsync<JsonObject>(Json))!;
+        var viewId = original["id"]!.GetValue<int>();
+        var before = await SnapshotAsync();
+        var payload = new JsonObject { ["name"] = "Changed", ["stateJson"] = stateJson, ["isDefault"] = true };
+        if (route == "default") payload = new JsonObject { ["state"] = JsonNode.Parse(stateJson) };
+        payload[field] = explicitNull ? null : new JsonObject { ["@Code"] = "1" };
+        var path = $"/api/reports/{reportId}/saved-views" + (route == "update" ? $"/{viewId}" : route == "default" ? "/default" : "");
+        var rejected = await Send(client, route == "update" ? HttpMethod.Put : HttpMethod.Post, token, path, payload);
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        var listed = await Send(client, HttpMethod.Get, token, $"/api/reports/{reportId}/saved-views", null);
+        var retained = Assert.Single((await listed.Content.ReadFromJsonAsync<JsonArray>(Json))!);
+        Assert.Equal("Original", retained!["name"]!.GetValue<string>());
+        Assert.Equal("001", retained["state"]!["parameters"]!["@Code"]!.GetValue<string>());
+        Assert.Equal(before, await SnapshotAsync());
+
+        async Task<string> SnapshotAsync()
+        {
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            return JsonSerializer.Serialize(await db.SavedReportViews.AsNoTracking().Where(value => value.ReportId == reportId)
+                .OrderBy(value => value.Id).ToListAsync());
+        }
+    }
 
     [Fact]
     public async Task SavedViewRoundTripsTheResolvedStateEnvelope()
@@ -72,16 +156,15 @@ public sealed class SavedReportViewStateTests
     }
 
     [Fact]
-    public async Task LegacyParameterOnlyViewIsReadableAsAnEnvelope()
+    public async Task StringParametersStayStringsWithoutFlatResponseFields()
     {
         using var factory = new PortalWebFactory();
         using var client = factory.CreateClient();
         var token = await AdminTokenAsync(client);
         var reportId = await CreateReportAsync(factory, client, token, "legacy");
 
-        // The pre-envelope client shape: a flat string map, no stateJson at all.
         var created = await Send(client, HttpMethod.Post, token, $"/api/reports/{reportId}/saved-views",
-            new { name = "Legacy", parameters = new Dictionary<string, string> { ["@Region"] = "East" } });
+            new { name = "Text", stateJson = """{"schemaVersion":1,"parameters":{"@Region":"East","@Code":"001","@Year":"2026","@Live":"true"}}""" });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var viewId = (await created.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
 
@@ -89,8 +172,11 @@ public sealed class SavedReportViewStateTests
         var body = (await fetched.Content.ReadFromJsonAsync<JsonObject>(Json))!;
 
         Assert.Equal("East", body["state"]!["parameters"]!["@Region"]!.GetValue<string>());
-        // The legacy columns stay populated so an older client reading the same row keeps working.
-        Assert.Equal("East", body["parameters"]!["@Region"]!.GetValue<string>());
+        Assert.Equal("001", body["state"]!["parameters"]!["@Code"]!.GetValue<string>());
+        Assert.Equal("2026", body["state"]!["parameters"]!["@Year"]!.GetValue<string>());
+        Assert.Equal("true", body["state"]!["parameters"]!["@Live"]!.GetValue<string>());
+        Assert.False(body.ContainsKey("parameters"));
+        Assert.False(body.ContainsKey("filters"));
     }
 
     [Fact]

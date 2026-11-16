@@ -80,27 +80,6 @@ public sealed class ReportStateValue : IEquatable<ReportStateValue>
         }
     }
 
-    /// <summary>
-    /// Best-effort typing of a legacy raw string (e.g. from an existing <c>ParametersJson</c> dictionary,
-    /// which stored every value as a string). Numeric and boolean-looking strings are recovered so a
-    /// legacy view converges on the same typed envelope as a freshly-saved one.
-    /// </summary>
-    public static ReportStateValue FromLegacyString(string? raw)
-    {
-        if (raw == null) return Null;
-        if (raw.Length == 0) return FromString(string.Empty);
-        if (bool.TryParse(raw, out var b)) return FromBoolean(b);
-        // Only treat as a number when the invariant round-trip is exact; this preserves leading-zero
-        // codes ("007"), phone numbers, and thousands-separated strings as strings rather than numbers.
-        if (decimal.TryParse(raw, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
-                CultureInfo.InvariantCulture, out var d)
-            && d.ToString(CultureInfo.InvariantCulture) == raw)
-        {
-            return FromNumber(d);
-        }
-        return FromString(raw);
-    }
-
     /// <summary>Canonical string projection used where the runtime/engine expects a string parameter value.</summary>
     public string ToCanonicalString() => Kind switch
     {

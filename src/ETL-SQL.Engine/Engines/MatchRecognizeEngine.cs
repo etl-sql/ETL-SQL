@@ -18,9 +18,20 @@ namespace ETL_SQL.Engine.Engines
 
         public async Task<List<Row>> Apply(List<Row> rows, MatchRecognizeClause clause)
         {
-            if (rows.Count == 0 || string.IsNullOrWhiteSpace(clause.Pattern)) return new List<Row>();
+            if (string.IsNullOrWhiteSpace(clause.Pattern)) return new List<Row>();
 
             var pattern = ParsePattern(clause.Pattern);
+
+            // A DEFINE for a variable PATTERN never uses was ignored, so a misspelt variable left
+            // its real one undefined (matching every row) with no error. Checked before the
+            // empty-input return so the error does not depend on the data.
+            var patternVariables = new HashSet<string>(pattern.Select(p => p.Variable), StringComparer.OrdinalIgnoreCase);
+            var unused = clause.Definitions.Keys.FirstOrDefault(name => !patternVariables.Contains(name));
+            if (unused != null)
+                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException(
+                    $"MATCH_RECOGNIZE DEFINE names '{unused}', which PATTERN does not use. Pattern variables: {string.Join(", ", patternVariables)}.");
+
+            if (rows.Count == 0) return new List<Row>();
             var partitions = await PartitionRows(rows, clause.PartitionBy);
             var output = new List<Row>();
             int matchNumber = 1;
@@ -99,8 +110,8 @@ namespace ETL_SQL.Engine.Engines
             {
                 for (int i = 0; i < orderBy.Count; i++)
                 {
-                    int cmp = _context.CompareConstants(a.Keys[i], b.Keys[i]);
-                    if (cmp != 0) return orderBy[i].Descending ? -cmp : cmp;
+                    int cmp = orderBy[i].OutputOrder(_context.CompareConstants(a.Keys[i], b.Keys[i]), a.Keys[i], b.Keys[i]);
+                    if (cmp != 0) return cmp;
                 }
                 return 0;
             });
@@ -148,6 +159,24 @@ namespace ETL_SQL.Engine.Engines
                 string s => bool.TryParse(s, out var b) ? b : !string.IsNullOrEmpty(s),
                 _ => Convert.ToBoolean(value)
             };
+        }
+
+        /// <summary>
+        /// The column names <see cref="BuildOutputRow"/> gives a match over a source with the given
+        /// columns. They follow from the clause, not the rows, so an outer join can name an empty side.
+        /// </summary>
+        public static List<string> DeclaredColumns(IReadOnlyList<string> sourceColumns, MatchRecognizeClause clause)
+        {
+            var names = new List<string>();
+            if (clause.AllRowsPerMatch)
+            {
+                names.Add("MATCH_NUMBER");
+                names.AddRange(sourceColumns);
+                names.Add("CLASSIFIER");
+            }
+            names.AddRange(clause.PartitionBy.Select(expr => expr.ToSql()));
+            names.AddRange(clause.Measures.Select(measure => measure.Alias ?? measure.Expression.ToSql()));
+            return names;
         }
 
         private async Task<Row> BuildOutputRow(MatchRecognizeClause clause, List<Row> rows, PatternMatch match, int matchNumber, int? currentRowIndex)

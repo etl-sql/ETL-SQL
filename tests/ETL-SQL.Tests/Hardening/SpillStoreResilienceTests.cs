@@ -188,20 +188,19 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
-        public async Task SpillLatencyMetrics_AreCollectedOnlyForAdaptiveExecution()
+        public async Task SpillLatencyMetrics_AreCollectedWithOrWithoutAdaptiveExecution()
         {
+            // The profile reports spill write cost, so writes are timed even when adaptive execution is off.
             var e = NewEvaluator();
             e.SpillEncryptionEnabled = false;
             e.SpillCompressionEnabled = false;
+            e.AdaptiveExecutionEnabled = false;
             using var store = new SpillStore(e);
 
             await using (var writer = await store.CreateWriterAsync("static_metrics"))
                 await writer.WriteRowAsync(new Row { ["Id"] = 1 });
-            Assert.Equal(0, e.AdaptiveMetrics.SpillWriteLatencyMsPerMB);
 
-            e.AdaptiveExecutionEnabled = true;
-            await using (var writer = await store.CreateWriterAsync("adaptive_metrics"))
-                await writer.WriteRowAsync(new Row { ["Id"] = 2 });
+            Assert.True(e.AdaptiveMetrics.TotalSpillWriteBytes > 0);
             Assert.True(e.AdaptiveMetrics.SpillWriteLatencyMsPerMB > 0);
         }
 

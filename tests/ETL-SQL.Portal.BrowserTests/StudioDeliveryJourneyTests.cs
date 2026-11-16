@@ -115,7 +115,7 @@ public sealed class StudioDeliveryJourneyTests(StudioAuthoringFixture fixture, I
         await File.WriteAllTextAsync(file, ColdDocument);
         var host = WorkstationEditorApp.Create([], new WorkstationEditorOptions(workspace.Root, file, 0, false, "scope-token", StudioMode: true));
         await host.StartAsync();
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=scope-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=scope-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__?.state.editorInstance)");
         return host;
     }

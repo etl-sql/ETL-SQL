@@ -39,37 +39,9 @@ public sealed class PortalPiiProtector
     {
         if (string.IsNullOrEmpty(value)) return value;
 
-        try
-        {
-            if (value.StartsWith(Prefix, StringComparison.Ordinal))
-                return _protector.Unprotect(value[Prefix.Length..]);
-
-            return _protector.Unprotect(value);
-        }
-        catch (CryptographicException)
-        {
-            if (value.StartsWith(Prefix, StringComparison.Ordinal))
-                throw;
-
-            // Legacy unencrypted data remains readable; startup maintenance rewrites it encrypted.
-            return value;
-        }
-    }
-
-    public bool IsEncrypted(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return false;
-        if (value.StartsWith(Prefix, StringComparison.Ordinal)) return true;
-
-        try
-        {
-            _protector.Unprotect(value);
-            return true;
-        }
-        catch (CryptographicException)
-        {
-            return false;
-        }
+        if (!value.StartsWith(Prefix, StringComparison.Ordinal))
+            throw new CryptographicException("A protected column holds a value that was not encrypted by the Portal.");
+        return _protector.Unprotect(value[Prefix.Length..]);
     }
 }
 

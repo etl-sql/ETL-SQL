@@ -65,7 +65,7 @@ public sealed class StudioPortalPracticeTests(PortalJourneyFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await SignInAsync(page, learner.UserName);
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
 
         var pipelineId = await CreatePipelineInStudioAsync(page, learner);
         var job = $"PIPELINE:{pipelineId}";
@@ -116,7 +116,7 @@ public sealed class StudioPortalPracticeTests(PortalJourneyFixture fixture)
         await Expect(page.Locator(".etlsql-script-results")).ToContainTextAsync($"Run {second.Id} finished with status SUCCESS");
 
         // The learner's document survives its runs: reopened, it is the repaired script.
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         var open = page.Locator($"[data-open-report='{pipelineId}'][data-open-proj='code']");
         await Expect(open).ToBeVisibleAsync(new() { Timeout = 20_000 });
         await open.ClickAsync();
@@ -246,11 +246,11 @@ public sealed class StudioPortalPracticeTests(PortalJourneyFixture fixture)
 
     private static async Task SignInAsync(IPage page, string userName)
     {
-        await page.GotoAsync("/login.html");
+        await page.GotoWithDiagnosticsAsync("/login.html");
         await page.FillAsync("#username", userName);
         await page.FillAsync("#password", LearnerPassword);
         await page.ClickAsync("#loginBtn");
-        await page.WaitForURLAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
+        await page.WaitForURLWithDiagnosticsAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
     }
 
     // ── The people involved ──────────────────────────────────────────────────

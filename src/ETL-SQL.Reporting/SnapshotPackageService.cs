@@ -50,10 +50,6 @@ public sealed class SnapshotPackageService(
     public static bool IsPackageKey(string key) =>
         key.EndsWith(Extension, StringComparison.OrdinalIgnoreCase);
 
-    public static bool IsLegacyJsonKey(string key) =>
-        key.EndsWith(".snapshot.json", StringComparison.OrdinalIgnoreCase)
-        || key.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
-
     public static string ToPackageKey(string key)
     {
         var normalized = key.Replace('\\', '/');
@@ -96,12 +92,6 @@ public sealed class SnapshotPackageService(
     {
         _ = ResolveKeyScope(keyScope);
         RequireSharedKeyProvider();
-        if (IsLegacyJsonKey(key))
-        {
-            RejectSharedLegacySnapshot();
-            return await ScopedArtifacts(keyScope).ReadAllTextAsync(ArtifactArea.Snapshots, key, ct);
-        }
-
         if (!IsPackageKey(key))
             throw new InvalidDataException($"Unsupported snapshot artifact extension: {key}");
 
@@ -120,12 +110,6 @@ public sealed class SnapshotPackageService(
     {
         _ = ResolveKeyScope(keyScope);
         RequireSharedKeyProvider();
-        if (IsLegacyJsonKey(key))
-        {
-            RejectSharedLegacySnapshot();
-            return await ScopedArtifacts(keyScope).ReadAllTextAsync(ArtifactArea.Snapshots, key, ct);
-        }
-
         if (!IsPackageKey(key))
             throw new InvalidDataException($"Unsupported snapshot artifact extension: {key}");
 
@@ -148,18 +132,6 @@ public sealed class SnapshotPackageService(
         RequireSharedKeyProvider();
         if (visualIndex < 0)
             return null;
-
-        if (IsLegacyJsonKey(key))
-        {
-            RejectSharedLegacySnapshot();
-            var json = await ScopedArtifacts(keyScope).ReadAllTextAsync(ArtifactArea.Snapshots, key, ct);
-            var legacyManifest = JsonSerializer.Deserialize<ReportManifest>(json, JsonOptions);
-            if (legacyManifest is null || visualIndex >= legacyManifest.Visuals.Count)
-                return null;
-
-            var legacyVisual = legacyManifest.Visuals[visualIndex];
-            return new SnapshotVisualRows(legacyVisual.Columns.ToList(), legacyVisual.Rows, legacyVisual.Rows.Count);
-        }
 
         if (!IsPackageKey(key))
             throw new InvalidDataException($"Unsupported snapshot artifact extension: {key}");
@@ -243,27 +215,6 @@ public sealed class SnapshotPackageService(
             ?? throw new InvalidDataException($"Snapshot package is missing {LayoutEntryName}.");
         using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
         return await reader.ReadToEndAsync(ct);
-    }
-
-    public async Task<string?> MigrateLegacyJsonAsync(
-        string legacyKey,
-        CancellationToken ct = default,
-        string? keyScope = null)
-    {
-        if (!IsLegacyJsonKey(legacyKey)
-            || !await ScopedArtifacts(keyScope).ExistsAsync(ArtifactArea.Snapshots, legacyKey, ct))
-            return null;
-
-        var targetKey = ToPackageKey(legacyKey);
-        var manifest = await LoadAsync(legacyKey, ct, keyScope);
-        if (manifest is null)
-            return null;
-
-        await SaveAsync(manifest, targetKey, ct, keyScope);
-        await ScopedArtifacts(keyScope).DeleteAsync(ArtifactArea.Snapshots, legacyKey, ct);
-        logger.LogInformation("Migrated legacy plaintext snapshot {LegacySnapshot} to encrypted package {SnapshotPackage}",
-            legacyKey, targetKey);
-        return targetKey;
     }
 
     private async Task<byte[]> EncryptAsync(byte[] plaintext, CancellationToken ct, string? keyScope)
@@ -413,13 +364,6 @@ public sealed class SnapshotPackageService(
                 "Shared snapshot encryption requires a tenant-aware Artifact key provider.");
     }
 
-    private void RejectSharedLegacySnapshot()
-    {
-        if (config.SharedTenancy.Enabled)
-            throw new InvalidDataException(
-                "Legacy plaintext snapshots cannot be read on a Shared host because they have no authenticated tenant ownership.");
-    }
-
     private byte[] ResolveReadKey(string keyVersion)
     {
         if (string.Equals(keyVersion, config.Dataset.AtRestKeyVersion, StringComparison.OrdinalIgnoreCase))
@@ -427,9 +371,6 @@ public sealed class SnapshotPackageService(
 
         if (config.Dataset.PreviousAtRestKeys.TryGetValue(keyVersion, out var previousKey))
             return DeriveAesKey(previousKey, $"Portal:Dataset:PreviousAtRestKeys:{keyVersion}");
-
-        if (string.Equals(keyVersion, config.Dataset.LegacyAtRestKeyVersion, StringComparison.OrdinalIgnoreCase))
-            return DeriveAesKey(config.Dataset.AtRestKey, "Portal:Dataset:AtRestKey");
 
         throw new InvalidDataException($"No configured dataset at-rest key can decrypt snapshot key version '{keyVersion}'.");
     }

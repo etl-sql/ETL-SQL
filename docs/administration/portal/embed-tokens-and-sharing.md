@@ -15,11 +15,16 @@ Share links are anonymous bearer capabilities. Keep their URLs secret. Resolutio
 
 New share links expire after seven days unless `ExpiresAt` is supplied.
 
+The Portal stores only a SHA-256 hash of each share link and embed token. The token and its URL are
+returned once, by the request that creates them; copy the URL then. Listings show the name, id,
+creator and expiry, and a lost link is revoked by id and created again.
+
 | Endpoint | Purpose |
 | :--- | :--- |
 | `POST /api/reports/{id}/share-links` | Create a share link for a report the caller can execute. |
-| `GET /api/reports/{id}/share-links` | List share links for a report the caller can manage. |
-| `DELETE /api/reports/{id}/share-links/{token}` | Revoke a share link. |
+| `GET /api/reports/{id}/share-links` | List share links for a report the caller can manage. Tokens are not returned. |
+| `DELETE /api/reports/{id}/share-links/by-id/{linkId}` | Revoke a share link by id. |
+| `DELETE /api/reports/{id}/share-links/{token}` | Revoke a share link by its token. |
 | `GET /api/share/{token}` | Resolve an anonymous share capability after reauthorizing its creator. |
 | `GET /api/admin/anonymous-report-access` | Admin inventory of active, expired, revoked, disabled-creator, and permission-lost capabilities. The inventory intentionally excludes the bearer token itself. |
 

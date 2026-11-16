@@ -111,7 +111,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             try { response = await _portal.SendAsync(request, cancellationToken); }
             catch (HttpRequestException ex)
             {
-                throw new ExecutionException($"Portal connection error during assertion exchange: {ex.Message}", ex);
+                throw new ExecutionException($"Portal connection error during assertion exchange: {ETL_SQL.Core.Common.SecretRedactor.Redact(ex.Message)}");
             }
 
             using (response)
@@ -141,7 +141,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             try { return await _portal.PostAsJsonAsync(path, body, Json, cancellationToken); }
             catch (HttpRequestException ex)
             {
-                throw new ExecutionException($"Portal connection error: {ex.Message}", ex);
+                throw new ExecutionException($"Portal connection error: {ETL_SQL.Core.Common.SecretRedactor.Redact(ex.Message)}");
             }
         }
 

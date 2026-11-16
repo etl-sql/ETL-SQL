@@ -118,8 +118,10 @@ namespace ETL_SQL.Connectors.Oracle
             var currentBatch = new DataTable();
             currentBatch.SetColumns(columns);
 
+            var noRows = true;
             while (await reader.ReadAsync(effectiveCancellationToken))
             {
+                noRows = false;
                 var row = new Row();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
@@ -135,7 +137,8 @@ namespace ETL_SQL.Connectors.Oracle
                 }
             }
 
-            if (currentBatch.Rows.Count > 0)
+            // An empty result still names its columns, so an outer join can name an empty side.
+            if (currentBatch.Rows.Count > 0 || noRows)
             {
                 yield return currentBatch;
             }
@@ -147,6 +150,7 @@ namespace ETL_SQL.Connectors.Oracle
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            if (_context != null && _context.IsWhatIf) return;
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Oracle data source write.");
 
@@ -183,7 +187,11 @@ namespace ETL_SQL.Connectors.Oracle
                         var dataRow = dt.NewRow();
                         foreach (var col in batch.ColumnNames)
                         {
-                            dataRow[col] = row.Columns.TryGetValue(col, out var val) && val != null ? val : DBNull.Value;
+                            dataRow[col] = row.Columns.TryGetValue(col, out var val) && val != null
+                                ? (val is DateOnly dateOnly
+                                    ? dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                                    : val)
+                                : DBNull.Value;
                         }
                         dt.Rows.Add(dataRow);
                     }
@@ -377,6 +385,7 @@ namespace ETL_SQL.Connectors.Oracle
 
         private async Task TruncateAsync(CancellationToken cancellationToken)
         {
+            if (_context != null && _context.IsWhatIf) return;
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Oracle truncate.");
 
@@ -388,11 +397,18 @@ namespace ETL_SQL.Connectors.Oracle
             }
         }
 
-        private static string QuoteIdentifier(string name)
+        internal static string QuoteIdentifier(string name)
         {
-            // Oracle stores unquoted identifiers as uppercase; uppercase when quoting to match
+            // Oracle stores unquoted identifiers as uppercase; uppercase when quoting to match.
+            // An identifier that arrives already quoted is case-sensitive: keep its case and strip
+            // the outer quotes instead of escaping them into the name.
             var parts = name.Split('.');
-            return string.Join(".", parts.Select(p => $"\"{p.ToUpperInvariant().Replace("\"", "\"\"")}\""));
+            return string.Join(".", parts.Select(p =>
+            {
+                if (p.Length >= 2 && p[0] == '"' && p[^1] == '"')
+                    return $"\"{p[1..^1].Replace("\"\"", "\"").Replace("\"", "\"\"")}\"";
+                return $"\"{p.ToUpperInvariant().Replace("\"", "\"\"")}\"";
+            }));
         }
 
         public async ValueTask DisposeAsync()

@@ -62,15 +62,18 @@ public sealed class DbGatewayEnrollmentStore(
 
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-        var candidates = await db.GatewayEnrollments
-            .Where(value => value.TenantId == tenantId)
-            .ToListAsync(cancellationToken)
+        // Seek the one row through the unique (TenantId, TokenHash) index instead of reading the
+        // tenant's whole enrollment history. The token is high-entropy and only its SHA-256 is
+        // stored, so an indexed equality on the hash discloses nothing a timing probe could use; the
+        // constant-time comparison is kept on the located row. Tenant is part of the predicate so
+        // cross-tenant and unknown presentations remain deliberately indistinguishable.
+        var presentedHash = GatewayEnrollmentToken.Hash(oneTimeToken);
+        var match = await db.GatewayEnrollments
+            .Where(value => value.TenantId == tenantId && value.TokenHash == presentedHash)
+            .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
-
-        // Compare hashes in constant time. Tenant is part of the query so cross-tenant and unknown
-        // presentations remain deliberately indistinguishable.
-        var match = candidates.FirstOrDefault(value =>
-            GatewayEnrollmentToken.Matches(value.TokenHash, oneTimeToken));
+        if (match is not null && !GatewayEnrollmentToken.Matches(match.TokenHash, oneTimeToken))
+            match = null;
         if (match is null
             || !Enum.TryParse<GatewayEnrollmentState>(match.State, out var state)
             || state != GatewayEnrollmentState.Pending

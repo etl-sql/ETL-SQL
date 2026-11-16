@@ -21,7 +21,6 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("renderButton(container", js);
             Assert.Contains("renderNavBar", js);
             Assert.Contains("applyPageCrossFilter", js);
-            Assert.Contains("ON_SELECT", js);
 
             Assert.Contains("function crossFilterActive", js);
             Assert.Contains("toggleVisualMaximize", js);

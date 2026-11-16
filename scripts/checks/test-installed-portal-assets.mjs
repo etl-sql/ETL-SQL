@@ -85,6 +85,22 @@ try {
     const leaked = await checkInstalledPortal({ url, install });
     server.close();
     assert.ok(leaked.problems.includes('Expected 404, got 200: /js/app.ts'), leaked.problems.join('\n'));
+
+    // A check that looked at nothing is not a pass: no recorded validators, and no installed files.
+    const emptyCache = path.join(root, 'empty-cache.json');
+    fs.writeFileSync(emptyCache, JSON.stringify({ entries: [] }));
+    fs.rmSync(path.join(install, 'wwwroot', 'js', 'app.ts'));
+    ({ server, url } = await serve(install));
+    const unrecorded = await checkInstalledPortal({ url, install, revalidate: emptyCache });
+    server.close();
+    assert.ok(unrecorded.problems.includes('The recorded cache has no entries, so no revalidation was checked.'), unrecorded.problems.join('\n'));
+    const hollow = path.join(root, 'hollow');
+    fs.mkdirSync(path.join(hollow, 'wwwroot'), { recursive: true });
+    ({ server, url } = await serve(hollow));
+    const nothing = await checkInstalledPortal({ url, install: hollow });
+    server.close();
+    assert.equal(nothing.passed, false);
+    assert.ok(nothing.problems.includes('The installed wwwroot holds no files to check.'), nothing.problems.join('\n'));
 } finally {
     fs.rmSync(root, { recursive: true, force: true });
 }

@@ -156,7 +156,7 @@ public class ExtensionParser : ParserComponent
                     else localPath = ParseExpression();
                 }
                 else if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
-                else if (Match(TokenType.WITH)) { overwrite = ParseWithOverwrite(); }
+                else if (Match(TokenType.WITH)) { overwrite = ParseWithOptions(type == FileTransferType.Send ? "SEND FILE" : "RECEIVE FILE", "OVERWRITE").GetValueOrDefault("OVERWRITE"); }
                 else if (Match(TokenType.COMMA)) { continue; }
                 else if (localPath == null && type == FileTransferType.Send && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                     localPath = ParseExpression();
@@ -227,7 +227,7 @@ public class ExtensionParser : ParserComponent
         };
 
         Expression? source = null, dest = null, overwrite = null, password = null, keyFile = null, pgpKey = null;
-        Expression? dateSuffix = null, suffixSeparator = null;
+        Expression? dateSuffix = null, suffixSeparator = null, signingKey = null, signingPassword = null, verifyKey = null, deleteSource = null;
         string? connectionName = null;
         bool isFunctionStyle = Match(TokenType.LPAREN);
         if (isFunctionStyle)
@@ -279,7 +279,25 @@ public class ExtensionParser : ParserComponent
                 }
                 else if (Match(TokenType.KEYFILE)) { keyFile = ParseExpression(); }
                 else if (Match(TokenType.PGP_KEY)) { pgpKey = ParseExpression(); }
-                else if (Match(TokenType.WITH)) { ParseFileOperationOptions(ref overwrite, ref dateSuffix, ref suffixSeparator); }
+                else if (MatchIdentifier("SIGNING_KEY")) { signingKey = ParseExpression(); }
+                else if (MatchIdentifier("SIGNING_PASSWORD")) { signingPassword = ParseExpression(); }
+                else if (MatchIdentifier("VERIFY_KEY")) { verifyKey = ParseExpression(); }
+                else if (Match(TokenType.WITH))
+                {
+                    // The handler applies DATE_SUFFIX only to COPY, MOVE and RENAME (ROADMAP FO08).
+                    var name = $"{type.ToString().ToUpperInvariant()} FILE";
+                    // DELETE_SOURCE only where the statement writes a new file from the source (ROADMAP FO03).
+                    var options = type switch
+                    {
+                        FileOpType.Copy or FileOpType.Move or FileOpType.Rename => ParseWithOptions(name, "OVERWRITE", "DATE_SUFFIX", "SUFFIX_SEPARATOR"),
+                        FileOpType.Encrypt or FileOpType.Decrypt or FileOpType.Compress or FileOpType.Decompress => ParseWithOptions(name, "OVERWRITE", "DELETE_SOURCE"),
+                        _ => ParseWithOptions(name, "OVERWRITE"),
+                    };
+                    overwrite = options.GetValueOrDefault("OVERWRITE") ?? overwrite;
+                    deleteSource = options.GetValueOrDefault("DELETE_SOURCE") ?? deleteSource;
+                    dateSuffix = options.GetValueOrDefault("DATE_SUFFIX") ?? dateSuffix;
+                    suffixSeparator = options.GetValueOrDefault("SUFFIX_SEPARATOR") ?? suffixSeparator;
+                }
                 else if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
                 else if (source == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                     source = ParseExpression();
@@ -288,31 +306,68 @@ public class ExtensionParser : ParserComponent
                 else break;
             }
             if (source == null) throw new SyntaxException($"Source path is mandatory for {startToken.Value}", _parser.Current.Line, _parser.Current.Column);
+            RejectIgnoredKeyClauses($"{type.ToString().ToUpperInvariant()} FILE", type is FileOpType.Encrypt or FileOpType.Decrypt,
+                type == FileOpType.Encrypt, password, keyFile, pgpKey, startToken);
+            RejectMisplacedSigningClauses(type, pgpKey, signingKey, signingPassword, verifyKey, startToken);
         }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-        return new FileOperationStatement(type, source, dest, overwrite, password, keyFile, pgpKey, ifExists, connectionName, dateSuffix, suffixSeparator, destinationIsDirectory) { Line = startToken.Line, Column = startToken.Column };
+        return new FileOperationStatement(type, source, dest, overwrite, password, keyFile, pgpKey, ifExists, connectionName, dateSuffix, suffixSeparator, destinationIsDirectory)
+        {
+            SigningKey = signingKey,
+            SigningPassword = signingPassword,
+            VerifyKey = verifyKey,
+            DeleteSource = deleteSource,
+            Line = startToken.Line,
+            Column = startToken.Column,
+        };
     }
 
-    private void ParseFileOperationOptions(ref Expression? overwrite, ref Expression? dateSuffix, ref Expression? suffixSeparator)
+    /// <summary>
+    /// The handler reads PASSWORD, KEYFILE and PGP_KEY only for ENCRYPT and DECRYPT, and ENCRYPT
+    /// uses one method, preferring PGP_KEY, then KEYFILE, then PASSWORD. A clause the run would ignore
+    /// is a syntax error rather than a silent fallback to another key or the session password.
+    /// </summary>
+    private static void RejectIgnoredKeyClauses(string name, bool isCrypto, bool isEncrypt,
+        Expression? password, Expression? keyFile, Expression? pgpKey, Token at)
     {
-        Consume(TokenType.LPAREN, "Expected '(' after WITH");
-        while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
-        {
-            string key = Advance().Value;
-            Consume(TokenType.EQUALS, "Expected '=' after option name");
-            if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "OVERWRITE"))
-                overwrite = ParseExpression();
-            else if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "DATE_SUFFIX"))
-                dateSuffix = ParseExpression();
-            else if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "SUFFIX_SEPARATOR"))
-                suffixSeparator = ParseExpression();
-            else
-                ParseExpression();
-            if (!Match(TokenType.COMMA)) break;
-        }
-        Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+        if (!isCrypto && (password != null || keyFile != null || pgpKey != null))
+            throw new SyntaxException($"{name} does not take PASSWORD, KEYFILE or PGP_KEY; only ENCRYPT FILE and DECRYPT FILE do.", at.Line, at.Column);
+        if (keyFile != null && pgpKey != null)
+            throw new SyntaxException($"{name} takes KEYFILE (an SSH RSA key) or PGP_KEY, not both.", at.Line, at.Column);
+        if (isEncrypt && password != null && (keyFile != null || pgpKey != null))
+            throw new SyntaxException($"{name} with {(pgpKey != null ? "PGP_KEY" : "KEYFILE")} encrypts to a public key and takes no PASSWORD. PASSWORD is the private-key passphrase on DECRYPT FILE.", at.Line, at.Column);
     }
+
+    /// <summary>
+    /// SIGNING_KEY signs on ENCRYPT FILE and VERIFY_KEY checks on DECRYPT FILE, both with PGP_KEY only
+    /// (ROADMAP FO11). A signing clause the run would ignore is a syntax error, so a script never
+    /// believes it checked a signature that it did not.
+    /// </summary>
+    private static void RejectMisplacedSigningClauses(FileOpType type, Expression? pgpKey,
+        Expression? signingKey, Expression? signingPassword, Expression? verifyKey, Token at)
+    {
+        if (signingKey == null && signingPassword == null && verifyKey == null) return;
+        var name = $"{type.ToString().ToUpperInvariant()} FILE";
+        if (type is not (FileOpType.Encrypt or FileOpType.Decrypt))
+            throw new SyntaxException($"{name} does not take SIGNING_KEY, SIGNING_PASSWORD or VERIFY_KEY; only ENCRYPT FILE and DECRYPT FILE with PGP_KEY do.", at.Line, at.Column);
+        if (type == FileOpType.Decrypt && (signingKey != null || signingPassword != null))
+            throw new SyntaxException("DECRYPT FILE does not take SIGNING_KEY or SIGNING_PASSWORD. To check who signed the file, use VERIFY_KEY with the sender's public key.", at.Line, at.Column);
+        if (type == FileOpType.Encrypt && verifyKey != null)
+            throw new SyntaxException("ENCRYPT FILE does not take VERIFY_KEY. To sign the file, use SIGNING_KEY with your private key.", at.Line, at.Column);
+        if (pgpKey == null)
+            throw new SyntaxException(type == FileOpType.Encrypt
+                ? "SIGNING_KEY works with PGP_KEY only. PASSWORD and KEYFILE encryption cannot be signed."
+                : "VERIFY_KEY works with PGP_KEY only. PASSWORD and KEYFILE files carry no signature.", at.Line, at.Column);
+        if (signingPassword != null && signingKey == null)
+            throw new SyntaxException("SIGNING_PASSWORD needs SIGNING_KEY: it is the passphrase of the private key that signs.", at.Line, at.Column);
+    }
+
+    private static string DirectoryStatementName(DirectoryOpType type) => type switch
+    {
+        DirectoryOpType.DeleteContents => "DELETE DIRECTORY_CONTENTS",
+        _ => $"{type.ToString().ToUpperInvariant()} DIRECTORY",
+    };
 
     public Statement ParseDirectoryOperation(Token startToken)
     {
@@ -383,24 +438,11 @@ public class ExtensionParser : ParserComponent
                 else if (Match(TokenType.RECURSIVE) || MatchIdentifier("RECURSIVE")) { recursive = ParseExpression(); }
                 else if (Match(TokenType.WITH))
                 {
-                    Consume(TokenType.LPAREN, "Expected '(' after WITH");
-                    while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
-                    {
-                        string key = Advance().Value;
-                        Consume(TokenType.EQUALS, "Expected '=' after option name");
-                        if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "OVERWRITE"))
-                            overwrite = ParseExpression();
-                        else if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "RECURSIVE"))
-                            recursive = ParseExpression();
-                        else if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "KEYFILE"))
-                            keyFile = ParseExpression();
-                        else if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "PGP_KEY"))
-                            pgpKey = ParseExpression();
-                        else
-                            ParseExpression();
-                        if (!Match(TokenType.COMMA)) break;
-                    }
-                    Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+                    var options = type == DirectoryOpType.DeleteContents
+                        ? ParseWithOptions(DirectoryStatementName(type), "RECURSIVE")
+                        : ParseWithOptions(DirectoryStatementName(type), "OVERWRITE");
+                    overwrite = options.GetValueOrDefault("OVERWRITE") ?? overwrite;
+                    recursive = options.GetValueOrDefault("RECURSIVE") ?? recursive;
                 }
                 else if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
                 else if (path == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
@@ -410,6 +452,13 @@ public class ExtensionParser : ParserComponent
                 else break;
             }
             if (path == null) throw new SyntaxException($"Path is mandatory for {startToken.Value}", _parser.Current.Line, _parser.Current.Column);
+            var name = DirectoryStatementName(type);
+            if (keyFile != null || pgpKey != null)
+                throw new SyntaxException($"{name} does not support KEYFILE or PGP_KEY. Directories are encrypted with PASSWORD only.", startToken.Line, startToken.Column);
+            if (password != null && type is not (DirectoryOpType.Encrypt or DirectoryOpType.Decrypt))
+                throw new SyntaxException($"{name} does not take PASSWORD; only ENCRYPT DIRECTORY and DECRYPT DIRECTORY do.", startToken.Line, startToken.Column);
+            if (recursive != null && type != DirectoryOpType.DeleteContents)
+                throw new SyntaxException($"{name} does not take RECURSIVE; only DELETE DIRECTORY_CONTENTS does.", startToken.Line, startToken.Column);
         }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
@@ -422,29 +471,6 @@ public class ExtensionParser : ParserComponent
         var startToken = _parser.Previous;
         DockerTargetMode mode = DockerTargetMode.LastStarted;
         string? alias = null;
-
-        if (startToken.Type == TokenType.DOCKER)
-        {
-            // Legacy: DOCKER CLOSE [<alias>], DOCKER STOP, etc.
-            if (Match(TokenType.START)) action = DockerAction.Start;
-            else if (Match(TokenType.STOP)) action = DockerAction.Stop;
-            else if (Match(TokenType.PAUSE)) action = DockerAction.Pause;
-            else if (Match(TokenType.CLOSE)) action = DockerAction.Close;
-
-            if (_parser.Current.Type == TokenType.IDENTIFIER && !LanguageMetadata.IsKeyword(_parser.Current.Value))
-            {
-                alias = Advance().Value;
-                mode = DockerTargetMode.Single;
-            }
-            else if (_parser.Current.Type == TokenType.STRING_LITERAL)
-            {
-                alias = Advance().Value.Trim('\'', '\"');
-                mode = DockerTargetMode.Single;
-            }
-
-            _parser.Match(TokenType.SEMICOLON);
-            return new DockerActionStatement(action, alias, mode) { Line = startToken.Line, Column = startToken.Column };
-        }
 
         if (Match(TokenType.ALL))
         {
@@ -476,21 +502,6 @@ public class ExtensionParser : ParserComponent
 
     public Statement ParseLineage(Token startToken)
     {
-        // Legacy parser for an earlier draft spelling. Canonical file export is EXPORT LINEAGE.
-        if (_parser.Current.Type == TokenType.EXPORT)
-        {
-            Advance(); // consume EXPORT
-            Consume(TokenType.AS, "Expected AS after EXPORT");
-            var olTok = _parser.Current;
-            if (!olTok.Value.Equals("OPENLINEAGE", StringComparison.OrdinalIgnoreCase))
-                throw new SyntaxException("Expected OPENLINEAGE after AS", olTok.Line, olTok.Column);
-            Advance();
-            Consume(TokenType.TO, "Expected TO after OPENLINEAGE");
-            var path = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
-            Match(TokenType.SEMICOLON);
-            return new LineageStatement(null, null, path, exportAsOpenLineage: true) { Line = startToken.Line, Column = startToken.Column };
-        }
-
         Match(TokenType.LPAREN);
         var targetTable = _parser.ParseTableReference(allowAlias: false);
         string? columnName = null;
@@ -928,18 +939,10 @@ public class ExtensionParser : ParserComponent
 
         if (Match(TokenType.WITH))
         {
-            Consume(TokenType.LPAREN, "Expected '(' after WITH");
-            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
-            {
-                string key = Advance().Value.ToUpperInvariant();
-                Consume(TokenType.EQUALS, "Expected '=' after option key");
-                var val = ParseExpression();
-                if (key == "FROM_ENCODING") fromEncoding = val;
-                else if (key == "TO_ENCODING") toEncoding = val;
-                else if (key == "OVERWRITE") overwrite = val;
-                if (!Match(TokenType.COMMA)) break;
-            }
-            Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+            var options = ParseWithOptions("CONVERT FILE ENCODING", "FROM_ENCODING", "TO_ENCODING", "OVERWRITE");
+            fromEncoding = options.GetValueOrDefault("FROM_ENCODING");
+            toEncoding = options.GetValueOrDefault("TO_ENCODING");
+            overwrite = options.GetValueOrDefault("OVERWRITE");
         }
 
         if (fromEncoding == null) throw new SyntaxException("FROM_ENCODING option is mandatory in CONVERT FILE ENCODING", startToken.Line, startToken.Column);
@@ -962,19 +965,11 @@ public class ExtensionParser : ParserComponent
         Expression? overwrite = null;
 
         Consume(TokenType.WITH, "Expected WITH after destination path in SPLIT FILE");
-        Consume(TokenType.LPAREN, "Expected '(' after WITH");
-        while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
-        {
-            string key = Advance().Value.ToUpperInvariant();
-            Consume(TokenType.EQUALS, "Expected '=' after option key");
-            var val = ParseExpression();
-            if (key == "LIMIT_TYPE") limitType = val;
-            else if (key == "LIMIT_VALUE") limitValue = val;
-            else if (key == "PREFIX") prefix = val;
-            else if (key == "OVERWRITE") overwrite = val;
-            if (!Match(TokenType.COMMA)) break;
-        }
-        Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+        var options = ParseWithOptions("SPLIT FILE", "LIMIT_TYPE", "LIMIT_VALUE", "PREFIX", "OVERWRITE");
+        limitType = options.GetValueOrDefault("LIMIT_TYPE");
+        limitValue = options.GetValueOrDefault("LIMIT_VALUE");
+        prefix = options.GetValueOrDefault("PREFIX");
+        overwrite = options.GetValueOrDefault("OVERWRITE");
 
         if (limitType == null) throw new SyntaxException("LIMIT_TYPE option is mandatory in SPLIT FILE", startToken.Line, startToken.Column);
         if (limitValue == null) throw new SyntaxException("LIMIT_VALUE option is mandatory in SPLIT FILE", startToken.Line, startToken.Column);
@@ -994,17 +989,9 @@ public class ExtensionParser : ParserComponent
 
         if (Match(TokenType.WITH))
         {
-            Consume(TokenType.LPAREN, "Expected '(' after WITH");
-            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
-            {
-                string key = Advance().Value.ToUpperInvariant();
-                Consume(TokenType.EQUALS, "Expected '=' after option key");
-                var val = ParseExpression();
-                if (key == "HEADER") header = val;
-                else if (key == "OVERWRITE") overwrite = val;
-                if (!Match(TokenType.COMMA)) break;
-            }
-            Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+            var options = ParseWithOptions("MERGE FILES", "HEADER", "OVERWRITE");
+            header = options.GetValueOrDefault("HEADER");
+            overwrite = options.GetValueOrDefault("OVERWRITE");
         }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
@@ -1024,18 +1011,10 @@ public class ExtensionParser : ParserComponent
 
         if (Match(TokenType.WITH))
         {
-            Consume(TokenType.LPAREN, "Expected '(' after WITH");
-            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
-            {
-                string key = Advance().Value.ToUpperInvariant();
-                Consume(TokenType.EQUALS, "Expected '=' after option key");
-                var val = ParseExpression();
-                if (key == "DELETE_EXTRA") deleteExtra = val;
-                else if (key == "OVERWRITE") overwrite = val;
-                else if (key == "RECURSIVE") recursive = val;
-                if (!Match(TokenType.COMMA)) break;
-            }
-            Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+            var options = ParseWithOptions("SYNC DIRECTORY", "DELETE_EXTRA", "OVERWRITE", "RECURSIVE");
+            deleteExtra = options.GetValueOrDefault("DELETE_EXTRA");
+            overwrite = options.GetValueOrDefault("OVERWRITE");
+            recursive = options.GetValueOrDefault("RECURSIVE");
         }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();

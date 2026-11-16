@@ -1,6 +1,6 @@
 # ETL-SQL Orchestrator Architecture & Engineering Reference
 
-**Applies to ETL-SQL 0.21.0**
+**Applies to ETL-SQL 0.22.0**
 
 This document describes the internal mechanics of the `ETL-SQL.Orchestrator` project — the layer responsible for scheduling, executing, tracking, and governing ETL-SQL scripts in both interactive (TUI/IDE) and unattended (background job) contexts. It is the primary reference for engineers who need to understand how scripts move from a `CREATE JOB` statement to a completed run entry in `eng.job_history`.
 
@@ -77,6 +77,18 @@ The HTTP API has two independent trust checks. `X-Orchestrator-Key` authenticate
 `JOB`, `SCHEDULE`, and `NOTIFICATION` use durable owner fields plus `OrchestratorObjectAcls`. Grants target users, groups, or service accounts and form the hierarchy `READ < EXECUTE < OVERRIDE < MANAGE`. The separate `OVERRIDE` capability is deliberate: permission to run the stored job does not imply permission to replace variables and widen its data scope.
 
 Authorization is enforced twice: minimal-API endpoints filter reads and protect mutations, while engine catalog statement handlers resolve `IOrchestratorObjectAuthorizer` from the execution host. Ad-hoc scripts receive only the cryptographically verified `ExecutionIdentity`, so submitting `CREATE OR ALTER` cannot bypass shared-name ownership. Solo/local hosts that do not register an authorizer retain script-first local administration semantics.
+
+### 1.3 Ad-hoc report completion
+
+An ad-hoc job submitted with `IsReport=true` stays `Running` while its report manifest and snapshot
+are prepared. The status endpoint publishes terminal status and its manifest/error payload through
+the same state lock after output preparation and execution-scope disposal. A successful `Completed`
+report has its manifest ready; preparation failures produce `Failed`. Cancellation remains terminal
+and prevents a later completion from publishing output.
+
+Manifest construction currently requires `ScriptExecutorAdapter.LastEvaluator`. A process-spawned
+executor without that context fails the report job explicitly. It never falls back to in-process
+execution. The status endpoint continues to require its API key and caller authorization.
 
 ---
 
@@ -368,10 +380,17 @@ execution lease, throttle, history and metering. It differs from a trigger in se
 `NextRun` parked at `SchedulerService.ManualOnlyNextRun`. It cannot be a disabled job: the execution
 lease refuses one, and disabling the job is how an operator stops it being run at all.
 
-Cancel by run ID records `CANCELLED`. The older `POST /api/scheduled-jobs/{name}/kill` is unchanged
-and still records `FAILURE` with a cancellation message. Who submitted a run is held in memory for
-the life of the run, so after a restart only `MANAGE` can cancel it. A cancel for a run this node is
-not executing answers `409 not_running_here`; there is no cross-node signal.
+Cancel by run ID records `CANCELLED`. The older `POST /api/scheduled-jobs/{name}/kill` still
+records `FAILURE` with a cancellation message when this node runs the job. Who submitted a run is
+held in memory on the node running it, so after a restart, or through another node, only `MANAGE`
+can cancel it.
+
+A cancel can land on any node behind the load balancer. When this node does not run the job, it
+records the request in the shared `job_run_cancel_requests` table and answers `202 Accepted`. Each
+node polls that table for the runs it holds every `Scheduler:CancelPollSeconds` (default 5, range
+1–300), stops a requested run, and records it as `CANCELLED`. The row is deleted when the run ends;
+an unmatched request is pruned after a day. `409 not_running_here` remains only for a store that
+cannot record the request.
 
 Refusals return `{ Code, Error }`: `not_a_run_slot`, `sandbox_identity_unsupported`,
 `job_not_provisioned`, `run_grant_denied`, `already_running`,

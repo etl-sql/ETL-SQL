@@ -191,7 +191,7 @@ public static class ColumnBatchKernels
         byte[]? constantUtf8 = null;
         var canCompareEncodedEquality = comparison is ColumnComparison.Equal or ColumnComparison.NotEqual
             && constant is string constantString
-            && !decimal.TryParse(constantString, out _)
+            && !decimal.TryParse(constantString, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out _)
             && !EvaluationUtils.TryToDateTime(constantString, out _);
         if (canCompareEncodedEquality)
             constantUtf8 = Encoding.UTF8.GetBytes((string)constant);

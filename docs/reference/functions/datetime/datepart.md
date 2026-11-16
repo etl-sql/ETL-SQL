@@ -21,6 +21,10 @@ Returns an `INT` value for the specified date part.
 
 Returns `NULL` when `date` is `NULL`.
 
+## Remarks
+
+- Text is read as a date the way [`CAST`](../conversion/cast.md) reads it, on every server: ISO first, then slash dates in the [`SET DATEFORMAT`](../../set-commands/set-dateformat.md) order (default month first: `08/01/2024` is 1 August).
+
 ## Examples
 
 ```sql

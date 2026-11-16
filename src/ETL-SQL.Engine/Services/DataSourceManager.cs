@@ -61,7 +61,60 @@ public class DataSourceManager(
     /// Resolves a table reference to a functional IDataSource.
     /// Handles subqueries, function calls, dual table, and temporary tables.
     /// </summary>
-    public async Task<IDataSource> ResolveDataSourceAsync(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager)
+    /// <param name="forRead">
+    /// True when a statement reads the table. A write target creates a temp table or dataset that
+    /// does not exist yet; a read of one fails, where it used to get an empty table.
+    /// </param>
+    public async Task<IDataSource> ResolveDataSourceAsync(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager, bool forRead = false)
+    {
+        return await ResolveDataSourceCoreAsync(table, connections, transactionManager, forRead);
+    }
+
+    /// <summary>
+    /// The column names <paramref name="table"/> returned, after its table operators, the last time
+    /// it was read; null when it has not been read or named no columns. Kept for a table function or
+    /// a table operator only: an outer join asks for it when that side returned no rows, because
+    /// running a table function again could repeat a side effect, and a dynamic pivot's names
+    /// depend on the rows it read.
+    /// </summary>
+    public IReadOnlyList<string>? ReturnedColumns(TableReference table) =>
+        _returnedColumns.TryGetValue(table, out var columns) ? columns : null;
+
+    // Keyed by reference: a TableReference is a record, but each one in a script is its own entry.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<TableReference, string[]> _returnedColumns = new();
+
+    private static bool KeepsReturnedColumns(TableReference table) =>
+        table.FunctionCall != null || table.TableOperators.Count > 0;
+
+    private void RecordReturnedColumns(TableReference table, IEnumerable<string>? columns)
+    {
+        if (columns == null || !KeepsReturnedColumns(table)) return;
+        var names = columns.ToArray();
+        if (names.Length > 0) _returnedColumns.AddOrUpdate(table, names);
+    }
+
+    /// <summary>
+    /// Passes the batches through, keeping the column names of the first one that names any. An
+    /// in-memory result (a table function evaluated here) may hand back no batch when it is empty;
+    /// it is asked for its names instead, which reads nothing and runs nothing.
+    /// </summary>
+    private async IAsyncEnumerable<DataTable> RecordingColumns(TableReference table, IAsyncEnumerable<DataTable> batches, IDataSource? source = null)
+    {
+        var recorded = !KeepsReturnedColumns(table);
+        await foreach (var batch in batches)
+        {
+            if (!recorded && batch.Schema.ColumnCount > 0)
+            {
+                RecordReturnedColumns(table, batch.Schema.ColumnNames);
+                recorded = true;
+            }
+            yield return batch;
+        }
+        if (!recorded && source is InMemoryDataSource)
+            RecordReturnedColumns(table, await source.GetColumnsAsync(_evaluator.CancellationToken));
+    }
+
+    private async Task<IDataSource> ResolveDataSourceCoreAsync(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager, bool forRead)
     {
         _evaluator.CancellationToken.ThrowIfCancellationRequested();
 
@@ -90,6 +143,10 @@ public class DataSourceManager(
         }
         else if (table.ConnectionName == null && (table.TableName.StartsWith("#") || table.TableName.StartsWith("&")))
         {
+            if (forRead)
+                throw new ExecutionException(
+                    $"Unknown source '{name}' at Line {table.Line}. Nothing has created it; check the spelling, or create it before it is read.");
+
             var mem = new InMemoryDataSource();
             mem.Validator = _evaluator;
 
@@ -527,8 +584,8 @@ public class DataSourceManager(
         return mem;
     }
 
-    /// <summary>Restores a temporary table from a session data store (SQLite/Chunks or Legacy JSON).</summary>
-    public async Task<IDataSource> RestoreTempTable(TempTableInfo info, string password)
+    /// <summary>Restores a temporary table from its persisted spill chunks.</summary>
+    public IDataSource RestoreTempTable(TempTableInfo info)
     {
         _evaluator.CancellationToken.ThrowIfCancellationRequested();
 
@@ -548,40 +605,6 @@ public class DataSourceManager(
             ds.Rehydrate(info.Columns ?? new(), info.SpillChunkNames);
             _logger.Debug("[SESSION] Rehydrated temp table {TableName} from {ChunkCount} spill chunks.", info.Name, info.SpillChunkNames.Count);
             return ds;
-        }
-
-        // Legacy/Snapshot Path: Restore from JSON file
-        if (File.Exists(info.DataFilePath))
-        {
-            try
-            {
-                string encryptedJson = await File.ReadAllTextAsync(info.DataFilePath, _evaluator.CancellationToken);
-                string plainJson = CryptoUtils.Unprotect(encryptedJson, password);
-                var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(plainJson);
-
-                if (rows != null && rows.Count > 0)
-                {
-                    var dt = new DataTable();
-                    dt.SetColumns(ds.Schema.Keys, info.Constraints);
-
-                    foreach (var rowDict in rows)
-                    {
-                        _evaluator.CancellationToken.ThrowIfCancellationRequested();
-                        var row = dt.NewRow();
-                        foreach (var kvp in rowDict)
-                        {
-                            row[kvp.Key] = JsonToClr(kvp.Value);
-                        }
-                        await dt.AddRowAsync(row);
-                    }
-                    await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable(), append: false, cancellationToken: _evaluator.CancellationToken);
-                    _logger.Debug("[SESSION] Restored {RowCount} rows into temp table {TableName} via JSON snapshot", rows.Count, info.Name);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.WriteLine($"Warning: Failed to restore temp table {info.Name}: {ex.Message}", ConsoleColor.Yellow);
-            }
         }
 
         return ds;
@@ -634,37 +657,19 @@ public class DataSourceManager(
         return stmtParser.ParseForeignKeyReference();
     }
 
-    private object? JsonToClr(object? val)
-    {
-        if (val is JsonElement elem)
-        {
-            switch (elem.ValueKind)
-            {
-                case JsonValueKind.String: return elem.GetString();
-                case JsonValueKind.Number:
-                    if (elem.TryGetInt32(out int i)) return i;
-                    if (elem.TryGetInt64(out long l)) return l;
-                    return elem.GetDouble();
-                case JsonValueKind.True: return true;
-                case JsonValueKind.False: return false;
-                case JsonValueKind.Null: return null;
-                default: return elem.ToString();
-            }
-        }
-        return val;
-    }
-
     /// <summary>
     /// Reads batches from a data source and applies high-level operators like PIVOT or UNPIVOT.
     /// </summary>
     public async IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager, int batchSize)
     {
-        var source = await ResolveDataSourceAsync(table, connections, transactionManager);
+        // A name kept from an earlier read (a loop) must not stand in for this one.
+        _returnedColumns.Remove(table);
+        var source = await ResolveDataSourceAsync(table, connections, transactionManager, forRead: true);
         var batches = source.ReadBatches(batchSize, _evaluator.CancellationToken);
 
         if (table.TableOperators.Count == 0)
         {
-            await foreach (var b in batches) yield return b;
+            await foreach (var b in RecordingColumns(table, batches, source)) yield return b;
             yield break;
         }
 
@@ -672,9 +677,9 @@ public class DataSourceManager(
         {
             string streamingTableName = table.Alias ?? table.TableName;
             var streamingPivotEngine = new Engines.PivotEngine(_evaluator, _logger);
-            await foreach (var b in BatchRows(
+            await foreach (var b in RecordingColumns(table, BatchRows(
                 streamingPivotEngine.ApplyUnpivotStream(PrefixRows(batches, streamingTableName), streamingUnpivot),
-                batchSize))
+                batchSize)))
                 yield return b;
             yield break;
         }
@@ -683,9 +688,9 @@ public class DataSourceManager(
         {
             string streamingTableName = table.Alias ?? table.TableName;
             var streamingPivotEngine = new Engines.PivotEngine(_evaluator, _logger);
-            await foreach (var b in BatchRows(
+            await foreach (var b in RecordingColumns(table, BatchRows(
                 streamingPivotEngine.ApplyPivotStream(PrefixRows(batches, streamingTableName), streamingPivot),
-                batchSize))
+                batchSize)))
                 yield return b;
             yield break;
         }
@@ -695,8 +700,12 @@ public class DataSourceManager(
         string tableName = table.Alias ?? table.TableName;
         var containsMatchRecognize = table.TableOperators.Any(op => op is MatchRecognizeClause);
         var warnedMatchRecognizeBuffering = false;
+        // The source's names, kept for a result with no rows: bare and qualified, as rows carry them.
+        List<string>? names = null;
         await foreach (var batch in batches)
         {
+            if (names == null && batch.Schema.ColumnCount > 0)
+                names = Engines.OuterJoinShape.Qualified(batch.Schema.ColumnNames, tableName);
             foreach (var row in batch.Rows)
             {
                 var r = row.Clone();
@@ -720,14 +729,22 @@ public class DataSourceManager(
         var matchRecognizeEngine = new Engines.MatchRecognizeEngine(_evaluator);
         foreach (var op in table.TableOperators)
         {
+            var inputEmpty = allRows.Count == 0;
             if (op is PivotClause pivot) allRows = await pivotEngine.ApplyPivot(allRows, pivot);
             else if (op is DuckPivotClause duckPivot) allRows = await pivotEngine.ApplyDuckPivot(allRows, duckPivot);
             else if (op is UnpivotClause unpivot) allRows = await pivotEngine.ApplyUnpivot(allRows, unpivot);
             else if (op is MatchRecognizeClause matchRecognize) allRows = await matchRecognizeEngine.Apply(allRows, matchRecognize);
+
+            // Each stage's names, from its first row or, with none, from what the operator declares.
+            names = allRows.Count > 0
+                ? allRows[0].Columns.Keys.ToList()
+                : names == null ? null : await Engines.PivotEngine.DeclaredColumnsAsync(names, op, _evaluator, inputEmpty);
         }
 
         var resultTable = new DataTable();
         if (allRows.Count > 0) resultTable.SetColumns(allRows[0].Columns.Keys);
+        else if (names != null) resultTable.SetColumns(names.Distinct(StringComparer.OrdinalIgnoreCase));
+        RecordReturnedColumns(table, resultTable.Schema.ColumnCount > 0 ? resultTable.Schema.ColumnNames : null);
         foreach (var r in allRows) await resultTable.AddRowAsync(r);
 
         yield return resultTable;

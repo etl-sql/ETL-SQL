@@ -12,6 +12,1409 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Hardened shared connections (`SHARED:`) and secret resolution (`SECRET:`): Portal shared connections are deny-by-default (an entry with no group grants is usable only by an admin or its owner; other authors need a group `Use` grant, so existing ungranted connections stop resolving for them after upgrade), catalog-backed connection destinations/options cannot be overridden by script parameters or mutated via `ALTER CONNECTION` / `CREATE OR ALTER`, and `ConnectionSecretResolver` checks caller identity/ACL authorization against shared connection secrets.
+- Hardened external tool catalog and execution (`XT01`–`XT06`): validated aliases and root/reparse containment across all `LocalToolCatalogProvider` operations; enforced OS ownership/ACL boundaries (`MachineAdministrator` vs `PersonalWorkstation`) and elevation checks in `ToolAdminService`; honored `SET WHAT_IF ON` in `ExecuteToolStatementHandler` before external side effects; required explicit policy/host approval on every Docker launch/reuse path (`USE DOCKER`, `DOCKER START`/`RESUME`, `EXECUTE TOOL` containers); enforced parameter role/option/interpreter guards and single-pass placeholder expansion; added container CPU/memory/PID bounds and runtime profile gating; held Windows catalog ancestors only to the rights that could replace the path (delete, re-permission, take ownership), since stock `C:\` and `C:\ProgramData` let users create folders and the full write check refused every catalog; and updated [governed-custom-tool-runner-certification.md](docs/architecture/decisions/governed-custom-tool-runner-certification.md).
+- Fixed scale and concurrency defects: canceled abandoned semaphore/memory queue waits and handled grant/timeout races in `BufferManager`; included `HostCpuPercent` in `NodeCapacityMonitor.IsOverloaded`; added periodic disk-reserve checks during spill writes and replaced 10 ms polling in `SpillStore.WaitForWriteSlotAsync` with an event-driven waiter queue; failed closed on empty persistent spill keys in `SpillStore.NormalizeAesKey`; enforced `Security:RequireSpillEncryption` / `Governance:Spill:RequireEncryption` on `SET SPILL_ENCRYPTION OFF` and startup; and cleared pooled `ColumnBatch` arrays (`clearArray: true`) on disposal.
+- A scalar aggregate (no `GROUP BY`) whose states are fixed-size — non-`DISTINCT` `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, variance, covariance, `APPROX_COUNT_DISTINCT` — now streams its whole input in memory instead of hash-partitioning every row to spill once the admission probe passes `JOIN_SPILL_THRESHOLD`; a 1e9-row `COUNT(*)` in the hosted HA soak wrote gigabytes of `agg_` partitions for one running count. The streaming loop checks the run's cancellation token, so a killed run stops within seconds. `DISTINCT`, `STRING_AGG` and percentiles still go external. The HA soak harness now stops any job a failed scenario left running, so one failure no longer cascades into every later scenario.
+- Fixed cancellation inside `BEGIN … END`, `IF`, loops and procedure bodies: their statements were dispatched without a token and reset the run's cancellation token to none, so a killed job or a cancelled session kept running whatever was inside the block (`Evaluator.EvaluateStatement`).
+- Billion-row memory flatness gates AllocProfile on a fixed 256 MB live-heap ceiling in both runs instead of the 1.25x + 32 MB ratio: its 100M peak is bimodal (82 or 165 MB across hosted runs) without growing with rows, so the ratio failed about two runs in three (`billion-row-evidence.mjs`).
+- Narrowed script sealing: `SET ALLOW_PLAINTEXT_SECRETS = ON` now only keeps a literal `USE PASSWORD = '...'` in the file; connection secrets are always sealed as `ENC:...`. `SET NO_SAVE_SENSITIVE ON` writes a `<secret>` placeholder instead of encrypting, and the scrub reaches every credential encryption sealed (URL userinfo, any credential-named connection-string key, opaque connector tokens) while hosts, databases and file paths stay readable; and `SET NO_SAVE_CONNECTION ON` scrubs connection definitions as well (a superset). First-run sealing honours the session's `NO_SAVE_SENSITIVE`, `NO_SAVE_CONNECTION` and `CONNECTION_ENCRYPTION` settings and restores the defaults afterwards (`Evaluator`, `SecurityService`). VS Code save policy seals connection credentials even with `ALLOW_PLAINTEXT_SECRETS ON` (`savePolicy.ts`). Documented in the `SET` reference pages and [use.md](docs/reference/variables-parameters/use.md).
+- Documented Docker image approval (`Governance:Docker:AllowedImages`, `Governance:Docker:RequirePinnedDigest`, and the enrolled `Security:AllowedDockerImages` list) in [use-docker.md](docs/reference/statements/use-docker.md#image-approval) and [engine-configuration.md](docs/administration/platform/config/engine-configuration.md); the sample gate (`Test-AllSamples.ps1`) approves exactly the two images its Docker samples start.
+- Query-level `WITH` / `WITH RECURSIVE` and parenthesized queries (`query_expression = [ with_clause ] query_body`) are now accepted and executed across every query expression position: CTE bodies, derived tables/`JOIN` subqueries, scalar subqueries, `IN`/`NOT IN`, `EXISTS`/`NOT EXISTS`, and parenthesized set-operation branches (`SetOperationStatement.IsRecursive`, `AstSerializer.FormatWithClause`, `docs/grammar.ebnf`, and `EbnfConformanceTests`).
+- Engine execution evaluates query-level CTEs in isolated `CteScope` frames so inner CTEs shadow outer CTEs or `#temp` tables only within their subquery, supports `SetOperationStatement` in scalar/`IN`/`EXISTS` subqueries, and keeps correlated subqueries with nested CTEs free of stale cache hits (`ExpressionEvaluator`, `SubqueryAnalyzer`).
+- Linter CTE/column discovery, `QuarantineBoundaryRule`, `UnusedConnectionRule`, `LineageAnalyzer`, `ScriptDataModelService`, and `DefaultGrammar` completion recognize nested CTEs and parenthesized query expressions.
+
+## [0.22.0] — 2026-11-04
+
+- The Orchestrator has a readiness probe, `GET /health/ready`: 200 when its job store answers a read
+  within 3 s, otherwise 503. The HA Compose haproxy checks it instead of the liveness-only
+  `/health`, so an Orchestrator that has lost PostgreSQL leaves rotation (HA fault
+  PostgresOutageBrief). The HA soak harness now reads job history before deleting a job,
+  identifies the sticky Portal node from its affinity cookie, and sizes the temp-root exhaustion
+  headroom so the free-space reserve trips.
+
+- Engine `DATE` values now use CLR `System.DateOnly` instead of `DateTime`, so
+  `CAST(CAST('2024-01-08' AS DATE) AS STRING)` produces `'2024-01-08'` while `DATETIME` and
+  `TIMESTAMP` continue to format as `'yyyy-MM-dd HH:mm:ss'`. Updated comparisons, `CompoundKey`
+  join/group normalization and original-value retention, date arithmetic, date/string functions
+  (`CURRENT_DATE`, `TO_DATE`, `DATEADD`, `DATE_TRUNC`, `TRUNC`, `EOMONTH`, `START_OF_*`, `END_OF_*`,
+  `SAME_PERIOD_LAST_YEAR`, `FORMAT`), columnar buffers/plans (`ColumnBuffer<DateOnly>`), Arrow
+  spill storage, `RowPacker`, composite unique keys, watermarks, reporting export, and
+  database/file connectors, with unit and integration coverage in `DateOnlyEngineTests`.
+
+- Scripts using `USE PASSWORD = '...'` or plaintext secrets now seal automatically and clear undo
+  history unless `SET ALLOW_PLAINTEXT_SECRETS = ON` is active. Running a file-backed script via the
+  CLI or engine rewrites literal `USE PASSWORD` to `USE PASSWORD PROMPT;` and encrypts secrets as
+  `ENC:...` on disk before execution. VS Code saves apply save-time policy automatically (prompting
+  when no literal `USE PASSWORD` exists) and reload via `workbench.action.files.revert` so `Ctrl+Z`
+  does not restore plaintext, while `runEtlSql` respects both literal `USE PASSWORD` and
+  `USE PASSWORD PROMPT;`. TUI loads keep `ENC:` sealed (no decrypt-on-load) and clear `_undo` on
+  save. ETL-SQL Studio (Portal and WorkstationEditor) seals scripts via
+  `SecurityService.TrySealScriptForSave`, prompts when a save password is needed, and resets the
+  CodeMirror `EditorState` on save to clear undo history. Sealing never rewrites text inside a
+  string literal: a `CREATE CONNECTION` or `USE PASSWORD` in dynamic SQL is left alone, where it
+  used to be encrypted in place and broke the script's quoting. File-connector paths (`FLATFILE`,
+  `DIRECTORY`, `PARQUET` and the other file formats) stay readable unless they carry a credential,
+  and a sealed file keeps its UTF-8 byte order mark. Run a sealed script unattended with
+  `ETL_SQL_MASTER_PASSWORD`; the sample gate runs every pass that way on a copy of `samples/`.
+
+- `ENCRYPT FILE` and `DECRYPT FILE` derive default destination paths when `TO` is omitted (ROADMAP
+  FO04): `ENCRYPT FILE` appends `.pgp` for `PGP_KEY` and `.enc` for `PASSWORD` or SSH `KEYFILE`,
+  and `DECRYPT FILE` strips a recognized `.pgp`/`.enc` suffix (or fails on unrecognized suffixes),
+  honoring `OVERWRITE` and `WHAT_IF`.
+
+- Added file, path, and remote transfer scalar functions (ROADMAP FN01, FN02, FN03, FN07, FN08,
+  FN09): `PATH_FILENAME_NO_EXT`, `PATH_CHANGE_EXTENSION`, `FILE_CREATED`, `FILE_LINE_COUNT`,
+  `REMOTE_FILE_SIZE`, `REMOTE_FILE_MODIFIED`, and `REMOTE_DIRECTORY_EXISTS`, with updated
+  reference pages and `LanguageMetadata` entries.
+
+- FTP connections now read `TIMEOUT_SECONDS` (default 30s) and enforce strict FTPS TLS certificate
+  validation by default, adding `CERT_FINGERPRINT` certificate pinning and explicit opt-out
+  `ALLOW_UNTRUSTED_CERT` (ROADMAP RF02).
+
+- `ENCRYPT FILE`, `DECRYPT FILE`, `COMPRESS FILE` and `DECOMPRESS FILE` take
+  `WITH (DELETE_SOURCE = ON)` (ROADMAP FO03). The source file is deleted only after the output is
+  written; a failed run or `SET WHAT_IF ON` keeps it. A directory source, or a destination that is
+  the source itself, is refused before anything runs. The default stays `OFF`.
+
+- PGP files can be signed and their signatures checked (ROADMAP FO11).
+  `ENCRYPT FILE ... PGP_KEY 'partner_public.asc' SIGNING_KEY 'our_private.asc' [SIGNING_PASSWORD x]`
+  encrypts and signs in one pass. `DECRYPT FILE ... PGP_KEY 'our_private.asc' [PASSWORD x]
+  VERIFY_KEY 'partner_public.asc'` fails and writes nothing when the file is unsigned, signed by
+  another key, or changed after signing. A PGP file that fails its integrity check, signed or not,
+  no longer leaves the decrypted plaintext behind, and a failed signing leaves no partial output.
+
+- Formatting a script no longer breaks file and directory statements. The formatter wrote
+  `PASSWORD`, `KEYFILE` and `PGP_KEY` inside `WITH (...)`, which the parser now rejects, dropped
+  `AT connection` and `IF EXISTS` (so a remote delete became a local one), wrote `ON`/`OFF` as
+  `True`/`False`, and put `CONVERT FILE ENCODING`'s encodings outside `WITH`. The round-trip
+  test now covers these statements and checks that the output parses without diagnostics.
+
+- `DECRYPT FILE` failures name the cause (ROADMAP FO06). A wrong SSH key reported
+  `Unknown error (0xc100000d)`; it now says the private key does not match. A wrong password says
+  the password is wrong or the file was changed, and a file that was never encrypted (or used
+  another method) says so instead of `Unsupported encrypted file format`. A failed PGP decrypt no
+  longer leaves a partial output file: it decrypts to a temporary file and moves it into place
+  only on success. Messages never include passwords or key contents.
+
+- `FILE_EXISTS` and `DIRECTORY_EXISTS` give the same result on every host (ROADMAP FN10). Two
+  versions were registered and the last one won: the CLI and language server returned `1`/`0` and
+  `NULL` for a `NULL` path, while the Orchestrator and TUI returned `TRUE`/`FALSE` and `FALSE`. All
+  hosts now return `1`/`0` and `NULL` for `NULL`, and the reference pages say `NULL` (they said `0`).
+  A test fails if any function name is registered twice. **Behaviour change** for Orchestrator jobs
+  and the TUI only.
+
+- Renaming or moving a file on an FTP or SFTP connection no longer loses the destination (ROADMAP
+  RF10). Both deleted an existing destination before renaming, so a mistyped source path or a
+  refused rename destroyed it. The source is now checked first, an existing destination is moved
+  aside and put back if the rename fails, and `OVERWRITE = OFF` fails before anything changes
+  instead of depending on the server.
+
+- File and directory statements reject an option they would ignore (ROADMAP FO02). Every
+  `WITH (...)` on `COPY`, `MOVE`, `RENAME`, `DELETE`, `COMPRESS`, `DECOMPRESS`, `ENCRYPT`, `DECRYPT`
+  (file and directory), `CREATE DIRECTORY`, `DELETE DIRECTORY_CONTENTS`, `SEND FILE`, `RECEIVE FILE`,
+  `CONVERT FILE ENCODING`, `SPLIT FILE`, `MERGE FILES` and `SYNC DIRECTORY` used to parse any key and
+  drop the ones it did not know, so `ENCRYPT FILE ... WITH (DELETE_SOURCE = ON)` left the plaintext
+  on disk and `COMPRESS FILE ... WITH (FORMAT = 'GZIP')` still wrote ZIP. An unknown key is now a
+  syntax error naming the accepted keys. `DATE_SUFFIX` and `SUFFIX_SEPARATOR` are accepted only on
+  `COPY`, `MOVE` and `RENAME`, where they work. `PASSWORD`, `KEYFILE` and `PGP_KEY` are errors on
+  anything but `ENCRYPT`/`DECRYPT`; `KEYFILE` with `PGP_KEY`, or `PASSWORD` with a key on
+  `ENCRYPT FILE`, is an error instead of silently using one; directories reject `KEYFILE` and
+  `PGP_KEY`, which they ignored in favour of a password; and `RECURSIVE` is accepted only on
+  `DELETE DIRECTORY_CONTENTS`. **Behaviour change.**
+- The ENCRYPT / DECRYPT FILE page is rewritten to the real syntax (ROADMAP FO01): the clause form,
+  `KEYFILE` as an SSH RSA key and `PGP_KEY` as the PGP key (the page had them reversed), no
+  `ALGORITHM` or `DELETE_SOURCE`, the directory forms, and a vendor-drop example that deletes the
+  plaintext with `DELETE FILE`. Every example was run. Related pages: `COMPRESS` writes ZIP only and
+  has no `FORMAT` or `RECURSE`; `OVERWRITE` defaults to `ON` for file statements, `SEND FILE` and
+  `RECEIVE FILE` (four pages said `OFF`); and `CREATE SSH_KEY_PAIR` and `CREATE PGP_KEY_PAIR` write
+  `id_rsa`/`id_rsa.pub` and `public.asc`/`private.asc` into a folder, not `<path>` and `<path>.pub`.
+- `ENCRYPT`/`DECRYPT FILE` and `DIRECTORY` no longer fall back to the master password when no
+  `PASSWORD` is given (ROADMAP FO09). The master password protects connection strings and secrets in
+  a script; a file passphrase has to be shared with whoever decrypts the file, so the statement now
+  requires its own `PASSWORD`, `KEYFILE` or `PGP_KEY`. On the CLI the fallback never had a value; in
+  the TUI it silently encrypted files with the editor's master password. **Behaviour change.**
+- `.pub` and `.pem` key files are on the default file-type list (ROADMAP FO10), so a key pair from
+  `CREATE SSH_KEY_PAIR` works with `ENCRYPT FILE ... KEYFILE` without `SET ALLOW_FILE_TYPE_ACCESS`.
+
+- FTP: an unrecognized `USE_SSL` or `PASSIVE` value is an error and the connection does not open
+  (ROADMAP RF01). `USE_SSL` read every value but `EXPLICIT`, `ON` and `IMPLICIT` as no encryption,
+  and the FTP page told users to set `USE_SSL=TRUE`, so a quoted `'TRUE'` (and `YES` or `1`) sent the
+  password in clear text. `TRUE`, `YES` and `1` now mean `EXPLICIT`, as `ON` did. The page documents
+  `USE_SSL` and `PASSIVE` as the connector reads them and drops the `FTPS` alias and `USE_PASSIVE`
+  option, which never existed. **Behaviour change; security.**
+
+- **Generate Script from Spec** in the VS Code extension now uses only a chat model from an
+  installed VS Code chat extension (such as GitHub Copilot), which handles sign-in. The direct
+  Gemini, OpenAI, Anthropic, OpenRouter and custom-endpoint providers are removed, with the
+  `etlsql.ai.provider`, `etlsql.ai.apiKey` and `etlsql.ai.endpoint` settings. The API key was plain
+  text in `settings.json`, which Settings Sync copies to every machine, and a workspace could
+  redirect the endpoint and receive the key. If you set `etlsql.ai.apiKey`, delete it from your
+  settings and rotate the key. The command takes text specs (`.csv`, `.tsv`, `.json`, `.xml`,
+  `.txt`, `.md`); for a PDF, Excel or Word spec use the manual `extract-spec` → AI assistant →
+  `gen-script` path. **Breaking change; security.**
+- Check the machine before the `integration`, `perf` and `benchmarks` lanes of `test-lane.ps1`
+  (release reliability W7). A lane on a machine without Docker, the ODBC driver, Node.js 22,
+  enough free memory or (for timing) an idle processor stops in seconds and says why. CI skips
+  the check; `-SkipEnvironmentCheck` skips it locally. The Timing check no longer ends without a
+  reason when Windows' processor counter fails ("negative denominator", 3 in 8 reads): it retries,
+  then reports the load as unknown.
+- Run the spill lane in CI (release reliability W7): the **Spill Certification** jobs rerun the
+  engine and SLT corpus with spill thresholds of a few rows, in three shard groups, on every push
+  that selects the engine lanes (not on pull requests). It ran only on the owner's workstation and
+  was advisory; it now gates and is release evidence. `test-lane -Lane spill` takes
+  `-EngineShardGroup`/`-EngineShardGroupCount`; the SLT corpus runs in group 1.
+- Fail on a misspelt column of an empty outer-join side in the last three cases that read it as
+  `NULL`: a `PIVOT` whose values are variables (they are evaluated, as the pivot does), a
+  `MATCH_RECOGNIZE` (its columns follow from the clause), and a table function served by a
+  database connection (`db.fn(...)`). The side's names also answer to the alias of its `PIVOT` or
+  `MATCH_RECOGNIZE` (`AS p`). Database reads with no rows now keep their column names, and a
+  table operator over no rows names its columns, so a DuckDB `PIVOT` over an empty table returns
+  its grouping columns. **Behaviour change.**
+- Fix the SLT runner's memory check for parallel files. Every runner shared one `Process` object,
+  and one runner's `Refresh()` cleared it while another read it, so a file run 4-way parallel
+  failed with a `NullReferenceException` or "Process has exited". The engine was not involved.
+- Scope a CTE to its statement. Its result stayed registered until the script ended, so a later
+  statement could read it by name, and a CTE named like an existing `#temp` table replaced and
+  disposed that table. The name now means what it meant before once the statement ends, also
+  when the statement fails. **Behaviour change.**
+- Expand `OUTPUT INSERTED.*` and `OUTPUT DELETED.*` on `INSERT`, `UPDATE`, `DELETE` and `MERGE`
+  to every column of that row. Both failed with `Unknown column 'DELETED.*'`. A side the
+  statement has no row for (`DELETED` on an insert) reads `NULL` in every column.
+- Require a unit in `USING SAMPLE`, and fail on a percentage above 100. `USING SAMPLE 10` read
+  as 10 percent, and `USING SAMPLE 150 PERCENT` returned every row with no error.
+  **Behaviour change.**
+- Fail a `MATCH_RECOGNIZE` whose `DEFINE` names a variable `PATTERN` does not use. The
+  definition was ignored, so a misspelt variable left the real one undefined, and it matched
+  every row. **Behaviour change.**
+- Fail on a misspelt `OUTPUT` column before `INSERT`, `UPDATE`, `DELETE` or `MERGE` changes any
+  row. The clause was evaluated after the change, so `DELETE ... OUTPUT DELETED.nmae` failed
+  with the rows already deleted.
+- Run the CTEs of `WITH ... INSERT`, `UPDATE`, `DELETE` and `MERGE`. They were parsed and never
+  registered, so the statement failed with `Unknown source` on its own CTE.
+- Reject `COUNT(DISTINCT *)` and `DISTINCT *` in any function. It was accepted and the
+  `DISTINCT` ignored. **Behaviour change.**
+- Add SLT coverage: `IS [NOT] DISTINCT FROM`, named `WINDOW` clauses, `OUTPUT` on DML, `WITH`
+  on `INSERT`/`UPDATE`/`DELETE`/`MERGE`, `statement error` cases for `USING SAMPLE`,
+  `GROUP BY ALL` and `MATCH_RECOGNIZE`, and regression queries for this release's `NULL` and
+  fail-closed fixes. The standard-SQL queries of `slt_lang_aggfunc.test` (SQLite-only, halts on
+  other engines) now run as `aggregate_distinct.test`. `select5.test` has no `halt`; all 732
+  queries run. The `index/` corpus was probed: 189 of 213 files pass (see
+  `docs/architecture/standards/slt-coverage.md`).
+
+- Keep the tables a script creates on a `MOCKDB` connection. `CREATE TABLE demo.t (...)` was
+  ignored and inserts into it were dropped, so `SELECT * FROM demo.t` silently returned the
+  seeded `Users` table. A created table now holds its declared columns and inserted rows until it
+  is dropped; the seeded tables still ignore writes.
+- Make the SQL fuzzer test what it claims. Its table lived on `MOCKDB`, so every query read
+  `Users`: about 1,100 of 2,000 iterations failed and the NoREC differential check compared no
+  query. The generator now builds `JOIN`s, `IN`/`EXISTS`/scalar/derived subqueries, CTEs,
+  `UNION`/`INTERSECT`/`EXCEPT`/`MINUS`, `DISTINCT`, `TOP`, `LIMIT ... OFFSET`,
+  `OFFSET ... FETCH`, `QUALIFY`, `GROUPING SETS` and `ROLLUP`, and no longer emits the retired
+  `SHOW VARIABLES`/`SHOW CONNECTIONS`. These template queries are valid by construction, so any
+  engine rejection of one, or the parser rejecting one, fails the run without
+  `ETLSQL_FUZZ_STRICT_EXEC`. A NoREC rewrite that fails when its original query ran now fails the
+  run (it was counted and dropped), NoREC covers joins, and a statement the parser accepts but
+  the grammar state tree rejects is a failure. Five seeds of 2,000 iterations: no finding, and
+  NoREC compared 243 to 279 queries per seed.
+
+- Accept `||`, `??` and `<<`/`>>` in the right operand of `LIKE`, `ESCAPE`, `BETWEEN`, a bare
+  `IN` and `IS DISTINCT FROM`, as `=` already did. `name LIKE '%' || @q || '%'` and
+  `x BETWEEN @lo ?? 0 AND @hi` failed to parse. `NOT EXISTS (...) = FALSE` now parses as
+  `NOT (EXISTS (...) = FALSE)`; it failed to parse.
+- Align `docs/grammar.ebnf` with the parser: `ALTER TABLE ... DROP [COLUMN]` and
+  `RENAME [COLUMN] ... TO ...` are added; a bare `APPLY`, `JSON_TABLE` as an expression,
+  `MATCH_RECOGNIZE MEASURES *` and any option but `ICON`, `LABEL` or `BADGE` on a navigation page
+  are removed, because the parser never accepted them. A `GROUP BY` or `ORDER BY` list that
+  ends in a comma may now be followed by `USING SAMPLE`, `MINUS` or `ON FAILURE`, as the grammar
+  says.
+- Return `NULL` from scalar functions given a `NULL` argument: `REPLACE`, `SUBSTRING`, `LEFT`,
+  `RIGHT`, `CHARINDEX`, `INSTR`, `STUFF`, `STR`, `QUOTENAME`, `TRANSLATE`, `PATINDEX`,
+  `STRING_ESCAPE`, `LOG`, `LOG10`, `ATAN2`, `ROUND`, `DATETIMEFROMPARTS`, `TIMEFROMPARTS`,
+  `EOMONTH`, `DATEPART`, `DATEDIFF`, `HASHBYTES`, `SIMILARITY`, `LEVENSHTEIN`, `POSITION` and
+  `AT TIME ZONE`. They answered with an empty string, 0, 1, the first argument or an exception:
+  `CHARINDEX(NULL, 'abc')` was 1, `REPLACE('abc', 'b', NULL)` was `'ac'` and
+  `SIMILARITY(NULL, NULL)` was a 100% match. **Behaviour change.**
+- Skip `NULL` in `STRING_AGG` and `LIST_AGG`, and return `NULL` when a group has no value to
+  join. A `NULL` joined as an empty string (`'a,,b'`) and an empty group gave `''`.
+  **Behaviour change.**
+- Read the window frame in `FIRST_VALUE` and `LAST_VALUE`. Both read the whole partition, so
+  `LAST_VALUE(x) OVER (ORDER BY d ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)` gave the partition's
+  last row on every row.
+- Fail arithmetic on text that is not a number and on a result that does not fit. `'abc' - 5`,
+  `'abc' * 5`, a date plus text and a product too large for `decimal` or `double` all gave `NULL`,
+  so a bad value read as missing data. This covers `-`, `*`, `/`, `%`, `<<` and `>>`; `+` on text
+  still concatenates, and `NaN` or infinity as an operand still carries through.
+  **Behaviour change.**
+- Fail `EXTRACT` on a field it does not know or a value that is not a date. Both gave `NULL`.
+  **Behaviour change.**
+- Compare timestamps at full precision in `=`. Equality dropped the fraction of a second while
+  `<` and `>` kept it, so two times in one second were both equal and ordered.
+  **Behaviour change.**
+- Treat a database `NULL` as `NULL` in arithmetic, `CAST` and aggregates. `5 + NULL` gave `'5'`,
+  `CAST(NULL AS VARCHAR)` gave `''`, `COUNT(col)` counted the row and `MIN`/`MAX` failed when the
+  `NULL` came from a source as `DBNull`. `SUM` and `AVG` over a value that is not a number now fail
+  in test mode too, where they counted it as 0.
+- Fail on a name nothing defines. A misspelt column read as `NULL` on every row, and a bare name
+  with no row in scope read as its own text (`SELECT bogus` gave `'bogus'`), so the script
+  succeeded with wrong data. The error names the column and lists the columns in scope. A row
+  with no match in an outer join carries the other side's columns as `NULL`, so a real column
+  still reads `NULL` there and a misspelt one fails, as it does on a row read back from a spill
+  file. An undeclared `@variable` fails too, including one bound into a query pushed down to a
+  database, where it was sent as `NULL`. **Behaviour change.**
+- Fail on a misspelt column of an outer join side that returned no rows. Such a side had no
+  row to take its column names from, so any name read `NULL`. The names now come from the table
+  function's result, the `PIVOT` or `UNPIVOT` list, the tables behind `SELECT *` or `t.*`, the
+  first query of a `UNION`, or the header or catalog of an empty file or database table on the
+  left. **Behaviour change.**
+- Report a visual whose source fails on the report as well as on the visual. The visual showed
+  its error, but the report build had no error and no message. The report now carries
+  `One or more visuals failed to build.` and a message that names the visual. The other
+  visuals still render.
+- Fail on reading a temp table or dataset that nothing created. `SELECT * FROM #mistyped`
+  created an empty table and returned no rows, so a misspelt table name succeeded. A read, a
+  join, `TRUNCATE TABLE` and `ALTER TABLE` now fail with `Unknown source`; `SELECT ... INTO`,
+  `INSERT INTO` and the other write targets still create the table. **Behaviour change.**
+- Load the table named by `EXEC (@sql) INTO #t` when no connection is given. The local form
+  ignored `INTO`: it printed the result and left the table missing, which the empty table a read
+  used to create had hidden. It now fails when the SQL returns no result set.
+- Fail `DROP INDEX` and `REINDEX` on an index that does not exist. An in-memory table kept its
+  indexes by column and not by name, so both statements succeeded on any name. The engine now
+  records each index name, fails with `Unknown index`, and drops a table's indexes with the
+  table. `DROP INDEX IF EXISTS` still succeeds. **Behaviour change.**
+- Return each left row at most once from a `SEMI JOIN` or `ANTI JOIN` that spills to disk. The
+  spilled join ran a `SEMI JOIN` and an `ANTI JOIN` as an `INNER JOIN`, and the `LEFT` forms as a
+  `LEFT JOIN`, so the result held joined rows, one per match. Removed the buffered join path that
+  nothing called; the `NULL` key, `ON` clause and `WHERE` pushdown defects recorded against it do
+  not occur in the streaming join, and tests now pin that.
+- Compare numbers of different types in `GREATEST` and `LEAST`. `GREATEST(CAST(1 AS FLOAT), 2)`
+  failed with `Object must be of type Decimal`; both functions now order values the way
+  `ORDER BY` does.
+- Return `NULL` from `GENERATE_SERIES` when a bound or the step is `NULL`, and fail on a step of
+  0. A `NULL` bound read as 0, and a zero step returned 1,000,001 copies of the start value.
+  **Behaviour change.**
+- Return `NULL` from `CHARACTER_LENGTH`, `OCTET_LENGTH`, `SUBSTRING`, `OVERLAY` and `TRIM` for a
+  database `NULL` argument, which read as the text of an empty value. A `NULL` length in
+  `OVERLAY ... FOR` and `NULL` trim characters in `TRIM` now give `NULL` too; they were ignored.
+  **Behaviour change.**
+- Order values by kind before value: numbers, then dates, then other text. A number compared
+  with text that is not a number fell back to comparing their text, which gave no consistent
+  order: `9 < 10`, `10 < '5x'` and `'5x' < 9` all held. `ORDER BY`, `MIN`, `MAX` and the
+  comparison operators now put `'5x'` and `'#1'` after every number. **Behaviour change.**
+- Return a grouped text column as text. `GROUP BY` compares `'123'` and `123` as one value, and
+  the query returned the compared value: text `'123'` came back as a number, `'2026-01-05'` as a
+  date, and `'abc '` without its trailing space. A group now returns the first value it saw.
+  **Behaviour change.**
+- Let `HAVING` name a `SELECT` alias of a grouping expression, and a grouping expression that is
+  a function call. `SELECT UPPER(region) AS r ... GROUP BY UPPER(region) HAVING r = 'EAST'`
+  returned no rows, and `HAVING UPPER(region) = 'EAST'` failed on `region`.
+- Read a text column of a spilled temp table back as text. Once a temp table passed
+  `TempTableSpillThresholdRows`, or memory ran short, the rows read from disk went through a
+  number parse and a date parse: `'00123'` came back as the number 123 and `'2026-01-05'` as a
+  date. A table under the threshold was not affected, so a script gave different values at
+  scale. **Behaviour change.**
+- Sort `NULL` last for `ORDER BY ... DESC` on a columnar temp table. The columnar sort put
+  `NULL` first for both directions; the row sort puts it first for `ASC` and last for `DESC`.
+  The two now agree. **Behaviour change.**
+- Keep `PIVOT` rows apart when their grouping values differ. The group key was the values
+  joined with `|`, so `('x|y', 'z')` and `('x', 'y|z')` shared one output row, and `NULL` shared
+  a row with the text `'NULL'`.
+- Count the rows of a `NULL` pivot value in a dynamic `PIVOT ... ON`. The `NULL` column was
+  filtered with `= NULL`, which matches nothing, so it was always empty.
+- Read `[q1]` or a bare `q1` in the `IN` list of a `PIVOT` that spills. The spilled path read
+  the name as a column and failed with `Unknown column 'q1'`.
+- Leave `NULL` cells out of `UNPIVOT`, as the reference says. Every cell produced a row.
+  **Behaviour change.**
+- Make `LAST_VALUE` read the default frame. With `ORDER BY` and no frame clause the frame is
+  `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`, so `LAST_VALUE` is the value of the
+  current row's last peer. It returned the last value of the whole partition. To get that,
+  write `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`. **Behaviour change.**
+- Give a `RANGE` frame with an offset the right rows when the `ORDER BY` key is `NULL`. The
+  frame of such a row was the whole partition; it is now the rows that share the `NULL`. An
+  `UNBOUNDED PRECEDING` or `UNBOUNDED FOLLOWING` end now includes the `NULL` rows on that side,
+  which it left out. **Behaviour change.**
+- Add `NULLS FIRST` and `NULLS LAST` to `ORDER BY`, after `ASC` or `DESC`:
+  `ORDER BY amount DESC NULLS LAST`. It works in a query, in a window `ORDER BY` and in
+  `WITHIN GROUP (ORDER BY ...)`. Without it `NULL` still sorts lowest: first for `ASC` and last
+  for `DESC`. PostgreSQL and Oracle are sent the placement; for another source the engine sorts.
+- Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
+  each value as `NULL`, so the pivoted columns held nothing.
+- Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to
+  the updated rows and the statement succeeded. The error names the column and lists the columns
+  that exist. **Behaviour change.**
+- Fail `IN (SELECT a, b ...)`. `IN` compares against the first column, so the others were
+  ignored without a word. A subquery used with `IN` must return one column.
+- Make the SQL logic corpus count its `statement error` records. The runner raised "expected
+  failure" inside the block that ignored every error of such a record, so all 29 passed whatever
+  the engine did; turning them on found the two defects above. The runner also fails text in a
+  numeric result column instead of reading it as 0, and offers every statement handler the engine
+  ships instead of a hand-kept 26 of 67.
+- Record what each row did in `MERGE ... OUTPUT $action`. The lexer dropped the `$`, so the
+  reference read an unknown column named `action` and every audit row recorded `NULL` instead of
+  `INSERT`, `UPDATE` or `DELETE`. The self-checking scripts in `tests/Integration`, which would
+  have caught it, now run with the engine tests.
+- Fail a `SELECT` that names an unknown column when every table it reads is a temp table with
+  known columns. A misspelt column used to return `NULL` on every row and the script succeeded.
+  The error names the column and lists the columns that exist. Other sources (files, connections,
+  subqueries, CTEs) still read an unknown name as `NULL`; v0.23.0 makes that fail too.
+- Sort grouped results by a grouping key that the `SELECT` list does not return, as in
+  `SELECT COUNT(*) FROM t GROUP BY g ORDER BY g`. The key was missing from the aggregated rows,
+  so the groups came back in arrival order.
+- Keep number-like codes apart in `GROUP BY`, `DISTINCT`, set operations and join keys. Any
+  string that parsed as a number keyed as that number, so `'00123'`, `'0123'` and `'123'` became
+  one group returned as `123`, and `'1,000'` matched `1000`. Only plain number text such as
+  `'123'` or `'-4.5'` still keys as a number, so text `'1'` still joins to `1`.
+- Stop the script when a `GO` batch fails. The error was logged and the next batch ran, so the
+  run ended with exit code 0. Use `TRY…CATCH` inside a batch to carry on after an error.
+  **Behaviour change.**
+- Remove the Packaged Bundle target from the Portal's New Job dialog. It saved the job as
+  `bundle://<name>/latest`, which the Orchestrator cannot resolve, so every job created that way
+  failed when it ran. Create bundle jobs with an `orch://<bundle>[@<version>]/<entry>.etlsql`
+  path from a script, the CLI or the API; the dialog will offer bundles again in v0.23.0.
+- Return the same text on every host from string casts, `TO_STR`, `FOR JSON` and `FOR XML`.
+  Casting a date to a string followed the server's locale (`1/8/2024 12:00:00 AM` on Windows
+  en-US, `01/08/2024 00:00:00` on Linux) and the documents used the platform newline, so the SQL
+  logic corpus failed on its first Linux run. Dates now cast to ISO `yyyy-MM-dd HH:mm:ss`, numbers
+  to invariant digits, and both documents use LF. See
+  [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
+- Return the same text on every host from concatenation, string functions, casing, `DATENAME`
+  and report cells. `'Run ' || @d` gave the locale's date text, `UPPER('i')` gave `İ` on a Turkish
+  server, and chart labels read `1/1/2026 12:00:00 AM`. They now use the `CAST ... AS STRING` text,
+  invariant casing and English names, and `INITCAP` capitalizes after an apostrophe (`O'Neil`);
+  reports carry ISO dates and drop a midnight time. Text read as a date means the same date on
+  every host and every path: ISO first, then slash dates month first as in SQL Server and
+  PostgreSQL (`CAST` read them day first). `SET DATEFORMAT DMY` and `Engine:DateFormat` switch to
+  day first. `FLATFILE` writes the same text on every host (a German host
+  wrote `"1,5"`) unless `CULTURE` or `DATE_FORMAT` is set. See
+  [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
+- Run the checks that only the owner's workstation ran (EBNF, SQL logic corpus, 10M-row spill and
+  Smoke/Standard scale) in a hosted Engine Certification CI job, and drop the workstation run from
+  the release. A retried test now logs at the first run's verbosity; the SQL logic retry printed
+  428,000 lines until its step deadline killed it.
+
+- Stop the MSI from shutting down other software that has ETL-SQL files open. Windows Restart
+  Manager shut down the hosted runner's own `provjobd`, which reads newly installed files for about
+  a minute, and the MSI certification lost its runner. The MSI now authors
+  `MSIRESTARTMANAGERCONTROL=Disable`: a quick uninstall lost 0 of 6 runners with it and 4 of 6
+  without. `DisableShutdown`, tried on 2026-11-01, still shut applications down in silent mode.
+  The source preflight rejects missing, weakened or duplicate authoring. Fresh-install MSI
+  certification then passed 6 nightly runs in a row (2026-11-09 to 2026-11-14).
+- Run the Shared SaaS metering and backup-recovery certification tests in the project that holds
+  them. Those phases ran their filters against the Portal tests, so the release receipt check
+  failed. A contract test now requires every phase filter to name tests in its own project.
+  Production-canary bundles are ignored by Git, so a run no longer trips its own source-drift check.
+- Accept real deployment and recovery evidence in the operator submission. The validator required
+  scenario files named after their ID, but certification records the names its tests write; it
+  also required the CLI version log to be one line, but the CLI prints its security-policy lines
+  first. The canary plan is pinned to LF so its recorded hash matches on every checkout.
+- Promote certified Windows and macOS packages whose launch log carries the CLI's start-up lines.
+- Run the Windows workstation check with its absolute evidence path instead of nesting it under the repository.
+- Keep a log for every pre-release phase, including a clean format check that prints nothing.
+  Release selection required the log to hold only the version, so it would have refused every
+  real native package after tagging. It now requires the exact candidate version as one line.
+- Monitor MSI certification from an independent Linux runner. Retain its progress report before
+  cancelling a run whose active test stops delivering checkpoints for five minutes. Successful
+  jobs and installer artifacts remain available for failed-job-only recovery. Recheck the attempt
+  before cancellation; monitoring failures cannot certify packages or trigger a rebuild.
+
+- Skip ReadyToRun precompilation for hosted PR native packages while retaining self-contained
+  bundles, installed-package checks, CLI launches and VSIX webview acceptance. Local, nightly
+  and full release publishing keep ReadyToRun enabled. Payload manifests bind the selected
+  setting, and publication rejects PR, missing or untyped optimization evidence.
+
+- Retry a failed native-package evidence upload on the same runner using its completed files.
+  A successful upload is never replaced. The complete artifact retains diagnostics if their
+  separate upload fails; exhausted or missing uploads still fail certification. Store the
+  already-compressed packages without another compression pass during artifact upload.
+
+- Wait for consumer-check discovery output to finish before exiting. A busy output pipe could
+  otherwise truncate the test list and falsely fail source preflight. Regression checks delay
+  output for both full and preflight-excluded discovery without changing test membership.
+
+- Restore every native host's dependencies for the selected platform before publishing any
+  host. Publishing then uses those restored inputs without another restore. A dependency
+  failure in a later host now stops before compiling earlier hosts; verified Windows payload
+  consumers continue to package the retained bytes without restoring or publishing again.
+
+- Route MSI XML authoring and its source-validation changes to source preflight and installed
+  MSI certification. Unrelated native package builds and engine suites skip in ordinary PR checks.
+  Local MSI-only pre-push stops after source checks; full release certification still selects
+  every lane and all four native platforms.
+
+- Poll the installer process in bounded intervals during quiet MSI certification, using the
+  existing deadline, ordinary logging and installer arguments. Retained quiet-runtime checks
+  pass fresh install/uninstall, upgrade, rollback and cleanup. The Restart Manager authoring
+  experiment is removed after a control passed without its override.
+
+- Publish Windows host binaries once for hosted MSI and ZIP/VSIX packaging. Consumers verify
+  the retained payload inventory and hashes and reuse its original successful build attempt.
+  MSI and native packaging keep separate acceptance checks; release publication requires their
+  certified packages to identify the same payload. Failed consumers have no rebuild fallback.
+
+- Prepare the VS Code acceptance host before native publishing. Later webview checks verify
+  its local receipt and executable hash and use that executable without resolving another
+  download. A network failure now stops before the long native build. Webview assertions and
+  the combined download/test time budget are preserved.
+
+- Capture effective protected secrets when preparing the previous Portal installation for MSI
+  upgrade certification. Consume its existing bootstrap file before checking that the upgrade
+  creates none. Legacy shared-settings predecessors remain covered, and inconsistent service
+  settings fail before upgrade. This corrects test setup for the 0.21.0 predecessor.
+  A guarded diagnostic selection can exercise upgrade/rollback against retained installers
+  separately from fresh-install failures; ordinary certification always includes both scenarios.
+
+- Prepare v0.22.0 version sources and draft release notes before testing its installed upgrade
+  path. Source preflight checks release-branch version families before expensive builds, including
+  the PR's target branch. Final release dates and certification remain separate gates.
+
+- Retain bounded Windows Installer action names, numeric exit codes and independent supervisor
+  heartbeats in development-only MSI diagnostics. Flush diagnostic installer logs and preserve
+  the existing certification deadlines, result codes and ordinary installer behavior.
+  A retained-input Portal diagnostic passes without rebuilding; earlier runner stalls remain
+  unexplained. Three independent browser inventories on the same proposal pass without retries.
+
+- Preserve Playwright's browser defaults while applying its upstream Windows TCP port-allocation
+  mitigation to test-owned Chromium launches. Keep browser assertions, timeouts and request failures.
+
+- Stage macOS DMG applications under `release/` so packaging preserves the clean candidate.
+  Submit bounded MSI phase/resource annotations directly to the job's check run before and
+  after resource probes, including separate fresh-uninstall/cleanup markers and Windows Installer
+  product versions. Diagnostic delivery cannot change a certification result.
+  Investigate the Portal profile against retained installer inputs through a separate development-
+  branch dispatch, without rebuilding or generating release certification.
+
+- Bound MSI candidate builds with streamed diagnostics and a 45-minute process deadline;
+  retain build diagnostics separately before uploading the installer inputs.
+  Require explicit runner-job, shell-command and checkout deadlines across CI/release workflows.
+
+- Require a candidate-bound operator checklist bundle before release promotion and publication.
+  Validate retained deployment, canary and recovery reports, explicit conditional reviews, the
+  previous-release diff and CodeQL alert inventory without rerunning successful suites.
+
+- Retain sanitized transport and process-resource evidence when the missing-chart browser
+  assertion times out. Preserve its existing timeout and original exception without adding retries.
+
+- Promote the certified macOS Intel and Apple Silicon packages from their original native
+  certification artifacts. Release verifies candidate identity, webview/CLI/DMG acceptance,
+  toolchain and hashes before upload and publication, without rebuilding macOS packages.
+  Clarify parallel certification and receipt reuse in the release checklist, including one full
+  independent workstation execution and no merge commit after candidate certification.
+  Let both release drivers consume the workstation run's original validation state directly,
+  with unchanged scope/freshness/candidate checks, and resolve notes from `docs/releases/`.
+  Give Windows artifact certification its own preflight entry so the consumer gate excludes it
+  after success instead of running it again through discovery.
+
+- Update minimatch and glob to patched releases across lint, extension, UI and VSIX toolchains.
+  Read the draft manifest through its validated open handle to prevent path replacement races.
+
+- Verify hosted failed-upload and missing-artifact recovery in 3m58s using the original Windows
+  packages. Successful jobs and immutable artifact identity survive one failed-job-only retry;
+  downloaded draft bytes match the original manifest. No public release or rebuild was performed.
+
+- Bound release-validation preflight and evidence collectors with the shared process supervisor.
+  Retain their diagnostics on failure and reserve time for evidence uploads.
+  Track release timing and failed-job recovery in a focused acceptance table.
+
+- Require the mounted macOS DMG CLI to report the exact release version and candidate commit.
+  Reject detach failures before recording DMG acceptance, while preserving an earlier launch or
+  asset-verification error when cleanup also fails.
+
+- Bound native ZIP/VSIX publishing with the shared process supervisor and retain diagnostics
+  before uploading full package artifacts. Preserve the publish log used by certification.
+  Also retain compiler-restore output, supervise asset preparation and bound native acceptance steps.
+  Bound preparation in reusable macOS release builds and upload their diagnostics before packages.
+  Bound DEB preflight and asset preparation, retain their logs on failure, and reserve upload time.
+
+- Preserve the workstation certification plan's original JSON timestamps. PowerShell date
+  reserialization could trim fractional zeros and reject otherwise successful fresh or resumed evidence.
+
+- Recheck the complete draft asset inventory immediately before release publication against a
+  retained, hash-pinned manifest from platform verification. Changed, missing or extra packages,
+  evidence, checksums or SBOM now block publication across every platform.
+
+- Include candidate-cut, tag and publication times and attempt reasons from an external,
+  candidate-bound ledger in release timeline reports. Label supplied timestamps explicitly,
+  preserve unknown values and report total release elapsed time separately from parallel job time.
+
+- Verify hosted browser asset-generation checks after the compiler optimization: 635.3 seconds
+  versus the earlier 996.2-second run, with all 122 consumer checks passing. Retain both archive
+  digests and tested source identities; full-release timing remains separate.
+
+- Reject release timeline collection if a selected run changes during collection or its final
+  state cannot be read. Concurrent retries can no longer leave an outdated completed-run report.
+
+- Limit MSI certification-script fixes to source checks and MSI build/install certification in
+  regular CI. Keep shared helpers, package-build scripts, unknown files and full certification
+  on the conservative path; unrelated native package and browser jobs no longer run for these fixes.
+
+- Keep MSI certification backup archives outside uploaded evidence. The backups include generated
+  service secrets; retain certification logs and assertions without publishing those archives.
+
+- Measure Studio startup readiness independently of headless animation-frame delivery. Keep the
+  same editor-ready condition and performance budgets, and retain navigation/resource timing
+  alongside the result to distinguish loading delays from delayed observation.
+  Hosted acceptance passes the unchanged Windows startup budget at 1.67 seconds. The scoped
+  browser-test PR passes CI in 19 minutes 21 seconds on its first attempt, with native/MSI
+  package builds correctly skipped. Full release certification remains separate.
+
+- Keep all 64 CI-impact routing cases in independent native processes and private directories,
+  running at most four concurrently. Preserve the existing deadlines and assertions while reducing
+  serial startup cost behind repeated hosted source-preflight timeouts.
+  Verify invalid supervisor arguments before execution without a process-startup timing assertion,
+  and preserve Windows PATH when preparing the workstation driver fixture.
+
+- Resume the independent Windows workstation gate explicitly on unchanged inputs. Verify the
+  original evidence, toolchain and cached outputs before reusing passed phases; retain failed
+  attempts and original phase timestamps. Changed or missing checkpoints stop before work.
+
+- Reduce repeated TypeScript work during browser asset preparation by sharing compatible module
+  graphs. Classic globals and ambient augmentations retain their independent surface scopes;
+  strict diagnostics and generated bytes are preserved.
+
+- Run Portal smoke/security and three engine coverage groups independently of solution verification
+  in CI. The required `Build & Test` aggregate verifies every original shard and merges only its
+  recorded coverage attachments before enforcing the same 70% threshold. Failed-job recovery
+  preserves successful groups and rejects incomplete or mismatched latest evidence.
+  Source retirement audits prune excluded build/dependency trees before traversal while retaining
+  nested and untracked source coverage.
+  A hosted diagnostic verifies the complete build/test path in 27.44 minutes, with 77% coverage.
+  A separate unchanged-commit rehearsal verifies failed-group-only engine recovery in 14.6 minutes,
+  retaining every original successful execution and artifact.
+
+- Verify hosted failed-shard-only recovery with 1,010 passed browser cases. Successful shard,
+  source and performance executions retain their original evidence; recovery completes in
+  19.7 minutes and the longest recovered shard job takes 19.3 minutes.
+
+- Defer MOCKDB row seeding until data is needed. Schema discovery no longer repeatedly generates
+  the million-row fixture; the desktop dataset-picker regression passes with an empty private cache.
+  Concurrent reads share initialization, and failed seeding raises a sanitized error instead of
+  exposing partial rows.
+
+- Capture browser process resources and sanitized HTTP/transport failures when Studio startup
+  waits or module loads fail. Studio persistence checks also require the requested active report
+  and matching editor text before reading it. Controlled failures verify diagnostics and readiness.
+
+- Run both selected test suites for combined extension/browser-test edits during local pre-push.
+  This path now checks both extension/UI packages and the complete browser inventory with Studio
+  performance evidence, avoiding the broad route that previously skipped those suites.
+
+- Verify Linux fresh installation, upgrade from v0.20.1, rollback and purge on a real hosted
+  machine. All 45 checks pass, including protected payload ownership, service-written databases
+  and logs, runtime data, secret preservation and installed browser assets. Final release
+  delivery-path certification remains separate.
+
+- Keep ad-hoc report jobs running until their manifest and snapshot are ready. Publish terminal
+  status and payload together; report preparation failures stay failed and cancellation wins
+  over late completion.
+  Local pre-push now runs Portal smoke cases alongside generated browser contracts so this
+  execution path is checked before a hosted CI round.
+
+- Keep Studio interaction checks attached to the current chart during redraws. A deterministic
+  browser regression reproduces the earlier failure; all ten interaction journeys pass with the
+  bounded data probe. Foreground CSV metadata tests now isolate background refresh and dispose
+  their service providers; all 459 language-server tests pass, including background-refresh tests.
+
+- Run the full Windows release check independently on the workstation. Upload its verified
+  evidence separately; publication checks the candidate, payload digest and complete local phase
+  results without registering the workstation as a GitHub runner.
+
+- Bound the negative Git API fixture to its temporary workspace. Exercise a nested parent
+  repository explicitly so test placement under a checkout cannot change the expected result.
+- Check installed DEB directory permissions and root ownership of shipped files after fresh install
+  and upgrade. Verify service-owned databases, each running service's open application log, and
+  service-account data writes. Upgrade diagnostics no longer print secret prefixes.
+  Fixture account cleanup handles hosts that automatically remove a user's matching group and
+  also runs when an assertion fails, preserving the failed check's status.
+
+- Require DEB installation checks to observe an active service, a valid main PID and the exact
+  installed executable. Inactive services and failed or unrelated executable lookups can no longer
+  pass certification. Ten deterministic cases pass on Windows/Git Bash and Linux.
+
+- Give the DEB workflow's runner ownership of the recovery diagnostic before evidence upload,
+  preserving its owner-only mode and root-only backup archives. A hosted rehearsal passed all
+  39 lifecycle checks but failed upload on that root-owned report; Linux permission regressions
+  cover report readability, unchanged backup permissions, missing reports and linked paths.
+
+- Keep PowerShell version bumps and consistency checks inside literal checkout and page paths.
+  Brackets no longer redirect version writes to a wildcard-matching neighboring checkout or hide
+  stale Portal cache versions. Public-command regressions cover both shells and preserve neighbor bytes.
+
+- Retain release-wrapper fixture process output before reading observations. Failures now identify
+  the scenario, exit, output and observed state instead of reporting only a missing artifact.
+
+- Verify hosted real-browser timeout recovery on retained, hash-checked inputs. The watchdog stops
+  its child while preserving an unrelated process, failure diagnostics upload, and failed-job-only
+  recovery reuses the original driver build. The disposable rehearsal recovers in 58.7 seconds.
+
+- Run the PowerShell Portal test lane in fresh sequential testhosts to bound accumulated factory
+  state. Keep every class together and verify each discovered method and case count from TRX.
+  All 1,631 default and six hosted-service cases pass locally under the original 8 GB ceiling,
+  without skips; final-candidate certification remains required.
+
+- Prepare and verify browser assets after every checkout in the scale commit comparison before
+  building or measuring that arm. Successful Git warnings stay separate from revision and dirty
+  path output; failed commands retain their diagnostics. Preparation failure restores the original
+  branch and stops measurement.
+
+- Retain the GC regression investigation with 48 measured cases. Ten-sample normal-project probes
+  reproduce both reference failures; the old source control is elevated too. Baselines and bands
+  remain unchanged, and the original workstation gate remains failed.
+
+- Pin the unsigned VSIX packager's transitive `qs` dependency to patched version 6.16.1.
+  Advisory crash inputs pass, the toolchain audit reports no vulnerabilities, and all four
+  target archive regressions pass with the existing unsigned packager.
+
+- Verify hosted MSI failed-job recovery on an unchanged disposable candidate. Portal certification
+  resumes against the original hash-verified installer pair while preserving the successful build
+  and workstation execution. The installed fresh/upgrade/rollback checks and final receipt pass;
+  recovery takes 8.2 minutes from request to green without rebuilding the installers.
+
+- Resolve activated VS Code module identities through canonical filesystem paths during packaged
+  webview acceptance. Filesystem aliases retain the loaded panel instance; another extension's
+  copy cannot substitute for it. The portable identity regression runs before native builds.
+
+- Upload MSI profile summaries and supervisor diagnostics before the complete evidence bundle.
+  Separate upload deadlines and a profile-job deadline bound diagnostics collection after tests
+  finish, while preserving the full evidence upload and attempt-specific artifact names.
+
+- Reject conflicting changelog check/skip switches before changing files. Check-only mode no
+  longer creates a fragments directory. Executed public-command regressions verify preservation,
+  invalid headings and normal compilation; the shared source preflight runs them independently.
+
+- Keep changelog compilation inside the literal checkout path, including bracketed directories
+  and fragment names. Coverage now includes untracked and Unicode source paths, rejects invalid
+  comparison commits and failed Git queries, and refuses to inspect a parent repository.
+  Renames retain the removed source path, whitespace-only fragments cannot supply coverage,
+  and ambiguous Unreleased headings stop compilation before any write or fragment deletion.
+
+- Reject invalid stable versions before the PowerShell or Bash version-bump command changes
+  files. Leading zeroes, non-ASCII digits, whitespace and prerelease labels cannot become build
+  metadata. Executed command regressions also verify valid bumps preserve dependency versions.
+
+- Verify Linux Docker integration on candidate `8941ea449`: all 224 engine and 65 Portal cases
+  pass without skips, including the 24 Linux lifecycle cases. The hosted job prepares gVisor and
+  the pinned worker digest. Final-candidate integration certification remains required.
+
+- Prepare and verify the browser inventory in each isolated MSI certification job before
+  checking installed assets. The build job's generated inventory is absent from fresh workers.
+
+- Update the VS Code acceptance runner to resolve current macOS bundle executables, fixing
+  startup failures caused by the retired `Electron` path. Keep the Ctrl+click browser journey on
+  Studio's current list-filter authoring flow while checking the selected report rows.
+
+- Update extension/UI test and build dependencies and VSIX authentication tooling to patched
+  releases. Clean installs with the pinned npm 10 toolchain report no audit findings; extension
+  and UI compile/build, lint and 403 unit tests pass.
+
+- Give installer actions, release-wrapper, portable-publisher and SBOM fixtures independent source
+  checks. Their shared installer-source deadline caused hosted CI/MSI timeouts. The shared manifest
+  also excludes these suites from the later consumer pass, so each runs once.
+
+- Correct consumer regressions to verify resolved chart interactions and structured data-quality
+  rule failures after the documented legacy-format removal.
+
+- Run canary receipts, source provenance and deployment-claim regressions as independent source
+  checks. Each retains its own log and bounded process result; their assertions no longer share
+  the release-evidence check's deadline. Timeout errors now identify the failed child directly.
+  Early no-build fixture failures retain their shell, scenario, exit code and process output.
+
+- Fix Linux release preflight failures from incorrectly cased documentation links and multiple Git
+  executables on PATH. Documentation checks now enforce exact path casing on Windows too, with
+  permanent file/directory/anchor regressions in the shared source gate.
+
+- Publish MSI/DEB first-sign-in credentials only after configuration is saved. Failed writes stop
+  installation; retries recover the saved bootstrap password without replacing service keys.
+  Protected sign-in files preserve configured Unicode usernames and passwords.
+
+- Preserve operator-added protected configuration during MSI and DEB upgrades, including settings
+  outside the installer's generated-key list. Invalid shared, saved or protected JSON documents
+  now stop configuration before installed keys or settings change. Windows and Linux regressions
+  verify preservation and rejection; Linux configuration checks also run in DEB candidate CI.
+
+- Keep portable bundles and native MSI/DEB/DMG collection under one transaction in the release
+  wrapper. Native failures preserve the accepted release and restore prior native build outputs.
+  Failed recovery retains its backup and blocks retries. Final checksums include DEB and DMG files
+  and bind the collected bytes before promotion.
+
+- Build portable releases in private attempts under `artifacts/portable-release/`. Failed builds
+  preserve accepted ZIPs, SBOM and checksums. Promotion retains the previous release and rolls back
+  a failed rename; unresolved recovery blocks another attempt. A lock prevents concurrent producers.
+  VSIX and SBOM generation now target staging, and promotion requires matching SBOM versions.
+
+- Validate portable-release platforms and versions before cleaning release output. ZIP creation
+  verifies every archived file against the input inventory and SHA-256 before replacing an existing
+  destination; failed temporary archives are removed. Packaging supports Unicode and bracketed paths.
+  Portable ZIP and native builders share the runtime-state inventory and reject protected files.
+  Portable bundles require nonempty, regular host binaries.
+
+- Refuse DEB and DMG builds from publish folders containing protected secrets, installer recovery
+  files, database sidecars or runtime directories. Validation runs before staging cleanup and leaves
+  prior outputs intact. The shared check never reads runtime file contents.
+
+- Remove non-owner write permissions from DEB program payloads and macOS app bundles. A POSIX
+  regression reproduced world-writable packaged executables before the fix. Builders now stop
+  when native tools are missing, resolve staging from the repository and reject linked staging
+  paths before cleanup. The DEB workflow runs the permanent permissions regression.
+
+- Stop release packaging on failed UI restore/build commands and missing or stale native output.
+  `Master-Release.ps1` validates sources first, uses `npm ci`, restores caller location and version
+  state, and collects the host's native package in `release/`. Linux and macOS now invoke their
+  builders on the host; Windows no longer dispatches WSL implicitly. Completion describes package
+  building, with certification and publication still separate.
+
+- Retire simulated workstation installers and obsolete standalone service-install scripts.
+  Setup uses the maintained MSI/Linux packages and their configuration/upgrade lifecycle.
+  The Windows source helper could remove an existing service after failed publishing and still
+  report success. Installer source checks reject restored retired helpers; `Master-Release.ps1`
+  now runs that gate in its final validation step.
+
+- Fix MSI configuration deleting installed secrets before a replacement could be written.
+  Protected staging preserves keys on denied writes and locked-file failures; checked MSI
+  actions stop on settings/configuration errors. Retained protected recovery files block unsafe
+  retries. Successful writes retain SYSTEM/Administrators-only permissions. All 14 focused
+  configuration/upgrade regressions and 34 source checks pass; installed MSI certification remains
+  required.
+
+- Store saved views solely as resolved-state envelopes. APIs reject retired flat maps, while
+  `CREATE SAVED VIEW` preserves its string assignments in the envelope. SQLite and PostgreSQL
+  migrations retain saved state and backfill old maps before dropping their columns. Unicode
+  parameter names use engine comparison rules; malformed old maps stop the upgrade. Stop older
+  Portal hosts before migrating. All 1,636 Portal default cases and 140 selected core/bookmark
+  cases pass, alongside real PostgreSQL upgrades. Corrected saved-view guides to describe private
+  ownership and parser-supported scripting forms.
+
+- Fix JSON spills silently turning text such as `'001'` into decimal `1`. A versioned format with
+  explicit scalar tags preserves strings and native scalar values, including decimal scale,
+  date/time kinds and offsets, GUIDs and binary data. Recreate saved sessions containing old
+  untyped JSON chunks. All 192 spill regressions pass, including encrypted/compressed reads,
+  persistent reopen, query output and tamper rejection; all 34 source checks pass.
+
+- Remove obsolete inline alert delivery fields from entities, API contracts and both database
+  schemas. Alert delivery uses named Orchestrator notification attachments. Create/update
+  requests reject retired or unknown fields; supported alert definitions and attachments survive
+  upgrades on SQLite and PostgreSQL.
+  Verified all 1,621 Portal default cases without failures or skips, plus real-provider upgrades.
+  The pre-deployment policy exception permits only the reviewed column drops; older Portal hosts
+  must stop before applying this migration.
+
+- Verify real `USE DOCKER` scripts for two tenants sharing one alias: rows, interleaved connection
+  lookups, tagged names and lifecycle actions remain separate. Windows integration checks verify
+  200 engine and 64 Portal cases; the 24 Linux sandbox lifecycle cases still require Linux evidence.
+
+- Keep VS Code test caches out of the browser-contract source scan so private IPC endpoints do
+  not block regeneration. Regression fixtures retain detection of changes to actual inputs.
+
+- Verified deprecated-syntax removal across all nine default test projects: 15,213 passes,
+  zero failures and six explicit platform/controlled-host skips. Fresh sequential test hosts
+  preserve complete discovered-method coverage after the original monolithic run exhausted memory.
+  Updated the legacy Orchestrator schema fixture to prove refusal preserves original job data.
+
+- Complete retired-syntax cleanup: reject missing commas after TOOLTIP markdown, remove obsolete
+  connection-option completion and Docker grammar, and document canonical replacements.
+  Grammar test generation now stops recursive expansion at a finite derivation. Documentation
+  link checks use authored Git files while retaining the separate artifact-index scope.
+
+- Fixed controlled-host certification rejecting its 400-minute process budget before execution.
+  The shared supervisor now accepts up to seven hours and records the effective timeout. Recovery
+  fixtures exercise the real supervisor, including long-budget binding and out-of-range rejection.
+
+- Verified all 23 security tests on Windows, including DPAPI hardware-locked encryption. Corrected
+  the temp-path fixture to check the existing protection of per-user `AppData` directories.
+
+- Authenticate encrypted JSON and Arrow spill files before decoding rows. The new envelope binds
+  the codec, compression, chunk name and ciphertext, rejecting tampering and incomplete files.
+  Missing chunks now fail; valid empty partitions keep their files. Recreate saved sessions whose
+  encrypted spill files were written by earlier releases.
+
+- Track the pre-commit hook as executable and pin its line endings to LF so fresh Linux clones
+  run the staged C# and browser-asset checks.
+
+- Release promotes the Windows ZIP and VSIX already tested by native-package certification.
+  It verifies the candidate, original job/artifact, CLI and webview acceptance, toolchain and hashes,
+  then rechecks the retained selection and actual draft files before publication. Missing or changed
+  certification blocks promotion without rebuilding the Windows packages.
+
+### Breaking Changes
+
+Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
+
+- An unquoted `TRUE` now turns boolean connection options on. `USE_SSL = TRUE` / `ENCRYPT = TRUE`
+  had turned encryption off for MSSQL and LDAPS off for Active Directory.
+- `LIKE` and `NOT LIKE` with a NULL operand are UNKNOWN; `NOT LIKE` no longer keeps NULL rows.
+- Arithmetic on doubles outside decimal's range stays numeric instead of concatenating as text.
+- Scripts can no longer read or write the application's own configuration, secrets, databases,
+  keys or binaries, even inside an approved safe zone.
+- Kafka `SECURITY_PROTOCOL` applies without SASL credentials and an unknown value is an error.
+- SMTP `USE_SSL = TRUE` requires TLS: implicit on 465, STARTTLS on any other port.
+- `${NAME}` placeholders in `CREATE CONNECTION` / `ALTER CONNECTION` read only variables listed in
+  `Security:AllowedEnvVars`, the list `ENV()` uses.
+- `EXECUTE TOOL` keeps a parameter value with spaces as one argument.
+- `GENERATE JWT_SECRET` no longer writes to `appsettings.json`; install the value with
+  `etl-sql config setup-jwt --update`.
+- `USE DOCKER` accepts the official database repositories only, gives every container a generated
+  password (Oracle included) and publishes its ports on loopback.
+- LDAP sign-in refuses a name qualified with a domain other than `Identity:Ldap:Domain`.
+- Share links and embed tokens are stored as hashes and shown once, when created. Listings return
+  the id instead of the token, and `DELETE .../share-links/by-id/{id}` revokes by id.
+- Machine-bound encrypted files use format `ETLSQLMF4` with separate encryption and MAC keys;
+  `ETLSQLMF3` files are refused.
+- `${@var}` interpolation no longer decrypts a sensitive `ENC:` value outside credential options.
+- Number literals and casts ignore the host locale; `0x` alone and oversized hex literals are errors.
+- Password and LDAP sign-in answer 401 on a Shared Tenancy Portal; use the tenant's OIDC provider.
+- `admin restore` refuses archives holding files the backup manifest does not list.
+- OLTP, REST and webhook connections without `TIMEOUT_SECONDS` time out after 30 seconds, not 30
+  minutes.
+- Kafka `Partition`/`Offset` and S3/Azure Blob `Size` are decimal; SharePoint list fields keep their
+  number, boolean and NULL types. A scheme-less S3 `ENDPOINT` is refused.
+- Loopback has no exemption from `Security:AllowedHosts`: a narrowed list must name `localhost`,
+  `127.0.0.1` or `::1` to reach them.
+- A federated Orchestrator answers 403 to `POST /jobs` from a caller with no role, only read-only
+  roles, or a service token without the execute scope. Publishing a bundle takes Admin or
+  OrchestratorManager, and reading bundles takes a role.
+- `Security:MaxRecursiveNestingDepth` (default 5) is enforced again; every engine instance had
+  overwritten it with the CTE limit (10000). `EXEC '<sql>'` and `EXECUTE '<file>'` count toward it,
+  and `SYNC DIRECTORY` refuses trees deeper than it unless `ALLOW_RECURSIVE_LAYERS` is set in a safe
+  zone.
+- `CREATE TOOL` and `DROP TOOL` fail with an error naming `etl-sql admin machine tool`; they never
+  registered anything.
+
+### Added
+
+- Spill storage keeps a free-space reserve. A spill that would start a new extent on a volume with
+  less than `Engine:SpillMinimumFreeDiskMB` free (default 256 MB, `0` turns it off) fails with a
+  clear error instead of filling the disk.
+- The Orchestrator removes the spill root of a process that died without cleaning up as soon as it
+  sweeps, rather than after 24 hours. Each disposable spill root names its owning process in a
+  `<root>.owner` marker that the owner holds open; a root whose marker nobody holds and whose owner
+  is gone is removed, and a live owner keeps its root. On Linux and macOS, markers in a spill
+  directory that other users can write are ignored, so those roots only age out.
+- `eng.profile` reports `spill_write_ms_per_mb` and `storage_pressure_events` for each statement.
+  Slow spill writes that make adaptive execution scale down are counted as storage pressure.
+- Cancelling a run works through a load balancer. A node that does not run the job records the
+  request in the shared Orchestrator store, and the node running it stops the run within
+  `Scheduler:CancelPollSeconds` (default 5). `POST /api/job-runs/{id}/cancel` and
+  `POST /api/scheduled-jobs/{name}/kill` return `202 Accepted` for such a run instead of
+  `409 not_running_here` or an error.
+- Release evidence runs two more certifications on GitHub-hosted runners for each candidate: service
+  capacity (five workloads against the candidate's Portal and Orchestrator) and an HA soak on a
+  Compose topology of two Portals and two Orchestrators behind a load balancer on PostgreSQL. The
+  soak runs sustained load, real large spilling jobs cancelled through the load balancer at four
+  points, and ten injected faults, and is gated by `ha-soak validate --required-gate All`.
+- Releases no longer need an operator submission from the owner's workstation. Tag Release and
+  Release require a green Release Evidence dispatch on the exact candidate (every certification as
+  a hosted job, including a new `Report contracts` job that checks the deployment and canary
+  reports), no open CodeQL alerts on the release branch, and approval of the `release-approval`
+  environment, whose checklist holds the six release reviews. Release attaches the selected run to
+  the draft as `release-evidence-selection.json` and rechecks it before publication. The operator
+  bundle tools (`operator-release-evidence.mjs`, `collect-operator-release-evidence.mjs`,
+  `Test-OperatorReportInputs.ps1`) and `docs/releases/operator-evidence.md` are removed.
+
+- Controlled-host local certification can resume failed phases or recover failed evidence uploads
+  after verifying the same run, runner, workspace, toolchain, cached outputs and original receipts.
+  Reused phases retain their original execution times and job identities. Missing checkpoints or
+  changed inputs block recovery; the workflow retains every attempt's diagnostics.
+
+### Changed
+
+- `admin ha-soak validate` gates sustained load on errors only: error rate, request count, SQLite
+  contention and unexpected 5xx or transport failures. A p95 latency above the workload limit is a
+  warning. Large-job and fault reports must contain a passing result for every planned scenario or
+  fault.
+- Release now requires a verified full local phase bundle from the exact candidate's controlled-host
+  workflow. It checks job/artifact origin, freshness, execution windows and file hashes, pins the
+  manifest, and verifies the attached ZIP before publication. The new manual Windows workflow retains
+  per-attempt evidence and failure diagnostics. Host rollout and full-run acceptance remain pending;
+  deployment/operator and complete package requirements remain separate.
+
+- Local UI pre-push validation now runs the selected extension/UI package checks and complete browser
+  inventory, including Studio performance evidence. Existing formatting, consumer and smoke checks
+  remain; failures stop validation without reporting UI success.
+
+- Enterprise certification preserves supplied build caches and earlier evidence attempts. Fresh builds
+  use a unique private directory; cleanup rejects paths outside that attempt and linked build roots.
+  Nonempty evidence directories now require a new run/output path before testing starts.
+
+- Closed the one-command release-metadata follow-up after public CLI rehearsal verifies preview,
+  exactly three metadata writes, repeat safety, invalid-request rejection and LF/CRLF preservation.
+  Private v0.22.0 rehearsal metadata agrees; the real release date and version remain unchanged.
+
+- Canary certification now checks provisioning identities and cost/customer boundaries against the
+  plan, and validates credential revocation, replacement identities, reasons, continuity and lifetime
+  details. A retained `passed` summary cannot override inconsistent provisioning or credential data.
+
+- Deployment packaging now checks the shared execution plan against ordered phase records,
+  structured invocations, canonical logs and per-phase TRX receipts. Receipts require every planned
+  test selector, unique passed outcomes and timestamps inside the phase run. Enterprise prerequisites,
+  concrete lifecycle files and nested fault-matrix receipts are verified before archiving.
+  Deployment `-NoBuild` results remain development evidence until matching build provenance exists.
+
+- Packaging supplied deployment evidence now requires every profile and transition claim, canonical
+  topology/scope/gaps and Release reports. Producer and validator share the lane and topology contracts.
+  Partial helper archives remain marked `SelectedClaims`; packaging requires `AllProfilesAndTransitions`.
+  Missing evidence and the remaining operator/package publication requirements still need the full gate.
+
+- Enterprise certification now defaults to Release, passes the selected configuration to both test
+  projects and records it in JSON/Markdown. Debug results remain development evidence. Security
+  tests define the unsafe fixture's ACL independently of host inheritance and audit Git's authored
+  source inventory, including new files, without traversing ignored VS Code runtime data.
+
+- Deployment-profile, provider-neutral fault, canary and enterprise certification now capture source
+  identity before testing and recheck it before completing their reports. Changed commits, tracked,
+  staged or untracked source changes and failed Git lookups abort certification. Reports retain the
+  source fingerprint; stable dirty runs remain development evidence. Deployment-profile archives
+  require a full candidate SHA and matching clean fingerprints in the report and nested certifications.
+
+- Closed the Docker test stability follow-up using three consecutive CI executions, each passing
+  all 287 integration cases without skips. Verified the FTP readiness and scheduled-job fixes in
+  every checkout and preserved original-attempt evidence. This is historical stability evidence;
+  final-candidate release certification remains required.
+
+- Desktop Studio's confirmed forced exit no longer depends on a final heartbeat succeeding.
+  Ordinary exit still refreshes the dirty-document guard. Browser regressions cover failed heartbeats,
+  stale dirty state, discard/cancel confirmation and host shutdown; future shutdown timeouts retain
+  transport/resource diagnostics. The historical CI timeout remains under investigation.
+
+- Canary contract certification now rejects duplicate or missing planned runs, mismatched isolation,
+  incorrect fault attribution and alerts sent to an unexpected route. Release policy now states
+  that these deterministic contracts require separate operator evidence for live hosted claims.
+
+- Browser shard, test-lane and smoke no-build checks now validate asset stamps for each selected project's evaluated
+  dependency graph. Unrelated stale hosts no longer block a targeted run; missing/stale consumed
+  assets and unresolved or ambiguous project graphs still fail validation.
+  PowerShell validates before sharded-engine discovery, and both shell variants check every selected
+  project in aggregate lanes. Bash smoke lane selection no longer requires associative arrays.
+
+- Local release-evidence bundles now reject aliased phase logs/artifacts, orphaned payloads and
+  directories, and unsafe or duplicate directory-entry names even when manifest hashes agree.
+  Verification walks the complete declared artifact tree using the producer's canonical paths.
+
+- Browser navigation failures now retain bounded, sanitized transport-request history and
+  Chromium/test-host process resource snapshots. Windows snapshots count handles and owned
+  IPv4/IPv6 TCP/UDP endpoints. Shards retain diagnostics with candidate/run/attempt identity;
+  navigation errors still fail with their original exception.
+
+- Recalibrated Smoke and Standard scale baselines from clean candidate/control runs using the
+  scaled warm-up protocol. All 1,170 measured correctness/resource checks, 24 full comparisons and
+  78 Smoke order comparisons pass unchanged bands. Previous references are archived byte for byte;
+  Git attributes preserve raw reference hashes across platforms. The measurement record retains
+  working-set/timing warnings and the earlier failed run.
+
+- Scale warm-up now uses the measured workload through Standard scale, capped at 10x for larger
+  workloads. Reports record the completed warm-up scale, selected observed GC settings and GC
+  memory state after timing. Capture rejects incomplete provenance or changing GC settings;
+  baseline comparison rejects different warm-up versions or GC configurations.
+
+- Retained clean Smoke/Standard baseline-calibration evidence: all 1,040 measured correctness and
+  memory checks pass, but one control-repeat GC-pause comparison fails. Reference replacement is
+  rejected; existing baselines and bands remain unchanged while GC variation is investigated.
+  A forty-sample diagnostic probe records GC configuration and memory state under two warm-up
+  sizes. Both repeat checks pass; the original failure remains unreproduced in the focused probe.
+
+- Scale reports now record discarded process warm-up. New baseline comparisons reject diagnostic
+  skipped-warm-up captures and incomplete warm-up provenance, including matching diagnostic flags.
+
+- Smoke and Standard scale capture now runs every scenario in its own test host, matching isolated
+  scenario capture. Reports retain each child invocation and reject incomplete metrics, source
+  drift and baseline comparisons across different process-isolation models.
+
+- Verified Smoke order independence with five samples of all thirteen scenarios alone between
+  two full-tier captures. All 78 directional comparisons pass existing failure bands after
+  process isolation; earlier failed experiments remain documented. Baseline calibration is pending.
+
+- Failed Portal browser shards now print failed-job-only recovery commands with candidate and
+  artifact identities, retaining the report in diagnostic artifacts and the job summary.
+
+- Manual CI diagnostics can select one Portal browser shard while preserving the normal test
+  partition. Partial runs skip the full-coverage gate and cannot satisfy release certification;
+  regular CI and full certification still select every shard.
+
+- Portal browser shards now bound preparation and build steps, retain their logs in shard
+  diagnostics, and avoid a duplicate Node setup before UI compilation.
+
+- Studio performance CI now bounds asset preparation, build and measurement on every platform,
+  retaining streamed logs and per-attempt diagnostics when a step fails or times out.
+
+- Browser ownership, Studio performance and enterprise certification CI artifacts now include
+  run and attempt IDs. Failed-job retries can retain new evidence without colliding with or
+  replacing earlier artifacts. Regression checks cover every CI upload and its matrix dimensions.
+
+- Extension CI now bounds its engine build and npm commands, streams npm output into retained logs,
+  and saves per-attempt diagnostics on failure. Pipeline logging preserves failing command exits.
+
+- Regular MSI checks now share the package-impact manifest with native package checks, allowing
+  browser-test-only fixes to skip installer rebuilds and installation tests. Shipped, shared and
+  unknown inputs still require MSI certification; manual and release calls always run it in full.
+
+- VS Code UI source edits now select extension checks, browser/consumer contracts, browser journeys
+  and Studio performance in regular CI, retaining native packaging. The consumer job has its own
+  lane selector. Dependency, build configuration, shared and unknown changes still select full CI.
+
+- Native package PR checks use shared impact selection to skip platform builds for classified
+  documentation and browser-test-only edits. Manual certification and shipped or unknown inputs
+  still select all platforms. Source preflight and an aggregate coverage gate guard selection;
+  newer PR revisions cancel obsolete package work while manual candidate runs are preserved.
+
+- Release certification can reuse complete nightly CI results for the unchanged candidate after
+  a green targeted push. Both release drivers and the publication gate retain exact-SHA,
+  seven-day freshness, job coverage and retry checks; failed explicit or regular CI blocks reuse.
+
+- Browser-test-only local pre-push now builds the browser test project once and validates its
+  complete test inventory, including Studio performance, without broad engine and consumer checks.
+  It retains local browser evidence and rejects missing performance coverage or results.
+
+- Failed Windows and macOS package uploads now print candidate/artifact identities and commands
+  to inspect and rerun failed jobs in the same Release run. Upload steps have explicit deadlines;
+  local rehearsals verify recovery after partial uploads without changing retained package bytes.
+
+- macOS release builds retain Intel and Apple Silicon packages independently before upload.
+  Failed uploads can reuse both builds; a failed architecture can resume while preserving the
+  successful one. Package hashes, including a successfully built optional Intel DMG, are checked
+  before upload and again before attestation against the original build manifest digests.
+
+- Windows ZIP/VSIX release builds retain their packages before a separate upload job, allowing
+  failed uploads to resume without rebuilding. Candidate identity and hashes are verified before
+  upload and attestation. A packaging watchdog streams and retains diagnostic logs.
+
+- Cross-platform native package certification now mounts and launches the macOS DMG package,
+  verifying its CLI version and packaged browser assets before unmounting. Packaged VSIX webview
+  acceptance (scripts/test-vsix-acceptance.mjs) now exercises designer and preview webviews inside
+  real VS Code on Windows, Linux (via xvfb), and macOS matrix runners, recording verified webview
+  outcomes in package certification manifests.
+
+- Scale certification now warms each scenario's own code path with an untimed run before
+  measuring samples, eliminating run-order dependencies. Reports record the warm-up method,
+  and baseline comparison requires matching warm-up configurations.
+
+- Linux release publication reuses the candidate ZIP and VSIX alongside the installed-tested DEB,
+  removing a duplicate Linux build. All three package hashes are checked before attestation.
+  Attestation and publication explicitly handle certification jobs skipped by artifact reuse,
+  while still requiring successful promotion and build gates.
+
+- MSI publication can reuse nightly certification for the exact candidate and predecessor.
+  Discovery rejects incomplete GitHub inventories and runs retried during selection.
+
+- Release can reuse a retained DEB from exact-candidate nightly or dedicated certification,
+  preserving successful build/install evidence across retries and rejecting incomplete selections.
+
+- Release now gates DEB publication on installed-upgrade certification and promotes the tested
+  package. Candidate identity, receipt and package hashes are checked again before attestation.
+
+- Release timelines now break down measured step time by inferred setup/build/test/upload
+  categories without counting carried retry results again. Incomplete timing stays unknown.
+
+- Local certification evidence can now be retained and verified as a portable bundle with
+  candidate identity, original phase times, logs, artifact inventories and file hashes.
+
+- Release drivers no longer accept local-certification or CI-wait bypass flags. Both gates
+  are mandatory before a driver can push a release tag.
+
+- Pre-release resume preserves original phase completion times and reuses only results from
+  the past seven days. The release gate rejects missing, future or expired phase timestamps.
+
+- Release drivers validate the saved evidence commit, clean-tree fingerprint and result age
+  against the candidate, rejecting results older than seven days or dated in the future.
+
+- Pre-release validation rechecks candidate sources before saving success. Source drift or an
+  unavailable fingerprint now saves a failed result and rejects certification.
+
+- Docker integration CI now bounds restore/build, image pulls, sandbox setup and tests, retaining
+  per-attempt process logs. Package installation steps also have explicit time limits.
+
+- Sample and enterprise CI lanes now supervise long-running commands with deadlines, streamed
+  logs and per-attempt diagnostics retained after failure.
+
+- Extension-only local pre-push follows the shared CI selection, checking the extension and UI
+  with their engine integration build instead of repeating unrelated engine validation.
+
+- Release drivers no longer offer a force override for stale source fingerprints. Certification
+  must match the exact candidate; successful evidence for another source state is rejected.
+
+- Release drivers now stop when Git cannot inspect the working tree; the POSIX driver also
+  stops on failed remote refresh instead of proceeding with stale refs.
+
+- CI restore, formatting, compilation and engine coverage now use bounded process supervision,
+  streamed logs and retained diagnostics. Consumer-check deadlines allow the measured hosted baseline.
+
+- Browser and consumer contracts now run independently of engine build/coverage in CI. Full
+  release evidence requires both jobs, and failed-job recovery can preserve either success.
+
+- macOS ZIP/VSIX release packaging now runs independently on native Intel and Apple Silicon
+  runners. Both are required for publication, with per-architecture retries and retained logs.
+
+- Release timing and evidence collection now preserve the original execution attempt when GitHub
+  copies successful jobs into a retry with new job IDs, avoiding double-counted retry work.
+
+- Failed Windows process-tree shutdown now rejects promptly and terminates the direct child,
+  instead of leaving certification waiting indefinitely for the child's output streams.
+
+- Consumer-contract validation now reports the active check, streams output with heartbeats,
+  retains per-check logs, and applies independent deadlines while preserving serial execution.
+
+- CI now runs HA soak harness contracts without repeating their engine tests. DEB certification
+  validates a backup produced by the installed candidate and retains its recovery report.
+
+- Added nightly release-branch orchestration for broad CI, Portal browser shards and installed
+  MSI/DEB upgrade checks. DEB certification retains the built package pair for installation retries.
+
+- Source preflight validates workflow syntax, expressions and reusable-workflow contracts with pinned MIT-licensed actionlint.
+
+- Regular CI now selects affected jobs from the shared impact map. Explicit full CI certification
+  uses the same workflow implementation and preserves successful candidate runs. Release drivers
+  reuse complete regular CI coverage when available, or request/resume full certification with
+  duplicate-dispatch protection. Classified documentation-only local pushes stop after source checks.
+- Release smoke tests now use CI's existing Release build. Tag validation consumes that evidence
+  instead of rebuilding the solution for a second smoke pass.
+- Release now checks candidate-bound CI and CodeQL job evidence before packaging and again before
+  publication. It retains successful jobs across failed-job retries, rejects stale or incomplete
+  evidence, and attaches the selected run/job identities and retry history to the release.
+- Local release evidence now requires Standard scale and the full mandatory phase inventory.
+  Removing a required phase from both the saved plan and results no longer bypasses validation.
+- Split browser CI into three independent jobs with deterministic discovery-based partitions,
+  exact method filters, per-attempt diagnostics and a gate checking complete, nonoverlapping
+  results. Browser execution now uses the bounded streaming supervisor. Hosted timing and
+  recovery evidence remain pending.
+- Added a shared advisory CI impact manifest and selector. Regular CI and local pre-push record
+  proposed affected lanes without changing existing coverage. Unknown paths and missing history
+  select all lanes; Git fixtures cover renames, merge bases and local changes.
+- Added a read-only release timeline collector for exact-candidate GitHub runs, all retry attempts,
+  jobs and steps. Reports distinguish elapsed spans from parallel job totals and preserve missing
+  timestamps as unknown, with JSON/Markdown stored outside the candidate commit. Partial parallel
+  runs and invalid timestamp ranges leave the elapsed span unknown; regressions run in preflight.
+- Added one-command release metadata finalization with preview by default and explicit `--write`.
+  It validates the changelog, notes and index together, protects finalized dates and restores
+  original contents on write failure when possible.
+- New CI revisions cancel obsolete runs for the same event and full branch/PR ref, freeing runner
+  capacity. Independent branches, push/PR runs and Release/MSI workflows remain separate.
+- Stable release drivers and tag preflight now require finalized, consistent version/date metadata
+  across the changelog, release notes and index. Draft branch work remains allowed; all metadata
+  findings are reported together before packaging.
+- Shared preflight now runs the fourteen release-automation regression fixtures before restore/build,
+  with independent deadlines and logs. MSI no longer repeats its two separate policy-test steps.
+- Release recovery preserves branches named like a version tag. All tag lookups use explicit tag
+  refs, removing the old automatic branch deletion and its unsafe merge-lookup failure fallback.
+- Release drivers can resume when existing local/remote tags resolve to the exact candidate,
+  including annotated tags, without a Force override. Conflicting tags and failed lookups stop
+  the release before pushing; tags are never moved by this recovery path.
+- Both release drivers now share workflow-run waiting keyed by workflow, commit and branch/tag.
+  API errors fail promptly; failed runs print inspection/retry commands, and pending runs cannot
+  fall back to older successes. The CI wait default is now 120 minutes.
+- MSI impact selection now requires certification for shipped service/runtime changes and unknown
+  paths. Only explicitly listed documentation paths skip it; an unavailable comparison base runs
+  certification instead of silently checking only the final commit.
+- Release drivers now agree with the validator's content fingerprint for clean candidates,
+  avoiding false stale-evidence failures. Actual driver-gate and resume-guard regressions cover
+  valid candidates and rejection of incomplete, legacy, forced-resume and stale evidence.
+- Local release drivers now require explicit validation scope and successful planned phases;
+  quick, omitted-lane, forced-resume and legacy states cannot pass the normal local gate.
+- Installer source validation now runs before packaging, checking WiX XML, static source-file
+  references and installer script syntax without executing the scripts or publishing applications.
+- Source preflight now detects partial version bumps across .NET, the VS Code manifest and lock
+  file, and Portal cache URLs before packaging. It reports all version mismatches together.
+- Release and CI automation now collect independent source-check failures in one bounded preflight
+  before expensive builds, with separate logs and a JSON summary. Local pre-push/pre-release drivers
+  use the same check list. Fixed the release-note changelog anchor and performance-report index link
+  found by the documentation check.
+- MSI certification now streams output and heartbeats under a bounded supervisor. Timeout cleanup
+  targets only the tracked child, and Windows handle inheritance is restricted to avoid a descendant
+  keeping the runner output pipe open. Local process regressions pass; hosted runner-loss diagnosis
+  and timeout recovery remain pending.
+- MSI upgrade automation saves one installer pair for independent workstation and Portal checks,
+  verifies its source commit and hashes before installation, and retains evidence separately for
+  each retry. Added release-branch PR coverage and documented failed-job recovery. Release publication
+  now requires both profiles, promotes that MSI without rebuilding, and verifies its draft asset
+  hash before attestation. Removed the duplicate standalone MSI tag run. Hosted recovery rehearsal
+  remains pending. Exact-commit pre-tag release-branch certification can now supply the MSI using
+  a successful gate receipt and retained artifact ID, avoiding another build at tag time. Discovery
+  checks freshness and the previous stable release, and stops on unfinished/failed candidate runs
+  or invalid receipts. Cross-run reuse still needs hosted rehearsal.
+- The release driver requires the MSI input manifest, checksums and SBOM, treats a draft as
+  incomplete, and no longer downloads all binaries to overwrite verification assets after publication.
+
+### Security
+
+- Chart and micro-chart SVG keeps only SVG-namespace elements and drops `<style>`, `style`
+  attributes and any `url()` that leaves the document. An XHTML `<meta>` refresh inside a chart
+  could redirect a report page, and `<img>`, `@import` or `url()` could fetch from outside it, in
+  hosts without the Portal's CSP.
+- Identity-sensitive reports no longer serve a shared snapshot left from before they read the
+  viewer's identity; the snapshot routes refuse them and the report opens live.
+- The report runtime's URL check strips tab, newline and control characters first, as the browser
+  does, so `java\tscript:` no longer passes as a relative link. HTML-visual inline micro-charts go
+  through the SVG sanitizer.
+- A Gateway session matches replies to their operation, so rows that arrive after a caller gave up
+  are never handed to the next caller.
+- Connection tests (`TEST CONNECTION`, the Portal connection test) resolve `KEYFILE` and other
+  key or credential file options through the path guard, so a test cannot load the service
+  account's own SSH key. `LINT 'path'` reads through the same guard.
+- `POST /api/connectors/test` is limited to administrators and accounts with Studio script preview.
+- `POST /api/scripts/upload` no longer replaces the script of a report or pipeline the uploader
+  cannot author.
+- The ReportPlayer serves only loopback host names, refuses cross-origin requests and requires JSON
+  on POSTs, so a web page cannot drive it or read it through DNS rebinding.
+- An Orchestrator without an API key (loopback-only) also refuses requests whose Host is not a
+  loopback name, so a DNS-rebinding page cannot reach its unauthenticated job API.
+- The VS Code report preview writes unsaved scripts and the built manifest into a private temporary
+  directory instead of predictable names in the shared temp folder.
+- Machine-bound encryption on Linux and macOS, and machine-bound encrypted files everywhere, is
+  keyed from the engine's machine key (the owner-only `etl-sql/machine.key`, or a mounted
+  `ETLSQL_MACHINE_KEY_FILE`). It was keyed from `/etc/machine-id` or the host name, which a cloned
+  image shares. Scripts cannot open the machine key file.
+- ODBC connection values with `;`, `{`, `}` or `=` are brace-quoted, so a value cannot add keywords;
+  an option name with those characters is refused.
+- SharePoint list titles and BigQuery identifiers are escaped (a quote, and a trailing backslash).
+- `etl-sql purge` refuses the install folder, a folder that contains it, and any folder in a git
+  working tree.
+- The operation ledger refuses a session id that leaves the session root.
+- LDAP refuses an empty password before binding.
+- The shipped `appsettings.json` no longer lists a developer's folder as an approved safe zone.
+- `USE DOCKER` state is scoped by tenant: an alias, `DOCKER.CONNECTION_STRING` and the container
+  itself are no longer shared between tenants on one Orchestrator. Single-tenant hosts keep their
+  container names.
+- Upgrade code for state written by earlier releases is removed: Orchestrator schema renames and
+  add-missing-column steps, plaintext JSON snapshots, plaintext PII and settings upgrades, the
+  Gateway `outcomes.json` import, `Portal:Dataset:LegacyAtRestKeyVersion`, JSON temp-table restore
+  and browser-stored Studio drafts. Every store is created in its current shape.
+- Report formats from earlier releases are no longer read: the pre-v0.19 `interactions` map,
+  version-one chart contracts, Studio's pre-v0.20 single-value filter upgrade, and counts-only
+  data-quality rows.
+- Deprecated syntax is removed: the `FILE` connection type (use `FLATFILE`), `DROP CHART`
+  (use `DROP VISUAL`), `DOCKER STOP|CLOSE|...` (use `STOP DOCKER`), `LINEAGE EXPORT AS
+  OPENLINEAGE` (use `EXPORT LINEAGE`), the `@sensitivity` tag alias (use `@classification`), the
+  missing comma between `TOOLTIP` parts, and the `etl-sql ui old` command.
+- Only authenticated encryption formats are read. `ENC:` values, encrypted files, SSH-encrypted
+  files and machine-bound payloads in the old unauthenticated AES-CBC formats are refused instead
+  of decrypted.
+- Streaming decryption of encrypted files (password, SSH key and machine-bound) checks the file's
+  authentication tag before returning any data; a tampered file is refused instead of decrypting
+  to garbage rows.
+- The Gateway broker refuses a result beyond the operation's row or size limit and drops rows for
+  an operation nobody is waiting on, so a Gateway cannot make the Portal buffer without bound.
+- A Gateway node id held by a live session with a different workload key is refused; the same node
+  reconnecting replaces its stale session.
+- The Linux package keeps shipped binaries and configuration owned by root. The bin folder stays
+  writable for the services' databases and data, with the sticky bit so they cannot replace root's
+  files, and the `.deb` is built with root ownership.
+
+### Fixed
+
+- A `SELECT ... INTO #temp` whose source fails part way leaves the table empty and its spill files
+  deleted. It used to keep the extents already written until the session ended.
+
+- A script can no longer switch off the `Security:MaxSpillBytesPerScript` ceiling with
+  `SET TELEMETRY = OFF`.
+- `PARALLEL` branches share the parent's file-operation budget, recursion depth, limits and
+  cancellation, and a `SECRET` declared in a branch stays masked.
+- `PRINT` masks `SECRET`/`SENSITIVE` variables declared in a procedure or local scope.
+- `SYNC DIRECTORY` keeps every write and delete inside the destination when the source holds a
+  link that points elsewhere.
+- `EXPORT DATASET` / `PUBLISH DATASET` authorize the `KEYFILE` path and stage plaintext in a private
+  temporary directory.
+- A path holding an unexpanded `${...}` placeholder is still validated.
+- `*.example.com` in `Security:AllowedHosts` matches only at a label boundary; `evil-example.com`
+  no longer passes. `Users/Public` in the sensitive-directory list now matches, and a safe-zone
+  override no longer follows a link out of the zone.
+- `RUN SCRIPT` lint preflight reads only `.etlsql`/`.sql` files outside protected locations.
+  `CredentialLeakRule` catches `${@var}` interpolation; `FileSystemSecurityRule` matches credential
+  directories anywhere in a path and covers the file-transfer and dataset statements.
+- `EXPORT REPORT` accepts `BROWSER_PATH` only for a browser the engine discovers itself and `HOST`
+  only as an allowed `http(s)` URL; the PDF exporter refuses `file:` and other schemes.
+- The constrained HTML sanitizer (server and report runtime) parses `>` inside quoted attributes,
+  checks every `srcset` candidate and decodes SVG `data:` URLs before scanning for script.
+- Report CSV output neutralizes cells starting with `=`, `+`, `-`, `@`, tab or CR.
+- ReportPlayer refuses cross-site API requests, including cross-site GETs that change the session,
+  and encodes report titles.
+- WorkstationEditor `GET /studio` needs the session token and no longer embeds it for anyone who
+  asks; non-loopback `Host` headers are refused, and preview runs under the run guard.
+- VS Code: notebook table output is HTML-escaped, pre-quoted terminal arguments cannot inject
+  commands, the executable shadow copy lives in private extension storage, report drill targets
+  stay inside the workspace, and REPL variables are sanitized before reaching webviews.
+- `--json` runs and the REPL mask `SECRET`/`SENSITIVE` variables in variable events; REPL and TUI
+  exports go through path policy; support bundles stage in an owner-only folder.
+- Shared Tenancy Portal: Policy Authority machine listing, registration and revocation are tenant
+  scoped; folder, group and preview-as diagnostics stay in the caller's tenant; anonymous share,
+  embed and studio-session endpoints no longer answer 500; audit rows record the tenant for OIDC,
+  service-account and workload-identity sign-ins; alert names are unique per tenant.
+- The Orchestrator refuses identity-bound runs under `Jobs:UseProcessSpawning` instead of running
+  them as the host; federated connection administration needs an object administrator;
+  notification dispatch resolves the tenant's own rule and checks attachment paths before
+  existence; imported history and lineage stay in their tenant; tenant purge removes lineage,
+  bundles and fence records.
+- `etl-sql-tenant-validator` refuses unknown, repeated or incomplete arguments, so a mistyped
+  `--require-signature` no longer validates an unsigned bundle.
+- Kafka `CREATE CONNECTION` with options only reaches its brokers, and every broker is checked
+  against the egress fence. SFTP/FTP connections take `HOST` from options. Active Directory escapes
+  the table name in its filter and keeps the port, LDAPS and base DN in `WithTable`.
+- `EXECUTE ... BEGIN ... END` pushdown blocks no longer end at a `CASE ... END`.
+- Columnar predicates fall back to row mode for fractional constants on integer columns, integer
+  division and zero divisors, instead of rounding or throwing.
+- Report tables keep row styles, row details and micro-charts aligned after sorting and page
+  splitting; numbers sort and format the same under any locale; summaries can name a mapped
+  display column; a corrupt `.etlsnap` opens as missing.
+- `EXPORT REPORT` scopes report state to the export; the ReportBuilder CLI sets the script path and
+  escapes errors; dashboard drill state is thread-safe and `@`-prefixed parameters are one
+  parameter.
+- Report runtime: table context menus pick the right row, responsive chart redraws keep
+  crosshairs and hover, bookmark names with quotes no longer abort restore, and modal and
+  multiselect listeners are released.
+- Portal export honours folder owners and per-report grants; folder owners see their folder in the
+  tree and catalog search.
+- Gateway: an executor protocol error ends in a recorded outcome, `HelloAck` is sent before routed
+  work, an oversized frame ends the session, and `Connected` is reported only after connecting.
+- Orchestrator: list endpoints fill each page from rows the caller can see; scheduled-job updates
+  validate the schedule; a scheduler node that lost its lease no longer quarantines the job; a warm
+  runner that fails its handshake is killed.
+- S3 file listings follow continuation tokens past 1,000 objects; SharePoint, SMTP, Azure Blob and
+  Active Directory errors are wrapped; cloud listings honour batch size and cancellation.
+- Connection strings keep a `'` inside an unquoted password, and doubled quotes and braces.
+- Language server: signature help works, out-of-range positions no longer throw, closed documents
+  release their state, and the lint pass no longer erases fast-pass diagnostics.
+- The REPL answers `ping` and `cancel` while a script runs.
+- A writable SQLite database with a script extension is refused; WHAT_IF also skips data-source
+  writes and truncates; MongoDB checks every seed host; database diagnostic probes keep the
+  authorized host.
+- INSERT INTO compressed or encrypted flat files, Parquet, Avro, JSON and XML keeps existing rows;
+  Parquet and Avro column types come from all values; JSON honours ENCODING on read and XML on
+  write; Excel answers for the sheet asked.
+- Snowflake, Oracle, Postgres, SQL Server, BigQuery, Neo4j and ODBC fixes: leaked connections and
+  cursors, unwrapped provider errors, Oracle quoted identifiers, Neo4j `?` inside literals, ODBC
+  `@pN` markers. Snowflake and BigQuery read `Connectors:DataWarehouse:DefaultCommandTimeoutSeconds`.
+- REST responses are disposed across retries, paging and redirects; Portal and Orchestrator
+  connector errors are redacted.
+- Test lanes: the fuzzer's NoREC oracle runs on generated queries, SLT honours stacked
+  `skipif`/`onlyif` and fails with no corpus, unconfigured scale certifications skip, and several
+  tests now assert what their names claim. The `ETL-SQL.LintTests` console program is removed; its
+  one scenario is an xUnit test.
+- The Portal designer and the Orchestrator lint without reading `RUN SCRIPT` dependency files from
+  the server's disk.
+- `EXEC` and `EXECUTE '<file>'` no longer reset the file-operation budget and results mid-script.
+- Portal admin user search matches email, first and last name; it compared against ciphertext.
+- A machine polling `/api/policy-authority/envelope` on a Shared Tenancy host gets 403, not 500.
+- The unused-connection and forward-reference lint rules look inside `TRY`/`CATCH`, `IF`, loops and
+  `EXECUTE ... BEGIN ... END` blocks, CTEs, set operations and subqueries, so a connection used
+  only there is no longer reported unused. `DROP CONNECTION IF EXISTS` before `CREATE` is not a
+  forward reference.
+- Gateway reconnect backoff doubles across failed connections instead of staying at twice the
+  initial delay, and waits before reconnecting after a session ends.
+- A Gateway result larger than one frame is sent as several row batches; it used to end the
+  session after the operation was recorded as committed.
+- Markdown link text and URLs in report titles are escaped once; `&` showed as `&amp;` and broke
+  query strings.
+- The ReportPlayer map route answers 403 for a path outside the report folder instead of failing
+  with 500.
+- Gateway session registration and removal no longer race, which could show a connected Gateway
+  as offline; the Player's paginated-page set is no longer changed while a rebuild reads it.
+- Re-attaching to a running `USE DOCKER` container reads the credentials it was created with; it
+  used to hand out a new password the container never had.
+- Importing a connection string keeps a password that reads `True` or `False` as typed.
+- SMTP docs give the default port as 587, which the connector uses.
+- Chart contract fingerprint tests normalize line endings, so they pass on Linux and macOS.
+- Security tests that used Windows paths now build OS-neutral paths, so the safe-zone, temp-folder,
+  runaway-protection and credential-folder rules are checked on Linux and macOS too.
+- `admin restore` writes the installer-managed secrets (JWT secret, dataset at-rest keys,
+  Orchestrator API keys and identity signing secret, first-run password) to
+  `appsettings.secrets.json` again. Restored only into `appsettings.json`, they were shadowed by an
+  installed host's existing secrets file, leaving restored dataset caches unreadable.
+
 ## [0.21.0] — 2026-10-18
 
 For complete release details, highlights, and migration notes, see [Release Notes v0.21.0](docs/releases/v0.21.0.md).

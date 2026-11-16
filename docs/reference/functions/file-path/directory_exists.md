@@ -18,7 +18,7 @@ Returns `1` when the directory exists and `0` when it does not.
 
 ## Null Behavior
 
-`DIRECTORY_EXISTS(NULL)` returns `0`.
+`DIRECTORY_EXISTS(NULL)` returns `NULL`.
 
 ## Security Notes
 

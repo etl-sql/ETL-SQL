@@ -29,7 +29,7 @@ public class SharedConnectionTests
     }
 
     [Fact]
-    public async Task SharedReference_ScriptOptionsMergeButCannotOverrideCatalogCredentials()
+    public async Task SharedReference_ScriptOptionsMergeSafeOptionsButLockDestinationsAndCredentials()
     {
         var connector = new CapturingConnector();
         var catalog = Catalog(new SharedConnectionDefinition(
@@ -38,31 +38,45 @@ public class SharedConnectionTests
             Disabled: false));
         var secrets = new DictionarySecretProvider(("sales_db_password", "resolved-password"));
 
-        // Non-credential override wins.
+        // Safe non-destination, non-credential script option merges alongside catalog options.
         var handler = Handler(connector, catalog, secrets);
         var statement = new CreateConnectionStatement(
             "m", "CAPTURE",
             new LiteralExpression("SHARED:my_sql_server", TokenType.STRING_LITERAL),
             new Dictionary<string, Expression>
             {
-                ["DATABASE"] = new LiteralExpression("Analytics", TokenType.STRING_LITERAL)
+                ["TIMEOUT_SECONDS"] = new LiteralExpression("60", TokenType.STRING_LITERAL)
             });
         await handler.Execute(statement, ConnectionTestDoubles.Context());
-        Assert.Equal("Analytics", connector.LastOptions?["DATABASE"]);
+        Assert.Equal("60", connector.LastOptions?["TIMEOUT_SECONDS"]);
         Assert.Equal("sql01", connector.LastOptions?["SERVER"]);
 
-        // Credential override is rejected.
-        var overriding = new CreateConnectionStatement(
-            "m2", "CAPTURE",
+        // Credential and destination options cannot be set or overridden on SHARED: connections.
+        foreach (var blockedKey in new[] { "PASSWORD", "HOST", "SERVER", "PORT", "DATABASE", "URL", "BASE_URL" })
+        {
+            var overriding = new CreateConnectionStatement(
+                $"m_{blockedKey}", "CAPTURE",
+                new LiteralExpression("SHARED:my_sql_server", TokenType.STRING_LITERAL),
+                new Dictionary<string, Expression>
+                {
+                    [blockedKey] = new LiteralExpression("attacker-value", TokenType.STRING_LITERAL)
+                });
+            var ex = await Assert.ThrowsAsync<ExecutionException>(
+                () => Handler(new CapturingConnector(), catalog, secrets).Execute(overriding, ConnectionTestDoubles.Context()));
+            Assert.Contains(blockedKey, ex.Message);
+            Assert.Contains("cannot", ex.Message);
+        }
+
+        // Script cannot inject SECRET: values through an otherwise benign option on SHARED:.
+        var secretInjection = new CreateConnectionStatement(
+            "m_inject", "CAPTURE",
             new LiteralExpression("SHARED:my_sql_server", TokenType.STRING_LITERAL),
             new Dictionary<string, Expression>
             {
-                ["PASSWORD"] = new LiteralExpression("attacker-value", TokenType.STRING_LITERAL)
+                ["CUSTOM_HEADER"] = new LiteralExpression("SECRET:sales_db_password", TokenType.STRING_LITERAL)
             });
-        var ex = await Assert.ThrowsAsync<ExecutionException>(
-            () => Handler(new CapturingConnector(), catalog, secrets).Execute(overriding, ConnectionTestDoubles.Context()));
-        Assert.Contains("PASSWORD", ex.Message);
-        Assert.Contains("cannot", ex.Message);
+        await Assert.ThrowsAsync<ExecutionException>(
+            () => Handler(new CapturingConnector(), catalog, secrets).Execute(secretInjection, ConnectionTestDoubles.Context()));
     }
 
     [Fact]
@@ -157,6 +171,99 @@ public class SharedConnectionTests
         Assert.DoesNotContain(sink.Events, e =>
             e.Reason.Contains("do-not-log", StringComparison.OrdinalIgnoreCase)
             || e.SanitizedTarget.Contains("do-not-log", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task SharedReference_AlterAndCreateOrAlter_AreRejectedOnCatalogBackedConnections()
+    {
+        var connector = new CapturingConnector();
+        var registry = ConnectionTestDoubles.Registry(connector);
+        var catalog = Catalog(new SharedConnectionDefinition(
+            "corp_db", "CAPTURE", null,
+            Options(("SERVER", "sql01"), ("PASSWORD", "SECRET:sales_db_password")),
+            Disabled: false));
+        var secrets = new DictionarySecretProvider(("sales_db_password", "resolved-password"));
+        var context = ConnectionTestDoubles.Context();
+
+        var createHandler = new CreateConnectionStatementHandler(
+            registry.Object, new Mock<ILogger>().Object, secretProvider: secrets, connectionCatalog: catalog);
+        await createHandler.Execute(SharedCreate("corp", "SHARED:corp_db"), context);
+        Assert.True(context.CatalogBackedConnections.ContainsKey("corp"));
+
+        var alterHandler = new AlterConnectionStatementHandler(
+            registry.Object, new Mock<ILogger>().Object, secretProvider: secrets, connectionCatalog: catalog);
+        var alterStmt = new AlterConnectionStatement(
+            "corp", null, null,
+            new Dictionary<string, Expression> { ["SERVER"] = new LiteralExpression("evil.host", TokenType.STRING_LITERAL) });
+        var alterEx = await Assert.ThrowsAsync<ExecutionException>(() => alterHandler.Execute(alterStmt, context));
+        Assert.Contains("SHARED:", alterEx.Message);
+        Assert.Equal("sql01", connector.LastOptions?["SERVER"]);
+
+        var upsertStmt = new CreateConnectionStatement(
+            "corp", "CAPTURE",
+            options: new Dictionary<string, Expression> { ["HOST"] = new LiteralExpression("evil.host", TokenType.STRING_LITERAL) },
+            mode: ObjectCreationMode.CreateOrAlter);
+        var upsertEx = await Assert.ThrowsAsync<ExecutionException>(() => createHandler.Execute(upsertStmt, context));
+        Assert.Contains("SHARED:", upsertEx.Message);
+        Assert.Equal("sql01", connector.LastOptions?["SERVER"]);
+    }
+
+    [Fact]
+    public async Task DirectSecretReference_WithActiveCatalog_RequiresAdminAuthorization()
+    {
+        var connector = new CapturingConnector();
+        var registry = ConnectionTestDoubles.Registry(connector);
+        var catalog = Catalog(new SharedConnectionDefinition(
+            "corp_db", "CAPTURE", null,
+            Options(("SERVER", "sql01"), ("PASSWORD", "SECRET:sales_db_password")),
+            Disabled: false));
+        var secrets = new DictionarySecretProvider(("sales_db_password", "resolved-password"));
+
+        var createHandler = new CreateConnectionStatementHandler(
+            registry.Object, new Mock<ILogger>().Object, secretProvider: secrets, connectionCatalog: catalog);
+
+        var directCreate = new CreateConnectionStatement(
+            "bypass", "CAPTURE",
+            options: new Dictionary<string, Expression>
+            {
+                ["SERVER"] = new LiteralExpression("evil.host", TokenType.STRING_LITERAL),
+                ["PASSWORD"] = new LiteralExpression("SECRET:sales_db_password", TokenType.STRING_LITERAL)
+            });
+
+        // Non-admin identity cannot reference SECRET: directly to bypass SHARED: ACLs.
+        var nonAdminContext = ContextWithIdentity(new ExecutionIdentity
+        {
+            EffectiveUser = "alice",
+            RealUser = "alice",
+            IsAdmin = false
+        });
+        await Assert.ThrowsAsync<ExecutionException>(() => createHandler.Execute(directCreate, nonAdminContext));
+        Assert.Null(connector.LastOptions);
+
+        // Anonymous context with governed catalog active cannot reference SECRET: directly either.
+        await Assert.ThrowsAsync<ExecutionException>(() => createHandler.Execute(directCreate, ConnectionTestDoubles.Context()));
+
+        // Authorized SHARED: expansion still succeeds for non-admin users who have catalog access.
+        await createHandler.Execute(SharedCreate("corp_ok", "SHARED:corp_db"), nonAdminContext);
+        Assert.Equal("resolved-password", connector.LastOptions?["PASSWORD"]);
+
+        // Admin can still resolve direct SECRET: references.
+        var adminContext = ContextWithIdentity(new ExecutionIdentity
+        {
+            EffectiveUser = "root",
+            RealUser = "root",
+            IsAdmin = true
+        });
+        await createHandler.Execute(directCreate, adminContext);
+        Assert.Equal("resolved-password", connector.LastOptions?["PASSWORD"]);
+    }
+
+    private static IExecutionContext ContextWithIdentity(ExecutionIdentity identity)
+    {
+        var baseContext = ConnectionTestDoubles.Context();
+        var mock = Mock.Get(baseContext);
+        mock.SetupGet(c => c.ExecutionIdentity).Returns(identity);
+        return mock.Object;
     }
 
     private static CreateConnectionStatement SharedCreate(string name, string target) =>

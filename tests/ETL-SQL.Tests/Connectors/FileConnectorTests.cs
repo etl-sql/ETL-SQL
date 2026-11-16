@@ -859,11 +859,12 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public async Task XmlConnector_GetTablesAsync_ReturnsEmpty()
+        public async Task XmlConnector_GetTablesAsync_ReturnsRoot()
         {
+            // Agrees with XmlDataSource.GetTablesAsync, which exposes the one table ROOT.
             var conn = new XmlConnector();
             var tables = await conn.GetTablesAsync(Ctx, "/path/mydata.xml");
-            Assert.Empty(tables);
+            Assert.Equal(new[] { "ROOT" }, tables.ToArray());
         }
 
         // -- ExcelDataSource ----------------------------------------------------

@@ -558,18 +558,36 @@ ETL-SQL strictly follows [Semantic Versioning 2.0.0](https://semver.org/). Agent
 - **No direct commits to `main` or `dev`.**
 - Active development happens on the **release branch for the version in flight** (e.g. `release/v0.19.0`). Branch features and fixes off that branch, not off `dev` or `main`, and open pull requests back into it.
 - After a stable release is tagged, critical bug fixes and security hotfixes are applied (or cherry-picked) to that version's `release/vX.Y.Z` branch, shipped as a patch, and merged forward.
-- Batch work into a single push. Every push to `main` or a `release/**` branch runs the full ~40-minute CI; back-to-back pushes queue the runners. Cancel superseded runs when the queue backs up.
+- Batch work into a single push. Regular push/PR CI uses the shared impact manifest; shared or
+  unknown changes select broad coverage. Full frozen-candidate certification selects every required
+  lane. Preserve immutable candidate runs and recover unchanged inputs with failed-job-only retries.
 
 ### 16.3 Release Flow
 
 Full procedure: **[release-checklist.md](./docs/releases/release-checklist.md)**. The mechanical sequence:
 
-1. `scripts/Set-Version.ps1 -Version x.y.z` plus a hand-authored `CHANGELOG.md` entry.
-2. `scripts/Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration` — the authoritative gate. Writes `release-validation/latest/state.json`; `-Explain` previews the plan, `-Resume` continues after fixing a failed phase.
-3. `scripts/Master-Release.ps1 -Version x.y.z` — builds the VS Code UI, runs cross-platform packaging via `scripts/publish-release.ps1` (emits `release/`, `sha256sums.txt`, a CycloneDX `sbom.json`, and SLSA provenance), and builds the Windows MSI.
-4. Tag and publish **manually**: push the branch, then `git tag vx.y.z && git push origin vx.y.z`. The tag push triggers `.github/workflows/release.yml`.
+1. Finish versioning, changelog, release notes, dates and source preflight before freezing the SHA.
+2. Run full hosted CI/CodeQL (including Engine Certification), native packages and MSI/DEB
+   installed certification on that exact candidate. Independent hosts may run in parallel.
+   Complete the checklist's deployment/operator evidence too.
+3. Review retained results and hashes. Use failed-job-only retries for unchanged inputs. Source changes require a new candidate. `Master-Release.ps1` remains a local
+   packaging/diagnostic tool; it is not an additional publication build.
+4. Tag and publish **manually** only after all applicable evidence is accepted. The tag-triggered
+   `.github/workflows/release.yml` verifies and promotes certified packages and generates consolidated
+   checksums, SBOM and provenance. It does not rebuild macOS packages.
 
-`.github/workflows/ci.yml` runs on pushes and PRs to `main` and `release/**` but does **not** cover the Docker integration or SLT lanes — a green CI is not a substitute for `Test-PreRelease`. Confirm CI is green before tagging: a few failures only reproduce there.
+Regular CI is impact-selected. Explicit full certification includes Docker integration and the
+cross-platform enterprise/browser lanes. Since v0.22.0 the EBNF, SLT, spill and scale checks run in
+the hosted Engine Certification job, so no workstation run is part of the release. Green regular CI
+alone cannot authorize publication. The spill lane (the corpus again with spill thresholds of a
+few rows) runs in the hosted Spill Certification jobs on every push that selects the engine
+lanes. The local pre-release gate (`Test-PreRelease`) stays an optional developer tool; release
+drivers no longer read its state.
+
+Hosted PR native packages skip ReadyToRun precompilation while retaining self-contained bundles
+and the selected installed/CLI/webview checks. Local, nightly, release-branch push and full manual
+certification keep ReadyToRun enabled. Publication requires typed optimized-package evidence and
+cannot promote the faster PR artifacts. Their complete hosted timing still needs measurement.
 
 ---
 
@@ -634,8 +652,18 @@ To prevent cross-platform CI failures and avoid wasting 1-hour GitHub Actions ru
    - Edit shared runtime/designer modules in `src/ETL-SQL.ReportRuntime/Resources/TypeScript/`, Portal modules in `src/ETL-SQL.Portal/BrowserSources/`, and retained styles/vendor assets in `Resources/Shared/`. Run `node .\scripts\sync-assets.js` followed by `node .\scripts\sync-assets.js -Check`; never edit generated JavaScript.
 4. **C# Text/Doc Assertions Must Normalize Line Endings**:
    - When writing C# tests that read markdown or text files from disk via `File.ReadAllText()`, never assume `\r\n` or `\n`. Always use `.Replace("\r\n", "\n")` or regex `\r?\n` for cross-platform stability.
-5. **Always Run Pre-Push Validation Locally**:
-   - Before pushing to remote, always execute `.\scripts\Test-PrePush.ps1` (or verify via git pre-push hook). It verifies formatting, asset sync, syntax index sync, link coverage, flaky sleep patterns, test lane inventory, and fast contract tests in ~30 seconds.
+5. **Pre-Push Validation**:
+   - The pre-push hook runs the fast tier: an environment check (`scripts/Test-Environment.ps1`),
+     source preflight and formatting. It has measured about three minutes. CI runs everything else
+     and is what certifies a commit.
+   - Before a risky or broad batch, run the complete local set: `.\scripts\Test-PrePush.ps1` (or
+     push with `ETLSQL_PREPUSH_FULL=1`). It adds the browser type and lint gates, the consumer
+     contracts, smoke tests and, when selected, the extension and browser checks; broad runs have
+     measured about twelve minutes. These are observations, not timeout guarantees.
+   - The `integration`, `perf` and `benchmarks` lanes of `scripts/test-lane.ps1` run
+     `scripts/Test-Environment.ps1 -For Integration` or `-For Timing` first and stop in seconds
+     when the machine is not ready. A timing lane must not start on a busy machine. CI skips the
+     check; `-SkipEnvironmentCheck` skips it locally.
 
 ---
 

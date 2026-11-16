@@ -49,10 +49,25 @@ namespace ETL_SQL.LSP
             await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
 
             var server = await LanguageServer.From(options =>
-                options
-                    .WithInput(Console.OpenStandardInput())
-                    .WithOutput(Console.OpenStandardOutput())
-                    .ConfigureLogging(lb => lb.AddDebug().AddLanguageProtocolLogging().SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Trace))
+                LanguageServerComposition.Configure(
+                    options
+                        .WithInput(Console.OpenStandardInput())
+                        .WithOutput(Console.OpenStandardOutput())
+                        .ConfigureLogging(lb => lb.AddDebug().AddLanguageProtocolLogging().SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Trace))));
+
+            await server.WaitForExit;
+        }
+    }
+
+    /// <summary>
+    /// The language server's services and handlers, shared by <see cref="Program"/> and the
+    /// smoke test so the test proves the shipped composition resolves.
+    /// </summary>
+    public static class LanguageServerComposition
+    {
+        public static LanguageServerOptions Configure(LanguageServerOptions options)
+        {
+            options
                     .WithServices(services =>
                     {
                         var configuration = new ConfigurationBuilder()
@@ -170,22 +185,31 @@ namespace ETL_SQL.LSP
                     {
                         server.Configuration.AddConfigurationItem(new ConfigurationItem { Section = "etlsql" });
                         return Task.CompletedTask;
-                    })
-                    .WithHandler<TextDocumentHandler>()
-                    .WithHandler<HoverProvider>()
-                    .WithHandler<DefinitionProvider>()
-                    .WithHandler<ReportRenameProvider>()
-                    .WithHandler<CompletionProvider>()
-                    .WithHandler<SignatureHelpProvider>()
-                    .WithHandler<FormattingProvider>()
-                    .WithHandler<DocumentSymbolProvider>()
-                    .WithHandler<CustomMethodsHandler>()
-                    .WithHandler<RefreshMetadataHandler>()
-                    .WithHandler<UpdateNotebookContextHandler>()
-                    .WithHandler<DesignerLspHandler>()
-            );
+                    });
 
-            await server.WaitForExit;
+            foreach (var handlerType in HandlerTypes)
+            {
+                options.AddHandler(handlerType);
+            }
+
+            return options;
         }
+
+        /// <summary>The handler types <see cref="Configure"/> registers.</summary>
+        public static IReadOnlyList<Type> HandlerTypes { get; } =
+        [
+            typeof(TextDocumentHandler),
+            typeof(HoverProvider),
+            typeof(DefinitionProvider),
+            typeof(ReportRenameProvider),
+            typeof(CompletionProvider),
+            typeof(SignatureHelpProvider),
+            typeof(FormattingProvider),
+            typeof(DocumentSymbolProvider),
+            typeof(CustomMethodsHandler),
+            typeof(RefreshMetadataHandler),
+            typeof(UpdateNotebookContextHandler),
+            typeof(DesignerLspHandler),
+        ];
     }
 }

@@ -30,8 +30,9 @@ public partial class UpdateStatementHandler(ILogger logger) : IStatementHandler
             throw new ExecutionException($"View {connName} is read-only and cannot be used as an UPDATE target.");
         if (!context.Connections.TryGetValue(connName, out var connection)) throw new ExecutionException($"Unknown connection: {connName}");
         // COMPAT_BREAK: 0.20.0 — enlist the target before executing the first transactional mutation.
-        connection = await context.ResolveDataSourceAsync(stmt.TargetTable);
+        connection = await context.ResolveReadSourceAsync(stmt.TargetTable);
         _logger.Debug("Connection resolved as {ConnectionType}", connection.GetType().Name);
+        if (stmt.Output != null) await OutputClauseHelper.ValidateNamesAsync(stmt.Output, context, await connection.GetColumnsAsync(context.CancellationToken));
 
         var dataQualityStatusAssignment = GetDataQualityStatusAssignment(stmt);
         bool touchesDataQualityColumns = dataQualityStatusAssignment != null
@@ -85,6 +86,17 @@ public partial class UpdateStatementHandler(ILogger logger) : IStatementHandler
         else
         {
             _logger.Debug("Strategy: Engine-side Batch UPDATE (Streaming)");
+
+            // A row accepts any column name, so SET on a misspelt column added that column to the
+            // updated rows and the statement succeeded.
+            var knownColumns = new HashSet<string>(await connection.GetColumnsAsync(context.CancellationToken), StringComparer.OrdinalIgnoreCase);
+            if (knownColumns.Count > 0)
+            {
+                var unknown = stmt.Assignments.FirstOrDefault(a =>
+                    !knownColumns.Contains(a.ColumnName) && !DataQualityColumns.IsDataQualityColumn(a.ColumnName));
+                if (unknown != null)
+                    throw new ExecutionException($"Unknown column '{unknown.ColumnName}' in UPDATE of {connName}. Known columns: {string.Join(", ", knownColumns)}.");
+            }
 
             if (context.IsWhatIf)
             {

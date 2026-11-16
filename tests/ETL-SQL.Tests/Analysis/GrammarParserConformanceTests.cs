@@ -32,6 +32,11 @@ namespace ETL_SQL.Tests.Analysis
         private static bool GrammarAccepts(string sql, out string? error) =>
             DefaultGrammar.Build().ValidateSequence(Tokenize(sql), out error, requireComplete: true);
 
+        // The built grammar hands a complete sequence to the production parser as its final check,
+        // so the state transitions alone are tested here, without that check.
+        private static bool StateTransitionsAccept(string sql, out string? error) =>
+            DefaultGrammar.Build(requireParserAcceptance: false).ValidateSequence(Tokenize(sql), out error, requireComplete: true);
+
         // Complete, valid statements across the main authoring workflows.
         public static IEnumerable<object[]> ValidStatements() => new[]
         {
@@ -52,6 +57,8 @@ namespace ETL_SQL.Tests.Analysis
             new object[] { "INSERT INTO src.Users (UserID, UserName) VALUES (1, 'Alice');" },
             new object[] { "UPDATE src.Users SET UserName = 'Bob' WHERE UserID = 1;" },
             new object[] { "DELETE FROM src.Users WHERE UserID = 1;" },
+            new object[] { "ALTER TABLE #t DROP COLUMN c;" },
+            new object[] { "ALTER TABLE #t RENAME COLUMN a TO b;" },
             // Connections
             new object[] { "CREATE CONNECTION src AS MSSQL (PASSWORD = 'abc');" },
             new object[] { "CREATE CONNECTION f AS FLATFILE (PATH = 'C:\\data.csv', COMPRESS = ON);" },
@@ -74,13 +81,23 @@ namespace ETL_SQL.Tests.Analysis
             new object[] { "SET @x = 5;" },
         };
 
-        // Statements the parser rejects; the grammar must reject them too.
+        // Statements the parser rejects at a token the state tree models: the state transitions
+        // alone must reject them, without the parser's final check.
         public static IEnumerable<object[]> InvalidStatements() => new[]
         {
             new object[] { "CREATE CONNECTION c WITH (PATH = 'x');" },   // WITH instead of AS TYPE(...)
             new object[] { "CREATE CONNECTION c AS MSSQL PATH = 'x';" }, // missing parentheses
-            new object[] { "SELECT FROM WHERE;" },                       // no columns / garbage
-            new object[] { "COMPRESS 'C:\\raw.csv';" },                  // legacy short form
+            new object[] { "SELECT FROM WHERE;" },                       // no columns
+        };
+
+        // Statements the state tree cannot reject on its own: it validates a prefix and has no
+        // accepting states, so a statement cut short passes, and DDL after ALTER/CREATE <kind> is a
+        // wildcard tail. The built grammar rejects them through the parser's final check.
+        public static IEnumerable<object[]> InvalidStatementsTheParserRejects() => new[]
+        {
+            new object[] { "COMPRESS 'C:\\raw.csv';" },                  // legacy short form: no TO
+            new object[] { "ALTER TABLE #t RENAME COLUMN a b;" },        // RENAME needs TO
+            new object[] { "SELECT ;" },                                 // empty select list
         };
 
         [Theory]
@@ -93,6 +110,8 @@ namespace ETL_SQL.Tests.Analysis
             Assert.True(grammarAccepts,
                 $"Grammar recall gap — the parser accepts this but the grammar rejected it (completion would " +
                 $"stop suggesting valid next tokens):\n{sql}\nError: {error}");
+            Assert.True(StateTransitionsAccept(sql, out error),
+                $"Grammar state transitions reject a statement the parser accepts:\n{sql}\nError: {error}");
         }
 
         [Theory]
@@ -101,10 +120,18 @@ namespace ETL_SQL.Tests.Analysis
         {
             Assert.False(ParserAccepts(sql), $"Corpus 'invalid' sample was actually accepted by the parser: {sql}");
 
-            bool grammarAccepts = GrammarAccepts(sql, out _);
+            bool grammarAccepts = StateTransitionsAccept(sql, out _);
             Assert.False(grammarAccepts,
                 $"Grammar precision gap — the parser rejects this but the grammar accepted it (completion would " +
                 $"suggest tokens leading to invalid SQL):\n{sql}");
+        }
+
+        [Theory]
+        [MemberData(nameof(InvalidStatementsTheParserRejects))]
+        public void BuiltGrammar_Rejects_WhatOnlyTheParserCanJudge(string sql)
+        {
+            Assert.False(ParserAccepts(sql), $"Corpus 'invalid' sample was actually accepted by the parser: {sql}");
+            Assert.False(GrammarAccepts(sql, out _), $"The built grammar accepted SQL the parser rejects:\n{sql}");
         }
     }
 }

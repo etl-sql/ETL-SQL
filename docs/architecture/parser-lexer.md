@@ -1,6 +1,6 @@
 # ETL-SQL Parser & Lexer Deep Dive
 
-This document is the primary reference for developers adding new statement types, modifying grammar, or debugging parse errors. For the higher-level architecture overview see [Engine.md](Engine.md).
+This document is the primary reference for developers adding new statement types, modifying grammar, or debugging parse errors. For the higher-level architecture overview see [Engine.md](engine.md).
 
 ---
 

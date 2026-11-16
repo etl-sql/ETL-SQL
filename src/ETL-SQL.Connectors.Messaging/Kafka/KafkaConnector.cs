@@ -21,11 +21,8 @@ namespace ETL_SQL.Connectors.Kafka
                 return "Apache Kafka Connector v1.0 (Offline - No servers specified)";
             }
 
-            var host = GetHost(connectionString);
-            if (!string.IsNullOrEmpty(host))
-            {
-                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
-            }
+            // Every broker is a destination the client may connect to, not only the first.
+            EnforceBrokerHosts(context, connectionString);
 
             try
             {
@@ -98,21 +95,43 @@ namespace ETL_SQL.Connectors.Kafka
                 connStr = BuildConnectionString(options);
             }
 
-            if (!string.IsNullOrEmpty(connStr))
-            {
-                var servers = connStr.Split(',', StringSplitOptions.RemoveEmptyEntries);
-                foreach (var server in servers)
-                {
-                    var parts = server.Split(':');
-                    var host = parts[0].Trim();
-                    if (!string.IsNullOrEmpty(host))
-                    {
-                        ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
-                    }
-                }
-            }
+            EnforceBrokerHosts(context, connStr);
 
-            return new KafkaDataSource(context, connectionString, topic ?? "default-topic", options);
+            return new KafkaDataSource(context, connStr, topic ?? "default-topic", options);
+        }
+
+        private static void EnforceBrokerHosts(IExecutionContext context, string? servers)
+        {
+            foreach (var host in BrokerHosts(servers))
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
+        }
+
+        /// <summary>
+        /// The host of every broker in a <c>BOOTSTRAP_SERVERS</c> list (<c>host:port,host:port</c>).
+        /// A bracketed IPv6 literal (<c>[::1]:9092</c>) keeps its colons.
+        /// </summary>
+        internal static IReadOnlyList<string> BrokerHosts(string? servers)
+        {
+            if (string.IsNullOrWhiteSpace(servers)) return Array.Empty<string>();
+            var hosts = new List<string>();
+            foreach (var raw in servers.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                string host;
+                if (raw.StartsWith('['))
+                {
+                    var close = raw.IndexOf(']');
+                    host = close > 0 ? raw[1..close] : raw.TrimStart('[');
+                }
+                else
+                {
+                    var colon = raw.IndexOf(':');
+                    host = colon >= 0 ? raw[..colon] : raw;
+                }
+
+                host = host.Trim();
+                if (host.Length > 0) hosts.Add(host);
+            }
+            return hosts;
         }
 
         public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");
@@ -132,14 +151,10 @@ namespace ETL_SQL.Connectors.Kafka
             {
                 connStr = BuildConnectionString(options);
             }
-            if (string.IsNullOrEmpty(connStr)) return null;
-            var servers = connStr.Split(',', StringSplitOptions.RemoveEmptyEntries);
-            if (servers.Length > 0)
-            {
-                var parts = servers[0].Split(':');
-                return parts[0].Trim();
-            }
-            return null;
+            // IConnector.GetHost reports one host, so the engine's pre-create check sees only the
+            // first broker; CreateDataSource and GetVersionAsync enforce every broker themselves.
+            var hosts = BrokerHosts(connStr);
+            return hosts.Count > 0 ? hosts[0] : null;
         }
     }
 }

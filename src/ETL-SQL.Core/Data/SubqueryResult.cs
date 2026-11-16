@@ -81,10 +81,10 @@ public class CanonicalEqualityComparer : IEqualityComparer<object?>
         if (obj is double dbl) return ((decimal)dbl).GetHashCode();
         if (obj is float f) return ((decimal)f).GetHashCode();
 
-        if (decimal.TryParse(obj.ToString(), out var m)) return m.GetHashCode();
+        if (decimal.TryParse(Convert.ToString(obj, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var m)) return m.GetHashCode();
 
         if (obj is DateTime dt) return dt.GetHashCode();
-        if (DateTime.TryParse(obj.ToString(), out var dt2)) return dt2.GetHashCode();
+        if (EvaluationUtils.TryToDateTime(obj, out var dt2)) return dt2.GetHashCode();
 
         if (obj is bool b) return b.GetHashCode();
         if (obj.ToString()?.Equals("ON", StringComparison.OrdinalIgnoreCase) == true) return true.GetHashCode();

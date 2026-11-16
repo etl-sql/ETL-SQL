@@ -31,7 +31,7 @@ public sealed class CriticalSurfaceSnapshotTests(PortalJourneyFixture fixture)
     public async Task SignInPage_KeepsItsStructure()
     {
         await using var session = await fixture.NewSessionAsync();
-        await session.Page.GotoAsync("/login.html");
+        await session.Page.GotoWithDiagnosticsAsync("/login.html");
         await session.Page.WaitForSelectorAsync("#loginBtn");
 
         // The one page every user meets, and the only one they cannot navigate away from if it
@@ -71,7 +71,7 @@ public sealed class CriticalSurfaceSnapshotTests(PortalJourneyFixture fixture)
         await page.RouteAsync("**/api/data-quality/jobs", route => route.FulfillAsync(
             new RouteFulfillOptions { Status = 200, ContentType = "application/json", Body = "[]" }));
 
-        await page.GotoAsync("/index.html#governance/overview");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/overview");
         await page.ReloadAsync();
         await page.WaitForSelectorAsync("[data-gov-state='never-scanned']",
             new PageWaitForSelectorOptions { Timeout = 20_000 });
@@ -95,7 +95,7 @@ public sealed class CriticalSurfaceSnapshotTests(PortalJourneyFixture fixture)
             ContentType = "application/json",
             Body = "{\"error\":\"Forbidden\"}"
         }));
-        await page.GotoAsync("/index.html#governance/overview");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/overview");
         await page.ReloadAsync();
         await page.WaitForSelectorAsync("[data-gov-state='unauthorized']",
             new PageWaitForSelectorOptions { Timeout = 20_000 });
@@ -112,7 +112,7 @@ public sealed class CriticalSurfaceSnapshotTests(PortalJourneyFixture fixture)
         var page = session.Page;
         await fixture.SignInAsync(page);
 
-        await page.GotoAsync("/index.html#governance/overview");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/overview");
         await page.ReloadAsync();
         await page.WaitForSelectorAsync("#governanceSidebarSection",
             new PageWaitForSelectorOptions { State = WaitForSelectorState.Visible, Timeout = 20_000 });

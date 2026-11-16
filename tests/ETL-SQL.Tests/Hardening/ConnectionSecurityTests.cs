@@ -184,13 +184,22 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
-        public void SecurityService_SecureScriptForSave_Preserves_UsePasswordLiteral_WhenAllowed()
+        public void SecurityService_SecureScriptForSave_Preserves_UsePasswordLiteral_WhenAllowed_WhileEncryptingSecrets()
         {
             var service = new SecurityService(NullLogger.Instance);
-            var sql = "SET ALLOW_PLAINTEXT_SECRETS = ON;\nUSE PASSWORD = 'dev-secret';";
-            var secured = service.SecureScriptForSave(sql, "master");
+            var sql = """
+                SET ALLOW_PLAINTEXT_SECRETS = ON;
+                USE PASSWORD = 'dev-secret';
+                CREATE CONNECTION c AS POSTGRES('Host=db;Password=db-pass;', PASSWORD='opt-pass');
+                """;
+            var outcome = service.TrySealScriptForSave(sql);
 
-            Assert.Contains("USE PASSWORD = 'dev-secret';", secured);
+            Assert.False(outcome.RequiresPassword);
+            Assert.Contains("USE PASSWORD = 'dev-secret';", outcome.ScriptText);
+            Assert.Contains("ENC:", outcome.ScriptText);
+            Assert.DoesNotContain("db-pass", outcome.ScriptText);
+            Assert.DoesNotContain("opt-pass", outcome.ScriptText);
+            Assert.True(service.RequiresSavePassword("SET ALLOW_PLAINTEXT_SECRETS = ON;\nCREATE CONNECTION c AS MSSQL(PASSWORD='pw');"));
         }
 
         [Fact]
@@ -225,6 +234,57 @@ namespace ETL_SQL.Tests.Hardening
             Assert.False(service.RequiresSavePassword(sql));
         }
 
+        // Scrubbing replaced encryption here, so it must reach every credential encryption sealed:
+        // URL userinfo, connection-string keys other than Password/Pwd, and opaque tokens.
+        [Theory]
+        [InlineData("POSTGRES('postgres://app:url-pass@db:5432/sales')", "url-pass", "postgres://app:<secret>@db:5432/sales")]
+        [InlineData("AZUREBLOB('DefaultEndpointsProtocol=https;AccountName=acct;AccountKey=acct-key==;')", "acct-key", "AccountName=acct;AccountKey=<secret>;")]
+        [InlineData("AZUREBLOB('BlobEndpoint=https://a.blob;SharedAccessSignature=sv=2024&sig=sas-sig')", "sas-sig", "BlobEndpoint=https://a.blob;SharedAccessSignature=<secret>")]
+        [InlineData("MSSQL('Server=.;Client Secret=cs-val;Access Token=at-val')", "-val", "Server=.;Client Secret=<secret>;Access Token=<secret>")]
+        [InlineData("MOCKDB('opaque-token-123')", "opaque-token-123", "MOCKDB('<secret>')")]
+        public void SecurityService_SecureScriptForSave_NoSaveSensitive_ScrubsEveryCredentialEncryptionSealed(
+            string connection, string secret, string expected)
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = $"SET NO_SAVE_SENSITIVE = ON;\nCREATE CONNECTION c AS {connection};";
+
+            var secured = service.SecureScriptForSave(sql, "save-pass");
+
+            Assert.DoesNotContain(secret, secured);
+            Assert.Contains(expected, secured);
+            Assert.DoesNotContain("ENC:", secured);
+        }
+
+        [Fact]
+        public void SecurityService_SecureScriptForSave_NoSaveSensitive_LeavesFilePathsReadable()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = "SET NO_SAVE_SENSITIVE = ON;\nCREATE CONNECTION c AS CSV('data/in.csv');";
+
+            Assert.Contains("CSV('data/in.csv')", service.SecureScriptForSave(sql, "save-pass"));
+        }
+
+        [Fact]
+        public void SecurityService_SecureScriptForSave_NoSaveSensitive_WithUsePassword_ScrubsWithoutEncrypting()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = """
+                SET NO_SAVE_SENSITIVE = ON;
+                USE PASSWORD = 'dev-secret';
+                DECLARE @token SENSITIVE = 'abc';
+                CREATE CONNECTION c AS POSTGRES('Host=db;Password=pw;', PASSWORD='pw2');
+                """;
+
+            var outcome = service.TrySealScriptForSave(sql);
+
+            Assert.False(outcome.RequiresPassword);
+            Assert.Contains("USE PASSWORD PROMPT;", outcome.ScriptText);
+            Assert.Contains("DECLARE @token SENSITIVE = '<secret>'", outcome.ScriptText);
+            Assert.Contains("POSTGRES('Host=db;Password=<secret>;', PASSWORD='<secret>')", outcome.ScriptText);
+            Assert.DoesNotContain("ENC:", outcome.ScriptText);
+            Assert.DoesNotContain("dev-secret", outcome.ScriptText);
+        }
+
         [Fact]
         public void SecurityService_SecureScriptForSave_NoSaveConnection_ScrubsConnectionDetails()
         {
@@ -240,6 +300,30 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Contains("PASSWORD='<placeholder>'", secured);
             Assert.DoesNotContain("Host=db", secured);
             Assert.DoesNotContain("USERNAME='u'", secured);
+        }
+
+        [Fact]
+        public void SecurityService_SecureScriptForSave_NoSaveConnection_IsSupersetOfNoSaveSensitive()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = """
+                SET ALLOW_PLAINTEXT_SECRETS = ON;
+                SET NO_SAVE_CONNECTION = ON;
+                USE PASSWORD = 'dev-secret';
+                DECLARE @token SENSITIVE = 'secret-val';
+                DECLARE @key ENCRYPTED = 'enc-val';
+                CREATE CONNECTION c AS POSTGRES('Host=db;Username=u;Password=p;', HOST='db', PASSWORD='p');
+                """;
+
+            var secured = service.SecureScriptForSave(sql, "");
+
+            Assert.Contains("USE PASSWORD PROMPT;", secured);
+            Assert.Contains("DECLARE @token SENSITIVE = '<secret>'", secured);
+            Assert.Contains("DECLARE @key ENCRYPTED = '<secret>'", secured);
+            Assert.Contains("POSTGRES('<connection>', HOST='<placeholder>', PASSWORD='<placeholder>')", secured);
+            Assert.DoesNotContain("dev-secret", secured);
+            Assert.DoesNotContain("secret-val", secured);
+            Assert.DoesNotContain("enc-val", secured);
         }
 
         [Fact]
@@ -316,6 +400,68 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Null(service.ExtractLiteralUsePassword("/* USE PASSWORD = 'secret-pw'; */"));
 
             Assert.Equal("secret-pw", service.ExtractLiteralUsePassword("USE PASSWORD = 'secret-pw';"));
+        }
+
+        // Sealing runs on the first CLI run of a script, so a rewrite inside a string literal turns a
+        // working script into one that no longer parses (samples/07_Real_World/realworld_09).
+        [Fact]
+        public void SecurityService_SecureScriptForSave_LeavesStringLiteralsIntact()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var dynamicSql =
+                "DECLARE @dynSql VARCHAR(1000) = 'CREATE CONNECTION Payload AS FLATFILE(''' + @targetFile + ''', HEADER=''ON'');';";
+            var dynamicPassword = "DECLARE @p VARCHAR(100) = 'USE PASSWORD = ''inner'';';";
+            var script = string.Join("\n",
+                "-- don't let this apostrophe hide the connection below",
+                "CREATE CONNECTION db AS MSSQL('Server=.;Database=DB;User=sa;Password=secret;');",
+                dynamicSql,
+                dynamicPassword,
+                "USE PASSWORD = 'outer';");
+
+            var secured = service.SecureScriptForSave(script, "seal-pw");
+
+            Assert.Contains(dynamicSql, secured);
+            Assert.Contains(dynamicPassword, secured);
+            Assert.Contains("CREATE CONNECTION db AS MSSQL('ENC:", secured);
+            Assert.DoesNotContain("Password=secret", secured);
+            Assert.Contains("USE PASSWORD PROMPT;", secured);
+            Assert.DoesNotContain("'outer'", secured);
+            Assert.DoesNotContain(Parse(secured).Diagnostics, d => d.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error);
+        }
+
+        // A file connector's positional value is a path, not a credential; it stays readable unless
+        // it carries one (a connection string, or a URL with user:password@).
+        [Fact]
+        public void SecurityService_EncryptScript_LeavesFileConnectorPathsReadable()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = string.Join("\n",
+                "CREATE CONNECTION drop AS DIRECTORY('samples/output/pickup/');",
+                "CREATE CONNECTION out AS FLATFILE('exports/daily');",
+                "CREATE CONNECTION ftpdir AS DIRECTORY('ftp://etl:hunter2@files.example.com/in/');",
+                "CREATE CONNECTION mock AS MOCKDB('opaque-token');");
+
+            var encrypted = service.EncryptScript(sql, "master");
+
+            Assert.Contains("DIRECTORY('samples/output/pickup/')", encrypted);
+            Assert.Contains("FLATFILE('exports/daily')", encrypted);
+            Assert.DoesNotContain("hunter2", encrypted);
+            Assert.Contains("ftpdir AS DIRECTORY('ENC:", encrypted);
+            Assert.Contains("mock AS MOCKDB('ENC:", encrypted);
+            Assert.True(service.NeedsEncryption("CREATE CONNECTION d AS DIRECTORY('ftp://etl:hunter2@files.example.com/in/');"));
+            Assert.False(service.NeedsEncryption("CREATE CONNECTION d AS DIRECTORY('samples/output/pickup/');"));
+        }
+
+        [Fact]
+        public void SecurityService_NeedsEncryption_IgnoresConnectionsInsideStringLiterals()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+
+            Assert.False(service.NeedsEncryption(
+                "DECLARE @s VARCHAR(200) = 'CREATE CONNECTION c AS MSSQL(''Server=.;Password=p;'');';"));
+            Assert.False(service.RequiresSavePassword(
+                "DECLARE @s VARCHAR(200) = 'CREATE CONNECTION c AS MSSQL(''Server=.;Password=p;'');';"));
+            Assert.Null(service.ExtractLiteralUsePassword("PRINT 'USE PASSWORD = ''x'';';"));
         }
 
         private Script Parse(string sql)

@@ -36,7 +36,11 @@ public class RunScriptDependencyPreflightRule : ILintRule
             }
 
             var childPath = ResolveChildPath(rawPath, documentUri);
-            if (childPath == null || !File.Exists(childPath) || !visited.Add(childPath))
+            // Lint runs on scripts the analyzing host did not write (the Portal designer, the
+            // Orchestrator): it must not read arbitrary files and echo their tokens back in
+            // diagnostics. Only script files outside system, credential and application locations
+            // are preflighted, checked before the file is touched so the rule is no existence oracle.
+            if (childPath == null || !IsPreflightableScript(childPath) || !File.Exists(childPath) || !visited.Add(childPath))
                 continue;
 
             Script childScript;
@@ -87,6 +91,12 @@ public class RunScriptDependencyPreflightRule : ILintRule
             await AnalyzeScriptAsync(childScript, childPath, visited, results);
         }
     }
+
+    private static readonly string[] ScriptExtensions = { ".etlsql", ".sql" };
+
+    private static bool IsPreflightableScript(string path) =>
+        ScriptExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase)
+        && !ETL_SQL.Services.SecurityService.IsProtectedLocation(path);
 
     private static string? ResolveChildPath(string rawPath, string documentUri)
     {

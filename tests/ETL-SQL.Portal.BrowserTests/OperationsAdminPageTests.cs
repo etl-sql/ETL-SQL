@@ -13,7 +13,7 @@ public sealed class OperationsAdminPageTests(PortalAdminFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/admin.html");
+        await page.GotoWithDiagnosticsAsync("/admin.html");
         await page.Locator("[data-tab='operations']").ClickAsync();
         await Expect(page.Locator("#panel-operations")).ToHaveAttributeAsync("aria-busy", "false");
         await Expect(page.Locator("#ops-signals")).ToContainTextAsync("Nothing pending");

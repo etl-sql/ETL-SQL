@@ -222,6 +222,60 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
         Assert.Equal("SECRET:webhook_url", definition.Options["URL"]);
     }
 
+    [Fact]
+    public async Task FederatedMode_ConnectionAdministrationRequiresAnAdministrator()
+    {
+        // The catalog holds every tenant's connection definitions and secret references. A signed
+        // caller without administrator authority — a Viewer, or a read-scoped automation — was
+        // accepted on every one of these routes.
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var client = factory.CreateClient();
+        var viewer = new OrchestratorCaller("user", "viewer-1", "Vera Viewer", ["Viewer"], []);
+        var readScopedAdmin = new OrchestratorCaller(
+            "service", "svc-1", "Read automation", ["Admin"], [], null, ["orchestrator.read"]);
+        var admin = new OrchestratorCaller("user", "admin-1", "Ada Admin", ["Admin"], []);
+        var smtp = new
+        {
+            connectorType = "SMTP",
+            options = new Dictionary<string, string> { ["HOST"] = "smtp.example.test", ["PASSWORD"] = "SECRET:pw" }
+        };
+
+        foreach (var caller in new[] { viewer, readScopedAdmin })
+        {
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await SendAsAsync(client, caller, HttpMethod.Get, "/api/admin/connections", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await SendAsAsync(client, caller, HttpMethod.Get, "/api/admin/connections/export", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await SendAsAsync(client, caller, HttpMethod.Put, "/api/admin/connections/probe", smtp)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await SendAsAsync(client, caller, HttpMethod.Delete, "/api/admin/connections/probe", null)).StatusCode);
+        }
+
+        var provider = (IWritableConnectionCatalogProvider)factory.Services.GetRequiredService<IConnectionCatalogProvider>();
+        Assert.Equal(SecretLifecycleStatus.NotFound, await provider.GetStatusAsync("probe"));
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsAsync(client, admin, HttpMethod.Put, "/api/admin/connections/probe", smtp)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await SendAsAsync(client, admin, HttpMethod.Get, "/api/admin/connections", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsAsync(client, admin, HttpMethod.Delete, "/api/admin/connections/probe", null)).StatusCode);
+    }
+
+    private static Task<HttpResponseMessage> SendAsAsync(
+        HttpClient client, OrchestratorCaller caller, HttpMethod method, string uri, object? body)
+    {
+        var request = new HttpRequestMessage(method, uri);
+        request.Headers.Add("X-Orchestrator-Key", ValidKey);
+        request.Headers.Add(
+            OrchestratorIdentityAssertion.HeaderName,
+            OrchestratorIdentityAssertion.Create(caller, OrchestratorWebFactory.IdentitySecret));
+        if (body is not null)
+            request.Content = JsonContent.Create(body);
+        return client.SendAsync(request);
+    }
+
     private static Task<HttpResponseMessage> SendAsync(
         HttpClient client,
         HttpMethod method,

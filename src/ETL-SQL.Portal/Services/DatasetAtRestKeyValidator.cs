@@ -82,14 +82,6 @@ public static class DatasetAtRestKeyValidator
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(config.LegacyAtRestKeyVersion)
-            && !config.LegacyAtRestKeyVersion.Equals(config.AtRestKeyVersion, StringComparison.OrdinalIgnoreCase)
-            && !config.PreviousAtRestKeys.ContainsKey(config.LegacyAtRestKeyVersion))
-        {
-            return Result.Fatal(
-                "Portal:Dataset:LegacyAtRestKeyVersion must identify the current key version or a configured previous key.");
-        }
-
         return Result.Ok;
     }
 }

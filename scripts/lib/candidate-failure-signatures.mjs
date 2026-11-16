@@ -1,0 +1,76 @@
+// Known failures of release-candidate jobs that are NOT defects in the candidate, so the candidate
+// supervisor reruns the failed jobs on unchanged inputs instead of stopping the release.
+// Anything that matches none of these is treated as a real defect.
+//
+// kind:
+//   infra      GitHub or runner trouble. Rerun up to twice (run attempts 1 and 2).
+//   flaky      A known timing-sensitive test. Rerun once; a second failure is real. Temporary:
+//              each carries the issue that tracks its cause fix and its removal.
+//   dependent  Fails because another workflow's job failed. Rerun once that job has succeeded.
+// source: 'log' (the job log) or 'annotation' (check-run annotations; jobs that never started
+// have no log).
+// Add an entry only with the run that proved it, so the list stays reviewable. Remove it once the
+// cause is fixed, as on 2026-11-09 for the Studio millisecond budgets (now the median of three
+// rounds) and the preflight per-check deadline (now a 180 s hang guard).
+export const candidateFailureSignatures = [
+  {
+    id: 'checkout-timeout', kind: 'infra', source: 'log',
+    pattern: /The action 'Run actions\/checkout@v\d+' has timed out after \d+ minutes/,
+    evidence: 'MSI 41710848250 attempts 1-2, 2026-11-03, during a GitHub Git Operations degradation',
+  },
+  {
+    id: 'runner-not-acquired', kind: 'infra', source: 'annotation',
+    pattern: /The job was not acquired by Runner of type hosted even after multiple attempts/,
+    evidence: 'Release Certification 41676286923 and 41710847926 (macOS arm64 capacity), 2026-11-03',
+  },
+  {
+    id: 'runner-lost', kind: 'infra', source: 'annotation',
+    pattern: /The runner has received a shutdown signal|lost communication with the server|The operation was canceled because the runner/,
+    evidence: 'v0.21.0 MSI rounds lost their hosted runner (docs/releases/recovery-acceptance.md)',
+  },
+  {
+    id: 'hdiutil-busy', kind: 'infra', source: 'log',
+    pattern: /hdiutil: (?:create|attach|detach) failed - Resource busy/,
+    evidence: 'Native Package Certification 41676292135 osx-x64, 2026-11-03',
+  },
+  {
+    id: 'apt-mirror-dns', kind: 'infra', source: 'log',
+    pattern: /Temporary failure resolving '(?:[\w-]+\.)*(?:ubuntu\.com|microsoft\.com)'/,
+    evidence: 'Release Certification 43039101047 Docker Integration Tests (ODBC driver install), 2026-11-11',
+  },
+  {
+    id: 'windows-payload-dependency', kind: 'dependent', source: 'log',
+    pattern: /Shared Windows payload selection failed|Windows payload publication failed/,
+    waitFor: { workflow: 'MSI In-Place Upgrade', job: 'Publish Windows payload' },
+    evidence: 'Native Package Certification 41710853145 win-x64 after MSI payload checkout timeout, 2026-11-03',
+  },
+  {
+    // Narrowed 2026-11-11 from every Playwright locator or timeout failure, which gave any browser
+    // regression a free rerun. Only the failures still without a cause fix match: the folder-tree
+    // test, a Windows socket-buffer exhaustion, and a navigation that timed out.
+    id: 'playwright-wait', kind: 'flaky', source: 'log',
+    pattern: /TheFolderTreeShowsSubfoldersAndOpensThemByMouseAndKeyboard|net::ERR_NO_BUFFER_SPACE|Timeout \d+ms exceeded\.\s+Call log:\s+- navigating to /,
+    evidence: 'CI 42609393604 Portal Browser Journey 3/3 (folder tree), 2026-11-09; Windows browser lane ERR_NO_BUFFER_SPACE and navigation timeouts (docs/releases/flaky-test-stability.md)',
+    issue: 'https://github.com/etl-sql/ETL-SQL/issues/74',
+  },
+  {
+    id: 'first-run-sign-in-wait', kind: 'flaky', source: 'log',
+    pattern: /waiting for Locator\("#changeForm"\) to be visible/,
+    evidence: 'CI 41744076759 Portal Browser Journey 3/3, 2026-11-04 (same shard passed on 2026-11-03 rounds 4 and 5)',
+    issue: 'https://github.com/etl-sql/ETL-SQL/issues/75',
+  },
+];
+
+const limits = { infra: 3, flaky: 2, dependent: 3 };
+
+// Returns the first matching signature for a failed job, or null for a real defect.
+export function classifyFailure({ log = '', annotations = [] } = {}) {
+  const annotationText = annotations.join('\n');
+  // GitHub also writes step errors such as a checkout timeout as annotations, so a log signature
+  // still matches when the log itself could not be read.
+  return candidateFailureSignatures.find(signature =>
+    signature.pattern.test(signature.source === 'annotation' ? annotationText : `${log}\n${annotationText}`)) ?? null;
+}
+
+// The highest run attempt at which a failure of this kind may still be rerun.
+export function maxAttemptFor(signature) { return limits[signature.kind]; }

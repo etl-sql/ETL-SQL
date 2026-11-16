@@ -88,10 +88,21 @@ public static class DefaultThresholds
         => config?.GetValue<long?>("Engine:TempTableSpillThresholdRows") ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
 
     public static bool SpillEncryptionEnabled(IConfiguration? config)
-        => config?.GetValue<bool>("Security:SpillEncryptionEnabled") ?? true;
+        => RequireSpillEncryption(config) || (config?.GetValue<bool>("Security:SpillEncryptionEnabled") ?? true);
+
+    public static bool RequireSpillEncryption(IConfiguration? config)
+        => (config?.GetValue<bool?>("Security:RequireSpillEncryption") ?? false)
+            || (config?.GetValue<bool?>("Governance:Spill:RequireEncryption") ?? false);
 
     public static bool SpillCompressionEnabled(IConfiguration? config)
         => config?.GetValue<bool>("Security:SpillCompressionEnabled") ?? true;
+
+    /// <summary>
+    /// Free space, in MB, the spill volume keeps in reserve: a new extent is refused below it, so a
+    /// filling disk fails one statement cleanly instead of every writer on the host. Zero disables it.
+    /// </summary>
+    public static long SpillMinimumFreeDiskMB(IConfiguration? config)
+        => Math.Max(0, config?.GetValue<long?>("Engine:SpillMinimumFreeDiskMB") ?? 256);
 
     public static string SpillFormat(IConfiguration? config)
         => config?.GetValue<string>("Security:SpillFormat") ?? "Arrow";
@@ -103,6 +114,19 @@ public static class DefaultThresholds
     {
         var s = config?.GetValue<string>("Engine:StartOfWeek") ?? "Monday";
         return Enum.TryParse<DayOfWeek>(s, ignoreCase: true, out var day) ? day : DayOfWeek.Monday;
+    }
+
+    /// <summary>
+    /// Engine:DateFormat — how slash dates in text are read: "MDY" (default; 08/01/2026 is 1 August, as
+    /// SQL Server and PostgreSQL read it) or "DMY". A script can change it with SET DATEFORMAT.
+    /// </summary>
+    public static ETL_SQL.Core.Data.DateOrder DateOrder(IConfiguration? config)
+    {
+        var text = config?.GetValue<string>("Engine:DateFormat");
+        if (string.IsNullOrWhiteSpace(text)) return ETL_SQL.Core.Data.DateOrder.MonthFirst;
+        return ETL_SQL.Core.Data.DateTextOrder.TryParse(text, out var order)
+            ? order
+            : throw new InvalidOperationException($"Engine:DateFormat must be MDY or DMY, not '{text}'.");
     }
 
     public static string ScriptHashPolicy(IConfiguration? config)

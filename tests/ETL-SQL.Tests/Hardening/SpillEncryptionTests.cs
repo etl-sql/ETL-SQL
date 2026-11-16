@@ -8,11 +8,13 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Engine.Services;
-using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Engine.Spill;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Services;
 using Microsoft.Data.Sqlite;
@@ -232,6 +234,141 @@ namespace ETL_SQL.Tests.Hardening
                         }
                     }
                 }
+            }
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task SpillStore_EmptyOrNullPersistentKey_FailsClosed(bool useNull)
+        {
+            var tempRoot = Path.Combine(Path.GetTempPath(), "ETL-SQL-SpillEmptyKey", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempRoot);
+            try
+            {
+                var sessionManager = new Mock<ISessionStateManager>();
+                sessionManager.Setup(m => m.SessionRoot).Returns(tempRoot);
+                sessionManager.Setup(m => m.GetSpillKey(It.IsAny<string>()))
+                    .Returns(useNull ? null! : Array.Empty<byte>());
+
+                var ctx = new Mock<IExecutionContext>();
+                ctx.SetupGet(c => c.IsPersistentSession).Returns(true);
+                ctx.SetupGet(c => c.SessionId).Returns("sess_empty_key");
+                ctx.SetupGet(c => c.SessionRoot).Returns(tempRoot);
+                ctx.SetupGet(c => c.SessionStateManager).Returns(sessionManager.Object);
+                ctx.SetupGet(c => c.SpillEncryptionEnabled).Returns(true);
+                ctx.SetupGet(c => c.Logger).Returns(new Mock<ILogger>().Object);
+
+                using var store = new SpillStore(ctx.Object);
+                var ex = await Assert.ThrowsAsync<ExecutionException>(() => store.CreateWriterAsync("chunk1"));
+                Assert.Contains("missing or empty", ex.Message);
+            }
+            finally
+            {
+                try { if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true); } catch { }
+            }
+        }
+
+        [Fact]
+        public async Task SetSpillEncryptionOff_BlockedByDeploymentAndEnterprisePolicy()
+        {
+            var prevPolicy = EnterprisePolicyRuntime.Current;
+            try
+            {
+                var logger = new Mock<ILogger>();
+                var offStmt = new SetSpillOptionStatement(SpillOptionType.Encryption, false);
+
+                // 1. Standalone without policy allows SET SPILL_ENCRYPTION OFF.
+                var standaloneCtx = new Mock<IExecutionContext>();
+                standaloneCtx.SetupProperty(c => c.SpillEncryptionEnabled, true);
+                standaloneCtx.SetupProperty(c => c.SpillCompressionEnabled, true);
+                standaloneCtx.SetupGet(c => c.ExecutionPolicy).Returns(
+                    ExecutionPolicySnapshot.Capture(EffectiveEnterprisePolicy.Standalone, "dev", ScriptExecutionMode.Batch, "h"));
+
+                var standaloneHandler = new SetSpillOptionStatementHandler(logger.Object, new ConfigurationBuilder().Build());
+                await standaloneHandler.Execute(offStmt, standaloneCtx.Object);
+                Assert.False(standaloneCtx.Object.SpillEncryptionEnabled);
+
+                // 2. Local deployment config Security:RequireSpillEncryption = true blocks SET SPILL_ENCRYPTION OFF.
+                var strictConfig = new ConfigurationBuilder()
+                    .AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["Security:RequireSpillEncryption"] = "true"
+                    })
+                    .Build();
+                var configProtectedCtx = new Mock<IExecutionContext>();
+                configProtectedCtx.SetupProperty(c => c.SpillEncryptionEnabled, true);
+                configProtectedCtx.SetupGet(c => c.ExecutionPolicy).Returns(
+                    ExecutionPolicySnapshot.Capture(EffectiveEnterprisePolicy.Standalone, "dev", ScriptExecutionMode.Batch, "h"));
+
+                var strictHandler = new SetSpillOptionStatementHandler(logger.Object, strictConfig);
+                await Assert.ThrowsAsync<ExecutionException>(() => strictHandler.Execute(offStmt, configProtectedCtx.Object));
+                Assert.True(configProtectedCtx.Object.SpillEncryptionEnabled);
+
+                // 3. Enrolled enterprise policy with RequireSpillEncryption = true blocks SET SPILL_ENCRYPTION OFF.
+                var doc = new OrganizationPolicyDocument
+                {
+                    MutationGuardrails = new MutationGuardrailPolicySection { RequireSpillEncryption = true }
+                };
+                var enrolled = new EffectiveEnterprisePolicy(
+                    true, true, "Live", "v1", "h",
+                    System.DateTimeOffset.UtcNow.AddMinutes(-1),
+                    System.DateTimeOffset.UtcNow.AddHours(1),
+                    System.DateTimeOffset.UtcNow,
+                    doc,
+                    EnterprisePolicyConfiguration.Flatten(doc.ToPolicyValues()));
+                EnterprisePolicyRuntime.SetCurrent(enrolled);
+
+                var enrolledCtx = new Mock<IExecutionContext>();
+                enrolledCtx.SetupProperty(c => c.SpillEncryptionEnabled, true);
+                enrolledCtx.SetupGet(c => c.ExecutionPolicy).Returns(
+                    ExecutionPolicySnapshot.Capture(enrolled, "alice", ScriptExecutionMode.Batch, "h"));
+
+                await Assert.ThrowsAsync<OperationPolicyDeniedException>(() => standaloneHandler.Execute(offStmt, enrolledCtx.Object));
+                Assert.True(enrolledCtx.Object.SpillEncryptionEnabled);
+            }
+            finally
+            {
+                EnterprisePolicyRuntime.SetCurrent(prevPolicy);
+            }
+        }
+
+        [Fact]
+        public async Task SpillStore_ContendedWriteSlots_WakeAndCompleteWithoutErrors()
+        {
+            var tempRoot = Path.Combine(Path.GetTempPath(), "ETL-SQL-SpillSlots", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempRoot);
+            try
+            {
+                var sessionManager = new NullSessionStateManager();
+                var ctx = new Mock<IExecutionContext>();
+                ctx.SetupGet(c => c.IsPersistentSession).Returns(false);
+                ctx.SetupGet(c => c.SessionId).Returns("sess_slots");
+                ctx.SetupGet(c => c.SessionStateManager).Returns(sessionManager);
+                ctx.SetupGet(c => c.SpillEncryptionEnabled).Returns(false);
+                ctx.SetupGet(c => c.SpillCompressionEnabled).Returns(false);
+                ctx.SetupGet(c => c.SpillFormat).Returns("Json");
+                ctx.SetupGet(c => c.EffectiveSpillWriteConcurrency).Returns(1);
+                ctx.SetupGet(c => c.AdaptiveMetrics).Returns(new ETL_SQL.Core.Adaptive.AdaptiveRuntimeMetrics());
+                ctx.SetupGet(c => c.Logger).Returns(new Mock<ILogger>().Object);
+                ctx.SetupGet(c => c.CancellationToken).Returns(System.Threading.CancellationToken.None);
+
+                using var store = new SpillStore(ctx.Object);
+                var table = new DataTable();
+                table.SetColumns(["id"]);
+                var row = table.NewRow();
+                row["id"] = 1m;
+                var tasks = Enumerable.Range(0, 8).Select(async i =>
+                {
+                    await using var writer = await store.CreateWriterAsync($"c_{i}");
+                    await writer.WriteRowAsync(row);
+                });
+
+                await Task.WhenAll(tasks);
+            }
+            finally
+            {
+                try { if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true); } catch { }
             }
         }
     }

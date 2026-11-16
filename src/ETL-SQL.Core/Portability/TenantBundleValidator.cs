@@ -203,7 +203,9 @@ public static class TenantBundleValidator
             {
                 if (!inventoryById.TryGetValue(component.LogicalId, out var item)
                     || item.Disposition != TenantInventoryDisposition.Included
-                    || item.ByteLength != (component.PlaintextSha256 is null ? component.ByteLength : item.ByteLength)
+                    // An encrypted component's ByteLength is the ciphertext's; its plaintext length is
+                    // checked against the inventory after decryption, below.
+                    || (component.PlaintextSha256 is null && item.ByteLength != component.ByteLength)
                     || !string.Equals(item.Sha256, component.PlaintextSha256 ?? component.Sha256,
                         StringComparison.OrdinalIgnoreCase))
                     findings.Add(new TenantBundleFinding("bundle.inventory.component-mismatch", "Error",
@@ -305,6 +307,11 @@ public static class TenantBundleValidator
                     if (!string.Equals(plaintextHash, expectedPlaintext, StringComparison.OrdinalIgnoreCase))
                         findings.Add(new TenantBundleFinding("bundle.payload.plaintext-hash", "Error",
                             component.LogicalId, "The decrypted payload does not match its export-time plaintext hash."));
+                    if (manifest.Inventory?.FirstOrDefault(x => string.Equals(x.StableId, component.LogicalId, StringComparison.Ordinal)) is { } inventoryRow
+                        && inventoryRow.ByteLength != plaintext.BytesWritten)
+                        findings.Add(new TenantBundleFinding("bundle.inventory.component-mismatch", "Error",
+                            component.LogicalId,
+                            $"The decrypted payload is {plaintext.BytesWritten} bytes; the inventory declares {inventoryRow.ByteLength}."));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -342,11 +349,12 @@ public static class TenantBundleValidator
     private sealed class HashingSinkStream : Stream
     {
         private readonly IncrementalHash _hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        public long BytesWritten { get; private set; }
         public string GetHash() => Convert.ToHexString(_hash.GetHashAndReset()).ToLowerInvariant();
-        public override void Write(byte[] buffer, int offset, int count) => _hash.AppendData(buffer, offset, count);
-        public override void Write(ReadOnlySpan<byte> buffer) => _hash.AppendData(buffer);
+        public override void Write(byte[] buffer, int offset, int count) { _hash.AppendData(buffer, offset, count); BytesWritten += count; }
+        public override void Write(ReadOnlySpan<byte> buffer) { _hash.AppendData(buffer); BytesWritten += buffer.Length; }
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default)
-        { ct.ThrowIfCancellationRequested(); _hash.AppendData(buffer.Span); return ValueTask.CompletedTask; }
+        { ct.ThrowIfCancellationRequested(); _hash.AppendData(buffer.Span); BytesWritten += buffer.Length; return ValueTask.CompletedTask; }
         protected override void Dispose(bool disposing) { if (disposing) _hash.Dispose(); base.Dispose(disposing); }
         public override bool CanRead => false;
         public override bool CanSeek => false;

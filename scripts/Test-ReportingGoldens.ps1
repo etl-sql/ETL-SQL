@@ -61,6 +61,8 @@ try {
 
     $arguments = @($testProject, '--filter', $filter, '-v', 'quiet', '--nologo')
     if ($SkipBuild) { $arguments += @('--no-build', '--no-restore') }
+    # A filter that matches no test (a mistyped -Fixture) exits 0 by default and would print a match.
+    $arguments += @('--', 'RunConfiguration.TreatNoTestsAsError=true')
 
     & dotnet test @arguments
     $testExit = $LASTEXITCODE

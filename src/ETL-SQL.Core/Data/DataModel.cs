@@ -156,6 +156,14 @@ public class Row
     public DataQualityReplayProvenance? DataQualityReplayProvenance { get; set; }
 
     /// <summary>
+    /// True when this row is allowed to be missing columns the statement can name. An outer-join
+    /// row with no match normally carries the other side's columns as NULL; the mark is only for
+    /// the case where the other side had no rows and nothing declares its columns. An unknown
+    /// column name reads as NULL on such a row and is an error on any other.
+    /// </summary>
+    public bool MayLackColumns { get; set; }
+
+    /// <summary>
     /// A shared empty row with no schema or values. Use when an expression evaluator
     /// requires a row context but no column bindings are needed (e.g., evaluating
     /// literal start/end/step values in FOR loops, WHILE conditions, etc.).
@@ -271,7 +279,7 @@ public class Row
         null => 0L,
         string s => 24L + 2L * s.Length,
         decimal => 32L,
-        DateTime => 24L,
+        DateTime or DateOnly => 24L,
         bool => 24L,
         double or float or long or ulong or int or uint or short or ushort or byte or sbyte => 24L,
         _ => 32L
@@ -558,6 +566,7 @@ public class Row
         {
             foreach (var kvp in _dynamicColumns) row[kvp.Key] = kvp.Value;
         }
+        row.MayLackColumns = MayLackColumns;
         row.DataQualityReplayProvenance = includeReplayProvenance && DataQualityReplayProvenance is not null
             ? DataQualityReplayProvenance with { SourceRow = DataQualityReplayProvenance.SourceRow.CloneWithoutReplayProvenance() }
             : null;
@@ -689,22 +698,6 @@ public class DataTable
                     throw new Core.Common.Exceptions.ExecutionException($"Foreign key violation: {constraint.Name ?? "unnamed"} (values: {vals})");
                 }
             }
-        }
-
-        ValidateSynchronousConstraints(row);
-        IncrementRowsAdded();
-        Rows.Add(row);
-    }
-
-    [Obsolete("Use AddRowAsync to ensure all constraints (CHECK, FOREIGN KEY) are validated.")]
-    public void AddRow(Row row)
-    {
-        PrepareRowForAdd(row);
-
-        if (AnyConstraintRequiresAsyncValidation())
-        {
-            throw new Core.Common.Exceptions.ExecutionException(
-                "DataTable.AddRow cannot validate CHECK or FOREIGN KEY constraints synchronously. Use AddRowAsync.");
         }
 
         ValidateSynchronousConstraints(row);

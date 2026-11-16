@@ -260,7 +260,13 @@ public class GatewayResourceDiscoveryAndBindingTests : IClassFixture<PortalWebFa
         using (var scope = _factory.Services.CreateScope())
         {
             var catalog = scope.ServiceProvider.GetRequiredService<PortalConnectionCatalogService>();
-            var resolved = await catalog.ResolveDefinitionAsync(alias);
+            var adminIdentity = new ETL_SQL.Core.Governance.ExecutionIdentity
+            {
+                EffectiveUser = "admin",
+                RealUser = "admin",
+                IsAdmin = true
+            };
+            var resolved = await catalog.ResolveDefinitionAsync(alias, adminIdentity);
             Assert.Equal("MSSQL", resolved.ConnectorType);
             Assert.NotNull(resolved.Gateway);
             Assert.Equal(gatewayId, resolved.Gateway.GatewayId);

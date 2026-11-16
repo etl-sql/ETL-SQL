@@ -33,6 +33,8 @@ export async function verifySourceOnlyPreparation({ root = defaultRoot, toolchai
         throw new Error('Browser ownership inventory is missing. Run node scripts/sync-assets.js first.');
     const before = readOwnership(root);
     if (before.version !== 2) throw new Error('Browser ownership inventory has no output hashes. Run node scripts/sync-assets.js first.');
+    // Regenerating zero outputs would pass while proving nothing.
+    if (before.outputs.length === 0) throw new Error('Browser ownership inventory lists no outputs. Run node scripts/sync-assets.js first.');
     const saved = new Map();
     for (const owner of before.outputs) {
         const file = safeAssetPath(root, owner.path);

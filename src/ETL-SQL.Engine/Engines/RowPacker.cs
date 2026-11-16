@@ -29,6 +29,7 @@ internal sealed class RowPacker
     private const byte TDateTime = 4;
     private const byte TString = 5;
     private const byte TJson = 6;
+    private const byte TDateOnly = 7;
 
     // Reused across rows in a single (sequential) build so packing doesn't allocate a stream per row;
     // only the returned byte[] (the retained blob) is freshly allocated.
@@ -133,6 +134,10 @@ internal sealed class RowPacker
                 w.Write(dt.Ticks);
                 w.Write((byte)dt.Kind);
                 break;
+            case DateOnly dOnly:
+                w.Write(TDateOnly);
+                w.Write(dOnly.DayNumber);
+                break;
             case string s:
                 w.Write(TString);
                 w.Write(s);
@@ -170,6 +175,7 @@ internal sealed class RowPacker
                     var kind = (DateTimeKind)r.ReadByte();
                     return new DateTime(ticks, kind);
                 }
+            case TDateOnly: return DateOnly.FromDayNumber(r.ReadInt32());
             case TString: return r.ReadString();
             case TJson:
                 {

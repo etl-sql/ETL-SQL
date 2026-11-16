@@ -18,6 +18,7 @@ try {
   fs.mkdirSync(path.join(fixture, 'scripts'), { recursive: true });
   fs.copyFileSync(path.join(repo, 'scripts/generate-third-party-inventory.js'),
     path.join(fixture, 'scripts/generate-third-party-inventory.js'));
+  fs.copyFileSync(path.join(repo, 'scripts/actionlint-lock.json'), path.join(fixture, 'scripts/actionlint-lock.json'));
   write('scripts/codemirror/package-lock.json', { packages: { '': { dependencies: {} } } });
   write('src/etl-sql-vscode/package.json', { devDependencies: { glob: '^13.0.6' } });
   const lock = { packages: { 'node_modules/glob': { version: '13.0.6', license: 'BlueOak-1.0.0' } } };

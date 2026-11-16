@@ -54,7 +54,7 @@ namespace ETL_SQL.Tests.Reporting
         /// Each call produces an independent provider so singletons (EvaluatorComponentRegistry,
         /// ReportRegistry, FunctionRegistry, …) are never shared across scopes or evaluations.
         /// </summary>
-        private static ServiceProvider BuildScopeProvider()
+        internal static ServiceProvider BuildScopeProvider()
         {
             var logger = NullLogger.Instance;
             var security = new SecurityService(logger) { IsTestMode = true };

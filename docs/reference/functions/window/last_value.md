@@ -8,6 +8,7 @@ Returns the last value in the current window frame.
 LAST_VALUE(expression) OVER (
   [PARTITION BY partition_expression [, ...]]
   ORDER BY sort_expression [ASC|DESC] [, ...]
+  [frame_clause]
 )
 ```
 
@@ -27,7 +28,8 @@ If the last row's expression value is `NULL`, `LAST_VALUE` returns `NULL`.
 
 ## Remarks
 
-- `LAST_VALUE` depends on the active window frame. If results look like the current row instead of the final partition row, check the frame behavior in the query syntax reference.
+- `LAST_VALUE` reads the window frame. With `ORDER BY` and no frame clause the frame is `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`, so `LAST_VALUE` returns the value of the current row's last peer, which is usually the current row itself.
+- To get the last value of the whole partition, write the frame: `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`.
 - Use deterministic tie-breakers when duplicate sort keys are possible.
 - Use [`FIRST_VALUE`](first_value.md) for the first value in the frame.
 
@@ -40,6 +42,7 @@ SELECT
   LAST_VALUE(order_date) OVER (
     PARTITION BY customer_id
     ORDER BY order_date
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
   ) AS latest_order_date
 FROM #orders;
 ```

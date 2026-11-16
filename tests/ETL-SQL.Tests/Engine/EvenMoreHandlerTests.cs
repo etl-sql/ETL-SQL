@@ -432,8 +432,8 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = await RunAndGet(
                 "CREATE DATASET &myds AS (SELECT 1 AS n);" +
-                "SELECT * FROM #myds;");
-            Assert.NotNull(eval.LastResult);
+                "SELECT * FROM &myds;");
+            Assert.Single(eval.LastResult!.Rows);
         }
 
         [Fact]
@@ -441,8 +441,8 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = await RunAndGet(
                 "CREATE DATASET &myds2 TTL = '1h' AS (SELECT 1 AS n);" +
-                "SELECT * FROM #myds2;");
-            Assert.NotNull(eval.LastResult);
+                "SELECT * FROM &myds2;");
+            Assert.Single(eval.LastResult!.Rows);
         }
 
         [Fact]

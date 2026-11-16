@@ -8,10 +8,10 @@ Aliases: `EMAIL`
 
 | Option | Description | Mandatory |
 | :--- | :--- | :---: |
-| `PORT` | SMTP server port (default: `25`) | No |
+| `PORT` | SMTP server port (default: `587`) | No |
 | `USERNAME` | Authentication username | No |
 | `PASSWORD` | Authentication password | No |
-| `USE_SSL` | Enable TLS/SSL (`TRUE`/`FALSE`, default: `FALSE`) | No |
+| `USE_SSL` | Require TLS (`TRUE`/`FALSE`, default: `FALSE`). `TRUE` uses implicit TLS on port 465 and required STARTTLS on any other port; `FALSE` uses STARTTLS only when the server offers it | No |
 | `DEFAULT_FROM` | Default sender address when `FROM` is omitted in `SEND EMAIL` | No |
 
 The host is supplied as the traditional connection-string argument (e.g. `SMTP('smtp.example.com', …)`).
@@ -40,7 +40,7 @@ SEND EMAIL
 ## Troubleshooting
 
 - **Authentication Failed**: For Office 365 / Gmail, use App Passwords or OAuth2 relay.
-- **TLS Handshake Error**: Set `USE_SSL=TRUE` or port 587 for STARTTLS.
+- **TLS Handshake Error**: With `USE_SSL=TRUE`, use port 465 for implicit TLS or 587 for STARTTLS; a server that offers neither needs `USE_SSL=FALSE`.
 
 ## References
 

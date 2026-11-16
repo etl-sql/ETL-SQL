@@ -26,9 +26,11 @@ internal class FuzzyJoinEngine(IExecutionContext context, ILogger logger)
 {
     private const string ScoreColumn = "__score";
 
-    public async Task<List<Row>> PerformFuzzyJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join)
+    public async Task<List<Row>> PerformFuzzyJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join, OuterJoinShape shape)
     {
         bool isLeft = join.JoinType.StartsWith("LEFT", StringComparison.OrdinalIgnoreCase);
+        if (leftRows.Count > 0) shape.SeeLeft(leftRows[0]);
+        if (rightRows.Count > 0) shape.SeeRight(rightRows[0]);
 
         // Detect the similarity expression and right-side column for blocking
         var scoreExpr = ExtractScoreExpression(join.Condition);
@@ -95,7 +97,7 @@ internal class FuzzyJoinEngine(IExecutionContext context, ILogger logger)
             {
                 if (isLeft)
                 {
-                    var unmatched = left.Clone();
+                    var unmatched = shape.Unmatched(left);
                     unmatched[ScoreColumn] = null;
                     result.Add(unmatched);
                 }
@@ -146,6 +148,7 @@ internal class FuzzyJoinEngine(IExecutionContext context, ILogger logger)
     private static Row CombineRows(Row left, Row right)
     {
         var r = left.Clone();
+        r.MayLackColumns = left.MayLackColumns || right.MayLackColumns;
         r.DataQualityReplayProvenance = left.DataQualityReplayProvenance;
         right.ForEachColumn((k, v) => r[k] = v);
         // Expand schema aliases (e.g. "b.name") so qualified column references in the ON

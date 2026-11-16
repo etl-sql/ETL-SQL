@@ -111,8 +111,14 @@ etl-sql admin restore --from data.zip --keys keys.zip --expected-tenant tenant-a
 Validation checks that the two archives are a matching pair (same backup id), that the data archive's
 at-rest key version is present in the keys archive, that every file matches its recorded checksum, and
 that the backup was **not** produced by a newer release than the restoring binary. Restore
-reconstructs the on-disk layout and re-injects the secrets into the restored `appsettings.json`; on the
-next portal start, pending migrations apply automatically. Dataset caches referenced by **absolute**
+reconstructs the on-disk layout and re-injects the secrets. The ones the installers manage (JWT secret,
+dataset at-rest keys, Orchestrator API keys and identity signing secret, first-run password) go into
+`appsettings.secrets.json`, the rest into `appsettings.json`. Copy **both** files into place: on an
+installed host the existing `appsettings.secrets.json` overrides `appsettings.json` and survives
+upgrades, so restoring only `appsettings.json` would leave the old keys in use and the restored dataset
+caches unreadable. Give the copied secrets file the installer's permissions (`640 root:etlsql` on
+Linux; Administrators and SYSTEM only on Windows). On the next portal start, pending migrations apply
+automatically. Dataset caches referenced by **absolute**
 path in the catalog must be restored to their original `DatasetRootPath` (or re-materialized) — see
 [versioned upgrades and rollback](../portal/report-versioning-and-promotion.md#in-place-upgrades).
 The optional `--report` path writes a machine-readable recovery report containing the backup id,

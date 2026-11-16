@@ -178,7 +178,7 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
         IExecutionContext context,
         ReplayQuarantineStatement stmt)
     {
-        var source = await context.ResolveDataSourceAsync(stmt.QuarantineTable);
+        var source = await context.ResolveReadSourceAsync(stmt.QuarantineTable);
         await foreach (var batch in source.ReadBatches(context.EffectiveBatchSize, context.CancellationToken))
         {
             if (!batch.Rows.Any(row => string.Equals(
@@ -233,7 +233,7 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
         Core.Data.QuarantineReplayManifest manifest)
     {
         long count = 0;
-        var source = await context.ResolveDataSourceAsync(table);
+        var source = await context.ResolveReadSourceAsync(table);
         var replaySource = new InMemoryDataSource
         {
             Validator = context as IDataValidator,

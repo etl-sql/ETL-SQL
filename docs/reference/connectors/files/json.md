@@ -8,9 +8,9 @@ Document extraction with JSONPath addressing for nested data. When querying a `J
 | Option | Description | Mandatory |
 | :--- | :--- | :---: |
 | `PATH` | Absolute path to the file | Yes (structured) |
-| `ROOT_PATH` | JSONPath to the root data array (e.g. `$.data.orders`) | No |
+| `ROOT_PATH` | Dot path to the data array when reading (`$.data.orders` or `data.orders`). Writes through a `ROOT_PATH` connection are refused | No |
 | `ENCODING` | Character encoding (default: `UTF8`) | No |
-| `COMPRESS` | `ON`/`OFF` — transparent GZip support | No |
+| `COMPRESS` | `ON`/`OFF` — store the file as a ZIP archive (one entry); `.zip` is added to the path if it does not end in `.zip` | No |
 | `ENCRYPT` | `ON`/`OFF` — AES file encryption (default: `OFF`) | No |
 | `PASSWORD` | Password for encryption/decryption (required if `ENCRYPT=ON`) | Conditional |
 | `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |
@@ -29,7 +29,7 @@ JSON file operations use local file system permissions or storage connector cred
 CREATE CONNECTION json_src AS JSON('C:\Data\orders.json', ROOT_PATH='$.data.orders');
 
 -- Compressed JSON
-CREATE CONNECTION json_gz AS JSON(PATH='C:\Data\events.json.gz', COMPRESS=ON);
+CREATE CONNECTION json_zip AS JSON(PATH='C:\Data\events.json.zip', COMPRESS=ON);
 ```
 
 ## Troubleshooting

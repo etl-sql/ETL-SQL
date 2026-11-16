@@ -120,12 +120,55 @@ builder.Services.AddEtlSqlEngine(builder.Configuration);
 
 var app = builder.Build();
 
+// The Player listens on loopback with no sign-in, so a web page in the same browser must not be able
+// to drive it. A rebinding attack arrives with the attacker's host name, so only loopback hosts are
+// served; a cross-site request carries a foreign Origin; and a form or no-cors fetch cannot send
+// application/json, which every runtime POST does.
+app.Use(async (ctx, next) =>
+{
+    var host = ctx.Request.Host.Host;
+    if (!(host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || host == "127.0.0.1" || host == "[::1]"))
+    {
+        ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+        return;
+    }
+    var origin = ctx.Request.Headers.Origin.ToString();
+    if (origin.Length > 0
+        && !(Uri.TryCreate(origin, UriKind.Absolute, out var originUri)
+             && string.Equals(originUri.Authority, ctx.Request.Host.Value, StringComparison.OrdinalIgnoreCase)))
+    {
+        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+    if (HttpMethods.IsPost(ctx.Request.Method)
+        && !(ctx.Request.ContentType ?? "").StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
+    {
+        ctx.Response.StatusCode = StatusCodes.Status415UnsupportedMediaType;
+        return;
+    }
+    await next();
+});
+
 // Disable browser caching for all responses (static files and API alike) to prevent stale report data.
 app.Use(async (ctx, next) =>
 {
     ctx.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
     ctx.Response.Headers["Pragma"] = "no-cache";
     ctx.Response.Headers["Expires"] = "0";
+    await next();
+});
+
+// The guard above cannot see a cross-site GET: <img src="/api/refresh"> sends no Origin, yet
+// GET /api/manifest?@p=... and GET /api/refresh change the shared session. Browsers mark such a
+// request with Sec-Fetch-Site, so refuse API requests that are not same-origin or user-initiated.
+// Non-browser local clients send no Sec-Fetch-Site header.
+app.Use(async (ctx, next) =>
+{
+    if (!IsTrustedLocalRequest(ctx.Request))
+    {
+        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
     await next();
 });
 
@@ -204,7 +247,7 @@ if (multiMode)
         var body = await JsonSerializer.DeserializeAsync<ParameterUpdateRequest>(ctx.Request.Body, webOptions);
         if (body == null || string.IsNullOrWhiteSpace(body.Name))
             return Results.BadRequest("name is required");
-        return BrowserManifest(await svc.SetParameterAsync(body.Name, body.Value ?? ""));
+        return BrowserManifest(await svc.SetParameterAsync(body.Name, body.Value ?? "", body.IsInteraction));
     });
 
     app.MapPost("/reports/{name}/api/parameters",
@@ -329,7 +372,7 @@ else
         var body = await JsonSerializer.DeserializeAsync<ParameterUpdateRequest>(ctx.Request.Body, webOptions);
         if (body == null || string.IsNullOrWhiteSpace(body.Name))
             return Results.BadRequest("name is required");
-        return BrowserManifest(await svc.SetParameterAsync(body.Name, body.Value ?? ""));
+        return BrowserManifest(await svc.SetParameterAsync(body.Name, body.Value ?? "", body.IsInteraction));
     });
 
     app.MapPost("/api/parameters", async (HttpContext ctx, DashboardService svc) =>
@@ -358,6 +401,14 @@ else
         if (body == null || string.IsNullOrWhiteSpace(body.BookmarkName))
             return Results.BadRequest("bookmarkName is required");
         return BrowserManifest(await svc.ApplyBookmarkAsync(body.BookmarkName));
+    });
+
+    app.MapPost("/api/run-script", async (HttpContext ctx, DashboardService svc) =>
+    {
+        var body = await JsonSerializer.DeserializeAsync<RunScriptRequest>(ctx.Request.Body, webOptions);
+        if (body == null || string.IsNullOrEmpty(body.ScriptPath)) return Results.BadRequest("ScriptPath is required");
+        var result = await svc.RunScriptAsync(body.ScriptPath, body.Parameters ?? new());
+        return Results.Json(new { message = result.Message, refresh = result.Refresh }, noCache);
     });
 
     app.MapPost("/api/drill", async (HttpContext ctx, DashboardService svc) =>
@@ -433,7 +484,7 @@ app.MapGet("/maps/custom", async (HttpContext ctx) =>
         return Results.BadRequest("Map path must be relative");
 
     if (!SafePath.TryResolveWithinRoot(baseDir, rawPath, out var fullPath))
-        return Results.Forbid();
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
 
     if (!File.Exists(fullPath))
         return Results.NotFound($"Map file not found: {Path.GetFileName(fullPath)}");
@@ -465,7 +516,7 @@ if (multiMode)
             return Results.BadRequest("Map path must be relative");
 
         if (!SafePath.TryResolveWithinRoot(svc.ScriptDirectory, rawPath, out var fullPath))
-            return Results.Forbid();
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
 
         if (!File.Exists(fullPath))
             return Results.NotFound($"Map file not found: {Path.GetFileName(fullPath)}");
@@ -630,8 +681,7 @@ static string GetDashboardHtml(ReportManifest manifest, string staleBanner)
         "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n" +
         "<meta charset=\"UTF-8\">\n" +
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
-        "<title>" + title + "</title>\n" +
-        "<title>" + title + "</title>\n" +
+        "<title>" + WebUtility.HtmlEncode(title) + "</title>\n" +
         "<link rel=\"stylesheet\" href=\"/report-runtime.css\">\n</head>\n<body>\n" +
         staleBanner + "\n" +
         "<div id=\"root\"></div>\n" +
@@ -641,6 +691,24 @@ static string GetDashboardHtml(ReportManifest manifest, string staleBanner)
         "<script src=\"/feedback.js\"></script>\n" +
         "<script type=\"module\" src=\"/report-runtime.js\"></script>\n" +
         "</body>\n</html>";
+}
+
+static bool IsTrustedLocalRequest(HttpRequest request)
+{
+    // Host (DNS rebinding) and Origin are checked by the first middleware. Pages and assets may be opened from anywhere; only the API changes or returns session state.
+    var path = request.Path.Value ?? "";
+    var isApi = path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)
+        || (path.StartsWith("/reports/", StringComparison.OrdinalIgnoreCase)
+            && path.Contains("/api/", StringComparison.OrdinalIgnoreCase));
+    if (!isApi) return true;
+
+    var fetchSite = request.Headers["Sec-Fetch-Site"].ToString();
+    if (fetchSite.Length > 0
+        && !fetchSite.Equals("same-origin", StringComparison.OrdinalIgnoreCase)
+        && !fetchSite.Equals("none", StringComparison.OrdinalIgnoreCase))
+        return false;
+
+    return true;
 }
 
 static string BuildAbsoluteUrl(HttpContext ctx, string path)
@@ -665,8 +733,7 @@ static string GetDashboardShellHtml(string reportName, string? description, stri
         "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n" +
         "<meta charset=\"UTF-8\">\n" +
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
-        "<title>" + reportName + " — ETL-SQL</title>\n" +
-        "<title>" + reportName + " — ETL-SQL</title>\n" +
+        "<title>" + WebUtility.HtmlEncode(reportName) + " — ETL-SQL</title>\n" +
         "<link rel=\"stylesheet\" href=\"/report-runtime.css\">\n</head>\n<body>\n" +
         staleBanner + "\n" +
         "<div id=\"root\"></div>\n" +
@@ -702,8 +769,8 @@ static string GetCatalogHtml(IReadOnlyList<ReportEntry> reports)
         foreach (var r in reports)
         {
             var href = "/reports/" + WebUtility.UrlEncode(r.Name);
-            var desc = r.Description != null ? "<p>" + r.Description + "</p>" : "";
-            cards.Append($"<a href=\"{href}\" class=\"catalog-card\"><h2>{r.Name}</h2>{desc}</a>");
+            var desc = r.Description != null ? "<p>" + WebUtility.HtmlEncode(r.Description) + "</p>" : "";
+            cards.Append($"<a href=\"{href}\" class=\"catalog-card\"><h2>{WebUtility.HtmlEncode(r.Name)}</h2>{desc}</a>");
         }
         cards.Append("</div>");
     }

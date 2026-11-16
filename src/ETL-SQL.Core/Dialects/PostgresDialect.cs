@@ -7,6 +7,8 @@ public class PostgresDialect : DefaultSqlDialect
 {
     public override string Name => "POSTGRES";
 
+    public override bool SupportsNullsOrdering => true;
+
     public override string RewriteIdentifier(string name)
     {
         var upper = name.ToUpperInvariant();

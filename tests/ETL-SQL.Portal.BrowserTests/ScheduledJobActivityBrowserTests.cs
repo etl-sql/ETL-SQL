@@ -13,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Playwright;
+using Xunit.Abstractions;
 using static Microsoft.Playwright.Assertions;
 
 namespace ETL_SQL.Portal.BrowserTests;
@@ -33,9 +34,14 @@ public sealed partial class ScheduledJobActivityBrowserTests : IAsyncLifetime
     private const string LeaseOwner = "browser-fixture";
     private readonly ActivityOrchestratorFactory orchestrator = new();
     private readonly PortalBrowserFixture browser;
+    private readonly ITestOutputHelper output;
     private SQLiteJobHistoryStore Store => orchestrator.Services.GetRequiredService<SQLiteJobHistoryStore>();
 
-    public ScheduledJobActivityBrowserTests() => browser = new(new ActivityPortalFactory(orchestrator));
+    public ScheduledJobActivityBrowserTests(ITestOutputHelper output)
+    {
+        this.output = output;
+        browser = new(new ActivityPortalFactory(orchestrator));
+    }
 
     public async Task InitializeAsync()
     {
@@ -225,11 +231,11 @@ public sealed partial class ScheduledJobActivityBrowserTests : IAsyncLifetime
             OrchestratorObjectPermission.Read, "user:admin"));
         await using var session = await browser.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync("/login.html");
+        await page.GotoWithDiagnosticsAsync("/login.html");
         await page.FillAsync("#username", "activity-reader");
         await page.FillAsync("#password", "Activity@Reader99!");
         await page.ClickAsync("#loginBtn");
-        await page.WaitForURLAsync("**/index.html");
+        await page.WaitForURLWithDiagnosticsAsync("**/index.html");
         await OpenAsync(page);
         await Expect(Rows(page)).ToHaveCountAsync(1);
         await Expect(Rows(page)).ToContainTextAsync("activity-complete");
@@ -323,13 +329,19 @@ public sealed partial class ScheduledJobActivityBrowserTests : IAsyncLifetime
 
     private static async Task OpenAsync(IPage page)
     {
-        await page.GotoAsync("/orchestrator.html");
+        await page.GotoWithDiagnosticsAsync("/orchestrator.html");
         await Expect(page.Locator("#statusLabel")).ToHaveTextAsync("Online");
         await Expect(page.Locator("#jobsTableWrap")).ToHaveAttributeAsync("aria-busy", "false");
     }
 
-    private static void AssertClean(BrowserSession session)
+    private void AssertClean(BrowserSession session)
     {
+        if (session.PageErrors.Count != 0 || session.ConsoleErrors.Count != 0 || session.FailedRequests.Count != 0)
+        {
+            output.WriteLine("Page errors:{0}{1}", Environment.NewLine, string.Join(Environment.NewLine, session.PageErrors));
+            output.WriteLine("Console errors:{0}{1}", Environment.NewLine, string.Join(Environment.NewLine, session.ConsoleErrors));
+            output.WriteLine("Failed HTTP requests:{0}{1}", Environment.NewLine, string.Join(Environment.NewLine, session.FailedRequests));
+        }
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
         Assert.Empty(session.FailedRequests);

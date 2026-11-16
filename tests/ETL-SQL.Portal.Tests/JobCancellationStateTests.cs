@@ -56,6 +56,6 @@ public sealed class JobCancellationStateTests
     private static bool Finish(object entry, string outcome)
     {
         var method = EntryType.GetMethod("TryFinish")!;
-        return (bool)method.Invoke(entry, [Enum.Parse(method.GetParameters()[0].ParameterType, outcome)])!;
+        return (bool)method.Invoke(entry, [Enum.Parse(method.GetParameters()[0].ParameterType, outcome), null, null])!;
     }
 }

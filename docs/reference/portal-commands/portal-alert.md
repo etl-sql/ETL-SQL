@@ -1,14 +1,16 @@
-# Portal Report Alerts
+# ALERT
+
+Create portal alert definitions through a `PORTAL` connection. Delivery uses named Orchestrator notification attachments.
+
 <!-- CreatePortalAlertStatement -->
 <!-- AlterPortalAlertNotificationStatement -->
 <!-- AlterPortalAlertStatement -->
 <!-- DropPortalAlertStatement -->
 <!-- SetPortalAlertEnabledStatement -->
 <!-- ShowPortalAlertsStatement -->
-Create portal alert definitions through a `PORTAL` connection.
 
 ## Syntax
-```text
+```sql
 CREATE [OR REPLACE | OR ALTER] ALERT AlertName
   FOR REPORT '/Folder/ReportName'
   WHEN VISUAL VisualName >= 1000
@@ -39,13 +41,15 @@ END;
 ```
 
 ## Notes
-- Alert names and visual names are identifiers. Report names remain string paths.
-- Delivery is attached through named Orchestrator notifications; inline `DELIVER TO ... AT ...`
+- **Names** — Alert names and visual names are identifiers. Report names remain string paths.
+- **Delivery** — Attach named Orchestrator notifications; inline `DELIVER TO ... AT ...`
   on `CREATE ALERT` is retired.
-- New alerts are enabled by default. Use `DISABLE ALERT` to pause one.
-- Configuration import uses alert name as its stable key. Replay updates drifted definitions and skips
+- **HTTP contract** — Alert responses omit `recipient` and `smtpAlias`. Create/update requests reject these fields, including explicit nulls, and other unknown fields. Use notification attachment operations for delivery.
+- **Initial state** — New alerts are enabled by default. Use `DISABLE ALERT` to pause one.
+- **Configuration import** — Alert name is the stable key. Replay updates drifted definitions and skips
   equal definitions.
 
-References:
-- [Data Connectors](../../administration/platform/README.md)
+## References
+
+- [Data Connectors](../connectors/README.md)
 - [Portal Admin Commands](README.md)

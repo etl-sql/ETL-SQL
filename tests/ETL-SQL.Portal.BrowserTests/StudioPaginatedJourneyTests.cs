@@ -39,7 +39,7 @@ public sealed class StudioPaginatedJourneyTests(StudioAuthoringFixture fixture)
         await CreateSharedConnectionAsync(page, alias);
         var reportId = await CreateReportAsync(page, alias);
 
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await WaitForStudioAsync(page);
 
         // The workflow bar only appears once Studio knows this is a paginated report. The seeded

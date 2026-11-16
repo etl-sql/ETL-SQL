@@ -1036,17 +1036,9 @@ namespace ETL_SQL.App
             };
             editSubcommand.SetAction(context => Dispatch(context, "ui-edit", handler));
 
-            var oldSubcommand = new Command("old", "Start the legacy Spectre-based console editor")
-            {
-                new Argument<string?>("file") { Description = "Optional file to pre-load", Arity = ArgumentArity.ZeroOrOne },
-                BatchSizeOption, VerboseOption
-            };
-            oldSubcommand.SetAction(context => Dispatch(context, "ui-old", handler));
-
             uiCommand.Add(replSubcommand);
             uiCommand.Add(simpleSubcommand);
             uiCommand.Add(editSubcommand);
-            uiCommand.Add(oldSubcommand);
 
             // 7. DOCTOR Command (Health Check)
             var doctorCommand = BuildDoctorCommand(handler);
@@ -2114,7 +2106,7 @@ namespace ETL_SQL.App
             }
             else if (commandName.StartsWith("ui-"))
             {
-                cliContext.UiMode = commandName.Substring(3); // "repl", "simple", "edit", "old"
+                cliContext.UiMode = commandName.Substring(3); // "repl", "simple", "edit"
                 // Check if there was a positional file argument
                 var fileResult = res.CommandResult.Children.OfType<ArgumentResult>().FirstOrDefault(a => a.Argument.Name == "file");
                 if (fileResult != null)

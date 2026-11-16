@@ -411,9 +411,6 @@ public sealed class ConfigurationExportService(
                     $"    ALTER ALERT {Ident(a.Name)} ADD NOTIFICATION {Ident(notification.OrchestratorAlias)}.{Ident(notification.NotificationName)};");
             if (!a.IsActive)
                 body.AppendLine($"    DISABLE ALERT {Ident(a.Name)};");
-            if (!string.IsNullOrWhiteSpace(a.Recipient) || !string.IsNullOrWhiteSpace(a.SmtpAlias))
-                skipped.Add(
-                    $"alert '{a.Name}': legacy inline recipient/SMTP fields were not exported; create a NOTIFICATION and attach it");
         }
         emitted.Add($"{alertCount} alert(s)");
 

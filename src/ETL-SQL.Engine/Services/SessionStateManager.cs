@@ -138,8 +138,9 @@ public class SessionStateManager : ISessionStateManager
             await store.SaveConnectionsAsync(connections);
 
             // 4. Save Docker State
-            var dockerStrings = evaluator.DockerManager.GetState();
-            var dockerLast = evaluator.DockerManager.LastConnectionString;
+            var dockerScope = DockerScope.For(evaluator);
+            var dockerStrings = evaluator.DockerManager.GetState(dockerScope);
+            var dockerLast = evaluator.DockerManager.GetLastConnectionString(dockerScope);
             await store.SaveDockerStateAsync(dockerLast, dockerStrings);
 
             // 6. Save Temp Tables

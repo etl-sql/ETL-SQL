@@ -29,7 +29,7 @@ public sealed partial class StudioKeyboardJourneyTests(StudioAuthoringFixture fi
         var authorId = await SignInAsPublisherAsync(page);
         var folderId = await CreateWritableFolderAsync(authorId);
 
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         await WaitForStudioAsync(session);
 
         // Verify Studio opened on the Home view.
@@ -200,7 +200,7 @@ public sealed partial class StudioKeyboardJourneyTests(StudioAuthoringFixture fi
         Assert.Equal(NormalizeEndings(validScript), NormalizeEndings(savedContent));
 
         // Reload the browser with the report query param and verify the document survives reload with identical script.
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await WaitForStudioAsync(session);
 
         var reloadedScript = await page.EvaluateAsync<string>(
@@ -234,7 +234,7 @@ public sealed partial class StudioKeyboardJourneyTests(StudioAuthoringFixture fi
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token={token}");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token={token}");
         await WaitForStudioAsync(session);
 
         // Verify Studio opened on the Home view.
@@ -467,7 +467,7 @@ public sealed partial class StudioKeyboardJourneyTests(StudioAuthoringFixture fi
         const string count = ".etlsql-dsgn-visual-card[data-vid*='UserCount']";
         const string table = ".etlsql-dsgn-visual-card[data-vid*='UsersTable']";
 
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await WaitForStudioAsync(session);
         await page.Locator(table).WaitForAsync(new() { Timeout = 20_000 });
         Assert.Equal("1/1/6/4", await PlacementAsync(page, "UserCount"));
@@ -536,7 +536,7 @@ public sealed partial class StudioKeyboardJourneyTests(StudioAuthoringFixture fi
             """, reportId);
         Assert.Contains("STRUCTURE = 'A / B .'", saved, StringComparison.Ordinal);
 
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await WaitForStudioAsync(session);
         await page.Locator(table).WaitForAsync(new() { Timeout = 20_000 });
         Assert.Equal("1/1/12/4", await PlacementAsync(page, "UserCount"));
@@ -582,11 +582,11 @@ public sealed partial class StudioKeyboardJourneyTests(StudioAuthoringFixture fi
             Assert.Equal("Publisher", Assert.Single(await users.GetRolesAsync(user)));
             userId = user.Id;
         }
-        await page.GotoAsync("/login.html");
+        await page.GotoWithDiagnosticsAsync("/login.html");
         await page.FillAsync("#username", name);
         await page.FillAsync("#password", password);
         await page.ClickAsync("#loginBtn");
-        await page.WaitForURLAsync("**/index.html");
+        await page.WaitForURLWithDiagnosticsAsync("**/index.html");
         return userId;
     }
 

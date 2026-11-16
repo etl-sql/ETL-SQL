@@ -7,6 +7,7 @@ using ETL_SQL.Core.Formatting;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Portal.Controllers;
 using ETL_SQL.Portal.Models;
+using ETL_SQL.Portal.Services;
 using ETL_SQL.Reporting.Authoring;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -30,6 +31,33 @@ public class DesignerControllerTests
 
         Assert.Contains("Region = 'North'", response.Source, StringComparison.Ordinal);
         Assert.StartsWith("(SELECT * FROM #sales", response.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Analyze_DoesNotReadRunScriptDependenciesFromTheServerDisk()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "designer-preflight-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var other = Path.Combine(dir, "other-tenant.etlsql");
+            await File.WriteAllTextAsync(other, "PRINT @tenant_secret_variable;");
+
+            var response = await new DesignerAnalysisService().AnalyzeAsync(
+                $"RUN SCRIPT '{other.Replace('\\', '/')}';", null, 1000, null);
+
+            Assert.DoesNotContain(response.Diagnostics, d =>
+                d.Message.Contains("tenant_secret_variable", StringComparison.OrdinalIgnoreCase)
+                || d.Message.Contains("other-tenant", StringComparison.OrdinalIgnoreCase));
+            Assert.False(LinterFactory.CreateWithAllRules(readDependencyFiles: false)
+                .HasRuleOfType(typeof(ETL_SQL.Analysis.Linting.Rules.RunScriptDependencyPreflightRule)));
+            Assert.True(LinterFactory.CreateWithAllRules()
+                .HasRuleOfType(typeof(ETL_SQL.Analysis.Linting.Rules.RunScriptDependencyPreflightRule)));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
     }
 
     [Fact]

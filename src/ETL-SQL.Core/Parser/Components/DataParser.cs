@@ -261,7 +261,7 @@ public class DataParser : ParserComponent
             RejectUnsupportedCreateIfNotExists("DIRECTORY");
             var path = ParseExpression();
             Expression? overwrite = null;
-            if (Match(TokenType.WITH)) overwrite = ParseWithOverwrite();
+            if (Match(TokenType.WITH)) overwrite = ParseWithOptions("CREATE DIRECTORY", "OVERWRITE").GetValueOrDefault("OVERWRITE");
             string? connectionName = null;
             if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
             Match(TokenType.SEMICOLON);
@@ -730,12 +730,7 @@ public class DataParser : ParserComponent
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropSetsStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
         }
-        // CHART is a legacy alias for VISUAL. It is tested without consuming: the previous spelling
-        // was `Match(TokenType.VISUAL) || (Match(TokenType.IDENTIFIER) && …Equals("CHART"))`, where
-        // the second Match consumed *any* identifier before the value check rejected it — leaving the
-        // parser a token ahead, so every later identifier-dispatched DROP reported a syntax error
-        // pointing past the word it had already eaten.
-        else if (Match(TokenType.VISUAL) || MatchIdentifier("CHART"))
+        else if (Match(TokenType.VISUAL))
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected visual name").Value;
@@ -929,7 +924,7 @@ public class DataParser : ParserComponent
         {
             var path = ParseExpression();
             Expression? recursive = null;
-            if (Match(TokenType.WITH)) recursive = ParseWithRecursive();
+            if (Match(TokenType.WITH)) recursive = ParseWithOptions("DELETE DIRECTORY_CONTENTS", "RECURSIVE").GetValueOrDefault("RECURSIVE");
             Match(TokenType.SEMICOLON);
             return new DirectoryOperationStatement(DirectoryOpType.DeleteContents, path, null, null, recursive) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -976,8 +971,9 @@ public class DataParser : ParserComponent
         var targetTable = ParseTableReference(false);
 
         List<string>? columns = null;
-        if (Match(TokenType.LPAREN))
+        if (_parser.Current.Type == TokenType.LPAREN && !_parser.IsInsertQueryStart())
         {
+            Advance();
             columns = ParseIdentifierList();
             Consume(TokenType.RPAREN, "Expected ')' after column list");
         }

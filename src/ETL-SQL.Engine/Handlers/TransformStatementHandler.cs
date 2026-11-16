@@ -75,7 +75,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             throw new ExecutionException($"{algorithmName} algorithm requires a source table (FROM clause)");
         }
 
-        var source = await context.ResolveDataSourceAsync(stmt.SourceTable)
+        var source = await context.ResolveReadSourceAsync(stmt.SourceTable)
             ?? throw new ExecutionException($"Could not resolve source dataset: {stmt.SourceTable.TableName}");
 
         var rows = new List<Row>();
@@ -1061,7 +1061,8 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         {
             if (column.Equals(dateColumn, StringComparison.OrdinalIgnoreCase))
             {
-                row[column] = date;
+                // Keep the column's type: a DATE column holds DateOnly, DATETIME holds DateTime.
+                row[column] = template[column] is DateOnly ? DateOnly.FromDateTime(date) : date;
             }
             else if (groupColumns.Contains(column, StringComparer.OrdinalIgnoreCase))
             {
@@ -1083,7 +1084,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             return true;
         }
 
-        return DateTime.TryParse(value?.ToString(), out date);
+        return EvaluationUtils.TryToDateTime(value, out date);
     }
 
     private static object? GetValue(object? val)
@@ -1097,6 +1098,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         var v = GetValue(val);
         if (v == null) return 0m;
         if (v is DateTime dt) return dt.Ticks;
+        if (v is DateOnly dateOnly) return dateOnly.ToDateTime(TimeOnly.MinValue).Ticks;
         if (decimal.TryParse(v.ToString(), out var d)) return d;
         throw new ExecutionException($"Cannot convert ORDER_COL value '{val}' to a numeric or date value for linear interpolation.");
     }

@@ -14,7 +14,7 @@ namespace ETL_SQL.Portal.Tests;
 /// P2.7 versioned upgrade-path drill. P2.5 restores into a clean location; this proves an in-place
 /// N→N+1 upgrade instead: a catalog seeded at the previous release migrates forward over live data
 /// with permissions, jobs, subscriptions-ledger schema, datasets, and audit rows intact, and the
-/// Orchestrator SQLite store upgrades a legacy Jobs schema in place without losing jobs.
+/// Orchestrator SQLite store refuses a legacy Jobs schema without losing its original jobs.
 ///
 /// "Release N" here is the migration <c>AddDurablePortalExecutionJobs</c> — the catalog state
 /// immediately before this release's two migrations (<c>AuditLogCorrelationId</c> adds a nullable
@@ -137,16 +137,16 @@ public sealed class UpgradePathDrillTests : IDisposable
     }
 
     [Fact]
-    public async Task OrchestratorJobStore_UpgradesLegacySchemaInPlace_AndPreservesJobs()
+    [Trait("CompatBreak", "0.22")]
+    public async Task OrchestratorJobStore_RefusesLegacySchema_AndPreservesOriginalJobs()
     {
         var dbPath = Path.Combine(_scratch, "etlsql_legacy.db");
 
         // ── A Jobs table from an earlier build of the current schema: the identity and the
         //    (TenantId, Name) key are there, but none of the additively-migrated columns —
         //    no MaxRetries/RetryDelaySeconds/ScriptHash/HashPolicy/LeaseOwner/LeaseExpiresAt/Version.
-        //    That is the upgrade InitializeAsync performs. It does not convert a pre-identity
-        //    database, where the name was the primary key: that needs identities minted and keys
-        //    rebuilt, and no release shipped with data in that schema. ───────────────────────────
+        //    v0.22 no longer upgrades this schema; callers must start from empty state.
+        //    Refusal must preserve the original rows for recovery. ───────────────────────────────
         await using (var conn = new SqliteConnection($"Data Source={dbPath}"))
         {
             await conn.OpenAsync();
@@ -177,34 +177,21 @@ public sealed class UpgradePathDrillTests : IDisposable
             }
         }
 
-        // A current store initializing against the legacy file adds the missing columns in place.
+        // v0.22 requires fresh Orchestrator state; startup must not silently rewrite legacy jobs.
         var store = new SQLiteJobHistoryStore(dbPath);
-        await store.InitializeAsync();
+        await Assert.ThrowsAsync<SqliteException>(() => store.InitializeAsync());
 
-        // The legacy job survives and reads back with the new columns sensibly defaulted.
-        var job = await store.GetJobAsync("legacy-job");
-        Assert.NotNull(job);
-        Assert.Equal("legacy-job", job!.Name);
-        Assert.Equal("06:00", job.AtTime);
-        Assert.True(job.IsEnabled);
-        Assert.Equal(0, job.MaxRetries);
-        Assert.Equal(30, job.RetryDelaySeconds);
-        Assert.Equal("Warn", job.HashPolicy);
-        Assert.Equal(1, job.Version);
-
-        // Idempotent: a second store re-initializing the now-upgraded file is a no-op (the column
-        // checks see the columns already present) and the job is still intact — restart-safe.
-        var store2 = new SQLiteJobHistoryStore(dbPath);
-        await store2.InitializeAsync();
-        Assert.NotNull(await store2.GetJobAsync("legacy-job"));
-
-        // The new columns are usable on the upgraded file: a normal write round-trips.
-        await store2.SaveJobAsync(new JobDefinition(
-            "legacy-job", "RUN SCRIPT 'x.etlsql';", 2, "HOUR", null, null, null,
-            IsEnabled: true, MaxRetries: 3, RetryDelaySeconds: 45, ScriptHash: null, HashPolicy: "Fail"));
-        var updated = await store2.GetJobAsync("legacy-job");
-        Assert.Equal(3, updated!.MaxRetries);
-        Assert.Equal("Fail", updated.HashPolicy);
+        await using var verification = new SqliteConnection($"Data Source={dbPath}");
+        await verification.OpenAsync();
+        using var read = verification.CreateCommand();
+        read.CommandText = "SELECT Name, Script, AtTime, IsEnabled FROM Jobs;";
+        await using var row = await read.ExecuteReaderAsync();
+        Assert.True(await row.ReadAsync());
+        Assert.Equal("legacy-job", row.GetString(0));
+        Assert.Equal("RUN SCRIPT 'x.etlsql';", row.GetString(1));
+        Assert.Equal("06:00", row.GetString(2));
+        Assert.Equal(1, row.GetInt32(3));
+        Assert.False(await row.ReadAsync());
     }
 
     private static async Task<bool> TableExistsAsync(PortalDbContext db, string table)

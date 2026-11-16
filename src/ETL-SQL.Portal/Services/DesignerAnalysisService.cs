@@ -68,7 +68,9 @@ public sealed class DesignerAnalysisService
             ValidateAstLimit(ast, maxAstStatements);
             diagnostics.AddRange(AnalysisDiagnosticBuilder.FromParserDiagnostics(ast.Diagnostics, lines));
 
-            var linter = LinterFactory.CreateWithAllRules(serviceProvider);
+            // The designer lints scripts Portal users submit; it must not read files from the
+            // server's disk on their behalf.
+            var linter = LinterFactory.CreateWithAllRules(serviceProvider, readDependencyFiles: false);
             var lintContext = new DefaultLintContext
             {
                 DocumentUri = string.IsNullOrWhiteSpace(documentUri) ? "portal-designer" : documentUri!

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
 using Xunit;
 
 namespace ETL_SQL.Tests.Reporting
@@ -41,8 +42,11 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Equal(File.ReadAllBytes(plain), File.ReadAllBytes(decrypted));
 
             var wrongOutput = Path.Combine(_root, "wrong-at-rest.dec");
-            await Assert.ThrowsAnyAsync<CryptographicException>(
+            // FO06: a wrong key is reported by name rather than as a raw CryptographicException.
+            var wrongKey = await Assert.ThrowsAsync<ExecutionException>(
                 async () => await Password("portal-at-rest-key-b").DecryptFileAsync(encrypted, wrongOutput));
+            Assert.Contains("password is wrong", wrongKey.Message);
+            Assert.False(File.Exists(wrongOutput));
         }
 
         [Fact]
@@ -60,8 +64,11 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Equal(File.ReadAllBytes(plain), File.ReadAllBytes(decrypted));
 
             var wrongOutput = Path.Combine(_root, "wrong-password.dec");
-            await Assert.ThrowsAnyAsync<CryptographicException>(
+            var wrongPassword = await Assert.ThrowsAsync<ExecutionException>(
                 async () => await Password("incorrect-transport-password").DecryptFileAsync(encrypted, wrongOutput));
+            Assert.Contains("password is wrong", wrongPassword.Message);
+            Assert.DoesNotContain("incorrect-transport-password", wrongPassword.Message);
+            Assert.False(File.Exists(wrongOutput));
         }
 
         [Fact]
@@ -84,8 +91,10 @@ namespace ETL_SQL.Tests.Reporting
                 async () => await KeyFile(Path.Combine(_root, "missing.pem")).DecryptFileAsync(encrypted, missingOutput));
 
             var wrongOutput = Path.Combine(_root, "wrong-key.dec");
-            await Assert.ThrowsAnyAsync<CryptographicException>(
+            var wrongKey = await Assert.ThrowsAsync<ExecutionException>(
                 async () => await KeyFile(wrongPrivateKey).DecryptFileAsync(encrypted, wrongOutput));
+            Assert.Contains("private key does not match", wrongKey.Message);
+            Assert.False(File.Exists(wrongOutput));
         }
 
         private string WritePlaintext()

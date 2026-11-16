@@ -99,9 +99,11 @@ function Invoke-NuGetPackageAudit {
     #    solution-level CPM NullReferenceException does not occur for single-project invocations.
     $mergedProjects = New-Object System.Collections.Generic.List[object]
     $auditedAnyProject = $false
+    $unaudited = New-Object System.Collections.Generic.List[string]
     foreach ($project in $ProjectFallback) {
         $result = & $Runner $project $Mode
         if ($result.ExitCode -ne 0) {
+            $unaudited.Add($project)
             continue
         }
         $auditedAnyProject = $true
@@ -111,6 +113,12 @@ function Invoke-NuGetPackageAudit {
         }
     }
 
+    # A project whose audit failed has unchecked packages; passing on the others would hide them.
+    if ($auditedAnyProject -and $unaudited.Count -gt 0) {
+        throw ("NuGet $Mode audit could not run for $($unaudited.Count) of $($ProjectFallback.Count) projects after " +
+            "the solution-level audit failed: $($unaudited -join ', '). The release gate cannot certify their " +
+            "dependency posture; run 'dotnet list package $Mode --include-transitive' on each and resolve the failure.")
+    }
     if ($auditedAnyProject) {
         return [PSCustomObject]@{ projects = $mergedProjects.ToArray() }
     }

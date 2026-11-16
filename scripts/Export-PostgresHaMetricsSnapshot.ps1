@@ -213,9 +213,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $snapshot = $rawJson | ConvertFrom-Json
+$captured = @($snapshot.databases | ForEach-Object { $_.datname })
+foreach ($database in @($env['PG_DB_PORTAL'], $env['PG_DB_ORCH'])) {
+    if ($captured -notcontains $database) { throw "PostgreSQL metrics capture found no database named $database." }
+}
 $report = [ordered]@{
     schemaVersion = 1
-    phase = 'v0.15.0 Phase 6'
+    phase = 'High availability soak'
     runId = $metadata.runId
     topologyMetadataPath = Get-RelativeLabel $metadataPath
     capturedAt = $snapshot.capturedAt

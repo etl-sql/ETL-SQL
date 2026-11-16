@@ -38,6 +38,36 @@ public sealed class ReleasePolicyHelperTests
     }
 
     [Theory]
+    [InlineData("0.21.0")]
+    [InlineData("0.22.0")]
+    public async Task UpgradeBaseline_IsNoneUpToTheFirstPublicRelease(string candidate)
+    {
+        var result = await RunHelper(Releases + $"\n'[' + (Select-UpgradeBaseline -CurrentVersion '{candidate}' -Releases $releases) + ']'");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Equal("[]", result.Output.Trim());
+    }
+
+    [Theory]
+    [InlineData("0.23.0", "v0.22.0")]
+    [InlineData("2.0.0", "v1.0.1")]
+    public async Task UpgradeBaseline_IsTheLatestPublicReleaseBelowTheCandidate(string candidate, string expected)
+    {
+        var result = await RunHelper(Releases + $"\n@{{tag_name='v0.22.0'; draft=$false; prerelease=$false}} | ForEach-Object {{ $releases += $_ }}\nSelect-UpgradeBaseline -CurrentVersion '{candidate}' -Releases $releases");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Equal(expected, result.Output.Trim());
+    }
+
+    [Fact]
+    public async Task UpgradeBaseline_FailsAfterTheFirstPublicReleaseWhenNoneIsListed()
+    {
+        // Only v0.19.0 and v0.20.0 precede 0.23.0 here: neither was public, and a missing baseline
+        // must fail rather than quietly certify a fresh install.
+        var result = await RunHelper(Releases + "\nSelect-UpgradeBaseline -CurrentVersion '0.23.0' -Releases $releases");
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("No public release", result.Output);
+    }
+
+    [Theory]
     [InlineData("v0.19.1", "false")]
     [InlineData("v1.0.2", "false")]
     [InlineData("v2.0.0", "true")]
@@ -81,7 +111,7 @@ public sealed class ReleasePolicyHelperTests
             $log = [IO.Path]::GetTempFileName()
             try {
                 Set-Content -LiteralPath $log -Value 'Executed phase output'
-                $phase = @{status='{{status}}'; command='same command'; log=$log; note='Skipped because prerequisite phase failed'}
+                $phase = @{status='{{status}}'; command='same command'; log=$log; completedAt=[datetimeoffset]::UtcNow.ToString('o'); note='Skipped because prerequisite phase failed'}
                 Test-PreReleasePhaseReusable -PreviousPhase $phase -Command '{{command}}'
             } finally { Remove-Item -LiteralPath $log -Force }
             """);
@@ -95,6 +125,24 @@ public sealed class ReleasePolicyHelperTests
         var result = await RunHelper("Test-PreReleasePhaseReusable -PreviousPhase @{status='Passed'; command='same command'; log='missing.log'} -Command 'same command'");
         Assert.True(result.ExitCode == 0, result.Output);
         Assert.Equal("False", result.Output.Trim());
+    }
+
+    [Theory]
+    [InlineData(-1, true)]
+    [InlineData(-8, false)]
+    [InlineData(1, false)]
+    public async Task Resume_RequiresRecentOriginalCompletion(int ageDays, bool expected)
+    {
+        var result = await RunHelper($$"""
+            $log = [IO.Path]::GetTempFileName()
+            try {
+                Set-Content -LiteralPath $log -Value 'Executed phase output'
+                $phase = @{status='Passed'; command='same'; log=$log; completedAt=[datetimeoffset]::UtcNow.AddDays({{ageDays}}).ToString('o')}
+                Test-PreReleasePhaseReusable -PreviousPhase $phase -Command 'same'
+            } finally { Remove-Item -LiteralPath $log -Force }
+            """);
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Equal(expected.ToString(), result.Output.Trim());
     }
 
     private const string PhaseRunnerFixture = """
@@ -173,11 +221,29 @@ public sealed class ReleasePolicyHelperTests
         Assert.Contains(prerequisite, result.Output);
     }
 
+    // Format verify prints nothing on a clean tree. Tee-Object creates no file for empty input, and the
+    // workstation checkpoint refuses a passed phase whose log is missing.
+    [Fact]
+    public async Task SilentPassingPhaseStillLeavesItsLog()
+    {
+        var result = await RunHelper(PhaseRunnerFixture + """
+
+            try {
+                Invoke-LoggedPhase -Name 'Silent phase' -Command 'silent' -Action { $global:LASTEXITCODE = 0 } `
+                    -PreviousPhaseMap @{} -Fingerprint $fingerprint -Results $results
+                'RESULT|' + $results[0].status + '|' + (Test-Path -LiteralPath $results[0].log -PathType Leaf)
+            } finally { Remove-PhaseFixture }
+            """);
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains("RESULT|Passed|True", result.Output);
+    }
+
     [Fact]
     public async Task PrePush_PreparesBeforeInvokingDotnetFormat()
     {
         var result = await RunHelper("""
             function node { Write-Output 'TRACE|prepare'; $global:LASTEXITCODE = 0 }
+            function Get-Content { '{"lanes":["source-preflight","build-and-test"]}' }
             function dotnet { Write-Output 'TRACE|format'; throw 'Stop at the formatting boundary' }
             $script = Join-Path (Split-Path -Parent (Get-Command Test-PreReleasePhaseReusable).ScriptBlock.File) 'Test-PrePush.ps1'
             & $script
@@ -192,7 +258,11 @@ public sealed class ReleasePolicyHelperTests
     public async Task PrePush_StopsBeforeFormatWhenPreparationFails()
     {
         var result = await RunHelper("""
-            function node { Write-Output 'TRACE|prepare'; $global:LASTEXITCODE = 7 }
+            function node {
+                Write-Output 'TRACE|prepare'
+                $global:LASTEXITCODE = if ($args[0].EndsWith('sync-assets.js')) { 7 } else { 0 }
+            }
+            function Get-Content { '{"lanes":["source-preflight","build-and-test"]}' }
             function dotnet { Write-Output 'TRACE|unexpected-format' }
             $script = Join-Path (Split-Path -Parent (Get-Command Test-PreReleasePhaseReusable).ScriptBlock.File) 'Test-PrePush.ps1'
             & $script
@@ -213,6 +283,32 @@ public sealed class ReleasePolicyHelperTests
         var result = await RunHelper($"Test-ReleaseTestOutputExecuted -Output '{literal}'");
         Assert.True(result.ExitCode == 0, result.Output);
         Assert.Equal(expected.ToString(), result.Output.Trim());
+    }
+
+    // A localized console ("Bestanden! ... erfolgreich: 16") has no English summary to match, so a
+    // lane also accepts a TRX that records passed tests (CI 42732273546).
+    [Theory]
+    [InlineData(16, true)]
+    [InlineData(0, false)]
+    public async Task TrxEvidence_ShowsExecutedTestsInAnyDisplayLanguage(int passed, bool expected)
+    {
+        Assert.Equal("False", (await RunHelper(
+            "Test-ReleaseTestOutputExecuted -Output 'Bestanden!   : Fehler:     0, erfolgreich:    16, übersprungen:     0, gesamt:    16'")).Output.Trim());
+        var result = await RunHelper($$"""
+            $path = [IO.Path]::GetTempFileName()
+            try {
+                '<TestRun><ResultSummary><Counters total="16" executed="16" passed="{{passed}}" /></ResultSummary></TestRun>' | Set-Content -LiteralPath $path
+                Test-ReleaseTrxExecuted -Path $path
+                Test-ReleaseTrxExecuted -Path ($path + '.missing')
+                $german = 'Bestanden!   : Fehler:     0, erfolgreich:    16'
+                Test-ReleaseTestExecuted -Output $german -TrxPath $path
+                Test-ReleaseTestExecuted -Output $german
+                Test-ReleaseTestExecuted -Output 'Passed! - Failed: 0, Passed: 16' -TrxPath ($path + '.missing')
+            } finally { Remove-Item -LiteralPath $path -Force }
+            """);
+        Assert.True(result.ExitCode == 0, result.Output);
+        var nl = Environment.NewLine;
+        Assert.Equal($"{expected}{nl}False{nl}{expected}{nl}False{nl}True", result.Output.Trim());
     }
 
     [Theory]

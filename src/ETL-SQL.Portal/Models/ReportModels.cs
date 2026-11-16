@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ETL_SQL.Portal.Models;
 
 public record UploadScriptRequest(string Filename, string ContentBase64);
@@ -64,8 +66,8 @@ public record ReportShareLinkDto(
     string ReportName,
     string FolderPath,
     string Name,
-    string Token,
-    string Url,
+    string? Token,
+    string? Url,
     int CreatedBy,
     DateTime CreatedAt,
     DateTime? ExpiresAt,
@@ -85,8 +87,8 @@ public record ReportEmbedTokenDto(
     int ReportId,
     string ReportName,
     string Name,
-    string Token,
-    string Url,
+    string? Token,
+    string? Url,
     int CreatedBy,
     DateTime CreatedAt,
     DateTime? ExpiresAt,
@@ -107,36 +109,32 @@ public record AnonymousReportAccessDto(
     DateTime? RevokedAt,
     string Status);
 
+// COMPAT_BREAK: 0.22 — saved views accept only the shared resolved-state envelope.
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record CreateSavedReportViewRequest(
     string Name,
-    Dictionary<string, string>? Parameters,
-    Dictionary<string, string>? Filters,
     string? StateJson = null,
     string? ScriptHash = null,
     bool IsDefault = false);
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record UpdateSavedReportViewRequest(
     string? Name,
-    Dictionary<string, string>? Parameters,
-    Dictionary<string, string>? Filters,
     bool? IsDefault,
     string? StateJson = null,
     string? ScriptHash = null);
 
 /// <summary>
-/// Body for saving the caller's default view. <c>State</c> is the shared resolved-state envelope;
-/// <c>Parameters</c> is the legacy flat map, still accepted so pre-envelope clients keep working.
+/// Body for saving the caller's default view as the shared resolved-state envelope.
 /// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record SaveDefaultReportViewRequest(
-    ETL_SQL.Core.Reporting.ResolvedReportState? State = null,
-    Dictionary<string, string>? Parameters = null);
+    ETL_SQL.Core.Reporting.ResolvedReportState? State = null);
 
 public record SavedReportViewDto(
     int Id,
     int ReportId,
     string Name,
-    Dictionary<string, string>? Parameters,
-    Dictionary<string, string>? Filters,
     string? StateJson,
     string? ScriptHash,
     bool IsDefault,
@@ -145,24 +143,23 @@ public record SavedReportViewDto(
     ETL_SQL.Core.Reporting.ResolvedReportState? State = null,
     string? DriftWarning = null);
 
+// COMPAT_BREAK: 0.22 — retired inline delivery fields are rejected, including explicit nulls.
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record CreateReportAlertRequest(
     string Name,
     string VisualName,
     string Operator,
     decimal Threshold,
-    string? Recipient,
-    string? SmtpAlias,
     string? DisplayName,
     string? Description,
     Dictionary<string, string>? Options);
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record UpdateReportAlertRequest(
     string? Name,
     string? VisualName,
     string? Operator,
     decimal? Threshold,
-    string? Recipient,
-    string? SmtpAlias,
     string? DisplayName,
     string? Description,
     Dictionary<string, string>? Options,
@@ -186,8 +183,6 @@ public record ReportAlertDto(
     string VisualName,
     string Operator,
     decimal Threshold,
-    string? Recipient,
-    string? SmtpAlias,
     bool IsActive,
     IReadOnlyList<AlertNotificationDto> Notifications,
     DateTime CreatedAt,

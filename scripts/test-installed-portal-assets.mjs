@@ -70,6 +70,7 @@ export async function checkInstalledPortal({ url, install, inventoryRoot, record
     const installedSet = new Set(installed);
     const files = installed.filter(relative => !precompressed(relative, installedSet));
     evidence.precompressedSkipped = installed.length - files.length;
+    if (!files.length) problems.push('The installed wwwroot holds no files to check.');
     const served = await inBatches(files, 16, async relative => {
         const response = await fetchBytes(urlFor(base, relative));
         const disk = sha256(withoutNonces(relative, fs.readFileSync(path.join(webRoot, relative))));
@@ -112,6 +113,8 @@ export async function checkInstalledPortal({ url, install, inventoryRoot, record
 
     if (revalidate) {
         const previous = JSON.parse(fs.readFileSync(revalidate, 'utf8')).entries;
+        // --record keeps only assets served with a validator; none means the upgrade proves nothing.
+        if (!previous.length) problems.push('The recorded cache has no entries, so no revalidation was checked.');
         const current = new Map(served.map(entry => [entry.path, entry]));
         const tally = { unchanged304: 0, unchanged200: 0, changedRefetched: 0, removed: 0, stale: 0 };
         await inBatches(previous, 16, async old => {

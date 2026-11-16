@@ -35,4 +35,14 @@ public class ToolSecretDeliveryTests
         Assert.IsType<ExecutionException>(exception.InnerException);
         Assert.Empty(start.ArgumentList);
     }
+
+    [Fact]
+    [Trait("CompatBreak", "0.22.0")]
+    public void ArgumentValueWithSpacesStaysOneArgument()
+    {
+        var args = ExecuteToolStatementHandler.BuildArguments("--input {FILE} --mode={MODE} {EMPTY}",
+            new Dictionary<string, string> { ["FILE"] = "a b --exec evil", ["MODE"] = "fast run", ["EMPTY"] = "" });
+
+        Assert.Equal(new[] { "--input", "a b --exec evil", "--mode=fast run" }, args);
+    }
 }

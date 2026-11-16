@@ -27,7 +27,8 @@ public class ExportController(
     PortalExecutionIdentityService identities,
     DatasetTenantScope? datasetScope = null,
     PortalTenantCatalogScope? catalogScope = null,
-    ETL_SQL.Common.ILogger? logger = null) : ControllerBase
+    ETL_SQL.Common.ILogger? logger = null,
+    FolderPermissionService? folderPermissions = null) : ControllerBase
 {
     private readonly DatasetTenantScope _datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
     private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _datasetScope);
@@ -41,18 +42,15 @@ public class ExportController(
     private bool IsAdmin => User.IsInRole("Admin");
 
     // ── Permission check ───────────────────────────────────────────────────────
+    // The one resolver every other read surface uses, so export honours folder ownership and
+    // per-report grants exactly as viewing does — export must not be a narrower (or wider) door.
     private async Task<bool> CanReadAsync(int reportId)
     {
         if (IsAdmin) return true;
-        var userId = CurrentUserId;
-        var groupIds = await db.UserGroups
-            .Where(ug => ug.UserId == userId)
-            .Select(ug => ug.GroupId)
-            .ToListAsync();
         var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted);
         if (report is null) return false;
-        return await db.FolderAcls
-            .AnyAsync(a => a.FolderId == report.FolderId && groupIds.Contains(a.GroupId));
+        var permissions = folderPermissions ?? new FolderPermissionService(db, CatalogScope);
+        return (await permissions.GetEffectiveReportPermissionAsync(report, User)).AtLeast(FolderPermission.Read);
     }
 
     // ── Load manifest from latest snapshot ────────────────────────────────────

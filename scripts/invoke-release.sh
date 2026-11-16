@@ -2,29 +2,27 @@
 #
 # Mechanical release driver for ETL-SQL (POSIX/bash port of Invoke-Release.ps1).
 #
-# Runs the mechanical Phases 3-5 of Docs/Release_Checklist.md AFTER Test-PreRelease.ps1 has
-# passed and the version bump + CHANGELOG entry are committed on the release branch. It does
+# Runs the mechanical Phases 3-5 of Docs/Release_Checklist.md after the version bump + CHANGELOG
+# entry are committed on the release branch. Release evidence comes from GitHub Actions; no local
+# Test-PreRelease.ps1 run is required (v0.22.0). It does
 # NOT bump versions, author the CHANGELOG, or build artifacts locally (the Release workflow
-# builds them in the cloud on the tag).
+# promotes the accepted pre-tag certification bytes).
 #
 # Usage:
 #   ./scripts/invoke-release.sh --version 0.12.0 [options]
 #
 # Options:
 #   --version X.Y.Z            (required) release version, no leading 'v'
-#   --notes-file PATH          curated release notes (default: Docs/ReleaseNotes/vX.Y.Z.md, release-notes-vX.Y.Z.md, or CHANGELOG)
+#   --notes-file PATH          curated release notes (default: docs/releases/vX.Y.Z.md, release-notes-vX.Y.Z.md, or CHANGELOG)
 #   --remote NAME              git remote (default: origin)
 #   --branch NAME              release branch (default: main)
 #   --dry-run                  print mutating actions without performing them
-#   --force                    override fingerprint mismatch / existing tag guards
-#   --skip-prerelease-gate     do not require a Passed Test-PreRelease state
-#   --skip-ci-wait             do not wait for CI before tagging
 #   --prune-merged-branches    after a verified release: prune stale remote-tracking refs,
 #                              safe-delete LOCAL branches merged into --branch, list merged remote
 #                              branches (never touches main / dev / release/*)
 #   --sign-tag                 sign the release tag (git tag -s)
-#   --ci-timeout-minutes N     (default: 30)
-#   --release-timeout-minutes N (default: 45)
+#   --ci-timeout-minutes N     (default: 120)
+#   --release-timeout-minutes N (default: 120)
 #   -h, --help                 show this help
 
 set -euo pipefail
@@ -34,13 +32,10 @@ NOTES_FILE=""
 REMOTE="origin"
 BRANCH="main"
 DRY_RUN=0
-FORCE=0
-SKIP_GATE=0
-SKIP_CI=0
 PRUNE=0
 SIGN_TAG=0
-CI_TIMEOUT=30
-REL_TIMEOUT=45
+CI_TIMEOUT=120
+REL_TIMEOUT=120
 
 usage() { sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
@@ -51,9 +46,6 @@ while [ $# -gt 0 ]; do
     --remote) REMOTE="$2"; shift 2 ;;
     --branch) BRANCH="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
-    --force) FORCE=1; shift ;;
-    --skip-prerelease-gate) SKIP_GATE=1; shift ;;
-    --skip-ci-wait) SKIP_CI=1; shift ;;
     --prune-merged-branches) PRUNE=1; shift ;;
     --sign-tag) SIGN_TAG=1; shift ;;
     --ci-timeout-minutes) CI_TIMEOUT="$2"; shift 2 ;;
@@ -81,12 +73,6 @@ need git; need gh
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-sha256_hex() {
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum | awk '{print $1}'
-  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 | awk '{print $1}'
-  else die "Need sha256sum or shasum for the pre-release gate."; fi
-}
-
 # Run a mutating command, or just describe it under --dry-run.
 mut() {
   local desc="$1"; shift
@@ -104,43 +90,19 @@ ok "git + gh present (gh user: $GH_USER)"
 
 CUR_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 [ "$CUR_BRANCH" = "$BRANCH" ] || die "On branch '$CUR_BRANCH' but release branch is '$BRANCH'."
-[ -z "$(git status --porcelain)" ] || die "Working tree is not clean. Commit or stash first."
+DIRTY="$(git status --porcelain)" || die "Cannot inspect working-tree status; refusing release."
+[ -z "$DIRTY" ] || die "Working tree is not clean. Commit or stash first."
 ok "clean working tree on '$BRANCH'"
 
-git fetch "$REMOTE" --tags >/dev/null 2>&1 || true
+git fetch "$REMOTE" --tags >/dev/null 2>&1 || die "Cannot refresh remote refs; refusing release."
 LOCAL_SHA="$(git rev-parse HEAD)"
 if git rev-parse "$REMOTE/$BRANCH" >/dev/null 2>&1; then
   BEHIND="$(git rev-list --count "HEAD..$REMOTE/$BRANCH")"
   [ "$BEHIND" -eq 0 ] || die "Local '$BRANCH' is $BEHIND commit(s) behind '$REMOTE/$BRANCH'. Pull first."
 fi
 ok "release commit ${LOCAL_SHA:0:8}"
-
-# ---- 2. pre-release gate --------------------------------------------------
-step "Pre-release validation gate"
-STATE="release-validation/latest/state.json"
-if [ "$SKIP_GATE" -eq 1 ]; then
-  warn "skipped (--skip-prerelease-gate)"
-elif [ ! -f "$STATE" ]; then
-  die "No pre-release state at $STATE. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration first (or --skip-prerelease-gate)."
-else
-  if command -v jq >/dev/null 2>&1; then
-    STATUS="$(jq -r '.status' "$STATE")"
-    SAVED_FP="$(jq -r '.sourceFingerprint' "$STATE")"
-  else
-    STATUS="$(grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' "$STATE" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
-    SAVED_FP="$(grep -o '"sourceFingerprint"[[:space:]]*:[[:space:]]*"[^"]*"' "$STATE" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
-  fi
-  [ "$STATUS" = "Passed" ] || die "Latest pre-release status is '$STATUS', not 'Passed'. Re-run Test-PreRelease.ps1."
-  HEAD_LINE="$(git rev-parse HEAD)"
-  STATUS_LINE="$(git status --short)"
-  CUR_FP="$(printf '%s\n%s' "$HEAD_LINE" "$STATUS_LINE" | sha256_hex)"
-  if [ "$SAVED_FP" != "$CUR_FP" ]; then
-    if [ "$FORCE" -eq 1 ]; then warn "fingerprint mismatch [overridden by --force]"
-    else die "Pre-release state was recorded for a different source state. Re-validate this commit, or use --force."; fi
-  else
-    ok "validation Passed for this commit"
-  fi
-fi
+command -v node >/dev/null 2>&1 || die "Node is required to validate release metadata."
+node scripts/check-release-metadata.mjs "$TAG" || die "Finalize release metadata before tagging."
 
 # ---- 3. version consistency ----------------------------------------------
 step "Version consistency ($VERSION)"
@@ -152,7 +114,6 @@ MISS=""
 MISS+="$(check_src 'Directory.Build.props'           "<VersionPrefix>$VERSION</VersionPrefix>")
 $(check_src 'src/etl-sql-vscode/package.json'        "\"version\": \"$VERSION\"")
 $(check_src 'scripts/build-msi.ps1'                  "} else { \"$VERSION\" }")
-$(check_src 'scripts/publish-release.ps1'            "} else { \"$VERSION\" }")
 $(check_src 'scripts/Master-Release.ps1'             "\$Version = \"$VERSION\"")"
 MISS="$(printf '%s\n' "$MISS" | grep -v '^[[:space:]]*$' || true)"
 if [ -n "$MISS" ]; then
@@ -160,7 +121,17 @@ if [ -n "$MISS" ]; then
 $MISS
 Run Set-Version.ps1 -Version $VERSION."
 fi
-ok "all six version sources read $VERSION"
+ok "all four version sources read $VERSION"
+
+# ---- 3b. release evidence before push/tag ---------------------------------
+step "Release evidence"
+EVIDENCE_REPOSITORY="$(gh repo view --json nameWithOwner --jq '.nameWithOwner')" || die "Cannot resolve the release evidence repository."
+EVIDENCE_ROOT="release-validation/release-evidence-preflight"
+mkdir -p "$EVIDENCE_ROOT"
+EVIDENCE_OUTPUT="$EVIDENCE_ROOT/$LOCAL_SHA-$(date +%s)-$$.json"
+node scripts/collect-release-evidence.mjs collect "$EVIDENCE_REPOSITORY" "$LOCAL_SHA" "$EVIDENCE_OUTPUT" ||
+  die "Release Evidence is missing, failed or stale for this candidate, or CodeQL has open alerts. Dispatch Release Evidence on the candidate before tagging."
+ok "Release Evidence run and CodeQL alerts verified (the release-approval sign-off happens in Tag Release)"
 
 # ---- 4. resolve release notes --------------------------------------------
 step "Release notes"
@@ -168,8 +139,8 @@ TEMP_NOTES=""
 if [ -n "$NOTES_FILE" ]; then
   [ -f "$NOTES_FILE" ] || die "--notes-file '$NOTES_FILE' not found."
   NOTES_PATH="$NOTES_FILE"; ok "using $NOTES_FILE"
-elif [ -f "Docs/ReleaseNotes/$TAG.md" ]; then
-  NOTES_PATH="Docs/ReleaseNotes/$TAG.md"; ok "using Docs/ReleaseNotes/$TAG.md"
+elif [ -f "docs/releases/$TAG.md" ]; then
+  NOTES_PATH="docs/releases/$TAG.md"; ok "using docs/releases/$TAG.md"
 elif [ -f "release-notes-$TAG.md" ]; then
   NOTES_PATH="release-notes-$TAG.md"; ok "using release-notes-$TAG.md"
 else
@@ -188,72 +159,35 @@ else
 fi
 
 # ---- 5. stale ref guard ---------------------------------------------------
-step "Tag/branch guard for $TAG"
-REMOTE_TAG="$(git ls-remote --tags "$REMOTE" "refs/tags/$TAG" 2>/dev/null)"
-if [ -n "$REMOTE_TAG" ]; then
-  [ "$FORCE" -eq 1 ] || die "Tag $TAG already exists on $REMOTE (already released?). Re-run with --force to continue a partial release."
-  warn "tag $TAG already on $REMOTE [continuing under --force]"
-fi
-if [ -n "$(git branch --list "$TAG")" ]; then
-  UNMERGED="$(git rev-list --count "$BRANCH..refs/heads/$TAG" 2>/dev/null || echo 0)"
-  if [ "$UNMERGED" -eq 0 ]; then
-    mut "delete fully-merged stale branch '$TAG'" git branch -D "$TAG"
-    ok "deleted stale local branch '$TAG'"
-  else
-    die "Local branch '$TAG' has $UNMERGED unmerged commit(s); it collides with the tag."
-  fi
-fi
-LOCAL_TAG="$(git tag --list "$TAG")"
-if [ -n "$LOCAL_TAG" ]; then
-  [ "$FORCE" -eq 1 ] || die "Local tag $TAG already exists. Delete it or use --force."
-  warn "local tag $TAG already exists [continuing under --force]"
-fi
-{ [ -z "$REMOTE_TAG" ] && [ -z "$LOCAL_TAG" ] && ok "no conflicting refs"; } || true
-
+step "Tag identity guard for $TAG"
+command -v node >/dev/null 2>&1 || die "Node is required to validate tag identity."
+node scripts/check-release-tag.mjs "$TAG" "$LOCAL_SHA" "$REMOTE" || die "Release tag identity check failed."
 # ---- 6. push branch + wait for CI ----------------------------------------
-step "Push '$BRANCH' and wait for CI"
+step "Push '$BRANCH' and certify the release candidate"
 mut "git push $REMOTE $BRANCH" git push "$REMOTE" "$BRANCH"
 [ "$DRY_RUN" -eq 1 ] || ok "pushed $BRANCH"
 
-wait_for_run() { # workflow sha timeout_min label  -> echoes "id" ; returns 0 ok / 1 fail
-  local workflow="$1" sha="$2" tmin="$3" label="$4"
-  local deadline=$(( $(date +%s) + tmin*60 ))
-  local line id status conclusion
-  while [ "$(date +%s)" -lt "$deadline" ]; do
-    line="$(gh run list --workflow "$workflow" --json databaseId,headSha,status,conclusion -L 30 \
-      --jq ".[] | select(.headSha==\"$sha\") | \"\(.databaseId)\t\(.status)\t\(.conclusion)\"" 2>/dev/null | head -1)"
-    if [ -n "$line" ]; then
-      id="$(printf '%s' "$line" | cut -f1)"
-      status="$(printf '%s' "$line" | cut -f2)"
-      conclusion="$(printf '%s' "$line" | cut -f3)"
-      if [ "$status" = "completed" ]; then
-        printf '%s' "$id"
-        [ "$conclusion" = "success" ] && return 0 || return 1
-      fi
-      info "$label run $id : $status..."
-    else
-      info "$label run not registered yet..."
-    fi
-    sleep 30
-  done
-  printf '%s' "${id:-}"; return 1
+wait_for_run() { # workflow sha timeout_min label -> run ID on stdout, diagnostics on stderr
+  command -v node >/dev/null 2>&1 || { echo "Node is required to watch release runs." >&2; return 1; }
+  local run_ref="$TAG"
+  if [ "$1" = 'ci.yml' ] || [ "$1" = 'release-certification.yml' ] || [ "$1" = 'nightly-release.yml' ]; then run_ref="$BRANCH"; fi
+  node scripts/wait-release-run.mjs "$1" "$2" "$run_ref" "$3"
 }
-
-if [ "$SKIP_CI" -eq 1 ]; then
-  warn "CI wait skipped (--skip-ci-wait)"
-elif [ "$DRY_RUN" -eq 1 ]; then
-  info "[dry-run] would wait for CI on ${LOCAL_SHA:0:8}"
+if [ "$DRY_RUN" -eq 1 ]; then
+  info "[dry-run] would start/resume full release certification on ${LOCAL_SHA:0:8}"
 else
-  if CI_ID="$(wait_for_run ci.yml "$LOCAL_SHA" "$CI_TIMEOUT" CI)"; then
-    ok "CI green (run $CI_ID)"
+  wait_for_run ci.yml "$LOCAL_SHA" "$CI_TIMEOUT" CI >/dev/null || die "Regular CI did not pass; resolve its failures before full certification."
+  CERTIFICATION_WORKFLOW="$(node scripts/ensure-release-certification.mjs "$LOCAL_SHA" "$BRANCH")" || die "Cannot request full release certification."
+  if CI_ID="$(wait_for_run "$CERTIFICATION_WORKFLOW" "$LOCAL_SHA" "$CI_TIMEOUT" CI)"; then
+    ok "Full CI certification green (run $CI_ID)"
   else
-    die "CI did not pass (run ${CI_ID:-?}). Aborting before tag."
+    die "Release certification did not pass (run ${CI_ID:-?}). Aborting before tag."
   fi
 fi
 
 # ---- 7. tag + push tag (idempotent for re-runs) --------------------------
 step "Tag $TAG"
-if EXIST_SHA="$(git rev-list -n 1 "$TAG" 2>/dev/null)"; then
+if EXIST_SHA="$(git rev-list -n 1 "refs/tags/$TAG" 2>/dev/null)"; then
   if [ "$EXIST_SHA" = "$LOCAL_SHA" ]; then info "tag $TAG already at release commit; not recreating"
   else die "tag $TAG exists at a different commit ${EXIST_SHA:0:8}. Delete it before releasing."; fi
 else
@@ -298,13 +232,18 @@ else
 
   step "Verify published release"
   IS_DRAFT="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo true)"
-  [ "$IS_DRAFT" = "false" ] && ok "release is published" || warn "release is still a DRAFT."
+  if [ "$IS_DRAFT" = "false" ]; then ok "release is published"
+  else warn "release is still a DRAFT."; RELEASE_OK=0; fi
   ASSETS="$(gh release view "$TAG" --json assets --jq '.assets[].name' 2>/dev/null || true)"
   REQUIRED="ETL-SQL-$TAG-win-x64.zip
 ETL-SQL-$TAG-x64-Setup.msi
 ETL-SQL-$TAG-linux-x64.zip
 etl-sql_${VERSION}_amd64.deb
-ETL-SQL-$TAG-osx-arm64.zip"
+ETL-SQL-$TAG-osx-arm64.zip
+msi-certification-inputs.json
+msi-certification.json
+sha256sums.txt
+sbom.json"
   MISSING=""
   while IFS= read -r req; do
     [ -z "$req" ] && continue
@@ -320,38 +259,8 @@ EOF
   done
 fi
 
-# ---- 9b. attach verification assets (sha256sums + sbom) -------------------
-# release.yml uploads only the platform binaries; attach the CycloneDX SBOM (version-stamped
-# locally from Directory.Build.props) and a checksum manifest over the cloud-built assets so the
-# published release carries both verification assets (Release_Checklist Phase 5).
-step "Attach sha256sums + sbom"
-if [ "$DRY_RUN" -eq 1 ]; then
-  info "[dry-run] would generate sbom.json + sha256sums.txt and upload them to $TAG"
-elif [ "$RELEASE_OK" -ne 1 ]; then
-  warn "release not verified; skipping checksum/sbom attach"
-else
-  node scripts/generate-sbom.js || die "generate-sbom.js failed."
-  [ -f "$REPO_ROOT/release/sbom.json" ] || die "generate-sbom.js did not produce release/sbom.json."
-  WORK="$(mktemp -d)"
-  # shellcheck disable=SC2064
-  trap "rm -rf '$WORK'" EXIT
-  gh release download "$TAG" --dir "$WORK" \
-    --pattern '*.zip' --pattern '*.msi' --pattern '*.deb' --pattern '*.dmg' --pattern '*.vsix' \
-    || die "failed to download published $TAG assets."
-  (
-    cd "$WORK" || die "cannot enter $WORK"
-    # Bash glob expansion is already collation-sorted; skip the two files we are creating.
-    for f in *; do
-      [ -f "$f" ] || continue
-      case "$f" in sha256sums.txt | sbom.json) continue ;; esac
-      printf '%s  %s\n' "$(sha256_hex < "$f")" "$f"
-    done > sha256sums.txt
-  )
-  gh release upload "$TAG" "$WORK/sha256sums.txt" "$REPO_ROOT/release/sbom.json" --clobber \
-    || die "failed to upload sha256sums.txt + sbom.json."
-  rm -rf "$WORK"; trap - EXIT
-  ok "attached sha256sums.txt + sbom.json"
-fi
+# Verification assets are generated and attached by release.yml before publication.
+# Do not regenerate or overwrite them from a local checkout after publication.
 
 # ---- 9c. optional: prune merged branches (opt-in) ------------------------
 # Sweep up the sprint's branches so they don't pile up release over release. Non-destructive by

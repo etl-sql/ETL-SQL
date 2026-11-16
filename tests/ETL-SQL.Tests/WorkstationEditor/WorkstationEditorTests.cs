@@ -395,7 +395,7 @@ public sealed class WorkstationEditorTests
         Assert.Contains("unsaved", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    [SymlinkFact]
     public async Task Workspace_RejectsDirectorySymlinkEscape()
     {
         using var temp = new TempWorkspace();
@@ -404,8 +404,7 @@ public sealed class WorkstationEditorTests
         try
         {
             var link = Path.Combine(temp.Root, "linked");
-            if (!TryCreateDirectorySymlink(link, outside))
-                return;
+            Directory.CreateSymbolicLink(link, outside);
 
             var workspace = new WorkstationWorkspace(temp.Root, readOnly: false);
 
@@ -783,7 +782,7 @@ public sealed class WorkstationEditorTests
         var scriptPath = Path.Combine(temp.Root, "report.rptsql");
         const string script = """
             CREATE CONNECTION m AS MOCKDB();
-            CREATE DATASET &users AS (SELECT UserId, Name FROM m.Users);
+            CREATE DATASET &users AS (SELECT UserId, UserName AS Name FROM m.Users);
             """;
         await File.WriteAllTextAsync(scriptPath, script);
 
@@ -830,22 +829,6 @@ public sealed class WorkstationEditorTests
         Assert.Empty(result!.Diagnostics);
         Assert.Contains("CREATE CONNECTION", result.Script);
         Assert.Contains("\nSELECT", result.Script);
-    }
-
-    private static bool TryCreateDirectorySymlink(string linkPath, string targetPath)
-    {
-        try
-        {
-            Directory.CreateSymbolicLink(linkPath, targetPath);
-            return true;
-        }
-        catch (Exception ex) when (
-            ex is IOException ||
-            ex is UnauthorizedAccessException ||
-            ex is PlatformNotSupportedException)
-        {
-            return false;
-        }
     }
 
     [Fact]
@@ -1013,6 +996,104 @@ public sealed class WorkstationEditorTests
         Assert.Equal(HttpStatusCode.OK, authorised.StatusCode);
     }
 
+    [Theory]
+    [InlineData("/studio")]
+    [InlineData("/studio/")]
+    public async Task StudioShell_RequiresSessionToken_AndDoesNotLeakIt(string path)
+    {
+        // The Studio shell embeds the token exactly as the editor shell does, so it needs the same
+        // gate. Program.cs prints `/studio/?token=...`, so the trailing-slash form matters too.
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "secret-token-value", StudioMode: true));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        var anonymous = await client.GetAsync(path);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        Assert.DoesNotContain("secret-token-value", await anonymous.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        var authorised = await client.GetAsync(path + "?token=secret-token-value");
+        Assert.Equal(HttpStatusCode.OK, authorised.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("evil.example")]
+    [InlineData("evil.example:1234")]
+    [InlineData("127.0.0.1.evil.example")]
+    public async Task Host_RefusesNonLoopbackHostHeaders(string host)
+    {
+        // DNS rebinding points an attacker's name at 127.0.0.1, so the browser sends the attacker's
+        // name in Host. Refusing any name that is not loopback closes that path before the token
+        // gate is even reached, including for the open static assets.
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "secret-token-value"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        foreach (var path in new[] { "/?token=secret-token-value", "/studio?token=secret-token-value", "/runtime/feedback.js" })
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, path);
+            request.Headers.Host = host;
+            using var response = await client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.DoesNotContain("secret-token-value", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        }
+
+        foreach (var loopback in new[] { "localhost", "127.0.0.1" })
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/?token=secret-token-value");
+            request.Headers.Host = loopback + ":" + new Uri(WorkstationEditorApp.GetListeningUrl(app)).Port;
+            using var response = await client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+    }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/studio")]
+    public async Task Shell_EncodesInitialFileAsAJavaScriptString(string path)
+    {
+        // HTML entities are not decoded inside <script>, so an HtmlEncode'd name reached the page
+        // as `a&amp;b.etlsql` and the editor asked the API for a file that does not exist.
+        using var temp = new TempWorkspace();
+        var file = Path.Combine(temp.Root, "a&b's.etlsql");
+        await File.WriteAllTextAsync(file, "SELECT 1;");
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, file, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        var html = await client.GetStringAsync(path + "?token=test-token");
+
+        var match = Regex.Match(html, @"const initialFile = (?<literal>""[^""\r\n]*"");");
+        Assert.True(match.Success, "initialFile must be a JSON string literal.");
+        Assert.Equal("a&b's.etlsql", System.Text.Json.JsonSerializer.Deserialize<string>(match.Groups["literal"].Value));
+        Assert.DoesNotContain("&amp;", match.Value, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EditorShell_LoadsFeedbackFromTheRuntimeMount()
+    {
+        // feedback.js lives in the shared runtime root, mounted at /runtime. The editor shell asked
+        // for /feedback.js, got a 404, and every ETLSQLFeedback call then threw ReferenceError.
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        var html = await client.GetStringAsync("/?token=test-token");
+
+        var match = Regex.Match(html, @"<script src=""(?<src>[^""?]*feedback\.js)");
+        Assert.True(match.Success, "The editor shell must load feedback.js.");
+        using var response = await client.GetAsync(match.Groups["src"].Value);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     [Fact]
     public async Task Api_SchemaEndpoint_RequiresSessionToken()
     {
@@ -1082,6 +1163,38 @@ public sealed class WorkstationEditorTests
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("userTable", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("/api/preview")]
+    [InlineData("/api/designer/preview")]
+    [InlineData("/api/designer/preview/pdf")]
+    public async Task Preview_RefusesDestructiveStatements(string route)
+    {
+        // A preview executes the whole script. Run asks for confirmation before destroying
+        // persistent data; preview has no confirmation step, so it must refuse instead of
+        // quietly running the DELETE that Run would have stopped.
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var preview = new HttpRequestMessage(HttpMethod.Post, route);
+        preview.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        preview.Content = JsonContent.Create(new PreviewRequest("""
+            CREATE CONNECTION m AS MOCKDB();
+            DELETE FROM m.Users;
+            CREATE DATASET &users AS (SELECT UserID FROM m.Users);
+            CREATE VISUAL userTable AS TABLE (SOURCE = &users);
+            CREATE PAGE Overview AS DASHBOARD( STRUCTURE = 'A', MAP ( 'A' = userTable ) );
+            """));
+
+        var response = await client.SendAsync(preview);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("DELETE FROM m.Users", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1262,12 +1375,31 @@ public sealed class WorkstationEditorTests
         Assert.Contains("from", formatBody.Script);
     }
 
-    [Fact]
-    public async Task GitStatus_GetAndPost_ReturnsStatusAndCommitResponse()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GitStatus_GetAndPost_ReturnsStatusAndCommitResponse(bool enclosingRepository)
     {
         using var temp = new TempWorkspace();
+        var workspaceRoot = temp.Root;
+        if (enclosingRepository)
+        {
+            RunGit(temp.Root, "init");
+            RunGit(temp.Root, "config", "commit.gpgsign", "false");
+            RunGit(temp.Root, "config", "user.email", "workstation-tests@example.invalid");
+            RunGit(temp.Root, "config", "user.name", "Workstation Tests");
+            await File.WriteAllTextAsync(Path.Combine(temp.Root, "fixture.txt"), "Private parent repository.", CancellationToken.None);
+            RunGit(temp.Root, "add", "fixture.txt");
+            RunGit(temp.Root, "commit", "-m", "Fixture parent");
+            workspaceRoot = Path.Combine(temp.Root, "non-repository-workspace");
+            Directory.CreateDirectory(workspaceRoot);
+            Assert.Equal("non-repository-workspace/", RunGitCapture(workspaceRoot, "rev-parse", "--show-prefix").Trim());
+        }
+        // A test temp directory may live inside the checkout. Bound discovery to the private
+        // fixture area so its negative Git case cannot inherit the real parent repository.
+        using var gitBoundary = new GitDiscoveryBoundary(Path.GetDirectoryName(workspaceRoot)!);
         await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
-            temp.Root, null, 0, false, "test-token"));
+            workspaceRoot, null, 0, false, "test-token"));
         await app.StartAsync();
 
         using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
@@ -1309,6 +1441,7 @@ public sealed class WorkstationEditorTests
     {
         using var temp = new TempWorkspace();
         RunGit(temp.Root, "init");
+        RunGit(temp.Root, "config", "commit.gpgsign", "false");
         RunGit(temp.Root, "config", "user.email", "workstation-tests@example.invalid");
         RunGit(temp.Root, "config", "user.name", "Workstation Tests");
         await File.WriteAllTextAsync(Path.Combine(temp.Root, "pipeline.etlsql"), "SELECT 1 AS Value;\n");
@@ -1357,6 +1490,7 @@ public sealed class WorkstationEditorTests
     {
         using var temp = new TempWorkspace();
         RunGit(temp.Root, "init");
+        RunGit(temp.Root, "config", "commit.gpgsign", "false");
         RunGit(temp.Root, "config", "user.email", "workstation-tests@example.invalid");
         RunGit(temp.Root, "config", "user.name", "Workstation Tests");
         await File.WriteAllTextAsync(Path.Combine(temp.Root, "pipeline.etlsql"), "SELECT 1;");
@@ -1384,6 +1518,7 @@ public sealed class WorkstationEditorTests
     {
         using var temp = new TempWorkspace();
         RunGit(temp.Root, "init");
+        RunGit(temp.Root, "config", "commit.gpgsign", "false");
         RunGit(temp.Root, "config", "user.email", "workstation-tests@example.invalid");
         RunGit(temp.Root, "config", "user.name", "Workstation Tests");
 
@@ -1410,6 +1545,98 @@ public sealed class WorkstationEditorTests
         var committedFiles = RunGitCapture(temp.Root, "show", "--name-only", "--format=", "HEAD");
         Assert.Contains("pipeline.etlsql", committedFiles, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("local-secret.txt", committedFiles, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GitCommit_IncludesEverythingTheWorkspaceLetsYouEdit()
+    {
+        // The workspace lets a user open and save .sql files; committing them used to answer
+        // "No editable script changes to commit." because Git kept its own narrower list.
+        using var temp = new TempWorkspace();
+        RunGit(temp.Root, "init");
+        RunGit(temp.Root, "config", "commit.gpgsign", "false");
+        RunGit(temp.Root, "config", "user.email", "workstation-tests@example.invalid");
+        RunGit(temp.Root, "config", "user.name", "Workstation Tests");
+        File.WriteAllText(Path.Combine(temp.Root, "lookup.sql"), "SELECT 1;");
+
+        var git = new WorkstationGitService(new WorkstationWorkspace(temp.Root, readOnly: false));
+        var result = git.Commit(new GitCommitRequest("Commit sql script"));
+
+        Assert.True(result.Committed, result.Message);
+        Assert.Contains("lookup.sql", RunGitCapture(temp.Root, "show", "--name-only", "--format=", "HEAD"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DesignerSeal_SealsLiteralUsePasswordAndPromptsWhenPasswordNeeded()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        using var literalReq = new HttpRequestMessage(HttpMethod.Post, "/api/designer/seal");
+        literalReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        literalReq.Content = JsonContent.Create(new SealDesignerAuthoringRequest(
+            "USE PASSWORD = 'AuthorPassword1!';\nCREATE CONNECTION db AS MSSQL(SERVER='s', DATABASE='d', UID='u', PASSWORD='DbPassword1!');"));
+        var literalRes = await client.SendAsync(literalReq);
+        Assert.Equal(HttpStatusCode.OK, literalRes.StatusCode);
+        var literalBody = await literalRes.Content.ReadFromJsonAsync<SealDesignerAuthoringResponse>();
+        Assert.NotNull(literalBody);
+        Assert.True(literalBody!.Changed);
+        Assert.False(literalBody.RequiresPassword);
+        Assert.Contains("USE PASSWORD PROMPT;", literalBody.SealedScript, StringComparison.Ordinal);
+        Assert.Contains("ENC:", literalBody.SealedScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("AuthorPassword1!", literalBody.SealedScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("DbPassword1!", literalBody.SealedScript, StringComparison.Ordinal);
+
+        using var promptReq = new HttpRequestMessage(HttpMethod.Post, "/api/designer/seal");
+        promptReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        promptReq.Content = JsonContent.Create(new SealDesignerAuthoringRequest(
+            "CREATE CONNECTION db AS MSSQL(SERVER='s', DATABASE='d', UID='u', PASSWORD='DbPassword1!');"));
+        var promptRes = await client.SendAsync(promptReq);
+        Assert.Equal(HttpStatusCode.OK, promptRes.StatusCode);
+        var promptBody = await promptRes.Content.ReadFromJsonAsync<SealDesignerAuthoringResponse>();
+        Assert.NotNull(promptBody);
+        Assert.True(promptBody!.RequiresPassword);
+        Assert.False(promptBody.Changed);
+    }
+
+    [Fact]
+    public async Task PutFiles_SealsScriptWithUsePasswordAndRejectsMissingSealPassword()
+    {
+        using var temp = new TempWorkspace();
+        var filePath = Path.Combine(temp.Root, "pipeline.etlsql");
+        await File.WriteAllTextAsync(filePath, "SELECT 1;");
+
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        const string unsealedWithoutPass = "CREATE CONNECTION db AS MSSQL(SERVER='s', DATABASE='d', UID='u', PASSWORD='DbPassword1!');";
+        using var missingPassReq = new HttpRequestMessage(HttpMethod.Put, "/api/files");
+        missingPassReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        missingPassReq.Content = JsonContent.Create(new SaveFileRequest("pipeline.etlsql", unsealedWithoutPass));
+        var missingPassRes = await client.SendAsync(missingPassReq);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, missingPassRes.StatusCode);
+        Assert.Equal("SELECT 1;", await File.ReadAllTextAsync(filePath));
+
+        using var withLiteralReq = new HttpRequestMessage(HttpMethod.Put, "/api/files");
+        withLiteralReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        withLiteralReq.Content = JsonContent.Create(new SaveFileRequest(
+            "pipeline.etlsql",
+            "USE PASSWORD = 'AuthorPassword1!';\n" + unsealedWithoutPass));
+        var withLiteralRes = await client.SendAsync(withLiteralReq);
+        Assert.Equal(HttpStatusCode.OK, withLiteralRes.StatusCode);
+
+        var written = await File.ReadAllTextAsync(filePath);
+        Assert.Contains("USE PASSWORD PROMPT;", written, StringComparison.Ordinal);
+        Assert.Contains("ENC:", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("AuthorPassword1!", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("DbPassword1!", written, StringComparison.Ordinal);
     }
 
     private static void RunGit(string workingDirectory, params string[] arguments)
@@ -1448,6 +1675,17 @@ public sealed class WorkstationEditorTests
         }
 
         return output;
+    }
+
+    private sealed class GitDiscoveryBoundary : IDisposable
+    {
+        private readonly string? _previous = Environment.GetEnvironmentVariable("GIT_CEILING_DIRECTORIES");
+
+        public GitDiscoveryBoundary(string boundary)
+            => Environment.SetEnvironmentVariable("GIT_CEILING_DIRECTORIES", boundary);
+
+        public void Dispose()
+            => Environment.SetEnvironmentVariable("GIT_CEILING_DIRECTORIES", _previous);
     }
 
     private sealed class TempWorkspace : IDisposable

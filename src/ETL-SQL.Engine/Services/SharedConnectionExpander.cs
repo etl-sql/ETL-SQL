@@ -14,6 +14,18 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
 {
     private const string SharedPrefix = "SHARED:";
 
+    // Destination and endpoint options owned by the catalog entry. Allowing a script to set or
+    // override any of these on a SHARED: connection would let it redirect catalog credentials to an
+    // arbitrary server or URL.
+    private static readonly HashSet<string> LockedDestinationKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "TARGET", "HOST", "HOSTNAME", "SERVER", "DATA_SOURCE", "PORT", "DATABASE", "DB",
+        "URL", "BASE_URL", "URI", "ENDPOINT", "CONNECTION_STRING", "DSN",
+        "PATH", "FILEPATH", "FILE", "FILE_PATH", "BUCKET", "ACCOUNT", "ACCOUNT_NAME",
+        "BOOTSTRAP_SERVERS", "BROKER", "WAREHOUSE", "SERVICE_NAME", "SID", "REGION",
+        "PROJECT", "PROJECT_ID"
+    };
+
     public sealed record ExpandedConnection(
         string Target,
         Dictionary<string, string> Options,
@@ -93,14 +105,23 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
         {
             foreach (var (key, value) in scriptOptions)
             {
-                // The catalog owns credentials; a script overriding them would redirect a shared
-                // connection's identity without the administrator's knowledge.
-                if (IsCatalogOwnedSensitiveField(definition, key) && definition.Options.ContainsKey(key))
+                // The catalog owns credentials, destinations, and any option it explicitly defined;
+                // a script overriding them would redirect a shared connection's identity or target.
+                if (IsCatalogOwnedSensitiveField(definition, key)
+                    || ConnectionSecretResolver.IsSecretReference(value))
                 {
                     EmitUseDenied(alias, identity, catalogProvider.ProviderName, $"CatalogOwnedSensitiveOverride; Option={key}");
                     throw new ExecutionException(
                         $"Option '{key}' is a sensitive field managed by connection catalog entry '{alias}' and cannot " +
-                        "be overridden in the script.");
+                        "be overridden or supplied with SECRET: references in the script.");
+                }
+
+                if (LockedDestinationKeys.Contains(key) || definition.Options.ContainsKey(key))
+                {
+                    EmitUseDenied(alias, identity, catalogProvider.ProviderName, $"CatalogOwnedOptionOverride; Option={key}");
+                    throw new ExecutionException(
+                        $"Option '{key}' is locked by connection catalog entry '{alias}' and cannot " +
+                        "be set or overridden in the script.");
                 }
 
                 merged[key] = value;

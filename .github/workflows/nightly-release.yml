@@ -1,22 +1,162 @@
 name: Nightly Release Checks
 
-# Register the manual entry point while its implementation is certified on release branches.
+# Release rehearsal for one release-branch candidate. It starts every pre-tag certification as its
+# own run, exactly as a release needs them (Release Certification, MSI, DEB, native packages),
+# waits for them, then runs the release's own evidence collectors against those runs. It never
+# tags or publishes. The collect job's summary gives one pass/fail and names the failing step;
+# the dry-run job then runs release.yml with dry_run on the same candidate, which drafts, verifies
+# and deletes its own draft. Native packages can take three hours and no job may exceed 180
+# minutes, so the wait is split over two jobs; every job finds this rehearsal's runs again, so a
+# rerun resumes.
+
 on:
   workflow_dispatch:
     inputs:
       candidate_sha:
-        description: Exact candidate SHA on the selected release branch
+        description: Release branch HEAD selected by the nightly scheduler
         required: true
         type: string
 
-permissions: {}
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CANDIDATE_SHA: ${{ inputs.candidate_sha }}
 
 jobs:
-  select-release-branch:
+  candidate:
+    timeout-minutes: 5
     runs-on: ubuntu-latest
-    timeout-minutes: 1
     steps:
-      - name: Require the release branch implementation
+      - name: Require exact release branch candidate
+        timeout-minutes: 3
         run: |
-          echo '::error::Select the matching release branch when dispatching this workflow. The default branch only registers this entry point.'
-          exit 1
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/release/v* ]]
+          [[ "$CANDIDATE_SHA" == "$GITHUB_SHA" ]]
+  start:
+    name: Start certification runs
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ inputs.candidate_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Start Release Certification, MSI, DEB and native package runs
+        timeout-minutes: 20
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/nightly-rehearsal.mjs start "$GITHUB_REPOSITORY" "$CANDIDATE_SHA" "$GITHUB_REF_NAME" release-validation/nightly
+  wait:
+    name: Wait for certification runs
+    needs: start
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    outputs:
+      settled: ${{ steps.wait.outputs.settled }}
+    permissions:
+      contents: read
+      actions: write # reruns jobs whose runner was never acquired
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ inputs.candidate_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Wait up to 170 minutes
+        id: wait
+        timeout-minutes: 172
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/nightly-rehearsal.mjs wait "$GITHUB_REPOSITORY" "$CANDIDATE_SHA" "$GITHUB_REF_NAME" release-validation/nightly
+  wait-more:
+    name: Keep waiting for certification runs
+    needs: wait
+    if: needs.wait.outputs.settled != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: write # reruns jobs whose runner was never acquired
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ inputs.candidate_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Wait up to 170 more minutes
+        timeout-minutes: 172
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/nightly-rehearsal.mjs wait "$GITHUB_REPOSITORY" "$CANDIDATE_SHA" "$GITHUB_REF_NAME" release-validation/nightly
+  collect:
+    name: Release rehearsal
+    needs: [wait, wait-more]
+    if: ${{ !cancelled() && needs.wait.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.wait-more.result) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ inputs.candidate_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Collect release evidence from tonight's runs
+        timeout-minutes: 100
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/nightly-rehearsal.mjs collect "$GITHUB_REPOSITORY" "$CANDIDATE_SHA" "$GITHUB_REF_NAME" release-validation/nightly
+      - name: Retain rehearsal evidence
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-rehearsal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/nightly/
+          if-no-files-found: warn
+          retention-days: 30
+  dry-run:
+    name: Release dry run
+    needs: collect
+    # The default success() also requires every earlier job to have run, and wait-more is skipped
+    # whenever the first wait is enough, so without this the dry run never starts.
+    if: ${{ !cancelled() && needs.collect.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: write # starts release.yml in dry-run mode and reruns a job whose runner was never acquired
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ inputs.candidate_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Draft, verify and delete a release of this candidate
+        timeout-minutes: 172
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/nightly-rehearsal.mjs dry-run "$GITHUB_REPOSITORY" "$CANDIDATE_SHA" "$GITHUB_REF_NAME" release-validation/nightly

@@ -258,7 +258,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
         public async Task JoinEngine_ActivatesExternalPath_WhenRightSideExceedsThreshold()
         {
             // Left table has exactly 100k rows (fits in buffer); right has 110k.
-            // JoinEngine.ApplyJoins checks joinRows.Count > 100k and delegates to ExternalJoinEngine.
+            // The streaming join checks joinRows.Count > 100k and delegates to ExternalJoinEngine.
             const int LEFT_SIDE = 100_000;
             const int RIGHT_SIDE = 110_000;
             var e = NewEvaluator();

@@ -10,265 +10,643 @@ on:
         description: 'Tag to release (e.g. v0.8.0)'
         required: true
         default: 'v0.8.0'
+      dry_run:
+        description: 'Rehearse on a release branch: build a uniquely named draft, verify it, never tag or publish, then delete it'
+        type: boolean
+        default: false
+      candidate_sha:
+        description: 'Dry run only: exact release-branch HEAD to rehearse'
+        type: string
+        default: ''
 
 permissions:
   contents: write
+  actions: read
 
 env:
   TAG_NAME: ${{ inputs.tag || github.ref_name }}
+  # The release a run writes to. A dry run gets its own draft whose name can never be a version tag,
+  # so it cannot touch a real release draft and publishing it could never fire the v* trigger.
+  DRAFT_TAG: ${{ inputs.dry_run && format('dry-run-{0}-{1}', inputs.tag, github.run_id) || inputs.tag || github.ref_name }}
+  DRY_RUN: ${{ inputs.dry_run == true }}
+
+concurrency:
+  group: release-${{ inputs.dry_run && 'dry-run-' || '' }}${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   # 1. Validation Job - ensures the release is stable
   validate:
     name: Validate & Test
+    timeout-minutes: 110
+    outputs:
+      source_sha: ${{ steps.candidate.outputs.source_sha }}
+      hosted_evidence_artifact_id: ${{ steps.hosted-evidence.outputs.artifact-id }}
+      windows_artifact_id: ${{ steps.windows-selection.outputs.artifact_id }}
+      windows_run_id: ${{ steps.windows-selection.outputs.run_id }}
+      windows_manifest_sha256: ${{ steps.windows-selection.outputs.manifest_sha256 }}
+      windows_selection_artifact_id: ${{ steps.windows-evidence.outputs.artifact-id }}
     runs-on: windows-latest
     steps:
       - name: Checkout
+        timeout-minutes: 9
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.TAG_NAME }}
+          ref: ${{ inputs.dry_run && inputs.candidate_sha || env.TAG_NAME }}
           fetch-depth: 0
 
       - name: Verify release tag is on a supported release branch
+        timeout-minutes: 5
+        id: candidate
         shell: pwsh
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
         run: |
           . ./scripts/Release.Helpers.ps1
           git fetch --prune origin '+refs/heads/main:refs/remotes/origin/main' '+refs/heads/release/*:refs/remotes/origin/release/*'
           if ($LASTEXITCODE -ne 0) { throw 'Cannot refresh main and maintenance release refs.' }
-          $branch = Assert-ReleaseTagReachable -Tag $env:TAG_NAME
-          Write-Host "Release tag is reachable from $branch."
+          if ($env:DRY_RUN -eq 'true') {
+            if ($env:GITHUB_REF -notmatch '^refs/heads/release/v\d+\.\d+\.\d+$') { throw 'A dry run must be dispatched on a release branch.' }
+            if ($env:CANDIDATE_SHA -cnotmatch '^[0-9a-f]{40}$' -or $env:CANDIDATE_SHA -cne $env:GITHUB_SHA) {
+              throw 'A dry run needs candidate_sha equal to the release branch HEAD it was dispatched on.'
+            }
+            Write-Host "Dry run of $env:TAG_NAME on $env:GITHUB_REF_NAME; draft $env:DRAFT_TAG will be deleted."
+          } else {
+            $branch = Assert-ReleaseTagReachable -Tag $env:TAG_NAME
+            Write-Host "Release tag is reachable from $branch."
+          }
+          $sha = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve candidate commit.' }
+          if ($sha -cne $env:GITHUB_SHA) {
+            throw 'Run this workflow from the requested release tag so workflow provenance matches the candidate commit.'
+          }
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.VersionPrefix
+          if ($env:TAG_NAME -cne "v$version") { throw 'Release tag does not match VersionPrefix.' }
+          "source_sha=$sha" >> $env:GITHUB_OUTPUT
 
       - name: Set up browser compiler runtime
         uses: actions/setup-node@v7
         with:
           node-version: 22
 
-      - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
-
-      - name: Prepare browser assets
-        run: node scripts/sync-assets.js
-
-      - name: Verify .NET
-        run: dotnet --info
-      - name: Build & Run Smoke Tests
+      # Source preflight is not rerun here: the exact-candidate CI evidence required below includes
+      # its Source preflight job. Rerunning all lanes on hosted Windows failed 7 of 66 on timeouts and
+      # environment assertions (dry run 42483552717). Only the tag-only metadata check runs here.
+      # A dry run rehearses before the notes are final, so there it reports without failing.
+      - name: Require final release metadata
+        timeout-minutes: 4
+        continue-on-error: ${{ inputs.dry_run == true }}
         shell: pwsh
-        run: |
-          dotnet build ETL-SQL.slnx --configuration Release
-          .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/check-release-metadata.mjs', $env:TAG_NAME) -EvidenceDirectory release-validation/supervisors/metadata -TimeoutSeconds 120
+
+      - name: Require exact-candidate CI and CodeQL evidence
+        timeout-minutes: 12
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-hosted-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, 'release-validation/hosted-release-evidence.json') -EvidenceDirectory release-validation/supervisors/hosted -TimeoutSeconds 600
+
+      - name: Retain selected hosted evidence
+        timeout-minutes: 5
+        id: hosted-evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: hosted-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/hosted-release-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Require certified pre-tag Windows packages
+        id: windows-selection
+        timeout-minutes: 15
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-certified-windows.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), 'release-validation/selected-windows') -EvidenceDirectory release-validation/supervisors/windows -TimeoutSeconds 780
+
+      - name: Retain certified Windows selection
+        timeout-minutes: 5
+        id: windows-evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: certified-windows-selection-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/selected-windows/certified-windows-selection.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload source preflight logs
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release-validation/preflight/
+            release-validation/supervisors/
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Every certification as hosted jobs (W8): a green Release Evidence dispatch on the exact
+  # candidate, no open CodeQL alerts on its release branch, and the owner's release-approval sign-off
+  # from Tag Release. A dry run skips the approval and tolerates only a missing evidence run (it runs
+  # once per candidate, not nightly); a failed run or open CodeQL alerts fail the rehearsal.
+  release-evidence:
+    name: Verify release evidence
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      security-events: read
+    outputs:
+      artifact_id: ${{ steps.retain.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 6
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require release evidence and approval for the candidate
+        timeout-minutes: 8
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          MODE: ${{ inputs.dry_run == true && 'rehearse' || 'collect-approved' }}
+        run: node scripts/collect-release-evidence.mjs "$MODE" "$GITHUB_REPOSITORY" "$SOURCE_SHA" release-validation/release-evidence-selection.json
+      - name: Retain selected release evidence
+        if: env.DRY_RUN != 'true'
+        id: retain
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-evidence-selection-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/release-evidence-selection.json
+          if-no-files-found: error
+          retention-days: 30
 
   prepare-release:
     name: Prepare GitHub Release
-    needs: validate
+    timeout-minutes: 10
+    needs: [validate, release-evidence]
     runs-on: ubuntu-latest
     steps:
+      # The curated notes become the release body. The validate job already required them final.
+      - name: Checkout release notes
+        if: env.DRY_RUN != 'true'
+        timeout-minutes: 5
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+          sparse-checkout: docs/releases
+
       - name: Create or update draft release
+        timeout-minutes: 8
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
           PRERELEASE: ${{ contains(env.TAG_NAME, 'alpha') || contains(env.TAG_NAME, 'beta') || contains(env.TAG_NAME, 'rc') }}
         run: |
           args=(--repo "$GITHUB_REPOSITORY")
           if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
-          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$TAG_NAME" --draft "${args[@]}"
+          if [ "$DRY_RUN" = "true" ]; then
+            if gh release view "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "::error::Dry-run draft $DRAFT_TAG already exists."; exit 1
+            fi
+            gh release create "$DRAFT_TAG" --draft --target "$SOURCE_SHA" --title "Dry run of $TAG_NAME (run $GITHUB_RUN_ID)" \
+              --notes "Release rehearsal. Never published; deleted at the end of run $GITHUB_RUN_ID." --repo "$GITHUB_REPOSITORY"
+          elif gh release view "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$DRAFT_TAG" --draft --notes-file "docs/releases/$TAG_NAME.md" "${args[@]}"
           else
-            gh release create "$TAG_NAME" --draft --generate-notes "${args[@]}"
+            gh release create "$DRAFT_TAG" --draft --notes-file "docs/releases/$TAG_NAME.md" "${args[@]}"
           fi
 
-  # 2. Windows Build (ZIP + MSI)
-  build-windows:
-    name: Build Windows (MSI & ZIP)
-    needs: prepare-release
-    runs-on: windows-latest
+  find-msi:
+    name: Find certified candidate MSI
+    timeout-minutes: 20
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ steps.find.outputs.artifact_id }}
+      run_id: ${{ steps.find.outputs.run_id }}
+      receipt_id: ${{ steps.find.outputs.receipt_id }}
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.TAG_NAME }}
-
-      - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
-
-      - name: Prepare browser assets
-        run: node scripts/sync-assets.js
-      - name: Verify .NET
-        run: dotnet --info
-      - name: Verify Node.js
-        run: node --version
-
-      - name: Build extension UI
-        working-directory: src/etl-sql-vscode/ui
-        run: |
-          npm ci
-          npm run build
-
-      - name: Build & Publish
-        shell: pwsh
-        run: |
-          $Version = $env:TAG_NAME.TrimStart('v')
-          $env:ETL_SQL_VERSION = $Version
-          .\scripts\publish-release.ps1 -Platforms win-x64
-
-      - name: Install WiX Toolset
-        shell: pwsh
-        run: choco install wixtoolset -y --no-progress --skip-if-installed
-
-      - name: Build MSI
-        shell: pwsh
-        run: |
-          $Version = $env:TAG_NAME.TrimStart('v')
-          $env:ETL_SQL_VERSION = $Version
-          .\scripts\build-msi.ps1
-          if ($LASTEXITCODE -ne 0) { throw "build-msi.ps1 failed with exit code $LASTEXITCODE" }
-          Move-Item "src/ETL-SQL.Installer/ETL-SQL-v$Version.msi" "release/ETL-SQL-v$Version-x64-Setup.msi"
-
-      - name: Upload Windows release assets
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - name: Find successful certification for this commit
+        timeout-minutes: 15
+        id: find
         shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload $env:TAG_NAME release/*.zip release/*.msi release/*.vsix --clobber
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: |
+          . ./scripts/Release.Helpers.ps1
+          [xml]$props = Get-Content Directory.Build.props
+          $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot list releases to find the upgrade baseline.' }
+          $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ })
+          $previousTag = Select-UpgradeBaseline -CurrentVersion ([string]$props.Project.PropertyGroup.VersionPrefix) -Releases $releases
+          ./scripts/Find-CertifiedMsi.ps1 -SourceSha $env:SOURCE_SHA -Repository $env:GITHUB_REPOSITORY -PreviousTag $previousTag -OutputDirectory msi-selection
 
-  # 3. Linux Build (ZIP + DEB)
-  build-linux:
-    name: Build Linux (DEB & ZIP)
-    needs: prepare-release
+  certify-msi:
+    name: Certify release MSI
+    needs: [validate, find-msi, release-evidence]
+    if: needs.find-msi.outputs.artifact_id == ''
+    permissions:
+      contents: read
+      actions: write
+      checks: write
+    uses: ./.github/workflows/msi-upgrade.yml
+    with:
+      source_sha: ${{ needs.validate.outputs.source_sha }}
+
+  promote-msi:
+    name: Promote certified MSI
+    timeout-minutes: 30
+    needs: [validate, prepare-release, find-msi, certify-msi]
+    if: >-
+      ${{ !cancelled() && needs.validate.result == 'success' && needs.prepare-release.result == 'success' &&
+          needs.find-msi.result == 'success' &&
+          ((needs.find-msi.outputs.artifact_id != '' && needs.certify-msi.result == 'skipped') ||
+           (needs.find-msi.outputs.artifact_id == '' && needs.certify-msi.result == 'success')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.TAG_NAME }}
+          ref: ${{ needs.validate.outputs.source_sha }}
 
-      - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
-
-      - name: Prepare browser assets
-        run: node scripts/sync-assets.js
-      - name: Verify .NET
-        run: dotnet --info
-      - name: Verify Node.js
-        run: node --version
-
-      - name: Build extension UI
-        working-directory: src/etl-sql-vscode/ui
-        run: |
-          npm ci
-          npm run build
-
-      - name: Publish Binaries
+      - name: Require certified artifact ID
+        timeout-minutes: 15
         shell: pwsh
-        run: |
-          $Version = $env:TAG_NAME.TrimStart('v')
-          $env:ETL_SQL_VERSION = $Version
-          ./scripts/publish-release.ps1 -Platforms linux-x64
-          chmod +x scripts/build-linux-packages.sh
-          ./scripts/build-linux-packages.sh $Version release/linux-x64/bin
-          mv "etl-sql_${Version}_amd64.deb" release/
-
-      - name: Upload Linux release assets
-        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG_NAME" release/*.zip release/*.deb release/*.vsix --clobber
+          ARTIFACT_ID: ${{ needs.find-msi.outputs.artifact_id || needs.certify-msi.outputs.artifact_id }}
+          RECEIPT_ID: ${{ needs.find-msi.outputs.receipt_id || needs.certify-msi.outputs.receipt_id }}
+        run: |
+          if ($env:ARTIFACT_ID -notmatch '^[1-9][0-9]*$') { throw 'Certified MSI artifact ID is missing or invalid.' }
+          if ($env:RECEIPT_ID -notmatch '^[1-9][0-9]*$') { throw 'Certification receipt ID is missing or invalid.' }
 
-  # 4. macOS Build (ZIP + DMG)
-  build-macos:
-    name: Build macOS (DMG & ZIP)
-    needs: prepare-release
-    runs-on: macos-latest
+      - name: Download certified installers
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.find-msi.outputs.artifact_id || needs.certify-msi.outputs.artifact_id }}
+          run-id: ${{ needs.find-msi.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: candidate
+
+      - name: Download certification receipt
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.find-msi.outputs.receipt_id || needs.certify-msi.outputs.receipt_id }}
+          run-id: ${{ needs.find-msi.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: certification
+
+      - name: Verify and upload certified MSI
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./scripts/MsiCandidate.ps1 -Mode Verify -Directory candidate -SourceSha $env:SOURCE_SHA
+          $destination = "candidate/ETL-SQL-$env:TAG_NAME-x64-Setup.msi"
+          Copy-Item candidate/current.msi $destination
+          Copy-Item candidate/candidate.json candidate/msi-certification-inputs.json
+          Copy-Item certification/certification.json candidate/msi-certification.json
+          gh release upload $env:DRAFT_TAG $destination candidate/msi-certification-inputs.json candidate/msi-certification.json --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot upload certified MSI.' }
+
+  find-deb:
+    name: Find certified candidate DEB
+    timeout-minutes: 20
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ steps.find.outputs.artifact_id }}
+      run_id: ${{ steps.find.outputs.run_id }}
+      receipt_id: ${{ steps.find.outputs.receipt_id }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        timeout-minutes: 15
         with:
-          ref: ${{ env.TAG_NAME }}
-
-      - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
-
-      - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
-
-      - name: Prepare browser assets
-        run: node scripts/sync-assets.js
-      - name: Verify .NET
-        run: dotnet --info
-      - name: Verify Node.js
-        run: node --version
-
-      - name: Build extension UI
-        working-directory: src/etl-sql-vscode/ui
-        run: |
-          npm ci
-          npm run build
-
-      # Apple Silicon is the priority artifact (most current Macs). Publish and upload it
-      # FIRST so an Intel/R2R failure below can never cost us the arm64 release. Each
-      # publish-release.ps1 run wipes release/, so arm64 is safely uploaded before x64 starts.
-      - name: Publish Apple Silicon (arm64) VSIX + ZIP
+      - name: Select exact-candidate DEB certification
+        timeout-minutes: 15
+        id: find
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
         run: |
-          $Version = $env:TAG_NAME.TrimStart('v')
-          $env:ETL_SQL_VERSION = $Version
-          ./scripts/publish-release.ps1 -Platforms osx-arm64
+          . ./scripts/Release.Helpers.ps1
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.VersionPrefix
+          $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot list releases to find the upgrade baseline.' }
+          $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ } | ForEach-Object { $_ })
+          $previous = Select-UpgradeBaseline -CurrentVersion $version -Releases $releases
+          node scripts/find-certified-deb.mjs $env:GITHUB_REPOSITORY $env:SOURCE_SHA $version $previous deb-selection
 
-      - name: Upload arm64 release assets
+  certify-deb:
+    name: Certify release DEB
+    needs: [validate, find-deb, release-evidence]
+    if: needs.find-deb.outputs.artifact_id == ''
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deb-upgrade.yml
+    with:
+      source_sha: ${{ needs.validate.outputs.source_sha }}
+
+  promote-deb:
+    name: Promote Linux candidate packages
+    timeout-minutes: 30
+    needs: [validate, prepare-release, find-deb, certify-deb]
+    if: >-
+      ${{ !cancelled() && needs.validate.result == 'success' && needs.prepare-release.result == 'success' &&
+          needs.find-deb.result == 'success' &&
+          ((needs.find-deb.outputs.artifact_id != '' && needs.certify-deb.result == 'skipped') ||
+           (needs.find-deb.outputs.artifact_id == '' && needs.certify-deb.result == 'success')) }}
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 15
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require DEB candidate and receipt IDs
+        timeout-minutes: 15
+        env:
+          ARTIFACT_ID: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
+          RECEIPT_ID: ${{ needs.find-deb.outputs.receipt_id || needs.certify-deb.outputs.receipt_id }}
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] && [[ "$RECEIPT_ID" =~ ^[1-9][0-9]*$ ]]
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
+          run-id: ${{ needs.find-deb.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: candidate
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.find-deb.outputs.receipt_id || needs.certify-deb.outputs.receipt_id }}
+          run-id: ${{ needs.find-deb.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: certification
+          merge-multiple: true
+      - name: Verify and upload Linux candidate packages
+        timeout-minutes: 20
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG_NAME" release/*.zip release/*.vsix --clobber
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          ARTIFACT_ID: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
+        run: |
+          set -euo pipefail
+          version="${TAG_NAME#v}"
+          node scripts/check-deb-candidate.mjs candidate/candidate.json certification/certification.json "$SOURCE_SHA" "$version" "$ARTIFACT_ID" candidate/current.deb candidate/current.zip candidate/current.vsix
+          cp candidate/current.deb "candidate/etl-sql_${version}_amd64.deb"
+          cp candidate/current.zip "candidate/ETL-SQL-v${version}-linux-x64.zip"
+          cp candidate/current.vsix "candidate/etl-sql-vscode-${version}-linux-x64.vsix"
+          cp candidate/candidate.json candidate/deb-certification-inputs.json
+          cp certification/certification.json candidate/deb-certification.json
+          gh release upload "$DRAFT_TAG" "candidate/etl-sql_${version}_amd64.deb" "candidate/ETL-SQL-v${version}-linux-x64.zip" "candidate/etl-sql-vscode-${version}-linux-x64.vsix" candidate/deb-certification-inputs.json candidate/deb-certification.json --clobber
 
-      # Intel build is best-effort: if osx-x64 R2R cross-gen breaks on the arm64 runner,
-      # the job degrades (arm64 already shipped) instead of failing the whole release.
-      - name: Publish Intel (x64) VSIX + ZIP (best effort)
-        id: macos_x64
-        continue-on-error: true
+  # Promote the Windows ZIP/VSIX already accepted by the candidate's native-package run.
+  upload-windows:
+    name: Promote certified Windows packages
+    needs: [validate, prepare-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      manifest_sha256: ${{ needs.validate.outputs.windows_manifest_sha256 }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require retained Windows artifact ID
+        timeout-minutes: 1
+        env:
+          ARTIFACT_ID: ${{ needs.validate.outputs.windows_artifact_id }}
+        run: '[[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]'
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.validate.outputs.windows_artifact_id }}
+          run-id: ${{ needs.validate.outputs.windows_run_id }}
+          github-token: ${{ github.token }}
+          path: candidate
+          merge-multiple: true
+      - name: Verify and upload Windows release assets
+        timeout-minutes: 10
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          MANIFEST_SHA256: ${{ needs.validate.outputs.windows_manifest_sha256 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${TAG_NAME#v}"
+          node scripts/windows-release-packages.mjs verify candidate/release "$SOURCE_SHA" "$version" "$MANIFEST_SHA256"
+          gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" \
+            "candidate/release/ETL-SQL-${TAG_NAME}-win-x64.zip" \
+            "candidate/release/etl-sql-vscode-${version}-win32-x64.vsix" \
+            candidate/release/windows-package-inputs.json --clobber
+      - name: Report Windows upload recovery
+        timeout-minutes: 1
+        if: failure()
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          PACKAGE_PLATFORM: Windows
+          PACKAGE_ARTIFACT_IDS: ${{ needs.validate.outputs.windows_artifact_id }}
+        run: node scripts/report-package-upload-recovery.mjs
+
+  # Select accepted native bytes before upload; Release never recompiles these packages.
+  select-macos-intel:
+    name: Select certified macOS (osx-x64)
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    outputs:
+      artifact_id: ${{ steps.selection.outputs.artifact_id }}
+      run_id: ${{ steps.selection.outputs.run_id }}
+      manifest_sha256: ${{ steps.selection.outputs.manifest_sha256 }}
+      selection_artifact_id: ${{ steps.receipt.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 6
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require certified pre-tag macOS packages
+        id: selection
+        timeout-minutes: 17
         shell: pwsh
-        run: |
-          $Version = $env:TAG_NAME.TrimStart('v')
-          $env:ETL_SQL_VERSION = $Version
-          ./scripts/publish-release.ps1 -Platforms osx-x64
-
-      - name: Upload x64 release assets
-        if: steps.macos_x64.outcome == 'success'
-        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG_NAME" release/*.zip release/*.vsix --clobber
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-certified-macos.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), 'osx-x64', 'selected') -EvidenceDirectory release-validation/supervisors/osx-x64 -TimeoutSeconds 900
+      - name: Retain certified macOS selection
+        id: receipt
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: certified-osx-x64-selection-${{ github.run_id }}-${{ github.run_attempt }}
+          path: selected/certified-osx-x64-selection.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Retain selection diagnostics
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@v7
+        with:
+          name: certified-osx-x64-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/supervisors/osx-x64/
+          if-no-files-found: warn
+          retention-days: 30
 
-      # DMG is parked at "TUI launcher" parity and fully optional — never block the release.
-      - name: Build & upload macOS DMG (best effort)
-        if: steps.macos_x64.outcome == 'success'
-        continue-on-error: true
-        shell: bash
+  select-macos-arm64:
+    name: Select certified macOS (osx-arm64)
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    outputs:
+      artifact_id: ${{ steps.selection.outputs.artifact_id }}
+      run_id: ${{ steps.selection.outputs.run_id }}
+      manifest_sha256: ${{ steps.selection.outputs.manifest_sha256 }}
+      selection_artifact_id: ${{ steps.receipt.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 6
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require certified pre-tag macOS packages
+        id: selection
+        timeout-minutes: 17
+        shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          Version="${TAG_NAME#v}"
-          chmod +x scripts/build-mac-dmg.sh
-          ./scripts/build-mac-dmg.sh "$Version" release/osx-x64/bin
-          mv "ETL-SQL_v${Version}.dmg" release/
-          gh release upload "$TAG_NAME" release/*.dmg --clobber
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-certified-macos.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), 'osx-arm64', 'selected') -EvidenceDirectory release-validation/supervisors/osx-arm64 -TimeoutSeconds 900
+      - name: Retain certified macOS selection
+        id: receipt
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: certified-osx-arm64-selection-${{ github.run_id }}-${{ github.run_attempt }}
+          path: selected/certified-osx-arm64-selection.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Retain selection diagnostics
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@v7
+        with:
+          name: certified-osx-arm64-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/supervisors/osx-arm64/
+          if-no-files-found: warn
+          retention-days: 30
 
-      # Make a degraded macOS release visible: the arm64 VSIX/ZIP still shipped, but Intel
-      # (x64 VSIX/ZIP + DMG) was dropped. Surfaces as a ::warning:: annotation on the run
-      # without failing the job (echo exits 0, so the release still publishes).
-      - name: Flag missing Intel (x64) artifacts
-        if: steps.macos_x64.outcome == 'failure'
-        shell: bash
-        run: echo "::warning title=macOS Intel build skipped::osx-x64 publish failed; release ${TAG_NAME} shipped arm64 only (no Intel VSIX/ZIP, no DMG)."
+  upload-macos:
+    name: Upload retained macOS packages
+    needs: [validate, prepare-release, select-macos-intel, select-macos-arm64]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      intel_manifest_sha256: ${{ needs.select-macos-intel.outputs.manifest_sha256 }}
+      arm64_manifest_sha256: ${{ needs.select-macos-arm64.outputs.manifest_sha256 }}
+      intel_selection_artifact_id: ${{ needs.select-macos-intel.outputs.selection_artifact_id }}
+      arm64_selection_artifact_id: ${{ needs.select-macos-arm64.outputs.selection_artifact_id }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require retained native artifact IDs
+        timeout-minutes: 1
+        env:
+          INTEL_ARTIFACT_ID: ${{ needs.select-macos-intel.outputs.artifact_id }}
+          ARM64_ARTIFACT_ID: ${{ needs.select-macos-arm64.outputs.artifact_id }}
+        run: |
+          [[ "$INTEL_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$ARM64_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$INTEL_ARTIFACT_ID" != "$ARM64_ARTIFACT_ID" ]]
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.select-macos-intel.outputs.artifact_id }}
+          run-id: ${{ needs.select-macos-intel.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: candidate/intel
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.select-macos-arm64.outputs.artifact_id }}
+          run-id: ${{ needs.select-macos-arm64.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: candidate/arm64
+          merge-multiple: true
+      - name: Stage only certified release packages
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          version="${TAG_NAME#v}"
+          cp "candidate/intel/release/ETL-SQL-v${version}-osx-x64.zip" candidate/intel/
+          cp "candidate/intel/release/etl-sql-vscode-${version}-darwin-x64.vsix" candidate/intel/
+          cp candidate/intel/release/osx-x64-package-inputs.json candidate/intel/
+          cp "candidate/intel/release/ETL-SQL_v${version}.dmg" candidate/intel/
+          cp "candidate/arm64/release/ETL-SQL-v${version}-osx-arm64.zip" candidate/arm64/
+          cp "candidate/arm64/release/etl-sql-vscode-${version}-darwin-arm64.vsix" candidate/arm64/
+          cp candidate/arm64/release/osx-arm64-package-inputs.json candidate/arm64/
+      - name: Verify and upload native release assets
+        timeout-minutes: 10
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          INTEL_MANIFEST_SHA256: ${{ needs.select-macos-intel.outputs.manifest_sha256 }}
+          ARM64_MANIFEST_SHA256: ${{ needs.select-macos-arm64.outputs.manifest_sha256 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${TAG_NAME#v}"
+          node scripts/macos-release-packages.mjs verify candidate/intel "$SOURCE_SHA" "$version" osx-x64 "$INTEL_MANIFEST_SHA256"
+          node scripts/macos-release-packages.mjs verify candidate/arm64 "$SOURCE_SHA" "$version" osx-arm64 "$ARM64_MANIFEST_SHA256"
+          gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" candidate/intel/*.zip candidate/intel/*.vsix candidate/intel/*.dmg candidate/intel/osx-*-package-inputs.json candidate/arm64/*.zip candidate/arm64/*.vsix candidate/arm64/osx-*-package-inputs.json --clobber
+      - name: Report macOS upload recovery
+        timeout-minutes: 1
+        if: failure()
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          PACKAGE_PLATFORM: macOS
+          PACKAGE_ARTIFACT_IDS: ${{ needs.select-macos-intel.outputs.artifact_id }},${{ needs.select-macos-arm64.outputs.artifact_id }}
+        run: node scripts/report-package-upload-recovery.mjs
 
   # 5. Build-provenance attestation (SLSA) — runs BEFORE publish and gates it, so no artifact is ever
   # public without provenance. Downloads the still-draft release assets (a draft is invisible with
@@ -278,26 +656,138 @@ jobs:
   # (SBOM = contents, sha256sums = integrity, provenance = authenticity.)
   attest-provenance:
     name: Attest build provenance
-    needs: [build-windows, build-linux, build-macos]
+    timeout-minutes: 85
+    outputs:
+      release_evidence_artifact_id: ${{ needs.release-evidence.outputs.artifact_id }}
+      intel_selection_artifact_id: ${{ needs.upload-macos.outputs.intel_selection_artifact_id }}
+      arm64_selection_artifact_id: ${{ needs.upload-macos.outputs.arm64_selection_artifact_id }}
+      draft_manifest_sha256: ${{ steps.draft-manifest.outputs.sha256 }}
+      draft_manifest_artifact_id: ${{ steps.retain-draft-manifest.outputs.artifact-id }}
+    needs: [validate, upload-windows, upload-macos, promote-msi, promote-deb, release-evidence]
+    # Reuse intentionally skips certification ancestors. Require every direct gate to pass.
+    if: >-
+      ${{ !cancelled() && needs.validate.result == 'success' && needs.upload-windows.result == 'success' &&
+          needs.upload-macos.result == 'success' && needs.promote-msi.result == 'success' &&
+          needs.promote-deb.result == 'success' && needs.release-evidence.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write       # mint the OIDC token that signs the attestation
       attestations: write   # write the attestation to the repository
       contents: write       # required to read/download the still-draft release
+      actions: read        # read the retained hosted-evidence artifact
     steps:
       - name: Checkout
+        timeout-minutes: 8
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.TAG_NAME }}
+          ref: ${{ needs.validate.outputs.source_sha }}
       - name: Download draft release assets
+        timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p dist
-          gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --dir dist \
+          gh release download "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --dir dist \
             --pattern '*.zip' --pattern '*.msi' --pattern '*.deb' \
-            --pattern '*.dmg' --pattern '*.vsix'
+            --pattern '*.dmg' --pattern '*.vsix' --pattern 'msi-certification-inputs.json' --pattern 'msi-certification.json' \
+            --pattern 'deb-certification-inputs.json' --pattern 'deb-certification.json' \
+            --pattern 'windows-package-inputs.json' --pattern 'osx-*-package-inputs.json'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Verify draft Windows packages against retained build
+        timeout-minutes: 3
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          MANIFEST_SHA256: ${{ needs.upload-windows.outputs.manifest_sha256 }}
+        run: node scripts/windows-release-packages.mjs verify dist "$SOURCE_SHA" "${TAG_NAME#v}" "$MANIFEST_SHA256"
+      - name: Verify draft macOS packages against retained builds
+        timeout-minutes: 3
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          INTEL_MANIFEST_SHA256: ${{ needs.upload-macos.outputs.intel_manifest_sha256 }}
+          ARM64_MANIFEST_SHA256: ${{ needs.upload-macos.outputs.arm64_manifest_sha256 }}
+        run: |
+          node scripts/macos-release-packages.mjs verify dist "$SOURCE_SHA" "${TAG_NAME#v}" osx-x64 "$INTEL_MANIFEST_SHA256"
+          node scripts/macos-release-packages.mjs verify dist "$SOURCE_SHA" "${TAG_NAME#v}" osx-arm64 "$ARM64_MANIFEST_SHA256"
+      - name: Verify draft Linux packages against candidate
+        timeout-minutes: 3
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          ARTIFACT_ID: ${{ needs.promote-deb.outputs.artifact_id }}
+        run: node scripts/check-deb-candidate.mjs dist/deb-certification-inputs.json dist/deb-certification.json "$SOURCE_SHA" "${TAG_NAME#v}" "$ARTIFACT_ID" "dist/etl-sql_${TAG_NAME#v}_amd64.deb" "dist/ETL-SQL-${TAG_NAME}-linux-x64.zip" "dist/etl-sql-vscode-${TAG_NAME#v}-linux-x64.vsix"
+      - name: Verify draft MSI against certification
+        timeout-minutes: 3
+        shell: pwsh
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: |
+          New-Item -ItemType Directory -Force candidate | Out-Null
+          Copy-Item dist/msi-certification-inputs.json candidate/candidate.json
+          ./scripts/MsiCandidate.ps1 -Mode VerifyPublished -Directory candidate -SourceSha $env:SOURCE_SHA -PublishedMsi "dist/ETL-SQL-$env:TAG_NAME-x64-Setup.msi"
+      - name: Download verified hosted evidence
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.validate.outputs.hosted_evidence_artifact_id }}
+          path: dist
+          merge-multiple: true
+      - name: Download certified Windows selection
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.validate.outputs.windows_selection_artifact_id }}
+          path: dist
+          merge-multiple: true
+      - name: Download certified osx-x64 selection
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.upload-macos.outputs.intel_selection_artifact_id }}
+          path: dist
+          merge-multiple: true
+      - name: Download certified osx-arm64 selection
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.upload-macos.outputs.arm64_selection_artifact_id }}
+          path: dist
+          merge-multiple: true
+      - name: Require the same certified Windows payload
+        timeout-minutes: 3
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: node scripts/check-windows-package-origin.mjs dist/msi-certification-inputs.json dist/certified-windows-selection.json "$SOURCE_SHA" "${TAG_NAME#v}"
+      - name: Verify and attach certified macOS selections
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node scripts/collect-certified-macos.mjs verify-draft dist dist/certified-osx-x64-selection.json osx-x64
+          node scripts/collect-certified-macos.mjs verify-draft dist dist/certified-osx-arm64-selection.json osx-arm64
+          gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/certified-osx-*-selection.json --clobber
+      - name: Attach certified Windows selection to draft
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/certified-windows-selection.json --clobber
+      - name: Attach hosted evidence to draft
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/hosted-release-evidence.json --clobber
+      - name: Download selected release evidence
+        if: env.DRY_RUN != 'true'
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.release-evidence.outputs.artifact_id }}
+          path: dist
+          merge-multiple: true
+      - name: Attach release evidence selection to draft
+        if: env.DRY_RUN != 'true'
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/release-evidence-selection.json --clobber
       - name: Attest draft artifacts
+        if: env.DRY_RUN != 'true' # attestations are permanent public records
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: 'dist/*'
@@ -306,27 +796,165 @@ jobs:
       # full set of published artifacts — and attach them (SBOM = contents, sha256sums = integrity;
       # the attestation above is authenticity).
       - name: Generate and upload checksums + SBOM
+        timeout-minutes: 12
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ( cd dist && sha256sum -b * > ../sha256sums.txt )
           mkdir -p release
           node scripts/generate-sbom.js   # reads version from Directory.Build.props -> release/sbom.json
-          gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" \
+          gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" \
             sha256sums.txt release/sbom.json --clobber
+      - name: Bind complete verified draft asset set
+        timeout-minutes: 3
+        id: draft-manifest
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: |
+          cp sha256sums.txt release/sbom.json dist/
+          digest=$(node scripts/release-draft-manifest.mjs create dist verified-draft.json "$SOURCE_SHA" "$TAG_NAME")
+          echo "sha256=$digest" >> "$GITHUB_OUTPUT"
+      - name: Retain verified draft manifest
+        id: retain-draft-manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: verified-draft-${{ github.run_id }}-${{ github.run_attempt }}
+          path: verified-draft.json
+          if-no-files-found: error
+          retention-days: 30
 
   # 6. Publish the GitHub Release (un-draft) only after provenance is attached, so the artifacts are
   # never public without provenance.
   publish-release:
     name: Publish GitHub Release
-    needs: attest-provenance
+    timeout-minutes: 110
+    needs: [validate, attest-provenance]
+    if: ${{ !cancelled() && needs.validate.result == 'success' && needs.attest-provenance.result == 'success' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+      security-events: read
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.TAG_NAME }}
+          ref: ${{ needs.validate.outputs.source_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Recheck hosted evidence before publication
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: node scripts/collect-hosted-release-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-hosted-evidence.json
+      - name: Download original release evidence selection
+        if: env.DRY_RUN != 'true'
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.attest-provenance.outputs.release_evidence_artifact_id }}
+          path: selected-release-evidence
+          merge-multiple: true
+      - name: Recheck release evidence and its draft attachment before publication
+        if: env.DRY_RUN != 'true'
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          node scripts/collect-release-evidence.mjs recheck "$GITHUB_REPOSITORY" "$SOURCE_SHA" selected-release-evidence/release-evidence-selection.json
+          mkdir current-release-evidence
+          gh release download "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --pattern release-evidence-selection.json --dir current-release-evidence
+          cmp selected-release-evidence/release-evidence-selection.json current-release-evidence/release-evidence-selection.json
+      - name: Download original certified Windows selection
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.validate.outputs.windows_selection_artifact_id }}
+          path: selected-windows
+          merge-multiple: true
+      - name: Recheck certified Windows origin before publication
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: node scripts/collect-certified-windows.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" "${TAG_NAME#v}" current-windows selected-windows/certified-windows-selection.json
+      - name: Verify draft Windows packages and selection
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: |
+          mkdir current-windows-draft
+          gh release download "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --dir current-windows-draft \
+            --pattern "ETL-SQL-${TAG_NAME}-win-x64.zip" --pattern "etl-sql-vscode-${TAG_NAME#v}-win32-x64.vsix" \
+            --pattern windows-package-inputs.json --pattern certified-windows-selection.json --pattern msi-certification-inputs.json
+          node scripts/collect-certified-windows.mjs verify-draft current-windows-draft current-windows/certified-windows-selection.json
+          node scripts/check-windows-package-origin.mjs current-windows-draft/msi-certification-inputs.json current-windows/certified-windows-selection.json "$SOURCE_SHA" "${TAG_NAME#v}"
+      - name: Download original certified osx-x64 selection
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.attest-provenance.outputs.intel_selection_artifact_id }}
+          path: selected-macos
+          merge-multiple: true
+      - name: Recheck certified osx-x64 origin before publication
+        timeout-minutes: 17
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-certified-macos.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), 'osx-x64', 'current-macos', 'selected-macos/certified-osx-x64-selection.json') -EvidenceDirectory release-validation/supervisors/osx-x64 -TimeoutSeconds 900
+      - name: Download original certified osx-arm64 selection
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.attest-provenance.outputs.arm64_selection_artifact_id }}
+          path: selected-macos
+          merge-multiple: true
+      - name: Recheck certified osx-arm64 origin before publication
+        timeout-minutes: 17
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-certified-macos.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), 'osx-arm64', 'current-macos', 'selected-macos/certified-osx-arm64-selection.json') -EvidenceDirectory release-validation/supervisors/osx-arm64 -TimeoutSeconds 900
+      - name: Download pinned verified draft manifest
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.attest-provenance.outputs.draft_manifest_artifact_id }}
+          path: verified-draft
+          merge-multiple: true
+      - name: Recheck every draft asset before publication
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          MANIFEST_SHA256: ${{ needs.attest-provenance.outputs.draft_manifest_sha256 }}
+        run: |
+          mkdir final-draft
+          gh release download "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --dir final-draft
+          node scripts/release-draft-manifest.mjs verify final-draft verified-draft/verified-draft.json "$SOURCE_SHA" "$TAG_NAME" "$MANIFEST_SHA256"
+
+      - name: Verify draft macOS packages and selections
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          node scripts/collect-certified-macos.mjs verify-draft final-draft current-macos/certified-osx-x64-selection.json osx-x64
+          node scripts/collect-certified-macos.mjs verify-draft final-draft current-macos/certified-osx-arm64-selection.json osx-arm64
+      - name: Retain publication diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: publication-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/supervisors/
+          if-no-files-found: warn
+          retention-days: 30
       - name: Publish draft release
+        if: env.DRY_RUN != 'true'
+        timeout-minutes: 15
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -336,5 +964,70 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate published releases before updating Latest.' }
           $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ })
           $latest = Get-ReleaseLatestValue -CandidateTag $env:TAG_NAME -Releases $releases
-          gh release edit $env:TAG_NAME --repo $env:GITHUB_REPOSITORY --draft=false "--latest=$latest"
+          gh release edit $env:DRAFT_TAG --repo $env:GITHUB_REPOSITORY --draft=false "--latest=$latest"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot publish draft release.' }
+
+  # 7. Publish certified VS Code extensions to Visual Studio Marketplace via OIDC Trusted Publishing.
+  # vsce is pinned to the version that packages them (scripts/vsix/package.json). --skip-duplicate
+  # skips a VSIX whose version and platform the Marketplace already has, so a rerun after a partial
+  # failure publishes only what is missing.
+  publish-marketplace:
+    name: Publish VS Code Extensions to Marketplace
+    timeout-minutes: 20
+    needs: [publish-release]
+    if: ${{ !cancelled() && needs.publish-release.result == 'success' && !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download certified VSIX packages
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir dist
+          gh release download "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --dir dist --pattern '*.vsix'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Publish platform VSIXs via OIDC Trusted Publishing
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          vsix_files=(dist/*.vsix)
+          if [ ${#vsix_files[@]} -eq 0 ]; then
+            echo "::error::No VSIX packages found in release assets."
+            exit 1
+          fi
+          for vsix in "${vsix_files[@]}"; do
+            echo "Publishing $(basename "$vsix") to Visual Studio Marketplace via OIDC..."
+            npx --yes @vscode/vsce@4.0.0 publish --oidc --skip-duplicate --packagePath "$vsix"
+          done
+
+  # 8. A dry run deletes its own draft. It refuses anything that is not a dry-run draft.
+  discard-dry-run-draft:
+    name: Delete dry-run draft
+    timeout-minutes: 10
+    needs: [prepare-release, promote-msi, promote-deb, upload-windows, upload-macos, attest-provenance, publish-release]
+    if: ${{ always() && inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete the draft this run created
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$DRAFT_TAG" == dry-run-v* ]]
+          if ! state=$(gh release view "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,tagName --jq '"\(.isDraft) \(.tagName)"' 2>/dev/null); then
+            echo "No draft $DRAFT_TAG exists; nothing to delete."; exit 0
+          fi
+          [[ "$state" == "true $DRAFT_TAG" ]] || { echo "::error::$DRAFT_TAG is not a dry-run draft ($state); left untouched."; exit 1; }
+          gh release delete "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --yes
+          echo "Deleted dry-run draft $DRAFT_TAG."

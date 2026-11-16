@@ -16,7 +16,7 @@ public sealed class AdminGroupsPageTests(AdminUsersFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/admin.html");
+        await page.GotoWithDiagnosticsAsync("/admin.html");
         await Expect(page.Locator("#userTableWrap")).ToHaveAttributeAsync("data-users-state", "ready");
         await page.Locator(".admin-tab[data-tab='groups']").ClickAsync();
         await Expect(page.Locator("#groupTableWrap")).ToHaveAttributeAsync("data-groups-state", "ready");

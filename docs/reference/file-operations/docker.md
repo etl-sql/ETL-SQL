@@ -8,6 +8,9 @@ Syntax:
   RESUME_DOCKER <alias>;
   CLOSE_DOCKER  <alias | image>;
 
+Every image needs host-administrator approval in `Governance:Docker:AllowedImages`; see
+[Image Approval](../statements/use-docker.md#image-approval).
+
 START_DOCKER pulls the image if not present locally and starts a container. AS <alias> assigns a name for subsequent operations.
 
 ```sql

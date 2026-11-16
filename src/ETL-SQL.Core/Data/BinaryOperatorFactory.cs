@@ -23,25 +23,33 @@ public static class BinaryOperatorFactory
         [TokenType.RSHIFT] = (l, r) => ShiftOp(l, r, ">>")
     };
 
+    // An operand that is not a number, or a result that does not fit, is an error. Both used to
+    // give NULL, so `'abc' - 5` and an overflowing product read as missing data.
+    private static ExecutionException NotNumeric(object a, object b, string op) =>
+        new($"Cannot apply '{op}' to '{TypeConverter.ToInvariantText(a)}' and '{TypeConverter.ToInvariantText(b)}': both operands must be numbers.");
+
+    private static ExecutionException Overflow(object a, object b, string op) =>
+        new($"Arithmetic overflow in '{TypeConverter.ToInvariantText(a)} {op} {TypeConverter.ToInvariantText(b)}'.");
+
     private static object? MathOp(object? a, object? b, string op)
     {
-        if (a == null || b == null) return null;
+        if (a is null or DBNull || b is null or DBNull) return null;
 
         // Handle date arithmetic (FW-6)
         if (a is DateTime dtA)
         {
-            if (op == "+")
-            {
-                try { return dtA.AddDays(Convert.ToDouble(b)); } catch { return null; }
-            }
-            if (op == "-" && b is DateTime dtB)
-            {
-                return (decimal)(dtA - dtB).TotalDays;
-            }
-            if (op == "-")
-            {
-                try { return dtA.AddDays(-Convert.ToDouble(b)); } catch { return null; }
-            }
+            if (op == "-" && TryGetDateDiffDays(dtA, b, out var diffDays))
+                return diffDays;
+            if (op is "+" or "-")
+                return AddDays(dtA, b, op, sign: op == "+" ? 1 : -1);
+        }
+
+        if (a is DateOnly dA)
+        {
+            if (op == "-" && TryGetDateDiffDays(dA.ToDateTime(TimeOnly.MinValue), b, out var diffDays))
+                return diffDays;
+            if (op is "+" or "-")
+                return AddDays(dA, b, op, sign: op == "+" ? 1 : -1);
         }
 
         decimal da, db;
@@ -52,7 +60,14 @@ public static class BinaryOperatorFactory
         }
         catch
         {
-            return op == "+" ? a?.ToString() + b?.ToString() : null;
+            // COMPAT_BREAK: 0.22.0 — a double outside decimal's range (1e30, NaN, ±Infinity) is still a
+            // number: compute it as a double instead of concatenating the two values as text for "+"
+            // and returning NULL for the other operators.
+            if (IsFloatingPoint(a) || IsFloatingPoint(b))
+                return DoubleOp(a, b, op);
+            // `+` on text is concatenation; no other operator has a meaning for text.
+            if (op == "+") return TypeConverter.ToInvariantText(a) + TypeConverter.ToInvariantText(b);
+            throw NotNumeric(a, b, op);
         }
         try
         {
@@ -69,40 +84,56 @@ public static class BinaryOperatorFactory
         }
         catch (OverflowException)
         {
-            return null;
+            throw Overflow(a, b, op);
         }
+    }
+
+    private static bool IsFloatingPoint(object? value) => value is double or float;
+
+    private static object? DoubleOp(object a, object b, string op)
+    {
+        double da, db;
+        try
+        {
+            da = Convert.ToDouble(a, System.Globalization.CultureInfo.InvariantCulture);
+            db = Convert.ToDouble(b, System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
+        {
+            throw NotNumeric(a, b, op);
+        }
+        if ((op == "/" || op == "%") && db == 0)
+            throw new ExecutionException("Divide by zero error encountered.");
+        var result = op switch
+        {
+            "+" => da + db,
+            "-" => da - db,
+            "*" => da * db,
+            "/" => da / db,
+            "%" => da % db,
+            _ => double.NaN
+        };
+        // NaN and infinity in give NaN and infinity out; only finite operands can overflow.
+        if (!double.IsFinite(result) && double.IsFinite(da) && double.IsFinite(db)) throw Overflow(a, b, op);
+        return result;
     }
 
     private static object? ShiftOp(object? a, object? b, string op)
     {
-        if (a == null || b == null) return null;
+        if (a is null or DBNull || b is null or DBNull) return null;
         long valA, valB;
         try
         {
             valA = Convert.ToInt64(a, System.Globalization.CultureInfo.InvariantCulture);
             valB = Convert.ToInt64(b, System.Globalization.CultureInfo.InvariantCulture);
         }
-        catch
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
         {
-            return null;
+            throw NotNumeric(a, b, op);
         }
 
-        try
-        {
-            if (op == "<<")
-            {
-                return valA << (int)(valB & 63);
-            }
-            if (op == ">>")
-            {
-                return valA >> (int)(valB & 63);
-            }
-        }
-        catch (OverflowException)
-        {
-            return null;
-        }
-        return null;
+        // Shifting a long cannot overflow: bits fall off the end.
+        return op == "<<" ? valA << (int)(valB & 63) : valA >> (int)(valB & 63);
     }
 
     private static bool IsIntegerType(object? val)
@@ -117,6 +148,34 @@ public static class BinaryOperatorFactory
             return !s.Contains('.') && !s.Contains('e') && !s.Contains('E');
         }
         return false;
+    }
+
+    private static bool TryGetDateDiffDays(DateTime dtA, object b, out decimal diffDays)
+    {
+        if (b is DateTime dtB) { diffDays = (decimal)(dtA - dtB).TotalDays; return true; }
+        if (b is DateOnly dB) { diffDays = (decimal)(dtA - dB.ToDateTime(TimeOnly.MinValue)).TotalDays; return true; }
+        diffDays = 0;
+        return false;
+    }
+
+    private static object AddDays(object a, object b, string op, int sign)
+    {
+        try
+        {
+            double days = sign * Convert.ToDouble(b, System.Globalization.CultureInfo.InvariantCulture);
+            if (a is DateTime dt) return dt.AddDays(days);
+            if (a is DateOnly dateOnly)
+            {
+                if (days == Math.Truncate(days) && days >= int.MinValue && days <= int.MaxValue)
+                    return dateOnly.AddDays((int)days);
+                return dateOnly.ToDateTime(TimeOnly.MinValue).AddDays(days);
+            }
+            throw NotNumeric(a, b, op);
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException or ArgumentOutOfRangeException)
+        {
+            throw NotNumeric(a, b, op);
+        }
     }
 
     /// <summary>Executes a binary operation for the given token type.</summary>

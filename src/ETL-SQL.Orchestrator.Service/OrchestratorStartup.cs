@@ -100,6 +100,25 @@ namespace ETL_SQL.Orchestrator.Service
         /// Throws <see cref="InvalidOperationException"/> when no API key is configured but the service
         /// is bound to a non-loopback address. Call this during startup, before serving requests.
         /// </summary>
+        /// <summary>
+        /// True when no API key (current or previous) is configured. The job API then accepts every
+        /// request, which <see cref="ValidateApiKeyBinding"/> only allows on loopback.
+        /// </summary>
+        public static bool IsKeyless(IConfiguration configuration) =>
+            !new[] { configuration["Orchestrator:ApiKey"] }
+                .Concat(configuration.GetSection("Orchestrator:PreviousApiKeys").Get<string[]>() ?? [])
+                .Any(key => !string.IsNullOrWhiteSpace(key));
+
+        /// <summary>
+        /// Whether a request's Host names this machine's loopback. A keyless Orchestrator serves only
+        /// these: a web page that rebinds its own host name to 127.0.0.1 arrives with that name, and
+        /// would otherwise run scripts through the unauthenticated job API.
+        /// </summary>
+        public static bool IsLoopbackHost(string? host) =>
+            host is not null
+            && (host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+                || (System.Net.IPAddress.TryParse(host.Trim('[', ']'), out var address) && System.Net.IPAddress.IsLoopback(address)));
+
         public static void ValidateApiKeyBinding(IConfiguration configuration)
         {
             var configuredTenant = configuration["Orchestrator:TenantId"];

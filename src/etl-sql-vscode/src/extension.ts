@@ -25,8 +25,13 @@ import * as logger from './logger';
 import { ensureExecutable } from './permissions';
 import { getTerminalCommand } from './terminalCommandBuilder';
 import { cleanupTempFiles } from './cleanupService';
+import { shadowCopyExecutable as shadowCopyToStorage, cleanupShadowDirectory as cleanupShadowStorage } from './shadowCopy';
+import { sanitizeVariableForClient, sanitizeVariablesForClient } from './clientSanitizer';
+import { ETL_DOCUMENT_SELECTOR, ETL_FILE_WATCH_GLOB } from './lspSelectors';
 import { generateScriptFromSpec } from './generateScriptFromSpec';
-import { markPolicySave, consumePolicySave } from './saveGuard';
+import { consumePolicySave } from './saveGuard';
+import { replaceDocumentWithoutUndoHistory } from './documentWriter';
+import { analyzeSavePolicy, getSealPasswordRequirement, requiresRunPasswordPrompt } from './savePolicy';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -48,24 +53,6 @@ function sanitizeConnectionForClient(value: unknown): Connection {
     };
 }
 
-function isSensitiveName(name: unknown): boolean {
-    const text = String(name ?? '');
-    return /(password|passwd|pwd|secret|token|api[_-]?key|credential|private[_-]?key)/i.test(text);
-}
-
-function sanitizeVariableForClient(value: unknown): unknown {
-    if (!isObject(value)) {
-        return value;
-    }
-
-    const name = value.name;
-    const typeName = value.typeName ?? value.type;
-    if (isSensitiveName(name) || isSensitiveName(typeName)) {
-        return { ...value, value: '(secret)' };
-    }
-
-    return value;
-}
 
 function buildSafeConnectionSnippet(conn: { name: string; type: string }): string {
     return `CREATE CONNECTION ${conn.name} AS ${conn.type}(/* connection options */);`;
@@ -156,9 +143,11 @@ export async function activate(context: vscode.ExtensionContext) {
         sidebarProvider.postMessage({ type: 'connections', connections: connectionsProvider.getConnections() });
     });
 
+    // The engine streams raw runtime values, so mask them here exactly as the LSP path does.
     ReplManager.getInstance().onVariablesChange(vars => {
-        connectionsProvider.updateVariables(vars as { name: string; value: string; type: string }[]);
-        sidebarProvider.postMessage({ type: 'variables', variables: vars });
+        const safeVars = sanitizeVariablesForClient(vars);
+        connectionsProvider.updateVariables(safeVars as { name: string; value: string; type: string }[]);
+        sidebarProvider.postMessage({ type: 'variables', variables: safeVars });
     });
 
     let lastActiveUri: string | undefined = vscode.window.activeTextEditor?.document.uri.toString();
@@ -271,12 +260,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
         const lspOutputChannel = vscode.window.createOutputChannel('ETL-SQL Language Server', { log: true });
         const clientOptions: LanguageClientOptions = {
-            documentSelector: [
-                { scheme: 'file', language: 'etlsql' },
-                { scheme: 'untitled', language: 'etlsql' }
-            ],
+            documentSelector: ETL_DOCUMENT_SELECTOR,
             synchronize: {
-                fileEvents: vscode.workspace.createFileSystemWatcher('**/*.etlsql')
+                fileEvents: vscode.workspace.createFileSystemWatcher(ETL_FILE_WATCH_GLOB)
             },
             outputChannel: lspOutputChannel
         };
@@ -348,6 +334,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const exePath = await getExecutablePath(context, config);
         return generateScriptFromSpec(context, exePath, uri);
     }));
+
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.runScript', () => {
         runEtlSql(context);
@@ -495,14 +482,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
 
         const text = editor.document.getText();
-        const noSaveSensitive = lastOnOffSetting(text, 'NO_SAVE_SENSITIVE');
-        const noSaveConnection = lastOnOffSetting(text, 'NO_SAVE_CONNECTION');
-        const connectionEncryption = lastOnOffSetting(text, 'CONNECTION_ENCRYPTION');
-        const hasPlainTextCreds = /\b(PASSWORD|API_KEY|APIKEY)\s*=\s*'(?!ENC:)[^']*'/i.test(text) ||
-                                  /\bPassword\s*=\s*(?!['\s]|ENC:)[^;'\s]+/i.test(text);
-        const hasConnection = /\bCREATE\s+CONNECTION\b/i.test(text);
-        const literalUsePassword = text.match(/\bUSE\s+PASSWORD\s*=\s*(['"])([\s\S]*?)\1\s*;?/i)?.[2];
-        const needsPassword = !noSaveConnection && ((connectionEncryption && hasConnection) || (!noSaveSensitive && hasPlainTextCreds));
+        const { needsPassword, literalUsePassword } = getSealPasswordRequirement(text);
         const password = needsPassword
             ? literalUsePassword ?? await vscode.window.showInputBox({
                 password: true,
@@ -521,31 +501,13 @@ export async function activate(context: vscode.ExtensionContext) {
                 password: password
             }) as { encryptedText: string };
 
-            if (response && response.encryptedText) {
-                const fullRange = new vscode.Range(
-                    editor.document.positionAt(0),
-                    editor.document.positionAt(editor.document.getText().length)
-                );
-                
-                const applied = await editor.edit(editBuilder => {
-                    editBuilder.replace(fullRange, response.encryptedText);
-                });
-
-                if (!applied) {
+            if (response && response.encryptedText && response.encryptedText !== text) {
+                const outcome = await replaceDocumentWithoutUndoHistory(editor, response.encryptedText);
+                if (outcome === 'failed') {
                     vscode.window.showErrorMessage("ETL-SQL: Could not rewrite the script with the secured connections.");
-                    return;
-                }
-
-                // Persist immediately. Leaving the encrypted text unsaved is worse than not having
-                // encrypted at all: the editor shows ENC:... while the file on disk still holds the
-                // plaintext password, so closing without saving silently keeps the secret.
-                const documentKey = editor.document.uri.toString();
-                markPolicySave(documentKey);
-                const saved = await editor.document.save();
-
-                if (saved) {
+                } else if (outcome === 'reverted' || outcome === 'saved') {
                     vscode.window.showInformationMessage("Script secrets secured and saved.");
-                } else {
+                } else if (outcome === 'unsaved') {
                     vscode.window.showWarningMessage(
                         "ETL-SQL: Connections were secured but the file could not be saved — save it before closing, or the plaintext on disk will remain."
                     );
@@ -609,48 +571,15 @@ export async function activate(context: vscode.ExtensionContext) {
         if (consumePolicySave(document.uri.toString())) {
             return;
         }
-        const text = document.getText();
-        const allowPlaintextSecretsPattern = /\bSET\s+ALLOW_PLAINTEXT_SECRETS\s*(?:=\s*)?(ON|OFF)\b/gi;
-        const noSaveSensitivePattern = /\bSET\s+NO_SAVE_SENSITIVE\s*(?:=\s*)?(ON|OFF)\b/gi;
-        const noSaveConnectionPattern = /\bSET\s+NO_SAVE_CONNECTION\s*(?:=\s*)?(ON|OFF)\b/gi;
-        const connectionEncryptionPattern = /\bSET\s+CONNECTION_ENCRYPTION\s*(?:=\s*)?(ON|OFF)\b/gi;
-        let allowPlaintextSecrets = false;
-        let noSaveSensitive = false;
-        let noSaveConnection = false;
-        let connectionEncryption = false;
-        let allowPlaintextSecretsMatch: RegExpExecArray | null;
-        while ((allowPlaintextSecretsMatch = allowPlaintextSecretsPattern.exec(text)) !== null) {
-            allowPlaintextSecrets = allowPlaintextSecretsMatch[1].toUpperCase() === 'ON';
-        }
-        let match: RegExpExecArray | null;
-        while ((match = noSaveSensitivePattern.exec(text)) !== null) {
-            noSaveSensitive = match[1].toUpperCase() === 'ON';
-        }
-        while ((match = noSaveConnectionPattern.exec(text)) !== null) {
-            noSaveConnection = match[1].toUpperCase() === 'ON';
-        }
-        while ((match = connectionEncryptionPattern.exec(text)) !== null) {
-            connectionEncryption = match[1].toUpperCase() === 'ON';
-        }
-        const hasPlainTextCreds = /\b(PASSWORD|API_KEY|APIKEY)\s*=\s*'(?!ENC:)[^']*'/i.test(text) || 
-                                 /\bPassword\s*=\s*(?!['\s]|ENC:)[^;'\s]+/i.test(text);
-        const hasLiteralUsePassword = /\bUSE\s+PASSWORD\s*=\s*(['"])[\s\S]*?\1\s*;?/i.test(text);
-        const hasConnection = /\bCREATE\s+CONNECTION\b/i.test(text);
-        if (allowPlaintextSecrets && !noSaveSensitive && !noSaveConnection && !connectionEncryption && (hasPlainTextCreds || hasLiteralUsePassword)) {
+        const decision = analyzeSavePolicy(document.getText());
+        if (decision.action === 'warn-plaintext') {
             vscode.window.showWarningMessage(
                 "ALLOW_PLAINTEXT_SECRETS is ON. Plaintext secrets may remain in this file and should not be committed."
             );
             return;
         }
-        if (hasPlainTextCreds || hasLiteralUsePassword || noSaveSensitive || noSaveConnection || (connectionEncryption && hasConnection)) {
-            const encryptOption = "Apply Save Policy";
-            const response = await vscode.window.showWarningMessage(
-                "This script contains save-time security work. Would you like to apply the script save policy now?",
-                encryptOption
-            );
-            if (response === encryptOption) {
-                vscode.commands.executeCommand('etlsql.secureConnection', document.uri.toString());
-            }
+        if (decision.action === 'auto-seal') {
+            await vscode.commands.executeCommand('etlsql.secureConnection', document.uri.toString());
         }
     }));
 }
@@ -661,18 +590,6 @@ function syncConnectionsToLsp() {
         client.sendNotification('etlsql/setConnections', { connections });
         sidebarProvider.postMessage({ type: 'connections', connections });
     }
-}
-
-function lastOnOffSetting(text: string, settingName: string): boolean {
-    const pattern = /\bSET\s+([A-Z_]+)\s*(?:=\s*)?(ON|OFF)\b/gi;
-    let value = false;
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(text)) !== null) {
-        if (match[1].toUpperCase() === settingName) {
-            value = match[2].toUpperCase() === 'ON';
-        }
-    }
-    return value;
 }
 
 // Removed syncDebugModeToLsp
@@ -721,7 +638,7 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     const fileName = path.basename(document.fileName);
 
     let masterPassword = "";
-    if (scriptText.includes('ENC:')) {
+    if (requiresRunPasswordPrompt(scriptText)) {
         masterPassword = await vscode.window.showInputBox({
             password: true,
             prompt: "Master Password required for encrypted credentials in this script",
@@ -1009,8 +926,9 @@ async function launchReport(context: vscode.ExtensionContext, mode: 'file' | 'di
     const dir = path.dirname(targetPath);
 
     if (mode === 'dir') {
-        args.push('--dir', `"${dir}"`);
-        args.push('--open', `"${path.basename(targetPath)}"`);
+        // Raw values: getTerminalCommand quotes every argument for the active shell.
+        args.push('--dir', dir);
+        args.push('--open', path.basename(targetPath));
     } else if (mode === 'manifest') {
         // Look for reports.json in current or parent dirs
         let currentDir = dir;
@@ -1028,11 +946,11 @@ async function launchReport(context: vscode.ExtensionContext, mode: 'file' | 'di
             vscode.window.showErrorMessage('ETL-SQL: No reports.json manifest found in current or parent directories.');
             return;
         }
-        args.push('--manifest', `"${manifestPath}"`);
-        args.push('--open', `"${path.basename(targetPath)}"`);
+        args.push('--manifest', manifestPath);
+        args.push('--open', path.basename(targetPath));
     } else {
         // Single file mode
-        args.push(`"${targetPath}"`);
+        args.push(targetPath);
     }
 
     const command = getTerminalCommand(reportExe.exe, args);
@@ -1132,60 +1050,18 @@ async function exportNotebookToSql() {
     }
 }
 
-async function shadowCopyExecutable(context: vscode.ExtensionContext, srcPath: string): Promise<string> {
-    try {
-        const version = context.extension.packageJSON.version;
-        const tempDir = path.join(os.tmpdir(), 'etl-sql-shadow', version);
-        const destPath = path.join(tempDir, path.basename(srcPath));
-
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-        }
-
-        const srcStats = fs.statSync(srcPath);
-        let needsCopy = true;
-
-        if (fs.existsSync(destPath)) {
-            const destStats = fs.statSync(destPath);
-            if (srcStats.size === destStats.size) {
-                needsCopy = false;
-            }
-        }
-
-        if (needsCopy) {
-            outputChannel?.appendLine(`[Extension] Shadow copying executable to temp directory: ${destPath}`);
-            fs.copyFileSync(srcPath, destPath);
-            if (os.platform() !== 'win32') {
-                fs.chmodSync(destPath, 0o755);
-            }
-        }
-
-        return destPath;
-    } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        outputChannel?.appendLine(`[Extension] Failed to shadow copy executable: ${message}. Using source path.`);
-        return srcPath;
-    }
+function shadowCopyExecutable(context: vscode.ExtensionContext, srcPath: string): Promise<string> {
+    return Promise.resolve(shadowCopyToStorage(
+        srcPath,
+        context.globalStorageUri.fsPath,
+        context.extension.packageJSON.version,
+        message => outputChannel?.appendLine(message)));
 }
 
-async function cleanupShadowDirectory(context: vscode.ExtensionContext) {
-    try {
-        const currentVersion = context.extension.packageJSON.version;
-        const parentDir = path.join(os.tmpdir(), 'etl-sql-shadow');
-        if (!fs.existsSync(parentDir)) {
-            return;
-        }
-
-        const entries = await fs.promises.readdir(parentDir, { withFileTypes: true });
-        for (const entry of entries) {
-            if (entry.isDirectory() && entry.name !== currentVersion) {
-                const oldDir = path.join(parentDir, entry.name);
-                outputChannel?.appendLine(`[Extension] Cleaning up old shadow directory: ${oldDir}`);
-                await fs.promises.rm(oldDir, { recursive: true, force: true });
-            }
-        }
-    } catch {
-        // Best-effort cleanup.
-    }
+function cleanupShadowDirectory(context: vscode.ExtensionContext): Promise<void> {
+    return cleanupShadowStorage(
+        context.globalStorageUri.fsPath,
+        context.extension.packageJSON.version,
+        message => outputChannel?.appendLine(message));
 }
 

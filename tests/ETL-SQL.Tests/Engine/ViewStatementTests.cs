@@ -70,7 +70,21 @@ SELECT view_name FROM #views;
         [Fact]
         public async Task DropView_RemovesView()
         {
-            await Run("CREATE VIEW V AS SELECT 1 AS n; DROP VIEW V; DROP VIEW IF EXISTS V;");
+            var eval = await Run(@"
+CREATE VIEW V AS SELECT 1 AS n;
+CREATE VIEW Kept AS SELECT 2 AS n;
+DROP VIEW V;
+DROP VIEW IF EXISTS V;
+SELECT * INTO #views FROM eng.views;
+SELECT view_name FROM #views;
+");
+
+            // V is gone from the catalog while the untouched view remains.
+            Assert.Single(eval.LastResult!.Rows);
+            Assert.Equal("Kept", eval.LastResult.Rows[0]["view_name"]);
+
+            // And it is gone for real: a plain DROP of it now fails.
+            await Assert.ThrowsAnyAsync<Exception>(() => eval.Evaluate(Parse("DROP VIEW V;")));
         }
 
         [Fact]

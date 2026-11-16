@@ -16,6 +16,8 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
     private readonly int _hashCode;
     private readonly bool _caseInsensitive;
     private readonly bool _isJoinKey;
+    // The text a group key was built from, where normalizing changed it. Not part of equality.
+    private readonly object?[]? _originals;
 
     public int Length => _values.Length;
     public object? this[int index] => _values[index];
@@ -55,7 +57,16 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
     public static CompoundKey CreateJoinKey(bool caseSensitive, object?[] values, int setIndex = 0) =>
         new(setIndex, caseSensitive, true, values);
 
-    private CompoundKey(int setIndex, bool caseSensitive, bool isJoinKey, object?[] values)
+    /// <summary>
+    /// Creates a group key that remembers the text it was built from. <c>'123'</c> and <c>123</c>
+    /// still fall in one group, and <see cref="Original"/> returns the first value the group saw.
+    /// </summary>
+    public static CompoundKey ForGroup(object?[] values) => new(0, true, false, values, keepOriginals: true);
+
+    /// <summary>The value to return for a grouping column: text stays text.</summary>
+    public object? Original(int index) => _originals != null ? _originals[index] : _values[index];
+
+    private CompoundKey(int setIndex, bool caseSensitive, bool isJoinKey, object?[] values, bool keepOriginals = false)
     {
         _setIndex = setIndex;
         _caseInsensitive = !caseSensitive;
@@ -81,6 +92,16 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
                 hash.Add(normalized);
         }
         _hashCode = hash.ToHashCode();
+
+        if (!keepOriginals) return;
+        for (int i = 0; i < values.Length; i++)
+        {
+            var original = values[i];
+            if (original is null || (original is string s && ReferenceEquals(s, _values[i])) || (original is not string && original is not DateOnly))
+                continue;
+            _originals ??= (object?[])_values.Clone();
+            _originals[i] = original;
+        }
     }
 
     public bool Equals(CompoundKey other)
@@ -146,12 +167,17 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
         if (val is decimal dec) return dec / 1.00000000000000000000000000000m;
 
         if (val is DateTime dt) return dt;
+        if (val is DateOnly dateOnly) return dateOnly.ToDateTime(TimeOnly.MinValue);
         if (val is DateTimeOffset dto) return dto.DateTime;
 
         // Ensure dates and numbers in strings are normalized
         if (val is string s)
         {
-            if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var dec2))
+            // Only plain number text ('123', '-4.50') keys as a number, so '1' still joins to 1.
+            // Codes such as '00123', '1,000' or '(5)' stay text: parsing them merged distinct
+            // values into one group, and the group came back as the number.
+            if (IsPlainNumber(s.Trim())
+                && decimal.TryParse(s.Trim(), System.Globalization.NumberStyles.AllowLeadingSign | System.Globalization.NumberStyles.AllowDecimalPoint, System.Globalization.CultureInfo.InvariantCulture, out var dec2))
                 return dec2 / 1.00000000000000000000000000000m;
 
             if (EvaluationUtils.SafeTryParseDate(s, out var dt2))
@@ -161,6 +187,22 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
         }
 
         return val;
+    }
+
+    // -?(0|[1-9][0-9]*)(\.[0-9]+)?
+    private static bool IsPlainNumber(string s)
+    {
+        int i = 0;
+        if (i < s.Length && s[i] == '-') i++;
+        int start = i;
+        while (i < s.Length && char.IsAsciiDigit(s[i])) i++;
+        int digits = i - start;
+        if (digits == 0 || (digits > 1 && s[start] == '0')) return false;
+        if (i == s.Length) return true;
+        if (s[i] != '.') return false;
+        int fraction = ++i;
+        while (i < s.Length && char.IsAsciiDigit(s[i])) i++;
+        return i > fraction && i == s.Length;
     }
 
     public int CompareTo(CompoundKey other)

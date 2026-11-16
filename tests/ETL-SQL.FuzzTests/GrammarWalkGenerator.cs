@@ -128,6 +128,13 @@ namespace ETL_SQL.FuzzTests
             }
         }
 
+        /// <summary>
+        /// True when the last query came from the statement templates, which are valid by
+        /// construction against the fuzz schema; false for a grammar walk, whose identifiers are
+        /// random and whose rejections are expected.
+        /// </summary>
+        public bool LastQueryIsValidByConstruction { get; private set; }
+
         public List<Token> GenerateQuery()
         {
             // Prefer complete statement skeletons most of the time. The raw grammar walker is useful
@@ -138,10 +145,12 @@ namespace ETL_SQL.FuzzTests
                 var generated = GenerateParserValidQuery();
                 if (generated.Count > 1)
                 {
+                    LastQueryIsValidByConstruction = true;
                     return generated;
                 }
             }
 
+            LastQueryIsValidByConstruction = false;
             return GenerateGrammarWalkQuery();
         }
 
@@ -324,11 +333,10 @@ namespace ETL_SQL.FuzzTests
                 7 => $"INSERT INTO src.{GetExecutionTable()} (ID, Name) VALUES ({_rng.Next(10, 1000)}, {GenerateStringLiteralSql()});",
                 8 => $"UPDATE src.{GetExecutionTable()} SET Price = {_rng.Next(1, 100)} WHERE ID = {_rng.Next(1, 4)};",
                 9 => $"DELETE FROM src.{GetExecutionTable()} WHERE ID = -1;",
-                10 => "SHOW VARIABLES;",
-                11 => "SHOW CONNECTIONS;",
-                12 => "SHOW VARIABLES;",
-                13 => "SHOW CONNECTIONS;",
-                14 => GenerateSelectStatement(),
+                // SHOW VARIABLES and SHOW CONNECTIONS are retired; these are their replacements.
+                10 => "SELECT * FROM eng.variables;",
+                11 => "SELECT * FROM eng.connections;",
+                12 or 13 or 14 => GenerateSelectStatement(),
                 15 => $"PRINT {GenerateStringLiteralSql()};",
                 16 => $"DECLARE @fuzzText VARCHAR(50) = {GenerateStringLiteralSql()};",
                 _ => $"PRINT {GenerateLiteralSql()};"
@@ -344,45 +352,176 @@ namespace ETL_SQL.FuzzTests
                    $"CREATE PAGE page_{_rng.Next(1, 1000)} AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = {visualName}));";
         }
 
-        private string GenerateSelectStatement()
+        // Every query below is valid by construction against the fuzz table, so an engine rejection
+        // is a finding, not generator noise: grouped queries project only grouped columns and
+        // aggregates, ORDER BY names a projected column (or any column when nothing is grouped or
+        // distinct), and set-operation branches project the same columns.
+        private string GenerateSelectStatement() => _rng.Next(10) switch
         {
-            var projections = _rng.Next(5) switch
-            {
-                0 => "*",
-                1 => $"{GetExecutionColumn()}, {GetExecutionColumn()}",
-                2 => $"{GenerateExpressionSql(2)} AS ExprValue",
-                3 => $"COUNT(*) AS RowCount",
-                _ => $"{GenerateWindowFunctionSql()} AS WindowValue"
-            };
+            0 or 1 or 2 => GenerateRowQuery(),
+            3 or 4 => GenerateAggregateQuery(),
+            5 => GenerateJoinQuery(),
+            6 => GenerateSetOperationQuery(),
+            7 => GenerateCteQuery(),
+            _ => GenerateSubqueryQuery(),
+        };
 
-            var sql = $"SELECT {projections} FROM src.{GetExecutionTable()}";
+        private string ExecutionSource => $"src.{GetExecutionTable()}";
 
-            if (_rng.Next(10) < 6)
+        private string GenerateRowQuery()
+        {
+            bool distinct = _rng.Next(10) < 2;
+            bool top = !distinct && _rng.Next(10) < 2;
+
+            string orderKey;
+            string projections;
+            switch (_rng.Next(4))
             {
-                sql += $" WHERE {GeneratePredicateSql()}";
+                case 0:
+                    projections = "*";
+                    orderKey = GetExecutionColumn();
+                    break;
+                case 1:
+                    orderKey = GetExecutionColumn();
+                    projections = $"{orderKey}, {GetExecutionColumn()}";
+                    break;
+                case 2:
+                    projections = $"{GenerateExpressionSql(2)} AS ExprValue";
+                    orderKey = "ExprValue";
+                    break;
+                default:
+                    projections = $"{GenerateWindowFunctionSql()} AS WindowValue";
+                    orderKey = "WindowValue";
+                    break;
             }
 
-            if (_rng.Next(10) < 3)
-            {
-                var col = GetExecutionColumn();
-                sql += $" GROUP BY {col}";
-                if (_rng.Next(2) == 0)
-                {
-                    sql += $" HAVING COUNT(*) > {_rng.Next(0, 5)}";
-                }
-            }
+            var sql = "SELECT " + (distinct ? "DISTINCT " : "") + (top ? $"TOP {_rng.Next(1, 20)} " : "")
+                + $"{projections} FROM {ExecutionSource}";
+            if (_rng.Next(10) < 6) sql += $" WHERE {GeneratePredicateSql()}";
+            if (!distinct && _rng.Next(10) < 2) sql += $" QUALIFY ROW_NUMBER() OVER (ORDER BY {GetExecutionColumn()}) <= {_rng.Next(1, 20)}";
 
-            if (_rng.Next(10) < 4)
-            {
-                sql += $" ORDER BY {GetExecutionColumn()} {(_rng.Next(2) == 0 ? "ASC" : "DESC")}";
-            }
-
-            if (_rng.Next(10) < 4)
-            {
-                sql += $" LIMIT {_rng.Next(1, 50)}";
-            }
-
+            bool ordered = _rng.Next(10) < 5;
+            if (ordered) sql += $" ORDER BY {orderKey} {(_rng.Next(2) == 0 ? "ASC" : "DESC")}";
+            if (!top) sql += GenerateRowLimit(ordered);
             return sql + ";";
+        }
+
+        private string GenerateRowLimit(bool ordered) => _rng.Next(10) switch
+        {
+            0 or 1 => $" LIMIT {_rng.Next(1, 50)}",
+            2 => $" LIMIT {_rng.Next(1, 50)} OFFSET {_rng.Next(0, 10)}",
+            3 when ordered => $" OFFSET {_rng.Next(0, 10)} ROWS FETCH NEXT {_rng.Next(1, 20)} ROWS ONLY",
+            4 when ordered => $" OFFSET {_rng.Next(0, 10)} ROWS",
+            _ => "",
+        };
+
+        private string GenerateAggregateQuery()
+        {
+            var key = GetExecutionColumn();
+            var measure = NumericExecutionColumn();
+            var aggregates = $"COUNT(*) AS RowCount, SUM({measure}) AS Total, MIN({key}) AS Low";
+
+            string groupBy;
+            string projections;
+            switch (_rng.Next(5))
+            {
+                case 0:
+                    // A whole-table aggregate: no key to project.
+                    projections = aggregates;
+                    groupBy = "";
+                    break;
+                case 1:
+                    var second = GetExecutionColumn();
+                    projections = $"{key}, {second}, {aggregates}";
+                    groupBy = $" GROUP BY GROUPING SETS (({key}, {second}), ({key}), ())";
+                    break;
+                case 2:
+                    projections = $"{key}, {aggregates}";
+                    groupBy = $" GROUP BY ROLLUP ({key})";
+                    break;
+                default:
+                    projections = $"{key}, {aggregates}";
+                    groupBy = $" GROUP BY {key}";
+                    break;
+            }
+
+            var sql = $"SELECT {projections} FROM {ExecutionSource}";
+            if (_rng.Next(10) < 5) sql += $" WHERE {GeneratePredicateSql()}";
+            sql += groupBy;
+            if (_rng.Next(10) < 3) sql += $" HAVING COUNT(*) > {_rng.Next(0, 5)}";
+            if (_rng.Next(10) < 5) sql += $" ORDER BY RowCount {(_rng.Next(2) == 0 ? "ASC" : "DESC")}";
+            return sql + ";";
+        }
+
+        private string GenerateJoinQuery()
+        {
+            var join = _rng.Next(3) switch
+            {
+                0 => "JOIN",
+                1 => "LEFT JOIN",
+                _ => "INNER JOIN",
+            };
+            var on = _rng.Next(3) == 0
+                ? $"a.ID = b.ID AND b.{NumericExecutionColumn()} IS NOT NULL"
+                : "a.ID = b.ID";
+            var sql = $"SELECT a.ID, a.{GetExecutionColumn()} AS LeftValue, b.{GetExecutionColumn()} AS RightValue "
+                + $"FROM {ExecutionSource} a {join} {ExecutionSource} b ON {on}";
+            if (_rng.Next(10) < 6) sql += $" WHERE {GeneratePredicateSql("a.")}";
+            if (_rng.Next(10) < 4) sql += $" ORDER BY a.ID{GenerateRowLimit(ordered: true)}";
+            return sql + ";";
+        }
+
+        private string GenerateSetOperationQuery()
+        {
+            var columns = $"ID, {GetExecutionColumn()}";
+            var op = _rng.Next(5) switch
+            {
+                0 => "UNION",
+                1 => "UNION ALL",
+                2 => "INTERSECT",
+                3 => "EXCEPT",
+                _ => "MINUS",
+            };
+            return $"SELECT {columns} FROM {ExecutionSource} WHERE {GeneratePredicateSql()} {op} "
+                + $"SELECT {columns} FROM {ExecutionSource} WHERE {GeneratePredicateSql()};";
+        }
+
+        private string GenerateCteQuery()
+        {
+            var measure = NumericExecutionColumn();
+            var body = $"SELECT ID, Name, {measure} AS Measure FROM {ExecutionSource}";
+            if (_rng.Next(2) == 0) body += $" WHERE {GeneratePredicateSql()}";
+
+            var outer = _rng.Next(3) switch
+            {
+                0 => "SELECT COUNT(*) AS RowCount, SUM(Measure) AS Total FROM c",
+                1 => $"SELECT ID, Measure FROM c WHERE Measure > {_rng.Next(0, 100)} OR Measure IS NULL",
+                _ => "SELECT c.ID, d.Measure FROM c JOIN c d ON c.ID = d.ID",
+            };
+            return $"WITH c AS ({body}) {outer};";
+        }
+
+        private string GenerateSubqueryQuery()
+        {
+            var inner = $"SELECT ID FROM {ExecutionSource} WHERE {GeneratePredicateSql()}";
+            return _rng.Next(4) switch
+            {
+                0 => $"SELECT ID, Name FROM {ExecutionSource} WHERE ID {(_rng.Next(2) == 0 ? "IN" : "NOT IN")} ({inner});",
+                1 => $"SELECT ID FROM {ExecutionSource} o WHERE {(_rng.Next(2) == 0 ? "" : "NOT ")}EXISTS "
+                    + $"(SELECT 1 FROM {ExecutionSource} i WHERE i.ID = o.ID AND {GeneratePredicateSql("i.")});",
+                2 => $"SELECT ID, (SELECT MAX({NumericExecutionColumn()}) FROM {ExecutionSource}) AS Peak FROM {ExecutionSource};",
+                _ => $"SELECT d.ID FROM (SELECT ID, {GetExecutionColumn()} AS V FROM {ExecutionSource}) d WHERE d.V IS NOT NULL;",
+            };
+        }
+
+        private string NumericExecutionColumn()
+        {
+            var numeric = (_schemaColumns.TryGetValue(GetExecutionTable(), out var columns) ? columns : Array.Empty<string>())
+                .Where(c => !c.Equals("Name", StringComparison.OrdinalIgnoreCase)
+                    && !c.EndsWith("Name", StringComparison.OrdinalIgnoreCase)
+                    && !c.Equals("Email", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            return numeric.Length > 0 ? numeric[_rng.Next(numeric.Length)] : GetExecutionColumn();
         }
 
         private string GenerateExpressionSql(int depth)
@@ -407,14 +546,17 @@ namespace ETL_SQL.FuzzTests
             };
         }
 
-        private string GeneratePredicateSql()
+        private string GeneratePredicateSql(string prefix = "")
         {
-            return _rng.Next(4) switch
+            string Col() => prefix + GetExecutionColumn();
+            return _rng.Next(6) switch
             {
-                0 => $"{GetExecutionColumn()} = {GenerateLiteralSql()}",
-                1 => $"{GetExecutionColumn()} > {_rng.Next(0, 100)}",
-                2 => $"{GetExecutionColumn()} IS NOT NULL",
-                _ => $"({GetExecutionColumn()} < {_rng.Next(1, 100)} OR {GetExecutionColumn()} IS NULL)"
+                0 => $"{Col()} = {GenerateLiteralSql()}",
+                1 => $"{Col()} > {_rng.Next(0, 100)}",
+                2 => $"{Col()} IS NOT NULL",
+                3 => $"{prefix}{NumericExecutionColumn()} BETWEEN {_rng.Next(0, 50)} AND {_rng.Next(50, 100)}",
+                4 => $"{Col()} IS DISTINCT FROM {GenerateLiteralSql()}",
+                _ => $"({Col()} < {_rng.Next(1, 100)} OR {Col()} IS NULL)"
             };
         }
 
@@ -423,7 +565,7 @@ namespace ETL_SQL.FuzzTests
             return _rng.Next(3) switch
             {
                 0 => $"ROW_NUMBER() OVER (ORDER BY {GetExecutionColumn()})",
-                1 => $"SUM({GetExecutionColumn()}) OVER (PARTITION BY {GetExecutionColumn()})",
+                1 => $"SUM({NumericExecutionColumn()}) OVER (PARTITION BY {GetExecutionColumn()})",
                 _ => $"COUNT(*) OVER ()"
             };
         }

@@ -94,35 +94,25 @@ function renderSparkline(runs: DataQualityRunDto[]) {
  * Those three came back from the API already and were being dropped here, which mattered beyond
  * missing detail: two columns with the same name in different target tables rendered as two
  * identical-looking rows with different counts, and a steward had no way to tell which was which.
- *
- * A `countsOnly` row is from a run that predates structured capture and can never carry the three.
- * It is marked rather than left blank — an empty Owner cell otherwise reads as "nobody owns this",
- * which is a different and more alarming statement than "this run did not record it".
  */
 export function renderTopFailures(failures: DataQualityRuleFailureDto[]) {
   if (!failures.length)
     return '<p class="library-subtitle">No per-rule failure counts recorded for these runs.</p>';
 
-  const unavailable = '<td class="dq-unrecorded" title="Not recorded: this run predates structured rule capture.">—</td>';
-  const rows = failures.map(f => `<tr${f.countsOnly ? ' class="dq-counts-only"' : ''}>
-      ${f.countsOnly ? unavailable : `<td>${esc(f.targetTable || '—')}</td>`}
+  const rows = failures.map(f => `<tr>
+      <td>${esc(f.targetTable || '—')}</td>
       <td>${esc(f.column)}</td>
       <td><code>${esc(f.rule)}</code></td>
-      ${f.countsOnly ? unavailable : `<td>${esc(f.action || '—')}</td>`}
-      ${f.countsOnly ? unavailable : `<td>${esc(f.owner || '—')}</td>`}
+      <td>${esc(f.action || '—')}</td>
+      <td>${esc(f.owner || '—')}</td>
       <td>${Number(f.count).toLocaleString()}</td>
     </tr>`).join('');
-
-  const legacy = failures.some(f => f.countsOnly)
-    ? `<p class="library-subtitle" data-dq-legacy-note>Rows marked — come from runs recorded before
-       per-rule capture; only the column, rule and count were kept for those.</p>`
-    : '';
 
   return `<h4 class="dq-trend-subhead">Rules firing most</h4>
     <table class="dq-rows-table">
       <thead><tr><th>Target</th><th>Column</th><th>Rule</th><th>Action</th><th>Owner</th><th>Failures</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>${legacy}`;
+    </table>`;
 }
 
 function renderTrendPanel(state: QualityQueueState) {

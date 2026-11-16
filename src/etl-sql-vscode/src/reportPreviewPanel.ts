@@ -15,6 +15,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as nodeCrypto from 'crypto';
 import * as logger from './logger';
+import { escapeHtml } from './htmlEscape';
+import { isAllowedDrillReport, resolveDrillReport } from './drillTarget';
 
 export class ReportPreviewPanel {
     public static readonly viewType = 'etlsql.reportPreview';
@@ -150,28 +152,24 @@ export class ReportPreviewPanel {
     }
 
     private async _handleDrillReport(target: string, parameters?: Record<string, unknown>): Promise<void> {
-        // Resolve target relative to current script
-        let targetPath = path.resolve(path.dirname(this._scriptPath), target);
-        
-        // If not found with .rptsql, try adding it
-        if (!fs.existsSync(targetPath) && !targetPath.endsWith('.rptsql')) {
-            targetPath += '.rptsql';
-        }
+        // The target comes from the report (and so from the webview). Opening it builds and runs it,
+        // so only a .rptsql report inside the workspace, or beside this report when there is no
+        // workspace, may be opened.
+        const allowedRoots = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath)
+            ?? [path.dirname(this._scriptPath)];
+        let targetPath = resolveDrillReport(this._scriptPath, target, allowedRoots);
 
-        if (!fs.existsSync(targetPath)) {
-            // Try workspace search
-            const files = await vscode.workspace.findFiles(`**/${target}`);
-            if (files.length > 0) {
-                targetPath = files[0].fsPath;
-            } else if (!target.endsWith('.rptsql')) {
-                const files2 = await vscode.workspace.findFiles(`**/${target}.rptsql`);
-                if (files2.length > 0) {
-                    targetPath = files2[0].fsPath;
-                }
+        if (!targetPath || !fs.existsSync(targetPath)) {
+            // Try workspace search by file name only; a target with glob or path syntax is not a name.
+            const name = path.basename(target);
+            if (name === target && /^[\w .-]+$/.test(name)) {
+                const fileName = name.toLowerCase().endsWith('.rptsql') ? name : `${name}.rptsql`;
+                const files = await vscode.workspace.findFiles(`**/${fileName}`);
+                targetPath = files.map(file => file.fsPath).find(file => isAllowedDrillReport(file, allowedRoots));
             }
         }
 
-        if (!fs.existsSync(targetPath)) {
+        if (!targetPath || !fs.existsSync(targetPath)) {
             vscode.window.showErrorMessage(`ETL-SQL: Could not find target report '${target}' in workspace.`);
             return;
         }
@@ -259,27 +257,30 @@ export class ReportPreviewPanel {
 
     /** Spawns `ETL-SQL-Report build --format json` and returns the parsed manifest. */
     private async _buildManifest(isInteraction: boolean, pageName: string | undefined, callback: (err: string | null, manifest: Record<string, unknown> | null) => void): Promise<void> {
-        const outputPath = path.join(os.tmpdir(), `etlsql-preview-${Date.now()}.json`);
+        // One private directory (mkdtemp: unpredictable name, owner-only on POSIX) for the unsaved
+        // script and the manifest, so another local user cannot plant a link at a guessable /tmp path.
+        const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'etlsql-preview-'));
+        const removeWorkDir = () => {
+            try { fs.rmSync(workDir, { recursive: true, force: true }); } catch { /* ignore */ }
+        };
+        const outputPath = path.join(workDir, 'manifest.json');
         const { exe, baseArgs } = this._resolveCliCall();
         
         let targetPath = this._scriptPath;
-        let isTempScript = false;
 
         // Handle Untitled or Dirty buffers by writing to a temporary file first
         const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath === this._scriptPath);
         if (editor && (editor.document.isUntitled || editor.document.isDirty)) {
-            const tempScriptPath = path.join(os.tmpdir(), `etlsql-script-${Date.now()}.rptsql`);
-            fs.writeFileSync(tempScriptPath, editor.document.getText());
+            const tempScriptPath = path.join(workDir, 'script.rptsql');
+            fs.writeFileSync(tempScriptPath, editor.document.getText(), { flag: 'wx' });
             targetPath = tempScriptPath;
-            isTempScript = true;
         } else if (!fs.existsSync(this._scriptPath)) {
             // Fallback: try to find the document by URI if fsPath doesn't exist on disk
             const doc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === this._scriptPath);
             if (doc) {
-                const tempScriptPath = path.join(os.tmpdir(), `etlsql-script-${Date.now()}.rptsql`);
-                fs.writeFileSync(tempScriptPath, doc.getText());
+                const tempScriptPath = path.join(workDir, 'script.rptsql');
+                fs.writeFileSync(tempScriptPath, doc.getText(), { flag: 'wx' });
                 targetPath = tempScriptPath;
-                isTempScript = true;
             }
         }
 
@@ -303,30 +304,24 @@ export class ReportPreviewPanel {
         let stderr = '';
         proc.stderr.on('data', d => { stderr += d.toString(); });
         proc.on('error', err => {
-            if (isTempScript && fs.existsSync(targetPath)) {
-                try { fs.unlinkSync(targetPath); } catch { /* ignore */ }
-            }
+            removeWorkDir();
             callback(`Failed to start ETL-SQL-Report: ${err.message}`, null);
         });
         proc.on('close', code => {
-            if (isTempScript && fs.existsSync(targetPath)) {
-                try { fs.unlinkSync(targetPath); } catch { /* ignore */ }
-            }
-
             if (code !== 0 || !fs.existsSync(outputPath)) {
+                removeWorkDir();
                 callback(stderr || `ETL-SQL-Report exited with code ${code}`, null);
                 return;
             }
             try {
                 const json     = fs.readFileSync(outputPath, 'utf8');
+                removeWorkDir();
                 const manifest = JSON.parse(json);
                 // In the unified React UI, the protocol expect { type: 'reportManifest', ... }
                 manifest.type  = 'reportManifest';
-                if (fs.existsSync(outputPath)) {
-                    fs.unlinkSync(outputPath);
-                }
                 callback(null, manifest);
             } catch (e: unknown) {
+                removeWorkDir();
                 const message = e instanceof Error ? e.message : String(e);
                 callback(message, null);
             }
@@ -394,7 +389,7 @@ export class ReportPreviewPanel {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};">
     <link rel="stylesheet" href="${runtimeCssUri}">
-    <title>${manifest.title || 'ETL-SQL Report'}</title>
+    <title>${escapeHtml(manifest.title || 'ETL-SQL Report')}</title>
 </head>
 <body class="vscode-theme">
     ${JSON.stringify(manifest).includes('"visualType":"Search"') || JSON.stringify(manifest).includes('"type":"Search"')

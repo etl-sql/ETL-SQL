@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "scope": "diagnostic-msi-failed-profile-recovery",
+  "fullReleaseCertification": false,
+  "runId": "40760871492",
+  "runUrl": "https://github.com/etl-sql/ETL-SQL/actions/runs/40760871492",
+  "headSha": "cfe4f53c9738bd877f917048c9024987161eb2eb",
+  "testedSha": "18faa0729bb61ef9456f7e5000112da6429fcb18",
+  "testedTreeEqualsHead": true,
+  "retries": 1,
+  "recoverySeconds": 453.2706838,
+  "originalSuccessfulExecutions": [
+    {
+      "startedAt": "2026-10-28T20:10:27Z",
+      "name": "Detect MSI Upgrade Impact",
+      "completedAt": "2026-10-28T20:13:37Z"
+    },
+    {
+      "startedAt": "2026-10-28T20:13:40Z",
+      "name": "Build MSI certification inputs",
+      "completedAt": "2026-10-28T20:43:37Z"
+    },
+    {
+      "startedAt": "2026-10-28T20:43:39Z",
+      "name": "MSI certification (workstation)",
+      "completedAt": "2026-10-28T20:46:10Z"
+    }
+  ],
+  "originalInputArtifact": {
+    "id": 12850372732,
+    "name": "msi-inputs-40760871492-1",
+    "digest": "sha256:8256ac141f8e1410d05de4de21eab77d269e6699c89138b187fd3e2b78cd7cb0",
+    "size_in_bytes": 1863535299
+  },
+  "installers": [
+    {
+      "sha256": "B0FAFC6A1CCAD18B8BE125C3FB9F85F7DE46FA1A9195C667AAFC4860A9B03DCB",
+      "name": "previous.msi"
+    },
+    {
+      "sha256": "F24DFEA63BFFAAEE0DC96FCCB4D0B7F11F3C71263E18BC30E066335845EBFEC2",
+      "name": "current.msi"
+    }
+  ],
+  "profiles": [
+    {
+      "passedAssertions": 32,
+      "name": "portal",
+      "elapsedSeconds": 317.7510855
+    },
+    {
+      "passedAssertions": 7,
+      "name": "workstation",
+      "elapsedSeconds": 60.0697564
+    }
+  ],
+  "retainedCheckpointNotices": 7,
+  "originalFailure": "Hosted runner lost communication; original Portal logs unavailable.",
+  "originalRunnerLossCause": "Unproven",
+  "rawEvidence": "release-validation/critical-path/msi-40760871492/",
+  "limitations": [
+    "PR diagnostic on the recorded merge commit; later commits require their own certification.",
+    "Packages still report 0.21.0; this does not certify final v0.22.0 metadata.",
+    "Successful-job notices do not establish diagnostic survival during a runner loss."
+  ]
+}

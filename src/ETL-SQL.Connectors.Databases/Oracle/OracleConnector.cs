@@ -22,11 +22,18 @@ namespace ETL_SQL.Connectors.Oracle
             var host = GetHost(connectionString);
             if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
 
-            using var conn = new OracleConnection(connectionString);
-            await conn.OpenAsync();
-            using var cmd = new OracleCommand("SELECT version FROM v$instance", conn);
-            var result = await cmd.ExecuteScalarAsync();
-            return result?.ToString() ?? "Unknown Oracle Version";
+            try
+            {
+                using var conn = new OracleConnection(connectionString);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand("SELECT version FROM v$instance", conn);
+                var result = await cmd.ExecuteScalarAsync();
+                return result?.ToString() ?? "Unknown Oracle Version";
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.Wrap("Oracle", ex);
+            }
         }
 
         public HashSet<string> GetSupportedFunctions() => OracleSyntax.GetSupportedFunctions();
@@ -79,14 +86,25 @@ namespace ETL_SQL.Connectors.Oracle
             var host = GetHost(connectionString);
             if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
 
-            var procs = new List<string>();
-            using var conn = new OracleConnection(connectionString);
-            await conn.OpenAsync();
-            using var cmd = new OracleCommand("SELECT object_name FROM all_procedures WHERE object_type = 'PROCEDURE' AND owner != 'SYS' AND owner != 'SYSTEM'", conn);
-            using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync()) procs.Add(reader.GetString(0));
-            return procs;
+            try
+            {
+                var procs = new List<string>();
+                using var conn = new OracleConnection(connectionString);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand("SELECT object_name FROM all_procedures WHERE object_type = 'PROCEDURE' AND owner != 'SYS' AND owner != 'SYSTEM'", conn);
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync()) procs.Add(reader.GetString(0));
+                return procs;
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.Wrap("Oracle", ex);
+            }
         }
+
+        // A malformed connection string fails in the OracleConnection constructor with an ArgumentException.
+        private static bool ShouldWrapProviderException(Exception ex) =>
+            ex is OracleException or InvalidOperationException or ArgumentException;
 
         public string BuildConnectionString(Dictionary<string, string> properties) =>
             DatabaseConnectionStringBuilder.Build(Name, properties);

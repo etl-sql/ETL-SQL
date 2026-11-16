@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Gateway;
 using ETL_SQL.Services;
+using ETL_SQL.TestSupport;
 
 namespace ETL_SQL.Tests.Governance;
 
@@ -215,6 +216,401 @@ public sealed class GatewayBrokerAndHostTests
         cts.Cancel();
         await runTask;
         Assert.Equal(GatewayHostStatus.Stopped, host.Status);
+    }
+
+    [Fact]
+    public async Task Session_NeverHandsAnAbandonedOperationsLateRowsToTheNextOperation()
+    {
+        var enrollmentStore = new InMemoryGatewayEnrollmentStore();
+        await enrollmentStore.IssueAsync(TenantA, GatewayId, "token-32-chars-long-minimum-length-req", DateTimeOffset.UtcNow.AddHours(1));
+        await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
+        var registry = new GatewaySessionRegistry();
+        var broker = new GatewayBroker(enrollmentStore, registry, allowUnprovenTestIdentities: true);
+        await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
+
+        using var gateway = new ClientWebSocket();
+        await gateway.ConnectAsync(server.Uri, CancellationToken.None);
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.Hello,
+            TenantId = TenantA,
+            GatewayId = GatewayId,
+            WorkloadPublicKeyThumbprint = Thumbprint
+        });
+        Assert.Equal(GatewayFrameKind.HelloAck, (await ReceiveFrameAsync(gateway))!.Kind);
+        Assert.True(registry.TryGet(TenantA, GatewayId, out var session));
+
+        static GatewayOperation Operation(string id) => new(
+            id, TenantA, GatewayId, "orders", GatewayOperationClass.Read, GatewayOperationEffect.ReadOnly,
+            GatewayOperationBounds.Default, id);
+
+        // The first caller gives up before its rows arrive (a timeout, a closed browser tab).
+        using (var abandoned = new CancellationTokenSource())
+        {
+            var first = session!.ExecuteAsync(Operation("op-first"), "SELECT 1", null, abandoned.Token);
+            Assert.Equal("op-first", (await ReceiveFrameAsync(gateway))!.OperationId);
+            abandoned.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        }
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.RowBatch,
+            OperationId = "op-first",
+            Columns = ["who"],
+            Rows = [["first viewer's row"]]
+        });
+        await SendFrameAsync(gateway, new GatewayFrame { Kind = GatewayFrameKind.Complete, OperationId = "op-first", RowsProduced = 1 });
+
+        // The next caller gets its own rows, not the leftovers.
+        var second = session!.ExecuteAsync(Operation("op-second"), "SELECT 2", null, CancellationToken.None);
+        Assert.Equal("op-second", (await ReceiveFrameAsync(gateway))!.OperationId);
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.RowBatch,
+            OperationId = "op-second",
+            Columns = ["who"],
+            Rows = [["second viewer's row"]]
+        });
+        await SendFrameAsync(gateway, new GatewayFrame { Kind = GatewayFrameKind.Complete, OperationId = "op-second", RowsProduced = 1 });
+
+        var result = await second;
+        Assert.Equal("second viewer's row", Assert.Single(result.Rows)[0]);
+        await gateway.CloseAsync(WebSocketCloseStatus.NormalClosure, "Test done", CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Session_RefusesAResultBeyondTheOperationsBounds()
+    {
+        var enrollmentStore = new InMemoryGatewayEnrollmentStore();
+        await enrollmentStore.IssueAsync(TenantA, GatewayId, "token-32-chars-long-minimum-length-req", DateTimeOffset.UtcNow.AddHours(1));
+        await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
+        var registry = new GatewaySessionRegistry();
+        var broker = new GatewayBroker(enrollmentStore, registry, allowUnprovenTestIdentities: true);
+        await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
+
+        using var gateway = new ClientWebSocket();
+        await gateway.ConnectAsync(server.Uri, CancellationToken.None);
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.Hello,
+            TenantId = TenantA,
+            GatewayId = GatewayId,
+            WorkloadPublicKeyThumbprint = Thumbprint
+        });
+        Assert.Equal(GatewayFrameKind.HelloAck, (await ReceiveFrameAsync(gateway))!.Kind);
+        Assert.True(registry.TryGet(TenantA, GatewayId, out var session));
+
+        var bounds = GatewayOperationBounds.Default with { MaxRows = 2 };
+        var running = session!.ExecuteAsync(
+            new GatewayOperation("op-flood", TenantA, GatewayId, "orders", GatewayOperationClass.Read,
+                GatewayOperationEffect.ReadOnly, bounds, "op-flood"),
+            "SELECT *", null, CancellationToken.None);
+        Assert.Equal("op-flood", (await ReceiveFrameAsync(gateway))!.OperationId);
+
+        // A Gateway that ignores the bounds it was sent.
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.RowBatch,
+            OperationId = "op-flood",
+            Columns = ["v"],
+            Rows = [["1"], ["2"], ["3"]]
+        });
+
+        await Assert.ThrowsAsync<GatewayProtocolException>(() => running);
+        await gateway.CloseAsync(WebSocketCloseStatus.NormalClosure, "Test done", CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Session_ReturnsAResultLargerThanOneFrame()
+    {
+        var enrollmentStore = new InMemoryGatewayEnrollmentStore();
+        await enrollmentStore.IssueAsync(TenantA, GatewayId, "token-32-chars-long-minimum-length-req", DateTimeOffset.UtcNow.AddHours(1));
+        await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
+        var registry = new GatewaySessionRegistry();
+        var broker = new GatewayBroker(enrollmentStore, registry, allowUnprovenTestIdentities: true);
+        await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
+
+        var resources = new GatewayResourceRegistry();
+        await resources.ProposeAsync(new GatewayResource(
+            "orders", "SQLSERVER", "sqlserver://db:1433/Sales", "SECRET:sales",
+            GatewayOperationClass.Read, new GatewayResourceLimits()));
+        await resources.ApproveAsync("orders");
+        var rows = Enumerable.Range(0, 500)
+            .Select(i => (IReadOnlyList<string?>)[$"row-{i:D4}-{new string('x', 40)}"]).ToList();
+        var dispatcher = new GatewayOperationDispatcher(resources, new FixedResultExecutor(["value"], rows), new GatewayOutcomeLedger());
+        // Far smaller than the result, so it must arrive as many batches.
+        var client = new GatewaySessionClient(
+            new GatewaySessionOptions(server.Uri, TenantA, GatewayId, Thumbprint, MaxFrameBytes: 2048), dispatcher);
+        using var run = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var clientTask = client.RunAsync(run.Token);
+
+        IGatewaySession? session = null;
+        for (var i = 0; i < 100 && !registry.TryGet(TenantA, GatewayId, out session); i++)
+            await Task.Delay(20); // flaky-delay-ok: waiting for the session to register
+        Assert.NotNull(session);
+
+        var result = await session!.ExecuteAsync(
+            new GatewayOperation("op-large", TenantA, GatewayId, "orders", GatewayOperationClass.Read,
+                GatewayOperationEffect.ReadOnly, GatewayOperationBounds.Default, "op-large"),
+            "SELECT *", null, run.Token);
+
+        Assert.Equal(500, result.Rows.Count);
+        Assert.Equal(rows.Select(row => row[0]), result.Rows.Select(row => row[0]));
+        Assert.False(result.Truncated);
+        Assert.False(clientTask.IsFaulted);
+        run.Cancel();
+        try { await clientTask; } catch (OperationCanceledException) { }
+    }
+
+    [Fact]
+    public void Registry_RefusesANodeIdHeldByAnotherKey_AndReplacesItsOwnStaleSession()
+    {
+        var registry = new GatewaySessionRegistry();
+        var original = new FakeSession("node-1", "key-a");
+        Assert.True(registry.TryRegister(original, out var displaced));
+        Assert.Null(displaced);
+
+        // Another node claiming the same id is refused while the original is live.
+        Assert.False(registry.TryRegister(new FakeSession("node-1", "key-b"), out _));
+        Assert.True(registry.TryGet(TenantA, GatewayId, out var routed));
+        Assert.Same(original, routed);
+
+        // The same key reconnecting replaces its own session, and the old one is handed back.
+        var reconnect = new FakeSession("node-1", "key-a");
+        Assert.True(registry.TryRegister(reconnect, out displaced));
+        Assert.Same(original, displaced);
+        Assert.True(registry.TryGet(TenantA, GatewayId, out routed));
+        Assert.Same(reconnect, routed);
+    }
+
+    private sealed class FakeSession(string nodeId, string thumbprint) : IGatewaySession
+    {
+        public string TenantId => TenantA;
+        public string GatewayId => GatewayBrokerAndHostTests.GatewayId;
+        public string NodeId => nodeId;
+        public string WorkloadPublicKeyThumbprint => thumbprint;
+        public DateTimeOffset ConnectedUtc { get; } = DateTimeOffset.UtcNow;
+        public bool IsActive => true;
+        public Task<GatewayExecutionResult> ExecuteAsync(GatewayOperation operation, string? request,
+            IReadOnlyList<string>? parameters, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class FixedResultExecutor(IReadOnlyList<string> columns, IReadOnlyList<IReadOnlyList<string?>> rows)
+        : IGatewayResourceExecutor
+    {
+        public Task<GatewayExecutionResult> ExecuteAsync(
+            GatewayResource resource,
+            GatewayOperationClass operationClass,
+            string? request,
+            IReadOnlyList<string>? parameters,
+            GatewayOperationBounds bounds,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new GatewayExecutionResult(columns, rows));
+    }
+
+    [Fact]
+    public async Task GatewayHost_BackoffDoublesAcrossFailedConnections()
+    {
+        var time = new RecordingDelayTimeProvider();
+        var options = new GatewayHostOptions(
+            new GatewaySessionOptions(new Uri("ws://127.0.0.1:1/"), TenantA, GatewayId, Thumbprint),
+            InitialBackoff: TimeSpan.FromMilliseconds(10),
+            MaxBackoff: TimeSpan.FromSeconds(30),
+            MaxRetries: 4);
+        var dispatcher = new GatewayOperationDispatcher(new GatewayResourceRegistry(), new MockResourceExecutor(), new GatewayOutcomeLedger());
+
+        await new GatewayHost(options, dispatcher, time).RunAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
+
+        Assert.Equal(
+            new[] { 10, 20, 40, 80 },
+            time.Delays.Select(delay => (int)delay.TotalMilliseconds).ToArray());
+    }
+
+    [Fact]
+    public async Task GatewayHost_NeverReportsConnectedForASessionThatFailedToConnect()
+    {
+        var options = new GatewayHostOptions(
+            new GatewaySessionOptions(new Uri("ws://127.0.0.1:1/"), TenantA, GatewayId, Thumbprint),
+            InitialBackoff: TimeSpan.FromMilliseconds(10),
+            MaxBackoff: TimeSpan.FromSeconds(30),
+            MaxRetries: 2);
+        var dispatcher = new GatewayOperationDispatcher(new GatewayResourceRegistry(), new MockResourceExecutor(), new GatewayOutcomeLedger());
+        var host = new GatewayHost(options, dispatcher, new RecordingDelayTimeProvider());
+        var seen = new List<GatewayHostStatus>();
+        host.StatusChanged += status => { lock (seen) seen.Add(status); };
+
+        await host.RunAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
+
+        Assert.DoesNotContain(GatewayHostStatus.Connected, seen);
+    }
+
+    [Fact]
+    public async Task GatewayHost_ASlowFailedConnectDoesNotResetTheBackoff()
+    {
+        // Every clock read jumps a minute, so each failed attempt "lasts" longer than MaxBackoff.
+        // A failed attempt is not a healthy session, however long it took to fail.
+        var time = new RecordingDelayTimeProvider { StepPerRead = TimeSpan.FromMinutes(1) };
+        var options = new GatewayHostOptions(
+            new GatewaySessionOptions(new Uri("ws://127.0.0.1:1/"), TenantA, GatewayId, Thumbprint),
+            InitialBackoff: TimeSpan.FromMilliseconds(10),
+            MaxBackoff: TimeSpan.FromSeconds(30),
+            MaxRetries: 4);
+        var dispatcher = new GatewayOperationDispatcher(new GatewayResourceRegistry(), new MockResourceExecutor(), new GatewayOutcomeLedger());
+
+        await new GatewayHost(options, dispatcher, time).RunAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
+
+        Assert.Equal(
+            new[] { 10, 20, 40, 80 },
+            time.Delays.Select(delay => (int)delay.TotalMilliseconds).ToArray());
+    }
+
+    [Fact]
+    public async Task Broker_HoldsAnOperationRoutedBeforeTheAcknowledgementUntilAfterIt()
+    {
+        var enrollmentStore = new InMemoryGatewayEnrollmentStore();
+        await enrollmentStore.IssueAsync(TenantA, GatewayId, "token-32-chars-long-minimum-length-req", DateTimeOffset.UtcNow.AddHours(1));
+        await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
+        var registry = new GatewaySessionRegistry();
+        var broker = new GatewayBroker(enrollmentStore, registry, allowUnprovenTestIdentities: true);
+        // The broker's first send is HelloAck; hold it so a caller routing to the freshly registered
+        // session gets the chance to write first.
+        await using var server = await LoopbackWebSocketServer.StartAsync(
+            (socket, ct) => broker.HandleInboundConnectionAsync(new FirstSendDelayingWebSocket(socket, TimeSpan.FromMilliseconds(500)), ct));
+
+        using var gateway = new ClientWebSocket();
+        await gateway.ConnectAsync(server.Uri, CancellationToken.None);
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.Hello,
+            TenantId = TenantA,
+            GatewayId = GatewayId,
+            WorkloadPublicKeyThumbprint = Thumbprint
+        });
+
+        var session = await LoadAwareWait.UntilAsync<IGatewaySession?>(
+            "gateway session to register",
+            _ => Task.FromResult(registry.TryGet(TenantA, GatewayId, out var found) ? found : null),
+            found => found is not null,
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromMilliseconds(10));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var running = session!.ExecuteAsync(
+            new GatewayOperation("op-early", TenantA, GatewayId, "orders", GatewayOperationClass.Read,
+                GatewayOperationEffect.ReadOnly, GatewayOperationBounds.Default, "op-early"),
+            "SELECT 1", null, cts.Token);
+
+        Assert.Equal(GatewayFrameKind.HelloAck, (await ReceiveFrameAsync(gateway))!.Kind);
+        Assert.Equal("op-early", (await ReceiveFrameAsync(gateway))!.OperationId);
+
+        await SendFrameAsync(gateway, new GatewayFrame { Kind = GatewayFrameKind.Complete, OperationId = "op-early", RowsProduced = 0 });
+        await running;
+        await gateway.CloseAsync(WebSocketCloseStatus.NormalClosure, "Test done", CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Session_EndsInsteadOfDecodingAnOversizedInboundFrame()
+    {
+        var enrollmentStore = new InMemoryGatewayEnrollmentStore();
+        await enrollmentStore.IssueAsync(TenantA, GatewayId, "token-32-chars-long-minimum-length-req", DateTimeOffset.UtcNow.AddHours(1));
+        await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
+        var registry = new GatewaySessionRegistry();
+        var broker = new GatewayBroker(enrollmentStore, registry, maxFrameBytes: 4096, allowUnprovenTestIdentities: true);
+        await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
+
+        using var gateway = new ClientWebSocket();
+        await gateway.ConnectAsync(server.Uri, CancellationToken.None);
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.Hello,
+            TenantId = TenantA,
+            GatewayId = GatewayId,
+            WorkloadPublicKeyThumbprint = Thumbprint
+        });
+        Assert.Equal(GatewayFrameKind.HelloAck, (await ReceiveFrameAsync(gateway))!.Kind);
+        Assert.True(registry.TryGet(TenantA, GatewayId, out var session));
+
+        var running = session!.ExecuteAsync(
+            new GatewayOperation("op-big", TenantA, GatewayId, "orders", GatewayOperationClass.Read,
+                GatewayOperationEffect.ReadOnly, GatewayOperationBounds.Default, "op-big"),
+            "SELECT *", null, CancellationToken.None);
+        Assert.Equal("op-big", (await ReceiveFrameAsync(gateway))!.OperationId);
+
+        // A well-formed frame, over the broker's 4 KB limit but read whole by its second 4 KB
+        // receive, so the oversized bytes are exactly one complete frame.
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.RowBatch,
+            OperationId = "op-big",
+            Columns = ["v"],
+            Rows = [[new string('x', 6_000)]]
+        });
+
+        await Assert.ThrowsAsync<GatewayProtocolException>(() => running);
+        // The broker ends the session rather than keep reading a stream it can no longer frame.
+        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var closing = await gateway.ReceiveAsync(new byte[1024], wait.Token);
+        Assert.Equal(WebSocketMessageType.Close, closing.MessageType);
+        Assert.False(session!.IsActive);
+    }
+
+    /// <summary>Delays the first send on a socket, then passes everything through.</summary>
+    private sealed class FirstSendDelayingWebSocket(WebSocket inner, TimeSpan delay) : WebSocket
+    {
+        private int _sends;
+
+        public override WebSocketCloseStatus? CloseStatus => inner.CloseStatus;
+        public override string? CloseStatusDescription => inner.CloseStatusDescription;
+        public override WebSocketState State => inner.State;
+        public override string? SubProtocol => inner.SubProtocol;
+        public override void Abort() => inner.Abort();
+        public override Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken) =>
+            inner.CloseAsync(closeStatus, statusDescription, cancellationToken);
+        public override Task CloseOutputAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken) =>
+            inner.CloseOutputAsync(closeStatus, statusDescription, cancellationToken);
+        public override void Dispose() => inner.Dispose();
+        public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken cancellationToken) =>
+            inner.ReceiveAsync(buffer, cancellationToken);
+        public override ValueTask<ValueWebSocketReceiveResult> ReceiveAsync(Memory<byte> buffer, CancellationToken cancellationToken) =>
+            inner.ReceiveAsync(buffer, cancellationToken);
+
+        public override async Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)
+        {
+            await DelayFirstSendAsync(cancellationToken);
+            await inner.SendAsync(buffer, messageType, endOfMessage, cancellationToken);
+        }
+
+        public override async ValueTask SendAsync(ReadOnlyMemory<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)
+        {
+            await DelayFirstSendAsync(cancellationToken);
+            await inner.SendAsync(buffer, messageType, endOfMessage, cancellationToken);
+        }
+
+        private Task DelayFirstSendAsync(CancellationToken cancellationToken) =>
+            Interlocked.Increment(ref _sends) == 1
+                ? Task.Delay(delay, cancellationToken) // flaky-delay-ok: widens the pre-acknowledgement window
+                : Task.CompletedTask;
+    }
+
+    /// <summary>Records each requested delay and lets it elapse at once.</summary>
+    private sealed class RecordingDelayTimeProvider : TimeProvider
+    {
+        private long _reads;
+
+        public List<TimeSpan> Delays { get; } = [];
+
+        /// <summary>How far the clock moves on each read; zero leaves it on the system clock.</summary>
+        public TimeSpan StepPerRead { get; init; }
+
+        public override DateTimeOffset GetUtcNow() => StepPerRead == TimeSpan.Zero
+            ? System.GetUtcNow()
+            : DateTimeOffset.UnixEpoch + StepPerRead * Interlocked.Increment(ref _reads);
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            lock (Delays) Delays.Add(dueTime);
+            return System.CreateTimer(callback, state, TimeSpan.Zero, period);
+        }
     }
 
     [Fact]

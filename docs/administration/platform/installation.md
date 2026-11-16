@@ -35,28 +35,74 @@ shared or split the services.
 
 ## Production Installation
 
+Use the packaged installers below. From v0.22.0, the source-only `scripts/install.ps1`,
+`scripts/install.sh` and `install-service-windows.ps1`/`install-service-linux.sh` helpers are
+removed. The workstation templates never downloaded binaries; the separate service helpers did
+not implement the packaged installation's configuration and upgrade lifecycle. Use the MSI's
+workstation/server feature selection on Windows and the Linux package's service units on Linux.
+On macOS, use the native ZIP or Intel DMG described below.
+
 ### Windows
 
-1. Run the `ETL-SQL-Enterprise-v0.21.0.msi` installer.
+1. Run the `ETL-SQL-Enterprise-v0.22.0.msi` installer.
 2. Select the workstation and server features required for the host.
 3. The installer registers these Windows services when the server features are selected:
    - `ETL-SQL-Orchestrator`
    - `ETL-SQL-Portal`
 4. Review the service accounts before production use. The installer default is `LocalSystem`; use a least-privilege domain or local service account when the service needs access to network shares, database drivers, certificates, or controlled script roots.
 
+From v0.22.0, the MSI stops if it cannot preserve installed settings or complete service
+configuration. Protected files are staged before replacement, and failed writes retain existing
+keys. Final secret-file permissions allow only SYSTEM and Administrators.
+
+If a failed replacement leaves an `appsettings.secrets.json.*.recovery` file, keep it. Configuration
+will refuse to retry until an administrator reviews that protected recovery copy and restores the
+original secrets file if needed. Do not discard it or generate replacement keys: existing cached
+datasets require their original at-rest key.
+
+From v0.22.0, both MSI and DEB save configuration before publishing the protected first-sign-in
+file. If a fresh installation fails while writing settings or that file, resolve the file access
+failure and retry. Keep `appsettings.secrets.json`: the retry reuses its bootstrap password and
+service keys. If a bootstrap password was configured already, a fresh install also records it in
+the protected sign-in file when that file is absent. Normal upgrades do not create a sign-in file.
+
 ### Linux
 
 Install the package for your distribution, then enable the services you intend to run:
 
 ```bash
-sudo dpkg -i etl-sql_0.21.0_amd64.deb
+sudo dpkg -i etl-sql_0.22.0_amd64.deb
 sudo systemctl enable etl-sql-orchestrator
 sudo systemctl start etl-sql-orchestrator
 sudo systemctl enable etl-sql-portal
 sudo systemctl start etl-sql-portal
 ```
 
-For RPM-based systems, use the matching `.rpm` package and the same `systemctl` service names.
+The current Linux package builder emits Debian `.deb` artifacts.
+
+### macOS workstation
+
+Use the release ZIP matching `osx-x64` or `osx-arm64`. The Intel DMG contains `ETL-SQL.app`;
+its CLI tools live under `Contents/Resources/bin` inside the application bundle.
+
+From v0.22.0, DEB payloads and macOS application bundles remove group/other write access from
+program trees while preserving executable and read-only bits. Native package builders require
+`dpkg-deb` on Linux or `hdiutil` on macOS and fail when those tools are missing. They resolve staging
+under the repository and reject linked staging ancestors or outputs before cleanup.
+DEB and DMG builds also reject publish folders containing runtime secrets, databases, key rings
+or runtime directories. Publish into a clean folder. Rejection preserves prior staging and packages.
+
+The portable ZIP producer uses the same runtime-state inventory. It validates platforms and
+versions before cleanup and checks archive file names and hashes before promoting each ZIP.
+Complete builds stage under `artifacts/portable-release/<attempt>/output/` and replace `release/`
+after packaging, SBOM and checksum work succeeds. Failed attempts and previous releases remain
+under the attempt directory with `transaction.json`. Inspect that record and `previous/` before
+resolving a recovery failure. Concurrent builds are blocked by `publish.lock`; a lock left by an
+interrupted producer requires checking that the original process has stopped before removing it.
+Retained attempts use disk space until you remove them after review.
+The release wrapper extends this transaction through native installer collection. Prior native
+build outputs are retained in `native-previous/` and restored after failure; partial replacements
+are retained in `native-failed/`. Final checksums include the native packages before promotion.
 
 ### Docker / Containerized
 

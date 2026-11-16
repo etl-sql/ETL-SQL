@@ -1,0 +1,157 @@
+# Regressions for the v0.22.0 NULL and fail-closed fixes (SQ10-SQ14). Each query held a wrong
+# answer before; the comment says what it was.
+
+statement ok
+CREATE TABLE r(id INT, s VARCHAR(10), n INT, g VARCHAR(5));
+
+statement ok
+INSERT INTO r VALUES (1, 'a', 10, 'x'), (2, NULL, NULL, 'x'), (3, 'c', 30, 'x'), (4, NULL, NULL, 'y');
+
+# Scalar functions return NULL for a NULL argument. CHARINDEX(NULL, 'abc') was 1;
+# REPLACE('abc', 'b', NULL) was 'ac'; SIMILARITY(NULL, NULL) was a full match.
+query T
+SELECT CASE WHEN CHARINDEX(NULL, 'abc') IS NULL THEN 'null' ELSE 'value' END;
+----
+null
+
+query T
+SELECT CASE WHEN REPLACE('abc', 'b', NULL) IS NULL THEN 'null' ELSE 'value' END;
+----
+null
+
+query T
+SELECT CASE WHEN SUBSTRING(NULL, 1, 2) IS NULL AND LEFT(NULL, 1) IS NULL AND ROUND(NULL, 1) IS NULL THEN 'null' ELSE 'value' END;
+----
+null
+
+query T
+SELECT CASE WHEN DATEDIFF(day, NULL, '2024-01-01') IS NULL THEN 'null' ELSE 'value' END;
+----
+null
+
+# NULL from a column, not only a literal.
+query IT rowsort
+SELECT id, CASE WHEN UPPER(s) IS NULL THEN 'null' ELSE UPPER(s) END FROM r;
+----
+1
+A
+2
+null
+3
+C
+4
+null
+
+# STRING_AGG skips NULL and gives NULL for a group with no value. Group x was 'a,,c'; y was ''.
+query TT rowsort
+SELECT g, COALESCE(STRING_AGG(s, ','), 'none') FROM r GROUP BY g;
+----
+x
+a,c
+y
+none
+
+# Aggregates ignore NULL; COUNT(col) counts only values.
+query IIII
+SELECT COUNT(*), COUNT(n), SUM(n), MIN(n) FROM r;
+----
+4
+2
+40
+10
+
+query I
+SELECT AVG(n) FROM r;
+----
+20
+
+# An aggregate over no rows: COUNT is 0, the others NULL.
+query IT
+SELECT COUNT(n), CASE WHEN SUM(n) IS NULL AND MAX(n) IS NULL THEN 'null' ELSE 'value' END FROM r WHERE id > 100;
+----
+0
+null
+
+# FIRST_VALUE and LAST_VALUE read the frame, not the whole partition.
+query II
+SELECT id, LAST_VALUE(id) OVER (ORDER BY id ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM r ORDER BY id;
+----
+1
+2
+2
+3
+3
+4
+4
+4
+
+query II
+SELECT id, FIRST_VALUE(id) OVER (ORDER BY id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM r ORDER BY id;
+----
+1
+1
+2
+1
+3
+2
+4
+3
+
+# Arithmetic on text that is not a number fails; it was NULL. + on text still concatenates.
+statement error
+SELECT 'abc' - 5;
+
+statement error
+SELECT 'abc' * 5;
+
+query T
+SELECT 'abc' + 'd';
+----
+abcd
+
+# NULL arithmetic stays NULL.
+query T
+SELECT CASE WHEN 5 + NULL IS NULL AND NULL * 2 IS NULL THEN 'null' ELSE 'value' END;
+----
+null
+
+# EXTRACT of an unknown field fails; it was NULL.
+statement error
+SELECT EXTRACT(fortnight FROM CAST('2024-01-01' AS DATETIME));
+
+# Timestamp equality keeps fractions of a second, as < and > do.
+query T
+SELECT CASE WHEN CAST('2024-01-01 10:00:00.100' AS DATETIME) = CAST('2024-01-01 10:00:00.200' AS DATETIME) THEN 'equal' ELSE 'different' END;
+----
+different
+
+query T
+SELECT CASE WHEN CAST('2024-01-01 10:00:00.100' AS DATETIME) < CAST('2024-01-01 10:00:00.200' AS DATETIME) THEN 'less' ELSE 'not less' END;
+----
+less
+
+# GREATEST and LEAST compare across numeric types and skip nothing silently.
+query R
+SELECT GREATEST(CAST(1 AS FLOAT), 2);
+----
+2.000
+
+# A misspelt column fails; it read NULL on every row.
+statement error Unknown column
+SELECT nn FROM r;
+
+# A bare name with no row in scope fails; it read as its own text.
+statement error
+SELECT bogus;
+
+# An undeclared variable fails.
+statement error
+SELECT @never_declared;
+
+# A temp table nothing created fails on read; it was an empty table.
+statement error Unknown source
+SELECT * FROM #never_created;
+
+# GENERATE_SERIES with a zero step fails; it returned a million rows.
+statement error
+SELECT * FROM GENERATE_SERIES(1, 3, 0);

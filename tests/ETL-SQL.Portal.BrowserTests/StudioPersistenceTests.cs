@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using ETL_SQL.Common;
 using ETL_SQL.Portal.Data;
@@ -76,7 +77,7 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
             });
         var reportId = report.GetProperty("id").GetInt32();
 
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await WaitForStudioAsync(page);
         await page.Locator("[data-activity='catalog']").ClickAsync();
         var schemaRequest = page.WaitForResponseAsync(response =>
@@ -153,7 +154,7 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
             new { folderId, name = reportName, scriptText = InitialScript });
         var reportId = report.GetProperty("id").GetInt32();
 
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         await WaitForStudioAsync(page);
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Catalog Documents" })).ToBeVisibleAsync();
         await Expect(page.GetByText(reportName + ".rptsql", new() { Exact = true })).ToBeVisibleAsync();
@@ -249,7 +250,7 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
             new { folderId, name = $"Studio Save {Guid.NewGuid():N}", scriptText = InitialScript });
         var reportId = report.GetProperty("id").GetInt32();
 
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await WaitForStudioAsync(page);
 
         await page.EvaluateAsync("script => window.__STUDIO__.state.editorInstance.setValue(script)", SavedScript);
@@ -328,7 +329,7 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         await WaitForStudioAsync(page);
 
         await page.EvaluateAsync(
@@ -377,7 +378,7 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         await WaitForStudioAsync(page);
 
         // Each document declares its page mode. An empty `.rptsql` does not say which kind of report
@@ -463,7 +464,7 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         await WaitForStudioAsync(page);
 
         var result = await page.EvaluateAsync<JsonElement>(
@@ -572,7 +573,7 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         await WaitForStudioAsync(page);
 
         var result = await page.EvaluateAsync<JsonElement>(
@@ -639,7 +640,7 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         await WaitForStudioAsync(page);
 
         var patched = await page.EvaluateAsync<string>(
@@ -686,7 +687,7 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         await WaitForStudioAsync(page);
 
         await page.EvaluateAsync(
@@ -763,9 +764,18 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
             .SingleAsync();
     }
 
-    private static async Task WaitForStudioAsync(IPage page)
+    internal static async Task WaitForStudioAsync(IPage page, float timeout = 20_000,
+        [CallerMemberName] string caller = "")
     {
-        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
-            new PageWaitForFunctionOptions { Timeout = 20_000 });
+        await page.WaitForFunctionWithDiagnosticsAsync("""
+            () => {
+                const state = window.__STUDIO__?.state;
+                if (!state?.editorInstance) return false;
+                const reportId = Number.parseInt(new URLSearchParams(window.location.search).get('reportId') || '', 10);
+                if (!Number.isInteger(reportId) || reportId <= 0) return true;
+                const document = state.documents.find(doc => doc.id === state.activeDocId && doc.reportId === reportId);
+                return !!document && state.editorInstance.getValue().replace(/\r\n?/g, '\n') === document.content.replace(/\r\n?/g, '\n');
+            }
+            """, null, new PageWaitForFunctionOptions { Timeout = timeout }, caller);
     }
 }

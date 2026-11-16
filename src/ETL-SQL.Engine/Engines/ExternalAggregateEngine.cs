@@ -379,7 +379,7 @@ public class ExternalAggregateEngine
         {
             names[i] = $"agg_d{depth}_{prefix}_{i}.tmp";
             tempFiles.Add(names[i]);
-            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i]);
+            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
         }
 
         try
@@ -445,7 +445,7 @@ public class ExternalAggregateEngine
         for (int i = 0; i < PartitionCount; i++)
         {
             names[i] = $"agg_{prefix}_{i}.tmp";
-            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i]);
+            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
         }
 
         try
@@ -500,7 +500,7 @@ public class ExternalAggregateEngine
         {
             names[partition] = $"agg_d{depth}_{prefix}_{partition}.tmp";
             tempFiles.Add(names[partition]);
-            writers[partition] = await _context.SpillStore.CreateWriterAsync(names[partition]);
+            writers[partition] = await _context.SpillStore.CreateWriterAsync(names[partition], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
         }
 
         try
@@ -629,7 +629,7 @@ public class ExternalAggregateEngine
         for (int i = 0; i < PartitionCount; i++)
         {
             names[i] = $"agg_{prefix}_{i}.tmp";
-            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i]);
+            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
         }
 
         long totalInput = 0;

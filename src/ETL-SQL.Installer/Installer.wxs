@@ -3,6 +3,14 @@
     <Product Id="*" Name="ETL-SQL" Language="1033" Version="$(var.ProductVersion)" Manufacturer="Charles Clemens" UpgradeCode="7e3da743-19a2-463e-a794-b9fb9a1757e1">
         <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="x64" />
 
+        <!-- Restart Manager must not shut down other software that is reading our files. On hosted CI
+             it shut down the runner host's own provjobd, which reads newly installed files for about a
+             minute, and the runner was lost: a quick uninstall lost 4 of 6 runners by default and 0 of
+             6 with this property (2026-11-07). DisableShutdown does not stop the shutdown in silent
+             mode, so it is not enough. ServiceControl stops our services and the CloseApplication
+             entries below close our own programs. -->
+        <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" Secure="yes" />
+
         <!-- Close running applications to avoid locked files during upgrade/install -->
         <util:CloseApplication Id="CloseLSP" Target="ETL-SQL-LSP.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
         <util:CloseApplication Id="CloseCLI" Target="ETL-SQL.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
@@ -15,8 +23,8 @@
              InstallValidate or InstallInitialize (error 2613), so the installed configuration is
              read by an immediate action (ReadSettings) rather than copied by a deferred one. -->
         <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
-        <!-- The previous appsettings.json can hold secrets (v0.20.x kept them there): keep the
-             property out of the verbose log (the actions that carry it set HideTarget). -->
+        <!-- The installed appsettings.json can hold an operator's secrets: keep the property out
+             of the verbose log (the actions that carry it set HideTarget). -->
         <Property Id="PREVIOUS_SETTINGS" Hidden="yes" />
         <MediaTemplate EmbedCab="yes" />
         <!-- Publish the resolved folder in Add/Remove Programs so upgrade certification and
@@ -328,10 +336,10 @@
         <CustomAction Id="SetWriteJwtData" Property="WriteJwt"
                       Value="[INSTALLFOLDER]|UPGRADE=[WIX_UPGRADE_DETECTED]|INSTALL_PORTAL=[INSTALL_ADMIN_PORTAL]|REPORTING=[INSTALL_PORTAL_REPORTING]|DESIGNER=[INSTALL_PORTAL_DESIGNER]|SCHEDULING=[INSTALL_PORTAL_SCHEDULING]|OPERATIONS=[INSTALL_PORTAL_OPERATIONS]|ORCH_SURFACE=[INSTALL_PORTAL_ORCH_SURFACE]|STEWARD_SURFACE=[INSTALL_PORTAL_STEWARD_SURFACE]|REPORT_PORTAL=[INSTALL_REPORT_PORTAL]"
                       Execute="immediate" />
-        <CustomAction Id="WriteJwt" BinaryKey="InstallerActionsJs" JScriptCall="ConfigureJwt" Execute="deferred" Impersonate="no" Return="ignore" />
-        <CustomAction Id="ReadSettings" BinaryKey="InstallerActionsJs" JScriptCall="ReadSettings" Execute="immediate" Return="ignore" HideTarget="yes" />
+        <CustomAction Id="WriteJwt" BinaryKey="InstallerActionsJs" JScriptCall="ConfigureJwt" Execute="deferred" Impersonate="no" Return="check" />
+        <CustomAction Id="ReadSettings" BinaryKey="InstallerActionsJs" JScriptCall="ReadSettings" Execute="immediate" Return="check" HideTarget="yes" />
         <CustomAction Id="SetRestoreSettingsData" Property="RestoreSettings" Value="[INSTALLFOLDER]|[PREVIOUS_SETTINGS]" Execute="immediate" HideTarget="yes" />
-        <CustomAction Id="RestoreSettings" BinaryKey="InstallerActionsJs" JScriptCall="RestoreSettings" Execute="deferred" Impersonate="no" Return="ignore" HideTarget="yes" />
+        <CustomAction Id="RestoreSettings" BinaryKey="InstallerActionsJs" JScriptCall="RestoreSettings" Execute="deferred" Impersonate="no" Return="check" HideTarget="yes" />
         <CustomAction Id="PromptCleanData" BinaryKey="InstallerActionsJs" JScriptCall="PromptCleanData" Execute="immediate" Return="ignore" />
         <CustomAction Id="SetCleanDataDir" Property="CleanData" Value="[INSTALLFOLDER]" Execute="immediate" />
         <CustomAction Id="CleanData" BinaryKey="InstallerActionsJs" JScriptCall="CleanData" Execute="deferred" Impersonate="no" Return="ignore" />

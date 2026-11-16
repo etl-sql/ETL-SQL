@@ -252,7 +252,8 @@ The Orchestrator Service exposes three unauthenticated operations endpoints:
 
 | Endpoint | Format | Purpose |
 | :--- | :--- | :--- |
-| `GET /health` | JSON | Liveness probe for supervisors and load balancers. Also reports `authorizationMode` (`federated` or `legacy`), `requiresCallerIdentity`, and `legacyModeOnSharedDeployment` — see [Legacy mode](#legacy-mode-solo-only). |
+| `GET /health/ready` | JSON | Readiness probe for load balancers: 200 when the job store answers a read within 3 s, otherwise 503 (`job-store-unavailable`). Point HA load-balancer checks here so a node without its database leaves rotation. |
+| `GET /health` | JSON | Liveness probe for supervisors and restart policies; stays 200 while the database is down. Also reports `authorizationMode` (`federated` or `legacy`), `requiresCallerIdentity`, and `legacyModeOnSharedDeployment` — see [Legacy mode](#legacy-mode-solo-only). |
 | `GET /metrics` | JSON | Existing Portal/UI metrics payload with active jobs, queued jobs, maximum jobs, available slots, and active child processes. |
 | `GET /metrics/prometheus` | Prometheus text | Scrape-friendly gauges for the same non-secret scheduler and process counts. |
 
@@ -354,6 +355,6 @@ Use **Disable** when you want to pause a recurring job temporarily. Use **Delete
 
 ---
 
-*For the scheduling internals, see [Orchestrator Architecture](../../architecture/Orchestrator.md).*  
+*For the scheduling internals, see [Orchestrator Architecture](../../architecture/orchestrator.md).*
 *For the full `CREATE JOB` syntax and all scheduling options, see [Job Scheduling](../../reference/orchestrator-jobs/schedule.md).*  
 *For complete function and connector references, see [Standard Library](../../reference/functions/README.md) and [Data Connectors](../../reference/connectors/README.md).*

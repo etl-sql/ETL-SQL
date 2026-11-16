@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "measuredOn": "2026-10-29",
+  "scope": "Historical hosted consumer/asset-generation timing, not release certification",
+  "testedMergeSha": "45e178d8204ebb39dbdf5521fed24a6af4d9c151",
+  "mergeAndHeadTree": "52f6807b1b50177ee2cb7ee64f9412794ba3f696",
+  "unchangedCompilerSourceSince": "434b72f3f20bf837b1f4e0165cecbdea65f875b9",
+  "captures": [
+    {
+      "label": "control",
+      "runId": 40312449895,
+      "sourceSha": "b0bc52f615cf2b35d0c51e62bbab93d0a1bb6708",
+      "artifactId": 12647240904,
+      "archiveDigest": "sha256:de735822f5b94bd575e571820e65b4338ed520462f075e744bf0d95bc6e46cf5",
+      "summarySha256": "cf7d5081df0cf2b262679a6e2bad7e9a0d78bc8eccb94c5e6d66640ae27de668",
+      "passedChecks": 122,
+      "consumerSeconds": 1279.258,
+      "assetGenerationSeconds": 996.185
+    },
+    {
+      "label": "candidate",
+      "runId": 40940345240,
+      "sourceSha": "d800288e20cc44da52747cd5ac00925729408c41",
+      "artifactId": 12927768076,
+      "archiveDigest": "sha256:f69c206742f12137dabef50914c6f03117aa32c643302a1ea3974a8b233089b2",
+      "summarySha256": "c5c28fd17b3b10fe457f3c9570c96160131c531e86f590919668816558fa4d98",
+      "passedChecks": 122,
+      "consumerSeconds": 870.171,
+      "assetGenerationSeconds": 635.272
+    }
+  ],
+  "currentConsumerJobSeconds": 1018,
+  "assetGenerationReductionSeconds": 360.9129999999999,
+  "assetGenerationReductionPercent": 36.2295156020217,
+  "limitations": [
+    "Different hosted runs and runner instances; not an isolated compiler A/B benchmark.",
+    "PR merge tree equals the reported head tree; this is historical PR evidence, not final-candidate certification.",
+    "Current CI skipped engine coverage, Docker and enterprise certification; full-CI and release critical-path requirements remain open."
+  ],
+  "evidenceDirectory": "release-validation/hosted-compiler-timing-20261029/"
+}

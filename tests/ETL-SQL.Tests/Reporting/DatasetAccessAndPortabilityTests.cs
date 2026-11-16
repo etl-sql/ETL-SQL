@@ -606,6 +606,37 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("PASSWORD", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
+        [Theory]
+        [InlineData("EXPORT DATASET &sales TO 'out.etlds' ENCRYPT = KEYFILE KEYFILE = '{0}';")]
+        [InlineData("PUBLISH DATASET &sales2 FROM 'in.etlds' INTO '/f' ENCRYPT = KEYFILE KEYFILE = '{0}';")]
+        public async Task TransportKeyFile_InSystemDirectory_IsDenied(string template)
+        {
+            // KEYFILE is a script-selected path and must pass the same path policy as any read.
+            var systemFile = OperatingSystem.IsWindows()
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "win.ini")
+                : "/etc/hostname";
+            var registry = new SingleDatasetRegistry(ownerUserId: 1);
+            await registry.RegisterOrUpdate(new DatasetMetadata
+            {
+                Name = "&sales",
+                FolderPath = "/f",
+                ParquetFilePath = "sales_1.parquet",
+                SourceQuery = "SELECT 1 AS v",
+                AccessLevel = DatasetAccessLevel.Public,
+                LastRefresh = DateTime.UtcNow
+            });
+
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            eval.DatasetRegistry = registry;
+            eval.DatasetCallerContext = "IsAdmin=true";
+
+            var ex = await Assert.ThrowsAnyAsync<Exception>(
+                () => eval.Evaluate(Parse(string.Format(template, systemFile))));
+            var denial = ex;
+            while (denial is not null and not ETL_SQL.Services.SecurityException) denial = denial.InnerException;
+            Assert.True(denial is not null, $"Expected a path-policy denial, got {ex.GetType().Name}: {ex.Message}");
+        }
+
         // ── 2b: EXPORT → PUBLISH round-trip (move between portals) ─────────────────
 
         [Fact]
@@ -720,7 +751,15 @@ namespace ETL_SQL.Tests.Reporting
                     Assert.DoesNotContain(transport, persisted, StringComparison.Ordinal);
                 }
 
-                foreach (var file in Directory.EnumerateFiles(rootA).Concat(Directory.EnumerateFiles(rootB)))
+                var scanned = Directory.EnumerateFiles(rootA, "*", SearchOption.AllDirectories)
+                    .Concat(Directory.EnumerateFiles(rootB, "*", SearchOption.AllDirectories))
+                    .Select(Path.GetFullPath)
+                    .ToList();
+                // The byte scan proves nothing unless it read the persisted datasets and the export.
+                foreach (var expected in new[] { registryA.Stored("&secret_source").ParquetFilePath, registryB.Stored("&secret_import").ParquetFilePath, exportPath })
+                    Assert.Contains(Path.GetFullPath(expected), scanned, StringComparer.OrdinalIgnoreCase);
+
+                foreach (var file in scanned)
                 {
                     Assert.DoesNotContain(atRestA, Path.GetFileName(file), StringComparison.Ordinal);
                     Assert.DoesNotContain(atRestB, Path.GetFileName(file), StringComparison.Ordinal);

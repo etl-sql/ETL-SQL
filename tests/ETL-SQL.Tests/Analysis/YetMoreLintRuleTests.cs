@@ -218,6 +218,76 @@ namespace ETL_SQL.Tests.Analysis
             Assert.Contains("unused", results[0].Message);
         }
 
+        [Fact]
+        public async Task UnusedConnection_UsedInsideTryCatch_NoWarning()
+        {
+            var rule = new UnusedConnectionRule();
+            var sql = "CREATE CONNECTION demo AS MOCKDB();\n" +
+                      "BEGIN TRY\n" +
+                      "    SELECT * FROM demo.Orders;\n" +
+                      "END TRY\n" +
+                      "BEGIN CATCH\n" +
+                      "END CATCH;";
+            var results = await Lint(rule, sql);
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task UnusedConnection_UsedInsideExecuteRemote_NoWarning()
+        {
+            var rule = new UnusedConnectionRule();
+            var sql = "CREATE CONNECTION db AS MOCKDB();\n" +
+                      "EXECUTE db BEGIN\n" +
+                      "    SELECT 1;\n" +
+                      "END;";
+            var results = await Lint(rule, sql);
+            Assert.Empty(results);
+        }
+
+        // ── ConnectionForwardReferenceRule ────────────────────────────────────
+
+        [Fact]
+        public async Task ConnectionForwardReference_UsedInsideTryCatch_NoWarning()
+        {
+            var rule = new ConnectionForwardReferenceRule();
+            var sql = "CREATE CONNECTION demo AS MOCKDB();\n" +
+                      "BEGIN TRY\n" +
+                      "    SELECT * FROM demo.Orders;\n" +
+                      "END TRY\n" +
+                      "BEGIN CATCH\n" +
+                      "END CATCH;";
+            var results = await Lint(rule, sql);
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task ConnectionForwardReference_UsedBeforeCreate_Warning()
+        {
+            var rule = new ConnectionForwardReferenceRule();
+            var sql = "SELECT * FROM demo.Orders;\n" +
+                      "CREATE CONNECTION demo AS MOCKDB();";
+            var results = await Lint(rule, sql);
+            Assert.Single(results);
+            Assert.Equal("ConnectionForwardReference", results[0].RuleName);
+            Assert.Contains("demo", results[0].Message);
+        }
+
+        [Fact]
+        public async Task ConnectionForwardReference_UsedInsideTryCatchBeforeCreate_Warning()
+        {
+            var rule = new ConnectionForwardReferenceRule();
+            var sql = "BEGIN TRY\n" +
+                      "    SELECT * FROM demo.Orders;\n" +
+                      "END TRY\n" +
+                      "BEGIN CATCH\n" +
+                      "END CATCH;\n" +
+                      "CREATE CONNECTION demo AS MOCKDB();";
+            var results = await Lint(rule, sql);
+            Assert.Single(results);
+            Assert.Equal("ConnectionForwardReference", results[0].RuleName);
+            Assert.Contains("demo", results[0].Message);
+        }
+
         // ── AbsolutePathRule ──────────────────────────────────────────────────
 
         [Fact]

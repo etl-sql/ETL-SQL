@@ -14,7 +14,7 @@ public sealed class ConnectionAdminPageTests(PortalAdminFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/admin.html");
+        await page.GotoWithDiagnosticsAsync("/admin.html");
         await page.Locator("[data-tab='connections']").ClickAsync();
         await Expect(page.Locator("#panel-connections")).ToHaveAttributeAsync("aria-busy", "false");
         var alias = $"browser_connection_{Guid.NewGuid():N}";
@@ -70,7 +70,7 @@ public sealed class ConnectionAdminPageTests(PortalAdminFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/admin.html");
+        await page.GotoWithDiagnosticsAsync("/admin.html");
         await page.Locator("[data-tab='connections']").ClickAsync();
         await Expect(page.Locator("#panel-connections")).ToHaveAttributeAsync("aria-busy", "false");
         var webhook = $"browser_webhook_{Guid.NewGuid():N}";

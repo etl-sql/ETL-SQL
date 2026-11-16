@@ -47,7 +47,9 @@ function Invoke-WatchedPhase {
         [string[]]$ChildCommand,
         [int]$StallSeconds,
         [int]$HardSeconds,
-        [int]$PollSeconds = 2
+        [int]$PollSeconds = 2,
+        # Leaves the watchdog running so the caller can check that it stands down on its own.
+        [switch]$KeepWatchdog
     )
 
     $base = Join-Path $workRoot ($Name -replace '[^A-Za-z0-9_.-]', '_')
@@ -78,7 +80,7 @@ function Invoke-WatchedPhase {
     Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue
     $reason = $null
     if (Test-Path -LiteralPath $reasonPath) { $reason = (Get-Content -LiteralPath $reasonPath -Raw).Trim() }
-    try { if (-not $watchdog.HasExited) { $watchdog.Kill() } } catch { }
+    if (-not $KeepWatchdog) { try { if (-not $watchdog.HasExited) { $watchdog.Kill() } } catch { } }
 
     return [ordered]@{
         Reason = $reason
@@ -131,7 +133,7 @@ else {
 Write-Host "3/3 A phase that completes leaves no verdict and no orphan..." -ForegroundColor Cyan
 $quick = Invoke-WatchedPhase -Name "fast pass" `
     -ChildCommand @("Write-Output 'done'") `
-    -StallSeconds 30 -HardSeconds 300
+    -StallSeconds 30 -HardSeconds 300 -KeepWatchdog
 
 if ($quick.Reason) {
     $failures.Add("A phase that completed normally was reported as timed out: $($quick.Reason)")
@@ -144,6 +146,7 @@ for ($i = 0; $i -lt 20; $i++) {
 }
 if (-not $standDown) {
     $failures.Add("The watchdog for a completed phase did not exit on its own after the marker was removed.")
+    try { $quick.Watchdog.Kill() } catch { }
 }
 else {
     Write-Host "    watchdog stood down on marker removal" -ForegroundColor DarkGray

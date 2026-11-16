@@ -1,0 +1,38 @@
+#!/bin/sh
+# Run the impact-selected pre-push validation (AGENTS.md section 19). Its source preflight alone
+# would have stopped release candidate f5c4fd62a, which every hosted workflow then failed on.
+
+set -eu
+
+# Pushed from a worktree, Git hands the hook GIT_DIR and friends. Fixtures that `git init` a temp
+# repo inherited them and rewrote the shared repository's config and refs (2026-11-04). The hook
+# runs at the worktree root, so Git finds the right repository without them.
+# shellcheck disable=SC2046
+unset $(git rev-parse --local-env-vars)
+
+# Git passes one "<local ref> <local sha> <remote ref> <remote sha>" line per updated ref. A
+# deletion has an all-zero local SHA and pushes no content, so there is nothing to validate.
+zero=0000000000000000000000000000000000000000
+content=no
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+    [ "$local_sha" = "$zero" ] || content=yes
+done
+[ "$content" = yes ] || exit 0
+
+if ! command -v pwsh >/dev/null 2>&1; then
+    echo "pre-push: PowerShell 7 (pwsh) is required to run scripts/Test-PrePush.ps1." >&2
+    exit 1
+fi
+
+# Fails in seconds on a missing tool (Node.js 22, the pinned .NET SDK) instead of minutes into a
+# fixture with an unrelated-looking error.
+pwsh -NoProfile -File ./scripts/Test-Environment.ps1 -For PrePush
+
+# CI certifies; the hook only stops what would fail every hosted workflow at once. It runs source
+# preflight and formatting. ETLSQL_PREPUSH_FULL=1 runs the complete local set, as does running
+# scripts/Test-PrePush.ps1 directly.
+if [ "${ETLSQL_PREPUSH_FULL:-}" = 1 ]; then
+    pwsh -NoProfile -File ./scripts/Test-PrePush.ps1
+else
+    pwsh -NoProfile -File ./scripts/Test-PrePush.ps1 -Fast
+fi

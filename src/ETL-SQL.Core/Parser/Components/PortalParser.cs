@@ -1284,7 +1284,7 @@ public class PortalParser : ParserComponent
     private decimal ParseDecimalLiteral(string message)
     {
         var tok = _parser.Current;
-        if (tok.Type == TokenType.NUMBER && decimal.TryParse(tok.Value, out var value))
+        if (tok.Type == TokenType.NUMBER && decimal.TryParse(tok.Value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var value))
         {
             _parser.Advance();
             return value;

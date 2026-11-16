@@ -229,7 +229,8 @@ namespace ETL_SQL.LSP
                 var evaluator = scope.ServiceProvider.GetRequiredService<Engine.Evaluator>();
 
                 // Inject parameters from request
-                foreach (var p in request.parameters)
+                // A client may send "parameters": null; treat it as none.
+                foreach (var p in request.parameters ?? new Dictionary<string, string>())
                 {
                     evaluator.DeclareVariable(p.Key, p.Value, new VariableMetadata { IsInput = true });
                 }

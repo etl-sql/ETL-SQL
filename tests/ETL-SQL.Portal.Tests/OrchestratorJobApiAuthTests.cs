@@ -4,13 +4,16 @@ using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Observability;
 using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator.Service;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace ETL_SQL.Portal.Tests;
@@ -135,6 +138,7 @@ public class OrchestratorJobApiAuthTests : IDisposable
 
     [Theory]
     [InlineData("/health")]
+    [InlineData("/health/ready")]
     [InlineData("/metrics")]
     [InlineData("/metrics/prometheus")]
     public async Task Probes_StayOpenWithoutApiKey(string path)
@@ -144,6 +148,53 @@ public class OrchestratorJobApiAuthTests : IDisposable
         var res = await client.SendAsync(req);
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         Assert.True(res.Headers.Contains("X-Correlation-ID"));
+    }
+
+    // HA fault PostgresOutageBrief: while the job store cannot be read, readiness fails closed with
+    // 503 and no store detail, and liveness (/health) stays 200 so supervisors do not restart the node.
+    [Fact]
+    public async Task Readiness_FailsClosed_WhenTheJobStoreIsUnavailable()
+    {
+        using var failing = _factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IOrchestratorReadinessProbe>();
+            services.AddSingleton<IOrchestratorReadinessProbe>(new UnavailableStoreProbe());
+        }));
+        var client = failing.CreateClient();
+
+        var ready = await client.GetAsync("/health/ready");
+        var body = await ready.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, ready.StatusCode);
+        Assert.Contains("job-store-unavailable", body);
+        Assert.DoesNotContain("10.0.0.5", body);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Readiness_FailsClosed_WhenTheJobStoreHangs()
+    {
+        using var hanging = _factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IOrchestratorReadinessProbe>();
+            services.AddSingleton<IOrchestratorReadinessProbe>(new HangingStoreProbe());
+        }));
+        var client = hanging.CreateClient();
+        var watch = Stopwatch.StartNew();
+        var ready = await client.GetAsync("/health/ready");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, ready.StatusCode);
+        // Generous hang guard: the deadline is 3 s; only an unbounded wait fails this.
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(60), $"readiness took {watch.Elapsed}"); // flaky-time-bound-ok: 20x hang guard over the 3 s deadline
+    }
+
+    private sealed class UnavailableStoreProbe : IOrchestratorReadinessProbe
+    {
+        public Task ProbeAsync(CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("connection to 10.0.0.5:5432 refused"));
+    }
+
+    private sealed class HangingStoreProbe : IOrchestratorReadinessProbe
+    {
+        public Task ProbeAsync(CancellationToken cancellationToken) => Task.Delay(Timeout.Infinite, cancellationToken);
     }
 
     [Fact]
