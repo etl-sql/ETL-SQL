@@ -6,14 +6,14 @@ Fills missing numeric values between known data points in a series.
 TRANSFORM #target
 FROM #source
 USING INTERPOLATE (
-  VALUE_COL = 'value_column',
+  VALUE_COLS = 'value_col1[, value_col2, ...]',
   ORDER_COL = 'order_column',
   METHOD = 'LINEAR' | 'FORWARD' | 'BACKWARD',
   BY_GROUP = 'group_column[, ...]'
 );
 ```
 
-- **VALUE_COL = 'value_column'** — The numeric column containing nulls/missing values to interpolate.
+- **VALUE_COL = 'value_column'** / **VALUE_COLS = 'col1, col2, ...'** — One or more comma-separated numeric columns containing nulls/missing values to interpolate. Specify either `VALUE_COL` or `VALUE_COLS`.
 - **ORDER_COL = 'order_column'** — The column used to sort the values chronologically or sequentially before interpolating. Can be a numeric or date/datetime type.
 - **METHOD = 'method'** — The interpolation method:
   - `LINEAR` (default) — Computes linear progression values between the nearest non-null neighbors.

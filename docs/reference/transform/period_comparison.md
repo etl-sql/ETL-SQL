@@ -8,7 +8,7 @@ FROM #source
 USING PERIOD_COMPARISON (
   DATE_COL = 'date_column',
   VALUE_COL = 'value_column',
-  PERIOD = 'DAY' | 'MONTH' | 'YEAR',
+  PERIOD = 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR',
   BY_GROUP = 'group_column[, ...]',
   DIFF_COL = 'diff_column_name',
   PCT_COL = 'pct_column_name'
@@ -17,7 +17,7 @@ USING PERIOD_COMPARISON (
 
 - **DATE_COL = 'date_column'** — The column containing chronological dates or datetimes.
 - **VALUE_COL = 'value_column'** — The numeric column to compare.
-- **PERIOD = 'period_type'** — The comparison offset interval: `DAY`, `MONTH`, or `YEAR`.
+- **PERIOD = 'period_type'** — The comparison offset interval: `DAY`, `WEEK`, `MONTH`, `QUARTER`, or `YEAR`.
 - **BY_GROUP = 'group_column[, ...]'** — Optional comma-separated list of columns to partition/group by. Comparisons are calculated independently within each group.
 - **DIFF_COL = 'diff_column_name'** — Output column name for difference (`current - prior`). Defaults to `'{VALUE_COL}_Diff'`.
 - **PCT_COL = 'pct_column_name'** — Output column name for growth percentage (`(current - prior) / prior * 100`). Defaults to `'{VALUE_COL}_Pct'`.

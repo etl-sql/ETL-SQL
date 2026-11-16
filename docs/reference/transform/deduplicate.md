@@ -8,13 +8,15 @@ FROM #source
 USING DEDUPLICATE (
   KEY_COLS = 'key_column[, ...]',
   ORDER_BY = 'order_expression',
-  KEEP = 'FIRST' | 'LAST'
+  KEEP = 'FIRST' | 'LAST' | 'UNIQUE_ONLY',
+  REJECT_INTO = #reject_table
 );
 ```
 
 - **KEY_COLS = 'key_column[, ...]'** — Comma-separated list of columns used to identify duplicate rows.
 - **ORDER_BY = 'order_expression'** — Optional order-by clause expression (e.g. `'Priority DESC, Id ASC'`) used to sort rows within duplicate groups before deciding which row to keep.
-- **KEEP = 'FIRST' | 'LAST'** — Which row in the sorted duplicate group to keep. Defaults to `FIRST`.
+- **KEEP = 'FIRST' | 'LAST' | 'UNIQUE_ONLY'** — Which row(s) in the sorted duplicate group to keep (`UNIQUE_ONLY` keeps only groups with exactly 1 row). Defaults to `FIRST`.
+- **REJECT_INTO = #reject_table** — Optional temporary table to receive rejected duplicate rows (all rows of non-unique groups when `KEEP = 'UNIQUE_ONLY'`).
 
 ## Examples
 

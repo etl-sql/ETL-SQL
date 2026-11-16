@@ -350,4 +350,260 @@ USING DEDUPLICATE (
         Assert.Equal(3, lastRows.Count);
         Assert.Equal(30, Convert.ToInt32(lastRows.Single(r => r["Grp"]?.ToString() == "X")["Val"]));
     }
+
+    [Fact]
+    public async Task OutputSchema_PreservesSourceColumnTypesAndTypedComputedColumns()
+    {
+        var evaluator = await RunScriptAsync(@"
+CREATE TABLE #src (Id INT, Dt DATE, Label VARCHAR(20), Val DECIMAL(18, 2));
+INSERT INTO #src VALUES
+  (1, '2026-01-01', 'A', 10.00),
+  (2, '2026-01-03', 'B', 30.00);
+
+TRANSFORM #filled
+FROM #src
+USING FILL_DATES (
+  DATE_COL = 'Dt',
+  GAPS_FILL = 0
+);
+
+TRANSFORM #period
+FROM #src
+USING PERIOD_COMPARISON (
+  DATE_COL = 'Dt',
+  VALUE_COL = 'Val',
+  PERIOD = 'DAY'
+);
+
+TRANSFORM #pivoted
+FROM #src
+USING PIVOT (
+  ROW_FIELDS = 'Id',
+  PIVOT_FIELD = 'Label',
+  VALUE_FIELD = 'Val',
+  AGGREGATE = 'COUNT'
+);
+");
+        var filled = Assert.IsType<InMemoryDataSource>(evaluator.Connections["#filled"]);
+        Assert.Equal("INT", filled.Schema["Id"].DataType);
+        Assert.Equal("DATE", filled.Schema["Dt"].DataType);
+        Assert.Equal("VARCHAR(20)", filled.Schema["Label"].DataType);
+        Assert.Equal("DECIMAL(18,2)", filled.Schema["Val"].DataType);
+
+        var period = Assert.IsType<InMemoryDataSource>(evaluator.Connections["#period"]);
+        Assert.Equal("INT", period.Schema["Id"].DataType);
+        Assert.Equal("DECIMAL(18,2)", period.Schema["Val"].DataType);
+        Assert.Equal("DECIMAL", period.Schema["Val_Diff"].DataType);
+        Assert.Equal("DECIMAL", period.Schema["Val_Pct"].DataType);
+
+        var pivoted = Assert.IsType<InMemoryDataSource>(evaluator.Connections["#pivoted"]);
+        Assert.Equal("INT", pivoted.Schema["Id"].DataType);
+        Assert.Equal("INT", pivoted.Schema["A"].DataType);
+        Assert.Equal("INT", pivoted.Schema["B"].DataType);
+    }
+
+    [Fact]
+    public async Task FillDates_SupportsIntervalsStartEndAndForwardFill()
+    {
+        var evaluator = await RunScriptAsync(@"
+CREATE TABLE #hourly (Ts DATETIME, Reading DECIMAL(18, 2));
+INSERT INTO #hourly VALUES
+  ('2026-01-01 09:00:00', 10),
+  ('2026-01-01 11:00:00', 30);
+
+TRANSFORM #hourly_filled
+FROM #hourly
+USING FILL_DATES (
+  DATE_COL = 'Ts',
+  INTERVAL = 'HOUR',
+  START_DATE = '2026-01-01 08:00:00',
+  END_DATE = '2026-01-01 12:00:00',
+  GAPS_FILL = 'FORWARD'
+);
+
+CREATE TABLE #monthly (Dt DATE, Val DECIMAL(18, 2));
+INSERT INTO #monthly VALUES
+  ('2026-01-31', 100),
+  ('2026-03-31', 300);
+
+TRANSFORM #monthly_filled
+FROM #monthly
+USING FILL_DATES (
+  DATE_COL = 'Dt',
+  INTERVAL = 'MONTH',
+  GAPS_FILL = 'FORWARD'
+);
+
+CREATE TABLE #quarterly (Dt DATE, Val INT);
+INSERT INTO #quarterly VALUES
+  ('2026-01-01', 1),
+  ('2026-07-01', 3);
+
+TRANSFORM #quarterly_filled
+FROM #quarterly
+USING FILL_DATES (
+  DATE_COL = 'Dt',
+  INTERVAL = 'QUARTER',
+  END_DATE = '2026-10-01',
+  GAPS_FILL = -1
+);
+");
+        var hourlyRows = await ReadRowsAsync(evaluator, "#hourly_filled");
+        Assert.Equal(5, hourlyRows.Count);
+        Assert.Null(hourlyRows[0]["Reading"]); // 08:00 leading gap
+        Assert.Equal(10m, Convert.ToDecimal(hourlyRows[1]["Reading"])); // 09:00
+        Assert.Equal(10m, Convert.ToDecimal(hourlyRows[2]["Reading"])); // 10:00 forward-filled
+        Assert.Equal(new DateTime(2026, 1, 1, 10, 0, 0), Assert.IsType<DateTime>(hourlyRows[2]["Ts"]));
+        Assert.Equal(30m, Convert.ToDecimal(hourlyRows[3]["Reading"])); // 11:00
+        Assert.Equal(30m, Convert.ToDecimal(hourlyRows[4]["Reading"])); // 12:00 forward-filled
+
+        var monthlyRows = await ReadRowsAsync(evaluator, "#monthly_filled");
+        Assert.Equal(3, monthlyRows.Count);
+        Assert.Equal(new DateOnly(2026, 2, 28), Assert.IsType<DateOnly>(monthlyRows[1]["Dt"]));
+        Assert.Equal(100m, Convert.ToDecimal(monthlyRows[1]["Val"]));
+
+        var quarterlyRows = await ReadRowsAsync(evaluator, "#quarterly_filled");
+        Assert.Equal(4, quarterlyRows.Count);
+        Assert.Equal(new DateOnly(2026, 4, 1), Assert.IsType<DateOnly>(quarterlyRows[1]["Dt"]));
+        Assert.Equal(-1m, Convert.ToDecimal(quarterlyRows[1]["Val"]));
+        Assert.Equal(new DateOnly(2026, 10, 1), Assert.IsType<DateOnly>(quarterlyRows[3]["Dt"]));
+        Assert.Equal(-1m, Convert.ToDecimal(quarterlyRows[3]["Val"]));
+
+        await Assert.ThrowsAsync<ExecutionException>(() => RunScriptAsync(@"
+CREATE TABLE #bad (Dt DATE, Val INT);
+INSERT INTO #bad VALUES ('2026-01-05', 1);
+TRANSFORM #bad_out FROM #bad USING FILL_DATES (
+  DATE_COL = 'Dt',
+  START_DATE = '2026-02-01',
+  END_DATE = '2026-01-01'
+);
+"));
+    }
+
+    [Fact]
+    public async Task InterpolateAndNormalize_SupportCommaSeparatedValueCols()
+    {
+        var evaluator = await RunScriptAsync(@"
+CREATE TABLE #series (Seq INT, Temp DECIMAL(18, 2), Humidity DECIMAL(18, 2));
+INSERT INTO #series VALUES
+  (1, 10, 40),
+  (2, NULL, NULL),
+  (3, 30, 80);
+
+TRANSFORM #interp_multi
+FROM #series
+USING INTERPOLATE (
+  VALUE_COLS = 'Temp, Humidity',
+  ORDER_COL = 'Seq',
+  METHOD = 'LINEAR'
+);
+
+TRANSFORM #norm_multi
+FROM #interp_multi
+USING NORMALIZE (
+  VALUE_COLS = 'Temp, Humidity',
+  METHOD = 'MIN_MAX'
+);
+");
+        var interpRows = await ReadRowsAsync(evaluator, "#interp_multi");
+        var mid = interpRows.Single(r => Convert.ToDecimal(r["Seq"]) == 2m);
+        Assert.Equal(20m, Convert.ToDecimal(mid["Temp"]));
+        Assert.Equal(60m, Convert.ToDecimal(mid["Humidity"]));
+
+        var normRows = await ReadRowsAsync(evaluator, "#norm_multi");
+        var midNorm = normRows.Single(r => Convert.ToDecimal(r["Seq"]) == 2m);
+        Assert.Equal(0.5m, Convert.ToDecimal(midNorm["Temp_Normalized"]));
+        Assert.Equal(0.5m, Convert.ToDecimal(midNorm["Humidity_Normalized"]));
+
+        await Assert.ThrowsAsync<ExecutionException>(() => RunScriptAsync(@"
+CREATE TABLE #t (Id INT, A INT, B INT);
+INSERT INTO #t VALUES (1, 10, 20);
+TRANSFORM #out FROM #t USING NORMALIZE (VALUE_COL = 'A', VALUE_COLS = 'A, B');
+"));
+    }
+
+    [Fact]
+    public async Task PeriodComparison_SupportsWeekAndQuarter()
+    {
+        var evaluator = await RunScriptAsync(@"
+CREATE TABLE #weekly (Dt DATE, Val DECIMAL(18, 2));
+INSERT INTO #weekly VALUES
+  ('2026-01-05', 100),
+  ('2026-01-12', 125);
+
+TRANSFORM #wow
+FROM #weekly
+USING PERIOD_COMPARISON (
+  DATE_COL = 'Dt',
+  VALUE_COL = 'Val',
+  PERIOD = 'WEEK'
+);
+
+CREATE TABLE #qtr (Dt DATE, Val DECIMAL(18, 2));
+INSERT INTO #qtr VALUES
+  ('2025-11-30', 200),
+  ('2026-02-28', 250);
+
+TRANSFORM #qoq
+FROM #qtr
+USING PERIOD_COMPARISON (
+  DATE_COL = 'Dt',
+  VALUE_COL = 'Val',
+  PERIOD = 'QUARTER'
+);
+");
+        var wowRows = await ReadRowsAsync(evaluator, "#wow");
+        var jan12 = wowRows.Single(r => r["Dt"] is DateOnly d && d == new DateOnly(2026, 1, 12));
+        Assert.Equal(25m, Convert.ToDecimal(jan12["Val_Diff"]));
+        Assert.Equal(25m, Convert.ToDecimal(jan12["Val_Pct"]));
+
+        var qoqRows = await ReadRowsAsync(evaluator, "#qoq");
+        var feb28 = qoqRows.Single(r => r["Dt"] is DateOnly d && d == new DateOnly(2026, 2, 28));
+        Assert.Equal(50m, Convert.ToDecimal(feb28["Val_Diff"]));
+        Assert.Equal(25m, Convert.ToDecimal(feb28["Val_Pct"]));
+    }
+
+    [Fact]
+    public async Task Deduplicate_SupportsRejectIntoAndKeepUniqueOnly()
+    {
+        var evaluator = await RunScriptAsync(@"
+CREATE TABLE #src (Id INT, Seq INT, Tag VARCHAR(10));
+INSERT INTO #src VALUES
+  (1, 1, 'a1'),
+  (2, 1, 'b1'),
+  (2, 2, 'b2'),
+  (3, 1, 'c1'),
+  (3, 2, 'c2');
+
+TRANSFORM #kept_first
+FROM #src
+USING DEDUPLICATE (
+  KEY_COLS = 'Id',
+  ORDER_BY = 'Seq ASC',
+  KEEP = 'FIRST',
+  REJECT_INTO = #rejected_first
+);
+
+TRANSFORM #kept_unique
+FROM #src
+USING DEDUPLICATE (
+  KEY_COLS = 'Id',
+  KEEP = 'UNIQUE_ONLY',
+  REJECT_INTO = #rejected_unique
+);
+");
+        var keptFirst = await ReadRowsAsync(evaluator, "#kept_first");
+        Assert.Equal(3, keptFirst.Count);
+        var rejectedFirst = await ReadRowsAsync(evaluator, "#rejected_first");
+        Assert.Equal(2, rejectedFirst.Count);
+        Assert.Equal(["b2", "c2"], rejectedFirst.Select(r => r["Tag"]?.ToString()).OrderBy(x => x));
+
+        var keptUnique = await ReadRowsAsync(evaluator, "#kept_unique");
+        var onlyUnique = Assert.Single(keptUnique);
+        Assert.Equal(1m, Convert.ToDecimal(onlyUnique["Id"]));
+
+        var rejectedUnique = await ReadRowsAsync(evaluator, "#rejected_unique");
+        Assert.Equal(4, rejectedUnique.Count);
+        Assert.Equal(["b1", "b2", "c1", "c2"], rejectedUnique.Select(r => r["Tag"]?.ToString()).OrderBy(x => x));
+    }
 }

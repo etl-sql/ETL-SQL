@@ -255,7 +255,7 @@ install and an upgrade from v0.22.0 keep their secrets and settings; the Portal-
 
 ### Data Preparation — `TRANSFORM` Reliability, Schema/Lineage Integration, and Analyst Operations
 
-**Status:** Incremental; TR01–TR04 selected for v0.23.0 (in `TODO.md`)  
+**Status:** Incremental; TR01–TR04 shipped in v0.23.0, TR05–TR09 open for future scheduling  
 **Horizon:** Next (v0.23.0)  
 **Scheduling:** Backlog for prioritization after v0.22.0 ships.  
 **Authoritative design:** [TRANSFORM Statement Reference](docs/reference/statements/dml/transform.md),

@@ -15,7 +15,7 @@ linked `ROADMAP.md` entry.
 | Tier | What is in it |
 | :--- | :--- |
 | [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Release follow-ups, merge gates, the script and test review, caller identity, local vault, `TRANSFORM` correctness, archives, database docs, the New Job bundle target |
-| [Tier 2 — next](#tier-2--next) | PR test lane, Orchestrator snapshot ACLs, tenant bundle store, resource-control bypasses, `TRANSFORM` schema/lineage, overlay correctness, Orchestrator cohesion, MSI first slices, fast pre-push |
+| [Tier 2 — next](#tier-2--next) | PR test lane, Orchestrator snapshot ACLs, tenant bundle store, resource-control bypasses, overlay correctness, Orchestrator cohesion, MSI first slices, fast pre-push |
 | [Tier 3 — if time allows](#tier-3--if-time-allows) | Spill framing and performance, reporting authoring parity and golden fixtures, Orchestrator console completion, remaining MSI slices, performance certification redesign |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -133,13 +133,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
 | SP14 | **Prevent cursor hold-and-wait in nested pipelines.** Make cursor admission safe for complete operator pipelines so an outer window/sort/join cannot hold the last slot while waiting on its upstream operator. Expose and propagate cancellation through `IBufferManager` and all engine callers. Regress nested sorts and window-to-sort execution with one slot, competing pipelines at capacity, cancellation while queued, and restoration of all permits after failure. | — | M |
 | SP15 | **Apply one aggregate memory contract across execution paths.** Honor the effective operator ceiling and shared reservations in ordinary aggregation, native-to-row fallback, and grouping sets. Account for retained group state and result materialization; repartition where possible and enforce the configured policy when no bounded path exists. Regress high cardinality, an operator grant smaller than the process grant, native rejection/fallback, and grouping sets; verify exact aggregate results and reservation release. | — | M |
 | SP16 | **Connect production allocations to one memory coordinator.** Consolidate `BufferManager` memory limits/floor/hysteresis with the active `IMemoryGrantArbiter` contract and wire external operator allocations into shared reservations. Define precedence for existing settings and avoid double accounting or waiting while holding memory needed for progress. Replace total-capacity reporting with current host/container memory headroom. Use deterministic pressure fixtures to prove that configured limits affect real operators, recovery resumes admission, and success/cancellation/failure release reservations; include concurrent jobs and compatibility documentation. | — | M |
-
-### 2.4 `TRANSFORM` schema, lineage and multi-column use
-
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| TR03 | **Preserve output `TableSchema` types and wire `TRANSFORM` into `LineageAnalyzer` and `ScriptScopeService`.** Copy source `ColumnMetadata` types (`DECIMAL`, `INT`, `DATE`, `VARCHAR`) and typed computed columns into `output.Schema`; record table/column lineage edges for `TransformStatement` in `LineageAnalyzer`; and populate target column schemas in `ScriptScopeService` for LSP autocomplete. | TR02 | M |
-| TR04 | **Extend existing `TRANSFORM` algorithms for multi-column and flexible-interval workflows.** Support `INTERVAL = 'HOUR' \| 'DAY' \| 'WEEK' \| 'MONTH' \| 'QUARTER' \| 'YEAR'`, explicit `START_DATE`/`END_DATE`, and `GAPS_FILL = 'FORWARD'` in `FILL_DATES`; accept comma-separated `VALUE_COLS` in `INTERPOLATE` and `NORMALIZE`; add `WEEK` and `QUARTER` to `PERIOD_COMPARISON`; and add `REJECT_INTO = #table` / `KEEP = 'UNIQUE_ONLY'` to `DEDUPLICATE`. | TR01, TR02 | M |
 
 ### 2.5 Analytical overlay correctness and a fail-closed golden harness
 

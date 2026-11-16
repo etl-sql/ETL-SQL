@@ -386,5 +386,29 @@ namespace ETL_SQL.LanguageServer.Tests
             Assert.Contains("connector_type", cols);
             Assert.Contains("details", cols);
         }
+
+        [Fact]
+        public async Task ScriptMetadataDiscovery_PopulatesTransformTargetAndRejectColumns()
+        {
+            var uri = "file:///transform-discovery.etlsql";
+            var scriptText = @"
+                CREATE TABLE #src (Id INT, Dt DATE, Val DECIMAL(18,2));
+                TRANSFORM #norm FROM #src USING NORMALIZE (VALUE_COLS = 'Val');
+                TRANSFORM #dedup FROM #norm USING DEDUPLICATE (KEY_COLS = 'Id', KEEP = 'UNIQUE_ONLY', REJECT_INTO = #dups);
+            ";
+            var parsed = new ETL_SQL.Core.Parser.Parser(new ETL_SQL.Core.Parser.Lexer(scriptText).Tokenize()).Parse();
+            var discovery = new ScriptMetadataDiscovery(_manager);
+
+            await discovery.DiscoverAsync(parsed, uri);
+
+            var normCols = (await _manager.GetColumnDetailsAsync("TEMP", "#norm", uri)).ToList();
+            Assert.Contains(normCols, c => c.Name == "Id" && c.DataType == "INT");
+            Assert.Contains(normCols, c => c.Name == "Dt" && c.DataType == "DATE");
+            Assert.Contains(normCols, c => c.Name == "Val" && c.DataType == "DECIMAL(18,2)");
+            Assert.Contains(normCols, c => c.Name == "Val_Normalized" && c.DataType == "DECIMAL");
+
+            var dupCols = (await _manager.GetColumnDetailsAsync("TEMP", "#dups", uri)).ToList();
+            Assert.Contains(dupCols, c => c.Name == "Val_Normalized" && c.DataType == "DECIMAL");
+        }
     }
 }

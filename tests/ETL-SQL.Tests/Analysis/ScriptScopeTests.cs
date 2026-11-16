@@ -325,4 +325,49 @@ public class ScriptScopeTests
         Assert.NotNull(scope.PrefixEffects);
         Assert.Empty(scope.PrefixEffects);
     }
+
+    [Fact]
+    public void ATransformStatementPopulatesProjectedTargetColumnsAndTypes()
+    {
+        const string script = """
+            CREATE TABLE #src (OrderId INT, Dt DATE, Amount DECIMAL(18, 2));
+
+            TRANSFORM #compared
+            FROM #src
+            USING PERIOD_COMPARISON (
+              DATE_COL = 'Dt',
+              VALUE_COL = 'Amount',
+              PERIOD = 'QUARTER'
+            );
+
+            TRANSFORM #clean
+            FROM #compared
+            USING DEDUPLICATE (
+              KEY_COLS = 'OrderId',
+              KEEP = 'UNIQUE_ONLY',
+              REJECT_INTO = #dups
+            );
+
+            after_transform:
+            SELECT * FROM #clean;
+            """;
+
+        var scope = _scope.At(script, "after_transform");
+
+        Assert.True(scope.Resolved, scope.Error);
+        var compared = Assert.Single(scope.TempTables, t => t.Name == "#compared");
+        Assert.Equal(
+            ["OrderId", "Dt", "Amount", "Amount_Diff", "Amount_Pct"],
+            compared.Columns.Select(c => c.Name));
+        Assert.Equal("INT", compared.Columns[0].Type);
+        Assert.Equal("DATE", compared.Columns[1].Type);
+        Assert.Equal("DECIMAL(18,2)", compared.Columns[2].Type);
+        Assert.Equal("DECIMAL", compared.Columns[3].Type);
+        Assert.Equal("DECIMAL", compared.Columns[4].Type);
+
+        var dups = Assert.Single(scope.TempTables, t => t.Name == "#dups");
+        Assert.Equal(
+            ["OrderId", "Dt", "Amount", "Amount_Diff", "Amount_Pct"],
+            dups.Columns.Select(c => c.Name));
+    }
 }

@@ -7,6 +7,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Services;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -63,7 +64,13 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         }
     }
 
-    private static async Task<(List<Row> Rows, List<string> Columns, string SourceName)> StageSourceRows(
+    private sealed record StagedTransformSource(
+        List<Row> Rows,
+        List<string> Columns,
+        Dictionary<string, ColumnDefinition> SourceSchema,
+        string SourceName);
+
+    private static async Task<StagedTransformSource> StageSourceRows(
         TransformStatement stmt,
         IExecutionContext context,
         string algorithmName)
@@ -72,6 +79,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         var source = await context.ResolveReadSourceAsync(sourceTable)
             ?? throw new ExecutionException($"Could not resolve source dataset: {sourceTable.TableName}");
 
+        var sourceSchema = await ResolveSourceSchemaAsync(source, sourceTable, context);
         var rows = new List<Row>();
         var columns = (await source.GetColumnsAsync(context.CancellationToken)).ToList();
         long retainedBytes = 0;
@@ -102,65 +110,236 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             throw new ExecutionException($"Source dataset {sourceTable.TableName} has no columns.");
         }
 
-        return (rows, columns, sourceTable.TableName);
+        foreach (var col in columns)
+        {
+            sourceSchema.TryAdd(col, new ColumnDefinition(col, "UNKNOWN", false));
+        }
+
+        return new StagedTransformSource(rows, columns, sourceSchema, sourceTable.TableName);
+    }
+
+    private static async Task<Dictionary<string, ColumnDefinition>> ResolveSourceSchemaAsync(
+        IDataSource source,
+        TableReference sourceTable,
+        IExecutionContext context)
+    {
+        var schema = new Dictionary<string, ColumnDefinition>(StringComparer.OrdinalIgnoreCase);
+
+        if (source is InMemoryDataSource inMemory)
+        {
+            foreach (var kv in inMemory.Schema)
+            {
+                schema[kv.Key] = kv.Value;
+            }
+        }
+        else if (source is AppendOnlyColumnDataSource colStore)
+        {
+            foreach (var kv in colStore.LogicalSchema)
+            {
+                schema[kv.Key] = kv.Value;
+            }
+        }
+        else if (source.GetCatalogProvider() is { } catalog)
+        {
+            var catCols = await catalog.GetColumnMetadataAsync(sourceTable.SchemaName ?? string.Empty, sourceTable.TableName, context.CancellationToken);
+            foreach (var col in catCols)
+            {
+                schema[col.ColumnName] = new ColumnDefinition(col.ColumnName, col.DataType, false) { IsNullable = col.IsNullable };
+            }
+        }
+
+        return schema;
+    }
+
+    private static List<ColumnDefinition> BuildTargetSchemaDefinitions(
+        TransformStatement stmt,
+        IReadOnlyList<string> columns,
+        IReadOnlyDictionary<string, ColumnDefinition> sourceSchema,
+        bool forceNullablePassThrough = false)
+    {
+        var sourceMeta = columns
+            .Select(col => new ColumnMetadata(
+                col,
+                sourceSchema.TryGetValue(col, out var def) ? def.DataType : "UNKNOWN"))
+            .ToList();
+
+        var projected = TransformSchemaProjection.ProjectColumns(stmt, sourceMeta);
+        var result = new List<ColumnDefinition>(projected.Count);
+        foreach (var col in projected)
+        {
+            if (sourceSchema.TryGetValue(col.Name, out var srcDef) &&
+                string.Equals(srcDef.DataType, col.DataType, StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add(CloneColumnDefinition(srcDef, forceNullablePassThrough ? true : srcDef.IsNullable));
+            }
+            else
+            {
+                result.Add(new ColumnDefinition(col.Name, col.DataType, false) { IsNullable = true });
+            }
+        }
+
+        return result;
+    }
+
+    private static List<ColumnDefinition> CopySourceSchemaDefinitions(
+        IReadOnlyList<string> columns,
+        IReadOnlyDictionary<string, ColumnDefinition> sourceSchema,
+        bool forceNullable = false)
+    {
+        var result = new List<ColumnDefinition>(columns.Count);
+        foreach (var col in columns)
+        {
+            if (sourceSchema.TryGetValue(col, out var srcDef))
+            {
+                result.Add(CloneColumnDefinition(srcDef, forceNullable ? true : srcDef.IsNullable));
+            }
+            else
+            {
+                result.Add(new ColumnDefinition(col, "UNKNOWN", false) { IsNullable = true });
+            }
+        }
+        return result;
+    }
+
+    private static ColumnDefinition CloneColumnDefinition(ColumnDefinition src, bool isNullable)
+    {
+        return new ColumnDefinition(src.ColumnName, src.DataType, false, src.DefaultExpression, src.Metadata)
+        {
+            IsNullable = isNullable
+        };
     }
 
     private async Task ExecuteFillDates(TransformStatement stmt, IExecutionContext context)
     {
-        ValidateAllowedOptions(stmt, "FILL_DATES", "DATE_COL", "GAPS_FILL", "BY_GROUP");
+        ValidateAllowedOptions(stmt, "FILL_DATES", "DATE_COL", "GAPS_FILL", "BY_GROUP", "INTERVAL", "START_DATE", "END_DATE");
         var dateColumn = GetStringOption(stmt.Options, "DATE_COL", "FILL_DATES");
+        var interval = stmt.Options.ContainsKey("INTERVAL")
+            ? GetStringOption(stmt.Options, "INTERVAL", "FILL_DATES").ToUpperInvariant()
+            : "DAY";
+        ValidateFillInterval(interval);
+
         var gapFillValueExpr = stmt.Options.TryGetValue("GAPS_FILL", out var grp)
             ? grp
             : new LiteralExpression(0m, TokenType.NUMERIC);
+        bool isForwardFill = gapFillValueExpr is IdentifierExpression gapId &&
+                             string.Equals(gapId.Name, "FORWARD", StringComparison.OrdinalIgnoreCase);
+        object? gapFillValue = null;
+        if (!isForwardFill)
+        {
+            gapFillValue = await context.EvaluationContext.EvaluateValue(gapFillValueExpr, Row.Empty);
+            if (gapFillValue is string gapStr && string.Equals(gapStr, "FORWARD", StringComparison.OrdinalIgnoreCase))
+            {
+                isForwardFill = true;
+            }
+        }
+
+        DateTime? explicitStart = await EvaluateOptionalBucketDateAsync(stmt.Options, "START_DATE", interval, context);
+        DateTime? explicitEnd = await EvaluateOptionalBucketDateAsync(stmt.Options, "END_DATE", interval, context);
+        if (explicitStart.HasValue && explicitEnd.HasValue && explicitStart.Value > explicitEnd.Value)
+        {
+            throw new ExecutionException("FILL_DATES START_DATE cannot be after END_DATE.");
+        }
+
         var groupColumns = GetOptionalColumnList(stmt.Options, "BY_GROUP");
 
-        var (rows, columns, sourceName) = await StageSourceRows(stmt, context, "FILL_DATES");
+        var staged = await StageSourceRows(stmt, context, "FILL_DATES");
+        var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "FILL_DATES",
             ("DATE_COL", [dateColumn]),
             ("BY_GROUP", groupColumns));
 
-        var gapFillValue = await context.EvaluationContext.EvaluateValue(gapFillValueExpr, Row.Empty);
-        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "FILL_DATES", columns, _logger);
+        bool nullableOutputs = isForwardFill || GetValue(gapFillValue) == null;
+        var targetSchemaDefs = BuildTargetSchemaDefinitions(stmt, columns, sourceSchema, forceNullablePassThrough: nullableOutputs);
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "FILL_DATES", targetSchemaDefs, _logger);
+
+        bool isHourly = string.Equals(interval, "HOUR", StringComparison.OrdinalIgnoreCase);
 
         foreach (var group in rows.GroupBy(row => BuildGroupKey(row, groupColumns)).OrderBy(g => g.Key, StringComparer.Ordinal))
         {
-            var byDate = new Dictionary<DateTime, List<Row>>();
+            var timedRows = new List<(DateTime RawDate, DateTime Bucket, Row Row)>();
+            var byBucket = new Dictionary<DateTime, List<Row>>();
             Row? template = null;
+
             foreach (var row in group)
             {
-                if (!TryGetDate(row[dateColumn], out var date))
+                if (!TryGetDateTime(row[dateColumn], out var dt))
                 {
                     throw new ExecutionException($"FILL_DATES could not convert {dateColumn} value '{row[dateColumn]}' to a date.");
                 }
                 template ??= row;
-                var day = date.Date;
-                if (!byDate.TryGetValue(day, out var dayRows))
+                var bucket = NormalizeIntervalBucket(dt, interval);
+                timedRows.Add((dt, bucket, row));
+                if (!byBucket.TryGetValue(bucket, out var bucketRows))
                 {
-                    dayRows = new List<Row>();
-                    byDate[day] = dayRows;
+                    bucketRows = new List<Row>();
+                    byBucket[bucket] = bucketRows;
                 }
-                dayRows.Add(row);
+                bucketRows.Add(row);
             }
 
-            if (byDate.Count == 0 || template == null) continue;
-            var minDate = byDate.Keys.Min();
-            var maxDate = byDate.Keys.Max();
+            if (byBucket.Count == 0 || template == null) continue;
+            var minDate = explicitStart ?? byBucket.Keys.Min();
+            var maxDate = explicitEnd ?? byBucket.Keys.Max();
+            if (minDate > maxDate) continue;
 
-            for (var date = minDate; date <= maxDate; date = date.AddDays(1))
+            var gridDates = new HashSet<DateTime>();
+            var steps = new List<DateTime>();
+            for (int step = 0; ; step++)
+            {
+                var stepDate = StepFromStart(minDate, interval, step);
+                if (stepDate > maxDate) break;
+                steps.Add(stepDate);
+                gridDates.Add(stepDate);
+            }
+
+            var offGridRows = timedRows
+                .Where(item => !gridDates.Contains(item.Bucket) && item.Bucket >= minDate && item.Bucket <= maxDate)
+                .OrderBy(item => item.RawDate)
+                .ToList();
+            int offGridIdx = 0;
+            Row? lastEmittedRow = null;
+
+            foreach (var stepDate in steps)
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
-                if (byDate.TryGetValue(date, out var existingRows))
+
+                while (offGridIdx < offGridRows.Count && offGridRows[offGridIdx].Bucket < stepDate)
+                {
+                    var offRow = offGridRows[offGridIdx++].Row.Clone();
+                    await sink.WriteRowAsync(offRow);
+                    lastEmittedRow = offRow;
+                }
+
+                if (byBucket.TryGetValue(stepDate, out var existingRows))
                 {
                     foreach (var existing in existingRows)
                     {
-                        await sink.WriteRowAsync(existing.Clone());
+                        var clone = existing.Clone();
+                        await sink.WriteRowAsync(clone);
+                        lastEmittedRow = clone;
                     }
                 }
                 else
                 {
                     await sink.WriteRowAsync(
-                        CreateGapRow(sink.Schema, columns, dateColumn, groupColumns, template, date, gapFillValue));
+                        CreateGapRow(
+                            sink.Schema,
+                            columns,
+                            dateColumn,
+                            groupColumns,
+                            template,
+                            stepDate,
+                            isForwardFill,
+                            lastEmittedRow,
+                            gapFillValue,
+                            isHourly));
                 }
+            }
+
+            while (offGridIdx < offGridRows.Count)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                await sink.WriteRowAsync(offGridRows[offGridIdx++].Row.Clone());
             }
         }
 
@@ -169,8 +348,8 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
 
     private async Task ExecuteInterpolate(TransformStatement stmt, IExecutionContext context)
     {
-        ValidateAllowedOptions(stmt, "INTERPOLATE", "VALUE_COL", "ORDER_COL", "METHOD", "BY_GROUP");
-        var valueCol = GetStringOption(stmt.Options, "VALUE_COL", "INTERPOLATE");
+        ValidateAllowedOptions(stmt, "INTERPOLATE", "VALUE_COL", "VALUE_COLS", "ORDER_COL", "METHOD", "BY_GROUP");
+        var valueCols = GetValueColumnList(stmt.Options, "INTERPOLATE");
         var orderCol = GetStringOption(stmt.Options, "ORDER_COL", "INTERPOLATE");
         var method = stmt.Options.ContainsKey("METHOD")
             ? GetStringOption(stmt.Options, "METHOD", "INTERPOLATE")
@@ -187,13 +366,15 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             throw new ExecutionException($"Unsupported INTERPOLATE method: {method}");
         }
 
-        var (rows, columns, sourceName) = await StageSourceRows(stmt, context, "INTERPOLATE");
+        var staged = await StageSourceRows(stmt, context, "INTERPOLATE");
+        var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "INTERPOLATE",
-            ("VALUE_COL", [valueCol]),
+            ("VALUE_COLS", valueCols),
             ("ORDER_COL", [orderCol]),
             ("BY_GROUP", groupColumns));
 
-        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "INTERPOLATE", columns, _logger);
+        var targetSchemaDefs = BuildTargetSchemaDefinitions(stmt, columns, sourceSchema);
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "INTERPOLATE", targetSchemaDefs, _logger);
 
         foreach (var group in rows.GroupBy(row => BuildGroupKey(row, groupColumns)))
         {
@@ -203,75 +384,78 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
                 .ToList();
             int n = sortedGroup.Count;
 
-            if (isForward)
+            foreach (var valueCol in valueCols)
             {
-                object? lastVal = null;
-                for (int i = 0; i < n; i++)
+                if (isForward)
                 {
-                    var val = GetValue(sortedGroup[i].Row[valueCol]);
-                    if (val != null)
+                    object? lastVal = null;
+                    for (int i = 0; i < n; i++)
                     {
-                        lastVal = val;
-                    }
-                    else if (lastVal != null)
-                    {
-                        sortedGroup[i].Row[valueCol] = lastVal;
-                    }
-                }
-            }
-            else if (isBackward)
-            {
-                object? nextVal = null;
-                for (int i = n - 1; i >= 0; i--)
-                {
-                    var val = GetValue(sortedGroup[i].Row[valueCol]);
-                    if (val != null)
-                    {
-                        nextVal = val;
-                    }
-                    else if (nextVal != null)
-                    {
-                        sortedGroup[i].Row[valueCol] = nextVal;
-                    }
-                }
-            }
-            else
-            {
-                for (int i = 0; i < n; i++)
-                {
-                    if (GetValue(sortedGroup[i].Row[valueCol]) != null) continue;
-
-                    int prevIdx = -1;
-                    for (int p = i - 1; p >= 0; p--)
-                    {
-                        if (GetValue(sortedGroup[p].Row[valueCol]) != null)
+                        var val = GetValue(sortedGroup[i].Row[valueCol]);
+                        if (val != null)
                         {
-                            prevIdx = p;
-                            break;
+                            lastVal = val;
+                        }
+                        else if (lastVal != null)
+                        {
+                            sortedGroup[i].Row[valueCol] = lastVal;
                         }
                     }
-
-                    int nextIdx = -1;
-                    for (int nx = i + 1; nx < n; nx++)
+                }
+                else if (isBackward)
+                {
+                    object? nextVal = null;
+                    for (int i = n - 1; i >= 0; i--)
                     {
-                        if (GetValue(sortedGroup[nx].Row[valueCol]) != null)
+                        var val = GetValue(sortedGroup[i].Row[valueCol]);
+                        if (val != null)
                         {
-                            nextIdx = nx;
-                            break;
+                            nextVal = val;
+                        }
+                        else if (nextVal != null)
+                        {
+                            sortedGroup[i].Row[valueCol] = nextVal;
                         }
                     }
-
-                    if (prevIdx != -1 && nextIdx != -1)
+                }
+                else
+                {
+                    for (int i = 0; i < n; i++)
                     {
-                        var y0 = ToDecimal(GetValue(sortedGroup[prevIdx].Row[valueCol])!, "INTERPOLATE", valueCol);
-                        var y1 = ToDecimal(GetValue(sortedGroup[nextIdx].Row[valueCol])!, "INTERPOLATE", valueCol);
-                        var x0 = sortedGroup[prevIdx].Order;
-                        var x1 = sortedGroup[nextIdx].Order;
-                        var x = sortedGroup[i].Order;
+                        if (GetValue(sortedGroup[i].Row[valueCol]) != null) continue;
 
-                        sortedGroup[i].Row[valueCol] = x1 == x0
-                            ? y0
-                            : LinearInterpolate(y0, y1, x0, x1, x);
+                        int prevIdx = -1;
+                        for (int p = i - 1; p >= 0; p--)
+                        {
+                            if (GetValue(sortedGroup[p].Row[valueCol]) != null)
+                            {
+                                prevIdx = p;
+                                break;
+                            }
+                        }
+
+                        int nextIdx = -1;
+                        for (int nx = i + 1; nx < n; nx++)
+                        {
+                            if (GetValue(sortedGroup[nx].Row[valueCol]) != null)
+                            {
+                                nextIdx = nx;
+                                break;
+                            }
+                        }
+
+                        if (prevIdx != -1 && nextIdx != -1)
+                        {
+                            var y0 = ToDecimal(GetValue(sortedGroup[prevIdx].Row[valueCol])!, "INTERPOLATE", valueCol);
+                            var y1 = ToDecimal(GetValue(sortedGroup[nextIdx].Row[valueCol])!, "INTERPOLATE", valueCol);
+                            var x0 = sortedGroup[prevIdx].Order;
+                            var x1 = sortedGroup[nextIdx].Order;
+                            var x = sortedGroup[i].Order;
+
+                            sortedGroup[i].Row[valueCol] = x1 == x0
+                                ? y0
+                                : LinearInterpolate(y0, y1, x0, x1, x);
+                        }
                     }
                 }
             }
@@ -287,7 +471,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
 
     private async Task ExecuteDeduplicate(TransformStatement stmt, IExecutionContext context)
     {
-        ValidateAllowedOptions(stmt, "DEDUPLICATE", "KEY_COLS", "ORDER_BY", "KEEP");
+        ValidateAllowedOptions(stmt, "DEDUPLICATE", "KEY_COLS", "ORDER_BY", "KEEP", "REJECT_INTO");
         if (!stmt.Options.TryGetValue("KEY_COLS", out var kExpr))
         {
             throw new ExecutionException("DEDUPLICATE algorithm requires KEY_COLS parameter");
@@ -302,42 +486,105 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ? GetStringOption(stmt.Options, "ORDER_BY", "DEDUPLICATE")
             : null;
         var keep = stmt.Options.ContainsKey("KEEP")
-            ? GetStringOption(stmt.Options, "KEEP", "DEDUPLICATE")
+            ? GetStringOption(stmt.Options, "KEEP", "DEDUPLICATE").ToUpperInvariant()
             : "FIRST";
 
-        if (!string.Equals(keep, "FIRST", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(keep, "LAST", StringComparison.OrdinalIgnoreCase))
+        if (keep is not ("FIRST" or "LAST" or "UNIQUE_ONLY"))
         {
             throw new ExecutionException($"Unsupported DEDUPLICATE KEEP option: {keep}");
         }
 
+        string? rejectInto = stmt.Options.ContainsKey("REJECT_INTO")
+            ? GetStringOption(stmt.Options, "REJECT_INTO", "DEDUPLICATE")
+            : null;
+        if (rejectInto != null)
+        {
+            if (!rejectInto.StartsWith("#", StringComparison.Ordinal))
+            {
+                throw new ExecutionException($"DEDUPLICATE REJECT_INTO target '{rejectInto}' must be a temporary table starting with '#'.");
+            }
+            if (string.Equals(rejectInto, stmt.TargetTable.TableName, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ExecutionException($"DEDUPLICATE REJECT_INTO target '{rejectInto}' cannot be the same as the target table.");
+            }
+        }
+
         List<SortKey>? sortKeys = !string.IsNullOrWhiteSpace(orderByStr) ? ParseOrderBy(orderByStr) : null;
 
-        var (rows, columns, sourceName) = await StageSourceRows(stmt, context, "DEDUPLICATE");
+        var staged = await StageSourceRows(stmt, context, "DEDUPLICATE");
+        var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "DEDUPLICATE",
             ("KEY_COLS", keyCols),
             ("ORDER_BY", sortKeys?.Select(sk => sk.ColumnName) ?? []));
 
-        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "DEDUPLICATE", columns, _logger);
+        var targetSchemaDefs = CopySourceSchemaDefinitions(columns, sourceSchema);
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "DEDUPLICATE", targetSchemaDefs, _logger);
+        TransformOutputSink? rejectSink = rejectInto != null
+            ? await TransformOutputSink.CreateForTableAsync(
+                new TableReference(rejectInto),
+                stmt,
+                context,
+                "DEDUPLICATE (REJECT_INTO)",
+                CopySourceSchemaDefinitions(columns, sourceSchema),
+                _logger)
+            : null;
 
-        var comparer = sortKeys is { Count: > 0 } ? new RowComparer(sortKeys) : null;
-        foreach (var group in rows.GroupBy(row => BuildGroupKey(row, keyCols)))
+        try
         {
-            context.CancellationToken.ThrowIfCancellationRequested();
-            // LINQ OrderBy is a stable merge sort in .NET, preserving input order on ties.
-            var groupRows = comparer != null
-                ? group.OrderBy(r => r, comparer).ToList()
-                : group.ToList();
-            if (groupRows.Count == 0) continue;
+            var comparer = sortKeys is { Count: > 0 } ? new RowComparer(sortKeys) : null;
+            foreach (var group in rows.GroupBy(row => BuildGroupKey(row, keyCols)))
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                // LINQ OrderBy is a stable merge sort in .NET, preserving input order on ties.
+                var groupRows = comparer != null
+                    ? group.OrderBy(r => r, comparer).ToList()
+                    : group.ToList();
+                if (groupRows.Count == 0) continue;
 
-            var keptRow = string.Equals(keep, "LAST", StringComparison.OrdinalIgnoreCase)
-                ? groupRows[^1]
-                : groupRows[0];
+                if (keep == "UNIQUE_ONLY")
+                {
+                    if (groupRows.Count == 1)
+                    {
+                        await sink.WriteRowAsync(groupRows[0]);
+                    }
+                    else if (rejectSink != null)
+                    {
+                        foreach (var rejected in groupRows)
+                        {
+                            await rejectSink.WriteRowAsync(rejected.Clone());
+                        }
+                    }
+                    continue;
+                }
 
-            await sink.WriteRowAsync(keptRow);
+                int keepIdx = keep == "LAST" ? groupRows.Count - 1 : 0;
+                await sink.WriteRowAsync(groupRows[keepIdx]);
+
+                if (rejectSink != null)
+                {
+                    for (int i = 0; i < groupRows.Count; i++)
+                    {
+                        if (i != keepIdx)
+                        {
+                            await rejectSink.WriteRowAsync(groupRows[i].Clone());
+                        }
+                    }
+                }
+            }
+
+            await sink.CompleteAsync();
+            if (rejectSink != null)
+            {
+                await rejectSink.CompleteAsync();
+            }
         }
-
-        await sink.CompleteAsync();
+        finally
+        {
+            if (rejectSink != null)
+            {
+                await rejectSink.DisposeAsync();
+            }
+        }
     }
 
     private async Task ExecutePivot(TransformStatement stmt, IExecutionContext context)
@@ -355,7 +602,8 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             : "SUM";
         ValidateAggregate(aggregate, "PIVOT");
 
-        var (rows, columns, sourceName) = await StageSourceRows(stmt, context, "PIVOT");
+        var staged = await StageSourceRows(stmt, context, "PIVOT");
+        var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "PIVOT",
             ("ROW_FIELDS", rowFields),
             ("PIVOT_FIELD", [pivotField]),
@@ -369,16 +617,19 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             .OrderBy(x => x.ColumnName, StringComparer.Ordinal)
             .ToList();
 
-        var targetColumns = new List<string>(rowFields);
+        var targetSchemaDefs = CopySourceSchemaDefinitions(rowFields, sourceSchema);
+        var seenCols = new HashSet<string>(rowFields, StringComparer.OrdinalIgnoreCase);
+        var valueSourceType = sourceSchema.TryGetValue(valueField, out var valDef) ? valDef.DataType : "DECIMAL";
+        var pivotColType = TransformSchemaProjection.InferAggregateType(aggregate, valueSourceType);
         foreach (var entry in pivotEntries)
         {
-            if (!targetColumns.Contains(entry.ColumnName, StringComparer.OrdinalIgnoreCase))
+            if (seenCols.Add(entry.ColumnName))
             {
-                targetColumns.Add(entry.ColumnName);
+                targetSchemaDefs.Add(new ColumnDefinition(entry.ColumnName, pivotColType, false) { IsNullable = true });
             }
         }
 
-        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "PIVOT", targetColumns, _logger);
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "PIVOT", targetSchemaDefs, _logger);
 
         foreach (var group in rows.GroupBy(row => BuildGroupKey(row, rowFields)))
         {
@@ -433,13 +684,15 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         ValidateAggregate(aggregate, "TOP_N_OTHERS");
         var groupColumns = GetOptionalColumnList(stmt.Options, "BY_GROUP");
 
-        var (rows, columns, sourceName) = await StageSourceRows(stmt, context, "TOP_N_OTHERS");
+        var staged = await StageSourceRows(stmt, context, "TOP_N_OTHERS");
+        var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "TOP_N_OTHERS",
             ("VALUE_COL", [valueCol]),
             ("CATEGORY_COL", [categoryCol]),
             ("BY_GROUP", groupColumns));
 
-        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "TOP_N_OTHERS", columns, _logger);
+        var targetSchemaDefs = BuildTargetSchemaDefinitions(stmt, columns, sourceSchema, forceNullablePassThrough: true);
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "TOP_N_OTHERS", targetSchemaDefs, _logger);
 
         foreach (var group in rows.GroupBy(row => BuildGroupKey(row, groupColumns)))
         {
@@ -544,17 +797,15 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ? GetStringOption(stmt.Options, "PCT_COL", "PERIOD_COMPARISON")
             : $"{valueCol}_Pct";
 
-        var (rows, columns, sourceName) = await StageSourceRows(stmt, context, "PERIOD_COMPARISON");
+        var staged = await StageSourceRows(stmt, context, "PERIOD_COMPARISON");
+        var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "PERIOD_COMPARISON",
             ("DATE_COL", [dateCol]),
             ("VALUE_COL", [valueCol]),
             ("BY_GROUP", groupColumns));
 
-        var targetColumns = new List<string>(columns);
-        if (!targetColumns.Contains(diffCol, StringComparer.OrdinalIgnoreCase)) targetColumns.Add(diffCol);
-        if (!targetColumns.Contains(pctCol, StringComparer.OrdinalIgnoreCase)) targetColumns.Add(pctCol);
-
-        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "PERIOD_COMPARISON", targetColumns, _logger);
+        var targetSchemaDefs = BuildTargetSchemaDefinitions(stmt, columns, sourceSchema);
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "PERIOD_COMPARISON", targetSchemaDefs, _logger);
 
         foreach (var group in rows.GroupBy(row => BuildGroupKey(row, groupColumns)))
         {
@@ -624,8 +875,9 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             return true;
         }
 
-        // Month-end alignment: e.g., 2026-02-28 (month end) looks back to 2026-01-31 when 2026-01-28 is absent.
+        // Month-end alignment: e.g., 2026-02-28 (month end) looks back to 2026-01-31 (MONTH) or 2025-11-30 (QUARTER).
         if ((string.Equals(period, "MONTH", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(period, "QUARTER", StringComparison.OrdinalIgnoreCase) ||
              string.Equals(period, "YEAR", StringComparison.OrdinalIgnoreCase)) &&
             currentDate.Day == DateTime.DaysInMonth(currentDate.Year, currentDate.Month))
         {
@@ -648,7 +900,9 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         return period.ToUpperInvariant() switch
         {
             "DAY" => dt.AddDays(count),
+            "WEEK" => dt.AddDays(count * 7),
             "MONTH" => dt.AddMonths(count),
+            "QUARTER" => dt.AddMonths(count * 3),
             "YEAR" => dt.AddYears(count),
             _ => throw new ExecutionException($"Unsupported comparison period: {period}")
         };
@@ -663,15 +917,14 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ? GetStringOption(stmt.Options, "SHARE_COL", "SHARE_OF_TOTAL")
             : $"{valueCol}_Share";
 
-        var (rows, columns, sourceName) = await StageSourceRows(stmt, context, "SHARE_OF_TOTAL");
+        var staged = await StageSourceRows(stmt, context, "SHARE_OF_TOTAL");
+        var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "SHARE_OF_TOTAL",
             ("VALUE_COL", [valueCol]),
             ("BY_GROUP", groupColumns));
 
-        var targetColumns = new List<string>(columns);
-        if (!targetColumns.Contains(shareCol, StringComparer.OrdinalIgnoreCase)) targetColumns.Add(shareCol);
-
-        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "SHARE_OF_TOTAL", targetColumns, _logger);
+        var targetSchemaDefs = BuildTargetSchemaDefinitions(stmt, columns, sourceSchema);
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "SHARE_OF_TOTAL", targetSchemaDefs, _logger);
 
         foreach (var group in rows.GroupBy(row => BuildGroupKey(row, groupColumns)))
         {
@@ -710,15 +963,22 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
 
     private async Task ExecuteNormalize(TransformStatement stmt, IExecutionContext context)
     {
-        ValidateAllowedOptions(stmt, "NORMALIZE", "VALUE_COL", "METHOD", "BY_GROUP", "NORM_COL");
-        var valueCol = GetStringOption(stmt.Options, "VALUE_COL", "NORMALIZE");
+        ValidateAllowedOptions(stmt, "NORMALIZE", "VALUE_COL", "VALUE_COLS", "METHOD", "BY_GROUP", "NORM_COL");
+        var valueCols = GetValueColumnList(stmt.Options, "NORMALIZE");
         var method = stmt.Options.ContainsKey("METHOD")
             ? GetStringOption(stmt.Options, "METHOD", "NORMALIZE")
             : "MIN_MAX";
         var groupColumns = GetOptionalColumnList(stmt.Options, "BY_GROUP");
-        var normCol = stmt.Options.ContainsKey("NORM_COL")
-            ? GetStringOption(stmt.Options, "NORM_COL", "NORMALIZE")
-            : $"{valueCol}_Normalized";
+
+        var explicitNormCols = GetOptionalColumnList(stmt.Options, "NORM_COL");
+        if (explicitNormCols.Count > 0 && explicitNormCols.Count != valueCols.Count)
+        {
+            throw new ExecutionException(
+                $"NORMALIZE NORM_COL count ({explicitNormCols.Count}) must match VALUE_COLS count ({valueCols.Count}).");
+        }
+        var normCols = valueCols
+            .Select((col, idx) => explicitNormCols.Count > 0 ? explicitNormCols[idx] : $"{col}_Normalized")
+            .ToList();
 
         bool isMinMax = string.Equals(method, "MIN_MAX", StringComparison.OrdinalIgnoreCase);
         bool isZScore = string.Equals(method, "Z_SCORE", StringComparison.OrdinalIgnoreCase);
@@ -727,87 +987,87 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             throw new ExecutionException($"Unsupported NORMALIZE method: {method}");
         }
 
-        var (rows, columns, sourceName) = await StageSourceRows(stmt, context, "NORMALIZE");
+        var staged = await StageSourceRows(stmt, context, "NORMALIZE");
+        var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "NORMALIZE",
-            ("VALUE_COL", [valueCol]),
+            ("VALUE_COLS", valueCols),
             ("BY_GROUP", groupColumns));
 
-        var targetColumns = new List<string>(columns);
-        if (!targetColumns.Contains(normCol, StringComparer.OrdinalIgnoreCase)) targetColumns.Add(normCol);
-
-        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "NORMALIZE", targetColumns, _logger);
+        var targetSchemaDefs = BuildTargetSchemaDefinitions(stmt, columns, sourceSchema);
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "NORMALIZE", targetSchemaDefs, _logger);
 
         foreach (var group in rows.GroupBy(row => BuildGroupKey(row, groupColumns)))
         {
             var groupRows = group.ToList();
             if (groupRows.Count == 0) continue;
 
-            if (isMinMax)
+            var computedByRow = new Dictionary<string, decimal?[]>(StringComparer.OrdinalIgnoreCase);
+            for (int colIdx = 0; colIdx < valueCols.Count; colIdx++)
             {
-                var nonNullVals = groupRows
-                    .Select(r => GetValue(r[valueCol]))
-                    .Where(v => v != null)
-                    .Select(v => ToDecimal(v!, "NORMALIZE", valueCol))
-                    .ToList();
-                var min = nonNullVals.Count > 0 ? nonNullVals.Min() : 0m;
-                var max = nonNullVals.Count > 0 ? nonNullVals.Max() : 0m;
-                var range = max - min;
+                var valueCol = valueCols[colIdx];
+                var normCol = normCols[colIdx];
+                var normalized = new decimal?[groupRows.Count];
 
-                foreach (var row in groupRows)
+                if (isMinMax)
                 {
-                    var outRow = new Row(sink.Schema);
-                    foreach (var col in columns)
-                    {
-                        outRow[col] = row[col];
-                    }
+                    var nonNullVals = groupRows
+                        .Select(r => GetValue(r[valueCol]))
+                        .Where(v => v != null)
+                        .Select(v => ToDecimal(v!, "NORMALIZE", valueCol))
+                        .ToList();
+                    var min = nonNullVals.Count > 0 ? nonNullVals.Min() : 0m;
+                    var max = nonNullVals.Count > 0 ? nonNullVals.Max() : 0m;
+                    var range = max - min;
 
-                    var rawVal = GetValue(row[valueCol]);
-                    if (rawVal == null)
+                    for (int rIdx = 0; rIdx < groupRows.Count; rIdx++)
                     {
-                        outRow[normCol] = null;
+                        var rawVal = GetValue(groupRows[rIdx][valueCol]);
+                        if (rawVal != null)
+                        {
+                            var val = ToDecimal(rawVal, "NORMALIZE", valueCol);
+                            normalized[rIdx] = range != 0m ? (val - min) / range : 0m;
+                        }
                     }
-                    else
-                    {
-                        var val = ToDecimal(rawVal, "NORMALIZE", valueCol);
-                        outRow[normCol] = range != 0m ? (val - min) / range : 0m;
-                    }
-
-                    await sink.WriteRowAsync(outRow);
                 }
+                else
+                {
+                    var nonNullVals = groupRows
+                        .Select(r => GetValue(r[valueCol]))
+                        .Where(v => v != null)
+                        .Select(v => ToDouble(v!, "NORMALIZE", valueCol))
+                        .ToList();
+                    var count = nonNullVals.Count;
+                    var mean = count > 0 ? nonNullVals.Average() : 0.0;
+                    var sumOfSquares = count > 0 ? nonNullVals.Select(v => Math.Pow(v - mean, 2)).Sum() : 0.0;
+                    var stddev = count > 0 ? Math.Sqrt(sumOfSquares / count) : 0.0;
+
+                    for (int rIdx = 0; rIdx < groupRows.Count; rIdx++)
+                    {
+                        var rawVal = GetValue(groupRows[rIdx][valueCol]);
+                        if (rawVal != null)
+                        {
+                            var val = ToDouble(rawVal, "NORMALIZE", valueCol);
+                            normalized[rIdx] = stddev != 0.0 ? (decimal)((val - mean) / stddev) : 0m;
+                        }
+                    }
+                }
+
+                computedByRow[normCol] = normalized;
             }
-            else
+
+            for (int rIdx = 0; rIdx < groupRows.Count; rIdx++)
             {
-                var nonNullVals = groupRows
-                    .Select(r => GetValue(r[valueCol]))
-                    .Where(v => v != null)
-                    .Select(v => ToDouble(v!, "NORMALIZE", valueCol))
-                    .ToList();
-                var count = nonNullVals.Count;
-                var mean = count > 0 ? nonNullVals.Average() : 0.0;
-                var sumOfSquares = count > 0 ? nonNullVals.Select(v => Math.Pow(v - mean, 2)).Sum() : 0.0;
-                var stddev = count > 0 ? Math.Sqrt(sumOfSquares / count) : 0.0;
-
-                foreach (var row in groupRows)
+                var row = groupRows[rIdx];
+                var outRow = new Row(sink.Schema);
+                foreach (var col in columns)
                 {
-                    var outRow = new Row(sink.Schema);
-                    foreach (var col in columns)
-                    {
-                        outRow[col] = row[col];
-                    }
-
-                    var rawVal = GetValue(row[valueCol]);
-                    if (rawVal == null)
-                    {
-                        outRow[normCol] = null;
-                    }
-                    else
-                    {
-                        var val = ToDouble(rawVal, "NORMALIZE", valueCol);
-                        outRow[normCol] = stddev != 0.0 ? (decimal)((val - mean) / stddev) : 0m;
-                    }
-
-                    await sink.WriteRowAsync(outRow);
+                    outRow[col] = row[col];
                 }
+                foreach (var normCol in normCols)
+                {
+                    outRow[normCol] = computedByRow[normCol][rIdx];
+                }
+                await sink.WriteRowAsync(outRow);
             }
         }
 
@@ -833,16 +1093,15 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ? GetStringOption(stmt.Options, "ROLLING_COL", "ROLLING_AGGREGATE")
             : $"{valueCol}_Rolling";
 
-        var (rows, columns, sourceName) = await StageSourceRows(stmt, context, "ROLLING_AGGREGATE");
+        var staged = await StageSourceRows(stmt, context, "ROLLING_AGGREGATE");
+        var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "ROLLING_AGGREGATE",
             ("VALUE_COL", [valueCol]),
             ("ORDER_COL", [orderCol]),
             ("BY_GROUP", groupColumns));
 
-        var targetColumns = new List<string>(columns);
-        if (!targetColumns.Contains(rollingCol, StringComparer.OrdinalIgnoreCase)) targetColumns.Add(rollingCol);
-
-        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "ROLLING_AGGREGATE", targetColumns, _logger);
+        var targetSchemaDefs = BuildTargetSchemaDefinitions(stmt, columns, sourceSchema);
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "ROLLING_AGGREGATE", targetSchemaDefs, _logger);
 
         foreach (var group in rows.GroupBy(row => BuildGroupKey(row, groupColumns)))
         {
@@ -873,6 +1132,28 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         }
 
         await sink.CompleteAsync();
+    }
+
+    private static List<string> GetValueColumnList(Dictionary<string, Expression> options, string algorithm)
+    {
+        bool hasSingle = options.ContainsKey("VALUE_COL");
+        bool hasMulti = options.ContainsKey("VALUE_COLS");
+        if (hasSingle && hasMulti)
+        {
+            throw new ExecutionException($"{algorithm} accepts either VALUE_COL or VALUE_COLS, not both.");
+        }
+        if (!hasSingle && !hasMulti)
+        {
+            throw new ExecutionException($"Algorithm {algorithm} requires option 'VALUE_COL' or 'VALUE_COLS'");
+        }
+
+        var key = hasMulti ? "VALUE_COLS" : "VALUE_COL";
+        var cols = GetGroupColumns(options[key]);
+        if (cols.Count == 0)
+        {
+            throw new ExecutionException($"{algorithm} {key} must specify at least one column.");
+        }
+        return cols;
     }
 
     private static void ValidateAllowedOptions(
@@ -918,10 +1199,54 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         }
     }
 
+    private static void ValidateFillInterval(string interval)
+    {
+        if (interval is not ("HOUR" or "DAY" or "WEEK" or "MONTH" or "QUARTER" or "YEAR"))
+        {
+            throw new ExecutionException($"Unsupported FILL_DATES INTERVAL: {interval}");
+        }
+    }
+
+    private static DateTime NormalizeIntervalBucket(DateTime dt, string interval) => interval.ToUpperInvariant() switch
+    {
+        "HOUR" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, 0, 0, dt.Kind),
+        _ => dt.Date
+    };
+
+    private static DateTime StepFromStart(DateTime start, string interval, int step) => interval.ToUpperInvariant() switch
+    {
+        "HOUR" => start.AddHours(step),
+        "DAY" => start.AddDays(step),
+        "WEEK" => start.AddDays(step * 7),
+        "MONTH" => start.AddMonths(step),
+        "QUARTER" => start.AddMonths(step * 3),
+        "YEAR" => start.AddYears(step),
+        _ => throw new ExecutionException($"Unsupported FILL_DATES INTERVAL: {interval}")
+    };
+
+    private static async Task<DateTime?> EvaluateOptionalBucketDateAsync(
+        Dictionary<string, Expression> options,
+        string key,
+        string interval,
+        IExecutionContext context)
+    {
+        if (!options.TryGetValue(key, out var expr))
+            return null;
+
+        var raw = GetValue(await context.EvaluationContext.EvaluateValue(expr, Row.Empty));
+        if (!TryGetDateTime(raw, out var dt))
+        {
+            throw new ExecutionException($"FILL_DATES {key} value '{raw}' could not be converted to a date.");
+        }
+        return NormalizeIntervalBucket(dt, interval);
+    }
+
     private static void ValidatePeriod(string period)
     {
         if (!string.Equals(period, "DAY", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(period, "WEEK", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(period, "MONTH", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(period, "QUARTER", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(period, "YEAR", StringComparison.OrdinalIgnoreCase))
         {
             throw new ExecutionException($"Unsupported comparison period: {period}");
@@ -1019,19 +1344,26 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         List<string> groupColumns,
         Row template,
         DateTime date,
-        object? gapFillValue)
+        bool isForwardFill,
+        Row? lastEmittedRow,
+        object? gapFillValue,
+        bool isHourly)
     {
         var row = new Row(schema);
         foreach (var column in columns)
         {
             if (column.Equals(dateColumn, StringComparison.OrdinalIgnoreCase))
             {
-                // Keep the column's type: a DATE column holds DateOnly, DATETIME holds DateTime.
-                row[column] = template[column] is DateOnly ? DateOnly.FromDateTime(date) : date;
+                // Keep the column's type: hourly intervals require DateTime; daily+ preserve DateOnly when present.
+                row[column] = !isHourly && template[column] is DateOnly ? DateOnly.FromDateTime(date) : date;
             }
             else if (groupColumns.Contains(column, StringComparer.OrdinalIgnoreCase))
             {
                 row[column] = template[column];
+            }
+            else if (isForwardFill)
+            {
+                row[column] = lastEmittedRow != null ? lastEmittedRow[column] : null;
             }
             else
             {
@@ -1041,21 +1373,26 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         return row;
     }
 
-    private static bool TryGetDate(object? value, out DateTime date)
+    private static bool TryGetDateTime(object? value, out DateTime dateTime)
     {
         var v = GetValue(value);
         if (v == null)
         {
+            dateTime = default;
+            return false;
+        }
+        return EvaluationUtils.TryToDateTime(v, out dateTime);
+    }
+
+    private static bool TryGetDate(object? value, out DateTime date)
+    {
+        if (!TryGetDateTime(value, out var dt))
+        {
             date = default;
             return false;
         }
-        if (v is DateTime dt)
-        {
-            date = dt.Date;
-            return true;
-        }
-
-        return EvaluationUtils.TryToDateTime(v, out date);
+        date = dt.Date;
+        return true;
     }
 
     private static object? GetValue(object? val)
@@ -1222,7 +1559,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
 
     private sealed class TransformOutputSink : IAsyncDisposable
     {
-        private readonly TransformStatement _stmt;
+        private readonly TableReference _targetTable;
         private readonly IExecutionContext _context;
         private readonly string _algorithm;
         private readonly List<string> _targetColumns;
@@ -1234,7 +1571,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         public int ProducedRows { get; private set; }
 
         private TransformOutputSink(
-            TransformStatement stmt,
+            TableReference targetTable,
             IExecutionContext context,
             string algorithm,
             List<string> targetColumns,
@@ -1242,7 +1579,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             IDataSource? target,
             DataTable batch)
         {
-            _stmt = stmt;
+            _targetTable = targetTable;
             _context = context;
             _algorithm = algorithm;
             _targetColumns = targetColumns;
@@ -1251,46 +1588,57 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             _batch = batch;
         }
 
-        public static async Task<TransformOutputSink> CreateAsync(
+        public static Task<TransformOutputSink> CreateAsync(
             TransformStatement stmt,
             IExecutionContext context,
             string algorithm,
-            List<string> targetColumns,
+            List<ColumnDefinition> targetColumnDefs,
+            ILogger logger) =>
+            CreateForTableAsync(stmt.TargetTable, stmt, context, algorithm, targetColumnDefs, logger);
+
+        public static async Task<TransformOutputSink> CreateForTableAsync(
+            TableReference targetTable,
+            TransformStatement stmt,
+            IExecutionContext context,
+            string algorithm,
+            List<ColumnDefinition> targetColumnDefs,
             ILogger logger)
         {
+            var targetColumns = targetColumnDefs.Select(c => c.ColumnName).ToList();
             var initialBatch = new DataTable();
             initialBatch.SetColumns(targetColumns);
 
             if (context.IsWhatIf)
             {
-                if (!stmt.TargetTable.TableName.StartsWith("#", StringComparison.Ordinal))
+                if (!targetTable.TableName.StartsWith("#", StringComparison.Ordinal))
                 {
-                    _ = await context.ResolveDataSourceAsync(stmt.TargetTable)
-                        ?? throw new ExecutionException($"Could not resolve target dataset: {stmt.TargetTable.TableName}");
+                    _ = await context.ResolveDataSourceAsync(targetTable)
+                        ?? throw new ExecutionException($"Could not resolve target dataset: {targetTable.TableName}");
                 }
-                return new TransformOutputSink(stmt, context, algorithm, targetColumns, logger, target: null, initialBatch);
+                return new TransformOutputSink(targetTable, context, algorithm, targetColumns, logger, target: null, initialBatch);
             }
 
-            if (stmt.TargetTable.TableName.StartsWith("#", StringComparison.Ordinal) &&
-                !context.Connections.ContainsKey(stmt.TargetTable.TableName))
+            if (targetTable.TableName.StartsWith("#", StringComparison.Ordinal) &&
+                !context.Connections.ContainsKey(targetTable.TableName))
             {
-                context.Connections[stmt.TargetTable.TableName] = new InMemoryDataSource
+                var created = new InMemoryDataSource
                 {
                     Validator = context as IDataValidator,
                     ExecutionContext = context,
                     MaxInMemoryBatches = context.MaxInMemoryBatches
                 };
+                created.SetSchema(targetColumnDefs);
+                context.Connections[targetTable.TableName] = created;
             }
 
-            var target = await context.ResolveDataSourceAsync(stmt.TargetTable)
-                ?? throw new ExecutionException($"Could not resolve target dataset: {stmt.TargetTable.TableName}");
+            var target = await context.ResolveDataSourceAsync(targetTable)
+                ?? throw new ExecutionException($"Could not resolve target dataset: {targetTable.TableName}");
             await target.TruncateAsync();
 
             if (target is AppendOnlyColumnDataSource colStore &&
-                stmt.TargetTable.TableName.StartsWith("#", StringComparison.Ordinal))
+                targetTable.TableName.StartsWith("#", StringComparison.Ordinal))
             {
-                var existingColumns = (await ((IDataSource)colStore).GetColumnsAsync(context.CancellationToken)).ToList();
-                if (!existingColumns.SequenceEqual(targetColumns, StringComparer.OrdinalIgnoreCase))
+                if (SchemaDiffers(colStore.LogicalSchema, targetColumnDefs))
                 {
                     var replacement = new InMemoryDataSource
                     {
@@ -1298,22 +1646,33 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
                         ExecutionContext = context,
                         MaxInMemoryBatches = context.MaxInMemoryBatches
                     };
-                    replacement.SetSchema(targetColumns.Select(c => new ColumnDefinition(c, "UNKNOWN", false)));
-                    context.Connections[stmt.TargetTable.TableName] = replacement;
+                    replacement.SetSchema(targetColumnDefs);
+                    context.Connections[targetTable.TableName] = replacement;
                     target = replacement;
                 }
             }
             else if (target is InMemoryDataSource inMemoryTarget)
             {
-                bool schemaDiffers = inMemoryTarget.Schema.Count != targetColumns.Count ||
-                    !inMemoryTarget.Schema.Keys.SequenceEqual(targetColumns, StringComparer.OrdinalIgnoreCase);
-                if (schemaDiffers)
-                {
-                    inMemoryTarget.SetSchema(targetColumns.Select(c => new ColumnDefinition(c, "UNKNOWN", false)));
-                }
+                inMemoryTarget.SetSchema(targetColumnDefs);
             }
 
-            return new TransformOutputSink(stmt, context, algorithm, targetColumns, logger, target, initialBatch);
+            return new TransformOutputSink(targetTable, context, algorithm, targetColumns, logger, target, initialBatch);
+        }
+
+        private static bool SchemaDiffers(
+            IReadOnlyDictionary<string, ColumnDefinition> existingSchema,
+            IReadOnlyList<ColumnDefinition> targetColumnDefs)
+        {
+            if (existingSchema.Count != targetColumnDefs.Count) return true;
+            foreach (var col in targetColumnDefs)
+            {
+                if (!existingSchema.TryGetValue(col.ColumnName, out var existing) ||
+                    !string.Equals(existing.DataType, col.DataType, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         public async Task WriteRowAsync(Row row)
@@ -1337,7 +1696,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             if (_context.IsWhatIf)
             {
                 _logger.WriteLine(
-                    $"WHAT IF: Would write {ProducedRows} rows to {_stmt.TargetTable.TableName} via TRANSFORM {_algorithm}.",
+                    $"WHAT IF: Would write {ProducedRows} rows to {_targetTable.TableName} via TRANSFORM {_algorithm}.",
                     ConsoleColor.Yellow);
                 return;
             }
@@ -1351,7 +1710,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
 
             _context.Telemetry.RowsProcessed += ProducedRows;
             _logger.Info("TRANSFORM {Algorithm} complete: {RowCount} rows staged into {Target}",
-                _algorithm, ProducedRows, _stmt.TargetTable.TableName);
+                _algorithm, ProducedRows, _targetTable.TableName);
         }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
