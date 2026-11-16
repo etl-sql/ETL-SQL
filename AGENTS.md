@@ -572,9 +572,18 @@ Full procedure: **[release-checklist.md](./docs/releases/release-checklist.md)**
    Complete the checklist's deployment/operator evidence too.
 3. Review retained results and hashes. Use failed-job-only retries for unchanged inputs. Source changes require a new candidate. `Master-Release.ps1` remains a local
    packaging/diagnostic tool; it is not an additional publication build.
-4. Tag and publish **manually** only after all applicable evidence is accepted. The tag-triggered
-   `.github/workflows/release.yml` verifies and promotes certified packages and generates consolidated
-   checksums, SBOM and provenance. It does not rebuild macOS packages.
+4. Tag only through the **Tag Release** workflow (`tag-release.yml`) after all applicable evidence
+   is accepted and the owner approves the `release-approval` environment. The tag-triggered
+   `.github/workflows/release.yml` verifies and promotes certified packages, generates consolidated
+   checksums, SBOM and provenance, and calls `publish-marketplace.yml`. It does not rebuild macOS
+   packages.
+
+**Register new dispatch-only workflows on `main` when you create them.** GitHub accepts
+`workflow_dispatch` (and lists the workflow) only once the file exists on the default branch; a
+workflow that lives only on a release branch returns 404 when dispatched. When a change adds a
+workflow with no push or pull_request trigger, land at least a stub of it on `main` in the same
+release cycle (v0.22.0's Tag Release and Publish to Marketplace each needed an emergency PR to
+`main` at release time).
 
 Regular CI is impact-selected. Explicit full certification includes Docker integration and the
 cross-platform enterprise/browser lanes. Since v0.22.0 the EBNF, SLT, spill and scale checks run in
