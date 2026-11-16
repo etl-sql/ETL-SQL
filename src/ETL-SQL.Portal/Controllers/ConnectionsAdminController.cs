@@ -246,8 +246,8 @@ public class ConnectionsAdminController(
     public sealed record GrantUseRequest(int GroupId);
 
     /// <summary>
-    /// Use grants: an entry with no grants is usable by any caller; adding the first grant
-    /// restricts use to admins, the owner, and members of granted groups.
+    /// Use grants: connections are deny-by-default. With no grants only admins and the owner can
+    /// use an entry; each grant adds the members of one group.
     /// </summary>
     [HttpGet("{alias}/acl")]
     public async Task<IActionResult> ListAcl(string alias, CancellationToken ct)

@@ -4,110 +4,297 @@ The execution ledger for v0.23.0: only work that still needs doing. Progress nar
 finished items live in Git history, `CHANGELOG.md`, the
 [release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md), the
 [flaky-test record](docs/releases/flaky-test-stability.md) and the
-[v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md). Flaky-test watch items are
-GitHub issues (#92), not TODO rows.
+[v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md).
 
-| Group | What is in it | Open |
-| :--- | :--- | :---: |
-| [After v0.22.0](#after-v0220--release-follow-ups) | Follow-ups the v0.22.0 release exposed | 2 |
-| [Carried to v0.23.0](#carried-to-v0230--open) | Open work carried from v0.22.0 | 5 |
+Selected 2026-11-16 by the owner. The selection is about 160+ developer-days by the ROADMAP sizing
+(**S** 1–2 days, **M** 3–5, **D** a 1–2 day decision), several monthly releases of work, so it is
+ordered in tiers. Work Tier 1 first; anything unfinished when v0.23.0 is cut carries to the next
+release without restarting it. Each task's design, boundaries and acceptance evidence stay in its
+linked `ROADMAP.md` entry.
+
+| Tier | What is in it |
+| :--- | :--- |
+| [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Release follow-ups, merge gates, the script and test review, caller identity, local vault, `TRANSFORM` correctness, archives, database docs, the New Job bundle target |
+| [Tier 2 — next](#tier-2--next) | PR test lane, Orchestrator snapshot ACLs, tenant bundle store, resource-control bypasses, `TRANSFORM` schema/lineage, overlay correctness, Orchestrator cohesion, MSI first slices, fast pre-push |
+| [Tier 3 — if time allows](#tier-3--if-time-allows) | Spill framing and performance, reporting authoring parity and golden fixtures, Orchestrator console completion, remaining MSI slices, performance certification redesign |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
 outcome in `CHANGELOG.md` (or the record doc for its section) and delete it. Deferred initiatives
-stay in `ROADMAP.md` until selected.
+stay in `ROADMAP.md` until selected. A task table row is done only when its finish line passes.
 
 ---
 
-## v0.22.0 release timeline
+## Tier 1 — must ship in v0.23.0
 
-Released 2026-11-16 from candidate `0a1507282` (docs-only reconcile on `2e418162b`). Against the
-§1 goal (release within 8 hours of the candidate with the same evidence): **missed**, about 14 h
-from candidate commit to published release and 15 h to the Marketplace.
-
-| UTC, 2026-11-16 | Step |
-| :--- | :--- |
-| 01:26 | Candidate `0a1507282` committed and pushed. CI reused the `2e418162b` run 43770097519 (W2). |
-| 01:29–03:38 | Release Evidence 43786591392 green. |
-| 10:30 | Release dry run 43849469513 failed: no exact-candidate native package run (the docs-only push skipped native, DEB and full MSI). MSI, native and DEB dispatched by hand. |
-| 12:27 | Dry run 43866681695 failed on 2 open CodeQL alerts (#586, #587); the owner dismissed them for this candidate. |
-| 12:57–13:47 | Dry run 43871241433 green (first real run of the W8 `release-evidence` job). |
-| 14:40–15:07 | Tag Release 43888292114, after a stub PR registered the dispatch-only workflow on `main` (404 before). Approved; tag `v0.22.0` created. |
-| 15:07–15:24 | Release 43893010630 published the GitHub Release; its Marketplace job failed (vsce 4.0.0 OIDC exchange, 400). |
-| 16:11–16:19 | Publish to Marketplace 43904773280 (vsce 4.1.1, PR #90) published all four VSIXs. Then `release/v0.22.0` merged to `main` (PR #91). |
-
-Lost time: the missing package dispatches, the CodeQL dismissal, the Tag Release registration PR
-and the Marketplace retry. Each has a fix on `main` (below) or an open item.
-
-## After v0.22.0 — release follow-ups
-
-Done on `main` after the release: Release calls `publish-marketplace.yml`, and packaging and
-publishing both use vsce 4.1.1; CodeQL #586 and #587 fixed in code; every release-branch push runs
-MSI in full and dispatches native and DEB; `AGENTS.md` §16.3 says to register dispatch-only
-workflows on `main` when they are created; "Enterprise Certification (windows|linux)" are no longer
-required checks on `main` (owner, 2026-11-16): they never report on pull requests, so every PR
-needed an admin bypass. They still run on release-branch pushes and count as release evidence.
-ROADMAP RG01 replaces the per-job required checks with one merge gate.
+### 1.1 Release follow-ups
 
 - [ ] **Marketplace verification of v0.22.0.** As of 2026-11-16 18:00 UTC only `darwin-arm64` is
-  public; `darwin-x64`, `linux-x64` and `win32-x64` were accepted 16:16–16:19 but are not yet
-  validated. **Left:** confirm all four are public; re-dispatch `publish-marketplace.yml` with
-  `tag=v0.22.0` if one failed verification (`--skip-duplicate` keeps the published ones).
+  public; `darwin-x64`, `linux-x64` and `win32-x64` were accepted 16:16–16:19 with no failure shown.
+  **Left:** confirm all four are public (owner checks 2026-11-17); if not, read the publisher page
+  status and run 43904773280, then re-dispatch `publish-marketplace.yml` with `tag=v0.22.0`
+  (`--skip-duplicate` keeps the published ones).
 - [ ] **First release through the Marketplace call.** v0.23.0 is the first Release that calls
-  `publish-marketplace.yml`. Keep the Marketplace trusted-publisher entries for both
-  `release.yml` and `publish-marketplace.yml` until it has published; then delete the one the
-  OIDC token does not use.
+  `publish-marketplace.yml`. Keep the Marketplace trusted-publisher entries for both `release.yml`
+  and `publish-marketplace.yml` until it has published; then delete the one the OIDC token does not
+  use.
 
-## Carried to v0.23.0 — open
+### 1.2 Release reliability and merge gates
 
-### 1. Release reliability
-
-**Plan:** [`docs/architecture/roadmaps/release-reliability-plan.md`](docs/architecture/roadmaps/release-reliability-plan.md).
-W0, W2, W3, W4b, W4c and W8 are done. W2: the docs-only candidate `0a1507282` reused the
-`2e418162b` CI run 43770097519 and `collect-hosted-release-evidence` accepted it. W4c: Tag Release,
-Release and the Marketplace publish ran with no command on the owner's machine (the Marketplace
-through the dispatched retry). W5: the supervisor's flaky signatures (#74, #75) were removed after
-no recurrence; the flake-rate measurement is #92. W6 and W7 moved to
-[`ROADMAP.md`](ROADMAP.md#release-engineering--routine-github-built-releases) as below-the-cut-line
-work.
+**Plan:** [release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md);
+[ROADMAP: Enforced Merge Gates](ROADMAP.md#release-engineering--enforced-merge-gates-and-a-github-first-contributor-workflow).
 
 - [ ] **W1 Five green nights running.** Not met for v0.22.0: 2 of the last 5 nights were green;
   2 failures were our own pushes mid-rehearsal ("release/v0.22.0 moved"), 1 was the certification
-  wait step (43247226793). **Left:** the streak on the v0.23.0 branch, and a rehearsal that does
+  wait step (43247226793). **Left:** the streak on `release/v0.23.0`, and a rehearsal that does
   not fail when the branch moves under it.
 - [ ] **W4 Release tooling tested on real output.** **Left:** the native Windows and macOS
   collectors and the draft-manifest check (about 1 GB of packages per platform); a recorded
   replay of `collect-release-evidence.mjs` from the first real v0.22.0 run (dry run 43871241433).
 
-### 2. Order-independent scale certification
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| RG01 | **Always-running merge gate.** Add a CI job that always runs and fails unless every lane selected for the change passed (skipped only when the change did not select it). Require it on `main` and `release/*` through a ruleset; drop the per-job required checks it replaces. Prove with a PR that skips a selected lane and is blocked. | — | S |
+| RG03 | **Align contributor docs, template and hooks with GitHub as the gate.** `CONTRIBUTING.md` builds from a clean clone (Node 22, `sync-assets.js`), the PR template asks for targeted runs, `AGENTS.md` agrees, and the pre-push hook skips heavy preflight for docs-only changes. Prove with a clean-clone build and a docs-only push timing. | — | S |
+| RG04 | **Dependency and Action maintenance.** Add Dependabot npm entries for `scripts/typecheck`, `scripts/lint`, `scripts/codemirror` and `scripts/vsix`; pin third-party Actions to commit SHAs with Dependabot `github-actions` updates. Prove with the first update PRs passing RG01. | — | S |
 
-**Design:** [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.md);
-[GC paired comparison](docs/benchmarks/gc-paired-comparison-2026-10-27.md).
+### 1.3 Full script and test review
+
+Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
+
+- [ ] **Scope the review (D).** Inventory `scripts/` and `tests/` by owner and lane, list what the
+  v0.22.0 tooling review already swept, and write the review plan (what is read, by whom, what
+  counts as a finding) with an estimate. **Finish line:** a plan in `docs/releases/` that the owner
+  accepts.
+- [ ] **Open items from the v0.22.0 tooling review.** `Compare-CertBaseline.ps1` warns on a new
+  scenario with no baseline but does not flag a baseline scenario missing from the new report.
+  Recheck on the paths the review names (they did not reproduce on temp tables): WHERE pushdown
+  with a shared column name, SEMI/ANTI `NULL` keys and residual `ON` terms, composite sort-merge join
+  at 3,000 rows, running `SUM() OVER (ORDER BY)`.
+
+### 1.4 Security: spawned-run identity and the local vault
+
+**Design:** [ROADMAP: Caller Identity for Process-Spawned Orchestrator Runs](ROADMAP.md#security--caller-identity-for-process-spawned-orchestrator-runs);
+[ROADMAP: Local Vault Isolation](ROADMAP.md#security--governance--local-vault-isolation-and-connection-acls-on-orchestrator-runs-and-snapshots).
+
+- [ ] **CI01 Signed identity envelope.** Identity, tenant, scopes, job id and expiry, HMAC with the
+  Orchestrator identity secret, written to a private temp file the child reads once and deletes.
+- [ ] **CI02 Child verifies and binds.** The child App rejects expired, altered or replayed
+  envelopes and binds the identity and tenant before the script runs.
+- [ ] **CI03 Per-object checks in the child.** An authorizer in the child applies the same checks
+  as an in-process run, or calls back to the Orchestrator. **Finish line (CI01–CI03):** a spawn-mode
+  run executes as its caller and is refused an object the caller cannot use; a forged, altered or
+  expired envelope is refused.
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SC04 | **User-scoped workstation vault option and Windows NTFS ACL hardening for machine stores.** Support a `CurrentUser` protection scope (`CryptoUtils.Protect` / `DPAPI:`) in `OsSecretStoreProvider` and `LocalConnectionCatalogProvider` for personal workstation installs (CLI, VS Code, Desktop Studio); for `LocalMachine` (`ProtectMachine` / `DPAPI-M:`) service stores on Windows, apply explicit `DirectorySecurity`/`FileSecurity` ACLs (Administrators, SYSTEM, and the service account only, with inheritance disabled) matching Unix `0600`. | — | S |
+
+### 1.5 `TRANSFORM` correctness
+
+**Design:** [ROADMAP: Data Preparation](ROADMAP.md#data-preparation--transform-reliability-schemalineage-integration-and-analyst-operations).
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| TR01 | **Fix `NULL` handling and date/grain bugs across the 9 existing `TRANSFORM` algorithms.** Preserve `NULL` inputs as `NULL` outputs (and exclude `NULL` from group `min`/`max`/`mean`/`stddev`/`sum`) in `NORMALIZE`, `PERIOD_COMPARISON`, `SHARE_OF_TOTAL`, and `TOP_N_OTHERS`; use `TryGetDate` and reject/skip `NULL` `ORDER_COL` values in `INTERPOLATE` and `ROLLING_AGGREGATE`; guard `WINDOW_SIZE >= 1`; handle duplicate dates and month-end lookups in `FILL_DATES` and `PERIOD_COMPARISON` without silent data loss or unhandled `ArgumentException`; align `TOP_N_OTHERS` output grain; and reconcile `SHARE_OF_TOTAL` scale with its reference doc. | — | M |
+| TR02 | **Enforce `SET WHAT_IF ON`, option/column validation, in-place `FROM` defaults, and `DBNull` group keys.** Respect `context.IsWhatIf` before truncating/writing target tables; validate `BY_GROUP` columns and reject unknown option keys across all 9 algorithms; support in-place `TRANSFORM #t USING ...` by defaulting `SourceTable ?? TargetTable` (and fix stale syntax in `sample-guide.md`); and distinguish `DBNull.Value`/`null` from `""` in `BuildGroupKey` with stable tie ordering in `DEDUPLICATE`. | — | S |
+
+### 1.6 Archives
+
+**Design:** [ROADMAP: Archive Listing, Selective Extraction, and `.gz` / `.tar.gz` Support](ROADMAP.md#file-operations--archive-listing-selective-extraction-and-gz--targz-support).
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| AR01 | **`.gz`, `.tar`, and `.tar.gz` (`.tgz`) support in `COMPRESS` and `DECOMPRESS`.** Detect archive format from the file extension (or an explicit `FORMAT = 'ZIP' \| 'GZIP' \| 'TAR' \| 'TAR_GZ'` option) in `FileOperationStatementHandler` and `DirectoryOperationStatementHandler`; stream single-file `.gz` via `GZipStream` and multi-entry `.tar` / `.tar.gz` via `System.Formats.Tar`, enforcing `SafeZipExtractor`-equivalent traversal, link-type, and decompression-ratio bounds. | — | M |
+| AR02 | **Archive entry inspection (`ARCHIVE_LIST`) and selective extraction (`PATTERN`).** Add a table-valued / collection function `ARCHIVE_LIST(path)` returning entry `Name`, `FullPath`, `Size`, `CompressedSize`, `LastModified`, and `IsDirectory` for `.zip`, `.tar`, and `.tar.gz` archives without extracting to disk; add `PATTERN = '<glob>'` and `OVERWRITE = ON \| OFF` options to `DECOMPRESS FILE` / `DECOMPRESS DIRECTORY`. | AR01 | S |
+| AR03 | **Optional `TO` destination defaults on `COMPRESS` and `DECOMPRESS`.** Make `TO <destination>` optional in the parser and handlers: `COMPRESS FILE 'x.csv'` defaults to `'x.csv.zip'` (or `.gz` when `FORMAT = 'GZIP'`), and `DECOMPRESS FILE 'x.csv.gz'` / `'x.zip'` defaults to stripping the archive suffix in the same directory; update `compress-file.md`. | AR01 | S |
+
+### 1.7 Database connector documentation
+
+**Design:** [ROADMAP: Database Connectors](ROADMAP.md#database-connectors--documentation-parity-write-path-clarity-and-credential-gaps).
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| DB01 | **Reconcile option lists with the code.** For each of the ten pages, make the Options table equal the connector's allowlist and fix the Authentication section. Known mismatches: Snowflake (`USER` vs `USERNAME`; add `ACCOUNT`, `PORT`, `PROTOCOL`; `ROLE` and `PRIVATE_KEY_PASSPHRASE` are documented but not read), BigQuery (`KEY_FILE` vs `CREDENTIAL_FILE`), Oracle (`SID`, `WALLET_LOCATION`), MySQL (`SSL_CA`, and the `VERIFY_*` spellings against the `SSL_MODE` values the code accepts), SQLite (`READ_ONLY`, `BUSY_TIMEOUT_MS`), Neo4j (`ENCRYPTION`; confirm whether encryption comes from the URI scheme), MSSQL (`ENCRYPT`, `PORT`), ODBC (`USER`, `PWD`, `TIMEOUT_SECONDS`, `TABLE`, `HTTPPATH`, `AUTHMECH`, `SSL`). A test compares each page's option table to the allowlist so they cannot drift again. | — | M |
+| DB02 | **Document `TIMEOUT_SECONDS` everywhere.** Add it to Oracle, Postgres, Snowflake, and BigQuery with the defaults the code applies (30 s for OLTP, the data-warehouse default for Snowflake and BigQuery). State the defaults in each page's option table. | DB01 | S |
+| DB03 | **Page-standard gaps.** Add the mutually exclusive call-outs the page standard requires (MSSQL and Oracle have them; the rest do not, including Snowflake `PASSWORD` vs `PRIVATE_KEY_FILE` and the Mongo URI vs `HOST`/`PORT` forms). Quote the `ENC:` value in the MongoDB example or confirm the lexer accepts it bare. Show one non-inline credential pattern (`ENC:`, `SECRET:`, or `${ENV}` with `Security:AllowedEnvVars`) on each page. | DB01 | S |
+
+### 1.8 Orchestrator New Job bundle target
+
+v0.22.0 removed the bundle target from the New Job dialog until this lands.
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| OR01 | **Fix Portal New Job bundle URIs (`orch://`) and target kind labeling.** Update `readBundleChoices` (`orchestrator-create-job.ts`) and the New Job modal to emit canonical `orch://<bundle>@<version>/<entryPath>` URIs (with version and entry-script selection) matching `BundleUri.TryParse`; support `JobType = REPORT` in New Job creation; and fix `orchestrator-job-detail.ts` so `jobType === 1` displays `'Report'` while `orch://` targets display `'Bundle'`. v0.22.0 removed the bundle target from the dialog until this lands. | — | S |
+
+### 1.9 Spill GC-pause gap
+
+- [ ] **Explain the spill GC-pause gap.** The smoke check fails four spill metrics with no engine
+  change: `TempTableSpill_50000_SELECT_INTO GC_PAUSE_MS` (stored 4.7 ms, measured 10.6–12.2 ms),
+  `SpillCleanupSuccess_50000 GC_PAUSE_MS` (4.8 ms against 14.2–14.5 ms),
+  `SpillCleanupSuccess_50000 ELAPSED_MS` (47 ms against 57–59 ms) and its derived
+  `ROWS_PER_SECOND`. Allocations and checksums match; the cause is unproven. Accepted as one known
+  gap for v0.22.0 (owner, 2026-11-03/04); v0.23.0 needs the cause or a re-baseline with a stated
+  reason.
+
+## Tier 2 — next
+
+### 2.1 PR regression lane and a light pre-push hook
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| RG02 | **PR regression lane for ordinary tests.** Run the deterministic unit/integration tests of the projects a PR affects (from `ci-impact.json`), so a new test runs before merge. Keep Engine Coverage's full sharding for pushes. Prove with a PR whose only change is a failing new test outside the smoke filters. | RG01 | M |
+
+- [ ] **W7 Fast pre-push hook and local gate hygiene.** Overlaps RG03's docs-only skip; see the
+  [Release Engineering entry](ROADMAP.md#release-engineering--routine-github-built-releases).
+
+### 2.2 Orchestrator runs, snapshots and bundles per tenant
+
+**Design:** [ROADMAP: Tenant-Scoped Orchestrator Bundle Store](ROADMAP.md#saas-isolation--tenant-scoped-orchestrator-bundle-store).
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SC05 | **Enforce `SHARED:` connection ACLs on Orchestrator runs and cached Portal report snapshots.** Bind scheduled and triggered Orchestrator jobs in `SchedulerService` to an explicit owning `ExecutionIdentity` (and enforce connection ACLs in the Orchestrator catalog), and update `ExecutionController.GetSnapshot` / `GetManifest` so reports using ACL-restricted `SHARED:` connections verify the caller's connection `Use` permission before serving a cached snapshot. | [Caller Identity for Process-Spawned Orchestrator Runs](ROADMAP.md#security--caller-identity-for-process-spawned-orchestrator-runs) | M |
+
+- [ ] **TB01 Tenant-taking bundle store.** A store contract that takes the tenant (for example
+  `ITenantBundleStore(TenantContext)`); the SQLite and Postgres stores filter every query by tenant.
+- [ ] **TB02 Bundle handlers resolve through the caller's tenant.** Engine `PUBLISH` /
+  `RUN SCRIPT 'orch://…'`, the Service endpoints and the LanguageServer.
+- [ ] **TB03 Migrate `'default'` bundle rows.** Move them to their owning tenant, or leave them for
+  an operator to reassign. **Finish line (TB01–TB03):** a two-tenant test where tenant B can neither
+  read nor overwrite tenant A's bundle of the same name, on SQLite and Postgres.
+
+### 2.3 Resource-control bypasses
+
+**Design:** [ROADMAP: Engine & Security](ROADMAP.md#engine--security--encrypted-spill-framing-byte-budgeted-scale-and-plaintext-memory-hygiene).
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SP12 | **Bound Top-N and deep pagination by bytes.** Account for retained rows, sort keys, and heap storage in `TopNFromStream`; reserve against the operator and shared grants. When `offset + limit` cannot fit, transition to bounded external sorting without losing the retained prefix or unread input. Regress large offsets, wide rows, exact output ordering/counts, cancellation, and reservation release under a tiny grant. | — | M |
+| SP13 | **Bound window peers and fallback buckets.** Stream `FIRST_VALUE` without retaining a whole peer group where semantics permit; use bounded spill/replay for `LAST_VALUE` peers. Replace unguarded bucket `ToListAsync` with byte admission and a bounded supported path or explicit resource-limit failure. Regress all-equal ordering keys, wide rows below the row threshold, and mixed window functions under a tiny grant; assert exact results against a small in-memory oracle and cleanup after cancellation/failure. | — | M |
+| SP14 | **Prevent cursor hold-and-wait in nested pipelines.** Make cursor admission safe for complete operator pipelines so an outer window/sort/join cannot hold the last slot while waiting on its upstream operator. Expose and propagate cancellation through `IBufferManager` and all engine callers. Regress nested sorts and window-to-sort execution with one slot, competing pipelines at capacity, cancellation while queued, and restoration of all permits after failure. | — | M |
+| SP15 | **Apply one aggregate memory contract across execution paths.** Honor the effective operator ceiling and shared reservations in ordinary aggregation, native-to-row fallback, and grouping sets. Account for retained group state and result materialization; repartition where possible and enforce the configured policy when no bounded path exists. Regress high cardinality, an operator grant smaller than the process grant, native rejection/fallback, and grouping sets; verify exact aggregate results and reservation release. | — | M |
+| SP16 | **Connect production allocations to one memory coordinator.** Consolidate `BufferManager` memory limits/floor/hysteresis with the active `IMemoryGrantArbiter` contract and wire external operator allocations into shared reservations. Define precedence for existing settings and avoid double accounting or waiting while holding memory needed for progress. Replace total-capacity reporting with current host/container memory headroom. Use deterministic pressure fixtures to prove that configured limits affect real operators, recovery resumes admission, and success/cancellation/failure release reservations; include concurrent jobs and compatibility documentation. | — | M |
+
+### 2.4 `TRANSFORM` schema, lineage and multi-column use
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| TR03 | **Preserve output `TableSchema` types and wire `TRANSFORM` into `LineageAnalyzer` and `ScriptScopeService`.** Copy source `ColumnMetadata` types (`DECIMAL`, `INT`, `DATE`, `VARCHAR`) and typed computed columns into `output.Schema`; record table/column lineage edges for `TransformStatement` in `LineageAnalyzer`; and populate target column schemas in `ScriptScopeService` for LSP autocomplete. | TR02 | M |
+| TR04 | **Extend existing `TRANSFORM` algorithms for multi-column and flexible-interval workflows.** Support `INTERVAL = 'HOUR' \| 'DAY' \| 'WEEK' \| 'MONTH' \| 'QUARTER' \| 'YEAR'`, explicit `START_DATE`/`END_DATE`, and `GAPS_FILL = 'FORWARD'` in `FILL_DATES`; accept comma-separated `VALUE_COLS` in `INTERPOLATE` and `NORMALIZE`; add `WEEK` and `QUARTER` to `PERIOD_COMPARISON`; and add `REJECT_INTO = #table` / `KEEP = 'UNIQUE_ONLY'` to `DEDUPLICATE`. | TR01, TR02 | M |
+
+### 2.5 Analytical overlay correctness and a fail-closed golden harness
+
+**Design:** [ROADMAP: Analytical Overlays, Authoring Parity, and Golden Conformance](ROADMAP.md#reporting--presentation--analytical-overlays-authoring-parity-and-golden-conformance).
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| GG01 | **Decide or implement `EXPONENTIAL`, `LOGARITHMIC`, and `POWER` trendlines.** Either implement exact least-squares fitting in `PlotPlanResolver.ResolveOverlay` with domain guards (rejecting non-positive Y for `EXPONENTIAL`/`POWER` and non-positive X for `LOGARITHMIC`/`POWER`) or reject them at parse/lowering time until implemented. Remove the silent all-null fallback. | — | S |
+| GG02 | **Exclude `NULL` Y pairs from statistical overlays.** Stop coercing `NULL` to `0m` in `PlotPlanResolver.ResolveOverlay` for `AVERAGE`, `MOVING_AVG`, `LINEAR`, and `POLYNOMIAL`. Skip null `(x, y)` pairs in regressions and averages, and define deterministic window behavior for `MOVING_AVG` over gaps. | — | S |
+| GG03 | **Define multi-series trendline ownership.** Either partition overlay computation per series (or bind to an explicit target series) or fail validation when a statistical trendline is authored on a multi-series visual without a target series. | GG02 | S |
+| GG04 | **Center/scale X in `PolynomialRegression` and guard singular/overflow cases.** Normalize X into `[-1, 1]` (or `[0, 1]`) before building the Vandermonde sums so large X domains (e.g., epoch dates or revenue) do not overflow `decimal.MaxValue`, and fail or emit a diagnostic when degree exceeds distinct X points. | GG02 | S |
+| GG05 | **Preserve unstacked `FieldChannel.Y` in mixed stacked/unstacked Y domains.** Include `FieldChannel.Y` alongside `YStart`/`YEnd`/`ErrorLow`/`ErrorHigh`/`ConfidenceLow`/`ConfidenceHigh` in `PlotPlanResolver.ResolveScales` when stacked and unstacked layers share a primary or secondary Y axis; include explicit `AnnotationPoint` coordinates in scale domain resolution. | — | S |
+| GG06 | **Fail closed in `ReportingGoldenHarness` and retire legacy `SvgChartRenderer` fallbacks.** Assert `visual.Error is null` in `ReportingGoldenHarness.ProduceAsync` so golden updates never record `null` artifacts for failed visuals; replace legacy `PlotPlan is null` fallback paths in `SvgChartRenderer.Render` with an explicit error for plot-plan-backed visual types; back `NativeSvgGeometryGoldenTests` and `GrammarOfGraphicsContractTests` with diffable artifact snapshots. | — | S |
+
+### 2.6 Orchestrator and catalog cohesion
+
+**Design:** [ROADMAP: Unified Operations Console](ROADMAP.md#portal-orchestrator--studio--unified-operations-console-catalog-job-cohesion-and-saas-authoring-boundary).
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| OR02 | **Unify Studio catalog pipelines (`PIPELINE:{id}`) with Orchestrator jobs.** Enrich `PIPELINE:{id}` rows in the Portal Orchestrator UI with catalog document display names, folder badges, and an **Open in Studio** link; replace raw inline `Jobs.Script` editing on catalog-backed jobs in `orchestrator-job-detail.ts` with Studio navigation so catalog and Orchestrator scripts cannot diverge; and auto-provision (or provide a 1-click provision + author `EXECUTE` grant workflow for) `PIPELINE:{id}` slots so non-admin Studio authors do not hit a dead-end `403 job_not_provisioned`. | — | M |
+| OR03 | **Enforce `CatalogOnly` / SaaS Portal-only authoring across Orchestrator and Report ingress.** When `Portal:Studio:Mode = CatalogOnly` (or external script ingress is disabled), disable raw server-filesystem script browsing (`/api/orchestrator/scripts`) and unreviewed inline script creation in `orchestrator.html` / `OrchestratorController.CreateJob` in favor of selecting a governed catalog `Pipeline` or signed `orch://` bundle; enforce `StudioCapabilities.ScriptIngress` on `ReportsController` script upload and mutation endpoints used by `PortalDataSource`. | OR02 | M |
+| OR04 | **Retire direct SQLite file coupling (`OrchestratorDbLocator`) in Triage, Poller, and Subscriptions.** Route `OperationsTriageService`, `OrchestratorPollerService`, and `SubscriptionsController` through `OrchestratorProxyService` (or a shared remote store contract) instead of opening a local SQLite path via `OrchestratorDbLocator.Resolve()`, and synchronize or federate Portal's `SHARED:` connection catalog and `SECRET:` store with remote Orchestrator workers. | — | M |
+| OR05 | **Fix Dependency Chain graph projection for normalized and bundle jobs.** Update `OrchestratorController.GetJobDependencies` so normalized jobs (`RUN SCRIPT '<targetPath>';`) resolve and parse their referenced script or `orch://` bundle entry and include explicit job dependencies when computing upstream/downstream table and job edges. | OR01 | S |
+
+### 2.7 MSI installer: services own their configuration
+
+**Design:** [ROADMAP: Windows Installer](ROADMAP.md#windows-installer--the-msi-copies-files-and-registers-services-only).
+
+- [ ] **MI01 Services create and migrate their own configuration.** The Orchestrator and Portal
+  generate missing secrets and migrate settings on first start; the `WriteJwt`, `ReadSettings` and
+  `RestoreSettings` custom actions are removed.
+- [ ] **MI02 Stop services without force-killing.** Remove `util:CloseApplication` /
+  `TerminateProcess`; `ServiceControl Stop="both" Wait="yes"` stops the services.
+
+### 2.8 Scale baseline recalibration
 
 - [ ] **Re-land the Stress/Huge Skipped fix with the next scale recalibration.** Commit `8b50435fe`
   made the opt-in `Cert_Stress_*`/`Cert_Huge_*` facts report Skipped instead of a false Passed when
   their row-scale variable is unset. It changed the fixture hash, so both baseline checks failed;
   reverted for v0.22.0 (owner, 2026-11-03). Re-apply it in the change that recalibrates
   `certification-results/baseline-*.json`.
-- [ ] **Explain the spill GC-pause gap before v0.23.0.** The smoke check fails four spill metrics
-  with no engine change: `TempTableSpill_50000_SELECT_INTO GC_PAUSE_MS` (stored 4.7 ms, measured
-  10.6–12.2 ms), `SpillCleanupSuccess_50000 GC_PAUSE_MS` (4.8 ms against 14.2–14.5 ms),
-  `SpillCleanupSuccess_50000 ELAPSED_MS` (47 ms against 57–59 ms) and its derived
-  `ROWS_PER_SECOND`. Allocations and checksums match; the cause is unproven. Owner, 2026-11-03/04:
-  accepted as one known gap for v0.22.0; record it in the release evidence and change no baseline
-  or band.
 
-- [ ] **Cut allocation churn in the external sort, window and join.** At 100M rows (Scale
-  Measurement 43504065542) the sort allocated 593 GB (about 6 KB per row), the window 621 GB and
-  the join 335 GB; the join spent 337 s of 896 s in GC pauses. Peak memory stays low, so nothing
-  breaks, but these are the slowest scenarios (15–21 min) and the cheapest to speed up. Profile
-  with `Test-SpillAllocProfile.ps1` and the scenario tests in `BillionRowCertificationTests`.
-  Codex/Gemini review candidates: `ExternalSortEngine.MergeChunksAsync` strips sort-key columns
-  and intermediate merges re-add them; inspect `Row.RemoveColumn` dictionary materialization and
-  retain keys through intermediate passes if semantics allow. Measure boxing/materialization in
-  `ArrowSpillReader.ExtractValue` and string-serialized `decimal` columns in
-  `ArrowSpillWriter`; evaluate columnar batch reads for sort/window, bounded buffer
-  reuse, and packed join storage using shared buffers plus offsets instead of one array per row.
-  Preserve final output schema, scalar fidelity, comparison semantics and cancellation. Compare
-  allocation counts and correct outputs first; use repeated same-host A/B runs for timing. Multi-day
-  architectural slices (framed spill encryption, byte-budgeted batches, late materialization) are
-  tracked in [`ROADMAP.md`](ROADMAP.md#engine--security--encrypted-spill-framing-byte-budgeted-scale-and-plaintext-memory-hygiene).
+## Tier 3 — if time allows
+
+### 3.1 Spill format, memory hygiene and allocation churn
+
+**Design:** [ROADMAP: Engine & Security](ROADMAP.md#engine--security--encrypted-spill-framing-byte-budgeted-scale-and-plaintext-memory-hygiene).
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SP02 | **Finish buffer hygiene beyond the cleared `ColumnBatch` baseline.** Audit remaining spill/packing pool returns and retained buffer sizes; clear plaintext buffers on return and bound retention where missing. Add focused ownership/disposal regressions for changed paths and document OS swap/pagefile encryption and crash-dump hardening in `docs/administration/`. Preserve the implemented encryption floor and empty-key rejection. | — | S |
+| SP03 | **Decide versioned framed spill format (`ETLSPL03`) and compression level defaults.** Specify a bounded frame format (e.g., 64–256 KB frames using `AesGcm` or per-frame Encrypt-then-MAC) that binds chunk name, monotonic frame index, and final-frame completion marker so truncation, reordering, or cross-chunk splicing fails closed on the first read pass. Benchmark `CompressionLevel.Fastest` vs `Optimal` with encryption enabled in `SpillCompressionAssessmentTests`. | — | D |
+| SP04 | **Implement single-pass framed spill encryption (`ETLSPL03`).** Implement the accepted framed writer and streaming reader in `AuthenticatedSpillEncryption` so `CreateReaderAsync` verifies and decrypts each frame in one pass without pre-scanning and seeking back across multi-GB files; test mid-stream tampering, frame reordering, prefix truncation, wrong session key, and renamed chunks. | SP03 | M |
+| SP05 | **Configurable and adaptive spill compression with end-to-end encrypted benchmarks.** Replace hardcoded `CompressionLevel.Optimal` in `SpillStore` with configurable/adaptive compression settings (`Fastest` default under high CPU pressure), and update `SpillCompressionAssessmentTests` to measure the production `Arrow -> Compress -> Encrypt` pipeline across concurrent writers. | SP03 | S |
+| SP06 | **Byte-budgeted batch sizing and bounded inter-stage queues.** Size batches by byte footprint as well as row count across input readers, `ArrowSpillWriter` builders, compression buffers, and partition writers; bound queues between pipeline stages so fast upstream readers cannot outrun encrypted spill sinks on wide string columns. | — | M |
+| SP07 | **Reduce spill volume via projection pruning and bounded dictionary encoding.** Carry only required columns through `ExternalJoinEngine`, `ExternalSortEngine`, and `ExternalWindowEngine` (delaying full row reconstruction where correctness permits), and evaluate bounded Arrow dictionary encoding for repeated low-cardinality strings with a fallback for high-cardinality columns. | SP06 | M |
+| SP08 | **Binary `decimal` serialization in Arrow spills and zero-copy `ColumnBatch` handoff.** Store `decimal` columns in `ArrowSpillWriter`/`ArrowSpillReader` using their 16-byte binary/decimal representation instead of `StringArray` (`ToString`/`decimal.Parse`), and transfer or wrap `RecordBatch` buffers directly into `ColumnBatch` without double-copying every column array. | — | S |
+| SP09 | **Eliminate intermediate sort-merge column stripping and join build-table object churn.** Retain `_SYS_SK_*` sort keys through intermediate merge passes in `ExternalSortEngine.MergeChunksToFileAsync` (stripping only on the final pass), evaluate a normalized 64-bit key prefix in the tournament tree, and replace per-row `byte[]` + `List<int>` buckets in `ExternalJoinEngine.PackedBuildTable` with budget-capped pooled `byte[]` slabs and flat index arrays. | SP08 | M |
+| SP10 | **Delete consumed join partitions eagerly.** Delete consumed build/probe partitions and superseded repartition files in `ExternalJoinEngine` as soon as their readers close and replay no longer needs them. Verify reduced peak live spill bytes, unchanged join results, and cleanup on success, cancellation, and failure. Preserve the implemented periodic disk-reserve checks and event-driven write waiters. | — | M |
+| SP11 | **Host-wide admission and short-job progress.** Preserve the host CPU check; add configured spill-volume free space and aggregate worker memory reservations to admission with hysteresis. Use SP16's shared accounting, coalesce `ChildProcessTracker.Unregister` spill sweeps, and reserve capacity or weight admission in `JobThrottle`. Validate heavy spilling jobs alongside short runs in both in-process and child-worker execution; one worker's process-local grant must not stand in for a host-wide reservation. | SP16 | M |
+
+- [ ] **Cut allocation churn in the external sort, window and join** (measures SP08/SP09). At 100M
+  rows (Scale Measurement 43504065542) the sort allocated 593 GB (about 6 KB per row), the window
+  621 GB and the join 335 GB; the join spent 337 s of 896 s in GC pauses. Peak memory stays low, so
+  nothing breaks, but these are the slowest scenarios (15–21 min) and the cheapest to speed up.
+  Profile with `Test-SpillAllocProfile.ps1` and the scenario tests in
+  `BillionRowCertificationTests`. Candidates: `ExternalSortEngine.MergeChunksAsync` strips sort-key
+  columns and intermediate merges re-add them (`Row.RemoveColumn` dictionary materialization);
+  boxing in `ArrowSpillReader.ExtractValue`; string-serialized `decimal` in `ArrowSpillWriter`;
+  columnar batch reads for sort/window, bounded buffer reuse, and packed join storage. Preserve
+  output schema, scalar fidelity, comparison semantics and cancellation. Compare allocation counts
+  and outputs first; time with repeated same-host A/B runs.
+
+### 3.2 Reporting authoring parity and golden conformance fixtures
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| GG11 | **Fix `ScaleKind.Time` (`TYPE = TEMPORAL`) to resolve and render as a continuous time axis.** Order temporal values chronologically rather than by string key, compute proportional time positions and nice ticks honoring `MIN`/`MAX`/`MAJOR_TICK_COUNT`/`TICK_INTERVAL` without populating discrete `Categories`, keep multiple rows sharing a timestamp in `ResolveLayerData`, and fix `RenderPoints` when `TIME_UNIT` or `TICK_FORMAT` is set. | — | M |
+| GG12 | **Fix horizontal grouped bar dodging (`TRANSPOSED_CARTESIAN`) and `X_OFFSET`/`Y_OFFSET` geometry in `CUSTOM ... CHART`.** Gate grouped dodging in `PlotPlanSvgRenderer.RenderTransposedCartesian` on `layer.SeriesKey is not null` as well as `LayerStyle(l, "series")`, align `PlotPlanResolver` offset bounds with `CartesianPlotArea`, and prevent double-dodging or row deduplication when `X_OFFSET`/`Y_OFFSET` is bound. | — | S |
+| GG13 | **Support `COLOR = DATUM('...')` multi-layer legends and non-null category row selection.** Preserve per-layer `COLOR` `DATUM` bindings in `AdvancedChartLowerer` and `PlotPlanResolver.ResolveSeries` so constant-series layers receive distinct palette colors and legend entries; in `PlotPlanResolver.ResolveLayerData`, select the first row per category where the layer's measure is non-null (or support a per-layer `WHERE` filter) so combined detail+summary tables do not drop summary layers. | — | M |
+| GG14 | **Support analytical overlays and categorical/temporal `LINE`/`AREA` `CONDITIONS` in `CUSTOM ... CHART`.** Allow `OVERLAYS` (or a `CHART`-level equivalent) on `CUSTOM` visuals, relax `AdvancedChartSemanticValidator.ValidateConditions` so `LINE`/`AREA` layers on categorical or temporal X axes can use `CONDITIONS` without requiring quantitative X or an explicit `INTERPOLATION` token, and support `LINE_DASH` / `SEGMENT_STYLE`. | GG01, GG02 | M |
+| GG15 | **Close scale and encoding gaps in `CHART (SCALES ... / ENCODE ...)`.** Support discrete domain-to-color mapping on `NOMINAL`/`ORDINAL` `COLOR` scales, `RANGE = (min, max)` on `SIZE` scales, a data-driven `OPACITY` channel in `ENCODE`, and axis `TITLE`/`LABEL` inside `SCALES(...)`; either lower or explicitly reject outer `AXIS_X`/`AXIS_Y` and named-visual-only `OPTIONS` on `CUSTOM` visuals. | — | M |
+| GG16 | **Studio inspector, cross-filter, hover-popover, and `DRILL_IN` parity for `CUSTOM` visuals.** Include `'CUSTOM'` in `FORMAT_INSPECTOR_CHARTS` and `FORMAT_INSPECTOR_CARTESIAN` in `visual-format-inspector.ts`, derive `selectionKey` and `hoverContextColumn` from `CUSTOM` encodings in `designer-interactions.ts`, and update `VisualBuilder` `DRILL_IN` hierarchy rewriting to rebind `AdvancedChart` encodings. | — | S |
+| GG07 | **Add golden conformance fixtures for analytical overlays.** Add `.rptsql` fixtures and four-artifact goldens in `index.json` for `LINEAR`, `POLYNOMIAL`, `FORECAST` (with confidence band and anomaly points), `REFERENCE_LINE`, `REFERENCE_BAND`, `RUNNING_TOTAL`, `PERCENT_OF_TOTAL`, and `ANNOTATIONS (POINT ...)`. | GG01, GG02, GG04 | M |
+| GG08 | **Add golden conformance fixtures for error bars, confidence bands, and connected interpolations.** Pin `.plan.json`, `.svg`, `.fallback.json`, and `terminal.txt` goldens for `ERROR_LOW`/`ERROR_HIGH`, `CONFIDENCE_LOW`/`CONFIDENCE_HIGH`, `INTERPOLATION = SMOOTH`/`STEP_BEFORE`/`STEP_AFTER`, and multi-color conditional line transitions. | — | M |
+| GG09 | **Add golden conformance fixtures for `LOG`/`IDENTITY` scales, 2D facets, `INDEPENDENT` resolution, `NULL_POLICY`, and `CUSTOM` polar arcs.** Add `.rptsql` golden fixtures covering `TYPE = LOG`, `TYPE = IDENTITY`, `FACET (ROW = ..., COLUMN = ...)`, `RESOLVE (Y = INDEPENDENT)`, `NULL_POLICY = ZERO`/`CONNECT`/`SKIP`, and a `CUSTOM` `COORDINATE POLAR` `ARC` chart. | — | M |
+| GG10 | **Declarative negative conformance corpus for reporting/GoG.** Add an SLT-style `statement error` script runner (or negative `.rptsql` fixture lane) that verifies expected parse, semantic-validator, and domain errors directly from `.rptsql` test scripts. | GG06 | M |
+
+### 3.3 Operations console completion
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| OR06 | **Add Edit dialogs and per-object ACL management for Jobs, Schedules, and Notifications.** Add an Edit Job metadata dialog (`PUT /api/orchestrator/jobs/{name}` with `If-Match` for target, interval, retries, retry delay, timeout, hash policy, and sandbox profile), Edit and Enable/Disable actions on the Schedules and Notifications tabs (`PUT /api/orchestrator/schedules/{name}` and `PUT /api/orchestrator/notifications/{name}`), and mount the Access (`READ`/`EXECUTE`/`OVERRIDE`/`MANAGE` + owner) panel for Schedules and Notifications as well as Jobs. | — | M |
+| OR07 | **Expose statement waterfalls, parameterized triggers, kill/cancel, and node/sandbox fleet health in `orchestrator.html`.** Make run rows in the Job Detail History tab clickable to open the per-statement execution waterfall and output (`GET /api/job-runs/{historyId}`); add `Run with Parameters...` (`Variables` overrides) and `Kill / Cancel Run` (`/kill` and `/cancel`) to the job table and detail drawer; and add a Nodes & Sandboxes view surfacing `NodeHeartbeatService` metrics and `RelationalSandboxAdmissionLedger` pool states. | — | M |
+| OR08 | **Complete `ORCHESTRATOR` connector (`OrchestratorDataSource`) statement parity and local `TRIGGER JOB`.** Implement `DROP JOB`, `KILL JOB`, `CREATE/ALTER/DROP NOTIFICATION`, `ALTER/DROP SCHEDULE`, `ALTER JOB ... ADD/REMOVE NOTIFICATION`, `SHOW JOB STATE`, and `ASSERT JOB` in `OrchestratorDataSource.cs` against the existing `JobApiEndpoints` REST routes; make local `TRIGGER JOB <name>` in `EnableDisableTriggerJobHandlers.cs` enqueue an execution or fail closed when no scheduler is attached instead of logging a no-op message. | — | M |
+| OR09 | **Complete the `/designer` to `/studio/` cutover in Portal.** Once the Studio beginner/authoring completeness gate (`ST03`) passes, redirect `/designer` and `/designer/new` in Portal to `/studio/` so Report and Pipeline authoring share one workbench, draft/approval pipeline, and capability boundary. | ST03 | S |
+
+### 3.4 MSI installer: restore, cleanup and isolated certification
+
+- [ ] **MI03 `ETL-SQL admin restore`.** The counterpart of `admin backup`; the certification's
+  rollback uses it instead of copying files.
+- [ ] **MI04 Uninstall data cleanup without a script custom action.** Replace
+  `PromptCleanData`/`CleanData`, or make it an explicit `admin` command the uninstall guidance points
+  to.
+- [ ] **MI05 MSI certification in a Hyper-V-isolated Windows Server Core container.** Proven on
+  `windows-2022` (branch `diag/nested-virt-probe`, run 42418358058, 7 of 7); `windows-latest`
+  (Server 2025) runs no Docker engine. **Finish line (MI01–MI05):** no script custom actions and no
+  `CloseApplication`; fresh install and upgrade from v0.22.0 keep secrets and settings; the
+  Portal-profile certification (fresh, upgrade, rollback via `admin restore`) passes first time on
+  five nightly runs.
+
+### 3.5 Performance certification redesign
+
+- [ ] **W6 Deterministic performance gates.** Gate on deterministic metrics (allocations, work
+  counts); time only by same-host interleaved A/B; no waivers. See the
+  [Release Engineering entry](ROADMAP.md#release-engineering--routine-github-built-releases).

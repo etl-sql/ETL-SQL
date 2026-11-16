@@ -87,8 +87,8 @@ that does not schedule their proposed implementation.
 
 ### Release Engineering — Routine, GitHub-Built Releases
 
-**Status:** In Progress  
-**Horizon:** Foundation (blocks v0.22.0)  
+**Status:** Planned (v0.23.0, tasks in `TODO.md`)  
+**Horizon:** Next (v0.23.0)  
 **Authoritative design:** [Release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md)
 
 **Problem and intended outcome:** v0.22.0 took seven candidates on 2026-11-04. Five restarts came
@@ -108,8 +108,10 @@ to feature work without a release sprint every month.
 - Remove before adding: a new gate must replace or simplify an existing one.
 - No waivers: a failing gate is fixed, re-baselined with a stated reason, or made report-only.
 - Shared SaaS and ETL-SQL Studio ship as alpha; evidence that only backs them can be deferred.
-- Not in scope: the full script and test review (a v0.23.0 priority), VS Code SecretStorage migration for AI API keys (v0.23.0), and Open VSX publishing
-  (owner: v0.23.0 or v0.24.0, after the Marketplace path proves out).
+- Not in scope: the full script and test review (selected for v0.23.0 in `TODO.md`) and Open VSX
+  publishing (owner: v0.23.0 or v0.24.0, after the Marketplace path proves out). The VS Code AI
+  key needs no SecretStorage migration: since `2724f3ce9` (v0.22.0) the extension uses VS Code chat
+  models and stores no key.
 
 **Dependencies:** the existing `nightly-release.yml` and its scheduler, the candidate supervisor,
 `release.yml` and its `publish-marketplace` job, and the MSI and DEB certification workflows.
@@ -136,10 +138,13 @@ passes every certification on its first attempt; no gate is passed by waiver; a 
 reruns only the lanes whose inputs changed; and a release reaches the Marketplace with one approval
 and no command on the owner's machine.
 
-**State at the v0.22.0 tag (2026-11-15):** W0, W3, W4b and W8 done; W4c closes with the v0.22.0
-run itself. W1's five-night streak was not met (owner: not a blocker; v0.22.0 closes on its own
-dry run and Release Evidence); W1, W2, W4 and W5 carry to v0.23.0 in `TODO.md`. Moved here after
-v0.22.0, picked up only when selected:
+**State after the v0.22.0 release (2026-11-16):** W0, W2, W3, W4b, W4c, W5 and W8 are done;
+v0.22.0 was tagged, released and published to the Marketplace from GitHub (timeline in the
+[v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md)). The post-release fixes are on
+`main`: Release calls `publish-marketplace.yml` (vsce 4.1.1), every release-branch push certifies
+MSI, native and DEB packages, and dispatch-only workflows are registered on `main` when created.
+W1 (five green nights) and W4 (native collectors, recorded replay) carry to v0.23.0 in `TODO.md`.
+Picked up only when selected:
 - W6 performance certification redesign: deterministic metrics gate; timing by same-host
   interleaved A/B; no waivers.
 - W7 fast pre-push hook and local gate hygiene (overlaps RG03's docs-only skip).
@@ -155,16 +160,20 @@ memory pressure made the workstation a bottleneck; release metadata edits must b
 
 ### Release Engineering — Enforced Merge Gates and a GitHub-First Contributor Workflow
 
-**Status:** Accepted  
+**Status:** Planned (v0.23.0, tasks in `TODO.md`)  
 **Horizon:** Next (v0.23.0)  
 **Authoritative design:** none yet; follows the
 [release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md) and its
 "CI certifies, the workstation does not" rule.
 
 **Problem and intended outcome:** A process review (Codex, 2026-11-15) found that releases are
-gated, but merges are not. `release/v0.22.0` has no branch protection. `main` requires 7 checks but
-omits browser contracts, Portal journeys and native package certification, and its required
-Enterprise Certification jobs skip on PRs, which GitHub counts as passing. Engine Coverage also
+gated, but merges are not. Release branches (`release/v0.23.0`) have no branch protection. `main`
+requires 5 named checks (CodeQL C# and JS/TS, Build & Test, Build VS Code Extension, MSI In-Place
+Upgrade) and omits browser contracts, Portal journeys and native package certification. Enterprise
+Certification was dropped from that list on 2026-11-16: its matrix job is skipped on PRs before it
+expands, so it never reported under its required names and every PR needed an admin bypass. The
+required review was also set to 0 that day, because the only code owner is the author of every PR;
+restore it when a second maintainer gets write access. Engine Coverage also
 skips on PRs, so an ordinary new unit test outside Engine Smoke and the selected certification
 suites may first run after merge. Contributor docs disagree with the workflow: `CONTRIBUTING.md`
 omits Node 22 and browser-asset preparation (a clean-clone build fails) and describes an obsolete
@@ -189,12 +198,7 @@ costs a release restart.
 `hosted-release-policy.json`, `.github/dependabot.yml`, the pre-push hook (`Test-PrePush.ps1`),
 `CONTRIBUTING.md`, `AGENTS.md` and the PR template.
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| RG01 | **Always-running merge gate.** Add a CI job that always runs and fails unless every lane selected for the change passed (skipped only when the change did not select it). Require it on `main` and `release/*` through a ruleset; drop the per-job required checks it replaces. Prove with a PR that skips a selected lane and is blocked. | — | S |
-| RG02 | **PR regression lane for ordinary tests.** Run the deterministic unit/integration tests of the projects a PR affects (from `ci-impact.json`), so a new test runs before merge. Keep Engine Coverage's full sharding for pushes. Prove with a PR whose only change is a failing new test outside the smoke filters. | RG01 | M |
-| RG03 | **Align contributor docs, template and hooks with GitHub as the gate.** `CONTRIBUTING.md` builds from a clean clone (Node 22, `sync-assets.js`), the PR template asks for targeted runs, `AGENTS.md` agrees, and the pre-push hook skips heavy preflight for docs-only changes. Prove with a clean-clone build and a docs-only push timing. | — | S |
-| RG04 | **Dependency and Action maintenance.** Add Dependabot npm entries for `scripts/typecheck`, `scripts/lint`, `scripts/codemirror` and `scripts/vsix`; pin third-party Actions to commit SHAs with Dependabot `github-actions` updates. Prove with the first update PRs passing RG01. | — | S |
+Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
 
 **Acceptance evidence:** a PR that skips a selected lane or adds a failing ordinary test is
 blocked by the single required check on `main` and `release/*`; a clean clone builds by following
@@ -202,7 +206,7 @@ blocked by the single required check on `main` and `release/*`; a clean clone bu
 
 ### Windows Installer — The MSI Copies Files and Registers Services Only
 
-**Status:** Accepted  
+**Status:** Planned (v0.23.0, tasks in `TODO.md`)  
 **Horizon:** Next (v0.23.0)  
 **Authoritative design:** none yet; [Release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md)
 section 10 holds the runner-loss evidence that prompted it.
@@ -217,7 +221,7 @@ previous release and copies databases and configuration back by hand. The outcom
 files and registers, starts and stops the two services; the services create and migrate their own
 configuration on first start; and rollback is one documented command.
 
-**Why next:** Recommended 2026-11-07 while diagnosing the MSI Portal runner loss (TODO §1, W3). That
+**Why next:** Recommended 2026-11-07 while diagnosing the MSI Portal runner loss (v0.22.0 TODO §1, W3). That
 diagnosis has not shown the installer to be the cause (24 of 24 install, idle, uninstall runs
 passed), so this is robustness work, not the W3 fix, and it waits for v0.23.0 unless the diagnosis
 points at it.
@@ -251,7 +255,7 @@ install and an upgrade from v0.22.0 keep their secrets and settings; the Portal-
 
 ### Data Preparation — `TRANSFORM` Reliability, Schema/Lineage Integration, and Analyst Operations
 
-**Status:** Incremental  
+**Status:** Incremental; TR01–TR04 selected for v0.23.0 (in `TODO.md`)  
 **Horizon:** Next (v0.23.0)  
 **Scheduling:** Backlog for prioritization after v0.22.0 ships.  
 **Authoritative design:** [TRANSFORM Statement Reference](docs/reference/statements/dml/transform.md),
@@ -324,12 +328,7 @@ Select individual IDs into `TODO.md` when scheduling.
 
 #### Correctness, `NULL` safety, and engine/tooling integration
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| TR01 | **Fix `NULL` handling and date/grain bugs across the 9 existing `TRANSFORM` algorithms.** Preserve `NULL` inputs as `NULL` outputs (and exclude `NULL` from group `min`/`max`/`mean`/`stddev`/`sum`) in `NORMALIZE`, `PERIOD_COMPARISON`, `SHARE_OF_TOTAL`, and `TOP_N_OTHERS`; use `TryGetDate` and reject/skip `NULL` `ORDER_COL` values in `INTERPOLATE` and `ROLLING_AGGREGATE`; guard `WINDOW_SIZE >= 1`; handle duplicate dates and month-end lookups in `FILL_DATES` and `PERIOD_COMPARISON` without silent data loss or unhandled `ArgumentException`; align `TOP_N_OTHERS` output grain; and reconcile `SHARE_OF_TOTAL` scale with its reference doc. | — | M |
-| TR02 | **Enforce `SET WHAT_IF ON`, option/column validation, in-place `FROM` defaults, and `DBNull` group keys.** Respect `context.IsWhatIf` before truncating/writing target tables; validate `BY_GROUP` columns and reject unknown option keys across all 9 algorithms; support in-place `TRANSFORM #t USING ...` by defaulting `SourceTable ?? TargetTable` (and fix stale syntax in `sample-guide.md`); and distinguish `DBNull.Value`/`null` from `""` in `BuildGroupKey` with stable tie ordering in `DEDUPLICATE`. | — | S |
-| TR03 | **Preserve output `TableSchema` types and wire `TRANSFORM` into `LineageAnalyzer` and `ScriptScopeService`.** Copy source `ColumnMetadata` types (`DECIMAL`, `INT`, `DATE`, `VARCHAR`) and typed computed columns into `output.Schema`; record table/column lineage edges for `TransformStatement` in `LineageAnalyzer`; and populate target column schemas in `ScriptScopeService` for LSP autocomplete. | TR02 | M |
-| TR04 | **Extend existing `TRANSFORM` algorithms for multi-column and flexible-interval workflows.** Support `INTERVAL = 'HOUR' \| 'DAY' \| 'WEEK' \| 'MONTH' \| 'QUARTER' \| 'YEAR'`, explicit `START_DATE`/`END_DATE`, and `GAPS_FILL = 'FORWARD'` in `FILL_DATES`; accept comma-separated `VALUE_COLS` in `INTERPOLATE` and `NORMALIZE`; add `WEEK` and `QUARTER` to `PERIOD_COMPARISON`; and add `REJECT_INTO = #table` / `KEEP = 'UNIQUE_ONLY'` to `DEDUPLICATE`. | TR01, TR02 | M |
+Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
 
 #### New analyst `TRANSFORM` algorithms and shared `SELECT` functions
 
@@ -348,9 +347,9 @@ SLT tests in `tests/slt_data/transform.test` pass.
 
 ### Engine & Security — Encrypted Spill Framing, Byte-Budgeted Scale, and Plaintext Memory Hygiene
 
-**Status:** Accepted  
+**Status:** Planned (v0.23.0, tasks in `TODO.md`)  
 **Horizon:** Next (v0.23.0)  
-**Scheduling:** Backlog for prioritization after v0.22.0 ships; active scale triage is tracked in `TODO.md` §2.
+**Scheduling:** Backlog for prioritization after v0.22.0 ships; SP02–SP16 selected for v0.23.0 in `TODO.md` (Tier 2 and 3).
 
 **Authoritative design:** [Engine Architecture](docs/architecture/engine.md),
 [Orchestrator Architecture](docs/architecture/orchestrator.md), and
@@ -435,7 +434,7 @@ with lower allocation churn, enforced shared resource limits, and responsive con
 scheduling under heavy spill load while preserving the implemented security floor.
 
 **Why next:** The 10M/100M scale certification passes within the 4 GB cap for v0.22.0. While
-targeted defects and measurements are triaged in `TODO.md` §2, the versioned spill format
+targeted defects and measurements are triaged in `TODO.md`, the versioned spill format
 (`ETLSPL03`), byte-budgeted operator pipelines, and columnar storage changes are multi-day
 architectural slices for v0.23.0 planning while keeping the v0.22.0 candidate frozen.
 SP12–SP16 are P1 resource-control gaps to prioritize during sprint selection. Completion of the
@@ -464,43 +463,23 @@ Select individual IDs into `TODO.md` when scheduling.
 
 #### Spill security policy, key derivation, and plaintext memory hygiene
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| SP02 | **Finish buffer hygiene beyond the cleared `ColumnBatch` baseline.** Audit remaining spill/packing pool returns and retained buffer sizes; clear plaintext buffers on return and bound retention where missing. Add focused ownership/disposal regressions for changed paths and document OS swap/pagefile encryption and crash-dump hardening in `docs/administration/`. Preserve the implemented encryption floor and empty-key rejection. | — | S |
+Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
 
 #### Single-pass framed authenticated encryption and compression tuning
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| SP03 | **Decide versioned framed spill format (`ETLSPL03`) and compression level defaults.** Specify a bounded frame format (e.g., 64–256 KB frames using `AesGcm` or per-frame Encrypt-then-MAC) that binds chunk name, monotonic frame index, and final-frame completion marker so truncation, reordering, or cross-chunk splicing fails closed on the first read pass. Benchmark `CompressionLevel.Fastest` vs `Optimal` with encryption enabled in `SpillCompressionAssessmentTests`. | — | D |
-| SP04 | **Implement single-pass framed spill encryption (`ETLSPL03`).** Implement the accepted framed writer and streaming reader in `AuthenticatedSpillEncryption` so `CreateReaderAsync` verifies and decrypts each frame in one pass without pre-scanning and seeking back across multi-GB files; test mid-stream tampering, frame reordering, prefix truncation, wrong session key, and renamed chunks. | SP03 | M |
-| SP05 | **Configurable and adaptive spill compression with end-to-end encrypted benchmarks.** Replace hardcoded `CompressionLevel.Optimal` in `SpillStore` with configurable/adaptive compression settings (`Fastest` default under high CPU pressure), and update `SpillCompressionAssessmentTests` to measure the production `Arrow -> Compress -> Encrypt` pipeline across concurrent writers. | SP03 | S |
+Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
 
 #### Byte-budgeted batches, spill volume reduction, and allocation-free operator storage
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| SP06 | **Byte-budgeted batch sizing and bounded inter-stage queues.** Size batches by byte footprint as well as row count across input readers, `ArrowSpillWriter` builders, compression buffers, and partition writers; bound queues between pipeline stages so fast upstream readers cannot outrun encrypted spill sinks on wide string columns. | — | M |
-| SP07 | **Reduce spill volume via projection pruning and bounded dictionary encoding.** Carry only required columns through `ExternalJoinEngine`, `ExternalSortEngine`, and `ExternalWindowEngine` (delaying full row reconstruction where correctness permits), and evaluate bounded Arrow dictionary encoding for repeated low-cardinality strings with a fallback for high-cardinality columns. | SP06 | M |
-| SP08 | **Binary `decimal` serialization in Arrow spills and zero-copy `ColumnBatch` handoff.** Store `decimal` columns in `ArrowSpillWriter`/`ArrowSpillReader` using their 16-byte binary/decimal representation instead of `StringArray` (`ToString`/`decimal.Parse`), and transfer or wrap `RecordBatch` buffers directly into `ColumnBatch` without double-copying every column array. | — | S |
-| SP09 | **Eliminate intermediate sort-merge column stripping and join build-table object churn.** Retain `_SYS_SK_*` sort keys through intermediate merge passes in `ExternalSortEngine.MergeChunksToFileAsync` (stripping only on the final pass), evaluate a normalized 64-bit key prefix in the tournament tree, and replace per-row `byte[]` + `List<int>` buckets in `ExternalJoinEngine.PackedBuildTable` with budget-capped pooled `byte[]` slabs and flat index arrays. | SP08 | M |
+Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
 
 #### Storage guardrails and concurrent Orchestrator workload isolation
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| SP10 | **Delete consumed join partitions eagerly.** Delete consumed build/probe partitions and superseded repartition files in `ExternalJoinEngine` as soon as their readers close and replay no longer needs them. Verify reduced peak live spill bytes, unchanged join results, and cleanup on success, cancellation, and failure. Preserve the implemented periodic disk-reserve checks and event-driven write waiters. | — | M |
-| SP11 | **Host-wide admission and short-job progress.** Preserve the host CPU check; add configured spill-volume free space and aggregate worker memory reservations to admission with hysteresis. Use SP16's shared accounting, coalesce `ChildProcessTracker.Unregister` spill sweeps, and reserve capacity or weight admission in `JobThrottle`. Validate heavy spilling jobs alongside short runs in both in-process and child-worker execution; one worker's process-local grant must not stand in for a host-wide reservation. | SP16 | M |
+Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
 
 #### Close operator and resource-control bypasses
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| SP12 | **Bound Top-N and deep pagination by bytes.** Account for retained rows, sort keys, and heap storage in `TopNFromStream`; reserve against the operator and shared grants. When `offset + limit` cannot fit, transition to bounded external sorting without losing the retained prefix or unread input. Regress large offsets, wide rows, exact output ordering/counts, cancellation, and reservation release under a tiny grant. | — | M |
-| SP13 | **Bound window peers and fallback buckets.** Stream `FIRST_VALUE` without retaining a whole peer group where semantics permit; use bounded spill/replay for `LAST_VALUE` peers. Replace unguarded bucket `ToListAsync` with byte admission and a bounded supported path or explicit resource-limit failure. Regress all-equal ordering keys, wide rows below the row threshold, and mixed window functions under a tiny grant; assert exact results against a small in-memory oracle and cleanup after cancellation/failure. | — | M |
-| SP14 | **Prevent cursor hold-and-wait in nested pipelines.** Make cursor admission safe for complete operator pipelines so an outer window/sort/join cannot hold the last slot while waiting on its upstream operator. Expose and propagate cancellation through `IBufferManager` and all engine callers. Regress nested sorts and window-to-sort execution with one slot, competing pipelines at capacity, cancellation while queued, and restoration of all permits after failure. | — | M |
-| SP15 | **Apply one aggregate memory contract across execution paths.** Honor the effective operator ceiling and shared reservations in ordinary aggregation, native-to-row fallback, and grouping sets. Account for retained group state and result materialization; repartition where possible and enforce the configured policy when no bounded path exists. Regress high cardinality, an operator grant smaller than the process grant, native rejection/fallback, and grouping sets; verify exact aggregate results and reservation release. | — | M |
-| SP16 | **Connect production allocations to one memory coordinator.** Consolidate `BufferManager` memory limits/floor/hysteresis with the active `IMemoryGrantArbiter` contract and wire external operator allocations into shared reservations. Define precedence for existing settings and avoid double accounting or waiting while holding memory needed for progress. Replace total-capacity reporting with current host/container memory headroom. Use deterministic pressure fixtures to prove that configured limits affect real operators, recovery resumes admission, and success/cancellation/failure release reservations; include concurrent jobs and compatibility documentation. | — | M |
+Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
 
 **Acceptance evidence:** `SET SPILL_ENCRYPTION OFF` is rejected when deployment policy requires
 encryption, and empty persistent keys fail closed; `ETLSPL03` framed spill files authenticate and
@@ -666,7 +645,7 @@ option fails a truncated download.
 
 ### File Operations — Archive Listing, Selective Extraction, and `.gz` / `.tar.gz` Support
 
-**Status:** Accepted  
+**Status:** Planned (v0.23.0, tasks in `TODO.md`)  
 **Horizon:** Next (v0.23.0)  
 **Authoritative design:** [COMPRESS / DECOMPRESS FILE / DIRECTORY](docs/reference/file-operations/compress-file.md),
 [`FileOperationStatementHandler.cs`](src/ETL-SQL.Engine/Handlers/FileOperationStatementHandler.cs),
@@ -712,11 +691,7 @@ dependencies.
 **Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
 Select individual IDs into `TODO.md` when scheduling.
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| AR01 | **`.gz`, `.tar`, and `.tar.gz` (`.tgz`) support in `COMPRESS` and `DECOMPRESS`.** Detect archive format from the file extension (or an explicit `FORMAT = 'ZIP' \| 'GZIP' \| 'TAR' \| 'TAR_GZ'` option) in `FileOperationStatementHandler` and `DirectoryOperationStatementHandler`; stream single-file `.gz` via `GZipStream` and multi-entry `.tar` / `.tar.gz` via `System.Formats.Tar`, enforcing `SafeZipExtractor`-equivalent traversal, link-type, and decompression-ratio bounds. | — | M |
-| AR02 | **Archive entry inspection (`ARCHIVE_LIST`) and selective extraction (`PATTERN`).** Add a table-valued / collection function `ARCHIVE_LIST(path)` returning entry `Name`, `FullPath`, `Size`, `CompressedSize`, `LastModified`, and `IsDirectory` for `.zip`, `.tar`, and `.tar.gz` archives without extracting to disk; add `PATTERN = '<glob>'` and `OVERWRITE = ON \| OFF` options to `DECOMPRESS FILE` / `DECOMPRESS DIRECTORY`. | AR01 | S |
-| AR03 | **Optional `TO` destination defaults on `COMPRESS` and `DECOMPRESS`.** Make `TO <destination>` optional in the parser and handlers: `COMPRESS FILE 'x.csv'` defaults to `'x.csv.zip'` (or `.gz` when `FORMAT = 'GZIP'`), and `DECOMPRESS FILE 'x.csv.gz'` / `'x.zip'` defaults to stripping the archive suffix in the same directory; update `compress-file.md`. | AR01 | S |
+Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
 
 **Acceptance evidence:** Round-trip SLT and unit tests pass for `.zip`, `.gz`, `.tar`, and `.tar.gz`
 across single files and directories; `ARCHIVE_LIST` enumerates entries without writing files;
@@ -785,7 +760,7 @@ from a multi-sheet fixture.
 
 ### Database Connectors — Documentation Parity, Write-Path Clarity, and Credential Gaps
 
-**Status:** Accepted  
+**Status:** Accepted; DB01–DB03 selected for v0.23.0 (in `TODO.md`)  
 **Horizon:** Next (DB01–DB03), Later (the rest)  
 **Authoritative design:** none yet; [Database connectors](docs/reference/connectors/databases/README.md)
 are the references and [Connector Standards](docs/architecture/standards/connectors-standards.md)
@@ -824,9 +799,6 @@ new package.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| DB01 | **Reconcile option lists with the code.** For each of the ten pages, make the Options table equal the connector's allowlist and fix the Authentication section. Known mismatches: Snowflake (`USER` vs `USERNAME`; add `ACCOUNT`, `PORT`, `PROTOCOL`; `ROLE` and `PRIVATE_KEY_PASSPHRASE` are documented but not read), BigQuery (`KEY_FILE` vs `CREDENTIAL_FILE`), Oracle (`SID`, `WALLET_LOCATION`), MySQL (`SSL_CA`, and the `VERIFY_*` spellings against the `SSL_MODE` values the code accepts), SQLite (`READ_ONLY`, `BUSY_TIMEOUT_MS`), Neo4j (`ENCRYPTION`; confirm whether encryption comes from the URI scheme), MSSQL (`ENCRYPT`, `PORT`), ODBC (`USER`, `PWD`, `TIMEOUT_SECONDS`, `TABLE`, `HTTPPATH`, `AUTHMECH`, `SSL`). A test compares each page's option table to the allowlist so they cannot drift again. | — | M |
-| DB02 | **Document `TIMEOUT_SECONDS` everywhere.** Add it to Oracle, Postgres, Snowflake, and BigQuery with the defaults the code applies (30 s for OLTP, the data-warehouse default for Snowflake and BigQuery). State the defaults in each page's option table. | DB01 | S |
-| DB03 | **Page-standard gaps.** Add the mutually exclusive call-outs the page standard requires (MSSQL and Oracle have them; the rest do not, including Snowflake `PASSWORD` vs `PRIVATE_KEY_FILE` and the Mongo URI vs `HOST`/`PORT` forms). Quote the `ENC:` value in the MongoDB example or confirm the lexer accepts it bare. Show one non-inline credential pattern (`ENC:`, `SECRET:`, or `${ENV}` with `Security:AllowedEnvVars`) on each page. | DB01 | S |
 | DB04 | **Write-path reference per connector.** For each database connector, state the bulk path (`SqlBulkCopy`, Oracle array binding, `MySqlBulkCopy`, row batches for the rest), what `MERGE` pushes down versus what the engine emulates, transaction support, `WHAT_IF` behavior, and the idempotent-load pattern to use. Verify each statement against the data source class before writing it. | DB01 | M |
 | DB05 | **Capability matrix.** One table on the databases README: transactions, pushdown, bulk load, schema introspection, `WHAT_IF`, default timeout, and auth modes, one row per connector. BigQuery has no transactions and SQLite is single-writer; Neo4j enlists transactions in its own way. Built from DB04 so it stays accurate. | DB04 | S |
 | DB06 | **Dialect notes for Postgres, Oracle, and MSSQL.** Snowflake, MySQL, and BigQuery list their supported native SQL; these three do not. Cover row capping (`LIMIT`, `FETCH FIRST`, `TOP`), `DUAL`, and identifier quoting, checked against the linter's dialect metadata. | — | S |
@@ -1049,7 +1021,7 @@ before selecting the next; preserve all existing fixtures for earlier supported 
 
 ### Reporting & Presentation — Analytical Overlays, Authoring Parity, and Golden Conformance
 
-**Status:** Incremental  
+**Status:** Planned (v0.23.0, tasks in `TODO.md`)  
 **Horizon:** Next (v0.23.0)  
 **Scheduling:** Backlog for prioritization after v0.22.0 ships.  
 **Authoritative design:** [Reporting Semantic Contracts](docs/architecture/reporting-semantic-contracts.md),
@@ -1142,34 +1114,15 @@ Select individual IDs into `TODO.md` when scheduling.
 
 #### Fail-closed overlay semantics and multi-layer domain resolution
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| GG01 | **Decide or implement `EXPONENTIAL`, `LOGARITHMIC`, and `POWER` trendlines.** Either implement exact least-squares fitting in `PlotPlanResolver.ResolveOverlay` with domain guards (rejecting non-positive Y for `EXPONENTIAL`/`POWER` and non-positive X for `LOGARITHMIC`/`POWER`) or reject them at parse/lowering time until implemented. Remove the silent all-null fallback. | — | S |
-| GG02 | **Exclude `NULL` Y pairs from statistical overlays.** Stop coercing `NULL` to `0m` in `PlotPlanResolver.ResolveOverlay` for `AVERAGE`, `MOVING_AVG`, `LINEAR`, and `POLYNOMIAL`. Skip null `(x, y)` pairs in regressions and averages, and define deterministic window behavior for `MOVING_AVG` over gaps. | — | S |
-| GG03 | **Define multi-series trendline ownership.** Either partition overlay computation per series (or bind to an explicit target series) or fail validation when a statistical trendline is authored on a multi-series visual without a target series. | GG02 | S |
-| GG04 | **Center/scale X in `PolynomialRegression` and guard singular/overflow cases.** Normalize X into `[-1, 1]` (or `[0, 1]`) before building the Vandermonde sums so large X domains (e.g., epoch dates or revenue) do not overflow `decimal.MaxValue`, and fail or emit a diagnostic when degree exceeds distinct X points. | GG02 | S |
-| GG05 | **Preserve unstacked `FieldChannel.Y` in mixed stacked/unstacked Y domains.** Include `FieldChannel.Y` alongside `YStart`/`YEnd`/`ErrorLow`/`ErrorHigh`/`ConfidenceLow`/`ConfidenceHigh` in `PlotPlanResolver.ResolveScales` when stacked and unstacked layers share a primary or secondary Y axis; include explicit `AnnotationPoint` coordinates in scale domain resolution. | — | S |
+Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
 
 #### Core scale, layer, and `CUSTOM ... CHART` authoring parity
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| GG11 | **Fix `ScaleKind.Time` (`TYPE = TEMPORAL`) to resolve and render as a continuous time axis.** Order temporal values chronologically rather than by string key, compute proportional time positions and nice ticks honoring `MIN`/`MAX`/`MAJOR_TICK_COUNT`/`TICK_INTERVAL` without populating discrete `Categories`, keep multiple rows sharing a timestamp in `ResolveLayerData`, and fix `RenderPoints` when `TIME_UNIT` or `TICK_FORMAT` is set. | — | M |
-| GG12 | **Fix horizontal grouped bar dodging (`TRANSPOSED_CARTESIAN`) and `X_OFFSET`/`Y_OFFSET` geometry in `CUSTOM ... CHART`.** Gate grouped dodging in `PlotPlanSvgRenderer.RenderTransposedCartesian` on `layer.SeriesKey is not null` as well as `LayerStyle(l, "series")`, align `PlotPlanResolver` offset bounds with `CartesianPlotArea`, and prevent double-dodging or row deduplication when `X_OFFSET`/`Y_OFFSET` is bound. | — | S |
-| GG13 | **Support `COLOR = DATUM('...')` multi-layer legends and non-null category row selection.** Preserve per-layer `COLOR` `DATUM` bindings in `AdvancedChartLowerer` and `PlotPlanResolver.ResolveSeries` so constant-series layers receive distinct palette colors and legend entries; in `PlotPlanResolver.ResolveLayerData`, select the first row per category where the layer's measure is non-null (or support a per-layer `WHERE` filter) so combined detail+summary tables do not drop summary layers. | — | M |
-| GG14 | **Support analytical overlays and categorical/temporal `LINE`/`AREA` `CONDITIONS` in `CUSTOM ... CHART`.** Allow `OVERLAYS` (or a `CHART`-level equivalent) on `CUSTOM` visuals, relax `AdvancedChartSemanticValidator.ValidateConditions` so `LINE`/`AREA` layers on categorical or temporal X axes can use `CONDITIONS` without requiring quantitative X or an explicit `INTERPOLATION` token, and support `LINE_DASH` / `SEGMENT_STYLE`. | GG01, GG02 | M |
-| GG15 | **Close scale and encoding gaps in `CHART (SCALES ... / ENCODE ...)`.** Support discrete domain-to-color mapping on `NOMINAL`/`ORDINAL` `COLOR` scales, `RANGE = (min, max)` on `SIZE` scales, a data-driven `OPACITY` channel in `ENCODE`, and axis `TITLE`/`LABEL` inside `SCALES(...)`; either lower or explicitly reject outer `AXIS_X`/`AXIS_Y` and named-visual-only `OPTIONS` on `CUSTOM` visuals. | — | M |
-| GG16 | **Studio inspector, cross-filter, hover-popover, and `DRILL_IN` parity for `CUSTOM` visuals.** Include `'CUSTOM'` in `FORMAT_INSPECTOR_CHARTS` and `FORMAT_INSPECTOR_CARTESIAN` in `visual-format-inspector.ts`, derive `selectionKey` and `hoverContextColumn` from `CUSTOM` encodings in `designer-interactions.ts`, and update `VisualBuilder` `DRILL_IN` hierarchy rewriting to rebind `AdvancedChart` encodings. | — | S |
+Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
 
 #### Harness fail-fast guarantees and golden SVG hash coverage
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| GG06 | **Fail closed in `ReportingGoldenHarness` and retire legacy `SvgChartRenderer` fallbacks.** Assert `visual.Error is null` in `ReportingGoldenHarness.ProduceAsync` so golden updates never record `null` artifacts for failed visuals; replace legacy `PlotPlan is null` fallback paths in `SvgChartRenderer.Render` with an explicit error for plot-plan-backed visual types; back `NativeSvgGeometryGoldenTests` and `GrammarOfGraphicsContractTests` with diffable artifact snapshots. | — | S |
-| GG07 | **Add golden conformance fixtures for analytical overlays.** Add `.rptsql` fixtures and four-artifact goldens in `index.json` for `LINEAR`, `POLYNOMIAL`, `FORECAST` (with confidence band and anomaly points), `REFERENCE_LINE`, `REFERENCE_BAND`, `RUNNING_TOTAL`, `PERCENT_OF_TOTAL`, and `ANNOTATIONS (POINT ...)`. | GG01, GG02, GG04 | M |
-| GG08 | **Add golden conformance fixtures for error bars, confidence bands, and connected interpolations.** Pin `.plan.json`, `.svg`, `.fallback.json`, and `terminal.txt` goldens for `ERROR_LOW`/`ERROR_HIGH`, `CONFIDENCE_LOW`/`CONFIDENCE_HIGH`, `INTERPOLATION = SMOOTH`/`STEP_BEFORE`/`STEP_AFTER`, and multi-color conditional line transitions. | — | M |
-| GG09 | **Add golden conformance fixtures for `LOG`/`IDENTITY` scales, 2D facets, `INDEPENDENT` resolution, `NULL_POLICY`, and `CUSTOM` polar arcs.** Add `.rptsql` golden fixtures covering `TYPE = LOG`, `TYPE = IDENTITY`, `FACET (ROW = ..., COLUMN = ...)`, `RESOLVE (Y = INDEPENDENT)`, `NULL_POLICY = ZERO`/`CONNECT`/`SKIP`, and a `CUSTOM` `COORDINATE POLAR` `ARC` chart. | — | M |
-| GG10 | **Declarative negative conformance corpus for reporting/GoG.** Add an SLT-style `statement error` script runner (or negative `.rptsql` fixture lane) that verifies expected parse, semantic-validator, and domain errors directly from `.rptsql` test scripts. | GG06 | M |
+Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
 
 **Acceptance evidence:** Zero silent null-layer fallbacks in `PlotPlanResolver.ResolveOverlay`;
 verified regression accuracy with `NULL` values and large X domains; unclipped mixed stacked/unstacked
@@ -1354,7 +1307,7 @@ must complete before the unified beginner experience can be accepted.
 
 ### SaaS Isolation — Tenant-Scoped Orchestrator Bundle Store
 
-**Status:** Accepted
+**Status:** Planned (v0.23.0, tasks in `TODO.md`)
 **Horizon:** Next (v0.23.0)
 **Authoritative design:** [SaaS Tenant Isolation Architecture](docs/architecture/saas-tenant-isolation.md)
 
@@ -1365,7 +1318,7 @@ across tenants. On a shared Orchestrator one tenant can overwrite or read anothe
 The outcome is that each tenant publishes, lists, reads and deletes only its own bundles, and two
 tenants can use the same bundle name.
 
-**Why next:** Found in the v0.22.0 security review (TODO.md §6). The fix spans Core, the Engine
+**Why next:** Found in the v0.22.0 security review (v0.22.0 TODO §6). The fix spans Core, the Engine
 bundle handlers, Orchestrator.Service and the LanguageServer, too wide for v0.22.0. Until it ships,
 publishing takes Admin or OrchestratorManager and reading takes a role, but any tenant's caller
 still sees every tenant's bundles, so Shared hosts must not claim bundle isolation.
@@ -1389,7 +1342,7 @@ bundle of the same name, on SQLite and Postgres.
 
 ### Security — Caller Identity for Process-Spawned Orchestrator Runs
 
-**Status:** Accepted
+**Status:** Planned (v0.23.0, tasks in `TODO.md`)
 **Horizon:** Next (v0.23.0)
 
 **Problem and Intended Outcome:** With `Jobs:UseProcessSpawning`, the Orchestrator runs a job in a
@@ -1418,101 +1371,64 @@ the fix needs a tamper-evident hand-off, too much for v0.22.0.
 **Acceptance evidence:** A spawn-mode test where a run executes as its caller and is refused an
 object the caller cannot use; and a test where a forged, altered or expired envelope is refused.
 
-### Security & Governance — Shared Connection Authorization, Secret Access Control, and Local Vault Isolation
+### Security & Governance — Local Vault Isolation and Connection ACLs on Orchestrator Runs and Snapshots
 
-**Status:** Accepted  
+**Status:** Planned (v0.23.0, tasks in `TODO.md`)  
 **Horizon:** Next (v0.23.0)  
-**Scheduling:** Backlog for prioritization after v0.22.0 ships; immediate fixes for default-open Portal ACLs, option/endpoint overrides, and direct `SECRET:` bypasses are tracked in `TODO.md` §5.  
 **Authoritative design:** [Governance Administration](docs/administration/platform/governance.md),
 [SaaS Tenant Isolation Architecture](docs/architecture/saas-tenant-isolation.md),
 [Portal Architecture](docs/architecture/portal.md), and
 [Connector Standards](docs/architecture/standards/connectors-standards.md).
 
-**Implemented baseline:** `IConnectionCatalogProvider` and `SharedConnectionExpander` resolve
-`SHARED:alias` references into cataloged definitions whose credential fields hold `SECRET:name` (or
-`ENC:`) references. `PortalCatalogConnectionProvider` checks per-connection group ACLs against
-`ExecutionIdentity` when grants exist, `PortalInteractiveRunPolicy` blocks `CREATE CONNECTION` in
-ad hoc Designer query runs, and `OsSecretStoreProvider` / `LocalConnectionCatalogProvider` store
-machine-protected files on disk.
+**Implemented baseline (v0.22.0, `6d0de6aa6`):** Portal `SHARED:` connections are deny-by-default:
+with no group grant only an admin or the owner can use one, and revoking the last grant returns it to
+admin/owner only (`PortalConnectionCatalogService.EnforceUseAclAsync`); there is no tenant-wide
+"allow all" flag. Scripts cannot override a `SHARED:` connection's destination or endpoint options
+(`SharedConnectionExpander`), and `ALTER CONNECTION` / `CREATE OR ALTER CONNECTION` refuse
+catalog-backed connections. A direct `SECRET:` reference is denied for non-admin callers whenever an
+identity, a governed catalog or the Portal secret store is in play, so it cannot bypass a
+connection ACL (`ConnectionSecretResolver.EnsureDirectSecretAuthorized`); secrets reached through an
+authorized `SHARED:` expansion still resolve.
 
-**Problem and intended outcome:** The combined v0.22.0 shared-connection and secret security review
-(Codex and Gemini, 2026-11-14) evaluated whether finding or authoring a script that references
-`SHARED:alias` or `SECRET:name` allows unauthorized credential use across Portal, Orchestrator, and
-workstation vaults:
-1. **Portal connections default to open, and removing the last grant reopens them:**
-   - `PortalConnectionCatalogService.EnforceUseAclAsync` (`src/ETL-SQL.Portal/Services/PortalConnectionCatalogService.cs:240`)
-     and `CanUse` (`line 163`) immediately allow any caller when `entity.Acls.Count == 0`. A newly
-     created connection is open to every user in the tenant until a grant is added, and revoking the
-     last group grant flips a restricted connection back to unrestricted (`PortalConnectionCatalogApiTests.cs:232`).
-2. **Direct `SECRET:` references are not identity-checked or bound to `SHARED:` ACLs:**
-   - `ISecretProvider.ResolveAsync(name, ct)` (`src/ETL-SQL.Core/Governance/SecretProviders.cs:17`)
-     and `PortalSecretStoreService.ResolveAsync` (`src/ETL-SQL.Portal/Services/PortalSecretStoreService.cs:97`)
-     check tenant, existence, and disabled status, but receive no `ExecutionIdentity` and enforce no
-     per-secret ACL or owning-connection check. Any surface that can run `CREATE CONNECTION` (such
-     as `PortalDesignerPreviewService`, published reports, or Orchestrator jobs) can reference
-     `SECRET:name` directly in a new connection declaration and bypass the `SHARED:` connection's ACL.
-3. **Shared connection destinations and `ALTER CONNECTION` are not locked:**
-   - `SharedConnectionExpander.ExpandAsync` (`src/ETL-SQL.Engine/Services/SharedConnectionExpander.cs:92`)
-     blocks overrides of sensitive fields (`PASSWORD`, `API_KEY`), but lets a script override
-     non-sensitive endpoint/target options (`HOST`, `SERVER`, `PORT`, `DATABASE`, `URL`, `BASE_URL`).
-   - `AlterConnectionStatementHandler` (`src/ETL-SQL.Engine/Handlers/AlterConnectionStatementHandler.cs:42`)
-     and `CREATE OR ALTER` in `CreateConnectionStatementHandler` (`line 56`) inherit `existingDs.Options`
-     (which already holds the decrypted secret value) without checking `context.CatalogBackedConnections`,
-     letting a script redirect a shared connection's credentials to another destination.
-4. **Local and Orchestrator catalogs ignore `ExecutionIdentity`, and machine-scoped Windows vaults lack NTFS ACL hardening:**
-   - `LocalConnectionCatalogProvider.ResolveAsync` (`src/ETL-SQL.Core/Governance/ConnectionCatalog.cs:68`)
-     ignores `ExecutionIdentity`, and non-revision Orchestrator jobs in `SchedulerService` (`line 984`)
-     execute with `executionIdentity: null`.
+**Problem and intended outcome:** The remaining findings of the v0.22.0 shared-connection and secret
+review (Codex and Gemini, 2026-11-14):
+1. **Local and Orchestrator catalogs ignore `ExecutionIdentity`, and machine-scoped Windows vaults lack NTFS ACL hardening:**
+   - `LocalConnectionCatalogProvider.ResolveAsync` ignores `ExecutionIdentity`, and non-revision
+     Orchestrator jobs in `SchedulerService` execute with `executionIdentity: null`.
    - `OsSecretStoreProvider` and `LocalConnectionCatalogProvider` always call `CryptoUtils.ProtectMachine`
-     (`DataProtectionScope.LocalMachine` / `DPAPI-M:` on Windows). While Unix writes set `0600`
-     (`UserRead | UserWrite`), Windows writes do not set restrictive NTFS ACLs on the directory or
-     files, and personal workstation users have no `DataProtectionScope.CurrentUser` vault option to
-     isolate their secrets from other OS accounts on the same machine.
-5. **Cached Portal report snapshots do not re-check `SHARED:` connection ACLs:**
-   - `ReportIdentitySensitivity.IsRunLiveAsync` (`src/ETL-SQL.Portal/Services/ReportIdentitySensitivity.cs:12`)
-     only scans for RLS identity functions (`CURRENT_USER()`, `USER_GROUPS()`). A report that queries
-     an ACL-restricted `SHARED:` connection without calling RLS functions saves a shared snapshot in
-     `ExecutionController.GetSnapshot` (`line 174`) that any user with folder `Read` permission can view.
+     (`DataProtectionScope.LocalMachine` / `DPAPI-M:` on Windows). Unix writes set `0600`, but
+     Windows writes set no restrictive NTFS ACLs, and personal workstation users have no
+     `DataProtectionScope.CurrentUser` vault option to isolate their secrets from other OS accounts.
+2. **Cached Portal report snapshots do not re-check `SHARED:` connection ACLs:**
+   - `ReportIdentitySensitivity.IsRunLiveAsync` only scans for RLS identity functions
+     (`CURRENT_USER()`, `USER_GROUPS()`). A report that queries an ACL-restricted `SHARED:`
+     connection without them saves a shared snapshot in `ExecutionController.GetSnapshot` that any
+     user with folder `Read` permission can view.
 
-The outcome is deny-by-default connection sharing (with explicit opt-in for tenant-wide connections),
-locked catalog destinations across `CREATE` and `ALTER`, identity-aware secret resolution that cannot
-bypass connection ACLs, user-scoped workstation vaults with hardened Windows NTFS permissions for
-machine stores, and connection-ACL enforcement on report snapshots and Orchestrator runs.
-
-**Why next:** The three immediate bypasses (default-open/last-grant reopen, destination/alter
-overrides, and unguarded direct `SECRET:` resolution) are queued in `TODO.md` §5; the broader
-data-model and cross-host changes (secret-level ACLs, user-scoped vs. machine-scoped local vault
-modes, Orchestrator job-principal binding, and snapshot ACL checks) are scheduled for v0.23.0.
+The outcome: user-scoped workstation vaults, hardened NTFS permissions for machine stores, and
+connection-ACL enforcement on Orchestrator runs and report snapshots.
 
 **Boundaries:**
 - Keep `SHARED:alias` and `SECRET:name` syntax unchanged.
 - On personal workstations using the local vault, the OS user account remains the primary boundary
   between processes running as that same user; separate OS accounts are required when untrusted local
   processes must not share a user vault.
+- Secret-level grants (a `SECRET:` usable directly by a named group) are out of scope until a user
+  needs them; today a non-admin reaches a secret only through an authorized `SHARED:` connection.
 
-**Dependencies:** `PortalConnectionCatalogService`, `PortalSecretStoreService`,
-`SharedConnectionExpander`, `ConnectionSecretResolver`, `CreateConnectionStatementHandler`,
-`AlterConnectionStatementHandler`, `LocalConnectionCatalogProvider`, `OsSecretStoreProvider`,
-`SchedulerService`, and `ExecutionController`.
+**Dependencies:** `LocalConnectionCatalogProvider`, `OsSecretStoreProvider`, `SchedulerService`,
+`ReportIdentitySensitivity` and `ExecutionController`.
 
 **Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
 Select individual IDs into `TODO.md` when scheduling.
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| SC01 | **Deny-by-default Portal `SHARED:` ACLs and explicit unrestricted sharing.** Add an explicit `AllowAllUsers` flag (default `false`) on `PortalSharedConnection` so newly created connections and connections whose last group ACL is revoked only allow Admin and `OwnerUserId` unless unrestricted sharing is explicitly enabled; update `PortalConnectionCatalogApiTests`. | — | S |
-| SC02 | **Lock `SHARED:` connection destinations and block `ALTER` / `CREATE OR ALTER` on catalog connections.** Disallow script-supplied option overrides on `SHARED:` connections in `SharedConnectionExpander.ExpandAsync` (or lock all catalog-defined options and endpoint/target fields), and reject `ALTER CONNECTION` and `CREATE OR ALTER CONNECTION` when `context.CatalogBackedConnections` contains the connection name. | — | S |
-| SC03 | **Identity-aware `SECRET:` authorization and catalog-bound secret resolution.** Thread `ExecutionIdentity?` through `ISecretProvider.ResolveAsync` and `ConnectionSecretResolver`; in `PortalStoreSecretProvider` / `PortalSecretStoreService`, require either a secret-level grant or an active catalog-expansion context from an authorized `SHARED:` connection so scripts cannot dereference `SECRET:name` directly to bypass connection ACLs. | SC01 | M |
-| SC04 | **User-scoped workstation vault option and Windows NTFS ACL hardening for machine stores.** Support a `CurrentUser` protection scope (`CryptoUtils.Protect` / `DPAPI:`) in `OsSecretStoreProvider` and `LocalConnectionCatalogProvider` for personal workstation installs (CLI, VS Code, Desktop Studio); for `LocalMachine` (`ProtectMachine` / `DPAPI-M:`) service stores on Windows, apply explicit `DirectorySecurity`/`FileSecurity` ACLs (Administrators, SYSTEM, and the service account only, with inheritance disabled) matching Unix `0600`. | — | S |
-| SC05 | **Enforce `SHARED:` connection ACLs on Orchestrator runs and cached Portal report snapshots.** Bind scheduled and triggered Orchestrator jobs in `SchedulerService` to an explicit owning `ExecutionIdentity` (and enforce connection ACLs in the Orchestrator catalog), and update `ExecutionController.GetSnapshot` / `GetManifest` so reports using ACL-restricted `SHARED:` connections verify the caller's connection `Use` permission before serving a cached snapshot. | SC01, [Caller Identity for Process-Spawned Orchestrator Runs](#security--caller-identity-for-process-spawned-orchestrator-runs) | M |
+Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
 
-**Acceptance evidence:** A newly created Portal `SHARED:` connection and a connection whose last
-group ACL is revoked both deny non-owner/non-admin callers unless unrestricted sharing is explicitly
-enabled; scripts cannot override `HOST`/`SERVER`/`Target` on a `SHARED:` connection via `CREATE` or
-`ALTER CONNECTION`; a script that references `SECRET:name` directly is denied when the caller lacks
-permission on the owning connection/secret; Windows `OsSecretStore` / `LocalCatalog` directories
-reject read access from other local non-admin accounts; and cached report snapshots for restricted
-`SHARED:` connections refuse viewers who lack connection `Use` permission.
+**Acceptance evidence:** Windows `OsSecretStore` / `LocalCatalog` directories reject read access
+from other local non-admin accounts and a workstation can choose a user-scoped vault; scheduled and
+triggered Orchestrator jobs run under an owning identity that `SHARED:` ACLs are checked against; and
+cached report snapshots for restricted `SHARED:` connections refuse viewers who lack connection `Use`
+permission.
 
 ### Security — External Tool Permissions, Artifact Identity, and Launch Contracts
 
@@ -1530,8 +1446,8 @@ catalog accepts an execution identity but does not authorize individual callers,
 not pinned to reviewed binary/script contents, and native `WORKING_DIR` is silently replaced by a
 temporary scratch directory. The outcome is explicit permission to use a tool, verifiable approved
 artifacts, and predictable launch behavior. Immediate catalog traversal, `WHAT_IF`, Docker approval,
-administrator ownership/lookup, argument safety and resource-bound fixes live only in
-[TODO.md §6](TODO.md#6-external-tool-approval-and-execution-safety), XT01–XT06.
+administrator ownership/lookup, argument safety and resource-bound fixes shipped in v0.22.0
+(XT01–XT06, `6d0de6aa6`).
 
 **Why next:** Per-principal grants and artifact versioning require catalog and execution contracts.
 They extend the immediate administrator-owned allowlist boundary. Working-directory behavior is a
@@ -1592,7 +1508,7 @@ claiming universal SSIS parity. Schedule any resulting feature separately.
 
 ### Portal, Orchestrator & Studio — Unified Operations Console, Catalog-Job Cohesion, and SaaS Authoring Boundary
 
-**Status:** Incremental  
+**Status:** Planned (v0.23.0, tasks in `TODO.md`)  
 **Horizon:** Next (v0.23.0)  
 **Scheduling:** Backlog for prioritization after v0.22.0 ships.  
 **Authoritative design:** [Portal Architecture](docs/architecture/portal.md),
@@ -1682,17 +1598,7 @@ Solo/Team profiles. Do not execute mutating ETL pipelines inside the Portal web 
 **Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
 Select individual IDs into `TODO.md` when scheduling.
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| OR01 | **Fix Portal New Job bundle URIs (`orch://`) and target kind labeling.** Update `readBundleChoices` (`orchestrator-create-job.ts`) and the New Job modal to emit canonical `orch://<bundle>@<version>/<entryPath>` URIs (with version and entry-script selection) matching `BundleUri.TryParse`; support `JobType = REPORT` in New Job creation; and fix `orchestrator-job-detail.ts` so `jobType === 1` displays `'Report'` while `orch://` targets display `'Bundle'`. v0.22.0 removed the bundle target from the dialog until this lands. | — | S |
-| OR02 | **Unify Studio catalog pipelines (`PIPELINE:{id}`) with Orchestrator jobs.** Enrich `PIPELINE:{id}` rows in the Portal Orchestrator UI with catalog document display names, folder badges, and an **Open in Studio** link; replace raw inline `Jobs.Script` editing on catalog-backed jobs in `orchestrator-job-detail.ts` with Studio navigation so catalog and Orchestrator scripts cannot diverge; and auto-provision (or provide a 1-click provision + author `EXECUTE` grant workflow for) `PIPELINE:{id}` slots so non-admin Studio authors do not hit a dead-end `403 job_not_provisioned`. | — | M |
-| OR03 | **Enforce `CatalogOnly` / SaaS Portal-only authoring across Orchestrator and Report ingress.** When `Portal:Studio:Mode = CatalogOnly` (or external script ingress is disabled), disable raw server-filesystem script browsing (`/api/orchestrator/scripts`) and unreviewed inline script creation in `orchestrator.html` / `OrchestratorController.CreateJob` in favor of selecting a governed catalog `Pipeline` or signed `orch://` bundle; enforce `StudioCapabilities.ScriptIngress` on `ReportsController` script upload and mutation endpoints used by `PortalDataSource`. | OR02 | M |
-| OR04 | **Retire direct SQLite file coupling (`OrchestratorDbLocator`) in Triage, Poller, and Subscriptions.** Route `OperationsTriageService`, `OrchestratorPollerService`, and `SubscriptionsController` through `OrchestratorProxyService` (or a shared remote store contract) instead of opening a local SQLite path via `OrchestratorDbLocator.Resolve()`, and synchronize or federate Portal's `SHARED:` connection catalog and `SECRET:` store with remote Orchestrator workers. | — | M |
-| OR05 | **Fix Dependency Chain graph projection for normalized and bundle jobs.** Update `OrchestratorController.GetJobDependencies` so normalized jobs (`RUN SCRIPT '<targetPath>';`) resolve and parse their referenced script or `orch://` bundle entry and include explicit job dependencies when computing upstream/downstream table and job edges. | OR01 | S |
-| OR06 | **Add Edit dialogs and per-object ACL management for Jobs, Schedules, and Notifications.** Add an Edit Job metadata dialog (`PUT /api/orchestrator/jobs/{name}` with `If-Match` for target, interval, retries, retry delay, timeout, hash policy, and sandbox profile), Edit and Enable/Disable actions on the Schedules and Notifications tabs (`PUT /api/orchestrator/schedules/{name}` and `PUT /api/orchestrator/notifications/{name}`), and mount the Access (`READ`/`EXECUTE`/`OVERRIDE`/`MANAGE` + owner) panel for Schedules and Notifications as well as Jobs. | — | M |
-| OR07 | **Expose statement waterfalls, parameterized triggers, kill/cancel, and node/sandbox fleet health in `orchestrator.html`.** Make run rows in the Job Detail History tab clickable to open the per-statement execution waterfall and output (`GET /api/job-runs/{historyId}`); add `Run with Parameters...` (`Variables` overrides) and `Kill / Cancel Run` (`/kill` and `/cancel`) to the job table and detail drawer; and add a Nodes & Sandboxes view surfacing `NodeHeartbeatService` metrics and `RelationalSandboxAdmissionLedger` pool states. | — | M |
-| OR08 | **Complete `ORCHESTRATOR` connector (`OrchestratorDataSource`) statement parity and local `TRIGGER JOB`.** Implement `DROP JOB`, `KILL JOB`, `CREATE/ALTER/DROP NOTIFICATION`, `ALTER/DROP SCHEDULE`, `ALTER JOB ... ADD/REMOVE NOTIFICATION`, `SHOW JOB STATE`, and `ASSERT JOB` in `OrchestratorDataSource.cs` against the existing `JobApiEndpoints` REST routes; make local `TRIGGER JOB <name>` in `EnableDisableTriggerJobHandlers.cs` enqueue an execution or fail closed when no scheduler is attached instead of logging a no-op message. | — | M |
-| OR09 | **Complete the `/designer` to `/studio/` cutover in Portal.** Once the Studio beginner/authoring completeness gate (`ST03`) passes, redirect `/designer` and `/designer/new` in Portal to `/studio/` so Report and Pipeline authoring share one workbench, draft/approval pipeline, and capability boundary. | ST03 | S |
+Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
 
 **Acceptance evidence:** Creating a bundle-backed job from `orchestrator.html` emits a valid
 `orch://` URI that pins and executes cleanly; `PIPELINE:{id}` jobs display their catalog metadata,
