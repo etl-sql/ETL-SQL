@@ -24,6 +24,26 @@ stay in `ROADMAP.md` until selected. A task table row is done only when its fini
 
 ---
 
+## v0.23.0 Release — run on the final candidate
+
+Nothing here can be closed early: each item is evidence about the candidate that ships.
+Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.md) and
+[`Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/enterprise-release-evidence-checklist.md).
+
+- [ ] Run the release gates the checklist requires. Green CI, CodeQL, MSI, native and DEB count for
+  the lanes they run on the exact candidate; Release Evidence covers the hosted certifications. No
+  local run counts.
+- [ ] A green Release Evidence dispatch on the final candidate, then a green release dry run on it.
+- [ ] Tag Release on the candidate with the `release-approval` review completed; Release publishes
+  the GitHub Release and calls `publish-marketplace.yml` (see 1.1).
+- [ ] Run every delivery path on the final candidate, as the v0.21.0 delivery matrix did.
+- [ ] Build the deployment-profile claim matrix from evidence; promote no unfinished Shared SaaS or
+  hosted-production outcome.
+- [ ] Verify third-party notices and inventory, secret scanning, SBOM, checksums, attestation,
+  installers, release notes, upgrade guidance and changelog for the shipped scope; finalize
+  `docs/releases/v0.23.0.md` (draft) and date the CHANGELOG entry.
+- [ ] Record the release timeline against the 8-hour goal, as the v0.22.0 tooling review did.
+
 ## Tier 1 — must ship in v0.23.0
 
 ### 1.1 Release follow-ups
