@@ -4,6 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
+| [ETL-SQL v0.23.0 — Draft](v0.23.0.md) | Planned scope and migration notes; certification and publication are pending. |
 | [ETL-SQL v0.22.0](v0.22.0.md) | Released 2026-11-04: release recovery, installed-package checks and security boundaries. |
 | [Release recovery acceptance](recovery-acceptance.md) | Timing targets, verified recovery cases and remaining hosted acceptance. |
 | [v0.22.0 release tooling review](v0.22.0-tooling-review.md) | Findings and fixes from the review of `scripts/`, the installers and `tests/`. |

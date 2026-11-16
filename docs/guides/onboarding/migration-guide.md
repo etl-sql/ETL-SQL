@@ -1,4 +1,4 @@
-# ETL-SQL Migration Guide (v0.22.0)
+# ETL-SQL Migration Guide (v0.23.0)
 
 This guide covers migration checks for the current release candidate. Review the
 [release notes](../../releases/README.md) and
