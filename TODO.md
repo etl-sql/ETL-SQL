@@ -8,8 +8,8 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 14 |
-| [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
+| [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 7 |
+| [Carried to v0.23.0](#carried-to-v0230--open-not-release-blockers) | Open work that does not block the tag | 11 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
 outcome in `CHANGELOG.md` (or the record doc for its section) and delete it. Deferred initiatives
@@ -17,89 +17,54 @@ stay in `ROADMAP.md` until selected.
 
 ---
 
-## Now — v0.22.0 work that can be done today
+## v0.22.0 Release — run on the final candidate
 
-**Current execution focus:** [release reliability](docs/architecture/roadmaps/release-reliability-plan.md) (section 1).
+Nothing here can be closed early: each item is evidence about the candidate that ships.
+Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.md) and
+[`Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/enterprise-release-evidence-checklist.md).
 
-### 1. Release reliability (v0.22.0 ships after this)
+- [ ] Run the release gates the checklist requires. Green CI, CodeQL and MSI count for the lanes they
+  run; Release Evidence covers the certifications that used to run locally. No local run counts.
+- [ ] A green Release Evidence dispatch on the final candidate (HA soak first green on
+  2026-11-15, run 43739492532), then a green release dry run on it: the first run of the W8
+  `release-evidence` job in `release.yml`.
+- [ ] W4c's done-when: Tag Release on the candidate, the `release-approval` review checklist
+  completed and approved, Release publishes to the Marketplace with no command on the owner's
+  machine.
+- [ ] Run every delivery path on the final candidate, as the v0.21.0 delivery matrix did.
+- [ ] Build the deployment-profile claim matrix from evidence; promote no unfinished Shared SaaS or
+  hosted-production outcome.
+- [ ] Verify third-party notices and inventory, secret scanning, SBOM, checksums, attestation,
+  installers, release notes, upgrade guidance and changelog for the shipped scope.
+- [ ] Record the release timeline against the §1 goal (`TODO.md` and `ROADMAP.md` reconciled
+  2026-11-15).
 
-**Plan:** [`docs/architecture/roadmaps/release-reliability-plan.md`](docs/architecture/roadmaps/release-reliability-plan.md), approved 2026-11-04;
-timebox 2026-11-07 to 2026-11-21.
-**Done when:** the nightly rehearsal is green 5 nights running, the v0.22.0 candidate passes every
-certification first time, no gate passes by waiver, and a script or doc fix reruns only its lanes.
-Cut line: W6 moves to the feature backlog if the timebox runs out. W8 is required for v0.22.0
-(owner, 2026-11-15): no release step runs on the owner's machine.
+## Carried to v0.23.0 — open, not release blockers
 
-- [ ] **W1 Nightly release rehearsal.** Running since 2026-11-08; first full pass including the
-  release dry run on 2026-11-09 (nightly 42687964349). Release Evidence is not part of the nightly:
-  it runs once per release candidate (owner, 2026-11-13); the dry run rehearses its collector.
-  **Left:** confirm the 5-night green streak.
-- [ ] **W2 Reuse evidence when inputs did not change.** Built 2026-11-10
-  ([design](docs/architecture/roadmaps/evidence-reuse-design.md)): CI lanes are reused from an
-  ancestor's full run, packages are always rebuilt. **Left:** the first real reuse on a recommit.
-- [ ] **W4 Release tooling tested on real output.** `test-real-release-output.mjs` replays the
-  responses recorded for dry run 42699535102. **Left:** the native Windows and macOS collectors
-  and the draft-manifest check (they hash about 1 GB of packages per platform, too much for the
-  repository); the operator collector, which needs the first real v0.22.0 submission.
-- [ ] **W4c GitHub is the source of truth.** The Tag Release workflow (`tag-release.yml`) is built.
-  **Left:** the first real run (v0.22.0), which is the done-when check: candidate to Marketplace
-  with one click.
-- [ ] **W5 Flaky tests fixed at the cause.** Every intermittent failure in 207 runs is fixed or
-  instrumented. **Left:** flake rate from nightly runs; the three instrumented failures
-  (FolderTree, first sign-in, FTP) when they next fail; remove the two flaky signatures when
-  their issues close (`playwright-wait` #74, `first-run-sign-in-wait` #75).
-- [ ] **W6 Performance certification redesign** (below the cut line). Deterministic metrics gate;
-  timing by same-host interleaved A/B; no waivers.
-- [ ] **W8 Move the operator evidence to GitHub** (required for v0.22.0). Owner decisions
-  2026-11-13: the goal is no release step on the owner's machine; every check moves, none is
-  dropped. The 3 reports (deployment, canary, recovery) become hosted jobs; the 6 reviews become a
-  GitHub environment approval on the release run; the 11 conditional certifications become hosted
-  jobs that run once per release candidate. They must not become flaky timeouts: size each to
-  about a third of its job limit and gate on deterministic results, never throughput. The whole
-  release stays under 4 hours. Billion-row: no 1B run; each scenario runs at 10M and 100M rows
-  under a 4 GB memory cap and passes when peak memory stays flat. 100M measured on a hosted runner
-  (Scale Measurement 43504065542): all 7 pass, peak memory 0.3–1.5 GB, longest 21 min. The 10M
-  run showed join and window memory growing with rows: one spill writer per partition, and the
-  partition count grows with input. Fixed in 5f14756e4 (spill writers share a fixed buffer).
-  Re-measured (runs 43515403790 at 10M, 43515404110 at 100M): window 477 → 530 MB, flat. The
-  join's remaining growth (838 → 1412 MB) is uncollected garbage, not live data (2026-11-14): the
-  job only checked the 4 GB bound afterwards, so the GC kept more garbage on longer runs. Live
-  heap (bytes surviving full collections) is 269 MB at 2M rows and 303 MB at 20M, one build
-  partition; under a 512 MB GC hard limit the 20M join passes about 6% slower. Owner decision
-  2026-11-14: the cap is enforced (`DOTNET_GCHeapHardLimit` = the bound) and "flat" is judged on
-  `peakLiveHeapMB`; working set and heap peak are report-only. Re-measured with the cap (runs
-  43617518622 at 10M, 43617518644 at 100M): all pass; live heap is flat for sort (183 → 183 MB),
-  window (152 → 173), grouping (188 → 168) and AllocProfile (82 → 88). The join is not: 292 →
-  435 MB. Most of it follows rows per build partition, which power-of-two partition sizing swings
-  between about 500K and 781K rows (live 269 → 303 → 377 MB locally); about 0.6 MB per partition
-  is unexplained (not the open spill writers, a flat 30 MB; not background-GC accounting, 12 MB).
-  Owner decision 2026-11-14: accepted as bounded (estimate 0.5–1 GB at the 1,024-partition cap,
-  under the 4 GB cap); the join gates on completing under the cap, not on strict flatness.
-  AllocProfile's 100M live heap later proved bimodal (82 or 165 MB; hosted runs 43639096544,
-  43648440192, 43669451423) while 10M stayed 84–88 MB: the peak is the largest gen2 survivor and
-  the 100M run has ~4x the collections, so it catches the transient more often. Owner decision
-  2026-11-15: AllocProfile gates on a fixed 256 MB live-heap ceiling in both runs.
-  AllocProfile fails at 10M only on the workstation machine-metric budget; the hosted job uses
-  `-MachineMetricsReportOnly`. Sized: every Release Evidence job runs at about a third of its limit
-  or less (runs 43684479666, 43714859186; longest Huge WindowFunction 45 of 140 min, billion-row
-  window 34 of 120). Wired (2026-11-15): Tag Release and Release require a green Release Evidence
-  dispatch on the candidate, zero open CodeQL alerts and the `release-approval` environment approval
-  (owner = required reviewer; the 6 reviews are its checklist) through
-  `scripts/collect-release-evidence.mjs`. The deployment/canary report-contract check is a hosted
-  job (`Report contracts`). The operator submission and its tooling are removed. **Left:** one
-  green HA soak (the faults after WorkerProcessCrashMidJob have never run hosted), then the first
-  green Release Evidence dispatch on the candidate. A partial rerun reads the earlier attempts'
-  artifacts; a release dry run fails on a failed evidence run or open CodeQL alerts and tolerates
-  only a candidate with no dispatch yet (Release Evidence runs once per candidate, not nightly).
-  The Codex review's merge-gate, PR-test, contributor-doc and Dependabot gaps are ROADMAP RG01–RG04.
+Reconciled 2026-11-15 on the final candidate. Nothing below blocks the v0.22.0 tag; each item says
+what is left.
 
-**Parked from the earlier "release in four hours" goal.** Each is picked up only if a workstream
-needs it, otherwise moves to `ROADMAP.md` after v0.22.0:
-fail fast on candidate failures; impact-selected CI and targeted fix rounds; broad package PRs in
-about 30 minutes; release timeline; longest CI job at about 20 minutes; hosted watchdog/upload
-proof for every long step; build once, publish the same bytes; one release gate owns publication;
-move local-only lanes into CI, then trim the checklist; protect runner capacity; freeze metadata
-before certification; recovery rehearsal timings.
+### 1. Release reliability
+
+**Plan:** [`docs/architecture/roadmaps/release-reliability-plan.md`](docs/architecture/roadmaps/release-reliability-plan.md).
+W0, W3, W4b and W8 are done (W8: every operator certification is a hosted Release Evidence job;
+the six reviews are the `release-approval` environment approval). W6 and W7 moved to
+[`ROADMAP.md`](ROADMAP.md#release-engineering--routine-github-built-releases) as below-the-cut-line
+work.
+
+- [ ] **W1 Five green nights running.** Not met for v0.22.0: 2 of the last 5 nights were green;
+  2 failures were our own pushes mid-rehearsal ("release/v0.22.0 moved"), 1 was the certification
+  wait step (43247226793). Owner, 2026-11-15: not a release blocker; v0.22.0 closes on its own
+  release dry run and Release Evidence. **Left:** the streak on the v0.23.0 branch, and a
+  rehearsal that does not fail when the branch moves under it.
+- [ ] **W2 Reuse evidence when inputs did not change.** **Left:** confirm the first real reuse
+  (the 2026-11-15 docs-only reconcile commit is the first candidate).
+- [ ] **W4 Release tooling tested on real output.** **Left:** the native Windows and macOS
+  collectors and the draft-manifest check (about 1 GB of packages per platform); a recorded
+  replay of `collect-release-evidence.mjs` from the first real v0.22.0 run.
+- [ ] **W5 Flaky tests fixed at the cause.** **Left:** flake rate from nightly runs; the three
+  instrumented failures (FolderTree, first sign-in, FTP) when they next fail; remove the two flaky
+  signatures when their issues close (`playwright-wait` #74, `first-run-sign-in-wait` #75).
 
 ### 2. Order-independent scale certification
 
@@ -154,7 +119,7 @@ sample on a shared runner.
 
 ### 4. Dependency alerts
 
-- [ ] **Confirm the 23 Dependabot alerts close when v0.22.0 merges to `main`.** Triaged
+- [ ] **After the release: confirm the 23 Dependabot alerts close when v0.22.0 merges to `main`.** Triaged
   2026-11-13: every alert is on an old version on `main`, and `release/v0.22.0` already has the
   fixed version of each (`vite` 8.3.5, `@vitest/mocker` 4.1.12, `undici` 7.30.1,
   `serialize-javascript` 7.1.4, `@azure/msal-node` 7.1.1, `qs` 6.16.1). Nothing to dismiss. All
@@ -163,18 +128,3 @@ sample on a shared runner.
   `dependencies` of `src/etl-sql-vscode/ui/package.json`; moving them to `devDependencies`
   fixes the label, if no build installs with `--omit=dev`.
 
-## v0.22.0 Release — run on the final candidate
-
-Nothing here can be closed early: each item is evidence about the candidate that ships.
-Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.md) and
-[`Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/enterprise-release-evidence-checklist.md).
-
-- [ ] Run the release gates the checklist requires. Green CI, CodeQL and MSI count for the lanes they
-  run; Release Evidence covers the certifications that used to run locally. No local run counts.
-- [ ] Run every delivery path on the final candidate, as the v0.21.0 delivery matrix did.
-- [ ] Build the deployment-profile claim matrix from evidence; promote no unfinished Shared SaaS or
-  hosted-production outcome.
-- [ ] Verify third-party notices and inventory, secret scanning, SBOM, checksums, attestation,
-  installers, release notes, upgrade guidance and changelog for the shipped scope.
-- [ ] Reconcile `TODO.md` and `ROADMAP.md` before the tag, and record the release timeline against
-  the §1 goal.

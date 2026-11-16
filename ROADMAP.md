@@ -87,7 +87,7 @@ that does not schedule their proposed implementation.
 
 ### Release Engineering — Routine, GitHub-Built Releases
 
-**Status:** Planned  
+**Status:** In Progress  
 **Horizon:** Foundation (blocks v0.22.0)  
 **Authoritative design:** [Release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md)
 
@@ -135,6 +135,19 @@ the nightly rehearsal is green five nights running with no manual help; the v0.2
 passes every certification on its first attempt; no gate is passed by waiver; a script or docs fix
 reruns only the lanes whose inputs changed; and a release reaches the Marketplace with one approval
 and no command on the owner's machine.
+
+**State at the v0.22.0 tag (2026-11-15):** W0, W3, W4b and W8 done; W4c closes with the v0.22.0
+run itself. W1's five-night streak was not met (owner: not a blocker; v0.22.0 closes on its own
+dry run and Release Evidence); W1, W2, W4 and W5 carry to v0.23.0 in `TODO.md`. Moved here after
+v0.22.0, picked up only when selected:
+- W6 performance certification redesign: deterministic metrics gate; timing by same-host
+  interleaved A/B; no waivers.
+- W7 fast pre-push hook and local gate hygiene (overlaps RG03's docs-only skip).
+- Parked from the earlier "release in four hours" goal: fail fast on candidate failures;
+  impact-selected CI and targeted fix rounds; broad package PRs in about 30 minutes; longest CI job
+  at about 20 minutes; hosted watchdog/upload proof for every long step; build once, publish the
+  same bytes; one release gate owns publication; protect runner capacity; freeze metadata before
+  certification; recovery rehearsal timings.
 
 **Lessons kept from v0.21.0:** defects surfaced only at certification (shift installer and Portal
 lanes to nightly); hosted runners lost mid-step need watchdogs that upload evidence first; local
