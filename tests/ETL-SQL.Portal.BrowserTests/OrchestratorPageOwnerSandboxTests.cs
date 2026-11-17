@@ -396,6 +396,47 @@ public sealed class OrchestratorPageOwnerSandboxTests(SandboxStoryFixture fixtur
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task CatalogOnlyModeHidesRawScriptOptionDoesNotFetchScriptsAndProvisionsCatalogPipeline()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenAsync(page, "catalog-only");
+
+        // Opening an ordinary script job in CatalogOnly mode disables inline CodeMirror editing.
+        await page.Locator("tr.job-row[data-name='daily_sales'] td").First.ClickAsync();
+        await Expect(page.Locator("#detailPanel")).ToHaveClassAsync(new System.Text.RegularExpressions.Regex("\\bopen\\b"));
+        await Expect(page.Locator("#detailScriptEditor [data-script-ingress-disabled='true']")).ToBeVisibleAsync();
+        await Expect(page.Locator("#detailScriptEditor .cm-content")).ToHaveCountAsync(0);
+        await Expect(page.Locator("#saveScriptBtn")).ToBeHiddenAsync();
+        await page.Locator("#closeDetailBtn").ClickAsync();
+
+        // Opening New Job hides Script File, shows CatalogOnly notice, and does not call /api/orchestrator/scripts.
+        await page.Locator("#newJobBtn").ClickAsync();
+        await Expect(page.Locator("#createJobModal")).ToBeVisibleAsync();
+        await Expect(page.Locator("#cj-mode-notice")).ToBeVisibleAsync();
+        await Expect(page.Locator("#cj-target-kind")).ToHaveValueAsync("Pipeline");
+        await Expect(page.Locator("#cj-script-target-row")).ToBeHiddenAsync();
+        await Expect(page.Locator("#cj-pipeline-target-row")).ToBeVisibleAsync();
+        Assert.True(await page.Locator("#cj-target-kind option[value='Script']").IsDisabledAsync());
+        Assert.Equal(0, await page.EvaluateAsync<int>(
+            "() => window.__orchestratorMock.calls.filter(call => call.path === '/api/orchestrator/scripts').length"));
+
+        // Selecting a catalog pipeline and optional shared schedule provisions PIPELINE:43 without copying script text.
+        await page.Locator("#cj-pipeline-select").SelectOptionAsync("43");
+        await page.Locator("#cj-sched-mode-shared").CheckAsync();
+        await page.Locator("#cj-shared-schedule-select").SelectOptionAsync("nightly_utc");
+        await page.Locator("#cj-saveBtn").ClickAsync();
+        await WaitForMessageAsync(page, "Provisioned 'PIPELINE:43' and granted EXECUTE");
+        await Expect(page.Locator("#createJobModal")).ToBeHiddenAsync();
+        await Expect(page.Locator("tr.job-row[data-name='PIPELINE:43']")).ToBeVisibleAsync();
+        Assert.Equal(1, await page.EvaluateAsync<int>(
+            "() => window.__orchestratorMock.calls.filter(call => call.method === 'POST' && call.path === '/api/orchestrator/pipelines/43/provision').length"));
+        Assert.Equal(1, await page.EvaluateAsync<int>(
+            "() => window.__orchestratorMock.calls.filter(call => call.method === 'POST' && call.path === '/api/orchestrator/jobs/PIPELINE%3A43/schedules/nightly_utc').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
     private static Task<int> AdoptCallsAsync(IPage page) => page.EvaluateAsync<int>(
         "() => window.__orchestratorMock.calls.filter(call => call.path.endsWith('/authorization/adopt')).length");
 

@@ -268,6 +268,12 @@ public record ProvisionPipelineSlotResultDto(
     string? Message
 );
 
+public record OrchestratorAuthoringModeDto(
+    string StudioMode,
+    bool ExternalScriptIngressEnabled,
+    bool CanCreateInlineScriptJobs
+);
+
 public record JobDependencyChainDto(
     string JobName,
     List<JobDependencyNodeDto> Nodes,

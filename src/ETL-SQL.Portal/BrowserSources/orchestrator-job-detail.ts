@@ -41,6 +41,7 @@ export interface JobDetailOptions {
     sessionExpired(): void;
     findCatalogPipeline?(jobName: string): CatalogPipelineLinkDto | null;
     onPipelineProvisioned?(result: ProvisionPipelineSlotResultDto): void | Promise<void>;
+    isExternalScriptIngressEnabled?(): boolean;
 }
 
 const TABS: Tab[] = ['details', 'flow', 'deps', 'quality', 'audit'];
@@ -310,6 +311,16 @@ export function createJobDetail(options: JobDetailOptions) {
                 <a class="btn btn-sm btn-primary" href="${escHtml(studioDocumentHref(pipelineId))}">Open in Studio ↗</a>
               </div>
               <pre class="orch-script-readonly"><code>${escHtml(savedScript || '-- No script snapshot stored on this run slot yet --')}</code></pre>`;
+            return;
+        }
+        if (options.isExternalScriptIngressEnabled && !options.isExternalScriptIngressEnabled()) {
+            host.innerHTML = `<div class="orch-catalog-script-notice" data-script-ingress-disabled="true">
+                <div>
+                  <strong>Inline script editing disabled</strong>
+                  <div class="orch-link-meta">CatalogOnly governance is active. Publish changes in Studio or deploy an <code>orch://</code> bundle.</div>
+                </div>
+              </div>
+              <pre class="orch-script-readonly"><code>${escHtml(savedScript || '-- Target definition stored externally --')}</code></pre>`;
             return;
         }
         try {

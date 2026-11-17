@@ -37,7 +37,7 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
     hourly_orders: { schedules: [], notifications: [], state: [], history: [], grants: [] }
   };
   let pipelineCatalog = [];
-  if (fixtureId === 'catalog-pipelines') {
+  if (fixtureId === 'catalog-pipelines' || fixtureId === 'catalog-only') {
     jobs.push({
       id: 'job-pipeline-42', name: 'PIPELINE:42', script: 'SELECT 42 AS PipelineRow;', interval: 1, unit: 'DAY',
       isEnabled: true, maxRetries: 0, retryDelaySeconds: 30, hashPolicy: 'Off',
@@ -176,6 +176,10 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
       if (path === '/api/portal/branding') return json({ displayName: 'ETL-SQL Portal', footerText: 'Sandbox', logoUrl: null });
       if (path === '/api/portal/navigation') return json([{ id: 'navOrchestrator', visible: true, reason: null }]);
       if (path === '/api/orchestrator/status') return json({ online: true, status: 'Online' });
+      if (path === '/api/orchestrator/authoring-mode' && method === 'GET') {
+        const ingress = failure !== 'catalog-only';
+        return json({ studioMode: ingress ? 'SourceControlled' : 'CatalogOnly', externalScriptIngressEnabled: ingress, canCreateInlineScriptJobs: ingress });
+      }
       if (path === '/api/orchestrator/pipelines/catalog' && method === 'GET') return json(pipelineCatalog);
       const provisionMatch = /^\/api\/orchestrator\/pipelines\/(\d+)\/provision$/.exec(path);
       if (provisionMatch && method === 'POST') {
@@ -240,6 +244,7 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
       const catalog = /^\/api\/orchestrator\/(schedules|notifications)(\/|$)/.exec(path);
       if (catalog) return catalogRoute(catalog[1], catalog[1] === 'schedules' ? schedules : notifications, path, method, init);
       if (path === '/api/orchestrator/scripts') return failure === 'pickers-unavailable' ? json({ error: 'Script unavailable.' }, 503)
+        : failure === 'catalog-only' ? json({ error: 'Server script browsing is disabled in this deployment mode.' }, 404)
         : json({ files: ['etl/daily_sales.etlsql', 'etl/hourly_orders.etlsql'] });
       if (path === '/api/orchestrator/bundles') return json([
         { bundleName: 'sales_bundle', version: 1, entryPath: 'main.etlsql' },

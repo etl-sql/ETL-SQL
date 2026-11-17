@@ -738,6 +738,12 @@
       <button class="btn-icon" id="closeCreateBtn" data-dialog-close title="Close">✕</button>
     </div>
     <div class="modal-body">
+      <div id="cj-mode-notice" class="orch-catalog-banner" style="display:none;margin-bottom:10px;">
+        <div>
+          <strong>CatalogOnly governance active</strong>
+          <div class="orch-link-meta">Raw server-filesystem scripts and inline script injection are disabled. Select a Studio catalog Pipeline, Report, or signed <code>orch://</code> bundle.</div>
+        </div>
+      </div>
       <div class="form-row">
         <div class="form-group" style="flex:1">
           <label for="cj-name">Job Identifier <span style="color:var(--portal-danger)">*</span></label>
@@ -759,6 +765,7 @@
           <label for="cj-target-kind">Target Type</label>
           <select id="cj-target-kind">
             <option value="Script" selected>Script File (.etlsql)</option>
+            <option value="Pipeline">Studio Catalog Pipeline (PIPELINE)</option>
             <option value="Bundle">Published Bundle (orch://)</option>
             <option value="Report">Report Refresh (REPORT)</option>
           </select>
@@ -821,6 +828,17 @@
       <div id="cj-report-target-row" class="form-group" style="display:none">
         <label for="cj-report-path">Report Target Path <span style="color:var(--portal-danger)">*</span></label>
         <input id="cj-report-path" type="text" placeholder="/Reports/Finance/DailySales">
+      </div>
+
+      <!-- Studio Catalog Pipeline Target Inputs -->
+      <div id="cj-pipeline-target-row" class="form-group" style="display:none">
+        <label for="cj-pipeline-select">Catalog Pipeline <span style="color:var(--portal-danger)">*</span></label>
+        <select id="cj-pipeline-select">
+          <option value="">— Select catalog pipeline —</option>
+        </select>
+        <p style="font-size:.78em;color:var(--portal-muted);margin:4px 0 0;">
+          Provisions the pipeline's governed run slot and grants EXECUTE to its owner without copying script text.
+        </p>
       </div>
 
       <div id="cj-preview-wrap" style="display:none" class="cj-preview-section">

@@ -112,7 +112,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| OR03 | **Enforce `CatalogOnly` / SaaS Portal-only authoring across Orchestrator and Report ingress.** When `Portal:Studio:Mode = CatalogOnly` (or external script ingress is disabled), disable raw server-filesystem script browsing (`/api/orchestrator/scripts`) and unreviewed inline script creation in `orchestrator.html` / `OrchestratorController.CreateJob` in favor of selecting a governed catalog `Pipeline` or signed `orch://` bundle; enforce `StudioCapabilities.ScriptIngress` on `ReportsController` script upload and mutation endpoints used by `PortalDataSource`. | — | M |
 | OR04 | **Retire direct SQLite file coupling (`OrchestratorDbLocator`) in Triage, Poller, and Subscriptions.** Route `OperationsTriageService`, `OrchestratorPollerService`, and `SubscriptionsController` through `OrchestratorProxyService` (or a shared remote store contract) instead of opening a local SQLite path via `OrchestratorDbLocator.Resolve()`, and synchronize or federate Portal's `SHARED:` connection catalog and `SECRET:` store with remote Orchestrator workers. | — | M |
 
 ### 2.7 MSI installer: services own their configuration

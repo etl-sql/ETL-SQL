@@ -1434,6 +1434,12 @@ interface OperationalMetrics {
     windowHours: number;
 }
 
+interface OrchestratorAuthoringModeDto {
+    studioMode: string;
+    externalScriptIngressEnabled: boolean;
+    canCreateInlineScriptJobs: boolean;
+}
+
 interface OrchestratorConnectionStatusDto {
     online: boolean;
     status?: unknown;

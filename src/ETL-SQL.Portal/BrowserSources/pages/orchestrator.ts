@@ -70,6 +70,7 @@ function mountOrchestratorPage(): void {
     // ── Jobs: list, actions, timeline, detail ──────────────────────────────────
     let catalogJobs: JobDefinition[] = [], visibleJobs: JobDefinition[] = [];
     let catalogPipelines: CatalogPipelineLinkDto[] = [];
+    let externalScriptIngressEnabled = true;
     const catalogPipelinesByJob = new Map<string, CatalogPipelineLinkDto>();
     const findJob = (name: string | null | undefined) =>
         visibleJobs.find(item => item.name === name) ?? catalogJobs.find(item => item.name === name) ?? null;
@@ -145,7 +146,8 @@ function mountOrchestratorPage(): void {
         },
         sessionExpired,
         findCatalogPipeline,
-        onPipelineProvisioned: async () => { await Promise.all([loadPipelineCatalog(), activity.refresh()]); }
+        onPipelineProvisioned: async () => { await Promise.all([loadPipelineCatalog(), activity.refresh()]); },
+        isExternalScriptIngressEnabled: () => externalScriptIngressEnabled
     });
     const timeline = createJobTimeline<JobDefinition>({ root: document, open: detail.open });
 
@@ -246,7 +248,26 @@ function mountOrchestratorPage(): void {
         void activity.refresh();
     }, { signal: lifetime.signal });
 
-    const createDialog = createJobDialog({ root: document, fetch: apiFetch, notify, sessionExpired, created: () => activity.refresh() });
+    async function loadAuthoringMode(): Promise<void> {
+        try {
+            const raw = await readJson('/api/orchestrator/authoring-mode', lifetime.signal);
+            if (lifetime.signal.aborted || !isObject(raw)) return;
+            if (typeof raw.externalScriptIngressEnabled === 'boolean') {
+                externalScriptIngressEnabled = raw.externalScriptIngressEnabled;
+            }
+        } catch {
+            // Keep default permissive mode only if authoring-mode endpoint is unavailable on an older backend.
+        }
+    }
+
+    const createDialog = createJobDialog({
+        root: document,
+        fetch: apiFetch,
+        notify,
+        sessionExpired,
+        created: async () => { await Promise.all([loadPipelineCatalog(), activity.refresh()]); },
+        isExternalScriptIngressEnabled: () => externalScriptIngressEnabled
+    });
     const unowned = createUnownedDialog({ root: document, fetch: apiFetch, notify, confirm: ask, sessionExpired,
         changed: async () => {
             await activity.refresh();
@@ -334,6 +355,8 @@ function mountOrchestratorPage(): void {
     // script and sends the author here; a name that matches nothing leaves the list as it is, since
     // the job may not have been run into existence yet.
     async function start() {
+        await loadAuthoringMode();
+        if (lifetime.signal.aborted) return;
         void activity.poll();
         void triage.reload();
         // Both catalogs load with the page so their navigation counts are read, not assumed to be zero.

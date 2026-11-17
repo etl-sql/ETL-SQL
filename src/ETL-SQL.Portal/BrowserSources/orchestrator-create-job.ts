@@ -21,6 +21,7 @@ export interface CreateJobOptions {
     sessionExpired(): void;
     /** Reloads the job list after a job was created. */
     created(name: string): Promise<void> | void;
+    isExternalScriptIngressEnabled?(): boolean;
 }
 
 export interface Choice { value: string; label: string }
@@ -82,6 +83,21 @@ export function readScriptChoices(value: unknown): Choice[] {
     if (!isObject(value) || !Array.isArray(value.files) || !value.files.every(file => typeof file === 'string' && file.length > 0))
         throw new TypeError('Invalid script list response.');
     return (value.files as string[]).map(file => ({ value: file, label: file }));
+}
+
+export function readPipelineChoices(value: unknown): Choice[] {
+    if (!Array.isArray(value)) throw new TypeError('Invalid catalog pipeline list response.');
+    const items: Choice[] = [];
+    for (const entry of value as unknown[]) {
+        if (!isObject(entry) || typeof entry.pipelineId !== 'number' || !Number.isSafeInteger(entry.pipelineId) || entry.pipelineId < 1
+            || typeof entry.name !== 'string' || typeof entry.folderPath !== 'string')
+            throw new TypeError('Invalid catalog pipeline list response.');
+        items.push({
+            value: String(entry.pipelineId),
+            label: `${entry.folderPath}/${entry.name} (PIPELINE:${entry.pipelineId})`
+        });
+    }
+    return items;
 }
 
 export function readBundleChoices(value: unknown): Choice[] {
@@ -276,20 +292,47 @@ export function createJobDialog(options: CreateJobOptions) {
         syncBundleUriFromPickers();
     }, { signal: lifetime.signal });
 
+    const scriptIngressEnabled = () => options.isExternalScriptIngressEnabled ? options.isExternalScriptIngressEnabled() : true;
+
+    function applyAuthoringPolicy() {
+        const allowScripts = scriptIngressEnabled();
+        const kindSelect = select('cj-target-kind');
+        const scriptOption = Array.from(kindSelect.options).find(option => option.value === 'Script') ?? null;
+        if (scriptOption) {
+            scriptOption.disabled = !allowScripts;
+            scriptOption.hidden = !allowScripts;
+        }
+        if (!allowScripts && kindSelect.value === 'Script') {
+            kindSelect.value = root.getElementById('cj-pipeline-select') ? 'Pipeline' : 'Bundle';
+        }
+        const modeNotice = root.getElementById('cj-mode-notice');
+        if (modeNotice instanceof HTMLElement) modeNotice.style.display = allowScripts ? 'none' : '';
+    }
+
     get('newJobBtn', HTMLButtonElement).addEventListener('click', async () => {
         const current = ++opening;
         reads?.abort();
         const scope = reads = new AbortController();
         reset();
+        applyAuthoringPolicy();
+        layout();
         error.textContent = '';
         save.disabled = saving;
         modal.style.display = 'flex';
-        const failures = await Promise.all([
-            fill(select('cj-script-select'), '— Select from server —', 'Server scripts', '/api/orchestrator/scripts', readScriptChoices, scope.signal),
+        const allowScripts = scriptIngressEnabled();
+        const pipelineSelect = root.getElementById('cj-pipeline-select');
+        const readsList: Promise<string | null>[] = [
+            allowScripts
+                ? fill(select('cj-script-select'), '— Select from server —', 'Server scripts', '/api/orchestrator/scripts', readScriptChoices, scope.signal)
+                : Promise.resolve(null),
             fill(select('cj-bundle-select'), '— Select published bundle —', 'Published bundles', '/api/orchestrator/bundles', readBundleChoices, scope.signal),
             fill(select('cj-shared-schedule-select'), '— Select shared schedule —', 'Shared schedules', '/api/orchestrator/schedules?limit=1000',
                 value => readSchedules(value).map(item => ({ value: item.name, label: `${item.displayName || item.name} (${item.cron})` })), scope.signal)
-        ]);
+        ];
+        if (pipelineSelect instanceof HTMLSelectElement) {
+            readsList.push(fill(pipelineSelect, '— Select catalog pipeline —', 'Catalog pipelines', '/api/orchestrator/pipelines/catalog', readPipelineChoices, scope.signal));
+        }
+        const failures = await Promise.all(readsList);
         if (lifetime.signal.aborted || current !== opening) return;
         // A typed path or bundle URI still works without its picker, so the dialog stays usable.
         const unavailable = failures.filter((failure): failure is string => failure !== null);
@@ -303,7 +346,12 @@ export function createJobDialog(options: CreateJobOptions) {
         box('cj-script-target-row').style.display = kind === 'Script' ? '' : 'none';
         box('cj-bundle-target-row').style.display = kind === 'Bundle' ? '' : 'none';
         box('cj-report-target-row').style.display = kind === 'Report' ? '' : 'none';
-        box('cj-inline-sched-wrap').style.display = shared ? 'none' : '';
+        const pipelineRow = root.getElementById('cj-pipeline-target-row');
+        if (pipelineRow instanceof HTMLElement) pipelineRow.style.display = kind === 'Pipeline' ? '' : 'none';
+        const isPipeline = kind === 'Pipeline';
+        input('cj-name').disabled = isPipeline;
+        input('cj-name').placeholder = isPipeline ? 'PIPELINE:<id> (catalog run slot)' : 'e.g. daily_sales_etl';
+        box('cj-inline-sched-wrap').style.display = shared || isPipeline ? 'none' : '';
         box('cj-shared-sched-wrap').style.display = shared ? '' : 'none';
     }
 
@@ -327,10 +375,54 @@ export function createJobDialog(options: CreateJobOptions) {
 
     save.addEventListener('click', async () => {
         if (saving || lifetime.signal.aborted) return;
-        const name = input('cj-name').value.trim();
         const kind = select('cj-target-kind').value;
-        const sandbox = select('cj-sandbox-profile').value;
         const shared = input('cj-sched-mode-shared').checked ? select('cj-shared-schedule-select').value : '';
+        if (input('cj-sched-mode-shared').checked && !shared) { error.textContent = 'Choose the shared schedule to attach.'; return; }
+
+        if (kind === 'Pipeline') {
+            const pipelineEl = root.getElementById('cj-pipeline-select');
+            const pipelineId = pipelineEl instanceof HTMLSelectElement ? Number(pipelineEl.value) : NaN;
+            if (!Number.isSafeInteger(pipelineId) || pipelineId < 1) {
+                error.textContent = 'Catalog pipeline is required.';
+                return;
+            }
+            const jobName = `PIPELINE:${pipelineId}`;
+            const current = opening;
+            saving = true; save.disabled = true; error.textContent = '';
+            try {
+                const resp = await options.fetch(`/api/orchestrator/pipelines/${encodeURIComponent(String(pipelineId))}/provision`,
+                    { method: 'POST', signal: lifetime.signal });
+                await requireMutationStatus(resp, 200);
+                if (lifetime.signal.aborted) return;
+                const result = await resp.json().catch(() => null) as ProvisionPipelineSlotResultDto | null;
+                let attachFailure = '';
+                if (shared) {
+                    try {
+                        await requireMutationStatus(await options.fetch(
+                            `/api/orchestrator/jobs/${encodeURIComponent(jobName)}/schedules/${encodeURIComponent(shared)}`,
+                            { method: 'POST', signal: lifetime.signal }), 200);
+                    } catch (failure) {
+                        attachFailure = asError(failure).message;
+                    }
+                    if (lifetime.signal.aborted) return;
+                }
+                if (current === opening) close();
+                if (attachFailure) options.notify(`Slot '${jobName}' provisioned, but schedule '${shared}' was not attached: ${attachFailure}`, true);
+                else options.notify(result?.message || `Provisioned '${jobName}'.`);
+                await options.created(jobName);
+            } catch (failure) {
+                if (lifetime.signal.aborted) return;
+                if (current === opening) error.textContent = asError(failure).message;
+                else options.notify(`Error: Slot '${jobName}' was not provisioned. ${asError(failure).message}`, true);
+            } finally {
+                saving = false;
+                if (!lifetime.signal.aborted) save.disabled = false;
+            }
+            return;
+        }
+
+        const name = input('cj-name').value.trim();
+        const sandbox = select('cj-sandbox-profile').value;
         if (!name) { error.textContent = 'Job identifier is required.'; return; }
 
         let targetPath: string;
@@ -352,12 +444,14 @@ export function createJobDialog(options: CreateJobOptions) {
             if (!targetPath) { error.textContent = 'Report target path is required.'; return; }
             jobType = 'REPORT';
         } else {
+            if (!scriptIngressEnabled()) {
+                error.textContent = 'Server script jobs are disabled in CatalogOnly mode. Choose a Catalog Pipeline, Report, or Bundle.';
+                return;
+            }
             targetPath = input('cj-script-path').value.trim() || select('cj-script-select').value;
             if (!targetPath) { error.textContent = 'Script path is required.'; return; }
             jobType = 'Script';
         }
-
-        if (input('cj-sched-mode-shared').checked && !shared) { error.textContent = 'Choose the shared schedule to attach.'; return; }
         const body = {
             name, displayName: input('cj-display-name').value.trim() || name, description: input('cj-description').value.trim() || null,
             jobType, targetPath,

@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
@@ -22,7 +23,8 @@ public class OrchestratorController(
     PortalDbContext? db = null,
     IArtifactStorage? artifacts = null,
     PortalConfig? portalConfig = null,
-    DatasetTenantScope? tenantScope = null) : ControllerBase
+    DatasetTenantScope? tenantScope = null,
+    StudioAuthorizationService? studioAuthorization = null) : ControllerBase
 {
     private static readonly JsonSerializerOptions CatalogJson = new(JsonSerializerDefaults.Web);
     /// <summary>Upper bound on one bulk re-run, so a mis-click cannot enqueue the whole estate.</summary>
@@ -66,9 +68,25 @@ public class OrchestratorController(
         return await RelayAsync(() => proxy.GetJobActivityAsync(filter, status, search, limit, offset, ct));
     }
 
+    [HttpGet("authoring-mode")]
+    public ActionResult<OrchestratorAuthoringModeDto> GetAuthoringMode()
+    {
+        var auth = ResolveStudioAuthorization();
+        var studioMode = auth?.Mode ?? StudioDeploymentMode.SourceControlled;
+        var canIngress = CanUseExternalScriptIngress(out _);
+        return Ok(new OrchestratorAuthoringModeDto(studioMode.ToString(), canIngress, canIngress));
+    }
+
     [HttpPost("jobs")]
     public async Task<IActionResult> CreateJob([FromBody] CreateJobRequest req)
     {
+        if (!CanUseExternalScriptIngress(out var blockedByMode)
+            && !IsAllowedCatalogOnlyCreateRequest(req))
+        {
+            return RejectExternalScriptIngress(
+                blockedByMode,
+                "Raw server scripts and unreviewed inline script jobs are disabled in this deployment mode. Create a job targeting a Studio catalog Pipeline, a catalog Report, or a published orch:// bundle.");
+        }
         using var resp = await proxy.CreateJobAsync(req);
         if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
         if (!resp.IsSuccessStatusCode)
@@ -90,6 +108,13 @@ public class OrchestratorController(
                 Code = "catalog_managed_script",
                 Error = $"Job '{unescaped}' is backed by a Studio catalog pipeline. Edit its script in Studio so catalog and Orchestrator scripts stay aligned."
             });
+        }
+        if (!CanUseExternalScriptIngress(out var blockedByMode)
+            && (req.ScriptText is not null || (req.TargetPath is not null && !IsPublishedBundleUri(req.TargetPath))))
+        {
+            return RejectExternalScriptIngress(
+                blockedByMode,
+                "Inline script edits and raw server script targets are disabled in this deployment mode. Use a Studio catalog Pipeline or published orch:// bundle.");
         }
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
@@ -587,6 +612,8 @@ public class OrchestratorController(
     [HttpGet("scripts")]
     public async Task<IActionResult> GetScripts()
     {
+        if (!CanUseExternalScriptIngress(out var blockedByMode))
+            return RejectExternalScriptIngress(blockedByMode, "Server script browsing is disabled in this deployment mode.");
         var scripts = await proxy.GetScriptsAsync();
         if (scripts == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
         return Ok(scripts);
@@ -595,6 +622,8 @@ public class OrchestratorController(
     [HttpGet("scripts/content")]
     public async Task<IActionResult> GetScriptContent([FromQuery] string path)
     {
+        if (!CanUseExternalScriptIngress(out var blockedByMode))
+            return RejectExternalScriptIngress(blockedByMode, "Server script reading is disabled in this deployment mode.");
         if (string.IsNullOrWhiteSpace(path)) return BadRequest(new { Error = "path is required." });
         var content = await proxy.GetScriptContentAsync(path);
         if (content == null) return StatusCode(503, new { Error = "Script unavailable." });
@@ -893,6 +922,43 @@ public class OrchestratorController(
             ownerPrincipalKey,
             message));
     }
+
+    private StudioAuthorizationService? ResolveStudioAuthorization() =>
+        studioAuthorization ?? HttpContext?.RequestServices.GetService<StudioAuthorizationService>();
+
+    private bool CanUseExternalScriptIngress(out bool blockedByDeploymentMode)
+    {
+        var auth = ResolveStudioAuthorization();
+        if (auth is null)
+        {
+            blockedByDeploymentMode = false;
+            return true;
+        }
+
+        blockedByDeploymentMode = auth.Mode != StudioDeploymentMode.SourceControlled;
+        if (blockedByDeploymentMode) return false;
+        return auth.HasCapability(User, StudioCapabilities.ScriptIngress);
+    }
+
+    private static bool IsPublishedBundleUri(string? targetPath) =>
+        !string.IsNullOrWhiteSpace(targetPath) && BundleUri.TryParse(targetPath, out _);
+
+    private static bool IsAllowedCatalogOnlyCreateRequest(CreateJobRequest req)
+    {
+        if (!string.IsNullOrWhiteSpace(req.ScriptText)) return false;
+        if (string.Equals(req.JobType, "REPORT", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(req.JobType, nameof(JobTargetKind.Report), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(req.JobType, "1", StringComparison.Ordinal))
+        {
+            return !string.IsNullOrWhiteSpace(req.TargetPath);
+        }
+        return IsPublishedBundleUri(req.TargetPath);
+    }
+
+    private IActionResult RejectExternalScriptIngress(bool blockedByMode, string message) =>
+        blockedByMode
+            ? NotFound(new { Code = "script_ingress_disabled", Error = message })
+            : StatusCode(StatusCodes.Status403Forbidden, new { Code = "script_ingress_forbidden", Error = message });
 
     private static bool IsCatalogPipelineSlot(string jobName) =>
         jobName.StartsWith("PIPELINE:", StringComparison.OrdinalIgnoreCase)
