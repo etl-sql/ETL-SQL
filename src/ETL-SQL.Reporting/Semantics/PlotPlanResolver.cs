@@ -339,23 +339,52 @@ public sealed class PlotPlanResolver
         if (spec.IsConnectedComposition)
             return spec.Layers.SelectMany(layer =>
             {
-                var color = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color && binding.SemanticKind is DataSemanticKind.Nominal or DataSemanticKind.Ordinal);
-                return color?.Field is { } field && columns.TryGetValue(field, out var column)
-                    ? column.Values.Select(CompositionSeriesKey)
-                    : layer.Mark == MarkKind.Rule ? [] : new[] { "layer:" + layer.Id };
+                var colorBinding = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color && binding.SemanticKind is DataSemanticKind.Nominal or DataSemanticKind.Ordinal);
+                if (colorBinding?.Field is { } field && columns.TryGetValue(field, out var column))
+                    return column.Values.Select(CompositionSeriesKey);
+                if (colorBinding?.SourceKind == BindingSourceKind.Datum && colorBinding.Constant is { } constant)
+                    return [CompositionSeriesKey(constant)];
+                return layer.Mark == MarkKind.Rule ? [] : new[] { "layer:" + layer.Id };
             }).Distinct(StringComparer.Ordinal).ToImmutableArray();
         if (spec.Coordinate.Kind == CoordinateKind.Polar && !spec.Layers.Any(layer => layer.Bindings.Any(binding => binding.Stack != StackMode.None)) && spec.Bindings.Any(binding => binding.Channel == FieldChannel.Theta)) return categories;
-        var color = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color);
-        if (color?.SemanticKind is not DataSemanticKind.Quantitative && color?.Field is { } colorField && columns.TryGetValue(colorField, out var colorColumn))
-            return colorColumn.Values.Select(ValueKey).Where(value => value is not null).Cast<string>().Distinct(StringComparer.Ordinal).ToImmutableArray();
 
-        var namedLayers = spec.Layers.Where(layer => layer.Mark is not MarkKind.Rule &&
-            !layer.Style.Any(token => token.Name == "overlayType") &&
-            layer.Style.Any(token => token.Name == "series"))
-            .Select(layer => layer.Style.First(token => token.Name == "series").Value)
-            .Distinct(StringComparer.Ordinal)
-            .ToImmutableArray();
-        if (!namedLayers.IsDefaultOrEmpty) return namedLayers;
+        var collected = new List<string>();
+        foreach (var layer in spec.Layers)
+        {
+            if (layer.Style.Any(token => token.Name == "overlayType")) continue;
+            var layerColor = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color);
+            if (layerColor is not null && layerColor.SemanticKind is not DataSemanticKind.Quantitative)
+            {
+                if (layerColor.Field is { } layerField && columns.TryGetValue(layerField, out var layerColumn))
+                {
+                    collected.AddRange(layerColumn.Values.Select(ValueKey).Where(value => value is not null).Cast<string>());
+                    continue;
+                }
+                if (layerColor.SourceKind == BindingSourceKind.Datum && layerColor.Constant is { } datumConstant && ValueKey(datumConstant) is { } datumKey)
+                {
+                    collected.Add(datumKey);
+                    continue;
+                }
+            }
+            if (layer.Mark is not MarkKind.Rule &&
+                layer.Style.FirstOrDefault(token => token.Name == "series") is { } seriesToken)
+            {
+                collected.Add(seriesToken.Value);
+            }
+        }
+        if (collected.Count > 0)
+            return collected.Distinct(StringComparer.Ordinal).ToImmutableArray();
+
+        foreach (var color in spec.Bindings.Where(binding => binding.Channel == FieldChannel.Color && binding.SemanticKind is not DataSemanticKind.Quantitative))
+        {
+            if (color.Field is { } colorField && columns.TryGetValue(colorField, out var colorColumn))
+                collected.AddRange(colorColumn.Values.Select(ValueKey).Where(value => value is not null).Cast<string>());
+            else if (color.SourceKind == BindingSourceKind.Datum && color.Constant is { } constant && ValueKey(constant) is { } constantKey)
+                collected.Add(constantKey);
+        }
+        if (collected.Count > 0)
+            return collected.Distinct(StringComparer.Ordinal).ToImmutableArray();
+
         var measure = spec.Bindings.FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Radius);
         return [measure?.Field ?? spec.Id];
     }
@@ -689,7 +718,12 @@ public sealed class PlotPlanResolver
             }
             else
             {
-                var seriesKey = spec.IsConnectedComposition ? layer.Mark == MarkKind.Rule ? null : "layer:" + layer.Id : explicitSeries ?? (spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Stack != StackMode.None) ? layer.Id : series.FirstOrDefault()?.Key);
+                var datumSeries = colorBinding?.SemanticKind is not DataSemanticKind.Quantitative &&
+                    colorBinding?.SourceKind == BindingSourceKind.Datum &&
+                    colorBinding.Constant is { } datumConstant
+                        ? ValueKey(datumConstant)
+                        : null;
+                var seriesKey = spec.IsConnectedComposition ? layer.Mark == MarkKind.Rule ? null : "layer:" + layer.Id : explicitSeries ?? datumSeries ?? (spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Stack != StackMode.None) ? layer.Id : series.FirstOrDefault()?.Key);
                 yield return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, seriesKey,
                     ResolveLayerData(layer, spec, data, columns, categories, formatter, _ => true))
                 {
@@ -953,6 +987,34 @@ public sealed class PlotPlanResolver
         if (!preserveRows && categoryBinding is not null && categoryBinding.SemanticKind != DataSemanticKind.Quantitative &&
             categoryBinding.Field is { } categoryField && columns.TryGetValue(categoryField, out var categoryColumn) && !categories.IsDefaultOrEmpty)
         {
+            var measureFields = layerBindings
+                .Where(b => b.SourceKind == BindingSourceKind.Field && b.Field is not null && columns.ContainsKey(b.Field) &&
+                    b.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd
+                        or FieldChannel.Radius or FieldChannel.Low or FieldChannel.High or FieldChannel.Open or FieldChannel.Close
+                        or FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh)
+                .Select(b => columns[b.Field!])
+                .Distinct()
+                .ToList();
+            if (measureFields.Count == 0)
+            {
+                measureFields = layerBindings
+                    .Where(b => b.SourceKind == BindingSourceKind.Field && b.Field is not null && columns.ContainsKey(b.Field) &&
+                        b.Channel == FieldChannel.Size)
+                    .Select(b => columns[b.Field!])
+                    .Distinct()
+                    .ToList();
+            }
+            bool HasMeasureValue(int rowIndex)
+            {
+                if (measureFields.Count == 0) return true;
+                for (var i = 0; i < measureFields.Count; i++)
+                {
+                    if (measureFields[i].Values[rowIndex].Kind != ChartValueKind.Null)
+                        return true;
+                }
+                return false;
+            }
+
             var facetBindings = layerBindings.Where(binding => binding.Channel is FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap)
                 .Where(binding => binding.Field is not null && columns.ContainsKey(binding.Field)).ToList();
             if (facetBindings.Count > 0)
@@ -970,7 +1032,10 @@ public sealed class PlotPlanResolver
                     var facetKey = FacetKey(facetColumns, index);
                     if (seenFacetKeys.Add(facetKey)) facetKeys.Add(facetKey);
                     if (ValueKey(categoryColumn.Values[index]) is not { } categoryKey) continue;
-                    firstRowByFacetCategory.TryAdd((facetKey, categoryKey), index);
+                    var key = (facetKey, categoryKey);
+                    if (!firstRowByFacetCategory.TryGetValue(key, out var existingIndex) ||
+                        (!HasMeasureValue(existingIndex) && HasMeasureValue(index)))
+                        firstRowByFacetCategory[key] = index;
                 }
                 foreach (var facetKey in facetKeys)
                     foreach (var category in categories)
@@ -984,7 +1049,11 @@ public sealed class PlotPlanResolver
             {
                 if (!include(index)) continue;
                 if (ValueKey(categoryColumn.Values[index]) is { } categoryKey)
-                    firstRowByCategory.TryAdd(categoryKey, index);
+                {
+                    if (!firstRowByCategory.TryGetValue(categoryKey, out var existingIndex) ||
+                        (!HasMeasureValue(existingIndex) && HasMeasureValue(index)))
+                        firstRowByCategory[categoryKey] = index;
+                }
             }
             for (var categoryIndex = 0; categoryIndex < categories.Length; categoryIndex++)
             {

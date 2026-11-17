@@ -1189,4 +1189,130 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
             Assert.Contains("2D Heatmap Grid", text);
         }
     }
+
+    [Fact]
+    public void ColorDatum_MultiLayer_PreservesDistinctPaletteColorsAndLegend()
+    {
+        const string sql = """
+            CREATE VISUAL ComboDatum AS CUSTOM (
+              SOURCE = #metrics,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (depts = BAND (CHANNEL = X)),
+                LAYERS (
+                  actual_bars = RECT (
+                    ENCODINGS (
+                      X = Dept (TYPE = NOMINAL, SCALE = depts),
+                      Y = Actual (TYPE = QUANTITATIVE),
+                      COLOR = DATUM('Actual') (TYPE = NOMINAL)
+                    )
+                  ),
+                  budget_line = LINE (
+                    ENCODINGS (
+                      X = Dept (TYPE = NOMINAL, SCALE = depts),
+                      Y = Budget (TYPE = QUANTITATIVE),
+                      COLOR = DATUM('Budget') (TYPE = NOMINAL)
+                    )
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var statement = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(statement));
+
+        var manifest = new VisualManifest
+        {
+            Name = "ComboDatum",
+            Columns = ["Dept", "Actual", "Budget"],
+            Rows = [["Eng", "100", "120"], ["Sales", "90", "85"]]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 600, 350));
+
+        Assert.Equal(2, plan.Series.Length);
+        Assert.Contains(plan.Legend, entry => entry.Label == "Actual");
+        Assert.Contains(plan.Legend, entry => entry.Label == "Budget");
+        var actualColor = Assert.Single(plan.Palette, p => p.SeriesKey == "Actual").Color;
+        var budgetColor = Assert.Single(plan.Palette, p => p.SeriesKey == "Budget").Color;
+        Assert.NotEqual(actualColor, budgetColor);
+        Assert.Equal("Actual", plan.Layers.Single(l => l.Id == "actual_bars").SeriesKey);
+        Assert.Equal("Budget", plan.Layers.Single(l => l.Id == "budget_line").SeriesKey);
+
+        var svg = new SvgChartRenderer().Render(plan);
+        Assert.Contains("Actual", svg);
+        Assert.Contains("Budget", svg);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MultiGrainDataset_SelectsNonNullCategoryRowPerLayer(bool faceted)
+    {
+        var sql = $$"""
+            CREATE VISUAL MultiGrain AS CUSTOM (
+              SOURCE = #combined,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (depts = BAND (CHANNEL = X)),
+                {{(faceted ? "FACET (WRAP = Region, COLUMNS = 2)," : "")}}
+                LAYERS (
+                  details = RECT (
+                    ENCODINGS (
+                      X = Dept (TYPE = NOMINAL, SCALE = depts),
+                      Y = DetailSpend (TYPE = QUANTITATIVE),
+                      COLOR = DATUM('Detail') (TYPE = NOMINAL)
+                    )
+                  ),
+                  targets = LINE (
+                    ENCODINGS (
+                      X = Dept (TYPE = NOMINAL, SCALE = depts),
+                      Y = SummaryBudget (TYPE = QUANTITATIVE),
+                      COLOR = DATUM('Budget') (TYPE = NOMINAL)
+                    )
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var statement = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(statement));
+
+        var manifest = new VisualManifest
+        {
+            Name = "MultiGrain",
+            Columns = ["Region", "Dept", "DetailSpend", "SummaryBudget"],
+            Rows =
+            [
+                ["West", "Eng", "100", null],
+                ["West", "Eng", null, "120"],
+                ["West", "Sales", null, "85"],
+                ["West", "Sales", "90", null],
+                ["West", "Ops", null, null]
+            ]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 600, 350));
+
+        var detailLayer = Assert.Single(plan.Layers, l => l.Id == "details");
+        var targetLayer = Assert.Single(plan.Layers, l => l.Id == "targets");
+
+        Assert.Equal(100m, detailLayer.Data.Single(d => d.Channels.Any(c => c.Channel == FieldChannel.X && c.Value.Text == "Eng"))
+            .Channels.Single(c => c.Channel == FieldChannel.Y).Value.Decimal);
+        Assert.Equal(90m, detailLayer.Data.Single(d => d.Channels.Any(c => c.Channel == FieldChannel.X && c.Value.Text == "Sales"))
+            .Channels.Single(c => c.Channel == FieldChannel.Y).Value.Decimal);
+        Assert.True(detailLayer.Data.Single(d => d.Channels.Any(c => c.Channel == FieldChannel.X && c.Value.Text == "Ops")).IsGap);
+
+        Assert.Equal(120m, targetLayer.Data.Single(d => d.Channels.Any(c => c.Channel == FieldChannel.X && c.Value.Text == "Eng"))
+            .Channels.Single(c => c.Channel == FieldChannel.Y).Value.Decimal);
+        Assert.Equal(85m, targetLayer.Data.Single(d => d.Channels.Any(c => c.Channel == FieldChannel.X && c.Value.Text == "Sales"))
+            .Channels.Single(c => c.Channel == FieldChannel.Y).Value.Decimal);
+        Assert.True(targetLayer.Data.Single(d => d.Channels.Any(c => c.Channel == FieldChannel.X && c.Value.Text == "Ops")).IsGap);
+    }
 }

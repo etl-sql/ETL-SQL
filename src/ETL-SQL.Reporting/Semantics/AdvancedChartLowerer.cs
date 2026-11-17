@@ -30,9 +30,24 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         var inference = InferScales(chart.Coordinate.Kind, layers);
         layers = inference.Layers;
         var inferredScales = inference.Scales;
-        var bindings = layers.SelectMany(layer => layer.Bindings)
-            .GroupBy(binding => binding.Channel)
-            .Select(group => group.First()).ToList();
+        var bindings = new List<FieldBinding>();
+        foreach (var binding in layers.SelectMany(layer => layer.Bindings))
+        {
+            if (binding.Channel == FieldChannel.Color && binding.SourceKind == BindingSourceKind.Datum)
+            {
+                if (!bindings.Any(existing =>
+                    existing.Channel == FieldChannel.Color &&
+                    existing.SourceKind == BindingSourceKind.Datum &&
+                    Equals(existing.Constant, binding.Constant)))
+                {
+                    bindings.Add(binding);
+                }
+            }
+            else if (bindings.All(existing => existing.Channel != binding.Channel))
+            {
+                bindings.Add(binding);
+            }
+        }
         if (chart.Facet?.RowField is { } row)
             bindings.Add(new FieldBinding(FieldChannel.Row, row, DataSemanticKind.Nominal));
         if (chart.Facet?.ColumnField is { } column)
