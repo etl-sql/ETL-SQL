@@ -532,9 +532,88 @@ namespace ETL_SQL.Tests.Orchestration
             // holding the busy tenant's backlog asks first.
             Assert.Null(await nodeA.TryActivateAsync("pg-fair-a3", "pg-node-a", 2, lease));
             Assert.NotNull(await nodeB.TryActivateAsync("pg-fair-b1", "pg-node-b", 2, lease));
+            Assert.Null(await nodeA.PeekEligibleAsync("pg-fair-share"));
             Assert.Equal(
                 "pg-fair-a3",
                 (await nodeA.PeekEligibleAsync("pg-fair-share")).EligibleAdmissionId);
+        }
+
+        [Fact]
+        public async Task BundleStore_IsIsolatedByTenant_AndReassignsDefaultRows_OnPostgres()
+        {
+            var store = NewStore();
+            await store.InitializeAsync();
+            ITenantBundleStore tenantStore = store;
+
+            var tenantA = TenantContext.FromVerifiedCredential("pg-tenant-a");
+            var tenantB = TenantContext.FromVerifiedCredential("pg-tenant-b");
+
+            var aV1 = await tenantStore.PublishBundleAsync(tenantA, new BundlePublishRequest(
+                "shared_pg_bundle",
+                "main.etlsql",
+                [new BundlePublishFile("main.etlsql", "SELECT 'a-1';", "sha256:pg-a1", 13, "application/etlsql")],
+                [new BundleDependencyInfo("shared_pg_bundle", 0, "main.etlsql", "lib/a.etlsql")],
+                "sha256:pg-a1",
+                "MACHINE",
+                null,
+                "alice",
+                null));
+
+            var bV1 = await tenantStore.PublishBundleAsync(tenantB, new BundlePublishRequest(
+                "shared_pg_bundle",
+                "main.etlsql",
+                [new BundlePublishFile("main.etlsql", "SELECT 'b-1';", "sha256:pg-b1", 13, "application/etlsql")],
+                [new BundleDependencyInfo("shared_pg_bundle", 0, "main.etlsql", "lib/b.etlsql")],
+                "sha256:pg-b1",
+                "MACHINE",
+                null,
+                "bob",
+                null));
+
+            Assert.Equal(1, aV1.Version);
+            Assert.Equal(1, bV1.Version);
+
+            await tenantStore.PublishBundleAsync(tenantA, new BundlePublishRequest(
+                "pg_alpha_only",
+                "main.etlsql",
+                [new BundlePublishFile("main.etlsql", "SELECT 'alpha';", "sha256:pg-ao", 15, "application/etlsql")],
+                [],
+                "sha256:pg-ao",
+                "MACHINE",
+                null,
+                "alice",
+                null));
+
+            var aFile = await tenantStore.GetFileAsync(tenantA, "shared_pg_bundle", 1, "main.etlsql");
+            var bFile = await tenantStore.GetFileAsync(tenantB, "shared_pg_bundle", 1, "main.etlsql");
+            Assert.Contains("a-1", aFile!.Content, StringComparison.Ordinal);
+            Assert.Contains("b-1", bFile!.Content, StringComparison.Ordinal);
+            Assert.Null(await tenantStore.GetLatestVersionAsync(tenantB, "pg_alpha_only"));
+            Assert.Single(await tenantStore.GetBundlesAsync(tenantB));
+
+            // Seed legacy 'default' bundle rows directly and verify FK-safe operator reassignment on PostgreSQL.
+            await using (var conn = new NpgsqlConnection(_pg.GetConnectionString()))
+            {
+                await conn.OpenAsync();
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    INSERT INTO bundle_versions (tenant_id, bundle_name, version, entry_path, content_hash, published_at)
+                    VALUES ('default', 'pg_legacy_bundle', 1, 'main.etlsql', 'sha256:leg', '2026-10-01T00:00:00Z');
+                    INSERT INTO bundle_files (tenant_id, bundle_name, version, virtual_path, content, content_hash, size_bytes, content_type)
+                    VALUES ('default', 'pg_legacy_bundle', 1, 'main.etlsql', 'SELECT 99;', 'sha256:leg', 10, 'application/etlsql');
+                    INSERT INTO bundle_dependencies (tenant_id, bundle_name, version, from_path, to_path)
+                    VALUES ('default', 'pg_legacy_bundle', 1, 'main.etlsql', 'lib/util.etlsql');";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            Assert.Null(await tenantStore.GetLatestVersionAsync(tenantA, "pg_legacy_bundle"));
+            Assert.Null(await tenantStore.GetLatestVersionAsync(tenantB, "pg_legacy_bundle"));
+
+            var reassigned = await tenantStore.ReassignDefaultBundlesAsync(tenantA, "pg_legacy_bundle");
+            Assert.Equal(1, reassigned);
+            Assert.NotNull(await tenantStore.GetFileAsync(tenantA, "pg_legacy_bundle", 1, "main.etlsql"));
+            Assert.Single(await tenantStore.GetDependenciesAsync(tenantA, "pg_legacy_bundle", 1));
+            Assert.Null(await tenantStore.GetLatestVersionAsync(tenantB, "pg_legacy_bundle"));
         }
     }
 }

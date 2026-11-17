@@ -12,6 +12,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Services;
 
 namespace ETL_SQL.Engine.Storage;
@@ -1035,9 +1036,14 @@ public sealed class HostMetricsDataSource : IDataSource
 public sealed class BundlesDataSource : IDataSource
 {
     private readonly IBundleStore? _store;
+    private readonly IExecutionContext? _context;
     private static readonly string[] Columns = ["bundle_name", "version", "entry_path", "content_hash", "published_at", "publisher", "description"];
 
-    public BundlesDataSource(IBundleStore? store) => _store = store;
+    public BundlesDataSource(IBundleStore? store, IExecutionContext? context = null)
+    {
+        _store = store;
+        _context = context;
+    }
 
     public string Path => "eng.bundles";
     public Dictionary<string, string>? Options => null;
@@ -1048,9 +1054,9 @@ public sealed class BundlesDataSource : IDataSource
     public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var rows = new List<Row>();
-        if (_store != null)
+        if (BundleStoreAccessor.HasStore(_store, _context))
         {
-            foreach (var bundle in await _store.GetBundlesAsync())
+            foreach (var bundle in await BundleStoreAccessor.GetBundlesAsync(_store, _context))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 AddBundleVersionRow(rows, bundle);
@@ -1093,13 +1099,19 @@ public sealed class BundleFilesDataSource : IDataSource
     private readonly IBundleStore? _store;
     private readonly string? _filterBundle;
     private readonly int? _filterVersion;
+    private readonly IExecutionContext? _context;
     private static readonly string[] Columns = ["bundle_name", "version", "virtual_path", "content_hash", "size_bytes", "content_type"];
 
-    public BundleFilesDataSource(IBundleStore? store, string? filterBundle = null, int? filterVersion = null)
+    public BundleFilesDataSource(
+        IBundleStore? store,
+        string? filterBundle = null,
+        int? filterVersion = null,
+        IExecutionContext? context = null)
     {
         _store = store;
         _filterBundle = filterBundle;
         _filterVersion = filterVersion;
+        _context = context;
     }
 
     public string Path => "eng.bundle_files";
@@ -1111,13 +1123,13 @@ public sealed class BundleFilesDataSource : IDataSource
     public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var rows = new List<Row>();
-        if (_store != null)
+        if (BundleStoreAccessor.HasStore(_store, _context))
         {
             if (_filterBundle != null)
             {
                 if (_filterVersion.HasValue)
                 {
-                    foreach (var file in await _store.GetFilesAsync(_filterBundle, _filterVersion.Value))
+                    foreach (var file in await BundleStoreAccessor.GetFilesAsync(_store, _context, _filterBundle, _filterVersion.Value))
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         rows.Add(new Row
@@ -1139,8 +1151,8 @@ public sealed class BundleFilesDataSource : IDataSource
                 }
                 else
                 {
-                    foreach (var version in await _store.GetVersionsAsync(_filterBundle))
-                        foreach (var file in await _store.GetFilesAsync(version.BundleName, version.Version))
+                    foreach (var version in await BundleStoreAccessor.GetVersionsAsync(_store, _context, _filterBundle))
+                        foreach (var file in await BundleStoreAccessor.GetFilesAsync(_store, _context, version.BundleName, version.Version))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                             rows.Add(new Row
@@ -1163,9 +1175,9 @@ public sealed class BundleFilesDataSource : IDataSource
             }
             else
             {
-                foreach (var bundle in await _store.GetBundlesAsync())
-                    foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
-                        foreach (var file in await _store.GetFilesAsync(version.BundleName, version.Version))
+                foreach (var bundle in await BundleStoreAccessor.GetBundlesAsync(_store, _context))
+                    foreach (var version in await BundleStoreAccessor.GetVersionsAsync(_store, _context, bundle.BundleName))
+                        foreach (var file in await BundleStoreAccessor.GetFilesAsync(_store, _context, version.BundleName, version.Version))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                             rows.Add(new Row
@@ -1204,13 +1216,19 @@ public sealed class BundleDependenciesDataSource : IDataSource
     private readonly IBundleStore? _store;
     private readonly string? _filterBundle;
     private readonly int? _filterVersion;
+    private readonly IExecutionContext? _context;
     private static readonly string[] Columns = ["bundle_name", "version", "from_path", "to_path"];
 
-    public BundleDependenciesDataSource(IBundleStore? store, string? filterBundle = null, int? filterVersion = null)
+    public BundleDependenciesDataSource(
+        IBundleStore? store,
+        string? filterBundle = null,
+        int? filterVersion = null,
+        IExecutionContext? context = null)
     {
         _store = store;
         _filterBundle = filterBundle;
         _filterVersion = filterVersion;
+        _context = context;
     }
 
     public string Path => "eng.bundle_dependencies";
@@ -1222,13 +1240,13 @@ public sealed class BundleDependenciesDataSource : IDataSource
     public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var rows = new List<Row>();
-        if (_store != null)
+        if (BundleStoreAccessor.HasStore(_store, _context))
         {
             if (_filterBundle != null)
             {
                 if (_filterVersion.HasValue)
                 {
-                    foreach (var dependency in await _store.GetDependenciesAsync(_filterBundle, _filterVersion.Value))
+                    foreach (var dependency in await BundleStoreAccessor.GetDependenciesAsync(_store, _context, _filterBundle, _filterVersion.Value))
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         rows.Add(new Row
@@ -1248,8 +1266,8 @@ public sealed class BundleDependenciesDataSource : IDataSource
                 }
                 else
                 {
-                    foreach (var version in await _store.GetVersionsAsync(_filterBundle))
-                        foreach (var dependency in await _store.GetDependenciesAsync(version.BundleName, version.Version))
+                    foreach (var version in await BundleStoreAccessor.GetVersionsAsync(_store, _context, _filterBundle))
+                        foreach (var dependency in await BundleStoreAccessor.GetDependenciesAsync(_store, _context, version.BundleName, version.Version))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                             rows.Add(new Row
@@ -1270,9 +1288,9 @@ public sealed class BundleDependenciesDataSource : IDataSource
             }
             else
             {
-                foreach (var bundle in await _store.GetBundlesAsync())
-                    foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
-                        foreach (var dependency in await _store.GetDependenciesAsync(version.BundleName, version.Version))
+                foreach (var bundle in await BundleStoreAccessor.GetBundlesAsync(_store, _context))
+                    foreach (var version in await BundleStoreAccessor.GetVersionsAsync(_store, _context, bundle.BundleName))
+                        foreach (var dependency in await BundleStoreAccessor.GetDependenciesAsync(_store, _context, version.BundleName, version.Version))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                             rows.Add(new Row

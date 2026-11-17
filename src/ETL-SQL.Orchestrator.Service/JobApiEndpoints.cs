@@ -346,7 +346,7 @@ namespace ETL_SQL.Orchestrator.Service
                         });
 
                     var targetPath = targetKind == JobTargetKind.Script
-                        ? await PinBundleTargetAsync(req.TargetPath, bundleStore)
+                        ? await PinBundleTargetAsync(req.TargetPath, bundleStore, ResolveBundleTenantOrNull(ctx, cfg))
                         : req.TargetPath;
                     var scriptText = targetKind == JobTargetKind.Script
                         ? new RunScriptStatement(
@@ -419,7 +419,7 @@ namespace ETL_SQL.Orchestrator.Service
                     if (!validUnits.Contains((req.Unit ?? "").ToUpperInvariant()))
                         return Results.BadRequest(new { Error = $"Unit must be one of: {string.Join(", ", validUnits)}" });
 
-                    var scriptText = await PinBundlePathsAsync(req.ScriptText, bundleStore);
+                    var scriptText = await PinBundlePathsAsync(req.ScriptText, bundleStore, ResolveBundleTenantOrNull(ctx, cfg));
                     job = new JobDefinition(
                         req.Name, scriptText, req.Interval.Value, (req.Unit ?? "HOUR").ToUpperInvariant(),
                         req.AtTime, null, null, true, req.MaxRetries ?? 0, req.RetryDelaySeconds ?? 30,
@@ -474,10 +474,11 @@ namespace ETL_SQL.Orchestrator.Service
                 if (!string.IsNullOrEmpty(req.AtTime) && !TimeSpan.TryParse(req.AtTime, CultureInfo.InvariantCulture, out _))
                     return Results.BadRequest(new { Error = "AtTime must be a time of day, such as 02:00." });
 
-                var pinnedScript = req.ScriptText != null ? await PinBundlePathsAsync(req.ScriptText, bundleStore) : null;
+                var bundleTenant = ResolveBundleTenantOrNull(ctx, cfg);
+                var pinnedScript = req.ScriptText != null ? await PinBundlePathsAsync(req.ScriptText, bundleStore, bundleTenant) : null;
                 var targetPath = req.TargetPath;
                 if (targetPath is not null && existing.JobType == JobTargetKind.Script)
-                    targetPath = await PinBundleTargetAsync(targetPath, bundleStore);
+                    targetPath = await PinBundleTargetAsync(targetPath, bundleStore, bundleTenant);
                 if (targetPath is not null && existing.JobType == JobTargetKind.Script)
                     pinnedScript = new RunScriptStatement(
                         new LiteralExpression(targetPath, TokenType.STRING_LITERAL),
@@ -2169,6 +2170,14 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (bundleTenant is not null)
+                {
+                    if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                    return Results.Ok(await tenantStore.GetBundlesAsync(bundleTenant));
+                }
                 return Results.Ok(await store.GetBundlesAsync());
             }).WithName("listBundles");
 
@@ -2177,6 +2186,8 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (BundlePublishDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (req.Bundle == null)
                     return Results.BadRequest(new { Error = "Bundle is required." });
                 if (string.IsNullOrWhiteSpace(req.Bundle.BundleName))
@@ -2187,16 +2198,78 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.BadRequest(new { Error = "At least one file is required." });
 
                 var reencrypted = BundlePublishSupport.ReEncryptRequest(req.Bundle, req.Password, SecurityService.GetMachineKey());
+                if (bundleTenant is not null)
+                {
+                    if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                    return Results.Ok(await tenantStore.PublishBundleAsync(bundleTenant, reencrypted));
+                }
                 var version = await store.PublishBundleAsync(reencrypted);
                 return Results.Ok(version);
             }).WithName("publishBundle");
+
+            app.MapGet("/api/bundles/unassigned", async (HttpContext ctx, IBundleStore store, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (BundlePublishDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (!TryResolveBundleTenant(ctx, cfg, out _))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                    return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                return Results.Ok(await tenantStore.GetUnassignedDefaultBundlesAsync(ctx.RequestAborted));
+            }).WithName("listUnassignedDefaultBundles");
+
+            app.MapPost("/api/bundles/reassign", async (HttpContext ctx, ReassignDefaultBundlesRequest? req,
+                IBundleStore store, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (BundlePublishDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (bundleTenant is null)
+                {
+                    return Results.BadRequest(new
+                    {
+                        Error = "A target tenant context (caller tenant claim or Orchestrator:TenantId) is required to reassign legacy bundles."
+                    });
+                }
+                if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                    return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+
+                try
+                {
+                    var reassigned = await tenantStore.ReassignDefaultBundlesAsync(
+                        bundleTenant,
+                        req?.BundleName,
+                        req?.IncludeUnbound ?? false,
+                        ctx.RequestAborted);
+                    return Results.Ok(new
+                    {
+                        TenantId = bundleTenant.Tenant.Value,
+                        ReassignedVersions = reassigned
+                    });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.Conflict(new { Error = ex.Message });
+                }
+            }).WithName("reassignDefaultBundles");
 
             app.MapGet("/api/bundles/{name}/versions", async (HttpContext ctx, string name,
                 IBundleStore store, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
-                return Results.Ok(await store.GetVersionsAsync(Uri.UnescapeDataString(name)));
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                var unescaped = Uri.UnescapeDataString(name);
+                if (bundleTenant is not null)
+                {
+                    if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                    return Results.Ok(await tenantStore.GetVersionsAsync(bundleTenant, unescaped));
+                }
+                return Results.Ok(await store.GetVersionsAsync(unescaped));
             }).WithName("listBundleVersions");
 
             app.MapGet("/api/bundles/{name}/versions/{version:int}", async (HttpContext ctx, string name, int version,
@@ -2204,7 +2277,20 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
-                var result = await store.GetVersionAsync(Uri.UnescapeDataString(name), version);
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                var unescaped = Uri.UnescapeDataString(name);
+                BundleVersionInfo? result;
+                if (bundleTenant is not null)
+                {
+                    if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                    result = await tenantStore.GetVersionAsync(bundleTenant, unescaped, version);
+                }
+                else
+                {
+                    result = await store.GetVersionAsync(unescaped, version);
+                }
                 return result == null ? Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." }) : Results.Ok(result);
             }).WithName("getBundleVersion");
 
@@ -2213,9 +2299,20 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
-                if (await store.GetVersionAsync(Uri.UnescapeDataString(name), version) == null)
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                var unescaped = Uri.UnescapeDataString(name);
+                if (bundleTenant is not null)
+                {
+                    if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                    if (await tenantStore.GetVersionAsync(bundleTenant, unescaped, version) == null)
+                        return Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." });
+                    return Results.Ok(await tenantStore.GetFilesAsync(bundleTenant, unescaped, version));
+                }
+                if (await store.GetVersionAsync(unescaped, version) == null)
                     return Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." });
-                return Results.Ok(await store.GetFilesAsync(Uri.UnescapeDataString(name), version));
+                return Results.Ok(await store.GetFilesAsync(unescaped, version));
             }).WithName("listBundleFiles");
 
             app.MapGet("/api/bundles/{name}/versions/{version:int}/dependencies", async (HttpContext ctx, string name, int version,
@@ -2223,9 +2320,20 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
-                if (await store.GetVersionAsync(Uri.UnescapeDataString(name), version) == null)
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                var unescaped = Uri.UnescapeDataString(name);
+                if (bundleTenant is not null)
+                {
+                    if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                    if (await tenantStore.GetVersionAsync(bundleTenant, unescaped, version) == null)
+                        return Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." });
+                    return Results.Ok(await tenantStore.GetDependenciesAsync(bundleTenant, unescaped, version));
+                }
+                if (await store.GetVersionAsync(unescaped, version) == null)
                     return Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." });
-                return Results.Ok(await store.GetDependenciesAsync(Uri.UnescapeDataString(name), version));
+                return Results.Ok(await store.GetDependenciesAsync(unescaped, version));
             }).WithName("listBundleDependencies");
 
             // ── Service management ────────────────────────────────────────────
@@ -2348,6 +2456,31 @@ namespace ETL_SQL.Orchestrator.Service
             tenantId = configured;
             return true;
         }
+
+        private static bool TryResolveBundleTenant(
+            HttpContext context,
+            IConfiguration configuration,
+            out TenantContext? tenant)
+        {
+            tenant = null;
+            if (!TryResolveRequestTenant(context, configuration, out var resolvedTenantId))
+                return false;
+
+            var callerTenant = RequestCaller(context).TenantId;
+            if (!string.IsNullOrWhiteSpace(callerTenant))
+                tenant = TenantContext.FromVerifiedCredential(callerTenant);
+            else if (!string.IsNullOrWhiteSpace(resolvedTenantId))
+                tenant = TenantContext.FromHostConfiguration(resolvedTenantId);
+            return true;
+        }
+
+        private static TenantContext? ResolveBundleTenantOrNull(
+            HttpContext context,
+            IConfiguration configuration) =>
+            TryResolveBundleTenant(context, configuration, out var tenant) ? tenant : null;
+
+        private static ITenantBundleStore? RequireTenantBundleStore(HttpContext ctx, IBundleStore store) =>
+            store as ITenantBundleStore ?? ctx.RequestServices.GetService<ITenantBundleStore>();
 
         private static bool TryResolveLineageTenant(
             HttpContext context,
@@ -2641,9 +2774,9 @@ namespace ETL_SQL.Orchestrator.Service
             caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
-        /// Publishing a bundle authors a catalog object, so it follows <see cref="OrchestratorObjectAuthorizationService.CanCreate"/>:
-        /// Admin or OrchestratorManager, within a manage scope ceiling. Reading takes any role and the
-        /// read ceiling. Bundles are not yet tenant-scoped (ROADMAP: Tenant-Scoped Orchestrator Bundle Store).
+        /// Publishing a bundle authors a tenant-scoped catalog object, so it follows
+        /// <see cref="OrchestratorObjectAuthorizationService.CanCreate"/>: Admin or OrchestratorManager,
+        /// within a manage scope ceiling. Reading takes any role and the read ceiling.
         /// </summary>
         private static bool BundlePublishDenied(HttpContext ctx, IConfiguration cfg) =>
             !OrchestratorAuthorizationMode.IsLegacy(cfg)
@@ -2889,7 +3022,10 @@ namespace ETL_SQL.Orchestrator.Service
             return _cachedScriptRoot!;
         }
 
-        private static async Task<string> PinBundlePathsAsync(string scriptText, IBundleStore store)
+        private static async Task<string> PinBundlePathsAsync(
+            string scriptText,
+            IBundleStore store,
+            TenantContext? tenant = null)
         {
             var parsed = new Parser(new Lexer(scriptText).Tokenize(), scriptText).Parse();
             if (parsed.Statements.Count != 1 || parsed.Statements[0] is not RunScriptStatement run)
@@ -2898,17 +3034,40 @@ namespace ETL_SQL.Orchestrator.Service
                 return scriptText;
             if (!BundleUri.TryParse(path, out var uri) || uri == null || uri.Version.HasValue)
                 return scriptText;
-            var latest = await store.GetLatestVersionAsync(uri.BundleName);
+            BundleVersionInfo? latest;
+            if (tenant is not null)
+            {
+                if (store is not ITenantBundleStore tenantStore)
+                    throw new InvalidOperationException("Tenant-bound bundle resolution requires ITenantBundleStore.");
+                latest = await tenantStore.GetLatestVersionAsync(tenant, uri.BundleName);
+            }
+            else
+            {
+                latest = await store.GetLatestVersionAsync(uri.BundleName);
+            }
             return latest == null
                 ? scriptText
                 : new RunScriptStatement(new LiteralExpression(uri.ToPinnedString(latest.Version), TokenType.STRING_LITERAL), run.Parameters).ToSql();
         }
 
-        private static async Task<string> PinBundleTargetAsync(string targetPath, IBundleStore store)
+        private static async Task<string> PinBundleTargetAsync(
+            string targetPath,
+            IBundleStore store,
+            TenantContext? tenant = null)
         {
             if (!BundleUri.TryParse(targetPath, out var uri) || uri == null || uri.Version.HasValue)
                 return targetPath;
-            var latest = await store.GetLatestVersionAsync(uri.BundleName);
+            BundleVersionInfo? latest;
+            if (tenant is not null)
+            {
+                if (store is not ITenantBundleStore tenantStore)
+                    throw new InvalidOperationException("Tenant-bound bundle resolution requires ITenantBundleStore.");
+                latest = await tenantStore.GetLatestVersionAsync(tenant, uri.BundleName);
+            }
+            else
+            {
+                latest = await store.GetLatestVersionAsync(uri.BundleName);
+            }
             return latest == null ? targetPath : uri.ToPinnedString(latest.Version);
         }
 
@@ -3331,6 +3490,11 @@ namespace ETL_SQL.Orchestrator.Service
             var name = value["SECRET:".Length..].Trim();
             return (await secrets.ResolveAsync(name, ct)).Value;
         }
+
+        private sealed record ReassignDefaultBundlesRequest(
+            string? BundleName = null,
+            bool IncludeUnbound = false
+        );
 
         private sealed record SetConnectionCatalogEntryRequest(
             string ConnectorType,

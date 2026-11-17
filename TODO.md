@@ -15,7 +15,7 @@ linked `ROADMAP.md` entry.
 | Tier | What is in it |
 | :--- | :--- |
 | [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Release follow-ups, merge gates, the script and test review, caller identity, local vault, `TRANSFORM` correctness, archives, database docs, the New Job bundle target |
-| [Tier 2 — next](#tier-2--next) | PR test lane, tenant bundle store, resource-control bypasses, overlay correctness, Orchestrator cohesion, MSI first slices, fast pre-push |
+| [Tier 2 — next](#tier-2--next) | PR test lane, resource-control bypasses, overlay correctness, Orchestrator cohesion, MSI first slices, fast pre-push |
 | [Tier 3 — if time allows](#tier-3--if-time-allows) | Spill framing and performance, reporting authoring parity and golden fixtures, Orchestrator console completion, remaining MSI slices, performance certification redesign |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -105,18 +105,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
 
 - [ ] **W7 Fast pre-push hook and local gate hygiene.** Overlaps RG03's docs-only skip; see the
   [Release Engineering entry](ROADMAP.md#release-engineering--routine-github-built-releases).
-
-### 2.2 Orchestrator bundles per tenant
-
-**Design:** [ROADMAP: Tenant-Scoped Orchestrator Bundle Store](ROADMAP.md#saas-isolation--tenant-scoped-orchestrator-bundle-store).
-
-- [ ] **TB01 Tenant-taking bundle store.** A store contract that takes the tenant (for example
-  `ITenantBundleStore(TenantContext)`); the SQLite and Postgres stores filter every query by tenant.
-- [ ] **TB02 Bundle handlers resolve through the caller's tenant.** Engine `PUBLISH` /
-  `RUN SCRIPT 'orch://…'`, the Service endpoints and the LanguageServer.
-- [ ] **TB03 Migrate `'default'` bundle rows.** Move them to their owning tenant, or leave them for
-  an operator to reassign. **Finish line (TB01–TB03):** a two-tenant test where tenant B can neither
-  read nor overwrite tenant A's bundle of the same name, on SQLite and Postgres.
 
 ### 2.3 Resource-control bypasses
 

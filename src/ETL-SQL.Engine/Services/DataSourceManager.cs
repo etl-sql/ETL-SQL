@@ -188,14 +188,14 @@ public class DataSourceManager(
                     var filterBundle = evalArgs.Count > 0 ? evalArgs[0] : null;
                     int? filterVersion = null;
                     if (evalArgs.Count > 1 && int.TryParse(evalArgs[1], out var v)) filterVersion = v;
-                    return new BundleFilesDataSource(_bundleStore, filterBundle, filterVersion);
+                    return new BundleFilesDataSource(_bundleStore, filterBundle, filterVersion, _evaluator);
                 }
                 if (funcName.Equals("bundle_dependencies", StringComparison.OrdinalIgnoreCase))
                 {
                     var filterBundle = evalArgs.Count > 0 ? evalArgs[0] : null;
                     int? filterVersion = null;
                     if (evalArgs.Count > 1 && int.TryParse(evalArgs[1], out var v)) filterVersion = v;
-                    return new BundleDependenciesDataSource(_bundleStore, filterBundle, filterVersion);
+                    return new BundleDependenciesDataSource(_bundleStore, filterBundle, filterVersion, _evaluator);
                 }
             }
 
@@ -342,15 +342,15 @@ public class DataSourceManager(
         }
         else if (IsEngineVirtualTable(table, "bundles"))
         {
-            return new BundlesDataSource(_bundleStore);
+            return new BundlesDataSource(_bundleStore, _evaluator);
         }
         else if (IsEngineVirtualTable(table, "bundle_files"))
         {
-            return new BundleFilesDataSource(_bundleStore);
+            return new BundleFilesDataSource(_bundleStore, context: _evaluator);
         }
         else if (IsEngineVirtualTable(table, "bundle_dependencies"))
         {
-            return new BundleDependenciesDataSource(_bundleStore);
+            return new BundleDependenciesDataSource(_bundleStore, context: _evaluator);
         }
         else if (IsEngineVirtualTable(table, "lineage"))
         {

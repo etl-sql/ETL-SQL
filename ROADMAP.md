@@ -1307,7 +1307,7 @@ must complete before the unified beginner experience can be accepted.
 
 ### SaaS Isolation — Tenant-Scoped Orchestrator Bundle Store
 
-**Status:** Planned (v0.23.0, tasks in `TODO.md`)
+**Status:** Implemented (v0.23.0: `TB01` `ITenantBundleStore` SQLite/Postgres filtering, `TB02` Engine/Service/LSP tenant routing and AST cache scoping, `TB03` `'default'` row migration & reassignment)
 **Horizon:** Next (v0.23.0)
 **Authoritative design:** [SaaS Tenant Isolation Architecture](docs/architecture/saas-tenant-isolation.md)
 

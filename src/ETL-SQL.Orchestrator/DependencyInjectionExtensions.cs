@@ -229,6 +229,7 @@ namespace ETL_SQL.Orchestrator
                     sp.GetRequiredService<IOrchestratorAuthorizationStore>(),
                     allowAnonymousWhenUnbound: true));
             services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
+            services.AddSingleton<ITenantBundleStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<ILineageCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<ITenantLineageCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<INodeRegistryStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());

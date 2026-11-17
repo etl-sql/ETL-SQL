@@ -23,7 +23,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// the same logic runs on SQLite (default) and PostgreSQL (Practical HA). The SQLite entry point is
     /// <see cref="SQLiteJobHistoryStore"/>.
     /// </summary>
-    public partial class RelationalJobHistoryStore : IJobHistoryStore, ITenantJobEvidenceStore, IJobScheduleQueryStore, IJobCatalogStore, IOrchestratorAuthorizationStore, IBundleStore, ILineageCatalogStore, ITenantLineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore, ISharedTenantLifecycleStore, ETL_SQL.Core.Portability.ITenantCutoverStateStore
+    public partial class RelationalJobHistoryStore : IJobHistoryStore, ITenantJobEvidenceStore, IJobScheduleQueryStore, IJobCatalogStore, IOrchestratorAuthorizationStore, IBundleStore, ITenantBundleStore, ILineageCatalogStore, ITenantLineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore, ISharedTenantLifecycleStore, ETL_SQL.Core.Portability.ITenantCutoverStateStore
     {
         private readonly IOrchestratorStoreDialect _dialect;
         private bool _initialized;
@@ -548,6 +548,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     await ExecuteOptionalSqlAsync(
                         connection,
                         "CREATE INDEX IF NOT EXISTS idx_hm_tenant_time ON host_metrics(node_tenant_id, captured_at);");
+                    await MigrateDefaultBundlesByJobOwnershipAsync(connection);
                 }
                 finally
                 {
@@ -2515,148 +2516,6 @@ namespace ETL_SQL.Orchestrator.Storage
             return results;
         }
 
-        public async Task<BundleVersionInfo> PublishBundleAsync(BundlePublishRequest request)
-        {
-            await EnsureInitializedAsync();
-            var latest = await GetLatestVersionAsync(request.BundleName);
-            if (latest != null && string.Equals(latest.ContentHash, request.ContentHash, StringComparison.OrdinalIgnoreCase))
-                return latest;
-
-            var nextVersion = (latest?.Version ?? 0) + 1;
-            var publishedAt = DateTime.Now;
-
-            using var connection = _dialect.CreateConnection();
-            await connection.OpenAsync();
-            using var transaction = connection.BeginTransaction();
-            try
-            {
-                using (var cmd = connection.CreateCommand())
-                {
-                    cmd.Transaction = transaction;
-                    cmd.CommandText = @"
-                        INSERT INTO bundle_versions
-                            (bundle_name, version, entry_path, content_hash, published_at, publisher, description, encryption_mode, encryption_metadata)
-                        VALUES
-                            (@bundle, @version, @entry, @hash, @published, @publisher, @description, @mode, @metadata);";
-                    cmd.AddParam("@bundle", request.BundleName);
-                    cmd.AddParam("@version", nextVersion);
-                    cmd.AddParam("@entry", NormalizeVirtualPath(request.EntryPath));
-                    cmd.AddParam("@hash", request.ContentHash);
-                    cmd.AddParam("@published", publishedAt.ToString("O"));
-                    cmd.AddParam("@publisher", (object?)request.Publisher ?? DBNull.Value);
-                    cmd.AddParam("@description", (object?)request.Description ?? DBNull.Value);
-                    cmd.AddParam("@mode", request.EncryptionMode);
-                    cmd.AddParam("@metadata", (object?)request.EncryptionMetadata ?? DBNull.Value);
-                    await cmd.ExecuteNonQueryAsync();
-                }
-
-                foreach (var file in request.Files)
-                {
-                    using var cmd = connection.CreateCommand();
-                    cmd.Transaction = transaction;
-                    cmd.CommandText = @"
-                        INSERT INTO bundle_files
-                            (bundle_name, version, virtual_path, content, content_hash, size_bytes, content_type)
-                        VALUES
-                            (@bundle, @version, @path, @content, @hash, @size, @type);";
-                    cmd.AddParam("@bundle", request.BundleName);
-                    cmd.AddParam("@version", nextVersion);
-                    cmd.AddParam("@path", NormalizeVirtualPath(file.VirtualPath));
-                    cmd.AddParam("@content", file.Content);
-                    cmd.AddParam("@hash", file.ContentHash);
-                    cmd.AddParam("@size", file.SizeBytes);
-                    cmd.AddParam("@type", file.ContentType);
-                    await cmd.ExecuteNonQueryAsync();
-                }
-
-                foreach (var dep in request.Dependencies)
-                {
-                    using var cmd = connection.CreateCommand();
-                    cmd.Transaction = transaction;
-                    cmd.CommandText = @"
-                        INSERT INTO bundle_dependencies
-                            (bundle_name, version, from_path, to_path)
-                        VALUES
-                            (@bundle, @version, @from, @to)
-                        ON CONFLICT DO NOTHING;";
-                    cmd.AddParam("@bundle", request.BundleName);
-                    cmd.AddParam("@version", nextVersion);
-                    cmd.AddParam("@from", NormalizeVirtualPath(dep.FromPath));
-                    cmd.AddParam("@to", NormalizeVirtualPath(dep.ToPath));
-                    await cmd.ExecuteNonQueryAsync();
-                }
-
-                using (var gcFiles = connection.CreateCommand())
-                {
-                    gcFiles.Transaction = transaction;
-                    gcFiles.CommandText = @"
-                        DELETE FROM bundle_files
-                        WHERE bundle_name = @bundle
-                          AND version NOT IN (
-                              SELECT version FROM bundle_versions
-                              WHERE bundle_name = @bundle
-                              ORDER BY version DESC
-                              LIMIT 5
-                          );";
-                    gcFiles.AddParam("@bundle", request.BundleName);
-                    await gcFiles.ExecuteNonQueryAsync();
-                }
-
-                using (var gcDeps = connection.CreateCommand())
-                {
-                    gcDeps.Transaction = transaction;
-                    gcDeps.CommandText = @"
-                        DELETE FROM bundle_dependencies
-                        WHERE bundle_name = @bundle
-                          AND version NOT IN (
-                              SELECT version FROM bundle_versions
-                              WHERE bundle_name = @bundle
-                              ORDER BY version DESC
-                              LIMIT 5
-                          );";
-                    gcDeps.AddParam("@bundle", request.BundleName);
-                    await gcDeps.ExecuteNonQueryAsync();
-                }
-
-                using (var gcVersions = connection.CreateCommand())
-                {
-                    gcVersions.Transaction = transaction;
-                    gcVersions.CommandText = @"
-                        DELETE FROM bundle_versions
-                        WHERE bundle_name = @bundle
-                          AND version NOT IN (
-                              SELECT version FROM bundle_versions
-                              WHERE bundle_name = @bundle
-                              ORDER BY version DESC
-                              LIMIT 5
-                          );";
-                    gcVersions.AddParam("@bundle", request.BundleName);
-                    await gcVersions.ExecuteNonQueryAsync();
-                }
-
-                await transaction.CommitAsync();
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                throw;
-            }
-
-            var versionInfo = new BundleVersionInfo(request.BundleName, nextVersion, NormalizeVirtualPath(request.EntryPath),
-                request.ContentHash, publishedAt, request.Publisher, request.Description);
-            var lineage = BuildBundleLineage(request, versionInfo);
-            if (lineage.Count > 0)
-            {
-                await SaveLineageAsync(
-                    lineage,
-                    $"bundle:{versionInfo.BundleName}@{versionInfo.Version}",
-                    $"orch://{versionInfo.BundleName}@{versionInfo.Version}/{versionInfo.EntryPath}",
-                    versionInfo.PublishedAt);
-            }
-
-            return versionInfo;
-        }
-
         private static IReadOnlyList<LineageEntry> BuildBundleLineage(BundlePublishRequest request, BundleVersionInfo version)
         {
             var entries = new List<LineageEntry>();
@@ -2697,119 +2556,13 @@ namespace ETL_SQL.Orchestrator.Storage
             || file.VirtualPath.EndsWith(".etlsql", StringComparison.OrdinalIgnoreCase)
             || file.VirtualPath.EndsWith(".rptsql", StringComparison.OrdinalIgnoreCase);
 
-        public async Task<BundleVersionInfo?> GetLatestVersionAsync(string bundleName)
-        {
-            await EnsureInitializedAsync();
-            using var connection = _dialect.CreateConnection();
-            await connection.OpenAsync();
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT bundle_name, version, entry_path, content_hash, published_at, publisher, description
-                                FROM bundle_versions WHERE bundle_name = @bundle COLLATE NOCASE
-                                ORDER BY version DESC LIMIT 1;";
-            cmd.AddParam("@bundle", bundleName);
-            using var reader = await cmd.ExecuteReaderAsync();
-            return await reader.ReadAsync() ? ReadBundleVersion(reader) : null;
-        }
-
-        public async Task<BundleVersionInfo?> GetVersionAsync(string bundleName, int version)
-        {
-            await EnsureInitializedAsync();
-            using var connection = _dialect.CreateConnection();
-            await connection.OpenAsync();
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT bundle_name, version, entry_path, content_hash, published_at, publisher, description
-                                FROM bundle_versions WHERE bundle_name = @bundle COLLATE NOCASE AND Version = @version LIMIT 1;";
-            cmd.AddParam("@bundle", bundleName);
-            cmd.AddParam("@version", version);
-            using var reader = await cmd.ExecuteReaderAsync();
-            return await reader.ReadAsync() ? ReadBundleVersion(reader) : null;
-        }
-
-        public async Task<BundleFileInfo?> GetFileAsync(string bundleName, int version, string virtualPath)
-        {
-            await EnsureInitializedAsync();
-            using var connection = _dialect.CreateConnection();
-            await connection.OpenAsync();
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT bundle_name, version, virtual_path, content, content_hash, size_bytes, content_type
-                                FROM bundle_files
-                                WHERE bundle_name = @bundle COLLATE NOCASE AND version = @version AND virtual_path = @path COLLATE NOCASE
-                                LIMIT 1;";
-            cmd.AddParam("@bundle", bundleName);
-            cmd.AddParam("@version", version);
-            cmd.AddParam("@path", NormalizeVirtualPath(virtualPath));
-            using var reader = await cmd.ExecuteReaderAsync();
-            return await reader.ReadAsync() ? ReadBundleFile(reader) : null;
-        }
-
-        public async Task<IEnumerable<BundleVersionInfo>> GetBundlesAsync()
-        {
-            await EnsureInitializedAsync();
-            using var connection = _dialect.CreateConnection();
-            await connection.OpenAsync();
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT bv.bundle_name, bv.version, bv.entry_path, bv.content_hash, bv.published_at, bv.publisher, bv.description
-                                FROM bundle_versions bv
-                                INNER JOIN (
-                                    SELECT bundle_name, MAX(version) AS Version FROM bundle_versions GROUP BY bundle_name
-                                ) latest ON latest.bundle_name = bv.bundle_name AND latest.Version = bv.version
-                                ORDER BY bv.bundle_name COLLATE NOCASE;";
-            return await ReadBundleVersionsAsync(cmd);
-        }
-
-        public async Task<IEnumerable<BundleVersionInfo>> GetVersionsAsync(string bundleName)
-        {
-            await EnsureInitializedAsync();
-            using var connection = _dialect.CreateConnection();
-            await connection.OpenAsync();
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT bundle_name, version, entry_path, content_hash, published_at, publisher, description
-                                FROM bundle_versions WHERE bundle_name = @bundle COLLATE NOCASE
-                                ORDER BY version DESC;";
-            cmd.AddParam("@bundle", bundleName);
-            return await ReadBundleVersionsAsync(cmd);
-        }
-
-        public async Task<IEnumerable<BundleFileInfo>> GetFilesAsync(string bundleName, int version)
-        {
-            await EnsureInitializedAsync();
-            using var connection = _dialect.CreateConnection();
-            await connection.OpenAsync();
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT bundle_name, version, virtual_path, content, content_hash, size_bytes, content_type
-                                FROM bundle_files WHERE bundle_name = @bundle COLLATE NOCASE AND version = @version
-                                ORDER BY virtual_path COLLATE NOCASE;";
-            cmd.AddParam("@bundle", bundleName);
-            cmd.AddParam("@version", version);
-            var files = new List<BundleFileInfo>();
-            using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync()) files.Add(ReadBundleFile(reader));
-            return files;
-        }
-
-        public async Task<IEnumerable<BundleDependencyInfo>> GetDependenciesAsync(string bundleName, int version)
-        {
-            await EnsureInitializedAsync();
-            using var connection = _dialect.CreateConnection();
-            await connection.OpenAsync();
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT bundle_name, version, from_path, to_path
-                                FROM bundle_dependencies WHERE bundle_name = @bundle COLLATE NOCASE AND version = @version
-                                ORDER BY from_path COLLATE NOCASE, to_path COLLATE NOCASE;";
-            cmd.AddParam("@bundle", bundleName);
-            cmd.AddParam("@version", version);
-            var deps = new List<BundleDependencyInfo>();
-            using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-                deps.Add(new BundleDependencyInfo(reader.GetString(0), reader.GetInt32(1), reader.GetString(2), reader.GetString(3)));
-            return deps;
-        }
-
-        private static async Task<IEnumerable<BundleVersionInfo>> ReadBundleVersionsAsync(DbCommand cmd)
+        private static async Task<IEnumerable<BundleVersionInfo>> ReadBundleVersionsAsync(
+            DbCommand cmd,
+            CancellationToken cancellationToken = default)
         {
             var versions = new List<BundleVersionInfo>();
-            using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync()) versions.Add(ReadBundleVersion(reader));
+            using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken)) versions.Add(ReadBundleVersion(reader));
             return versions;
         }
 

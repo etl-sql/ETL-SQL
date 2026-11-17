@@ -179,6 +179,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
             services.RemoveAll<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>();
             services.RemoveAll<ETL_SQL.Core.Data.IJobHistoryStore>();
             services.RemoveAll<ETL_SQL.Core.Data.IBundleStore>();
+            services.RemoveAll<ETL_SQL.Core.Data.ITenantBundleStore>();
             services.RemoveAll<ETL_SQL.Core.Data.ILineageCatalogStore>();
             services.RemoveAll<ETL_SQL.Core.Data.INodeRegistryStore>();
             services.RemoveAll<ETL_SQL.Core.Data.IWriteEpochStore>();
@@ -188,6 +189,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
             services.AddSingleton<ETL_SQL.Orchestrator.Storage.RelationalJobHistoryStore>(testStore);
             services.AddSingleton<ETL_SQL.Core.Data.IJobHistoryStore>(testStore);
             services.AddSingleton<ETL_SQL.Core.Data.IBundleStore>(testStore);
+            services.AddSingleton<ETL_SQL.Core.Data.ITenantBundleStore>(testStore);
             services.AddSingleton<ETL_SQL.Core.Data.ILineageCatalogStore>(testStore);
             services.AddSingleton<ETL_SQL.Core.Data.INodeRegistryStore>(testStore);
             services.AddSingleton<ETL_SQL.Core.Data.IWriteEpochStore>(testStore);
