@@ -79,6 +79,7 @@ public class SelectExecutionEngine
         bool hasGroupBy = stmt.GroupBy != null || stmt.GroupingSet != null;
         bool hasPreEvaluatedColumns = hasAggInColumns || hasWindowInColumns || hasGroupBy;
         bool distinctApplied = false;
+        bool orderApplied = false;
 
         _logger.Debug("[PIPELINE] Initializing Multi-Pass Engine Pipeline for {TableName}", fromName);
 
@@ -401,7 +402,17 @@ public class SelectExecutionEngine
                     : inputStream;
                 if (!whereApplied && stmt.WhereClause != null) whereApplied = true;
 
-                allRows = await TopNFromStream(src, stmt.OrderBy!, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns);
+                var topNResult = await TopNFromStream(src, stmt.OrderBy!, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns);
+                orderApplied = true;
+                if (topNResult.ExternalStream != null)
+                {
+                    externalEngineStream = topNResult.ExternalStream;
+                    allRows = [];
+                }
+                else
+                {
+                    allRows = topNResult.Rows!;
+                }
             }
             else
             {
@@ -650,7 +661,7 @@ public class SelectExecutionEngine
         }
 
         // 5. ORDER BY
-        if (stmt.OrderBy != null && stmt.OrderBy.Count > 0)
+        if (!orderApplied && stmt.OrderBy != null && stmt.OrderBy.Count > 0)
         {
             // Phase 7: If an external engine stream is pending and the query has a LIMIT/TOP,
             // run the TopN heap directly on the stream to avoid full materialization.
@@ -660,8 +671,17 @@ public class SelectExecutionEngine
             {
                 int limit = Convert.ToInt32(await _context.EvaluateValue(stmt.LimitCount ?? stmt.TopCount!, new Row()));
                 int topOffset = stmt.Offset != null ? Convert.ToInt32(await _context.EvaluateValue(stmt.Offset, new Row())) : 0;
-                allRows = await TopNFromStream(externalEngineStream, stmt.OrderBy, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns);
-                externalEngineStream = null;
+                var topNResult = await TopNFromStream(externalEngineStream, stmt.OrderBy, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns);
+                if (topNResult.ExternalStream != null)
+                {
+                    externalEngineStream = topNResult.ExternalStream;
+                    allRows = [];
+                }
+                else
+                {
+                    allRows = topNResult.Rows!;
+                    externalEngineStream = null;
+                }
             }
             else if (externalEngineStream != null)
             {
@@ -1095,12 +1115,16 @@ public class SelectExecutionEngine
         return rowSortKeys.Select(x => x.Row).ToList();
     }
 
+    private const long TopNHeapEntryOverheadBytes = 64L;
+
+    private readonly record struct TopNResult(List<Row>? Rows, IAsyncEnumerable<Row>? ExternalStream);
+
     /// <summary>
-    /// Streams <paramref name="source"/> through a min-heap of size (limit+offset),
-    /// returning up to (limit+offset) rows in final output order. O(n log(limit+offset)) time
-    /// and O(limit+offset) space — compared to O(n log n) / O(n) for a full sort.
+    /// Streams <paramref name="source"/> through a byte-bounded min-heap of up to (limit+offset)
+    /// rows, returning them in final output order or transitioning to bounded external sorting
+    /// without losing retained or unread rows when the byte grant is exceeded.
     /// </summary>
-    private async Task<List<Row>> TopNFromStream(
+    private async Task<TopNResult> TopNFromStream(
         IAsyncEnumerable<Row> source,
         List<OrderByClause> orderBy,
         List<string> colNames,
@@ -1109,14 +1133,22 @@ public class SelectExecutionEngine
         int offset,
         bool hasPreEvaluatedColumns)
     {
-        int keep = Math.Max(0, checked(offset + limit));
-        if (keep == 0) return new List<Row>();
+        if (offset < 0)
+            throw new ExecutionException("OFFSET must be a non-negative integer.");
+
+        long keepLong = Math.Max(0L, (long)offset + Math.Max(0, limit));
+        if (limit <= 0 || keepLong == 0)
+            return new TopNResult([], null);
+
+        var extractor = BuildSortKeyExtractor(orderBy, colNames, finalColumns, hasPreEvaluatedColumns);
+        long operatorCeiling = MemoryGovernor.Ceiling(_context);
+        long retainedBytes = 0;
 
         // The heap is a MAX-heap over the output order (heap top = worst kept row).
         // PriorityQueue is a min-heap, so we invert the output compare.
         // heap.Peek() returns the row that would appear LAST among the kept rows.
-        var heap = new PriorityQueue<(Row Row, object?[] Keys), (Row Row, object?[] Keys)>(
-            Comparer<(Row Row, object?[] Keys)>.Create((a, b) =>
+        var heap = new PriorityQueue<(Row Row, object?[] Keys, long EntryBytes), (Row Row, object?[] Keys, long EntryBytes)>(
+            Comparer<(Row Row, object?[] Keys, long EntryBytes)>.Create((a, b) =>
             {
                 for (int i = 0; i < orderBy.Count; i++)
                 {
@@ -1125,36 +1157,130 @@ public class SelectExecutionEngine
                 }
                 return 0;
             }));
-        var extractor = BuildSortKeyExtractor(orderBy, colNames, finalColumns, hasPreEvaluatedColumns);
 
-        await foreach (var row in source)
+        using var topNLease = _context.MemoryArbiter.AcquireLease();
+        var enumerator = source.GetAsyncEnumerator(_context.CancellationToken);
+        bool enumeratorHandedOff = false;
+        try
         {
-            var keys = await extractor.ExtractAsync(row);
-            var entry = (row, keys);
+            while (await enumerator.MoveNextAsync())
+            {
+                _context.CancellationToken.ThrowIfCancellationRequested();
+                var row = enumerator.Current;
+                var keys = await extractor.ExtractAsync(row);
+                long entryBytes = checked(row.EstimateHeapBytes() + RowMemory.EstimateValuesBytes(keys) + TopNHeapEntryOverheadBytes);
+                var entry = (row, keys, entryBytes);
 
-            if (heap.Count < keep)
-            {
-                heap.Enqueue(entry, entry);
-            }
-            else
-            {
-                var peekKeys = heap.Peek().Keys;
-                // Check whether the new row is better (appears earlier) than the worst kept.
-                bool better = false;
-                for (int i = 0; i < orderBy.Count; i++)
+                if (heap.Count < keepLong)
                 {
-                    var res = orderBy[i].OutputOrder(_context.CompareConstants(keys[i], peekKeys[i]), keys[i], peekKeys[i]);
-                    if (res != 0) { better = res < 0; break; }
+                    long prospective = checked(retainedBytes + entryBytes);
+                    if (ExceedsTopNBudget(prospective, operatorCeiling, topNLease))
+                    {
+                        var externalStream = SpillTopNToExternalSort(
+                            heap, row, enumerator, orderBy, extractor, operatorCeiling, prospective, topNLease);
+                        enumeratorHandedOff = true;
+                        return new TopNResult(null, externalStream);
+                    }
+
+                    heap.Enqueue(entry, entry);
+                    retainedBytes = prospective;
                 }
-                if (better) heap.DequeueEnqueue(entry, entry);
+                else
+                {
+                    var peek = heap.Peek();
+                    if (IsBetterThanPeek(keys, peek.Keys, orderBy))
+                    {
+                        long prospective = checked(retainedBytes - peek.EntryBytes + entryBytes);
+                        if (prospective > retainedBytes && ExceedsTopNBudget(prospective, operatorCeiling, topNLease))
+                        {
+                            var externalStream = SpillTopNToExternalSort(
+                                heap, row, enumerator, orderBy, extractor, operatorCeiling, prospective, topNLease);
+                            enumeratorHandedOff = true;
+                            return new TopNResult(null, externalStream);
+                        }
+
+                        heap.DequeueEnqueue(entry, entry);
+                        retainedBytes = prospective;
+                    }
+                }
             }
+        }
+        finally
+        {
+            if (!enumeratorHandedOff)
+                await enumerator.DisposeAsync();
         }
 
         // Drain in inverted output order (worst-first), then reverse to get correct order.
         var sorted = new List<Row>(heap.Count);
         while (heap.Count > 0) sorted.Add(heap.Dequeue().Row);
         sorted.Reverse();
-        return sorted;
+
+        topNLease.Dispose();
+        if (retainedBytes > 0)
+            _ = _memLease.RegisterAndCheckSpill(retainedBytes);
+
+        return new TopNResult(sorted, null);
+    }
+
+    private static bool ExceedsTopNBudget(long prospectiveBytes, long operatorCeiling, IMemoryGrantLease lease) =>
+        (operatorCeiling > 0 && prospectiveBytes > operatorCeiling) || lease.RegisterAndCheckSpill(prospectiveBytes);
+
+    private bool IsBetterThanPeek(object?[] keys, object?[] peekKeys, List<OrderByClause> orderBy)
+    {
+        for (int i = 0; i < orderBy.Count; i++)
+        {
+            var res = orderBy[i].OutputOrder(_context.CompareConstants(keys[i], peekKeys[i]), keys[i], peekKeys[i]);
+            if (res != 0) return res < 0;
+        }
+        return false;
+    }
+
+    private IAsyncEnumerable<Row> SpillTopNToExternalSort(
+        PriorityQueue<(Row Row, object?[] Keys, long EntryBytes), (Row Row, object?[] Keys, long EntryBytes)> heap,
+        Row triggeringRow,
+        IAsyncEnumerator<Row> enumerator,
+        List<OrderByClause> orderBy,
+        SortKeyExtractor extractor,
+        long operatorCeiling,
+        long prospectiveBytes,
+        IMemoryGrantLease topNLease)
+    {
+        var retainedPrefix = new List<Row>(heap.Count + 1);
+        while (heap.Count > 0)
+            retainedPrefix.Add(heap.Dequeue().Row);
+        retainedPrefix.Add(triggeringRow);
+
+        topNLease.Dispose();
+
+        RecordRowPipelineDecision("select.topn", PlanDecisionOutcome.Degraded,
+            "Top-N retained footprint exceeded memory budget; transitioning to external sort.",
+            PlanDecisionReasonCodes.MemoryAdmissionRejected,
+            ("executionMode", "external-streaming"),
+            ("stage", "top-n"),
+            ("retainedRows", retainedPrefix.Count.ToString()),
+            ("prospectiveBytes", prospectiveBytes.ToString()),
+            ("memoryCeilingBytes", operatorCeiling.ToString()),
+            ("fallbackDestination", "ExternalSort"));
+
+        var combined = PrependAndDispose(retainedPrefix, enumerator);
+        var externalSort = new ExternalSortEngine(_context, _logger);
+        return externalSort.SortStreamAsync(combined, orderBy, extractor.ExtractAsync);
+    }
+
+    private static async IAsyncEnumerable<Row> PrependAndDispose(
+        List<Row> buffered,
+        IAsyncEnumerator<Row> remaining)
+    {
+        try
+        {
+            foreach (var r in buffered) yield return r;
+            while (await remaining.MoveNextAsync()) yield return remaining.Current;
+        }
+        finally
+        {
+            await remaining.DisposeAsync();
+        }
     }
 
     /// <summary>

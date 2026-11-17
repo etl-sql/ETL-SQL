@@ -73,7 +73,8 @@ public class ExternalSortEngine
     /// </summary>
     public async IAsyncEnumerable<Row> SortStreamAsync(
         IAsyncEnumerable<Row> inputStream,
-        List<OrderByClause> orderBy)
+        List<OrderByClause> orderBy,
+        Func<Row, Task<object?[]>>? extractKeysAsync = null)
     {
         PlanDecisionRecorder.Record(_context, "external-sort", "ExternalSort",
             PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
@@ -82,6 +83,8 @@ public class ExternalSortEngine
             ("memoryCeilingBytes", MemoryGovernor.Ceiling(_context).ToString()));
 
         using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
+        var arbiter = _context.MemoryArbiter ?? MemoryGrantArbiter.Shared;
+        var chunkLease = arbiter.AcquireLease();
         var chunkPaths = new List<string>();
 
         // Every spill file ever created (initial chunks + intermediate merge runs) so the
@@ -113,17 +116,20 @@ public class ExternalSortEngine
             var memGuard = new MemoryBudgetGuard(MemoryGovernor.Ceiling(_context));
             await foreach (var row in inputStream)
             {
+                _context.CancellationToken.ThrowIfCancellationRequested();
                 var keys = new object?[orderBy.Count];
+                var extracted = extractKeysAsync != null ? await extractKeysAsync(row) : null;
                 for (int i = 0; i < orderBy.Count; i++)
                 {
-                    var val = await _context.EvaluateValue(orderBy[i].Expression, row);
+                    var val = extracted != null ? extracted[i] : await _context.EvaluateValue(orderBy[i].Expression, row);
                     keys[i] = CompoundKey.NormalizeValue(val);
                 }
 
                 currentChunk.Add((row, keys));
                 memGuard.Add(row.EstimateHeapBytes() + RowMemory.EstimateValuesBytes(keys));
+                bool spillForArbiter = currentChunk.Count > 0 && chunkLease.RegisterAndCheckSpill(memGuard.BytesAccumulated);
 
-                if (currentChunk.Count >= ChunkSize || (currentChunk.Count > 0 && memGuard.Exceeded()))
+                if (currentChunk.Count >= ChunkSize || (currentChunk.Count > 0 && (memGuard.Exceeded() || spillForArbiter)))
                 {
                     currentChunk.Sort(Compare);
                     var chunkName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
@@ -134,6 +140,8 @@ public class ExternalSortEngine
                     _context.Telemetry.PartitionsCount++;
                     currentChunk.Clear();
                     memGuard.Reset();
+                    chunkLease.Dispose();
+                    chunkLease = arbiter.AcquireLease();
                 }
             }
 
@@ -143,7 +151,10 @@ public class ExternalSortEngine
                 if (chunkPaths.Count == 0)
                 {
                     foreach (var entry in currentChunk)
+                    {
+                        _context.CancellationToken.ThrowIfCancellationRequested();
                         yield return entry.Row;
+                    }
 
                     yield break;
                 }
@@ -155,7 +166,10 @@ public class ExternalSortEngine
                 await SpillChunkAsync(chunkName, currentChunk, keyColumnNames);
                 _context.Telemetry.SortSpillCount++;
                 _context.Telemetry.PartitionsCount++;
+                currentChunk.Clear();
             }
+
+            chunkLease.Dispose();
 
             // 3. Bounded multi-pass k-way merge.
             if (chunkPaths.Count == 0) yield break;
@@ -202,6 +216,7 @@ public class ExternalSortEngine
         }
         finally
         {
+            chunkLease.Dispose();
             foreach (var path in cleanup)
             {
                 try
