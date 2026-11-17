@@ -491,4 +491,196 @@ public class OrchestratorDataSourceConnectionCatalogTests
             CancellationToken cancellationToken) =>
             Task.FromResult(responder(request));
     }
+
+    [Fact]
+    public async Task Or08StatementParity_RoutesRestEndpointsCorrectly()
+    {
+        var requests = new List<(HttpMethod Method, string Path, string? Query, string? IfMatch, string Body)>();
+        var handler = new RecordingHandler(request =>
+        {
+            var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? "";
+            var ifMatch = request.Headers.TryGetValues("If-Match", out var vals) ? vals.FirstOrDefault() : null;
+            var path = request.RequestUri?.AbsolutePath ?? "";
+            var query = request.RequestUri?.Query;
+            requests.Add((request.Method, path, query, ifMatch, body));
+
+            if (request.Method == HttpMethod.Get && path == "/api/scheduled-jobs")
+            {
+                return JsonResponse("""
+                [
+                  {"name":"nightly","script":"SELECT 1;","interval":1,"unit":"HOUR","isEnabled":true,"version":7}
+                ]
+                """);
+            }
+            if (request.Method == HttpMethod.Get && path == "/api/scheduled-jobs/nightly/state")
+            {
+                return JsonResponse("""
+                [
+                  {"jobName":"nightly","stateKey":"watermark","stateValue":"2026-11-17","updatedAt":"2026-11-17T00:00:00Z"}
+                ]
+                """);
+            }
+            if (request.Method == HttpMethod.Post && path == "/api/notifications")
+            {
+                // Simulate first call conflict so CREATE OR REPLACE falls back to PUT.
+                return requests.Count(r => r.Method == HttpMethod.Post && r.Path == "/api/notifications") == 1
+                    ? new HttpResponseMessage(HttpStatusCode.Conflict)
+                    : JsonResponse("""{"name":"ops_alert"}""");
+            }
+            if (request.Method == HttpMethod.Delete && path == "/api/schedules/missing_sched")
+                return new HttpResponseMessage(HttpStatusCode.NotFound);
+
+            return JsonResponse("{}");
+        });
+
+        await using var source = new OrchestratorDataSource(
+            new HttpClient(handler) { BaseAddress = new Uri("http://orchestrator.test/") },
+            "key",
+            NullLogger.Instance);
+        var context = new LiteralEvalContext();
+
+        await source.ExecuteAdminStatementAsync(new CreateNotificationStatement
+        {
+            Name = "ops_alert",
+            ConnectionName = "smtp_main",
+            Recipient = "oncall@example.test",
+            Mode = ObjectCreationMode.CreateOrReplace
+        }, context);
+        await source.ExecuteAdminStatementAsync(new AlterCatalogObjectStatement
+        {
+            Kind = CatalogObjectKind.Notification,
+            Name = "ops_alert",
+            Recipient = "tier2@example.test"
+        }, context);
+        await source.ExecuteAdminStatementAsync(new SetCatalogObjectEnabledStatement
+        {
+            Kind = CatalogObjectKind.Notification,
+            Name = "ops_alert",
+            IsEnabled = false
+        }, context);
+        await source.ExecuteAdminStatementAsync(new AlterJobAttachmentStatement
+        {
+            Action = JobAttachmentAction.Add,
+            Kind = CatalogObjectKind.Notification,
+            JobName = "nightly",
+            TargetName = "ops_alert",
+            Trigger = "FAILURE"
+        }, context);
+        await source.ExecuteAdminStatementAsync(new AlterJobAttachmentStatement
+        {
+            Action = JobAttachmentAction.Remove,
+            Kind = CatalogObjectKind.Notification,
+            JobName = "nightly",
+            TargetName = "ops_alert",
+            Trigger = "FAILURE"
+        }, context);
+        await source.ExecuteAdminStatementAsync(new AlterCatalogObjectStatement
+        {
+            Kind = CatalogObjectKind.Schedule,
+            Name = "daily_2am",
+            Cron = "0 2 * * *",
+            TimeZone = "UTC"
+        }, context);
+        await source.ExecuteAdminStatementAsync(new SetCatalogObjectEnabledStatement
+        {
+            Kind = CatalogObjectKind.Schedule,
+            Name = "daily_2am",
+            IsEnabled = true
+        }, context);
+        await source.ExecuteAdminStatementAsync(new DropCatalogObjectStatement
+        {
+            Kind = CatalogObjectKind.Schedule,
+            Name = "missing_sched",
+            IfExists = true
+        }, context);
+        await source.ExecuteAdminStatementAsync(new DropCatalogObjectStatement
+        {
+            Kind = CatalogObjectKind.Notification,
+            Name = "ops_alert",
+            IfExists = false
+        }, context);
+        await source.ExecuteAdminStatementAsync(new KillJobStatement(new LiteralExpression(42m, TokenType.NUMBER)), context);
+        await source.ExecuteAdminStatementAsync(new KillJobStatement(new IdentifierExpression("nightly")), context);
+        await source.ExecuteAdminStatementAsync(new ShowJobStateStatement(), context);
+        Assert.Equal("watermark", Assert.Single(context.LastResult!.Rows)["StateKey"]?.ToString());
+
+        await source.ExecuteAdminStatementAsync(new DropJobStatement("missing_job", IfExists: true), context);
+        await source.ExecuteAdminStatementAsync(new DropJobStatement("nightly", IfExists: false), context);
+
+        Assert.Contains(requests, r => r.Method == HttpMethod.Put && r.Path == "/api/notifications/ops_alert");
+        Assert.Contains(requests, r => r.Method == HttpMethod.Put && r.Path == "/api/schedules/daily_2am");
+        Assert.Contains(requests, r => r.Method == HttpMethod.Post && r.Path == "/api/scheduled-jobs/nightly/notifications/ops_alert" && r.Body.Contains("FAILURE"));
+        Assert.Contains(requests, r => r.Method == HttpMethod.Delete && r.Path == "/api/scheduled-jobs/nightly/notifications/ops_alert" && r.Query == "?trigger=FAILURE");
+        Assert.Contains(requests, r => r.Method == HttpMethod.Delete && r.Path == "/api/notifications/ops_alert");
+        Assert.Contains(requests, r => r.Method == HttpMethod.Post && r.Path == "/api/job-runs/42/cancel");
+        Assert.Contains(requests, r => r.Method == HttpMethod.Post && r.Path == "/api/scheduled-jobs/nightly/kill");
+        Assert.Contains(requests, r => r.Method == HttpMethod.Delete && r.Path == "/api/scheduled-jobs/nightly" && r.IfMatch == "\"7\"");
+
+        var beforeWhatIf = requests.Count(r => r.Method != HttpMethod.Get);
+        var whatIf = new LiteralEvalContext { IsWhatIf = true };
+        await source.ExecuteAdminStatementAsync(new KillJobStatement(new LiteralExpression(42m, TokenType.NUMBER)), whatIf);
+        await source.ExecuteAdminStatementAsync(new DropCatalogObjectStatement
+        {
+            Kind = CatalogObjectKind.Schedule,
+            Name = "daily_2am"
+        }, whatIf);
+        await source.ExecuteAdminStatementAsync(new DropJobStatement("nightly", IfExists: false), whatIf);
+        Assert.Equal(beforeWhatIf, requests.Count(r => r.Method != HttpMethod.Get));
+    }
+
+    [Fact]
+    public async Task AssertJob_HistoricalBaselineAndNotify_UsesOrchestratorRestApi()
+    {
+        var dispatchedTitle = "";
+        var savedAlertState = false;
+        var handler = new RecordingHandler(request =>
+        {
+            var path = request.RequestUri?.AbsolutePath ?? "";
+            var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? "";
+            if (request.Method == HttpMethod.Get && path == "/api/scheduled-jobs/nightly/history")
+            {
+                return JsonResponse("""
+                [
+                  {"id":1,"jobName":"nightly","startTime":"2026-11-14T00:00:00Z","endTime":"2026-11-14T00:01:00Z","status":"SUCCESS","rowsProcessed":100},
+                  {"id":2,"jobName":"nightly","startTime":"2026-11-15T00:00:00Z","endTime":"2026-11-15T00:01:00Z","status":"SUCCESS","rowsProcessed":100},
+                  {"id":3,"jobName":"nightly","startTime":"2026-11-16T00:00:00Z","endTime":"2026-11-16T00:01:00Z","status":"SUCCESS","rowsProcessed":100}
+                ]
+                """);
+            }
+            if (request.Method == HttpMethod.Get && path == "/api/scheduled-jobs/nightly/state")
+                return JsonResponse("[]");
+            if (request.Method == HttpMethod.Post && path == "/api/notifications/ops_alert/dispatch")
+            {
+                dispatchedTitle = JsonDocument.Parse(body).RootElement.GetProperty("Title").GetString() ?? "";
+                return JsonResponse("""{"delivered":true}""");
+            }
+            if (request.Method == HttpMethod.Put && path.StartsWith("/api/scheduled-jobs/nightly/state/dq%3Aassert-alert%3A", StringComparison.Ordinal))
+            {
+                savedAlertState = true;
+                return JsonResponse("{}");
+            }
+            return JsonResponse("{}");
+        });
+
+        await using var source = new OrchestratorDataSource(
+            new HttpClient(handler) { BaseAddress = new Uri("http://orchestrator.test/") },
+            "key",
+            NullLogger.Instance);
+        var context = new LiteralEvalContext();
+        context.Telemetry.RowsProcessed = 10;
+
+        var script = new Parser(new Lexer(
+            "ASSERT JOB nightly (ROW_COUNT WITHIN 0.1 OF HISTORICAL) ON FAILURE NOTIFY ops_alert ON FAILURE THROW;")
+            .Tokenize(),
+            "ASSERT JOB nightly (ROW_COUNT WITHIN 0.1 OF HISTORICAL) ON FAILURE NOTIFY ops_alert ON FAILURE THROW;")
+            .Parse();
+        var assertStmt = Assert.IsType<AssertJobStatement>(Assert.Single(script.Statements));
+
+        var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
+            source.ExecuteAdminStatementAsync(assertStmt, context));
+
+        Assert.Contains("ROW_COUNT", ex.Message, StringComparison.Ordinal);
+        Assert.Equal("Data quality alert: nightly", dispatchedTitle);
+        Assert.True(savedAlertState);
+    }
 }

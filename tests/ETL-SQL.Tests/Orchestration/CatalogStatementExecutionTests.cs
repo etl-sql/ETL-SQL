@@ -469,6 +469,48 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.False(schedule.IsEnabled);
         }
 
+        [Fact]
+        public async Task TriggerJob_WithAttachedScheduler_EnqueuesAndAudits()
+        {
+            await SaveJobAsync("NightlyTrigger");
+            var sink = new RecordingSecurityEventSink();
+            using var eventScope = SecurityEventRuntime.UseSinkForScope(sink);
+            var jobManager = new RecordingJobManager();
+            var handler = new TriggerJobStatementHandler(_store, jobManager);
+
+            var script = new Parser(new Lexer("TRIGGER JOB NightlyTrigger;").Tokenize(), "TRIGGER JOB NightlyTrigger;").Parse();
+            var evaluator = ETL_SQL.App.DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await handler.Execute(Assert.Single(script.Statements), evaluator);
+
+            var job = await _store.GetJobAsync((string?)null, "NightlyTrigger");
+            Assert.Equal(job!.Id, Assert.Single(jobManager.TriggeredJobIds));
+            AssertAudited(sink, "JOB:NightlyTrigger", "TRIGGER_JOB");
+        }
+
+        [Fact]
+        public async Task TriggerJob_WithoutAttachedScheduler_FailsClosed()
+        {
+            await SaveJobAsync("OrphanTrigger");
+            var handler = new TriggerJobStatementHandler(_store);
+
+            var script = new Parser(new Lexer("TRIGGER JOB OrphanTrigger;").Tokenize(), "TRIGGER JOB OrphanTrigger;").Parse();
+            var evaluator = ETL_SQL.App.DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => handler.Execute(Assert.Single(script.Statements), evaluator));
+            Assert.Contains("no local scheduler is attached", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private sealed class RecordingJobManager : ETL_SQL.Core.IJobManager
+        {
+            public List<JobId> TriggeredJobIds { get; } = [];
+            public bool KillJob(long historyId) => false;
+            public Task<bool> TriggerJobAsync(JobId jobId)
+            {
+                TriggeredJobIds.Add(jobId);
+                return Task.FromResult(true);
+            }
+        }
+
         private sealed class RecordingSecurityEventSink : ISecurityEventSink
         {
             public List<SecurityEvent> Events { get; } = [];

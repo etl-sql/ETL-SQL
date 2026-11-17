@@ -103,15 +103,20 @@ public class DisableJobStatementHandler : IStatementHandler
 }
 
 /// <summary>
-/// Handles TRIGGER JOB for the local scheduler — wakes the scheduler's trigger mechanism
-/// or logs a message if no scheduler is attached to this execution context.
+/// Handles TRIGGER JOB for the local scheduler — enqueues execution through the attached
+/// <see cref="IJobManager"/> or fails closed when no scheduler is attached.
 /// </summary>
 public class TriggerJobStatementHandler : IStatementHandler
 {
     public Type SupportedStatementType => typeof(TriggerJobStatement);
     private readonly IJobHistoryStore _store;
+    private readonly IJobManager? _jobManager;
 
-    public TriggerJobStatementHandler(IJobHistoryStore store) => _store = store;
+    public TriggerJobStatementHandler(IJobHistoryStore store, IJobManager? jobManager = null)
+    {
+        _store = store;
+        _jobManager = jobManager;
+    }
 
     public async Task Execute(Statement statement, IExecutionContext context)
     {
@@ -120,22 +125,30 @@ public class TriggerJobStatementHandler : IStatementHandler
             return;
 
         var existing = await _store.GetJobAsync(CatalogStatementSupport.ActingTenant(context), stmt.Name)
-            ?? throw new ExecutionException($"TRIGGER JOB failed: job '{stmt.Name}' not found.");
+            ?? throw new ExecutionException($"TRIGGER JOB failed: job '{stmt.Name}' not found.", null, stmt.Line, stmt.Column);
         await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
             stmt.Name, existing.Id, existing.TenantId,
             OrchestratorObjectPermission.Execute, existing.CreatedBy);
 
-        // TRIGGER JOB against the local store is informational — the scheduler loop
-        // is responsible for polling and immediate triggering requires an Orchestrator
-        // connection. This validates the job exists and advises the user.
-        //
-        // Deliberately not audited: nothing ran. The routed form above reaches the Orchestrator's
-        // trigger endpoint, which emits TRIGGER_JOB there, where the run actually happens. Emitting
-        // one here as well would put a run in the audit trail that never existed.
-        context.Log(
-            $"TRIGGER JOB: job '{stmt.Name}' found locally. " +
-            "To trigger it immediately on a remote Orchestrator, use: " +
-            $"EXECUTE orch BEGIN TRIGGER JOB {stmt.Name}; END",
-            ConsoleColor.Cyan);
+        if (_jobManager is null)
+            throw new ExecutionException(
+                $"TRIGGER JOB failed: no local scheduler is attached for job '{stmt.Name}'. " +
+                $"Route to an Orchestrator connection with EXECUTE <conn> BEGIN TRIGGER JOB {stmt.Name}; END or TRIGGER JOB {stmt.Name} AT <conn>.",
+                null, stmt.Line, stmt.Column);
+
+        if (context.IsWhatIf)
+        {
+            context.Log($"WHAT IF: Would trigger job '{stmt.Name}' for immediate execution.", ConsoleColor.Yellow);
+            return;
+        }
+
+        if (!await _jobManager.TriggerJobAsync(existing.Id))
+            throw new ExecutionException(
+                $"TRIGGER JOB failed: scheduler rejected immediate execution of job '{stmt.Name}'.",
+                null, stmt.Line, stmt.Column);
+
+        CatalogStatementSupport.AuditMutation(
+            context, "TRIGGER_JOB", $"JOB:{stmt.Name}", $"Job '{stmt.Name}' queued for immediate execution.");
+        context.Log($"Job '{stmt.Name}' triggered for immediate execution.", ConsoleColor.Green);
     }
 }

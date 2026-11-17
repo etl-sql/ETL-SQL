@@ -174,7 +174,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| OR08 | **Complete `ORCHESTRATOR` connector (`OrchestratorDataSource`) statement parity and local `TRIGGER JOB`.** Implement `DROP JOB`, `KILL JOB`, `CREATE/ALTER/DROP NOTIFICATION`, `ALTER/DROP SCHEDULE`, `ALTER JOB ... ADD/REMOVE NOTIFICATION`, `SHOW JOB STATE`, and `ASSERT JOB` in `OrchestratorDataSource.cs` against the existing `JobApiEndpoints` REST routes; make local `TRIGGER JOB <name>` in `EnableDisableTriggerJobHandlers.cs` enqueue an execution or fail closed when no scheduler is attached instead of logging a no-op message. | — | M |
 | OR09 | **Complete the `/designer` to `/studio/` cutover in Portal.** Once the Studio beginner/authoring completeness gate (`ST03`) passes, redirect `/designer` and `/designer/new` in Portal to `/studio/` so Report and Pipeline authoring share one workbench, draft/approval pipeline, and capability boundary. | ST03 | S |
 
 ### 3.4 MSI installer: restore, cleanup and isolated certification
