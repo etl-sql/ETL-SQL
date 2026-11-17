@@ -124,8 +124,11 @@ public class CreateConnectionStatementHandler(
             // through the same governed path, instead of a reader inferring it from the alias — a
             // script-local connection sharing the name is not the same connection.
             context.CatalogBackedConnections[stmt.ConnectionName] = connectionType ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(expanded.CatalogAlias))
-                context.SharedConnectionDependencies?.Add(expanded.CatalogAlias);
+            if (!string.IsNullOrWhiteSpace(expanded.CatalogAlias) && context.SharedConnectionDependencies is { } dependencies)
+            {
+                lock (dependencies)
+                    dependencies.Add(expanded.CatalogAlias);
+            }
         }
         if (gatewayBinding is not null)
         {

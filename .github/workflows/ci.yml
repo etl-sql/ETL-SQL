@@ -1187,7 +1187,9 @@ jobs:
           retention-days: 30
 
   merge-gate:
-    name: Merge Gate
+    # Manual diagnostics can omit affected lanes or browser shards. Give them a distinct
+    # check name so their success cannot satisfy the required Merge Gate check.
+    name: ${{ github.event_name == 'workflow_dispatch' && !inputs.release_certification && 'Diagnostic Gate' || 'Merge Gate' }}
     if: always()
     needs: [source-preflight, build-and-test, browser-consumer-contracts, build-vscode, sample-scripts, portal-browser-journey, portal-browser-gate, studio-performance-budgets, enterprise-certification, docker-integration-tests, engine-certification, spill-certification]
     runs-on: ubuntu-latest

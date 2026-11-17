@@ -30,8 +30,8 @@ public sealed record DesignerSnapshotMetadata(bool IsSampled, bool RlsEnforced, 
 /// <c>ExecutionJobService</c> refuses to persist a shared snapshot for an identity-sensitive report —
 /// if the script references identity, or the run was impersonated, no <c>ReportSnapshot</c> row is
 /// written and the report stays per-viewer execution only. Any snapshot that exists therefore cannot
-/// vary by identity, so the folder-permission gate below is sufficient and an identity-sensitive
-/// report simply has no snapshot to show.
+/// vary by identity. Folder permission and current access to every recorded shared connection
+/// are checked below; an identity-sensitive report simply has no snapshot to show.
 /// </summary>
 public sealed class DesignerSnapshotService(
     PortalDbContext db,
@@ -80,36 +80,37 @@ public sealed class DesignerSnapshotService(
             .FirstOrDefaultAsync(ct);
         if (snapshot is null) return new Result(SnapshotOutcome.NoSnapshot, null);
 
-        if (connectionCatalog is not null && identities is not null)
-        {
-            var userIdClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!int.TryParse(userIdClaim, out var userId))
-                return new Result(SnapshotOutcome.Forbidden, null);
+        // Authorization dependencies are required whenever a snapshot would be served.
+        if (connectionCatalog is null || identities is null)
+            return new Result(SnapshotOutcome.Forbidden, null);
 
-            var identity = await identities.BuildAsync(
-                userId, _datasetScope.TenantId, user.IsInRole("Admin"), impersonatedUserId: null, ct);
-            try
+        var userIdClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim, out var userId))
+            return new Result(SnapshotOutcome.Forbidden, null);
+
+        var identity = await identities.BuildAsync(
+            userId, _datasetScope.TenantId, user.IsInRole("Admin"), impersonatedUserId: null, ct);
+        try
+        {
+            await connectionCatalog.EnsureCallerCanReadSnapshotAsync(
+                resolvedScriptPath,
+                snapshot.ScriptHashAtRunTime,
+                snapshot.SharedConnectionDependenciesJson,
+                identity,
+                ct);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            if (audit is not null)
             {
-                await connectionCatalog.EnsureCallerCanReadSnapshotAsync(
-                    resolvedScriptPath,
-                    snapshot.ScriptHashAtRunTime,
-                    snapshot.SharedConnectionDependenciesJson,
-                    identity,
-                    ct);
+                await audit.LogAsync(
+                    userId,
+                    "SHARED_CONNECTION_SNAPSHOT_DENIED",
+                    "Report",
+                    reportId.ToString(),
+                    $"EffectiveUser={identity?.EffectiveUser ?? "(none)"}");
             }
-            catch (UnauthorizedAccessException)
-            {
-                if (audit is not null)
-                {
-                    await audit.LogAsync(
-                        userId,
-                        "SHARED_CONNECTION_SNAPSHOT_DENIED",
-                        "Report",
-                        reportId.ToString(),
-                        $"EffectiveUser={identity?.EffectiveUser ?? "(none)"}");
-                }
-                return new Result(SnapshotOutcome.Forbidden, null);
-            }
+            return new Result(SnapshotOutcome.Forbidden, null);
         }
 
         var manifestKey = PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath);

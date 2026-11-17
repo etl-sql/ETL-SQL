@@ -218,7 +218,8 @@ public interface IDataContext
 
     /// <summary>
     /// Governed <c>SHARED:</c> catalog aliases resolved during this execution, including
-    /// parameterized targets and nested <c>RUN SCRIPT</c> calls.
+    /// parameterized targets, nested <c>RUN SCRIPT</c> calls, and parallel forks.
+    /// Forks share this set; writers must lock it before adding dependencies.
     /// </summary>
     ISet<string> SharedConnectionDependencies { get; }
 

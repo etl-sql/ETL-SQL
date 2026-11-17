@@ -16,6 +16,7 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Operations;
 
+[Trait("CompatBreak", "0.23")]
 public class TopNPaginationMemoryTests
 {
     private static async Task<Evaluator> CreateEvaluatorAsync(MemoryGrantArbiter? arbiter = null, int operatorGrantMb = 1)
@@ -29,6 +30,39 @@ public class TopNPaginationMemoryTests
     }
 
     private static Script Parse(string sql) => new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+
+    [Fact]
+    public async Task SpillTransition_EvaluatesEachSortKeyOnlyOnce()
+    {
+        var arbiter = new MemoryGrantArbiter(16 * 1024);
+        await using var evaluator = await CreateEvaluatorAsync(arbiter);
+        var calls = new Dictionary<decimal, int>();
+        evaluator.FunctionRegistry.Register("REVIEW_KEY", (args, _) =>
+        {
+            var id = Convert.ToDecimal(args[0]);
+            calls[id] = calls.GetValueOrDefault(id) + 1;
+            // A deterministic stand-in for a volatile expression: replaying a row changes its key.
+            return (object?)(calls[id] == 1 ? id : -id);
+        });
+        evaluator.Connections["#src"] = new StreamingRowsDataSource(
+            Enumerable.Range(0, 100).Reverse().Select(i => new Row
+            {
+                ["id"] = (decimal)i,
+                ["payload"] = new string('x', 512)
+            }));
+
+        await evaluator.Evaluate(Parse("""
+            SELECT id, payload FROM #src
+            ORDER BY REVIEW_KEY(id) OFFSET 50 ROWS FETCH NEXT 10 ROWS ONLY;
+            """));
+
+        Assert.True(evaluator.Telemetry.SortSpillCount > 0);
+        Assert.Equal(Enumerable.Range(50, 10).Select(i => (decimal)i),
+            evaluator.LastResult!.Rows.Select(row => Convert.ToDecimal(row["id"])));
+        Assert.Equal(100, calls.Count);
+        Assert.All(calls.Values, count => Assert.Equal(1, count));
+        Assert.Equal(0, arbiter.ReservedBytes);
+    }
 
     [Fact]
     public async Task LargeOffsetUnderTinyGrant_TransitionsToExternalSortAndReturnsExactSlice()
@@ -216,6 +250,7 @@ public class TopNPaginationMemoryTests
         using var cts = new CancellationTokenSource();
 
         int yieldedBatches = 0;
+        bool sourceDisposed = false;
         evaluator.Connections["#src"] = new StreamingRowsDataSource(
             Enumerable.Range(0, 500).Reverse().Select(i => new Row
             {
@@ -227,7 +262,8 @@ public class TopNPaginationMemoryTests
             {
                 if (++yieldedBatches >= 4)
                     cts.Cancel();
-            });
+            },
+            onDisposed: () => sourceDisposed = true);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             evaluator.Evaluate(Parse("""
@@ -238,6 +274,7 @@ public class TopNPaginationMemoryTests
                 """), cts.Token));
 
         Assert.Equal(0, arbiter.ReservedBytes);
+        Assert.True(sourceDisposed);
     }
 
     [Fact]
@@ -257,7 +294,8 @@ public class TopNPaginationMemoryTests
     private sealed class StreamingRowsDataSource(
         IEnumerable<Row> rows,
         int batchSize = 10,
-        Action? onBatchYielded = null) : IDataSource
+        Action? onBatchYielded = null,
+        Action? onDisposed = null) : IDataSource
     {
         private readonly List<Row> _rows = rows.ToList();
 
@@ -277,18 +315,25 @@ public class TopNPaginationMemoryTests
             int requestedBatchSize,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            int size = Math.Min(batchSize, Math.Max(1, requestedBatchSize));
-            for (int i = 0; i < _rows.Count; i += size)
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var dt = new DataTable();
-                dt.SetColumns(_rows[0].GetColumnNames());
-                int end = Math.Min(_rows.Count, i + size);
-                for (int j = i; j < end; j++)
-                    await dt.AddRowAsync(_rows[j].Clone());
-                yield return dt;
-                onBatchYielded?.Invoke();
-                await Task.Yield();
+                int size = Math.Min(batchSize, Math.Max(1, requestedBatchSize));
+                for (int i = 0; i < _rows.Count; i += size)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var dt = new DataTable();
+                    dt.SetColumns(_rows[0].GetColumnNames());
+                    int end = Math.Min(_rows.Count, i + size);
+                    for (int j = i; j < end; j++)
+                        await dt.AddRowAsync(_rows[j].Clone());
+                    yield return dt;
+                    onBatchYielded?.Invoke();
+                    await Task.Yield();
+                }
+            }
+            finally
+            {
+                onDisposed?.Invoke();
             }
         }
 

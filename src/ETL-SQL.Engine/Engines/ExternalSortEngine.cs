@@ -71,11 +71,28 @@ public class ExternalSortEngine
     /// Sort keys are stored as individual named Arrow columns (<c>_SYS_SK_0</c>, <c>_SYS_SK_1</c>, ...)
     /// so Arrow handles native type serialization without JSON encoding overhead.
     /// </summary>
-    public async IAsyncEnumerable<Row> SortStreamAsync(
+    public IAsyncEnumerable<Row> SortStreamAsync(
         IAsyncEnumerable<Row> inputStream,
         List<OrderByClause> orderBy,
-        Func<Row, Task<object?[]>>? extractKeysAsync = null)
+        Func<Row, Task<object?[]>>? extractKeysAsync = null) =>
+        SortStreamCoreAsync(inputStream, orderBy, extractKeysAsync, null, null);
+
+    internal IAsyncEnumerable<Row> SortStreamWithPrefixAsync(
+        IAsyncEnumerable<Row> inputStream,
+        List<OrderByClause> orderBy,
+        Func<Row, Task<object?[]>> extractKeysAsync,
+        List<(Row Row, object?[] Keys)> prefix,
+        IMemoryGrantLease prefixLease) =>
+        SortStreamCoreAsync(inputStream, orderBy, extractKeysAsync, prefix, prefixLease);
+
+    private async IAsyncEnumerable<Row> SortStreamCoreAsync(
+        IAsyncEnumerable<Row> inputStream,
+        List<OrderByClause> orderBy,
+        Func<Row, Task<object?[]>>? extractKeysAsync,
+        List<(Row Row, object?[] Keys)>? prefix,
+        IMemoryGrantLease? prefixLease)
     {
+        using var retainedLease = prefixLease;
         PlanDecisionRecorder.Record(_context, "external-sort", "ExternalSort",
             PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
             "External sort path accepted.",
@@ -111,9 +128,36 @@ public class ExternalSortEngine
             // when the accumulated chunk footprint (precise byte accounting) crosses the governor
             // ceiling, so a chunk of very wide rows can't exceed the budget even if its row count is
             // under ChunkSize.
-            var currentChunk = new List<(Row Row, object?[] Keys)>();
+            var currentChunk = prefix ?? new List<(Row Row, object?[] Keys)>();
             int chunkCounter = 0;
             var memGuard = new MemoryBudgetGuard(MemoryGovernor.Ceiling(_context));
+
+            async Task SpillCurrentChunkAsync()
+            {
+                currentChunk.Sort(Compare);
+                var chunkName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
+                chunkPaths.Add(chunkName);
+                cleanup.Add(chunkName);
+                await SpillChunkAsync(chunkName, currentChunk, keyColumnNames);
+                _context.Telemetry.SortSpillCount++;
+                _context.Telemetry.PartitionsCount++;
+                currentChunk.Clear();
+                memGuard.Reset();
+                chunkLease.Dispose();
+                chunkLease = arbiter.AcquireLease();
+            }
+
+            // The admitted Top-N prefix already owns its grant. Spill it before reading
+            // more input, preserving the evaluated keys and releasing its row references.
+            if (currentChunk.Count > 0)
+            {
+                _context.CancellationToken.ThrowIfCancellationRequested();
+                foreach (var entry in currentChunk)
+                    for (int i = 0; i < entry.Keys.Length; i++)
+                        entry.Keys[i] = CompoundKey.NormalizeValue(entry.Keys[i]);
+                await SpillCurrentChunkAsync();
+                retainedLease?.Dispose();
+            }
             await foreach (var row in inputStream)
             {
                 _context.CancellationToken.ThrowIfCancellationRequested();
@@ -131,17 +175,7 @@ public class ExternalSortEngine
 
                 if (currentChunk.Count >= ChunkSize || (currentChunk.Count > 0 && (memGuard.Exceeded() || spillForArbiter)))
                 {
-                    currentChunk.Sort(Compare);
-                    var chunkName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
-                    chunkPaths.Add(chunkName);
-                    cleanup.Add(chunkName);
-                    await SpillChunkAsync(chunkName, currentChunk, keyColumnNames);
-                    _context.Telemetry.SortSpillCount++;
-                    _context.Telemetry.PartitionsCount++;
-                    currentChunk.Clear();
-                    memGuard.Reset();
-                    chunkLease.Dispose();
-                    chunkLease = arbiter.AcquireLease();
+                    await SpillCurrentChunkAsync();
                 }
             }
 
@@ -159,8 +193,7 @@ public class ExternalSortEngine
                     yield break;
                 }
 
-                var prefix = Guid.NewGuid().ToString("N");
-                var chunkName = $"sort_chunk_{prefix}_{chunkCounter++}.tmp";
+                var chunkName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
                 chunkPaths.Add(chunkName);
                 cleanup.Add(chunkName);
                 await SpillChunkAsync(chunkName, currentChunk, keyColumnNames);
@@ -216,6 +249,7 @@ public class ExternalSortEngine
         }
         finally
         {
+            prefix?.Clear();
             chunkLease.Dispose();
             foreach (var path in cleanup)
             {

@@ -59,6 +59,9 @@ public class SelectExecutionEngine
         List<SelectColumn> finalColumns,
         List<string> colNames)
     {
+        // Keep Top-N's admitted bytes reserved through projection, or until its prefix spills.
+        // Moving a reservation to another lease can fail under concurrent process pressure.
+        using var topNLease = _context.MemoryArbiter.AcquireLease();
         // Qualify bare identifiers (e.g. col → alias.col) so the predicate optimizer
         // can attribute each predicate to the correct source alias.
         stmt = await IdentifierQualifier.QualifyAsync(stmt, _context);
@@ -402,7 +405,7 @@ public class SelectExecutionEngine
                     : inputStream;
                 if (!whereApplied && stmt.WhereClause != null) whereApplied = true;
 
-                var topNResult = await TopNFromStream(src, stmt.OrderBy!, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns);
+                var topNResult = await TopNFromStream(src, stmt.OrderBy!, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns, topNLease);
                 orderApplied = true;
                 if (topNResult.ExternalStream != null)
                 {
@@ -491,14 +494,26 @@ public class SelectExecutionEngine
                         if (!whereApplied && stmt.WhereClause != null) whereApplied = true;
 
                         var winPrefix = new List<Row>();
-                        var winEnumerator = winInput.GetAsyncEnumerator();
+                        long winBytes = 0;
+                        long winCeiling = MemoryGovernor.Ceiling(_context);
+                        var winEnumerator = winInput.GetAsyncEnumerator(_context.CancellationToken);
                         bool winHandedOff = false;
                         int winCap = Math.Max(1, _context.WindowSpillThreshold);
+                        bool winExceeded = false;
                         try
                         {
                             while (winPrefix.Count < winCap && await winEnumerator.MoveNextAsync())
-                                winPrefix.Add(winEnumerator.Current);
-                            if (winPrefix.Count >= winCap)
+                            {
+                                var r = winEnumerator.Current;
+                                winPrefix.Add(r);
+                                winBytes = checked(winBytes + r.EstimateHeapBytes());
+                                if ((winCeiling > 0 && winBytes > winCeiling) || _memLease.RegisterAndCheckSpill(winBytes))
+                                {
+                                    winExceeded = true;
+                                    break;
+                                }
+                            }
+                            if (winPrefix.Count >= winCap || winExceeded)
                             {
                                 RecordRowPipelineDecision("select.window-probe", PlanDecisionOutcome.Degraded,
                                     "Window input exceeded the in-memory prefix probe; routing to external window.",
@@ -671,7 +686,7 @@ public class SelectExecutionEngine
             {
                 int limit = Convert.ToInt32(await _context.EvaluateValue(stmt.LimitCount ?? stmt.TopCount!, new Row()));
                 int topOffset = stmt.Offset != null ? Convert.ToInt32(await _context.EvaluateValue(stmt.Offset, new Row())) : 0;
-                var topNResult = await TopNFromStream(externalEngineStream, stmt.OrderBy, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns);
+                var topNResult = await TopNFromStream(externalEngineStream, stmt.OrderBy, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns, topNLease);
                 if (topNResult.ExternalStream != null)
                 {
                     externalEngineStream = topNResult.ExternalStream;
@@ -1131,7 +1146,8 @@ public class SelectExecutionEngine
         List<SelectColumn> finalColumns,
         int limit,
         int offset,
-        bool hasPreEvaluatedColumns)
+        bool hasPreEvaluatedColumns,
+        IMemoryGrantLease topNLease)
     {
         if (offset < 0)
             throw new ExecutionException("OFFSET must be a non-negative integer.");
@@ -1158,7 +1174,6 @@ public class SelectExecutionEngine
                 return 0;
             }));
 
-        using var topNLease = _context.MemoryArbiter.AcquireLease();
         var enumerator = source.GetAsyncEnumerator(_context.CancellationToken);
         bool enumeratorHandedOff = false;
         try
@@ -1177,7 +1192,7 @@ public class SelectExecutionEngine
                     if (ExceedsTopNBudget(prospective, operatorCeiling, topNLease))
                     {
                         var externalStream = SpillTopNToExternalSort(
-                            heap, row, enumerator, orderBy, extractor, operatorCeiling, prospective, topNLease);
+                            heap, (row, keys), enumerator, orderBy, extractor, operatorCeiling, prospective, topNLease);
                         enumeratorHandedOff = true;
                         return new TopNResult(null, externalStream);
                     }
@@ -1194,7 +1209,7 @@ public class SelectExecutionEngine
                         if (prospective > retainedBytes && ExceedsTopNBudget(prospective, operatorCeiling, topNLease))
                         {
                             var externalStream = SpillTopNToExternalSort(
-                                heap, row, enumerator, orderBy, extractor, operatorCeiling, prospective, topNLease);
+                                heap, (row, keys), enumerator, orderBy, extractor, operatorCeiling, prospective, topNLease);
                             enumeratorHandedOff = true;
                             return new TopNResult(null, externalStream);
                         }
@@ -1208,17 +1223,15 @@ public class SelectExecutionEngine
         finally
         {
             if (!enumeratorHandedOff)
+            {
                 await enumerator.DisposeAsync();
+            }
         }
 
         // Drain in inverted output order (worst-first), then reverse to get correct order.
         var sorted = new List<Row>(heap.Count);
         while (heap.Count > 0) sorted.Add(heap.Dequeue().Row);
         sorted.Reverse();
-
-        topNLease.Dispose();
-        if (retainedBytes > 0)
-            _ = _memLease.RegisterAndCheckSpill(retainedBytes);
 
         return new TopNResult(sorted, null);
     }
@@ -1238,7 +1251,7 @@ public class SelectExecutionEngine
 
     private IAsyncEnumerable<Row> SpillTopNToExternalSort(
         PriorityQueue<(Row Row, object?[] Keys, long EntryBytes), (Row Row, object?[] Keys, long EntryBytes)> heap,
-        Row triggeringRow,
+        (Row Row, object?[] Keys) triggeringRow,
         IAsyncEnumerator<Row> enumerator,
         List<OrderByClause> orderBy,
         SortKeyExtractor extractor,
@@ -1246,12 +1259,13 @@ public class SelectExecutionEngine
         long prospectiveBytes,
         IMemoryGrantLease topNLease)
     {
-        var retainedPrefix = new List<Row>(heap.Count + 1);
+        var retainedPrefix = new List<(Row Row, object?[] Keys)>(heap.Count + 1);
         while (heap.Count > 0)
-            retainedPrefix.Add(heap.Dequeue().Row);
+        {
+            var entry = heap.Dequeue();
+            retainedPrefix.Add((entry.Row, entry.Keys));
+        }
         retainedPrefix.Add(triggeringRow);
-
-        topNLease.Dispose();
 
         RecordRowPipelineDecision("select.topn", PlanDecisionOutcome.Degraded,
             "Top-N retained footprint exceeded memory budget; transitioning to external sort.",
@@ -1263,24 +1277,30 @@ public class SelectExecutionEngine
             ("memoryCeilingBytes", operatorCeiling.ToString()),
             ("fallbackDestination", "ExternalSort"));
 
-        var combined = PrependAndDispose(retainedPrefix, enumerator);
         var externalSort = new ExternalSortEngine(_context, _logger);
-        return externalSort.SortStreamAsync(combined, orderBy, extractor.ExtractAsync);
+        return SortAndDispose();
+
+        async IAsyncEnumerable<Row> SortAndDispose()
+        {
+            try
+            {
+                // COMPAT_BREAK: 0.23 - retain evaluated ORDER BY keys across a spill.
+                await foreach (var row in externalSort.SortStreamWithPrefixAsync(
+                    ContinueStream(enumerator), orderBy, extractor.ExtractAsync, retainedPrefix, topNLease))
+                    yield return row;
+            }
+            finally
+            {
+                retainedPrefix.Clear();
+                topNLease.Dispose();
+                await enumerator.DisposeAsync();
+            }
+        }
     }
 
-    private static async IAsyncEnumerable<Row> PrependAndDispose(
-        List<Row> buffered,
-        IAsyncEnumerator<Row> remaining)
+    private static async IAsyncEnumerable<Row> ContinueStream(IAsyncEnumerator<Row> remaining)
     {
-        try
-        {
-            foreach (var r in buffered) yield return r;
-            while (await remaining.MoveNextAsync()) yield return remaining.Current;
-        }
-        finally
-        {
-            await remaining.DisposeAsync();
-        }
+        while (await remaining.MoveNextAsync()) yield return remaining.Current;
     }
 
     /// <summary>

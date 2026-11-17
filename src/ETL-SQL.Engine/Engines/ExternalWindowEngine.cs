@@ -93,18 +93,7 @@ public class ExternalWindowEngine
             yield break;
         }
 
-        var groups = new List<WindowGroup>();
-        foreach (var f in allWindowCalls)
-        {
-            var sig = new WindowSignature(f.Window!.PartitionBy, f.Window.OrderBy);
-            var group = groups.FirstOrDefault(g => g.Signature.Equals(sig));
-            if (group == null)
-            {
-                group = new WindowGroup(sig);
-                groups.Add(group);
-            }
-            group.Columns.Add(new SelectColumn(f));
-        }
+        var groups = BuildWindowGroups(allWindowCalls);
 
         _logger.WriteLine($"[yellow]HYPER-SCALE: Processing {allWindowCalls.Count} window functions across {groups.Count} signature groups.[/]");
         _context.Telemetry.PartitionsCount = groups.Count;
@@ -176,9 +165,14 @@ public class ExternalWindowEngine
             stream, group.Signature.PartitionBy, knownRowCount, knownInputBytes);
         try
         {
+            var arbiter = _context.MemoryArbiter ?? MemoryGrantArbiter.Shared;
+            long ceiling = MemoryGovernor.Ceiling(_context);
             foreach (var info in partitionInfos)
             {
-                bool useDeepSpill = info.RowCount > _context.WindowSpillThreshold;
+                _context.CancellationToken.ThrowIfCancellationRequested();
+                bool useDeepSpill = info.RowCount > _context.WindowSpillThreshold
+                    || (ceiling > 0 && info.EstimatedBytes > ceiling)
+                    || (arbiter.TotalBudgetBytes > 0 && arbiter.ReservedBytes + info.EstimatedBytes > arbiter.TotalBudgetBytes);
 
                 if (useDeepSpill && IsOrderedPartitionValueReplayCompatible(group))
                 {
@@ -222,12 +216,15 @@ public class ExternalWindowEngine
                 }
                 else
                 {
-                    var bucketRows = await ReadPartitionStream(info.Name).ToListAsync();
-                    if (bucketRows.Count > 0)
+                    var (bucketRows, bucketLease) = await LoadBucketWithAdmissionAsync(info.Name, ceiling);
+                    using (bucketLease)
                     {
-                        var groupStmt = new SelectStatement(group.Columns, null, stmt.FromTable, new List<JoinClause>(), null, null, null, group.Signature.OrderBy);
-                        var processedRows = await _inMemoryEngine.ApplyWindowFunctions(bucketRows, groupStmt);
-                        foreach (var row in processedRows) yield return row;
+                        if (bucketRows.Count > 0)
+                        {
+                            var groupStmt = new SelectStatement(group.Columns, null, stmt.FromTable, new List<JoinClause>(), null, null, null, group.Signature.OrderBy);
+                            var processedRows = await _inMemoryEngine.ApplyWindowFunctions(bucketRows, groupStmt);
+                            foreach (var row in processedRows) yield return row;
+                        }
                     }
                 }
             }
@@ -248,7 +245,108 @@ public class ExternalWindowEngine
         }
     }
 
-    private record PartitionInfo(string Name, long RowCount);
+    private record PartitionInfo(string Name, long RowCount, long EstimatedBytes);
+
+    private enum WindowFamily
+    {
+        DeepSpill,
+        Lead,
+        Distribution,
+        PartitionReplay,
+        Fallback
+    }
+
+    private List<WindowGroup> BuildWindowGroups(List<FunctionCallExpression> allWindowCalls)
+    {
+        var bySignature = new List<WindowGroup>();
+        foreach (var f in allWindowCalls)
+        {
+            var sig = new WindowSignature(f.Window!.PartitionBy, f.Window.OrderBy);
+            var group = bySignature.FirstOrDefault(g => g.Signature.Equals(sig));
+            if (group == null)
+            {
+                group = new WindowGroup(sig);
+                bySignature.Add(group);
+            }
+            group.Columns.Add(new SelectColumn(f));
+        }
+
+        var result = new List<WindowGroup>(bySignature.Count);
+        foreach (var group in bySignature)
+        {
+            if (IsOrderedPartitionValueReplayCompatible(group)
+                || IsDistributionReplayCompatible(group)
+                || IsLeadSpillCompatible(group)
+                || IsDeepSpillCompatible(group)
+                || IsPartitionReplayCompatible(group))
+            {
+                result.Add(group);
+                continue;
+            }
+
+            // Mixed window families on the same PARTITION/ORDER signature: split into compatible
+            // streaming passes so supported functions stay bounded instead of forcing bucket ToList.
+            var byFamily = new Dictionary<WindowFamily, WindowGroup>();
+            foreach (var col in group.Columns)
+            {
+                var family = ClassifyFunction((FunctionCallExpression)col.Expression);
+                if (!byFamily.TryGetValue(family, out var subGroup))
+                {
+                    subGroup = new WindowGroup(group.Signature);
+                    byFamily[family] = subGroup;
+                    result.Add(subGroup);
+                }
+                subGroup.Columns.Add(col);
+            }
+        }
+        return result;
+    }
+
+    private WindowFamily ClassifyFunction(FunctionCallExpression f)
+    {
+        var single = new WindowGroup(new WindowSignature(f.Window?.PartitionBy, f.Window?.OrderBy));
+        single.Columns.Add(new SelectColumn(f));
+
+        if (IsDeepSpillCompatible(single)) return WindowFamily.DeepSpill;
+        if (IsLeadSpillCompatible(single)) return WindowFamily.Lead;
+        if (IsDistributionReplayCompatible(single)) return WindowFamily.Distribution;
+        if (IsPartitionReplayCompatible(single)) return WindowFamily.PartitionReplay;
+        return WindowFamily.Fallback;
+    }
+
+    private async Task<(List<Row> Rows, IMemoryGrantLease Lease)> LoadBucketWithAdmissionAsync(string name, long ceiling)
+    {
+        var arbiter = _context.MemoryArbiter ?? MemoryGrantArbiter.Shared;
+        var lease = arbiter.AcquireLease();
+        var rows = new List<Row>();
+        long bufferedBytes = 0;
+        try
+        {
+            await foreach (var row in ReadPartitionStream(name))
+            {
+                _context.CancellationToken.ThrowIfCancellationRequested();
+                bufferedBytes = checked(bufferedBytes + row.EstimateHeapBytes());
+                bool overCeiling = ceiling > 0 && bufferedBytes > ceiling;
+                bool overArbiter = lease.RegisterAndCheckSpill(bufferedBytes);
+                if (overCeiling || overArbiter)
+                {
+                    var effectiveLimit = ceiling > 0 ? ceiling : arbiter.TotalBudgetBytes;
+                    MemoryGovernor.EnforcePolicy(
+                        _context,
+                        $"Window fallback bucket '{name}' exceeded memory grant ({bufferedBytes:N0} bytes > {effectiveLimit:N0} bytes) " +
+                        "and has no bounded streaming spill path. Increase Engine:TotalMemoryGrantMB / OperatorMemoryGrantMB, " +
+                        "add PARTITION BY keys, or set Engine:MemoryGovernorPolicy = SpillOnly.");
+                }
+                rows.Add(row);
+            }
+            return (rows, lease);
+        }
+        catch
+        {
+            lease.Dispose();
+            throw;
+        }
+    }
 
     private bool IsDeepSpillCompatible(WindowGroup group)
     {
@@ -311,7 +409,13 @@ public class ExternalWindowEngine
     {
         return f.FunctionName.ToUpperInvariant() switch
         {
-            "FIRST_VALUE" => f.Arguments.Count == 1,
+            "FIRST_VALUE" => f.Arguments.Count == 1
+                && f.Filter == null
+                && (IsDefaultRunningFrame(f.Window?.Frame) || IsCumulativeRowsFrame(f.Window?.Frame)),
+            "LAST_VALUE" => f.Arguments.Count == 1
+                && f.Filter == null
+                && f.Window?.OrderBy is { Count: > 0 }
+                && (IsDefaultRunningFrame(f.Window?.Frame) || IsCumulativeRowsFrame(f.Window?.Frame)),
             "LAG" => f.Arguments.Count is >= 1 and <= 3 && TryGetLagOffset(f, out _),
             "NTH_VALUE" => IsCumulativeRowsFrame(f.Window?.Frame)
                 && f.Arguments.Count == 2
@@ -876,7 +980,17 @@ public class ExternalWindowEngine
             .Where(f => IsRunningAggregateCompatible(f)
                 && (f.Window?.Frame == null || f.Window.Frame.Type == WindowFrameType.RANGE))
             .ToList();
-        await using var peerBuffer = rangeRunningFuncs.Count > 0 ? new WindowPeerBuffer(this) : null;
+        var rangeLastValueFuncs = group.Columns
+            .Select(c => (FunctionCallExpression)c.Expression)
+            .Where(f => f.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase)
+                && f.Filter == null
+                && f.Window?.OrderBy is { Count: > 0 }
+                && IsDefaultRunningFrame(f.Window?.Frame))
+            .ToList();
+        await using var peerBuffer = (rangeRunningFuncs.Count > 0 || rangeLastValueFuncs.Count > 0)
+            ? new WindowPeerBuffer(this)
+            : null;
+        Row? lastPeerRow = null;
         var maxLagOffset = group.Columns
             .Select(c => (FunctionCallExpression)c.Expression)
             .Where(f => f.FunctionName.Equals("LAG", StringComparison.OrdinalIgnoreCase))
@@ -889,6 +1003,7 @@ public class ExternalWindowEngine
 
         await foreach (var row in bucketRows)
         {
+            _context.CancellationToken.ThrowIfCancellationRequested();
             object?[] currentPartitionKeys = new object?[group.Signature.PartitionBy?.Count ?? 0];
             if (group.Signature.PartitionBy != null)
             {
@@ -931,16 +1046,11 @@ public class ExternalWindowEngine
 
             if (peerBuffer is { Count: > 0 } && (partitionChanged || !samePeer))
             {
-                await foreach (var buffered in peerBuffer.ReadAsync())
-                {
-                    foreach (var rf in rangeRunningFuncs)
-                    {
-                        var key = rf.ToSql().ToUpperInvariant();
-                        buffered[$"WINDOW_{key}"] = runningAggregates[key].GetValue(rf.FunctionName);
-                    }
+                await foreach (var buffered in FlushDeepSpillPeerBufferAsync(
+                    peerBuffer, rangeRunningFuncs, rangeLastValueFuncs, runningAggregates, lastPeerRow!))
                     yield return buffered;
-                }
                 await peerBuffer.ClearAsync();
+                lastPeerRow = null;
             }
 
             if (partitionChanged || prevRow == null)
@@ -1010,6 +1120,13 @@ public class ExternalWindowEngine
                         ? await _context.EvaluateValue(f.Arguments[0], firstPartitionRow)
                         : null;
                 }
+                else if (name_func == "LAST_VALUE")
+                {
+                    // RANGE default frame resolves at peer-group close; ROWS cumulative frame is the current row.
+                    winVal = IsCumulativeRowsFrame(f.Window?.Frame)
+                        ? await _context.EvaluateValue(f.Arguments[0], row)
+                        : null;
+                }
                 else if (name_func == "LAG")
                 {
                     TryGetLagOffset(f, out var offset);
@@ -1053,9 +1170,14 @@ public class ExternalWindowEngine
             }
 
             if (peerBuffer != null)
+            {
                 await peerBuffer.AddAsync(row);
+                lastPeerRow = row;
+            }
             else
+            {
                 yield return row;
+            }
             if (maxLagOffset > 0)
             {
                 lagHistory.Enqueue(row);
@@ -1069,41 +1191,87 @@ public class ExternalWindowEngine
 
         if (peerBuffer is { Count: > 0 })
         {
-            await foreach (var buffered in peerBuffer.ReadAsync())
-            {
-                foreach (var rf in rangeRunningFuncs)
-                {
-                    var key = rf.ToSql().ToUpperInvariant();
-                    buffered[$"WINDOW_{key}"] = runningAggregates[key].GetValue(rf.FunctionName);
-                }
+            await foreach (var buffered in FlushDeepSpillPeerBufferAsync(
+                peerBuffer, rangeRunningFuncs, rangeLastValueFuncs, runningAggregates, lastPeerRow!))
                 yield return buffered;
-            }
         }
     }
 
-    // RANGE needs the final aggregate for every tied row. A peer group can be the entire
-    // partition, so it must obey the same spill threshold as the window operator.
+    private async IAsyncEnumerable<Row> FlushDeepSpillPeerBufferAsync(
+        WindowPeerBuffer peerBuffer,
+        List<FunctionCallExpression> rangeRunningFuncs,
+        List<FunctionCallExpression> rangeLastValueFuncs,
+        Dictionary<string, StreamingWindowAggregate> runningAggregates,
+        Row lastPeerRow)
+    {
+        var lastValues = new (string Key, object? Value)[rangeLastValueFuncs.Count];
+        for (int i = 0; i < rangeLastValueFuncs.Count; i++)
+        {
+            var lf = rangeLastValueFuncs[i];
+            lastValues[i] = ($"WINDOW_{lf.ToSql().ToUpperInvariant()}", await _context.EvaluateValue(lf.Arguments[0], lastPeerRow));
+        }
+
+        await foreach (var buffered in peerBuffer.ReadAsync())
+        {
+            _context.CancellationToken.ThrowIfCancellationRequested();
+            foreach (var rf in rangeRunningFuncs)
+            {
+                var key = rf.ToSql().ToUpperInvariant();
+                buffered[$"WINDOW_{key}"] = runningAggregates[key].GetValue(rf.FunctionName);
+            }
+            foreach (var (key, value) in lastValues)
+                buffered[key] = value;
+            yield return buffered;
+        }
+    }
+
+    // RANGE and LAST_VALUE peer groups can span the entire partition (e.g. all-equal ordering
+    // keys), so they must be bounded by both row threshold and byte grants.
     private sealed class WindowPeerBuffer(ExternalWindowEngine owner) : IAsyncDisposable
     {
         private readonly List<Row> _rows = [];
         private readonly int _limit = Math.Max(1, owner._context.WindowSpillThreshold);
+        private readonly long _byteCeiling = MemoryGovernor.Ceiling(owner._context);
+        private readonly IMemoryGrantArbiter _arbiter = owner._context.MemoryArbiter ?? MemoryGrantArbiter.Shared;
+        private IMemoryGrantLease? _lease;
+        private long _bufferedBytes;
         private string? _chunk;
         private ISpillWriter? _writer;
         public long Count { get; private set; }
 
         public async Task AddAsync(Row row)
         {
-            if (_writer == null && _rows.Count >= _limit)
+            if (_writer == null)
             {
-                _chunk = $"window_peers_{Guid.NewGuid():N}";
-                _writer = await owner._context.SpillStore.CreateWriterAsync(_chunk, _limit);
-                await _writer.WriteRowsAsync(_rows);
-                _rows.Clear();
+                long rowBytes = row.EstimateHeapBytes();
+                long prospective = checked(_bufferedBytes + rowBytes);
+                _lease ??= _arbiter.AcquireLease();
+                bool overRowCap = _rows.Count >= _limit;
+                bool overByteCeiling = _byteCeiling > 0 && prospective > _byteCeiling;
+                bool overSharedArbiter = _lease.RegisterAndCheckSpill(prospective);
+                if (overRowCap || overByteCeiling || overSharedArbiter)
+                {
+                    _chunk = $"window_peers_{Guid.NewGuid():N}.tmp";
+                    _writer = await owner._context.SpillStore.CreateWriterAsync(_chunk, _limit);
+                    if (_rows.Count > 0)
+                    {
+                        await _writer.WriteRowsAsync(_rows);
+                        _rows.Clear();
+                    }
+                    _bufferedBytes = 0;
+                    _lease.Dispose();
+                    _lease = null;
+                }
+                else
+                {
+                    _rows.Add(row);
+                    _bufferedBytes = prospective;
+                    Count++;
+                    return;
+                }
             }
-            if (_writer != null)
-                await _writer.WriteRowAsync(row);
-            else
-                _rows.Add(row);
+
+            await _writer.WriteRowAsync(row);
             Count++;
         }
 
@@ -1134,6 +1302,9 @@ public class ExternalWindowEngine
             finally
             {
                 _writer = null;
+                _lease?.Dispose();
+                _lease = null;
+                _bufferedBytes = 0;
                 _rows.Clear();
                 Count = 0;
                 if (_chunk != null)
@@ -1345,9 +1516,8 @@ public class ExternalWindowEngine
     }
 
     /// <summary>
-    /// FIRST_VALUE and LAST_VALUE over the default running frame. The partition is sorted once and
-    /// read once: FIRST_VALUE is the first row of the partition, and LAST_VALUE is the last row of
-    /// the current row's peer group, so only one peer group is held at a time.
+    /// FIRST_VALUE and LAST_VALUE over the default running frame. FIRST_VALUE streams in O(1)
+    /// without peer buffering; when LAST_VALUE is present, peers use the byte-bounded WindowPeerBuffer.
     /// </summary>
     private async IAsyncEnumerable<Row> ProcessBucketOrderedValueReplay(string name, WindowGroup group)
     {
@@ -1366,32 +1536,47 @@ public class ExternalWindowEngine
                 Key: $"WINDOW_{f.ToSql().ToUpperInvariant()}",
                 IsLast: f.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase)))
             .ToArray();
+        var hasLastValue = functions.Any(f => f.IsLast);
         var firstValues = new object?[functions.Length];
-        var peers = new List<Row>();
+        await using var peerBuffer = hasLastValue ? new WindowPeerBuffer(this) : null;
+        Row? lastPeerRow = null;
         object?[]? previousPartitionKeys = null;
         object?[]? previousOrderKeys = null;
 
-        async Task ClosePeerGroup()
+        async IAsyncEnumerable<Row> EmitPeerGroupAsync()
         {
-            if (peers.Count == 0) return;
-            foreach (var (function, key, isLast) in functions)
+            var lastValues = new object?[functions.Length];
+            for (var i = 0; i < functions.Length; i++)
             {
-                if (!isLast) continue;
-                var value = await _context.EvaluateValue(function.Arguments[0], peers[^1]);
-                foreach (var peer in peers) peer[key] = value;
+                if (functions[i].IsLast)
+                    lastValues[i] = await _context.EvaluateValue(functions[i].Function.Arguments[0], lastPeerRow!);
+            }
+
+            await foreach (var peer in peerBuffer!.ReadAsync())
+            {
+                _context.CancellationToken.ThrowIfCancellationRequested();
+                for (var i = 0; i < functions.Length; i++)
+                {
+                    if (functions[i].IsLast)
+                        peer[functions[i].Key] = lastValues[i];
+                }
+                yield return peer;
             }
         }
 
         await foreach (var row in _sortEngine.SortStreamAsync(ReadPartitionStream(name), sortCriteria))
         {
+            _context.CancellationToken.ThrowIfCancellationRequested();
             var keys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
             var orderKeys = await EvaluateOrderKeys(group.Signature.OrderBy!, row);
             var newPartition = previousPartitionKeys == null || !PartitionKeysEqual(previousPartitionKeys, keys);
-            if (newPartition || !PartitionKeysEqual(previousOrderKeys!, orderKeys))
+            var newPeer = newPartition || !PartitionKeysEqual(previousOrderKeys!, orderKeys);
+            if (peerBuffer != null && newPeer && peerBuffer.Count > 0)
             {
-                await ClosePeerGroup();
-                foreach (var peer in peers) yield return peer;
-                peers.Clear();
+                await foreach (var peer in EmitPeerGroupAsync())
+                    yield return peer;
+                await peerBuffer.ClearAsync();
+                lastPeerRow = null;
             }
 
             for (var i = 0; i < functions.Length; i++)
@@ -1402,13 +1587,25 @@ public class ExternalWindowEngine
                 row[functions[i].Key] = firstValues[i];
             }
 
-            peers.Add(row);
             previousPartitionKeys = keys;
             previousOrderKeys = orderKeys;
+
+            if (peerBuffer != null)
+            {
+                await peerBuffer.AddAsync(row);
+                lastPeerRow = row;
+            }
+            else
+            {
+                yield return row;
+            }
         }
 
-        await ClosePeerGroup();
-        foreach (var peer in peers) yield return peer;
+        if (peerBuffer is { Count: > 0 })
+        {
+            await foreach (var peer in EmitPeerGroupAsync())
+                yield return peer;
+        }
     }
 
     private async Task<Row> CompleteLeadRow(Queue<Row> pending, WindowGroup group, bool useDefaults)
@@ -1484,6 +1681,7 @@ public class ExternalWindowEngine
 
         var names = new string[PartitionCount];
         var counts = new long[PartitionCount];
+        var byteCounts = new long[PartitionCount];
         var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
 
         for (int i = 0; i < PartitionCount; i++)
@@ -1496,6 +1694,7 @@ public class ExternalWindowEngine
         {
             await foreach (var row in ReplaySample(sample, enumerator))
             {
+                _context.CancellationToken.ThrowIfCancellationRequested();
                 int pIdx = 0;
                 if (partitionBy != null && partitionBy.Count > 0)
                 {
@@ -1510,6 +1709,7 @@ public class ExternalWindowEngine
 
                 await writers[pIdx].WriteRowAsync(row);
                 counts[pIdx]++;
+                byteCounts[pIdx] = checked(byteCounts[pIdx] + row.EstimateHeapBytes());
             }
         }
         finally
@@ -1527,7 +1727,7 @@ public class ExternalWindowEngine
             _context.Telemetry.PartitionPassCount++;
         }
 
-        return names.Select((p, i) => new PartitionInfo(p, counts[i])).ToArray();
+        return names.Select((p, i) => new PartitionInfo(p, counts[i], byteCounts[i])).ToArray();
     }
 
     private async Task ConfigurePartitionCount(

@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.23.0 — Runtime: Top-N retains evaluated sort keys when spilling
+- **What changed**: Switching from Top-N to external sorting keeps the sort keys already evaluated for buffered rows. Previously those expressions ran again during the handoff, which could change ordering for volatile expressions.
+- **Who is affected**: Queries with `ORDER BY` and `TOP`, `LIMIT`, or `OFFSET`/`FETCH` that exceed their memory grant.
+- **Migration**: None. Each input row's sort key is evaluated once across the handoff.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.23.0 — Runtime: machine vault creation requires write authority
 - **What changed**: Vault directories receive their restrictive ACL before any value is written. Windows non-admin processes can no longer create a first entry through inherited directory permissions before those permissions are removed.
 - **Who is affected**: Non-elevated Windows processes initializing LocalMachine secret or connection stores.
@@ -25,7 +32,7 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 - **Earliest removal**: N/A
 
 ### v0.23.0 — Runtime: cached reports require verifiable source and connection access
-- **What changed**: Snapshots record the `SHARED:` connection aliases expanded at execution time (including parameterized targets and nested `RUN SCRIPT` calls) and re-check caller `Use` permissions against those recorded aliases on every read, export, and designer snapshot request. Legacy snapshots without recorded dependencies still verify the recorded source hash and statically scan the script, failing closed on missing hashes, changed or missing source, unresolved dynamic connections, and external `RUN SCRIPT` dependencies.
+- **What changed**: Snapshots record the `SHARED:` connection aliases expanded at execution time (including parameterized targets, nested `RUN SCRIPT` calls, and parallel branches) and re-check caller `Use` permissions against those recorded aliases on every read, export, and designer snapshot request. Legacy snapshots without recorded dependencies still verify the recorded source hash and statically scan the script, failing closed on missing hashes, changed or missing source, unresolved dynamic connections, and external `RUN SCRIPT` dependencies.
 - **Who is affected**: Cached reports using shared connections, older snapshots without recorded dependencies or source hashes, and legacy snapshots whose dependencies cannot be resolved from their source text.
 - **Migration**: Refresh older snapshots to record their runtime dependencies. Grant connection Use permission to readers who need the cached data.
 - **Diagnostic**: HTTP 403 on snapshot or export access.

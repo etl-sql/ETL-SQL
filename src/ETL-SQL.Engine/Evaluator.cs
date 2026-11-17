@@ -94,7 +94,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     /// <summary>Aliases created from a SHARED: catalog entry, mapped to connector type.</summary>
     public IDictionary<string, string> CatalogBackedConnections { get; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-    public ISet<string> SharedConnectionDependencies { get; } =
+    public ISet<string> SharedConnectionDependencies { get; private set; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     public IDictionary<string, IDataSource> LocalSources => _localSources;
     public IDictionary<string, IDataSource> ReplaySourceOverrides => _replaySourceOverrides;
@@ -1921,6 +1921,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             MaxGroupingSets = MaxGroupingSets,
             ExecutionPolicy = ExecutionPolicy,
             ExecutionIdentity = ExecutionIdentity,
+            // Dependencies protect the entire run, including branches whose results are
+            // never merged because another branch failed. Writers lock the shared set.
+            // COMPAT_BREAK: 0.23 - snapshot access includes parallel connection dependencies.
+            SharedConnectionDependencies = SharedConnectionDependencies,
             StorageCapability = StorageCapability,
             MemoryArbiter = MemoryArbiter,
             _adaptiveController = _adaptiveController,

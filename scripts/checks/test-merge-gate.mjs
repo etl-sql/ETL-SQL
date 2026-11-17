@@ -104,7 +104,8 @@ assert.throws(
 const ciSource = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const mergeGate = ciSource.split(/^  merge-gate:\r?\n/m)[1]?.split(/^  [\w-]+:\r?\n/m)[0];
 assert.ok(mergeGate, 'ci.yml must define a merge-gate job');
-assert.match(mergeGate, /^    name: Merge Gate\r?$/m);
+assert.ok(mergeGate.includes("name: ${{ github.event_name == 'workflow_dispatch' && !inputs.release_certification && 'Diagnostic Gate' || 'Merge Gate' }}"),
+  'Manual diagnostics must use a separate check name from the required Merge Gate');
 assert.match(mergeGate, /^    if: always\(\)\r?$/m);
 const needsMatch = mergeGate.match(/^    needs: \[([^\]]+)\]\r?$/m);
 assert.ok(needsMatch, 'merge-gate must declare its needs list');

@@ -12,6 +12,7 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Connectors;
 
+[Trait("CompatBreak", "0.23")]
 public class SharedConnectionTests
 {
     [Fact]
@@ -199,8 +200,10 @@ public class SharedConnectionTests
         Assert.True(context.SharedConnectionDependencies.SetEquals(["corp_db", "archive_db"]));
     }
 
-    [Fact]
-    public async Task Evaluator_RecordsParameterizedAndNestedRunScriptSharedConnectionDependencies()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Evaluator_RecordsParameterizedAndNestedRunScriptSharedConnectionDependencies(bool parallel)
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), "etlsql-shared-dep-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(tempRoot);
@@ -224,12 +227,15 @@ public class SharedConnectionTests
             await File.WriteAllTextAsync(nestedPath, "CREATE CONNECTION sub_conn AS MOCKDB('SHARED:nested_db');");
 
             var mainPath = Path.Combine(tempRoot, "main.etlsql");
-            const string mainScript = """
+            var mainScript = """
                 DECLARE @env VARCHAR = 'dyn_db';
                 CREATE CONNECTION dyn_conn AS MOCKDB('SHARED:' + @env);
                 RUN SCRIPT 'nested.etlsql';
                 DROP CONNECTION dyn_conn;
                 """;
+            if (parallel)
+                mainScript = mainScript.Replace("RUN SCRIPT 'nested.etlsql';",
+                    "PARALLEL BEGIN PARALLEL BEGIN RUN SCRIPT 'nested.etlsql'; END; END;");
             await File.WriteAllTextAsync(mainPath, mainScript);
 
             await using var evaluator = sp.GetRequiredService<Evaluator>();
@@ -244,6 +250,27 @@ public class SharedConnectionTests
         {
             try { Directory.Delete(tempRoot, recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public async Task ForkedDependencies_SurviveWithoutMergingBranchResults()
+    {
+        var sp = DependencyInjectionSetup.BuildServiceProvider();
+        await using var evaluator = sp.GetRequiredService<Evaluator>();
+        var catalog = Catalog(Enumerable.Range(0, 32).Select(i =>
+            new SharedConnectionDefinition($"source_{i}", "CAPTURE", null, Options(), false)).ToArray());
+
+        // A failed PARALLEL block never merges result sets. Connections already used by its
+        // branches must still protect any snapshot produced after an enclosing TRY/CATCH.
+        await Task.WhenAll(Enumerable.Range(0, 32).Select(i => Task.Run(async () =>
+        {
+            var fork = evaluator.Fork().Fork();
+            await Handler(new CapturingConnector(), catalog)
+                .Execute(SharedCreate($"local_{i}", $"SHARED:source_{i}"), fork);
+        })));
+
+        Assert.True(evaluator.SharedConnectionDependencies.SetEquals(
+            Enumerable.Range(0, 32).Select(i => $"source_{i}")));
     }
 
     [Fact]
