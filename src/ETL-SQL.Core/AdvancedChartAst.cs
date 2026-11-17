@@ -19,7 +19,7 @@ public enum AdvancedChartScaleKind { Linear, Logarithmic, Time, Band, Point, Ord
 public enum AdvancedChartCoordinateKind { Cartesian, TransposedCartesian, Polar, Geographic }
 public enum AdvancedChartGeographicProjection { Equirectangular, Mercator }
 public enum AdvancedChartResolutionMode { Shared, Independent }
-public enum AdvancedChartConditionChannel { Color, Opacity, Size, Shape, Text }
+public enum AdvancedChartConditionChannel { Color, Opacity, Size, Shape, Text, LineDash }
 public enum AdvancedChartBindingSourceKind { Field, Datum, Value }
 public enum AdvancedChartStackMode { None, Zero, Normalize }
 public enum AdvancedChartPositionKind { Identity, Jitter, Nudge }

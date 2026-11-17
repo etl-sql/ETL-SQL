@@ -48,8 +48,71 @@ public static class AdvancedChartSemanticValidator
         ValidateLayers(results, chart, chartNode);
         ValidateCoordinate(results, chart, chartNode);
         ValidateFacetAndResolution(results, chart, chartNode);
+        if (fallback is CreateVisualStatement visual)
+            ValidateVisualExtras(results, chart, visual, chartNode);
 
         return results;
+    }
+
+    private static void ValidateVisualExtras(List<Diagnostic> results, AdvancedChartDefinition chart, CreateVisualStatement visual, AstNode chartNode)
+    {
+        if (visual.SegmentStyles.Count > 0 && !chart.Layers.Any(layer => layer.Mark == AdvancedChartMarkKind.Line))
+            Add(results, chartNode, "SEGMENT_STYLE requires at least one LINE layer in CUSTOM CHART.");
+
+        if (visual.Overlays.Count == 0)
+            return;
+
+        if (chart.Coordinate.Kind is not (AdvancedChartCoordinateKind.Cartesian or AdvancedChartCoordinateKind.TransposedCartesian))
+        {
+            Add(results, chartNode, "Analytical OVERLAYS are supported only on CARTESIAN and TRANSPOSED_CARTESIAN CUSTOM charts.");
+            return;
+        }
+
+        var effectiveBindings = chart.Layers.SelectMany(layer => EffectiveEncodings(chart, layer)).ToList();
+        var hasX = effectiveBindings.Any(binding => BaseScaleChannel(binding.Channel) == AdvancedChartChannel.X);
+        var hasPrimaryY = effectiveBindings.Any(binding =>
+            binding.DataKind == AdvancedChartDataKind.Quantitative &&
+            binding.Channel is AdvancedChartChannel.Y or AdvancedChartChannel.Y2 or AdvancedChartChannel.Close);
+
+        foreach (var overlay in visual.Overlays)
+        {
+            if (overlay.OverlayType == OverlayType.Forecast)
+            {
+                if (string.IsNullOrWhiteSpace(overlay.ForecastField))
+                    Add(results, chartNode, "FORECAST overlay requires a forecast field name.");
+                if (string.IsNullOrWhiteSpace(overlay.ConfidenceLowField) != string.IsNullOrWhiteSpace(overlay.ConfidenceHighField))
+                    Add(results, chartNode, "FORECAST overlay requires both CONFIDENCE_LOW and CONFIDENCE_HIGH as a pair.");
+                if (!hasX) Add(results, chartNode, "FORECAST overlay requires an X encoding.");
+                if (!hasPrimaryY) Add(results, chartNode, "FORECAST overlay requires a quantitative Y encoding.");
+            }
+            else if (overlay.OverlayType == OverlayType.ReferenceLine)
+            {
+                if (!overlay.Parameter.HasValue || !double.IsFinite(overlay.Parameter.Value))
+                    Add(results, chartNode, "REFERENCE_LINE requires a finite numeric VALUE.");
+                if (!hasPrimaryY)
+                    Add(results, chartNode, "REFERENCE_LINE overlay requires a quantitative Y encoding.");
+            }
+            else if (overlay.OverlayType == OverlayType.ReferenceBand)
+            {
+                if (!overlay.BandLow.HasValue || !overlay.BandHigh.HasValue ||
+                    !double.IsFinite(overlay.BandLow.Value) || !double.IsFinite(overlay.BandHigh.Value) ||
+                    overlay.BandLow.Value >= overlay.BandHigh.Value)
+                    Add(results, chartNode, "REFERENCE_BAND requires finite numeric LOW < HIGH.");
+                if (!hasPrimaryY)
+                    Add(results, chartNode, "REFERENCE_BAND overlay requires a quantitative Y encoding.");
+            }
+            else if (overlay.OverlayType is OverlayType.RunningTotal or OverlayType.PercentOfTotal)
+            {
+                if (!hasPrimaryY)
+                    Add(results, chartNode, $"{overlay.OverlayType} overlay requires a quantitative Y encoding.");
+                if (string.IsNullOrWhiteSpace(overlay.TableCalculationField))
+                    Add(results, chartNode, $"{overlay.OverlayType} overlay requires a pre-computed field name.");
+            }
+            else if (overlay.OverlayType != OverlayType.AnnotationPoint && !hasPrimaryY)
+            {
+                Add(results, chartNode, $"{overlay.OverlayType} overlay requires a quantitative Y encoding.");
+            }
+        }
     }
 
     /// <summary>Effective encodings for a layer: inherited global channels the layer does not override.</summary>
@@ -739,11 +802,25 @@ public static class AdvancedChartSemanticValidator
                  yScale.Maximum is { } maximum && decimal.TryParse(LiteralNumberText(maximum), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var max) && max < 0m))
                 Add(results, Anchor(yScale, layerNode), "Connected ZERO scalar Y requires a linear Y domain containing zero.");
         }
+        var isNonQuantitativeX = positions.Any(binding =>
+            BaseScaleChannel(binding.Channel) == AdvancedChartChannel.X &&
+            binding.DataKind is AdvancedChartDataKind.Nominal or AdvancedChartDataKind.Ordinal or AdvancedChartDataKind.Temporal);
+        var hasInterpolationStyle = layer.Styles.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase));
+        var hasConnectedNullHandling = string.Equals(layer.NullHandling, "CONNECT", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(layer.NullHandling, "ZERO", StringComparison.OrdinalIgnoreCase);
+        var ordinaryConditionedLineOrArea = layer.Mark is (AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area) &&
+            !layer.Conditions.IsDefaultOrEmpty &&
+            chart.Coordinate.Kind == AdvancedChartCoordinateKind.Cartesian &&
+            !hasConnectedNullHandling &&
+            (!hasInterpolationStyle && isNonQuantitativeX ||
+             !hasInterpolationStyle && positions.All(b => BaseScaleChannel(b.Channel) is AdvancedChartChannel.X or AdvancedChartChannel.Y) ||
+             isNonQuantitativeX && (!hasInterpolationStyle || string.Equals(LiteralText(layer.Styles.First(s => s.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase)).Value)?.Trim(), "LINEAR", StringComparison.OrdinalIgnoreCase))) &&
+            bindings.Any(b => BaseScaleChannel(b.Channel) == AdvancedChartChannel.Y && b.DataKind == AdvancedChartDataKind.Quantitative);
         foreach (var condition in layer.Conditions)
         {
             var node = Anchor(condition, layerNode);
             if (layer.Mark is AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area &&
-                (!connectedLine || !Enum.IsDefined(condition.Channel)))
+                (!ordinaryConditionedLineOrArea && (!connectedLine || !Enum.IsDefined(condition.Channel))))
                 Add(results, node, $"Layer '{layer.Name}' cannot use these CONDITIONS on connected {layer.Mark.ToString().ToUpperInvariant()} marks. Connected CONDITIONS require Cartesian or transposed Cartesian LINE or AREA, quantitative unstacked X/Y, shared linear primary scales, optional categorical COLOR series, IDENTITY, NULL_HANDLING = GAP, CONNECT or ZERO, INTERPOLATION = LINEAR, SMOOTH, STEP_BEFORE or STEP_AFTER, COLOR/OPACITY connections and SIZE/SHAPE/TEXT row decorations; AREA requires AREA_BASELINE = ZERO or X/Y_START/Y_END with no baseline.");
             if (!IsSupportedPredicate(condition.Predicate))
                 Add(results, node, $"Layer '{layer.Name}' condition predicate supports only fields, parameters, literals, comparisons, AND/OR/NOT, and IS NULL.");
@@ -755,10 +832,17 @@ public static class AdvancedChartSemanticValidator
                 Add(results, node, $"Layer '{layer.Name}' condition ELSE value must be a literal or parameter.");
             if (condition.Channel == AdvancedChartConditionChannel.Shape)
             {
-                if (layer.Mark != AdvancedChartMarkKind.Point && !connectedLine)
+                if (layer.Mark != AdvancedChartMarkKind.Point && !(connectedLine && !ordinaryConditionedLineOrArea))
                     Add(results, node, $"Layer '{layer.Name}' may condition SHAPE only on POINT marks.");
                 ValidateConditionShape(condition.WhenTrue, "THEN");
                 if (condition.WhenFalse is not null) ValidateConditionShape(condition.WhenFalse, "ELSE");
+            }
+            if (condition.Channel == AdvancedChartConditionChannel.LineDash)
+            {
+                if (layer.Mark is not (AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area))
+                    Add(results, node, $"Layer '{layer.Name}' may condition LINE_DASH only on LINE and AREA marks.");
+                ValidateConditionLineDash(condition.WhenTrue, "THEN");
+                if (condition.WhenFalse is not null) ValidateConditionLineDash(condition.WhenFalse, "ELSE");
             }
 
             if (connectedLine)
@@ -780,6 +864,15 @@ public static class AdvancedChartSemanticValidator
             {
                 if (LiteralText(value) is { } shape && !PointShapeVocabulary.IsSupported(shape))
                     Add(results, node, connectedLine ? $"Connected CONDITIONS {branch} SHAPE accepts only {PointShapeVocabulary.DisplayList}; found '{shape}'." : $"Layer '{layer.Name}' condition {branch} SHAPE accepts only {PointShapeVocabulary.DisplayList}; found '{shape}'.");
+            }
+
+            void ValidateConditionLineDash(Expression value, string branch)
+            {
+                var kind = ConstantKind(value);
+                if (kind is LiteralKind.Numeric or LiteralKind.Boolean)
+                    Add(results, node, $"Layer '{layer.Name}' condition {branch} LINE_DASH requires SOLID, DASHED, DOTTED, or null.");
+                else if (LiteralText(value) is { } dash && dash.Trim().ToUpperInvariant() is not ("SOLID" or "DASHED" or "DOTTED"))
+                    Add(results, node, $"Layer '{layer.Name}' condition {branch} LINE_DASH accepts only SOLID, DASHED, or DOTTED; found '{dash}'.");
             }
         }
     }

@@ -92,6 +92,15 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
             Resolution(chart.Resolution.X), Resolution(chart.Resolution.Y), Resolution(chart.Resolution.Color));
         var title = manifest.Options.GetValueOrDefault("title") ?? manifest.Name;
         var resolvedBindings = bindings.ToImmutableArray();
+        var allScales = declaredScales.AddRange(inferredScales.Where(inferred => declaredScales.All(declared =>
+            !declared.Id.Equals(inferred.Id, StringComparison.OrdinalIgnoreCase))));
+        if (statement.Overlays.Count > 0)
+        {
+            var primaryYScaleId = resolvedBindings.FirstOrDefault(b => b.Channel is FieldChannel.Y or FieldChannel.Close && b.Axis != AxisRole.Secondary)?.ScaleId
+                ?? allScales.FirstOrDefault(s => s.Channel == FieldChannel.Y)?.Id
+                ?? "y";
+            layers = layers.AddRange(NamedVisualChartLowerer.BuildOverlayLayers(statement.Overlays, resolvedBindings, primaryYScaleId));
+        }
         var spec = ChartSpec.Create(
             manifest.Name,
             statement.Source.TempTableName ?? $"inline:{manifest.Name}",
@@ -107,8 +116,7 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
                     chart.Coordinate.MapFile ?? chart.Coordinate.MapName ?? "WORLD",
                     chart.Coordinate.FeatureKey ?? "name")
             },
-            declaredScales.AddRange(inferredScales.Where(inferred => declaredScales.All(declared =>
-                !declared.Id.Equals(inferred.Id, StringComparison.OrdinalIgnoreCase)))),
+            allScales,
             ChartStyleTokens.Formatting(context, manifest,
                 layers.SelectMany(layer => layer.Bindings)
                     .Where(binding => binding.SourceKind == BindingSourceKind.Field && binding.Field is not null && binding.Format is not null)
@@ -323,6 +331,15 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         {
             if (!connected || whenTrue.Kind != ChartValueKind.Null) ValidatePointShape(Display(whenTrue), condition);
             if (whenFalse is not null && (!connected || whenFalse.Kind != ChartValueKind.Null)) ValidatePointShape(Display(whenFalse), condition);
+        }
+        if (condition.Channel == AdvancedChartConditionChannel.LineDash)
+        {
+            if (whenTrue.Kind != ChartValueKind.Null)
+                whenTrue = ChartValue.From(NamedVisualChartLowerer.NormalizeLineDash(Display(whenTrue))?.ToUpperInvariant()
+                    ?? throw AdvancedChartSemanticException.At(condition, $"CONDITIONS LINE_DASH accepts only SOLID, DASHED, DOTTED, or null; found '{Display(whenTrue)}'."));
+            if (whenFalse is { Kind: not ChartValueKind.Null })
+                whenFalse = ChartValue.From(NamedVisualChartLowerer.NormalizeLineDash(Display(whenFalse))?.ToUpperInvariant()
+                    ?? throw AdvancedChartSemanticException.At(condition, $"CONDITIONS LINE_DASH accepts only SOLID, DASHED, DOTTED, or null; found '{Display(whenFalse)}'."));
         }
         return new EncodingConditionSpec(
             AdvancedChartEnumBridge.Condition(condition.Channel),

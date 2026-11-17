@@ -1814,6 +1814,7 @@ public static class AstSerializer
     private static string Upper<T>(T value) where T : struct, Enum => value switch
     {
         AdvancedChartCoordinateKind.TransposedCartesian => "TRANSPOSED_CARTESIAN",
+        AdvancedChartConditionChannel.LineDash => "LINE_DASH",
         AdvancedChartChannel.XStart => "X_START",
         AdvancedChartChannel.XEnd => "X_END",
         AdvancedChartChannel.XOffset => "X_OFFSET",

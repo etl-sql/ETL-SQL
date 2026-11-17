@@ -842,10 +842,10 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
             CREATE VISUAL BadLine AS CUSTOM (
               SOURCE = #prepared,
               CHART (
-                COORDINATE (TYPE = CARTESIAN),
-                SCALES (x = BAND (CHANNEL = X), y = LINEAR (CHANNEL = Y)),
+                COORDINATE (TYPE = POLAR),
+                SCALES (t = ORDINAL (CHANNEL = THETA), r = LINEAR (CHANNEL = RADIUS)),
                 LAYERS (trend = LINE (
-                  ENCODINGS (X = Category (TYPE = NOMINAL, SCALE = x), Y = Value (TYPE = QUANTITATIVE, SCALE = y)),
+                  ENCODINGS (THETA = Category (TYPE = NOMINAL, SCALE = t), RADIUS = Value (TYPE = QUANTITATIVE, SCALE = r)),
                   CONDITIONS (COLOR WHEN Value < 0 THEN '#b91c1c')
                 ))
               )
@@ -1454,5 +1454,139 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
         Assert.StartsWith("2026-06-30", PlotPlanResolver.Display(westTime.Domain[^1]));
         Assert.InRange(eastTime.Ticks.Length, 2, 4);
         Assert.InRange(westTime.Ticks.Length, 2, 4);
+    }
+
+    [Fact]
+    public async Task CustomChart_AllowsCategoricalAndTemporalLineAreaConditionsAndLineDashAndSegmentStyle()
+    {
+        const string sql = """
+            CREATE VISUAL CategoricalConditionLine AS CUSTOM (
+              SOURCE = #prepared,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (x = BAND (CHANNEL = X), y = LINEAR (CHANNEL = Y)),
+                LAYERS (
+                  trend = LINE (
+                    ENCODINGS (X = Category (TYPE = NOMINAL, SCALE = x), Y = Value (TYPE = QUANTITATIVE, SCALE = y)),
+                    CONDITIONS (
+                      COLOR WHEN Value < 0 THEN '#b91c1c' ELSE '#2563eb',
+                      LINE_DASH WHEN IsProj = 1 THEN 'DASHED' ELSE 'SOLID'
+                    )
+                  )
+                )
+              )
+            );
+
+            CREATE VISUAL TemporalConditionArea AS CUSTOM (
+              SOURCE = #events,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (t = TIME (CHANNEL = X), y = LINEAR (CHANNEL = Y)),
+                LAYERS (
+                  band = AREA (
+                    ENCODINGS (X = RecordedAt (TYPE = TEMPORAL, SCALE = t), Y = Value (TYPE = QUANTITATIVE, SCALE = y)),
+                    STYLE (LINE_DASH = 'DOTTED'),
+                    CONDITIONS (COLOR WHEN Value < 0 THEN '#dc2626')
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var diagnostics = await new AdvancedChartAuthoringRule().AnalyzeAsync(script, new DefaultLintContext());
+        Assert.Empty(diagnostics);
+
+        var lineStmt = script.Statements.OfType<CreateVisualStatement>().First(s => s.Name == "CategoricalConditionLine");
+        var reparsed = Assert.Single(new Parser(new Lexer(lineStmt.ToSql()).Tokenize(), lineStmt.ToSql()).Parse().Statements.OfType<CreateVisualStatement>());
+        Assert.Equal(lineStmt.ToSql(), reparsed.ToSql());
+
+        var lineManifest = new VisualManifest
+        {
+            Name = "CategoricalConditionLine",
+            Columns = ["Category", "Value", "IsProj"],
+            Rows = [["A", "10", "0"], ["B", "-5", "1"], ["C", "20", "1"]]
+        };
+        var lineSpec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(lineStmt, lineManifest);
+        var lineData = new VisualChartDataBuilder().Build(lineSpec, lineManifest);
+        var linePlan = new PlotPlanResolver().Resolve(lineSpec, lineData, new PlotBounds(0, 0, 600, 350));
+        var lineSvg = new SvgChartRenderer().Render(linePlan);
+        Assert.Contains("stroke='#b91c1c'", lineSvg);
+        Assert.Contains("stroke-dasharray='7 5'", lineSvg);
+
+        var areaStmt = script.Statements.OfType<CreateVisualStatement>().First(s => s.Name == "TemporalConditionArea");
+        var areaManifest = new VisualManifest
+        {
+            Name = "TemporalConditionArea",
+            Columns = ["RecordedAt", "Value"],
+            Rows = [["2026-01-01", "10"], ["2026-01-10", "-5"], ["2026-01-20", "15"]]
+        };
+        var areaSpec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(areaStmt, areaManifest);
+        var areaData = new VisualChartDataBuilder().Build(areaSpec, areaManifest);
+        var areaPlan = new PlotPlanResolver().Resolve(areaSpec, areaData, new PlotBounds(0, 0, 600, 350));
+        var areaSvg = new SvgChartRenderer().Render(areaPlan);
+        Assert.Contains("fill='#dc2626'", areaSvg);
+        Assert.Contains("stroke-dasharray='1 5'", areaSvg);
+    }
+
+    [Fact]
+    public void CustomChart_SupportsOverlaysAndSegmentStyleOption()
+    {
+        const string sql = """
+            CREATE VISUAL CustomWithOverlays AS CUSTOM (
+              SOURCE = #sales,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (t = POINT (CHANNEL = X), amt = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)),
+                LAYERS (
+                  actual = LINE (
+                    ENCODINGS (
+                      X = Period (TYPE = ORDINAL, SCALE = t),
+                      Y = Revenue (TYPE = QUANTITATIVE, SCALE = amt),
+                      COLOR = DATUM('Actual') (TYPE = NOMINAL)
+                    )
+                  )
+                )
+              ),
+              OPTIONS (
+                SEGMENT_STYLE (WHEN IsForecast = 1 THEN LINE_DASH = DASHED, COLOR = '#64748b')
+              ),
+              OVERLAYS (
+                REFERENCE_LINE (VALUE = 150, LABEL = 'Target', COLOR = '#ef4444'),
+                AVERAGE AS SOLID WITH (LABEL = 'Avg', COLOR = '#10b981'),
+                LINEAR AS DASHED WITH (SERIES = 'Actual', LABEL = 'Trend', COLOR = '#6366f1')
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var stmt = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(stmt));
+
+        var roundTripped = stmt.ToSql();
+        var reparsed = Assert.Single(new Parser(new Lexer(roundTripped).Tokenize(), roundTripped).Parse().Statements.OfType<CreateVisualStatement>());
+        Assert.Equal(roundTripped, reparsed.ToSql());
+
+        var manifest = new VisualManifest
+        {
+            Name = "CustomWithOverlays",
+            Columns = ["Period", "Revenue", "IsForecast"],
+            Rows = [["P1", "100", "0"], ["P2", "140", "0"], ["P3", "180", "1"], ["P4", "220", "1"]]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(stmt, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 700, 380));
+        plan = ETL_SQL.Reporting.Builders.VisualBuilder.ApplySegmentStyles(plan, [null, null, new() { LineDash = "DASHED", Color = "#64748b" }, new() { LineDash = "DASHED", Color = "#64748b" }]);
+
+        Assert.Contains(plan.Layers, l => l.Style.Any(t => t.Name == "overlayType" && t.Value == "ReferenceLine"));
+        Assert.Contains(plan.Layers, l => l.Style.Any(t => t.Name == "overlayType" && t.Value == "Average"));
+        Assert.Contains(plan.Layers, l => l.Style.Any(t => t.Name == "overlayType" && t.Value == "Linear"));
+
+        var svg = new SvgChartRenderer().Render(plan);
+        Assert.Contains("Target", svg);
+        Assert.Contains("Avg", svg);
+        Assert.Contains("Trend", svg);
+        Assert.Contains("stroke-dasharray='7 5'", svg);
+        Assert.Contains("stroke='#64748b'", svg);
     }
 }

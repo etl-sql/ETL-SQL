@@ -1352,7 +1352,7 @@ internal sealed class PlotPlanSvgRenderer
             }
             return;
         }
-        var segments = new List<List<(decimal X, decimal Y)>> { new() };
+        var segments = new List<List<((decimal X, decimal Y) Point, ResolvedDatum Datum)>> { new() };
         for (var index = 0; index < layer.Data.Length; index++)
         {
             var datum = layer.Data[index];
@@ -1365,8 +1365,8 @@ internal sealed class PlotPlanSvgRenderer
             var xPos = xScale is not null && Continuous(xScale) && PositionNumber(Channel(datum, FieldChannel.X)) is { } ax
                 ? MapX(ax, xScale, area)
                 : CategoryX(index, categoryCount, area, xScale);
-            segments[^1].Add((xPos + datum.DisplayOffsetX,
-                MapY(value.Value, scale, area.Height) + datum.DisplayOffsetY));
+            segments[^1].Add(((xPos + datum.DisplayOffsetX,
+                MapY(value.Value, scale, area.Height) + datum.DisplayOffsetY), datum));
         }
         var baselineOpt = LayerStyle(layer, "areaBaseline") ?? LayerStyle(layer, "area_baseline");
         decimal baselineY = area.Bottom;
@@ -1386,11 +1386,35 @@ internal sealed class PlotPlanSvgRenderer
         var areaInterpolation = ResolveInterpolation(LayerStyle(layer, "INTERPOLATION"), smoothFallback: false);
         var areaDash = LineStyleAttributes(LayerStyle(layer, "lineStyle"));
         var areaStroke = LineWidth(layer, "2");
-        foreach (var points in segments.Where(segment => segment.Count > 1))
+        var hasSegmentStyles = layer.Data.Any(d => !string.IsNullOrEmpty(d.SegmentColor) || !string.IsNullOrEmpty(d.SegmentLineDash));
+        foreach (var items in segments.Where(segment => segment.Count > 1))
         {
-            var path = PathData(points, areaInterpolation);
-            builder.AppendLine($"<path class='plot-area'{seriesAttr} d='{path} L {N(points[^1].X)} {N(baselineY)} L {N(points[0].X)} {N(baselineY)} Z' fill='{Esc(color)}' fill-opacity='.2'/>");
-            builder.AppendLine($"<path class='plot-line'{seriesAttr} d='{path}' fill='none' stroke='{Esc(color)}' stroke-width='{areaStroke}'{areaDash}/>");
+            if (hasSegmentStyles)
+            {
+                for (var i = 1; i < items.Count; i++)
+                {
+                    var p0 = items[i - 1];
+                    var p1 = items[i];
+                    var segCol = p1.Datum.SegmentColor ?? p0.Datum.SegmentColor ?? color;
+                    var segDash = p1.Datum.SegmentLineDash ?? p0.Datum.SegmentLineDash;
+                    var segDashAttr = !string.IsNullOrEmpty(segDash) ? LineStyleAttributes(segDash) : areaDash;
+                    var segPaint = SafePaint(segCol, color);
+                    var segOpacity = EncodingNumber(p1.Datum, ConditionalEncodingChannel.Opacity)
+                        ?? EncodingNumber(p0.Datum, ConditionalEncodingChannel.Opacity)
+                        ?? 1m;
+                    var fillOpacity = N(Math.Clamp(segOpacity * .2m, 0m, 1m));
+                    var segPath = PathData([p0.Point, p1.Point], areaInterpolation);
+                    builder.AppendLine($"<path class='plot-area'{seriesAttr} d='{segPath} L {N(p1.Point.X)} {N(baselineY)} L {N(p0.Point.X)} {N(baselineY)} Z' fill='{Esc(segPaint)}' fill-opacity='{fillOpacity}'/>");
+                    builder.AppendLine($"<path class='plot-line'{seriesAttr} d='{segPath}' fill='none' stroke='{Esc(segPaint)}' stroke-width='{areaStroke}'{segDashAttr}/>");
+                }
+            }
+            else
+            {
+                var points = items.Select(item => item.Point).ToList();
+                var path = PathData(points, areaInterpolation);
+                builder.AppendLine($"<path class='plot-area'{seriesAttr} d='{path} L {N(points[^1].X)} {N(baselineY)} L {N(points[0].X)} {N(baselineY)} Z' fill='{Esc(color)}' fill-opacity='.2'/>");
+                builder.AppendLine($"<path class='plot-line'{seriesAttr} d='{path}' fill='none' stroke='{Esc(color)}' stroke-width='{areaStroke}'{areaDash}/>");
+            }
         }
     }
 

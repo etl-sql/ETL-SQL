@@ -23,6 +23,9 @@ public sealed record ResolvedConnectionDecoration(decimal X, decimal Y, decimal 
         if (encoding.Channel == ConditionalEncodingChannel.Shape && encoding.Value.Kind != ChartValueKind.Null &&
             (encoding.Value.Kind != ChartValueKind.Text || !IsSupportedShape(encoding.Value.Text)))
             throw new InvalidDataException("Connected CONDITIONS SHAPE requires CIRCLE, SQUARE, TRIANGLE, DIAMOND, CROSS, STAR, or null.");
+        if (encoding.Channel == ConditionalEncodingChannel.LineDash && encoding.Value.Kind != ChartValueKind.Null &&
+            (encoding.Value.Kind != ChartValueKind.Text || encoding.Value.Text?.Trim().ToUpperInvariant() is not ("SOLID" or "DASHED" or "DOTTED")))
+            throw new InvalidDataException("CONDITIONS LINE_DASH requires SOLID, DASHED, DOTTED, or null.");
     }
 
     public static ResolvedConnectionDecoration? FromRaw(ResolvedDatum datum, ResolvedMarkLayer layer, ImmutableArray<StyleToken> plotStyle)

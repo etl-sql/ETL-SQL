@@ -230,6 +230,7 @@ internal static class AdvancedChartEnumBridge
         AdvancedChartConditionChannel.Size => ConditionalEncodingChannel.Size,
         AdvancedChartConditionChannel.Shape => ConditionalEncodingChannel.Shape,
         AdvancedChartConditionChannel.Text => ConditionalEncodingChannel.Text,
+        AdvancedChartConditionChannel.LineDash => ConditionalEncodingChannel.LineDash,
         _ => throw Unmapped(value)
     };
 

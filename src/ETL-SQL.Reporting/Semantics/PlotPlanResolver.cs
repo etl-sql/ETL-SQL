@@ -76,7 +76,7 @@ public sealed class PlotPlanResolver
         var radial = spec.Coordinate.Kind == CoordinateKind.Polar && layers.Any(layer => layer.Stack != StackMode.None);
         layers = radial ? RadialStackResolver.Resolve(spec, layers.Select((layer, index) => layer with { ZIndex = index }).ToImmutableArray()) : ResolveStacking(layers);
         var axes = spec.ResolveCartesianAxes();
-        var scaleSpec = spec.Layers.Any(layer => (layer.Mark == MarkKind.Area && (!layer.Conditions.IsDefaultOrEmpty || spec.IsTransposedAreaAspect || spec.IsTransposedConnected) || layer.Mark == MarkKind.Line && !layer.Conditions.IsDefaultOrEmpty && layer.Style.Any(token => token.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && token.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase))) && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Y))
+        var scaleSpec = spec.Layers.Any(layer => (layer.Mark == MarkKind.Area && (ChartSpec.IsConnectedConditionLayer(spec.Coordinate, layer) || spec.IsTransposedAreaAspect || spec.IsTransposedConnected) || layer.Mark == MarkKind.Line && ChartSpec.IsConnectedConditionLayer(spec.Coordinate, layer) && layer.Style.Any(token => token.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && token.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase))) && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Y))
             ? spec with { Scales = spec.Scales.Select(scale => scale.Channel == FieldChannel.Y && (axes is null || scale.Id.Equals(axes.YScaleId, StringComparison.OrdinalIgnoreCase)) ? scale with { IncludeZero = true } : scale).ToImmutableArray() }
             : spec;
         var scales = ResolveScales(scaleSpec, columns, categories, layers, formatter).ToImmutableArray();
@@ -155,7 +155,7 @@ public sealed class PlotPlanResolver
         // `gapRows.Contains` on an ImmutableArray made the skipped-row scan O(rows x gap rows).
         var gapRowSet = new HashSet<int>();
         var usedRows = new HashSet<int>();
-        var conditionedConnection = spec.Layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty);
+        var conditionedConnection = spec.Layers.Any(layer => ChartSpec.IsConnectedConditionLayer(spec.Coordinate, layer));
         foreach (var layer in layers)
         {
             if (!layer.Style.IsDefault && layer.Style.Any(token => token.Name == "overlayType")) continue;
@@ -222,7 +222,7 @@ public sealed class PlotPlanResolver
             plan = plan with { Schema = ChartContractVersions.ScaledRibbonPlotPlanSchema, Version = ChartContractVersions.ScaledRibbonPlotPlanVersion };
         if (spec.IsTransposedAreaAspect)
             plan = plan with { Schema = ChartContractVersions.TransposedAreaPlotPlanSchema, Version = ChartContractVersions.TransposedAreaPlotPlanVersion };
-        if (spec.Layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty))
+        if (spec.Layers.Any(layer => ChartSpec.IsConnectedConditionLayer(spec.Coordinate, layer)))
             plan = ConnectedMarkResolver.Attach(plan);
         if (spec.HasOrdinaryInterpolation)
             plan = plan with { Schema = ChartContractVersions.OrdinaryInterpolationPlotPlanSchema, Version = ChartContractVersions.OrdinaryInterpolationPlotPlanVersion };
@@ -672,7 +672,7 @@ public sealed class PlotPlanResolver
             var colorBinding = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color)
                 ?? (isolatedGeometry || spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Stack != StackMode.None) ? null : spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color));
             var explicitSeries = layer.Style.FirstOrDefault(token => token.Name == "series")?.Value;
-            var conditioned = layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty;
+            var conditioned = ChartSpec.IsConnectedConditionLayer(spec.Coordinate, layer);
             var areaConfidence = spec.HasTransposedConfidence && layer.Mark == MarkKind.Area && layer.Bindings.Any(binding => binding.Channel == FieldChannel.ConfidenceLow);
             var areaRibbon = areaConfidence || layer.Mark == MarkKind.Area && (conditioned || spec.IsTransposedAreaAspect || spec.IsConnectedComposition) && layer.Bindings.Any(binding => binding.Channel == FieldChannel.YStart);
             var ribbonScaleId = layer.Mark == MarkKind.Area &&
@@ -962,6 +962,24 @@ public sealed class PlotPlanResolver
         } : spec.NullHandling;
         var categoryBinding = layerBindings.FirstOrDefault(binding => binding.Channel is FieldChannel.X or FieldChannel.Theta);
         var rows = new List<ResolvedDatum>();
+        var applyOrdinarySegmentStyles = layer.Mark is (MarkKind.Line or MarkKind.Area) &&
+            !layer.Conditions.IsDefaultOrEmpty &&
+            !ChartSpec.IsConnectedConditionLayer(spec.Coordinate, layer);
+        ResolvedDatum BuildDatum(int rowIndex)
+        {
+            var datum = Datum(rowIndex, layerBindings, columns, nulls, conditionGroups, formatter);
+            if (!applyOrdinarySegmentStyles || datum.Encodings.IsDefaultOrEmpty)
+                return datum;
+            var segColor = datum.Encodings.FirstOrDefault(e => e.Channel == ConditionalEncodingChannel.Color)?.Value is { Kind: ChartValueKind.Text } c ? c.Text : null;
+            var segDash = datum.Encodings.FirstOrDefault(e => e.Channel == ConditionalEncodingChannel.LineDash)?.Value is { Kind: ChartValueKind.Text } d ? d.Text : null;
+            return segColor is null && segDash is null
+                ? datum
+                : datum with
+                {
+                    SegmentColor = segColor ?? datum.SegmentColor,
+                    SegmentLineDash = segDash ?? datum.SegmentLineDash
+                };
+        }
         var preserveRows = spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Radius && binding.Stack != StackMode.None)
             || layerBindings.Any(binding => binding.Channel is FieldChannel.XOffset or FieldChannel.YOffset)
             || layer.Style.Any(token => token.Name.Equals("preserveRows", StringComparison.OrdinalIgnoreCase)
@@ -1026,7 +1044,7 @@ public sealed class PlotPlanResolver
                 foreach (var facetKey in facetKeys)
                     foreach (var category in categories)
                         if (firstRowByFacetCategory.TryGetValue((facetKey, category), out var rowIndex))
-                            rows.Add(Datum(rowIndex, layerBindings, columns, nulls, conditionGroups, formatter));
+                            rows.Add(BuildDatum(rowIndex));
                 return rows.ToImmutableArray();
             }
             // The same one-pass indexing for the unfaceted category path.
@@ -1045,14 +1063,14 @@ public sealed class PlotPlanResolver
             {
                 var category = categories[categoryIndex];
                 rows.Add(firstRowByCategory.TryGetValue(category, out var rowIndex)
-                    ? Datum(rowIndex, layerBindings, columns, nulls, conditionGroups, formatter)
+                    ? BuildDatum(rowIndex)
                     : GapDatum(categoryIndex, layerBindings, categoryBinding, category));
             }
             return rows.ToImmutableArray();
         }
 
         for (var rowIndex = 0; rowIndex < data.RowCount; rowIndex++)
-            if (include(rowIndex)) rows.Add(Datum(rowIndex, layerBindings, columns, nulls, conditionGroups, formatter));
+            if (include(rowIndex)) rows.Add(BuildDatum(rowIndex));
         return rows.ToImmutableArray();
     }
 
@@ -1287,16 +1305,20 @@ public sealed class PlotPlanResolver
                 !candidate.Style.Any(token => token.Name == "overlayType") &&
                 (candidate.Id.Equals(targetSeries, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(candidate.Style.FirstOrDefault(t => t.Name == "series")?.Value, targetSeries, StringComparison.OrdinalIgnoreCase) ||
+                 candidate.Bindings.Any(b => b.Channel == FieldChannel.Color && b.SourceKind == BindingSourceKind.Datum && b.Constant is not null && string.Equals(ValueKey(b.Constant), targetSeries, StringComparison.OrdinalIgnoreCase)) ||
                  string.Equals(candidate.Bindings.FirstOrDefault(b => b.Channel is FieldChannel.Y or FieldChannel.Y2)?.Field, targetSeries, StringComparison.OrdinalIgnoreCase)))
             : null;
 
+        var primaryLayers = spec.Layers.Where(candidate => !candidate.Style.Any(token => token.Name == "overlayType"));
         var xBinding = matchingSeriesLayer?.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X)
-            ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X);
+            ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X)
+            ?? primaryLayers.SelectMany(l => l.Bindings).FirstOrDefault(binding => binding.Channel == FieldChannel.X);
         var yBinding = matchingSeriesLayer?.Bindings.FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Close)
             ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y && binding.Axis != AxisRole.Secondary)
             ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y)
             ?? spec.Bindings.FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2)
             ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Close)
+            ?? primaryLayers.SelectMany(l => l.Bindings).FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Close)
             ?? spec.Bindings.First(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Close);
 
         var yColumn = columns[yBinding.Field!];

@@ -369,8 +369,8 @@ public class ReportParser : ParserComponent
             throw new SyntaxException($"CUSTOM visual '{name}' requires a CHART clause.", startToken.Line, startToken.Column);
         if (visualType != VisualType.Custom && advancedChart != null)
             throw new SyntaxException("CHART is only valid on CUSTOM visuals.", startToken.Line, startToken.Column);
-        if (visualType == VisualType.Custom && (mappings.Count > 0 || typedSeries.Count > 0 || overlays.Count > 0 || formattingRules.Count > 0))
-            throw new SyntaxException("CUSTOM visuals use CHART encodings and cannot use MAPPINGS, SERIES, OVERLAYS, or FORMATTING.", startToken.Line, startToken.Column);
+        if (visualType == VisualType.Custom && (mappings.Count > 0 || typedSeries.Count > 0 || formattingRules.Count > 0))
+            throw new SyntaxException("CUSTOM visuals use CHART encodings and cannot use MAPPINGS, SERIES, or FORMATTING.", startToken.Line, startToken.Column);
 
         HtmlTemplateDefinition? htmlTemplateDef = null;
         if (visualType == VisualType.Html)
@@ -1503,6 +1503,7 @@ public class ReportParser : ParserComponent
         "SIZE" => AdvancedChartConditionChannel.Size,
         "SHAPE" => AdvancedChartConditionChannel.Shape,
         "TEXT" => AdvancedChartConditionChannel.Text,
+        "LINE_DASH" => AdvancedChartConditionChannel.LineDash,
         _ => throw new SyntaxException($"Unknown condition channel '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
     };
 

@@ -580,7 +580,7 @@ namespace ETL_SQL.Reporting.Builders
                         vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData, geography: vm.GeographicGeometry);
                         if (chartStatement.AdvancedChart is null && vm.RowStyles is { Count: > 0 })
                             vm.PlotPlan = ApplyChartFormatting(vm.PlotPlan, vm.RowStyles);
-                        if (chartStatement.AdvancedChart is null && vm.SegmentRowStyles is { Count: > 0 })
+                        if (vm.SegmentRowStyles is { Count: > 0 })
                             vm.PlotPlan = ApplySegmentStyles(vm.PlotPlan, vm.SegmentRowStyles);
                     }
                     if (vm.PlotPlan?.Series is { Length: > 0 } planSeries &&
@@ -1763,7 +1763,7 @@ namespace ETL_SQL.Reporting.Builders
         {
             Layers = plan.Layers.Select(layer =>
             {
-                if (layer.Mark != MarkKind.Line) return layer;
+                if (layer.Mark is not (MarkKind.Line or MarkKind.Area)) return layer;
                 return layer with
                 {
                     Data = layer.Data.Select(datum =>
@@ -1773,8 +1773,8 @@ namespace ETL_SQL.Reporting.Builders
                         if (style == null) return datum;
                         return datum with
                         {
-                            SegmentLineDash = style.LineDash,
-                            SegmentColor = style.Color
+                            SegmentLineDash = style.LineDash ?? datum.SegmentLineDash,
+                            SegmentColor = style.Color ?? datum.SegmentColor
                         };
                     }).ToImmutableArray()
                 };
