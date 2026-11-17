@@ -36,6 +36,34 @@ public sealed class ArchiveTests : IDisposable
     private string P(string relative) => Path.Combine(_root, relative);
     private string Sql(string relative) => P(relative).Replace("'", "''");
 
+    [Fact]
+    public void TarLimitsApplyToListingAndPatternExcludedEntries()
+    {
+        var archivePath = P("large.tar.gz");
+        using (var file = File.Create(archivePath))
+        using (var gzip = new GZipStream(file, CompressionMode.Compress))
+        using (var writer = new TarWriter(gzip, TarEntryFormat.Pax))
+        {
+            writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "excluded.csv")
+            {
+                DataStream = new MemoryStream(new byte[32 * 1024])
+            });
+        }
+
+        var limits = new ArchiveExtractionLimits(MaxEntryBytes: 1024, MaxTotalBytes: 2048);
+        Assert.Throws<InvalidDataException>(() => SafeArchiveService.ListEntries(
+            archivePath, ArchiveFormat.TarGz, default, limits));
+
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.SecurityService.IsTestMode = false;
+        evaluator.SecurityService.ApprovedSafeZones.Add(_root);
+        var authorizer = new FileSystemPolicyAuthorizer(evaluator.SecurityService);
+        Assert.Throws<InvalidDataException>(() => SafeArchiveService.ExtractArchive(
+            archivePath, P("selected"), ArchiveFormat.TarGz, false, evaluator, authorizer,
+            pattern: "*.json", limits: limits));
+        Assert.False(File.Exists(P("selected/excluded.csv")));
+    }
+
     private static async Task<Evaluator> RunAsync(string script)
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

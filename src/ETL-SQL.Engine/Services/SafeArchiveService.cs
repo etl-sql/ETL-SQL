@@ -252,7 +252,7 @@ public static class SafeArchiveService
                 using (var fs = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                 using (var reader = new TarReader(fs))
                 {
-                    ReadTarEntryInfos(reader, entries, limits, compressedSizeKnown: true, cancellationToken);
+                    ReadTarEntryInfos(reader, entries, limits, fs.Length, compressedSizeKnown: true, cancellationToken);
                 }
                 break;
 
@@ -261,7 +261,7 @@ public static class SafeArchiveService
                 using (var gz = new GZipStream(fs, CompressionMode.Decompress))
                 using (var reader = new TarReader(gz))
                 {
-                    ReadTarEntryInfos(reader, entries, limits, compressedSizeKnown: false, cancellationToken);
+                    ReadTarEntryInfos(reader, entries, limits, fs.Length, compressedSizeKnown: false, cancellationToken);
                 }
                 break;
 
@@ -288,9 +288,11 @@ public static class SafeArchiveService
         TarReader reader,
         List<ArchiveEntryInfo> entries,
         ArchiveExtractionLimits limits,
+        long archiveFileLength,
         bool compressedSizeKnown,
         CancellationToken cancellationToken)
     {
+        long totalBytes = 0;
         TarEntry? entry;
         while ((entry = reader.GetNextEntry()) != null)
         {
@@ -300,6 +302,7 @@ public static class SafeArchiveService
                 throw new InvalidDataException($"Archive exceeds maximum entry count ({limits.MaxEntries:N0}).");
             }
 
+            totalBytes = ValidateTarEntrySize(entry.Length, totalBytes, archiveFileLength, limits);
             var fullPath = NormalizeArchivePath(entry.Name);
             bool isDir = entry.EntryType == TarEntryType.Directory;
             var name = GetEntryName(fullPath);
@@ -455,6 +458,7 @@ public static class SafeArchiveService
         Directory.CreateDirectory(destination);
 
         long totalExtractedBytes = 0;
+        long totalDeclaredBytes = 0;
         int entryCount = 0;
 
         using var reader = new TarReader(tarStream);
@@ -462,6 +466,9 @@ public static class SafeArchiveService
         while ((entry = reader.GetNextEntry()) != null)
         {
             context.CancellationToken.ThrowIfCancellationRequested();
+            // TarReader consumes skipped bodies on the next read, including PATTERN exclusions.
+            // Admit their sizes before that read so selective extraction cannot bypass the bounds.
+            totalDeclaredBytes = ValidateTarEntrySize(entry.Length, totalDeclaredBytes, archiveFileLength, limits);
             entryCount++;
             if (entryCount > limits.MaxEntries)
             {
@@ -589,6 +596,19 @@ public static class SafeArchiveService
             totalExtractedBytesBefore: 0,
             limits,
             context.CancellationToken);
+    }
+
+    private static long ValidateTarEntrySize(long entryBytes, long totalBefore, long archiveFileLength, ArchiveExtractionLimits limits)
+    {
+        if (entryBytes > limits.MaxEntryBytes)
+            throw new InvalidDataException("TAR entry exceeds maximum allowed uncompressed size.");
+        if (entryBytes > limits.MaxTotalBytes - totalBefore)
+            throw new InvalidDataException("TAR archive exceeds maximum allowed total uncompressed size.");
+        long total = totalBefore + entryBytes;
+        if (total > limits.RatioCheckMinBytes && archiveFileLength > 0 &&
+            total > archiveFileLength * limits.MaxCompressionRatio)
+            throw new InvalidDataException("TAR archive exceeds maximum allowed decompression ratio.");
+        return total;
     }
 
     private static long WriteBoundedEntryFile(

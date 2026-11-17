@@ -17,6 +17,27 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.23.0 — Runtime: machine vault creation requires write authority
+- **What changed**: Vault directories receive their restrictive ACL before any value is written. Windows non-admin processes can no longer create a first entry through inherited directory permissions before those permissions are removed.
+- **Who is affected**: Non-elevated Windows processes initializing LocalMachine secret or connection stores.
+- **Migration**: Run machine-store administration with an elevated administrator token. Use CurrentUser protection for a personal workstation store. ServiceIdentity remains read-only.
+- **Diagnostic**: Access denied while writing a machine-store entry.
+- **Earliest removal**: N/A
+
+### v0.23.0 — Runtime: cached reports require verifiable source and connection access
+- **What changed**: Snapshot viewing and export both check connection permissions against the source hash recorded at execution. Missing hashes, changed or missing source, unresolved dynamic connections, and external `RUN SCRIPT` dependencies fail closed. Procedure and function bodies contribute their connection dependencies.
+- **Who is affected**: Cached reports using shared connections, older snapshots without source hashes, and reports with dependencies that cannot be resolved from their source text.
+- **Migration**: Refresh snapshots after source changes or to record a missing hash. Use live execution for reports with dynamic connections or external script dependencies until snapshot dependency tracking supports them. Grant connection Use permission to readers who need the cached data.
+- **Diagnostic**: HTTP 403 on snapshot or export access.
+- **Earliest removal**: N/A
+
+### v0.23.0 — Semantic: ambiguous pivot outputs and decimal chart coordinates
+- **What changed**: PIVOT rejects labels that collide with grouping columns or with the NULL output label, before modifying the destination. Polynomial overlays retain distinct decimal X coordinates when a large common offset would collapse them during floating-point conversion.
+- **Who is affected**: Pivots with ambiguous output names and polynomial charts with closely spaced, large decimal X values.
+- **Migration**: Rename conflicting grouping columns or pivot values. No chart syntax change is required.
+- **Diagnostic**: PIVOT output column is ambiguous.
+- **Earliest removal**: N/A
+
 ### v0.23.0 — Semantic: join filtering, merge joins and window spill correctness
 - **What changed**: Pre-join filtering no longer removes left-side matches needed by RIGHT/FULL joins, and unknown source schemas no longer cause speculative identifier qualification. Merge SEMI/ANTI joins return only qualifying left rows, and mixed-type compound sort keys use a transitive type order. Ordered running RANGE aggregates can spill tied peers while retaining their shared aggregate result.
 - **Who is affected**: Queries using these join paths or mixed-type composite keys; large ordered window queries with tied keys.

@@ -25,6 +25,23 @@ namespace ETL_SQL.Tests.Reporting.AdvancedAuthoring;
 public sealed class AnalyticalOverlayTests
 {
     [Fact]
+    [Trait("CompatBreak", "0.23")]
+    public void PolynomialRegression_PreservesDistinctDecimalXOnAShiftedDomain()
+    {
+        var manifest = Manifest("V", ["XVal", "YVal"],
+        [
+            ["1000000000000000000000000", "10"],
+            ["1000000000000000000000001", "40"],
+            ["1000000000000000000000002", "90"]
+        ]);
+        var plan = Resolve(
+            "CREATE VISUAL V AS SCATTER (SOURCE = #d, MAPPINGS (X = XVal, Y = YVal), OVERLAYS (POLYNOMIAL(2) AS SOLID));",
+            manifest);
+        var trend = Assert.Single(plan.Layers, layer => LayerStyle(layer, "overlayType") == "Polynomial");
+        Assert.Equal([10m, 40m, 90m], Values(trend).Select(value => Math.Round(value, 2)));
+    }
+
+    [Fact]
     public void Parser_RoundTripsReferenceBandAndTableCalculations()
     {
         const string sql = """

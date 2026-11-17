@@ -2,17 +2,88 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading;
 using ETL_SQL.App;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
+using Moq;
 using Xunit;
 
 namespace ETL_SQL.Tests.Statements;
 
+[Trait("CompatBreak", "0.23")]
 public class TransformCorrectnessTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StagedRowsRemainReservedUntilOutputCompletes(bool failWrite)
+    {
+        var evaluator = await RunScriptAsync("CREATE TABLE #src (Id INT); INSERT INTO #src VALUES (1), (1), (2);");
+        var arbiter = new ETL_SQL.Core.MemoryGrantArbiter(1024 * 1024);
+        evaluator.MemoryArbiter = arbiter;
+        var target = new Mock<IDataSource>();
+        target.Setup(t => t.TruncateAsync()).Returns(Task.CompletedTask);
+        bool wrote = false;
+        target.Setup(t => t.WriteBatches(It.IsAny<IAsyncEnumerable<DataTable>>(), true, It.IsAny<CancellationToken>()))
+            .Returns(async (IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
+            {
+                Assert.True(arbiter.ReservedBytes > 0, "Staged source rows must remain reserved during output.");
+                var rows = (await batches.ToListAsync()).SelectMany(batch => batch.Rows).ToList();
+                Assert.Equal([1m, 2m], rows.Select(row => Convert.ToDecimal(row["Id"])));
+                wrote = true;
+                if (failWrite) throw new ExecutionException("Output failed.");
+            });
+        evaluator.Connections["#out"] = target.Object;
+        const string sql = "TRANSFORM #out FROM #src USING DEDUPLICATE (KEY_COLS = 'Id');";
+        var ast = new Parser(new Lexer(sql).Tokenize()).Parse();
+        if (failWrite)
+            await Assert.ThrowsAsync<ExecutionException>(() => evaluator.Evaluate(ast));
+        else
+            await evaluator.Evaluate(ast);
+        Assert.True(wrote);
+        Assert.Equal(0, arbiter.ReservedBytes);
+    }
+
+    [Theory]
+    [InlineData("HOUR")]
+    [InlineData("DAY")]
+    [InlineData("WEEK")]
+    [InlineData("MONTH")]
+    [InlineData("QUARTER")]
+    [InlineData("YEAR")]
+    public async Task FillDates_StopsWithinTheRepresentableDateRange(string interval)
+    {
+        var evaluator = await RunScriptAsync($"""
+            CREATE TABLE #src (Dt DATE, Val INT);
+            INSERT INTO #src VALUES ('9999-12-31', 42);
+            TRANSFORM #out FROM #src USING FILL_DATES (DATE_COL = 'Dt', INTERVAL = '{interval}');
+            """);
+        var row = Assert.Single(await ReadRowsAsync(evaluator, "#out"));
+        Assert.Equal(new DateOnly(9999, 12, 31), row["Dt"]);
+        Assert.Equal(42m, row["Val"]);
+    }
+
+    [Theory]
+    [InlineData("('a', 'Region', 10)")]
+    [InlineData("('a', NULL, 10), ('a', 'NULL', 20)")]
+    public async Task Pivot_RejectsAmbiguousOutputColumnsBeforeChangingTheTarget(string values)
+    {
+        var evaluator = await RunScriptAsync($"""
+            CREATE TABLE #src (Region VARCHAR, Category VARCHAR, Val INT);
+            INSERT INTO #src VALUES {values};
+            CREATE TABLE #out (Sentinel INT);
+            INSERT INTO #out VALUES (99);
+            """);
+        const string transform = "TRANSFORM #out FROM #src USING PIVOT (ROW_FIELDS = 'Region', PIVOT_FIELD = 'Category', VALUE_FIELD = 'Val');";
+        var error = await Assert.ThrowsAsync<ExecutionException>(() =>
+            evaluator.Evaluate(new Parser(new Lexer(transform).Tokenize()).Parse()));
+        Assert.Contains("output column", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(99m, Assert.Single(await ReadRowsAsync(evaluator, "#out"))["Sentinel"]);
+    }
+
     private static async Task<Evaluator> RunScriptAsync(string script)
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

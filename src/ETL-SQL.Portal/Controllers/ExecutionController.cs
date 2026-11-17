@@ -186,9 +186,6 @@ public class ExecutionController(
             return Forbid();
         if (await ReportIdentitySensitivity.IsRunLiveAsync(resolvedScriptPath, HttpContext.RequestAborted))
             return NotFound(new { error = IdentitySensitiveSnapshotRefusal });
-        if (await EnforceSharedConnectionSnapshotAccessAsync(id, resolvedScriptPath) is { } connectionDenied)
-            return connectionDenied;
-
         var snapshot = await CatalogScope.ReportSnapshots
             .Where(s => s.ReportId == id)
             .OrderByDescending(s => s.BuiltAt)
@@ -196,6 +193,9 @@ public class ExecutionController(
 
         if (snapshot is null)
             return NotFound(new { error = "No snapshot available. Execute the report first." });
+
+        if (await EnforceSharedConnectionSnapshotAccessAsync(id, resolvedScriptPath, snapshot) is { } connectionDenied)
+            return connectionDenied;
 
         var manifestKey = PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath);
         if (manifestKey is null)
@@ -344,9 +344,6 @@ public class ExecutionController(
         // served, whoever built it.
         if (await ReportIdentitySensitivity.IsRunLiveAsync(scriptPath, HttpContext.RequestAborted))
             return (null, null, null, NotFound(new { error = IdentitySensitiveSnapshotRefusal }));
-        if (await EnforceSharedConnectionSnapshotAccessAsync(id, scriptPath) is { } connectionDenied)
-            return (null, null, null, connectionDenied);
-
         var snapshot = await CatalogScope.ReportSnapshots
             .Where(s => s.ReportId == id)
             .OrderByDescending(s => s.BuiltAt)
@@ -354,6 +351,9 @@ public class ExecutionController(
 
         if (snapshot is null)
             return (null, null, null, NotFound(new { error = "No snapshot available." }));
+
+        if (await EnforceSharedConnectionSnapshotAccessAsync(id, scriptPath, snapshot) is { } connectionDenied)
+            return (null, null, null, connectionDenied);
 
         var manifestKey = PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath);
         if (manifestKey is null)
@@ -365,29 +365,8 @@ public class ExecutionController(
         return (manifestKey, report, snapshot, null);
     }
 
-    private async Task<IActionResult?> EnforceSharedConnectionSnapshotAccessAsync(int reportId, string scriptPath)
+    private async Task<IActionResult?> EnforceSharedConnectionSnapshotAccessAsync(int reportId, string scriptPath, ReportSnapshot snapshot)
     {
-        if (!System.IO.File.Exists(scriptPath))
-            return null;
-
-        string scriptText;
-        try
-        {
-            scriptText = await System.IO.File.ReadAllTextAsync(scriptPath, HttpContext.RequestAborted);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger?.LogWarning(ex, "Could not inspect report {ReportId} script for SHARED: connections; failing closed.", reportId);
-            return Forbid();
-        }
-
-        var scan = ETL_SQL.Core.Governance.SharedConnectionReferenceScan.ExtractAliases(scriptText);
-        if (!scan.IsResolved)
-            return Forbid();
-
-        if (scan.Aliases.Count == 0)
-            return null;
-
         var ct = HttpContext?.RequestAborted ?? CancellationToken.None;
         var catalog = connectionCatalog ?? HttpContext?.RequestServices?.GetService<PortalConnectionCatalogService>();
         if (catalog is null)
@@ -398,7 +377,7 @@ public class ExecutionController(
 
         try
         {
-            await catalog.EnsureCallerCanUseAliasesAsync(scan.Aliases, identity, ct);
+            await catalog.EnsureCallerCanReadSnapshotAsync(scriptPath, snapshot.ScriptHashAtRunTime, identity, ct);
             return null;
         }
         catch (UnauthorizedAccessException)
@@ -408,7 +387,7 @@ public class ExecutionController(
                 "SHARED_CONNECTION_SNAPSHOT_DENIED",
                 "Report",
                 reportId.ToString(),
-                $"EffectiveUser={identity?.EffectiveUser ?? "(none)"}; Aliases={string.Join(',', scan.Aliases)}",
+                $"EffectiveUser={identity?.EffectiveUser ?? "(none)"}",
                 actorType: ActorType,
                 actorId: ActorId);
             return Forbid();

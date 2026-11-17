@@ -1081,7 +1081,11 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", "golden_workflow.rptsql");
         var exportPath = Path.Combine(_factory.TempDir, "scripts", "golden_orders_export.csv");
-        File.Copy(GetGoldenWorkflowPath(), scriptPath, overwrite: true);
+        // This workflow tests cached access. Bind its file destinations explicitly so the
+        // snapshot dependency scan does not have to guess a connection from runtime parameters.
+        var goldenSource = await File.ReadAllTextAsync(GetGoldenWorkflowPath());
+        await File.WriteAllTextAsync(scriptPath, goldenSource.Replace(
+            "FLATFILE(@ExportPath,", $"FLATFILE('{exportPath.Replace("'", "''")}',", StringComparison.Ordinal));
 
         var publishRes = await AuthPost(token, "/api/reports", new
         {
@@ -3754,7 +3758,8 @@ CREATE VISUAL EdgeRows AS TABLE (
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
-    public async Task Snapshot_FailedRefresh_KeepsLastGoodSnapshot()
+    [Trait("CompatBreak", "0.23")]
+    public async Task Snapshot_FailedRefresh_PreservesSnapshotButRequiresSourceForAuthorization()
     {
         var token = await GetAdminTokenAsync();
 
@@ -3792,7 +3797,8 @@ CREATE VISUAL Answer AS CARD (
         var snap1 = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=false");
         Assert.Equal(HttpStatusCode.OK, snap1.StatusCode);
 
-        // Delete the script — next run will fail
+        // Delete the script — next run will fail and the snapshot cannot be authorized.
+        var originalSource = await File.ReadAllTextAsync(scriptPath);
         File.Delete(scriptPath);
 
         var exec2 = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
@@ -3801,10 +3807,13 @@ CREATE VISUAL Answer AS CARD (
         var job2 = await WaitForJobAsync(token, exec2Body!["jobId"]!.GetValue<string>());
         Assert.Equal("Failed", job2["status"]!.GetValue<string>());
 
-        // Old snapshot must still be accessible despite the failed refresh
+        // Retain the snapshot, but refuse access until its exact source is available again.
         var snap2 = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=false");
-        Assert.Equal(HttpStatusCode.OK, snap2.StatusCode);
-        var snapBody = await snap2.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Equal(HttpStatusCode.Forbidden, snap2.StatusCode);
+        await File.WriteAllTextAsync(scriptPath, originalSource);
+        var restored = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=false");
+        Assert.Equal(HttpStatusCode.OK, restored.StatusCode);
+        var snapBody = await restored.Content.ReadFromJsonAsync<JsonObject>(_json);
         Assert.NotNull(snapBody!["builtAt"]);
 
         // Catalog listing should surface Failed status and preserve snapshotBuiltAt
@@ -3887,21 +3896,24 @@ CREATE VISUAL Answer AS TABLE (
 
         var responses = await Task.WhenAll(readTasks.Append(duplicateRefreshTask));
 
-        Assert.Equal(HttpStatusCode.OK, responses[0].StatusCode);
-        var duringRefreshSnapshot = await responses[0].Content.ReadFromJsonAsync<JsonObject>(_json);
-        Assert.NotNull(duringRefreshSnapshot!["manifest"]);
-        Assert.True(duringRefreshSnapshot["builtAt"]!.GetValue<DateTime>() >= baselineBuiltAt);
-
-        Assert.Equal(HttpStatusCode.OK, responses[1].StatusCode);
+        // Until the new snapshot is published, the old source hash cannot authorize its data.
+        foreach (var index in new[] { 0, 1, 5, 6, 7 })
+            Assert.Contains(responses[index].StatusCode, new[] { HttpStatusCode.OK, HttpStatusCode.Forbidden });
+        if (responses[0].StatusCode == HttpStatusCode.OK)
+        {
+            var duringRefreshSnapshot = await responses[0].Content.ReadFromJsonAsync<JsonObject>(_json);
+            Assert.NotNull(duringRefreshSnapshot!["manifest"]);
+            Assert.True(duringRefreshSnapshot["builtAt"]!.GetValue<DateTime>() >= baselineBuiltAt);
+        }
         Assert.Equal(HttpStatusCode.OK, responses[2].StatusCode);
         Assert.Equal(HttpStatusCode.OK, responses[3].StatusCode);
         Assert.Equal(HttpStatusCode.OK, responses[4].StatusCode);
-        Assert.Equal(HttpStatusCode.OK, responses[5].StatusCode);
-        Assert.Equal("text/csv", responses[5].Content.Headers.ContentType?.MediaType);
-        Assert.Equal(HttpStatusCode.OK, responses[6].StatusCode);
-        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", responses[6].Content.Headers.ContentType?.MediaType);
-        Assert.Equal(HttpStatusCode.OK, responses[7].StatusCode);
-        Assert.Equal("application/pdf", responses[7].Content.Headers.ContentType?.MediaType);
+        if (responses[5].StatusCode == HttpStatusCode.OK)
+            Assert.Equal("text/csv", responses[5].Content.Headers.ContentType?.MediaType);
+        if (responses[6].StatusCode == HttpStatusCode.OK)
+            Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", responses[6].Content.Headers.ContentType?.MediaType);
+        if (responses[7].StatusCode == HttpStatusCode.OK)
+            Assert.Equal("application/pdf", responses[7].Content.Headers.ContentType?.MediaType);
 
         Assert.Equal(HttpStatusCode.Accepted, responses[8].StatusCode);
         var duplicateRefresh = await responses[8].Content.ReadFromJsonAsync<JsonObject>(_json);
@@ -3910,6 +3922,9 @@ CREATE VISUAL Answer AS TABLE (
 
         var refreshJob = await WaitForJobAsync(token, refreshJobId);
         Assert.Equal("Completed", refreshJob["status"]!.GetValue<string>());
+        var refreshedExport = await AuthGet(token, $"/api/reports/{reportId}/export/csv");
+        Assert.Equal(HttpStatusCode.OK, refreshedExport.StatusCode);
+        Assert.Contains("43", await refreshedExport.Content.ReadAsStringAsync());
     }
 
     [Fact]

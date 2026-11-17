@@ -25,6 +25,7 @@ public class ExportController(
     SnapshotPackageService snapshotPackages,
     SessionCache sessions,
     PortalExecutionIdentityService identities,
+    PortalConnectionCatalogService connectionCatalog,
     DatasetTenantScope? datasetScope = null,
     PortalTenantCatalogScope? catalogScope = null,
     ETL_SQL.Common.ILogger? logger = null,
@@ -61,8 +62,9 @@ public class ExportController(
 
         // A report whose rows depend on the viewer has no snapshot. Export what this caller sees:
         // their own session, under their identity, with their current parameters. Nothing is kept.
-        if (PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var scriptPath)
-            && await ReportIdentitySensitivity.IsRunLiveAsync(scriptPath, HttpContext.RequestAborted))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var scriptPath))
+            return (null, "Snapshot source is outside the configured script directory", true);
+        if (await ReportIdentitySensitivity.IsRunLiveAsync(scriptPath, HttpContext.RequestAborted))
         {
             if (!ReportIdentitySensitivity.CallerMayRunByReading(User))
                 return (null, "Running this report needs the reports.execute scope", true);
@@ -85,6 +87,19 @@ public class ExportController(
 
         if (snapshot is null)
             return (null, "No snapshot available", false);
+
+        var snapshotIdentity = await identities.BuildAsync(
+            CurrentUserId, _datasetScope.TenantId, IsAdmin, impersonatedUserId: null, HttpContext.RequestAborted);
+        try
+        {
+            await connectionCatalog.EnsureCallerCanReadSnapshotAsync(
+                scriptPath, snapshot.ScriptHashAtRunTime, snapshotIdentity, HttpContext.RequestAborted);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            await audit.LogAsync(CurrentUserId, "SHARED_CONNECTION_SNAPSHOT_DENIED", "Report", reportId.ToString());
+            return (null, "Snapshot access denied", true);
+        }
 
         var manifestKey = PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath);
         if (manifestKey is null)

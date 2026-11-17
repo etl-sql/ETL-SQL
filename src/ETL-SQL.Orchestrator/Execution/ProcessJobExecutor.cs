@@ -154,6 +154,10 @@ namespace ETL_SQL.Orchestrator.Execution
             string? envelopeFile = null;
             try
             {
+                // Protect the directory before writing either the script or its signed identity.
+                var protector = new OsLocalStoreProtector();
+                protector.ProtectDirectory(
+                    runDir, LocalVaultProtectionScope.CurrentUser, serviceIdentity: null);
                 var scriptBytes = Encoding.UTF8.GetBytes(scriptText);
                 await File.WriteAllBytesAsync(tempFile, scriptBytes, cancellationToken);
 
@@ -167,11 +171,8 @@ namespace ETL_SQL.Orchestrator.Execution
                         executionIdentity, jobName, scriptHash, signingSecret!);
                     var path = Path.Combine(runDir, "caller.tok");
                     await File.WriteAllTextAsync(path, signedEnvelope, Encoding.UTF8, cancellationToken);
-                    var protector = new OsLocalStoreProtector();
                     protector.ProtectFile(
                         path, LocalVaultProtectionScope.CurrentUser, serviceIdentity: null);
-                    protector.ProtectDirectory(
-                        runDir, LocalVaultProtectionScope.CurrentUser, serviceIdentity: null);
                     return path;
                 }
 

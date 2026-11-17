@@ -1362,10 +1362,11 @@ public sealed class PlotPlanResolver
 
         // Scale X into [-1, 1] before raising to powers so large domains (epoch ms, revenue)
         // stay well within floating-point and decimal dynamic range and condition cleanly.
-        var xMin = valid.Min(pair => (double)pair.X);
-        var xMax = valid.Max(pair => (double)pair.X);
-        var span = xMax - xMin;
-        double NormalizeX(decimal x) => span == 0d ? 0d : (2d * ((double)x - xMin) / span) - 1d;
+        // COMPAT_BREAK: 0.23 - subtract decimal offsets before conversion so nearby large X values stay distinct.
+        var xMin = valid.Min(pair => pair.X);
+        var xMax = valid.Max(pair => pair.X);
+        var span = DecimalDifference(xMax, xMin);
+        double NormalizeX(decimal x) => span == 0d ? 0d : (2d * DecimalDifference(x, xMin) / span) - 1d;
 
         var size = requestedDegree + 1;
         var matrix = new double[size, size + 1];
@@ -1410,6 +1411,11 @@ public sealed class PlotPlanResolver
             return ToFiniteDecimal(prediction);
         }).ToList();
     }
+
+    private static double DecimalDifference(decimal value, decimal origin) =>
+        Math.Sign(value) == Math.Sign(origin)
+            ? (double)(value - origin)
+            : (double)value - (double)origin;
 
     private static List<decimal?> ExponentialRegression(
         IReadOnlyList<decimal?> xValues,

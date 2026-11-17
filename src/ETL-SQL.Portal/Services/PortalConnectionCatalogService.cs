@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Security.Cryptography;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Multitenancy;
@@ -254,6 +255,38 @@ public sealed class PortalConnectionCatalogService(
     /// Verifies that <paramref name="identity"/> holds <c>Use</c> permission for every catalog alias
     /// referenced by a report before serving a cached snapshot. Does not record connection usage.
     /// </summary>
+    public async Task EnsureCallerCanReadSnapshotAsync(
+        string scriptPath,
+        string? scriptHashAtRunTime,
+        ExecutionIdentity? identity,
+        CancellationToken ct)
+    {
+        // COMPAT_BREAK: 0.23 - authorize the source that actually produced the cached data.
+        if (string.IsNullOrWhiteSpace(scriptHashAtRunTime))
+            throw new UnauthorizedAccessException("Refresh this snapshot to record its source identity.");
+
+        byte[] bytes;
+        try
+        {
+            bytes = await File.ReadAllBytesAsync(scriptPath, ct);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new UnauthorizedAccessException("Snapshot source is unavailable.");
+        }
+
+        var hash = "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        if (!string.Equals(hash, scriptHashAtRunTime, StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException("Refresh this snapshot after changing its source.");
+
+        using var reader = new StreamReader(new MemoryStream(bytes));
+        var scan = SharedConnectionReferenceScan.ExtractAliases(await reader.ReadToEndAsync(ct));
+        if (!scan.IsResolved)
+            throw new UnauthorizedAccessException("Snapshot connection dependencies could not be resolved.");
+
+        await EnsureCallerCanUseAliasesAsync(scan.Aliases, identity, ct);
+    }
+
     public async Task EnsureCallerCanUseAliasesAsync(
         IReadOnlyCollection<string> aliases,
         ExecutionIdentity? identity,

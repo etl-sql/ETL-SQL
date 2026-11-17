@@ -43,7 +43,8 @@ public static class SharedConnectionReferenceScan
             VisitStatement(statement, aliases, ref sawUnresolvedDynamicConnection);
         }
 
-        if (sawUnresolvedDynamicConnection && aliases.Count == 0)
+        // COMPAT_BREAK: 0.23 - known aliases cannot authorize unresolved dependencies.
+        if (sawUnresolvedDynamicConnection)
             return new ScanResult(false, []);
 
         return new ScanResult(true, aliases.OrderBy(a => a, StringComparer.OrdinalIgnoreCase).ToArray());
@@ -58,6 +59,19 @@ public static class SharedConnectionReferenceScan
 
         switch (statement)
         {
+            case RunScriptStatement:
+                // The called script is outside this AST. Its connection dependencies are unknown.
+                sawUnresolvedDynamicConnection = true;
+                break;
+
+            case CreateProcedureStatement procedure:
+                VisitStatement(procedure.Body, aliases, ref sawUnresolvedDynamicConnection);
+                break;
+
+            case CreateFunctionStatement function:
+                VisitStatement(function.Body, aliases, ref sawUnresolvedDynamicConnection);
+                break;
+
             case CreateConnectionStatement conn:
                 VisitExpression(conn.TargetExpression, aliases);
                 if (conn.Options is not null)

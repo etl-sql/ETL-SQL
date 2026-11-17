@@ -68,7 +68,11 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         List<Row> Rows,
         List<string> Columns,
         Dictionary<string, ColumnDefinition> SourceSchema,
-        string SourceName);
+        string SourceName,
+        IMemoryGrantLease Lease) : IDisposable
+    {
+        public void Dispose() => Lease.Dispose();
+    }
 
     private static async Task<StagedTransformSource> StageSourceRows(
         TransformStatement stmt,
@@ -87,35 +91,43 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ? (long)context.OperatorMemoryGrantMB * 1024L * 1024L
             : 0L;
 
-        using var lease = context.MemoryArbiter.AcquireLease();
-        await foreach (var batch in source.ReadBatches(context.EffectiveBatchSize, context.CancellationToken))
+        var lease = context.MemoryArbiter.AcquireLease();
+        try
         {
-            foreach (var row in batch.Rows)
+            await foreach (var batch in source.ReadBatches(context.EffectiveBatchSize, context.CancellationToken))
             {
-                context.CancellationToken.ThrowIfCancellationRequested();
-                var clone = row.Clone();
-                retainedBytes = checked(retainedBytes + clone.EstimateHeapBytes());
-                if ((operatorBudget > 0 && retainedBytes > operatorBudget) || lease.RegisterAndCheckSpill(retainedBytes))
+                foreach (var row in batch.Rows)
                 {
-                    throw new ExecutionException(
-                        $"{algorithmName} exceeded its bounded memory grant while staging the source series. " +
-                        "Increase Engine:OperatorMemoryGrantMB or reduce the data scope.");
+                    context.CancellationToken.ThrowIfCancellationRequested();
+                    var clone = row.Clone();
+                    retainedBytes = checked(retainedBytes + clone.EstimateHeapBytes());
+                    if ((operatorBudget > 0 && retainedBytes > operatorBudget) || lease.RegisterAndCheckSpill(retainedBytes))
+                    {
+                        throw new ExecutionException(
+                            $"{algorithmName} exceeded its bounded memory grant while staging the source series. " +
+                            "Increase Engine:OperatorMemoryGrantMB or reduce the data scope.");
+                    }
+                    rows.Add(clone);
                 }
-                rows.Add(clone);
             }
-        }
 
-        if (columns.Count == 0)
+            if (columns.Count == 0)
+            {
+                throw new ExecutionException($"Source dataset {sourceTable.TableName} has no columns.");
+            }
+
+            foreach (var col in columns)
+            {
+                sourceSchema.TryAdd(col, new ColumnDefinition(col, "UNKNOWN", false));
+            }
+
+            return new StagedTransformSource(rows, columns, sourceSchema, sourceTable.TableName, lease);
+        }
+        catch
         {
-            throw new ExecutionException($"Source dataset {sourceTable.TableName} has no columns.");
+            lease.Dispose();
+            throw;
         }
-
-        foreach (var col in columns)
-        {
-            sourceSchema.TryAdd(col, new ColumnDefinition(col, "UNKNOWN", false));
-        }
-
-        return new StagedTransformSource(rows, columns, sourceSchema, sourceTable.TableName);
     }
 
     private static async Task<Dictionary<string, ColumnDefinition>> ResolveSourceSchemaAsync(
@@ -242,7 +254,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
 
         var groupColumns = GetOptionalColumnList(stmt.Options, "BY_GROUP");
 
-        var staged = await StageSourceRows(stmt, context, "FILL_DATES");
+        using var staged = await StageSourceRows(stmt, context, "FILL_DATES");
         var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "FILL_DATES",
             ("DATE_COL", [dateColumn]),
@@ -282,30 +294,25 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             var maxDate = explicitEnd ?? byBucket.Keys.Max();
             if (minDate > maxDate) continue;
 
-            var gridDates = new HashSet<DateTime>();
-            var steps = new List<DateTime>();
-            for (int step = 0; ; step++)
-            {
-                var stepDate = StepFromStart(minDate, interval, step);
-                if (stepDate > maxDate) break;
-                steps.Add(stepDate);
-                gridDates.Add(stepDate);
-            }
-
-            var offGridRows = timedRows
-                .Where(item => !gridDates.Contains(item.Bucket) && item.Bucket >= minDate && item.Bucket <= maxDate)
-                .OrderBy(item => item.RawDate)
+            var orderedRows = timedRows
+                .Where(item => item.Bucket >= minDate && item.Bucket <= maxDate)
+                .OrderBy(item => item.Bucket)
                 .ToList();
-            int offGridIdx = 0;
+            int rowIndex = 0;
             Row? lastEmittedRow = null;
 
-            foreach (var stepDate in steps)
+            // Bound calendar arithmetic before stepping, and stream the grid instead of retaining
+            // every generated date. This also keeps wide hourly ranges cancellable.
+            var lastStep = LastFillStep(minDate, maxDate, interval);
+            for (int step = 0; step <= lastStep; step++)
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
+                var stepDate = StepFromStart(minDate, interval, step);
+                if (stepDate > maxDate) break;
 
-                while (offGridIdx < offGridRows.Count && offGridRows[offGridIdx].Bucket < stepDate)
+                while (rowIndex < orderedRows.Count && orderedRows[rowIndex].Bucket < stepDate)
                 {
-                    var offRow = offGridRows[offGridIdx++].Row.Clone();
+                    var offRow = orderedRows[rowIndex++].Row.Clone();
                     await sink.WriteRowAsync(offRow);
                     lastEmittedRow = offRow;
                 }
@@ -317,6 +324,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
                         var clone = existing.Clone();
                         await sink.WriteRowAsync(clone);
                         lastEmittedRow = clone;
+                        rowIndex++;
                     }
                 }
                 else
@@ -336,10 +344,10 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
                 }
             }
 
-            while (offGridIdx < offGridRows.Count)
+            while (rowIndex < orderedRows.Count)
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
-                await sink.WriteRowAsync(offGridRows[offGridIdx++].Row.Clone());
+                await sink.WriteRowAsync(orderedRows[rowIndex++].Row.Clone());
             }
         }
 
@@ -366,7 +374,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             throw new ExecutionException($"Unsupported INTERPOLATE method: {method}");
         }
 
-        var staged = await StageSourceRows(stmt, context, "INTERPOLATE");
+        using var staged = await StageSourceRows(stmt, context, "INTERPOLATE");
         var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "INTERPOLATE",
             ("VALUE_COLS", valueCols),
@@ -511,7 +519,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
 
         List<SortKey>? sortKeys = !string.IsNullOrWhiteSpace(orderByStr) ? ParseOrderBy(orderByStr) : null;
 
-        var staged = await StageSourceRows(stmt, context, "DEDUPLICATE");
+        using var staged = await StageSourceRows(stmt, context, "DEDUPLICATE");
         var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "DEDUPLICATE",
             ("KEY_COLS", keyCols),
@@ -602,7 +610,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             : "SUM";
         ValidateAggregate(aggregate, "PIVOT");
 
-        var staged = await StageSourceRows(stmt, context, "PIVOT");
+        using var staged = await StageSourceRows(stmt, context, "PIVOT");
         var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "PIVOT",
             ("ROW_FIELDS", rowFields),
@@ -623,10 +631,12 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         var pivotColType = TransformSchemaProjection.InferAggregateType(aggregate, valueSourceType);
         foreach (var entry in pivotEntries)
         {
-            if (seenCols.Add(entry.ColumnName))
+            // COMPAT_BREAK: 0.23 - do not overwrite a grouping key or another pivot value.
+            if (!seenCols.Add(entry.ColumnName))
             {
-                targetSchemaDefs.Add(new ColumnDefinition(entry.ColumnName, pivotColType, false) { IsNullable = true });
+                throw new ExecutionException($"PIVOT output column '{entry.ColumnName}' is ambiguous. Rename the grouping column or pivot value before transforming.");
             }
+            targetSchemaDefs.Add(new ColumnDefinition(entry.ColumnName, pivotColType, false) { IsNullable = true });
         }
 
         await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "PIVOT", targetSchemaDefs, _logger);
@@ -684,7 +694,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         ValidateAggregate(aggregate, "TOP_N_OTHERS");
         var groupColumns = GetOptionalColumnList(stmt.Options, "BY_GROUP");
 
-        var staged = await StageSourceRows(stmt, context, "TOP_N_OTHERS");
+        using var staged = await StageSourceRows(stmt, context, "TOP_N_OTHERS");
         var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "TOP_N_OTHERS",
             ("VALUE_COL", [valueCol]),
@@ -797,7 +807,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ? GetStringOption(stmt.Options, "PCT_COL", "PERIOD_COMPARISON")
             : $"{valueCol}_Pct";
 
-        var staged = await StageSourceRows(stmt, context, "PERIOD_COMPARISON");
+        using var staged = await StageSourceRows(stmt, context, "PERIOD_COMPARISON");
         var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "PERIOD_COMPARISON",
             ("DATE_COL", [dateCol]),
@@ -917,7 +927,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ? GetStringOption(stmt.Options, "SHARE_COL", "SHARE_OF_TOTAL")
             : $"{valueCol}_Share";
 
-        var staged = await StageSourceRows(stmt, context, "SHARE_OF_TOTAL");
+        using var staged = await StageSourceRows(stmt, context, "SHARE_OF_TOTAL");
         var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "SHARE_OF_TOTAL",
             ("VALUE_COL", [valueCol]),
@@ -987,7 +997,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             throw new ExecutionException($"Unsupported NORMALIZE method: {method}");
         }
 
-        var staged = await StageSourceRows(stmt, context, "NORMALIZE");
+        using var staged = await StageSourceRows(stmt, context, "NORMALIZE");
         var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "NORMALIZE",
             ("VALUE_COLS", valueCols),
@@ -1093,7 +1103,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ? GetStringOption(stmt.Options, "ROLLING_COL", "ROLLING_AGGREGATE")
             : $"{valueCol}_Rolling";
 
-        var staged = await StageSourceRows(stmt, context, "ROLLING_AGGREGATE");
+        using var staged = await StageSourceRows(stmt, context, "ROLLING_AGGREGATE");
         var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
         ValidateColumnsExist(sourceName, columns, "ROLLING_AGGREGATE",
             ("VALUE_COL", [valueCol]),
@@ -1221,6 +1231,17 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         "MONTH" => start.AddMonths(step),
         "QUARTER" => start.AddMonths(step * 3),
         "YEAR" => start.AddYears(step),
+        _ => throw new ExecutionException($"Unsupported FILL_DATES INTERVAL: {interval}")
+    };
+
+    private static int LastFillStep(DateTime start, DateTime end, string interval) => interval switch
+    {
+        "HOUR" => (int)((end.Ticks - start.Ticks) / TimeSpan.TicksPerHour),
+        "DAY" => (end - start).Days,
+        "WEEK" => (end - start).Days / 7,
+        "MONTH" => (end.Year - start.Year) * 12 + end.Month - start.Month,
+        "QUARTER" => ((end.Year - start.Year) * 12 + end.Month - start.Month) / 3,
+        "YEAR" => end.Year - start.Year,
         _ => throw new ExecutionException($"Unsupported FILL_DATES INTERVAL: {interval}")
     };
 

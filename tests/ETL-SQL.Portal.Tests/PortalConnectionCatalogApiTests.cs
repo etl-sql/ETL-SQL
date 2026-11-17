@@ -749,6 +749,7 @@ public class PortalConnectionCatalogApiTests
     }
 
     [Fact]
+    [Trait("CompatBreak", "0.23")]
     public async Task CachedReportSnapshot_RequiresSharedConnectionUsePermission()
     {
         using var factory = new CatalogFactory();
@@ -843,7 +844,7 @@ public class PortalConnectionCatalogApiTests
                     new ETL_SQL.Reporting.VisualManifest
                     {
                         Name = "Summary",
-                        VisualType = "CARD",
+                        VisualType = "TABLE",
                         Columns = ["Answer"],
                         Rows = [["42"]]
                     }
@@ -854,6 +855,7 @@ public class PortalConnectionCatalogApiTests
             {
                 ReportId = reportId,
                 ManifestPath = manifestKey,
+                ScriptHashAtRunTime = "sha256:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(scriptPath))).ToLowerInvariant(),
                 BuiltAt = DateTime.UtcNow,
                 BuiltBy = adminUser.Id
             });
@@ -870,11 +872,29 @@ public class PortalConnectionCatalogApiTests
         Assert.Equal(HttpStatusCode.Forbidden,
             (await SendAsync(client, HttpMethod.Get, bobToken, $"/api/reports/{reportId}/snapshot/rows/0", null)).StatusCode);
 
+        foreach (var route in new[] { "snapshot/rows/0.arrow", "export/csv", "export/xlsx", "export/pdf" })
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await SendAsync(client, HttpMethod.Get, bobToken, $"/api/reports/{reportId}/{route}", null)).StatusCode);
+
         // Alice is in SnapFinance (has Use) -> 200 OK on snapshot and manifest.
         Assert.Equal(HttpStatusCode.OK,
             (await SendAsync(client, HttpMethod.Get, aliceToken, $"/api/reports/{reportId}/snapshot?includeManifest=true", null)).StatusCode);
         Assert.Equal(HttpStatusCode.OK,
             (await SendAsync(client, HttpMethod.Get, aliceToken, $"/api/reports/{reportId}/manifest", null)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await SendAsync(client, HttpMethod.Get, aliceToken, $"/api/reports/{reportId}/export/csv", null)).StatusCode);
+
+        // Editing or deleting today's source must not make the older restricted data public.
+        var originalScript = await File.ReadAllTextAsync(scriptPath);
+        await File.WriteAllTextAsync(scriptPath, "PRINT 'No connection references';");
+        foreach (var route in new[] { "snapshot?includeManifest=true", "manifest", "snapshot/manifest", "snapshot/rows/0", "snapshot/rows/0.arrow", "export/csv", "export/xlsx" })
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await SendAsync(client, HttpMethod.Get, bobToken, $"/api/reports/{reportId}/{route}", null)).StatusCode);
+        File.Delete(scriptPath);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Get, bobToken, $"/api/reports/{reportId}/manifest", null)).StatusCode);
+        await File.WriteAllTextAsync(scriptPath, originalScript);
 
         // Revoking SnapFinance's Use grant immediately blocks Alice from the cached snapshot.
         Assert.Equal(HttpStatusCode.NoContent,

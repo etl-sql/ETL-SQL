@@ -44,7 +44,8 @@ public class SecretProviderTests
     }
 
     [Fact]
-    public async Task OsSecretStoreProvider_StoresMachineScopedPayload()
+    [Trait("CompatBreak", "0.23")]
+    public async Task OsSecretStoreProvider_MachineWritesRequireAnAdministratorOnWindows()
     {
         var root = Path.Combine(Path.GetTempPath(), $"etl-secret-store-{Guid.NewGuid():N}");
         var serviceAccount = OperatingSystem.IsWindows()
@@ -54,6 +55,12 @@ public class SecretProviderTests
 
         try
         {
+            if (!LocalStoreProtectionOrderingTests.CanWriteMachineStore)
+            {
+                await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.StoreAsync("sales_db_password", "stored-secret"));
+                Assert.False(File.Exists(Path.Combine(root, "sales_db_password.secret")));
+                return;
+            }
             await provider.StoreAsync("sales_db_password", "stored-secret");
 
             var secretFile = Path.Combine(root, "sales_db_password.secret");
@@ -118,7 +125,10 @@ public class SecretProviderTests
 
         try
         {
-            await provider.StoreAsync("machine_token", "machine-secret");
+            if (LocalStoreProtectionOrderingTests.CanWriteMachineStore)
+                await provider.StoreAsync("machine_token", "machine-secret");
+            else
+                await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.StoreAsync("machine_token", "machine-secret"));
             var secretFile = Path.Combine(root, "machine_token.secret");
             var expectedSids = new[]
             {
@@ -127,7 +137,10 @@ public class SecretProviderTests
             };
 
             AssertWindowsAclContainsOnly(new DirectoryInfo(root).GetAccessControl(), expectedSids);
-            AssertWindowsAclContainsOnly(new FileInfo(secretFile).GetAccessControl(), expectedSids);
+            if (LocalStoreProtectionOrderingTests.CanWriteMachineStore)
+                AssertWindowsAclContainsOnly(new FileInfo(secretFile).GetAccessControl(), expectedSids);
+            else
+                Assert.False(File.Exists(secretFile));
         }
         finally
         {

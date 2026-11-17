@@ -116,6 +116,9 @@ assert.deepEqual(publishes, [`@vscode/vsce@${vsce} publish --oidc --skip-duplica
 // "Published" from vsce is only an accepted upload: v0.22.0 went green with 3 of 4 targets never listed.
 // Each target must show as validated in the public gallery before the next upload.
 assert.match(marketplace, /until listed "\$version" "\$target"; do/, 'Marketplace publish waits for each target to validate');
+assert.match(marketplace, /--connect-timeout 10 --max-time 30/, 'Gallery probes cannot hang past the polling budget');
+assert.match(marketplace, /if \(\( deadline > publish_deadline \)\); then deadline=\$publish_deadline; fi/, 'Per-target waits share the overall step budget');
+assert.match(marketplace, /timeout 5m npx/, 'An upload cannot consume an unbounded part of the step budget');
 assert.match(marketplace, /if listed "\$version" "\$target"; then\n\s+echo .*already live; skipping/, 'Marketplace publish skips targets already live');
 
 console.log('Tag Release: dispatch-only on a release-branch HEAD, every Release gate before the tag, tag reused never moved, Release started on the tag; Marketplace publish pinned and rerunnable.');

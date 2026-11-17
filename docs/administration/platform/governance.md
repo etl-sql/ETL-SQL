@@ -72,6 +72,10 @@ Like the OS secret store, it defaults to `ProtectionScope=LocalMachine` with opt
 with inheritance disabled) and supports `ProtectionScope=CurrentUser` for personal workstation installs.
 Then manage entries from the CLI:
 
+On Windows, run LocalMachine store administration from an elevated administrator session.
+The directory ACL is applied before the first write; `ServiceIdentity` grants read access only.
+Use `CurrentUser` for a personal store managed without elevation.
+
 ```powershell
 etl-sql admin machine connection set --alias sales_dw --type MSSQL --option SERVER=sql01 --option DATABASE=Sales --option USER=etl_worker --option PASSWORD=SECRET:sales_db_password
 etl-sql admin machine connection set --alias archive_s3 --type S3 --option BUCKET=archive-prod --option ACCESS_KEY=SECRET:archive_access_key --option SECRET_KEY=SECRET:archive_secret_key --sensitive BUCKET
@@ -113,6 +117,13 @@ alias. The executing user's identity is checked at `SHARED:alias` expansion time
 audited (`SHARED_CONNECTION_USE_DENIED`) without resolving any secret, and executions without an
 injected identity are denied. Grants are group-based,
 matching the folder/dataset permission model.
+
+Cached report viewing and export also require connection Use permission. The Portal verifies the
+snapshot's recorded source hash before scanning its connection dependencies. Refresh older snapshots
+without a hash or snapshots whose source has changed. Missing source files, dynamic connection
+targets, and external `RUN SCRIPT` dependencies prevent cached access; use live execution when the
+dependencies cannot be resolved from the report source. A failed refresh preserves the stored
+snapshot, but its exact source must be available before readers can access it again.
 
 Before disabling or deleting, check **impact** (the Impact button in either admin tab, or
 `GET api/admin/connections/{alias}/impact` / `GET api/admin/secrets/{name}/impact`): it lists

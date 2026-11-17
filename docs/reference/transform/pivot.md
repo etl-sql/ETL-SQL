@@ -15,6 +15,7 @@ USING PIVOT (
 
 - **ROW_FIELDS = 'row_column[, ...]'** — Comma-separated list of columns to group by on the left side of the output table.
 - **PIVOT_FIELD = 'pivot_column'** — The column whose distinct values will rotate to become new columns.
+- **Output names** — Pivot labels must not collide with `ROW_FIELDS` names. A NULL pivot value uses the column name `NULL`, so a literal `NULL` label cannot appear alongside it. Ambiguous names are rejected before the target is changed.
 - **VALUE_FIELD = 'value_column'** — The column containing numeric or comparable values to aggregate.
 - **AGGREGATE = 'SUM' | 'AVG' | 'COUNT' | 'MIN' | 'MAX'** — The aggregation function to apply. Defaults to `SUM`.
 

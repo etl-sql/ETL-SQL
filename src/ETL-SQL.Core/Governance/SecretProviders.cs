@@ -108,11 +108,13 @@ public sealed class OsSecretStoreProvider(
         var path = GetSecretPath(name);
         var directory = Path.GetDirectoryName(path)!;
         Directory.CreateDirectory(directory);
+        // COMPAT_BREAK: 0.23 - secure machine stores before creation; non-admin writers must use CurrentUser.
+        _protector.ProtectDirectory(directory, protectionScope, serviceIdentity);
+        if (File.Exists(path))
+            _protector.ProtectFile(path, protectionScope, serviceIdentity);
         var protectedValue = LocalStoreProtection.ProtectValue(value, name, protectionScope);
         await File.WriteAllTextAsync(path, protectedValue, cancellationToken).ConfigureAwait(false);
         _protector.ProtectFile(path, protectionScope, serviceIdentity);
-        _protector.ProtectDirectory(directory, protectionScope, serviceIdentity);
-
         // Storing a value re-enables a previously disabled secret.
         var disabledPath = GetDisabledPath(name);
         if (File.Exists(disabledPath))

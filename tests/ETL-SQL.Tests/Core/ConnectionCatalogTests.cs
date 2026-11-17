@@ -6,7 +6,8 @@ namespace ETL_SQL.Tests.Core;
 public class ConnectionCatalogTests
 {
     [Fact]
-    public async Task LocalProvider_StoreAndResolve_RoundTripsMachineEncrypted()
+    [Trait("CompatBreak", "0.23")]
+    public async Task LocalProvider_MachineWritesRequireAnAdministratorOnWindows()
     {
         var root = TempRoot();
         var serviceAccount = OperatingSystem.IsWindows()
@@ -27,6 +28,12 @@ public class ConnectionCatalogTests
 
         try
         {
+            if (!LocalStoreProtectionOrderingTests.CanWriteMachineStore)
+            {
+                await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.StoreAsync(definition));
+                Assert.False(File.Exists(Path.Combine(root, "my_sql_server.connection")));
+                return;
+            }
             await provider.StoreAsync(definition);
 
             var connectionFile = Path.Combine(root, "my_sql_server.connection");
@@ -100,9 +107,13 @@ public class ConnectionCatalogTests
 
         try
         {
-            await provider.StoreAsync(new SharedConnectionDefinition(
+            var definition = new SharedConnectionDefinition(
                 "machine_pg", "POSTGRES", null,
-                new Dictionary<string, string> { ["HOST"] = "pg01" }, false));
+                new Dictionary<string, string> { ["HOST"] = "pg01" }, false);
+            if (LocalStoreProtectionOrderingTests.CanWriteMachineStore)
+                await provider.StoreAsync(definition);
+            else
+                await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.StoreAsync(definition));
             var entryFile = Path.Combine(root, "machine_pg.connection");
             var expectedSids = new[]
             {
@@ -111,7 +122,10 @@ public class ConnectionCatalogTests
             };
 
             AssertWindowsAclContainsOnly(new DirectoryInfo(root).GetAccessControl(), expectedSids);
-            AssertWindowsAclContainsOnly(new FileInfo(entryFile).GetAccessControl(), expectedSids);
+            if (LocalStoreProtectionOrderingTests.CanWriteMachineStore)
+                AssertWindowsAclContainsOnly(new FileInfo(entryFile).GetAccessControl(), expectedSids);
+            else
+                Assert.False(File.Exists(entryFile));
         }
         finally
         {
