@@ -94,6 +94,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     /// <summary>Aliases created from a SHARED: catalog entry, mapped to connector type.</summary>
     public IDictionary<string, string> CatalogBackedConnections { get; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    public ISet<string> SharedConnectionDependencies { get; } =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     public IDictionary<string, IDataSource> LocalSources => _localSources;
     public IDictionary<string, IDataSource> ReplaySourceOverrides => _replaySourceOverrides;
     public Dictionary<string, string> PendingJobStateUpdates => _pendingJobStateUpdates;

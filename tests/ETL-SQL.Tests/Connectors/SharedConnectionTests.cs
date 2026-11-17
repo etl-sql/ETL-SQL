@@ -1,8 +1,12 @@
+using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Xunit;
 
@@ -171,6 +175,75 @@ public class SharedConnectionTests
         Assert.DoesNotContain(sink.Events, e =>
             e.Reason.Contains("do-not-log", StringComparison.OrdinalIgnoreCase)
             || e.SanitizedTarget.Contains("do-not-log", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task SharedReference_RecordsResolvedAliasesOnContextEvenAfterDrop()
+    {
+        var connector = new CapturingConnector();
+        var registry = ConnectionTestDoubles.Registry(connector);
+        var catalog = Catalog(
+            new SharedConnectionDefinition("corp_db", "CAPTURE", null, Options(("SERVER", "sql01")), Disabled: false),
+            new SharedConnectionDefinition("archive_db", "CAPTURE", null, Options(("SERVER", "sql02")), Disabled: false));
+        var context = ConnectionTestDoubles.Context();
+
+        var createHandler = new CreateConnectionStatementHandler(
+            registry.Object, new Mock<ILogger>().Object, connectionCatalog: catalog);
+        await createHandler.Execute(SharedCreate("corp", "SHARED:corp_db"), context);
+        await createHandler.Execute(SharedCreate("arch", "SHARED:archive_db"), context);
+
+        var dropHandler = new DropConnectionStatementHandler(new Mock<ILogger>().Object);
+        await dropHandler.Execute(new DropConnectionStatement("corp", ifExists: false), context);
+
+        Assert.False(context.CatalogBackedConnections.ContainsKey("corp"));
+        Assert.True(context.SharedConnectionDependencies.SetEquals(["corp_db", "archive_db"]));
+    }
+
+    [Fact]
+    public async Task Evaluator_RecordsParameterizedAndNestedRunScriptSharedConnectionDependencies()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "etlsql-shared-dep-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var storePath = Path.Combine(tempRoot, "catalog");
+            var sp = DependencyInjectionSetup.BuildServiceProvider(new Dictionary<string, string?>
+            {
+                ["Governance:ConnectionCatalog:Provider"] = "Local",
+                ["Governance:ConnectionCatalog:LocalRoot"] = storePath,
+                ["Governance:ConnectionCatalog:ProtectionScope"] = "CurrentUser"
+            });
+
+            var catalog = sp.GetRequiredService<IConnectionCatalogProvider>();
+            await ((LocalConnectionCatalogProvider)catalog).StoreAsync(
+                new SharedConnectionDefinition("dyn_db", "MOCKDB", null, new Dictionary<string, string>(), false));
+            await ((LocalConnectionCatalogProvider)catalog).StoreAsync(
+                new SharedConnectionDefinition("nested_db", "MOCKDB", null, new Dictionary<string, string>(), false));
+
+            var nestedPath = Path.Combine(tempRoot, "nested.etlsql");
+            await File.WriteAllTextAsync(nestedPath, "CREATE CONNECTION sub_conn AS MOCKDB('SHARED:nested_db');");
+
+            var mainPath = Path.Combine(tempRoot, "main.etlsql");
+            const string mainScript = """
+                DECLARE @env VARCHAR = 'dyn_db';
+                CREATE CONNECTION dyn_conn AS MOCKDB('SHARED:' + @env);
+                RUN SCRIPT 'nested.etlsql';
+                DROP CONNECTION dyn_conn;
+                """;
+            await File.WriteAllTextAsync(mainPath, mainScript);
+
+            await using var evaluator = sp.GetRequiredService<Evaluator>();
+            evaluator.SecurityService.ApprovedSafeZones.Add(tempRoot);
+            evaluator.CurrentScriptPath = mainPath;
+            var ast = new Parser(new Lexer(mainScript).Tokenize(), mainScript).Parse();
+            await evaluator.Evaluate(ast);
+
+            Assert.True(evaluator.SharedConnectionDependencies.SetEquals(["dyn_db", "nested_db"]));
+        }
+        finally
+        {
+            try { Directory.Delete(tempRoot, recursive: true); } catch { }
+        }
     }
 
     [Fact]

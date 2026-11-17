@@ -377,7 +377,12 @@ public class ExecutionController(
 
         try
         {
-            await catalog.EnsureCallerCanReadSnapshotAsync(scriptPath, snapshot.ScriptHashAtRunTime, identity, ct);
+            await catalog.EnsureCallerCanReadSnapshotAsync(
+                scriptPath,
+                snapshot.ScriptHashAtRunTime,
+                snapshot.SharedConnectionDependenciesJson,
+                identity,
+                ct);
             return null;
         }
         catch (UnauthorizedAccessException)

@@ -1802,7 +1802,7 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("report_id");
 
-b.Property<string>("TenantId")
+                    b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("TEXT")
@@ -2206,6 +2206,10 @@ b.Property<string>("TenantId")
                     b.Property<string>("ScriptHashAtRunTime")
                         .HasColumnType("TEXT")
                         .HasColumnName("script_hash_at_run_time");
+
+                    b.Property<string>("SharedConnectionDependenciesJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("shared_connection_dependencies_json");
 
                     b.HasKey("Id")
                         .HasName("pk_report_snapshots");

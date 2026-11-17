@@ -87,17 +87,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
   accepts.
 - [x] **Open items from the v0.22.0 tooling review.** (`Compare-CertBaseline.ps1` now warns `MISSING_NEW_SCENARIO` on baseline scenarios absent from the current report; fixed all four SQL review paths with `ToolingReviewSqlPathTests`: outer-join / unknown-schema qualification & `LeftSingle` pre-join pushdown guard, `LEFT SEMI`/`LEFT ANTI` handling in `JoinEngine.PerformMergeJoin`, transitive type-ranked `CompoundKey.CompareValues`, and `ExternalWindowEngine.ProcessBucketDeepSpill` `RANGE` peer-group folding — Reviewed with 81 targeted cases passing across SQL-path, join, pushdown and window tests; RANGE eligibility and bounded peer-spill cleanup are covered.)
 
-### Snapshot connection dependency evidence
-
-- [ ] **SC05 follow-up: retain dependencies from the snapshot execution.** Review found that
-  scanning today's script cannot authorize yesterday's data. Snapshot reads and exports now fail
-  closed unless the source matches its recorded hash and all connection dependencies resolve
-  statically. **Left:** persist the actual shared-connection dependencies with each snapshot,
-  including parameterized connections and nested `RUN SCRIPT` calls. Re-check those recorded
-  aliases on every read/export so stale snapshots can remain usable after source edits or removal
-  without bypassing revoked connection grants. Prove all snapshot/export routes with changed
-  source, missing source, dynamic targets, nested scripts, and grant revocation.
-
 ### 1.8 Orchestrator New Job bundle target
 
 - [x] **OR01: Portal New Job bundle URIs (`orch://`), Report target creation, and target kind labeling.** Restored the bundle target in `orchestrator-create-job.ts` and `#createJobModal` with `readBundleChoices` / `readBundleVersions` / `readBundleFiles`, Portal proxy route `GET /api/orchestrator/bundles/{name}/versions/{version}/files`, canonical `orch://<bundle>@<version>/<entryPath>` URIs matching `BundleUri.TryParse`, `JobType = REPORT` support, and `'Report'` / `'Bundle'` / `'Script'` labeling across `orchestrator-job-detail.ts` and `orchestrator-job-table.ts` (browser type/lint gates clean, JS owner/activity checks pass, 36/36 Playwright sandbox browser tests and 52/52 Portal integration tests pass; delayed catalog reads preserve manual URIs and refresh removed-version selections).

@@ -118,12 +118,13 @@ audited (`SHARED_CONNECTION_USE_DENIED`) without resolving any secret, and execu
 injected identity are denied. Grants are group-based,
 matching the folder/dataset permission model.
 
-Cached report viewing and export also require connection Use permission. The Portal verifies the
-snapshot's recorded source hash before scanning its connection dependencies. Refresh older snapshots
-without a hash or snapshots whose source has changed. Missing source files, dynamic connection
-targets, and external `RUN SCRIPT` dependencies prevent cached access; use live execution when the
-dependencies cannot be resolved from the report source. A failed refresh preserves the stored
-snapshot, but its exact source must be available before readers can access it again.
+Cached report viewing, export, and designer snapshot previews also require connection Use
+permission. New snapshots record the `SHARED:` connection aliases expanded during execution
+(including parameterized targets and nested `RUN SCRIPT` calls) so stale snapshots remain usable
+after source edits or removal while still enforcing grant revocations. Legacy snapshots without
+recorded dependencies verify the recorded source hash and fail closed if the source is missing,
+changed, or contains unresolved dependencies; refresh older snapshots to record their runtime
+dependencies.
 
 Before disabling or deleting, check **impact** (the Impact button in either admin tab, or
 `GET api/admin/connections/{alias}/impact` / `GET api/admin/secrets/{name}/impact`): it lists

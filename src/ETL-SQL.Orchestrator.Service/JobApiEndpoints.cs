@@ -280,7 +280,8 @@ namespace ETL_SQL.Orchestrator.Service
                     PeakMemoryBytes = entry.PeakMemoryBytes,
                     CpuTimeSeconds = entry.CpuTimeSeconds,
                     ErrorMessage = entry.ErrorMessage,
-                    ReportManifestJson = includeSensitivePayload ? entry.ReportManifestJson : null
+                    ReportManifestJson = includeSensitivePayload ? entry.ReportManifestJson : null,
+                    SharedConnectionDependencies = includeSensitivePayload ? entry.SharedConnectionDependencies : null
                 });
             }).WithName("getJobStatus");
 
@@ -3238,6 +3239,7 @@ namespace ETL_SQL.Orchestrator.Service
             var outcome = JobRunStatus.Failed;
             string? errorMessage = null;
             string? reportManifestJson = null;
+            IReadOnlyList<string>? sharedConnectionDependencies = null;
             try
             {
                 activity = OrchestratorObservability.StartAdHocJobActivity(entry.JobId, entry.CorrelationId);
@@ -3268,6 +3270,9 @@ namespace ETL_SQL.Orchestrator.Service
                     var builder = new ManifestBuilder(evaluator);
                     var manifest = await builder.BuildAsync("remote_script.rptsql");
                     reportManifestJson = JsonSerializer.Serialize(manifest);
+                    sharedConnectionDependencies = evaluator.SharedConnectionDependencies
+                        .OrderBy(alias => alias, StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
 
                     var snapshotDir = "Snapshots";
                     Directory.CreateDirectory(snapshotDir);
@@ -3309,7 +3314,7 @@ namespace ETL_SQL.Orchestrator.Service
                 entry.CompletedAt = DateTimeOffset.UtcNow;
                 // Publish terminal status only after output preparation and scope cleanup. A
                 // concurrent cancellation keeps its terminal state and receives no late payload.
-                entry.TryFinish(outcome, errorMessage, reportManifestJson);
+                entry.TryFinish(outcome, errorMessage, reportManifestJson, sharedConnectionDependencies);
                 logger.LogInformation("Job {JobId} {Status} in {ElapsedMs}ms, rows={Rows}",
                     entry.JobId, entry.Status, entry.ExecutionTimeMs, entry.RowsProcessed);
                 using (activity)
@@ -3682,13 +3687,18 @@ namespace ETL_SQL.Orchestrator.Service
                 }
             }
 
-            public bool TryFinish(JobRunStatus outcome, string? errorMessage = null, string? reportManifestJson = null)
+            public bool TryFinish(
+                JobRunStatus outcome,
+                string? errorMessage = null,
+                string? reportManifestJson = null,
+                IReadOnlyList<string>? sharedConnectionDependencies = null)
             {
                 lock (gate)
                 {
                     if (IsTerminal(status)) return false;
                     ErrorMessage = errorMessage;
                     ReportManifestJson = reportManifestJson;
+                    SharedConnectionDependencies = sharedConnectionDependencies;
                     status = outcome;
                     return true;
                 }
@@ -3711,6 +3721,7 @@ namespace ETL_SQL.Orchestrator.Service
             public double CpuTimeSeconds { get; set; }
             public string? ErrorMessage { get; set; }
             public string? ReportManifestJson { get; set; }
+            public IReadOnlyList<string>? SharedConnectionDependencies { get; set; }
             public DateTimeOffset? CompletedAt { get; set; }
         }
     }

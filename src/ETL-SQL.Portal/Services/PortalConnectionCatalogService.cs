@@ -254,13 +254,43 @@ public sealed class PortalConnectionCatalogService(
     /// <summary>
     /// Verifies that <paramref name="identity"/> holds <c>Use</c> permission for every catalog alias
     /// referenced by a report before serving a cached snapshot. Does not record connection usage.
+    /// When <paramref name="sharedConnectionDependenciesJson"/> was recorded at execution time, that
+    /// alias list is authoritative even if the source script later changed or was removed; otherwise
+    /// the check falls back to verifying the recorded source hash and statically scanning the source.
     /// </summary>
     public async Task EnsureCallerCanReadSnapshotAsync(
         string scriptPath,
         string? scriptHashAtRunTime,
+        string? sharedConnectionDependenciesJson,
         ExecutionIdentity? identity,
         CancellationToken ct)
     {
+        if (sharedConnectionDependenciesJson is not null)
+        {
+            List<string>? aliases;
+            try
+            {
+                aliases = JsonSerializer.Deserialize<List<string>>(sharedConnectionDependenciesJson);
+            }
+            catch (JsonException)
+            {
+                throw new UnauthorizedAccessException("Snapshot connection dependencies could not be read.");
+            }
+
+            if (aliases is null || aliases.Any(string.IsNullOrWhiteSpace))
+                throw new UnauthorizedAccessException("Snapshot connection dependencies could not be read.");
+
+            try
+            {
+                await EnsureCallerCanUseAliasesAsync(aliases, identity, ct);
+            }
+            catch (ArgumentException)
+            {
+                throw new UnauthorizedAccessException("Snapshot connection dependencies could not be read.");
+            }
+            return;
+        }
+
         // COMPAT_BREAK: 0.23 - authorize the source that actually produced the cached data.
         if (string.IsNullOrWhiteSpace(scriptHashAtRunTime))
             throw new UnauthorizedAccessException("Refresh this snapshot to record its source identity.");

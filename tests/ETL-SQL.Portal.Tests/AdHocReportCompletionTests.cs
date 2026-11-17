@@ -55,9 +55,16 @@ public sealed class AdHocReportCompletionTests
         if (action == "fail")
             Assert.Contains("Report preparation failed", (string)entryType.GetProperty("ErrorMessage")!.GetValue(entry)!);
         if (action == "complete")
+        {
             Assert.False(string.IsNullOrWhiteSpace((string?)entryType.GetProperty("ReportManifestJson")!.GetValue(entry)));
+            var deps = (IReadOnlyList<string>?)entryType.GetProperty("SharedConnectionDependencies")!.GetValue(entry);
+            Assert.NotNull(deps);
+        }
         else
+        {
             Assert.Null(entryType.GetProperty("ReportManifestJson")!.GetValue(entry));
+            Assert.Null(entryType.GetProperty("SharedConnectionDependencies")!.GetValue(entry));
+        }
     }
 
     [Fact]

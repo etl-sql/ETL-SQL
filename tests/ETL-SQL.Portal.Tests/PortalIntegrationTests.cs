@@ -3758,8 +3758,7 @@ CREATE VISUAL EdgeRows AS TABLE (
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
-    [Trait("CompatBreak", "0.23")]
-    public async Task Snapshot_FailedRefresh_PreservesSnapshotButRequiresSourceForAuthorization()
+    public async Task Snapshot_FailedRefresh_PreservesSnapshot()
     {
         var token = await GetAdminTokenAsync();
 
@@ -3797,8 +3796,7 @@ CREATE VISUAL Answer AS CARD (
         var snap1 = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=false");
         Assert.Equal(HttpStatusCode.OK, snap1.StatusCode);
 
-        // Delete the script — next run will fail and the snapshot cannot be authorized.
-        var originalSource = await File.ReadAllTextAsync(scriptPath);
+        // Delete the script — next run will fail, but the prior snapshot recorded its dependencies.
         File.Delete(scriptPath);
 
         var exec2 = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
@@ -3807,13 +3805,10 @@ CREATE VISUAL Answer AS CARD (
         var job2 = await WaitForJobAsync(token, exec2Body!["jobId"]!.GetValue<string>());
         Assert.Equal("Failed", job2["status"]!.GetValue<string>());
 
-        // Retain the snapshot, but refuse access until its exact source is available again.
+        // The prior snapshot remains usable using the dependencies recorded when it ran.
         var snap2 = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=false");
-        Assert.Equal(HttpStatusCode.Forbidden, snap2.StatusCode);
-        await File.WriteAllTextAsync(scriptPath, originalSource);
-        var restored = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=false");
-        Assert.Equal(HttpStatusCode.OK, restored.StatusCode);
-        var snapBody = await restored.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Equal(HttpStatusCode.OK, snap2.StatusCode);
+        var snapBody = await snap2.Content.ReadFromJsonAsync<JsonObject>(_json);
         Assert.NotNull(snapBody!["builtAt"]);
 
         // Catalog listing should surface Failed status and preserve snapshotBuiltAt

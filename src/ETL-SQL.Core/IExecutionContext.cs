@@ -216,6 +216,12 @@ public interface IDataContext
     /// </summary>
     IDictionary<string, string> CatalogBackedConnections { get; }
 
+    /// <summary>
+    /// Governed <c>SHARED:</c> catalog aliases resolved during this execution, including
+    /// parameterized targets and nested <c>RUN SCRIPT</c> calls.
+    /// </summary>
+    ISet<string> SharedConnectionDependencies { get; }
+
     /// <summary>Statement-local data source overrides (used for CTEs).</summary>
     IDictionary<string, IDataSource> LocalSources { get; }
     string? MasterPassword { get; }

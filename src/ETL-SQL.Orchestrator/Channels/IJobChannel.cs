@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -58,6 +59,8 @@ namespace ETL_SQL.Orchestrator.Channels
         public string? ErrorMessage { get; set; }
         /// <summary>Serialized report manifest returned for completed report jobs.</summary>
         public string? ReportManifestJson { get; set; }
+        /// <summary>Catalog aliases of SHARED: connections resolved during report execution.</summary>
+        public IReadOnlyList<string>? SharedConnectionDependencies { get; set; }
     }
 
     public enum JobRunStatus

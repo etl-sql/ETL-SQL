@@ -905,6 +905,394 @@ public class PortalConnectionCatalogApiTests
             (await SendAsync(client, HttpMethod.Get, aliceToken, $"/api/reports/{reportId}/manifest", null)).StatusCode);
     }
 
+    [Fact]
+    [Trait("CompatBreak", "0.23")]
+    public async Task RecordedSnapshotDependencies_SurviveSourceEditsAndRemoval_AndEnforceGrantRevocation()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Put, adminToken, "/api/admin/connections/recorded_snap_db", new
+            {
+                connectorType = "MOCKDB",
+                options = new Dictionary<string, string>()
+            })).StatusCode);
+
+        var (aliceId, aliceUsername) = await CreateReadyUserWithNameAsync(client, adminToken, "recalice", "Publisher");
+        var (bobId, bobUsername) = await CreateReadyUserWithNameAsync(client, adminToken, "recbob", "Viewer");
+
+        var (grpId, _) = await CreateGroupWithMembersAsync(client, adminToken, "RecFinance", aliceId);
+        var (_, _) = await CreateGroupWithMembersAsync(client, adminToken, "RecReaders", aliceId, bobId);
+
+        var folderId = await CreateReadableFolderAsync(client, adminToken, "RecordedSnapFolder", "RecReaders");
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, adminToken, "/api/admin/connections/recorded_snap_db/acl", new { groupId = grpId })).StatusCode);
+
+        var aliceToken = (await LoginAsync(client, aliceUsername, "User@Test2!")).AccessToken;
+        var bobToken = (await LoginAsync(client, bobUsername, "User@Test2!")).AccessToken;
+
+        var scriptPath = Path.Combine(factory.TempDir, "scripts", $"recorded_snap_{Guid.NewGuid():N}.rptsql");
+        Directory.CreateDirectory(Path.GetDirectoryName(scriptPath)!);
+        await File.WriteAllTextAsync(scriptPath, """
+            CREATE CONNECTION dw AS MOCKDB('SHARED:recorded_snap_db');
+            CREATE VISUAL Summary AS TABLE (
+              SOURCE = (SELECT 42 AS Answer),
+              MAPPINGS (Answer = Answer)
+            );
+            """);
+
+        var reportId = await CreateReportAndRefreshAsync(factory, client, adminToken, folderId, "RecordedSnapshotReport", scriptPath);
+        await AssertRecordedDependenciesAsync(factory, reportId, ["recorded_snap_db"]);
+
+        // Bob lacks Use -> 403 Forbidden on every snapshot and export route.
+        await AssertAllSnapshotRoutesDeniedAsync(client, bobToken, reportId, includePdf: true);
+        // Alice has Use -> authorized on all snapshot, export, and designer snapshot routes.
+        await AssertAllSnapshotRoutesAllowedAsync(client, aliceToken, reportId, includePdf: true, includeDesigner: true);
+
+        // Editing today's source (removing SHARED:) keeps the stale snapshot usable for Alice without leaking to Bob.
+        await File.WriteAllTextAsync(scriptPath, """
+            CREATE VISUAL Summary AS TABLE (
+              SOURCE = (SELECT 99 AS Answer),
+              MAPPINGS (Answer = Answer)
+            );
+            """);
+        await AssertAllSnapshotRoutesAllowedAsync(client, aliceToken, reportId, includePdf: false, includeDesigner: true);
+        await AssertAllSnapshotRoutesDeniedAsync(client, bobToken, reportId, includePdf: false);
+
+        // Removing the source file still allows Alice to read/export the recorded snapshot while blocking Bob.
+        File.Delete(scriptPath);
+        await AssertAllSnapshotRoutesAllowedAsync(client, aliceToken, reportId, includePdf: false, includeDesigner: true);
+        await AssertAllSnapshotRoutesDeniedAsync(client, bobToken, reportId, includePdf: false);
+
+        // Revoking the recorded alias grant immediately blocks Alice across all routes.
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Delete, adminToken, $"/api/admin/connections/recorded_snap_db/acl/{grpId}", null)).StatusCode);
+        await AssertAllSnapshotRoutesDeniedAsync(client, aliceToken, reportId, includePdf: false, includeDesigner: true);
+    }
+
+    [Fact]
+    [Trait("CompatBreak", "0.23")]
+    public async Task ParameterizedSharedConnection_IsRecordedWithSnapshot_AndEnforcedOnAllRoutes()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Put, adminToken, "/api/admin/connections/recorded_dyn_db", new
+            {
+                connectorType = "MOCKDB",
+                options = new Dictionary<string, string>()
+            })).StatusCode);
+
+        var (aliceId, aliceUsername) = await CreateReadyUserWithNameAsync(client, adminToken, "dynalice", "Viewer");
+        var (bobId, bobUsername) = await CreateReadyUserWithNameAsync(client, adminToken, "dynbob", "Viewer");
+
+        var (dynGrpId, _) = await CreateGroupWithMembersAsync(client, adminToken, "DynGroup", aliceId);
+        await CreateGroupWithMembersAsync(client, adminToken, "DynReaders", aliceId, bobId);
+
+        var folderId = await CreateReadableFolderAsync(client, adminToken, "DynamicSnapFolder", "DynReaders");
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, adminToken, "/api/admin/connections/recorded_dyn_db/acl", new { groupId = dynGrpId })).StatusCode);
+
+        var aliceToken = (await LoginAsync(client, aliceUsername, "User@Test2!")).AccessToken;
+        var bobToken = (await LoginAsync(client, bobUsername, "User@Test2!")).AccessToken;
+
+        var scriptPath = Path.Combine(factory.TempDir, "scripts", $"dyn_snap_{Guid.NewGuid():N}.rptsql");
+        Directory.CreateDirectory(Path.GetDirectoryName(scriptPath)!);
+        await File.WriteAllTextAsync(scriptPath, """
+            DECLARE @env VARCHAR = 'recorded_dyn_db';
+            CREATE CONNECTION dyn_dw AS MOCKDB('SHARED:' + @env);
+            CREATE VISUAL Summary AS TABLE (
+              SOURCE = (SELECT 42 AS Answer),
+              MAPPINGS (Answer = Answer)
+            );
+            """);
+
+        var reportId = await CreateReportAndRefreshAsync(factory, client, adminToken, folderId, "DynamicSnapshotReport", scriptPath);
+        await AssertRecordedDependenciesAsync(factory, reportId, ["recorded_dyn_db"]);
+
+        await AssertAllSnapshotRoutesAllowedAsync(client, aliceToken, reportId, includePdf: true, includeDesigner: false);
+        await AssertAllSnapshotRoutesDeniedAsync(client, bobToken, reportId, includePdf: false);
+
+        // Removing the source file keeps the recorded snapshot usable for Alice without exposing it to Bob.
+        File.Delete(scriptPath);
+        await AssertAllSnapshotRoutesAllowedAsync(client, aliceToken, reportId, includePdf: true, includeDesigner: false);
+        await AssertAllSnapshotRoutesDeniedAsync(client, bobToken, reportId, includePdf: false);
+
+        // Revoking the recorded dependency blocks Alice immediately.
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Delete, adminToken, $"/api/admin/connections/recorded_dyn_db/acl/{dynGrpId}", null)).StatusCode);
+        await AssertAllSnapshotRoutesDeniedAsync(client, aliceToken, reportId, includePdf: false);
+    }
+
+    [Fact]
+    [Trait("CompatBreak", "0.23")]
+    public async Task NestedRunScriptSharedConnections_AreCapturedAtExecution_AndEnforcedWhenPersisted()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+
+        foreach (var alias in new[] { "nested_parent_db", "nested_child_db" })
+        {
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await SendAsync(client, HttpMethod.Put, adminToken, $"/api/admin/connections/{alias}", new
+                {
+                    connectorType = "MOCKDB",
+                    options = new Dictionary<string, string>()
+                })).StatusCode);
+        }
+
+        var (aliceId, aliceUsername) = await CreateReadyUserWithNameAsync(client, adminToken, "nestalice", "Viewer");
+        var (bobId, bobUsername) = await CreateReadyUserWithNameAsync(client, adminToken, "nestbob", "Viewer");
+
+        var (parentGrpId, _) = await CreateGroupWithMembersAsync(client, adminToken, "NestParentGroup", aliceId);
+        var (childGrpId, _) = await CreateGroupWithMembersAsync(client, adminToken, "NestChildGroup", aliceId);
+        await CreateGroupWithMembersAsync(client, adminToken, "NestReaders", aliceId, bobId);
+
+        var folderId = await CreateReadableFolderAsync(client, adminToken, "NestedSnapFolder", "NestReaders");
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, adminToken, "/api/admin/connections/nested_parent_db/acl", new { groupId = parentGrpId })).StatusCode);
+
+        var aliceToken = (await LoginAsync(client, aliceUsername, "User@Test2!")).AccessToken;
+        var bobToken = (await LoginAsync(client, bobUsername, "User@Test2!")).AccessToken;
+
+        var scriptsDir = Path.Combine(factory.TempDir, "scripts");
+        Directory.CreateDirectory(scriptsDir);
+        var nestedPath = Path.Combine(scriptsDir, $"nested_conn_{Guid.NewGuid():N}.etlsql");
+        await File.WriteAllTextAsync(nestedPath, "CREATE CONNECTION sub_dw AS MOCKDB('SHARED:nested_child_db');");
+
+        var mainScriptPath = Path.Combine(scriptsDir, $"nested_snap_{Guid.NewGuid():N}.rptsql");
+        await File.WriteAllTextAsync(mainScriptPath, $$"""
+            DECLARE @env VARCHAR = 'nested_parent_db';
+            CREATE CONNECTION parent_dw AS MOCKDB('SHARED:' + @env);
+            RUN SCRIPT '{{Path.GetFileName(nestedPath)}}';
+            CREATE VISUAL Summary AS TABLE (
+              SOURCE = (SELECT 42 AS Answer),
+              MAPPINGS (Answer = Answer)
+            );
+            """);
+
+        // Build through DashboardService as admin and capture its recorded dependencies (including nested RUN SCRIPT).
+        int reportId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var adminUser = await db.Users.SingleAsync(u => u.UserName == "admin");
+            var identity = await scope.ServiceProvider.GetRequiredService<PortalExecutionIdentityService>()
+                .BuildAsync(adminUser.Id, "portal-host", isAdministrator: true, impersonatedUserId: null, CancellationToken.None);
+
+            await using var dashboard = new ETL_SQL.ReportHosting.DashboardService(
+                mainScriptPath,
+                factory.Services.GetRequiredService<IServiceScopeFactory>(),
+                executionIdentity: identity);
+            var manifest = await dashboard.RebuildAsync(CancellationToken.None);
+            Assert.Null(manifest.Error);
+            var recorded = dashboard.CurrentSharedConnectionDependencies;
+            Assert.Equal(["nested_child_db", "nested_parent_db"], recorded);
+
+            var report = new Report
+            {
+                FolderId = folderId,
+                Name = "NestedSnapshotReport",
+                ScriptPath = mainScriptPath,
+                ScriptLastModified = DateTime.UtcNow,
+                CreatedBy = adminUser.Id
+            };
+            db.Reports.Add(report);
+            await db.SaveChangesAsync();
+            reportId = report.Id;
+
+            var manifestKey = $"report_{reportId}_nested.etlsnap";
+            await scope.ServiceProvider.GetRequiredService<SnapshotPackageService>().SaveAsync(manifest, manifestKey);
+            db.ReportSnapshots.Add(new ReportSnapshot
+            {
+                ReportId = reportId,
+                ManifestPath = manifestKey,
+                BuiltAt = DateTime.UtcNow,
+                BuiltBy = adminUser.Id,
+                SharedConnectionDependenciesJson = JsonSerializer.Serialize(recorded)
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // Remove the RUN SCRIPT parent/child files so snapshot serving applies instead of live-session RUN SCRIPT fallback.
+        File.Delete(nestedPath);
+        File.Delete(mainScriptPath);
+
+        // Alice only has nested_parent_db initially (missing nested_child_db from the nested script) -> denied everywhere.
+        await AssertAllSnapshotRoutesDeniedAsync(client, aliceToken, reportId, includePdf: false);
+        await AssertAllSnapshotRoutesDeniedAsync(client, bobToken, reportId, includePdf: false);
+
+        // Grant nested_child_db too -> Alice succeeds across every snapshot and export route even with sources deleted.
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, adminToken, "/api/admin/connections/nested_child_db/acl", new { groupId = childGrpId })).StatusCode);
+        await AssertAllSnapshotRoutesAllowedAsync(client, aliceToken, reportId, includePdf: true, includeDesigner: false);
+        await AssertAllSnapshotRoutesDeniedAsync(client, bobToken, reportId, includePdf: false);
+
+        // Revoking the nested alias blocks Alice immediately.
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Delete, adminToken, $"/api/admin/connections/nested_child_db/acl/{childGrpId}", null)).StatusCode);
+        await AssertAllSnapshotRoutesDeniedAsync(client, aliceToken, reportId, includePdf: false);
+    }
+
+    private static async Task<(int GroupId, string ETag)> CreateGroupWithMembersAsync(
+        HttpClient client, string adminToken, string name, params int[] userIds)
+    {
+        var grpRes = await SendAsync(client, HttpMethod.Post, adminToken, "/api/admin/groups", new { name });
+        Assert.Equal(HttpStatusCode.Created, grpRes.StatusCode);
+        var grpId = (await grpRes.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+        var etag = grpRes.Headers.ETag?.ToString() ?? "\"1\"";
+        foreach (var userId in userIds)
+        {
+            var addRes = await SendAsync(client, HttpMethod.Post, adminToken, $"/api/admin/groups/{grpId}/members", new { userId }, etag);
+            Assert.Equal(HttpStatusCode.OK, addRes.StatusCode);
+            etag = addRes.Headers.ETag?.ToString() ?? etag;
+        }
+        return (grpId, etag);
+    }
+
+    private static async Task<int> CreateReadableFolderAsync(
+        HttpClient client, string adminToken, string folderName, string readersGroupName)
+    {
+        var groupsRes = await SendAsync(client, HttpMethod.Get, adminToken, "/api/admin/groups", null);
+        Assert.Equal(HttpStatusCode.OK, groupsRes.StatusCode);
+        var groups = await groupsRes.Content.ReadFromJsonAsync<JsonArray>(Json);
+        var readersGrpId = groups!
+            .Select(node => node!.AsObject())
+            .Single(g => string.Equals(g["name"]!.GetValue<string>(), readersGroupName, StringComparison.Ordinal))["id"]!
+            .GetValue<int>();
+
+        var folderRes = await SendAsync(client, HttpMethod.Post, adminToken, "/api/folders", new { name = folderName });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+        var folderEtag = folderRes.Headers.ETag?.ToString() ?? "\"1\"";
+        Assert.Equal(HttpStatusCode.OK,
+            (await SendAsync(client, HttpMethod.Post, adminToken, $"/api/folders/{folderId}/acl", new
+            {
+                groupId = readersGrpId,
+                permission = FolderPermission.Read
+            }, folderEtag)).StatusCode);
+        return folderId;
+    }
+
+    private static async Task<int> CreateReportAndRefreshAsync(
+        CatalogFactory factory,
+        HttpClient client,
+        string adminToken,
+        int folderId,
+        string reportName,
+        string scriptPath)
+    {
+        int reportId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var adminUser = await db.Users.SingleAsync(u => u.UserName == "admin");
+            var report = new Report
+            {
+                FolderId = folderId,
+                Name = reportName,
+                ScriptPath = scriptPath,
+                ScriptLastModified = DateTime.UtcNow,
+                CreatedBy = adminUser.Id
+            };
+            db.Reports.Add(report);
+            await db.SaveChangesAsync();
+            reportId = report.Id;
+        }
+
+        var refreshRes = await SendAsync(client, HttpMethod.Post, adminToken, $"/api/reports/{reportId}/refresh", new { });
+        Assert.Equal(HttpStatusCode.Accepted, refreshRes.StatusCode);
+        var jobId = (await refreshRes.Content.ReadFromJsonAsync<JsonObject>(Json))!["jobId"]!.GetValue<string>();
+
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (DateTime.UtcNow < deadline)
+        {
+            var jobRes = await SendAsync(client, HttpMethod.Get, adminToken, $"/api/jobs/{jobId}", null);
+            Assert.Equal(HttpStatusCode.OK, jobRes.StatusCode);
+            var job = await jobRes.Content.ReadFromJsonAsync<JsonObject>(Json);
+            var status = job!["status"]!.GetValue<string>();
+            if (status == "Completed")
+                return reportId;
+            if (status is "Failed" or "Cancelled")
+                throw new InvalidOperationException($"Report refresh failed: {job.ToJsonString()}");
+            await Task.Delay(100);
+        }
+
+        throw new TimeoutException($"Report refresh job {jobId} did not complete in time.");
+    }
+
+    private static async Task AssertRecordedDependenciesAsync(
+        CatalogFactory factory, int reportId, string[] expectedAliases)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var snapshot = await db.ReportSnapshots
+            .Where(s => s.ReportId == reportId)
+            .OrderByDescending(s => s.BuiltAt)
+            .FirstOrDefaultAsync();
+        Assert.NotNull(snapshot);
+        Assert.NotNull(snapshot!.SharedConnectionDependenciesJson);
+        var recorded = JsonSerializer.Deserialize<string[]>(snapshot.SharedConnectionDependenciesJson!);
+        Assert.NotNull(recorded);
+        Assert.Equal(expectedAliases.OrderBy(a => a, StringComparer.OrdinalIgnoreCase),
+            recorded!.OrderBy(a => a, StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static async Task AssertAllSnapshotRoutesAllowedAsync(
+        HttpClient client, string token, int reportId, bool includePdf, bool includeDesigner)
+    {
+        foreach (var route in new[] { "snapshot?includeManifest=true", "manifest", "snapshot/manifest", "export/csv", "export/xlsx" })
+            Assert.Equal(HttpStatusCode.OK,
+                (await SendAsync(client, HttpMethod.Get, token, $"/api/reports/{reportId}/{route}", null)).StatusCode);
+
+        // Small inline visuals pass the ACL gate and return 404 when no separate offloaded row artifact exists.
+        foreach (var route in new[] { "snapshot/rows/0", "snapshot/rows/0.arrow" })
+        {
+            var status = (await SendAsync(client, HttpMethod.Get, token, $"/api/reports/{reportId}/{route}", null)).StatusCode;
+            Assert.True(status is HttpStatusCode.OK or HttpStatusCode.NotFound,
+                $"Expected OK or NotFound on /api/reports/{reportId}/{route}, got {status}");
+        }
+
+        if (includePdf)
+            Assert.Equal(HttpStatusCode.OK,
+                (await SendAsync(client, HttpMethod.Get, token, $"/api/reports/{reportId}/export/pdf", null)).StatusCode);
+
+        if (includeDesigner)
+            Assert.Equal(HttpStatusCode.OK,
+                (await SendAsync(client, HttpMethod.Get, token, $"/api/designer/snapshot/{reportId}", null)).StatusCode);
+    }
+
+    private static async Task AssertAllSnapshotRoutesDeniedAsync(
+        HttpClient client, string token, int reportId, bool includePdf, bool includeDesigner = false)
+    {
+        var routes = new List<string>
+        {
+            "snapshot?includeManifest=true",
+            "manifest",
+            "snapshot/manifest",
+            "snapshot/rows/0",
+            "snapshot/rows/0.arrow",
+            "export/csv",
+            "export/xlsx"
+        };
+        if (includePdf)
+            routes.Add("export/pdf");
+
+        foreach (var route in routes)
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await SendAsync(client, HttpMethod.Get, token, $"/api/reports/{reportId}/{route}", null)).StatusCode);
+
+        if (includeDesigner)
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await SendAsync(client, HttpMethod.Get, token, $"/api/designer/snapshot/{reportId}", null)).StatusCode);
+    }
+
     private sealed class CatalogFactory : PortalWebFactory
     {
         protected override void CustomizeConfiguration(Dictionary<string, string?> settings)

@@ -224,6 +224,17 @@ namespace ETL_SQL.ReportHosting
 
         public ILineageTracker? CurrentLineageTracker => _evaluator?.LineageTracker;
 
+        /// <summary>
+        /// Governed <c>SHARED:</c> catalog aliases resolved during the most recent build,
+        /// including parameterized targets and nested <c>RUN SCRIPT</c> calls.
+        /// </summary>
+        public IReadOnlyList<string> CurrentSharedConnectionDependencies =>
+            _evaluator is null
+                ? []
+                : _evaluator.SharedConnectionDependencies
+                    .OrderBy(alias => alias, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
         internal int NativeLayoutCacheEntryCount => _layoutCache.Count;
 
         private bool IsPaginatedPage(string pageName) =>
@@ -609,6 +620,7 @@ namespace ETL_SQL.ReportHosting
                 _currentScope = _scopeFactory.CreateScope();
                 var evaluator = _currentScope.ServiceProvider.GetRequiredService<Evaluator>();
                 _evaluator = evaluator;
+                evaluator.CurrentScriptPath = _scriptPath;
                 evaluator.ExecutionIdentity = _executionIdentity;
                 var portalConfig = _currentScope.ServiceProvider.GetService<ETL_SQL.Portal.PortalConfig>();
                 var persistedTenant = portalConfig?.SharedTenancy.Enabled == true

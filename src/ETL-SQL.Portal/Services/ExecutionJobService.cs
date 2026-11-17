@@ -532,6 +532,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             // Hash the script file at execution time for integrity tracking
             string? runTimeHash = null;
             bool? hashMatched = null;
+            IReadOnlyList<string>? sharedConnectionDependencies = null;
             if (System.IO.File.Exists(scriptPath))
             {
                 runTimeHash = "sha256:" + Convert.ToHexString(
@@ -562,6 +563,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                     if (status.Status == JobRunStatus.Completed)
                     {
                         ApplyExecutionMetrics(job, status);
+                        sharedConnectionDependencies = status.SharedConnectionDependencies;
                         if (!string.IsNullOrWhiteSpace(status.ReportManifestJson))
                         {
                             var manifest = System.Text.Json.JsonSerializer.Deserialize<ReportManifest>(
@@ -616,6 +618,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                     await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)), ct: cts.Token);
 
                 var manifest = await svc.RebuildAsync(cts.Token);
+                sharedConnectionDependencies = svc.CurrentSharedConnectionDependencies;
                 process.Refresh();
                 job.RowsProcessed = manifest.Telemetry?.RowsProcessed ?? 0;
                 job.PeakMemoryBytes = process.PeakWorkingSet64;
@@ -660,7 +663,10 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                             parameters.ToDictionary(kv => kv.Key, kv => SecretRedactor.MaskIfSensitive(kv.Key, kv.Value)))
                         : null,
                     ScriptHashAtRunTime = runTimeHash,
-                    HashMatched = hashMatched
+                    HashMatched = hashMatched,
+                    SharedConnectionDependenciesJson = sharedConnectionDependencies is null
+                        ? null
+                        : System.Text.Json.JsonSerializer.Serialize(sharedConnectionDependencies)
                 });
             }
 

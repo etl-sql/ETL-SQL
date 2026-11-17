@@ -93,7 +93,11 @@ public class ExportController(
         try
         {
             await connectionCatalog.EnsureCallerCanReadSnapshotAsync(
-                scriptPath, snapshot.ScriptHashAtRunTime, snapshotIdentity, HttpContext.RequestAborted);
+                scriptPath,
+                snapshot.ScriptHashAtRunTime,
+                snapshot.SharedConnectionDependenciesJson,
+                snapshotIdentity,
+                HttpContext.RequestAborted);
         }
         catch (UnauthorizedAccessException)
         {

@@ -25,9 +25,9 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 - **Earliest removal**: N/A
 
 ### v0.23.0 — Runtime: cached reports require verifiable source and connection access
-- **What changed**: Snapshot viewing and export both check connection permissions against the source hash recorded at execution. Missing hashes, changed or missing source, unresolved dynamic connections, and external `RUN SCRIPT` dependencies fail closed. Procedure and function bodies contribute their connection dependencies.
-- **Who is affected**: Cached reports using shared connections, older snapshots without source hashes, and reports with dependencies that cannot be resolved from their source text.
-- **Migration**: Refresh snapshots after source changes or to record a missing hash. Use live execution for reports with dynamic connections or external script dependencies until snapshot dependency tracking supports them. Grant connection Use permission to readers who need the cached data.
+- **What changed**: Snapshots record the `SHARED:` connection aliases expanded at execution time (including parameterized targets and nested `RUN SCRIPT` calls) and re-check caller `Use` permissions against those recorded aliases on every read, export, and designer snapshot request. Legacy snapshots without recorded dependencies still verify the recorded source hash and statically scan the script, failing closed on missing hashes, changed or missing source, unresolved dynamic connections, and external `RUN SCRIPT` dependencies.
+- **Who is affected**: Cached reports using shared connections, older snapshots without recorded dependencies or source hashes, and legacy snapshots whose dependencies cannot be resolved from their source text.
+- **Migration**: Refresh older snapshots to record their runtime dependencies. Grant connection Use permission to readers who need the cached data.
 - **Diagnostic**: HTTP 403 on snapshot or export access.
 - **Earliest removal**: N/A
 

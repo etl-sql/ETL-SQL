@@ -30,7 +30,8 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
         string Target,
         Dictionary<string, string> Options,
         IReadOnlyCollection<string>? SensitiveFields,
-        GatewayResourceBinding? Gateway = null);
+        GatewayResourceBinding? Gateway = null,
+        string CatalogAlias = "");
 
     public static bool IsSharedReference(string? target) =>
         !string.IsNullOrEmpty(target) && target.TrimStart().StartsWith(SharedPrefix, StringComparison.OrdinalIgnoreCase);
@@ -85,7 +86,7 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
         {
             if (scriptOptions?.Count > 0)
                 throw new ExecutionException("A Gateway-bound SHARED connection does not accept script-supplied connection options.");
-            return new ExpandedConnection(string.Empty, new(StringComparer.OrdinalIgnoreCase), null, definition.Gateway);
+            return new ExpandedConnection(string.Empty, new(StringComparer.OrdinalIgnoreCase), null, definition.Gateway, alias);
         }
 
         if (declaredConnectorType != null
@@ -128,7 +129,7 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
             }
         }
 
-        return new ExpandedConnection(definition.Target ?? string.Empty, merged, definition.SensitiveFields);
+        return new ExpandedConnection(definition.Target ?? string.Empty, merged, definition.SensitiveFields, CatalogAlias: alias);
     }
 
     private static bool IsCatalogOwnedSensitiveField(SharedConnectionDefinition definition, string key) =>
