@@ -153,4 +153,37 @@ describe('Studio interaction clauses', () => {
             limit: null,
         })).toBe('ROW_DETAIL (TARGET = Detail, BINDINGS (@region = Region))');
     });
+
+    test('CUSTOM visuals derive selectionKey and hoverContextColumn from CHART encodings', () => {
+        const advancedChart = `CHART (
+            COORDINATE (TYPE = CARTESIAN),
+            LAYERS (
+                bars = RECT (
+                    ENCODINGS (
+                        X = Department (TYPE = NOMINAL),
+                        Y = Spend (TYPE = QUANTITATIVE),
+                        COLOR = Region (TYPE = NOMINAL)
+                    )
+                )
+            )
+        )`;
+        expect(m.selectionKey({ advanced_chart: advancedChart }, {})).toBe('Department');
+        expect(m.selectionKey({ advanced_chart: advancedChart, 'interaction:MATCHING': 'Region' }, {})).toBe('Region');
+        expect(m.hoverContextColumn({}, { advanced_chart: advancedChart })).toBe('Department');
+
+        const exprChart = `CHART (LAYERS (b = RECT (ENCODINGS (X = SUM(Spend)))))`;
+        expect(m.selectionKey({ advanced_chart: exprChart }, {})).toBeNull();
+        expect(m.hoverContextColumn({}, { advanced_chart: exprChart })).toBeNull();
+    });
+
+    test('visual format inspector exposes chart and Cartesian sections for CUSTOM visuals', async () => {
+        const fmt = await import('../../../ETL-SQL.ReportRuntime/Resources/Shared/designer/visual-format-inspector.js');
+        const html = fmt.renderVisualFormatInspectorHtml(
+            { name: 'CustomChart', type: 'CUSTOM', title: 'Custom', options: {} },
+            ['Category', 'Revenue'],
+        );
+        expect(html).toContain('Axes & legend');
+        expect(html).toContain('Marks & labels');
+        expect(html).toContain('Series palette');
+    });
 });

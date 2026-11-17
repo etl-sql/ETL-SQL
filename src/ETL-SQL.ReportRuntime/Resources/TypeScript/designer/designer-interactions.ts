@@ -85,14 +85,88 @@ export function readEmitTargets(value: string | null | undefined): string[] {
     return splitNames(String(value || ''));
 }
 
+const ENCODING_NAME = new RegExp(`^${NAME}$`);
+
+/**
+ * Extracts column bindings keyed by uppercase channel from `ENCODINGS (...)` blocks
+ * inside a `CUSTOM ... CHART (...)` definition. Expressions (`SUM(x)`) and constants
+ * (`DATUM('a')`) are excluded so callers only receive concrete data columns.
+ */
+export function extractCustomEncodings(advancedChart: string | null | undefined): Record<string, string> {
+    const result: Record<string, string> = {};
+    const source = String(advancedChart || '');
+    if (!source) return result;
+
+    const pattern = /\bENCODINGS\s*\(/gi;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(source)) !== null) {
+        let idx = match.index + match[0].length;
+        let depth = 1;
+        let inQuote = false;
+        let segmentStart = idx;
+        const segments: string[] = [];
+
+        while (idx < source.length && depth > 0) {
+            const ch = source[idx];
+            if (inQuote) {
+                if (ch === "'") {
+                    if (source[idx + 1] === "'") idx += 1;
+                    else inQuote = false;
+                }
+            } else if (ch === "'") {
+                inQuote = true;
+            } else if (ch === '(') {
+                depth += 1;
+            } else if (ch === ')') {
+                depth -= 1;
+                if (depth === 0) {
+                    segments.push(source.slice(segmentStart, idx));
+                    break;
+                }
+            } else if (ch === ',' && depth === 1) {
+                segments.push(source.slice(segmentStart, idx));
+                segmentStart = idx + 1;
+            }
+            idx += 1;
+        }
+
+        for (const segment of segments) {
+            const eq = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([\s\S]*)$/.exec(segment);
+            if (!eq) continue;
+            const channel = eq[1].toUpperCase();
+            if (Object.prototype.hasOwnProperty.call(result, channel)) continue;
+            const rhs = eq[2].trim();
+            if (ENCODING_NAME.test(rhs)) {
+                result[channel] = rhs;
+                continue;
+            }
+            const wrapped = /^([A-Za-z_][A-Za-z0-9_]*)\s*\(([\s\S]*)\)\s*$/.exec(rhs);
+            if (wrapped && /^\s*(?:TYPE|SCALE|AXIS|SORT|FORMAT|STACK)\s*=/i.test(wrapped[2])) {
+                result[channel] = wrapped[1];
+            }
+        }
+        pattern.lastIndex = Math.max(pattern.lastIndex, idx + 1);
+    }
+    return result;
+}
+
 /**
  * The column a selection made on a visual is keyed on, as far as the designer can tell: the
- * authored MATCHING, else the category mapping. A selection arrives at other visuals as a
- * parameter of the same name, so this is the parameter their queries have to read.
+ * authored MATCHING, else the category mapping or CUSTOM chart encoding. A selection arrives
+ * at other visuals as a parameter of the same name, so this is the parameter their queries
+ * have to read.
  */
 export function selectionKey(options: Record<string, string> | undefined, mappings: Record<string, string> | undefined): string | null {
-    const key = options?.['interaction:MATCHING'] || mappings?.X || mappings?.LABEL || mappings?.CATEGORY || mappings?.REGION || '';
-    return new RegExp(`^${NAME}$`).test(String(key).trim()) ? String(key).trim() : null;
+    const explicit = String(options?.['interaction:MATCHING'] || '').trim();
+    if (ENCODING_NAME.test(explicit)) return explicit;
+    const mapped = mappings?.X || mappings?.LABEL || mappings?.CATEGORY || mappings?.REGION || '';
+    if (ENCODING_NAME.test(String(mapped).trim())) return String(mapped).trim();
+    const custom = extractCustomEncodings(options?.advanced_chart);
+    for (const role of ['REGION', 'ROUTE', 'X', 'X_START', 'THETA', 'COLUMN', 'ROW', 'WRAP', 'TEXT', 'COLOR', 'DETAIL']) {
+        const candidate = custom[role];
+        if (candidate && ENCODING_NAME.test(candidate)) return candidate;
+    }
+    return null;
 }
 
 /** The parameters a source query reads, lower-cased with their `@`. */
@@ -222,9 +296,14 @@ export function writeTooltip(tooltip: Tooltip): string | null {
  * build resolves it (DetailSurfaceRowContext.ContextRoles). Null when the visual maps none, which
  * the build refuses for a popover.
  */
-export function hoverContextColumn(mappings: Record<string, string> | undefined): string | null {
+export function hoverContextColumn(mappings: Record<string, string> | undefined, options?: Record<string, string>): string | null {
     for (const role of ['X', 'LABEL', 'NAME', 'REGION', 'Y']) {
         const column = String(mappings?.[role] || '').trim();
+        if (column) return column;
+    }
+    const custom = extractCustomEncodings(options?.advanced_chart);
+    for (const role of ['X', 'REGION', 'ROUTE', 'THETA', 'LABEL', 'NAME', 'TEXT', 'Y']) {
+        const column = String(custom[role] || '').trim();
         if (column) return column;
     }
     return null;

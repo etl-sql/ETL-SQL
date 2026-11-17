@@ -39,11 +39,11 @@ export function parseNumericOpacity(val: unknown, fallback: number): number {
 const FORMAT_INSPECTOR_CHARTS: ReadonlySet<string> = new Set([
     'BAR', 'HBAR', 'LINE', 'AREA', 'PIE', 'DONUT', 'SCATTER', 'BUBBLE', 'GAUGE',
     'RADAR', 'HEATMAP', 'FUNNEL', 'WATERFALL', 'TREEMAP', 'BOXPLOT', 'COMBO',
-    'CANDLESTICK', 'GANTT', 'MAP', 'SANKEY', 'SUNBURST', 'NETWORK', 'TRELLIS', 'MATRIX'
+    'CANDLESTICK', 'GANTT', 'MAP', 'SANKEY', 'SUNBURST', 'NETWORK', 'TRELLIS', 'MATRIX', 'CUSTOM'
 ]);
 const FORMAT_INSPECTOR_CARTESIAN: ReadonlySet<string> = new Set([
     'BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'SCATTER', 'BUBBLE', 'HEATMAP',
-    'WATERFALL', 'BOXPLOT', 'COMBO', 'CANDLESTICK', 'GANTT', 'TRELLIS'
+    'WATERFALL', 'BOXPLOT', 'COMBO', 'CANDLESTICK', 'GANTT', 'TRELLIS', 'CUSTOM'
 ]);
 
 export interface VisualFormattingTitle {

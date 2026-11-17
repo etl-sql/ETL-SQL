@@ -628,7 +628,7 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
         const tooltip = tooltipDraft && (writtenTooltip.kind === 'NONE' || writeTooltip(tooltipDraft) === v.options?.tooltip)
             ? tooltipDraft
             : writtenTooltip;
-        const hoverColumn = hoverContextColumn(v.mappings);
+        const hoverColumn = hoverContextColumn(v.mappings, v.options);
         const containerNames = context.curVis()
             .filter(other => String(other.type || '').toUpperCase() === 'CONTAINER')
             .map(other => String(other.name));

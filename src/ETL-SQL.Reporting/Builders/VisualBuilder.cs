@@ -547,7 +547,10 @@ namespace ETL_SQL.Reporting.Builders
                             Mappings = vStmt.Mappings.Select(mapping =>
                                 mapping.Role.Equals("X", StringComparison.OrdinalIgnoreCase)
                                     ? mapping with { Column = currentLevel }
-                                    : mapping).ToList()
+                                    : mapping).ToList(),
+                            AdvancedChart = vStmt.AdvancedChart is null
+                                ? null
+                                : RewriteAdvancedChartDrillLevel(vStmt.AdvancedChart, drillState.Hierarchy, currentLevel)
                         };
                     }
 
@@ -770,6 +773,57 @@ namespace ETL_SQL.Reporting.Builders
                 .ToList();
 
             return (grouped, columns);
+        }
+
+        private static AdvancedChartDefinition RewriteAdvancedChartDrillLevel(
+            AdvancedChartDefinition chart,
+            string[] hierarchy,
+            string currentLevel)
+        {
+            ImmutableArray<AdvancedChartEncoding> RewriteEncodings(ImmutableArray<AdvancedChartEncoding> encodings)
+            {
+                if (encodings.IsDefaultOrEmpty) return encodings;
+                return encodings.Select(encoding =>
+                {
+                    if (encoding.Source.Kind != AdvancedChartBindingSourceKind.Field)
+                        return encoding;
+                    var isDrillCategory = encoding.Channel is AdvancedChartChannel.X or AdvancedChartChannel.Theta
+                        || (!string.IsNullOrWhiteSpace(encoding.Source.Field)
+                            && hierarchy.Contains(encoding.Source.Field, StringComparer.OrdinalIgnoreCase));
+                    return isDrillCategory
+                        ? encoding with { Source = encoding.Source with { Field = currentLevel } }
+                        : encoding;
+                }).ToImmutableArray();
+            }
+
+            return chart with
+            {
+                Encodings = RewriteEncodings(chart.Encodings),
+                Layers = chart.Layers.IsDefaultOrEmpty
+                    ? chart.Layers
+                    : chart.Layers.Select(layer =>
+                    {
+                        var rewrittenPosition = layer.Position.Kind == AdvancedChartPositionKind.Jitter
+                            && !string.IsNullOrWhiteSpace(layer.Position.KeyField)
+                            && hierarchy.Contains(layer.Position.KeyField, StringComparer.OrdinalIgnoreCase)
+                            ? layer.Position with { KeyField = currentLevel }
+                            : layer.Position;
+                        return layer with
+                        {
+                            Encodings = RewriteEncodings(layer.Encodings),
+                            Position = rewrittenPosition
+                        };
+                    }).ToImmutableArray(),
+                Facet = chart.Facet is null ? null : chart.Facet with
+                {
+                    RowField = chart.Facet.RowField is not null && hierarchy.Contains(chart.Facet.RowField, StringComparer.OrdinalIgnoreCase)
+                        ? currentLevel : chart.Facet.RowField,
+                    ColumnField = chart.Facet.ColumnField is not null && hierarchy.Contains(chart.Facet.ColumnField, StringComparer.OrdinalIgnoreCase)
+                        ? currentLevel : chart.Facet.ColumnField,
+                    WrapField = chart.Facet.WrapField is not null && hierarchy.Contains(chart.Facet.WrapField, StringComparer.OrdinalIgnoreCase)
+                        ? currentLevel : chart.Facet.WrapField
+                }
+            };
         }
 
         private static void ResolveSetParameterAction(VisualActionManifest action, List<string> columns)
