@@ -13,7 +13,7 @@ import { createScheduledJobActivityCoordinator } from '../orchestrator-activity-
 import { renderScheduledJobsTable, studioDocumentHref } from '../orchestrator-job-table.js';
 import { escHtml } from '../orchestrator-admin-ui.js';
 import { createJobActionController, createJobRunDialog, jobVersion, requireMutationStatus } from '../orchestrator-job-actions.js';
-import { createNotificationCatalog, createScheduleCatalog } from '../orchestrator-catalogs.js';
+import { createCatalogAccessDialog, createNotificationCatalog, createScheduleCatalog } from '../orchestrator-catalogs.js';
 import { readCatalogJson } from '../orchestrator-catalog-responses.js';
 import { createJobDetail } from '../orchestrator-job-detail.js';
 import { createJobDialog } from '../orchestrator-create-job.js';
@@ -147,7 +147,8 @@ function mountOrchestratorPage(): void {
         sessionExpired,
         findCatalogPipeline,
         onPipelineProvisioned: async () => { await Promise.all([loadPipelineCatalog(), activity.refresh()]); },
-        isExternalScriptIngressEnabled: () => externalScriptIngressEnabled
+        isExternalScriptIngressEnabled: () => externalScriptIngressEnabled,
+        editJob: value => createDialog.openEdit(value)
     });
     const timeline = createJobTimeline<JobDefinition>({ root: document, open: detail.open });
 
@@ -215,6 +216,10 @@ function mountOrchestratorPage(): void {
         const button = event.target.closest<HTMLButtonElement>('button[data-action]');
         if (button) {
             if (button.dataset.action === 'trigger' && button.dataset.name) runDialog.open(button.dataset.name);
+            else if (button.dataset.action === 'edit' && button.dataset.name) {
+                const target = findJob(button.dataset.name);
+                if (target) createDialog.openEdit(target);
+            }
             else void jobActions.run(button);
             return;
         }
@@ -265,7 +270,13 @@ function mountOrchestratorPage(): void {
         fetch: apiFetch,
         notify,
         sessionExpired,
+        findTarget: name => { const found = findJob(name); return found ? { name, version: found.version } : null; },
         created: async () => { await Promise.all([loadPipelineCatalog(), activity.refresh()]); },
+        updated: async name => {
+            await activity.refresh();
+            const current = findJob(name);
+            if (current && detail.selectedName === name) detail.refresh(current);
+        },
         isExternalScriptIngressEnabled: () => externalScriptIngressEnabled
     });
     const unowned = createUnownedDialog({ root: document, fetch: apiFetch, notify, confirm: ask, sessionExpired,
@@ -277,7 +288,10 @@ function mountOrchestratorPage(): void {
         } });
 
     // ── Schedule and notification catalogs ─────────────────────────────────────
-    const catalogHost = { root: document, notify, confirm: ask };
+    const catalogAccess = createCatalogAccessDialog({
+        root: document, isAdmin, fetch: apiFetch, notify, confirm: ask, sessionExpired
+    });
+    const catalogHost = { root: document, notify, confirm: ask, openAccess: catalogAccess.open };
     const schedules = createScheduleCatalog(catalogHost, {
         list: signal => readJson('/api/orchestrator/schedules?limit=1000', signal),
         create: (body, signal) => apiFetch('/api/orchestrator/schedules', { method: 'POST', body, signal }),
@@ -371,7 +385,7 @@ function mountOrchestratorPage(): void {
     window.addEventListener('pagehide', () => {
         clearInterval(statusTimer);
         lifetime.abort();
-        for (const owner of [jobActions, runDialog, createDialog, unowned, triage, schedules, notifications, detail, timeline, activity])
+        for (const owner of [jobActions, runDialog, createDialog, unowned, triage, catalogAccess, schedules, notifications, detail, timeline, activity])
             owner.dispose();
     }, { once: true });
     // A page restored from the back/forward cache has disposed owners; load it again instead.

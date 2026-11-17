@@ -974,6 +974,10 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     double attemptCpuSeconds = 0;
                     long attemptQueueWaitMs = 0;
                     var usedSandbox = false;
+                    var timeoutSeconds = ReadJobTimeoutSeconds(job.Options);
+                    using var attemptCts = timeoutSeconds is > 0
+                        ? CancellationTokenSource.CreateLinkedTokenSource(cycleCts.Token)
+                        : null;
                     try
                     {
                         await SetRunStateOrCancelAsync(job, fenceToken, ScheduledJobRunState.Queued, cycleCts);
@@ -986,6 +990,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         attemptQueueWaitMs = queueWaitMs;
                         _logger.LogInformation("Job {JobName} acquired throttle slot. Queue wait: {QueueWaitMs} ms.", job.Name, queueWaitMs);
                         using var scope = _serviceProvider.CreateScope();
+                        if (attemptCts is not null)
+                            attemptCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds!.Value));
+                        var attemptToken = (attemptCts ?? cycleCts).Token;
                         var effectiveIdentity = ResolveJobExecutionIdentity(job, revision?.Identity ?? callerIdentity);
                         var sandboxExecutor = scope.ServiceProvider.GetService<ISandboxScheduledJobExecutor>();
                         if (sandboxExecutor is not null)
@@ -999,25 +1006,25 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             lastResult = await sandboxExecutor.ExecuteAsync(
                                 revision is null ? job : job with { Script = script },
                                 historyId, attempt, sessionId, resumeFromCheckpoint, queueWaitMs,
-                                variableOverrides, cycleCts.Token, effectiveIdentity);
+                                variableOverrides, attemptToken, effectiveIdentity);
                         }
                         else
                         {
                             var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
                             lastResult = revision is not null
                                 ? await executor.ExecuteTextAsync(
-                                    script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
+                                    script, sessionId, attemptToken, job.Name, queueWaitMs,
                                     executionIdentity: effectiveIdentity)
                                 : resumeFromCheckpoint
                                 ? await executor.ResumeTextAsync(
-                                    job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
+                                    job.Script, sessionId, attemptToken, job.Name, queueWaitMs,
                                     executionIdentity: effectiveIdentity)
                                 : variableOverrides is { Count: > 0 }
                                 ? await executor.ExecuteTextAsync(
-                                    job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
+                                    job.Script, sessionId, attemptToken, job.Name, queueWaitMs,
                                     executionIdentity: effectiveIdentity, variableOverrides: variableOverrides)
                                 : await executor.ExecuteTextAsync(
-                                    job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
+                                    job.Script, sessionId, attemptToken, job.Name, queueWaitMs,
                                     executionIdentity: effectiveIdentity);
                         }
                         sessionId = lastResult.SessionId ?? sessionId;
@@ -1052,6 +1059,16 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             await PersistAttemptEvidenceAsync(job, historyId, attemptStatus, lastResult,
                                 sessionId, currentHash, hashMatched);
                         }
+                    }
+                    catch (OperationCanceledException) when (attemptCts is { IsCancellationRequested: true } && !cycleCts.IsCancellationRequested)
+                    {
+                        _logger.LogWarning("Job {JobName} timed out on attempt {Attempt} after {TimeoutSeconds}s.",
+                            job.Name, attempt, timeoutSeconds);
+                        lastResult = new ScriptExecutionResult(false, 0, $"Job execution timed out after {timeoutSeconds}s.");
+                        finalStatus = "FAILURE";
+                        attemptStatus = UnsuccessfulStatus(historyId);
+                        await PersistAttemptEvidenceAsync(job, historyId, attemptStatus, lastResult,
+                            sessionId, currentHash, hashMatched);
                     }
                     catch (Exception ex)
                     {
@@ -1535,6 +1552,31 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
 
             return earliest;
+        }
+
+        private static int? ReadJobTimeoutSeconds(string? options)
+        {
+            if (string.IsNullOrWhiteSpace(options)) return null;
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(options);
+                if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+                foreach (var property in document.RootElement.EnumerateObject())
+                {
+                    if (!property.Name.Equals("TimeoutSeconds", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (property.Value.ValueKind == System.Text.Json.JsonValueKind.Number
+                        && property.Value.TryGetInt32(out var numeric) && numeric > 0)
+                        return numeric;
+                    if (property.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                        && int.TryParse(property.Value.GetString(), out var parsed) && parsed > 0)
+                        return parsed;
+                }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // Non-JSON free-form options omit per-job timeout override.
+            }
+            return null;
         }
     }
 }

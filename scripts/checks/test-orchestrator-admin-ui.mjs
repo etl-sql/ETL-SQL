@@ -82,6 +82,7 @@ assert(schedulesHtml.includes('3 jobs'), 'renders linked jobs count');
 const uncountedSchedulesHtml = renderSchedulesTable(schedules);
 assert(!uncountedSchedulesHtml.includes('Linked Jobs') && !/\d+ jobs?/.test(uncountedSchedulesHtml), 'uncounted schedule links are not shown as zero');
 assert(schedulesHtml.includes('data-action="edit-schedule"'), 'renders edit action');
+assert(schedulesHtml.includes('data-action="acl-schedule"'), 'renders access action');
 assert(schedulesHtml.includes('data-action="delete-schedule"'), 'renders delete action');
 
 // ── 5. Notifications Table Rendering tests ────────────────────────────────────
@@ -89,13 +90,17 @@ const emptyNotifsHtml = renderNotificationsTable([]);
 assert(emptyNotifsHtml.includes('empty-state'), 'empty notifications list renders empty state');
 
 const notifications = [
-    { Name: 'slack_ops', DisplayName: 'Ops Slack Channel', ConnectionName: 'slack_webhook', Recipient: '#ops-data', IsEnabled: true, CreatedBy: 'user:admin' }
+    { Name: 'slack_ops', DisplayName: 'Ops Slack Channel', ConnectionName: 'slack_webhook', Recipient: '#ops-data', IsEnabled: true, CreatedBy: 'user:admin', Version: 2 }
 ];
 const notifsHtml = renderNotificationsTable(notifications, { slack_ops: 2 });
 assert(notifsHtml.includes('Ops Slack Channel'), 'renders notification display name');
 assert(notifsHtml.includes('slack_webhook'), 'renders connection name');
 assert(notifsHtml.includes('#ops-data'), 'renders recipient');
+assert(notifsHtml.includes('v2'), 'renders notification version');
 assert(notifsHtml.includes('data-action="dispatch-notification"'), 'renders test dispatch action button');
+assert(notifsHtml.includes('data-action="edit-notification"'), 'renders edit notification action button');
+assert(notifsHtml.includes('data-action="acl-notification"'), 'renders notification access action button');
+assert(notifsHtml.includes('data-action="toggle-notification"'), 'renders notification enable/disable action button');
 assert(notifsHtml.includes('2 jobs'), 'renders counted notification links');
 assert(!/\d+ jobs?/.test(renderNotificationsTable(notifications)), 'uncounted notification links are not shown as zero');
 

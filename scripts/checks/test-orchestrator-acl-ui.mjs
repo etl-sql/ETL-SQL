@@ -137,4 +137,12 @@ assert(/has a recorded owner/.test(unownedListHtml(null, esc)), 'null is tolerat
 assert(!unownedListHtml([{ kind: 'JOB', name: '<img src=x>' }], esc).includes('<img'),
     'object names are escaped');
 
+// 14. Custom idPrefix avoids duplicate control ids when mounted inside Schedule/Notification modal.
+const schedulePanel = accessPanelHtml(
+    { subject: { name: 'nightly_utc', createdBy: `user:${OWNER_KEY}` }, objectKind: 'Schedule', grants: [], isAdmin: true },
+    esc, escAttr, 'catalogAcl');
+assert(schedulePanel.includes('id="catalogAclGrantBtn"'), 'custom prefix isolates grant button id');
+assert(schedulePanel.includes('id="catalogAclOwnerBtn"'), 'custom prefix isolates owner button id');
+assert(schedulePanel.includes(ownerLabel(`user:${OWNER_KEY}`)), 'schedule owner renders via subject attribution');
+
 console.log('orchestrator-acl-ui tests passed');

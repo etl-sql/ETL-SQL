@@ -568,7 +568,10 @@
           <h3 id="detailJobName" style="margin:0;">Job Details</h3>
           <div id="detailJobDisplayName" style="font-size:.82em;color:var(--portal-muted);margin-top:2px;"></div>
         </div>
-        <button class="btn-icon" id="closeDetailBtn" title="Close">✕</button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="btn btn-sm btn-outline" id="editJobBtn" type="button" style="display:none">Edit Metadata</button>
+          <button class="btn-icon" id="closeDetailBtn" title="Close">✕</button>
+        </div>
       </div>
 
       <div class="orch-detail-tabs">
@@ -847,7 +850,7 @@
       </div>
 
       <!-- Schedule Selection Mode -->
-      <div class="form-group" style="margin-top:10px;">
+      <div class="form-group" id="cj-sched-mode-row" style="margin-top:10px;">
         <label>Schedule Mode</label>
         <div style="display:flex;gap:12px;margin-top:4px;">
           <label style="font-weight:normal;font-size:.85em;cursor:pointer;">
@@ -890,7 +893,7 @@
         </select>
       </div>
 
-      <!-- Retries and Policies -->
+      <!-- Retries, Timeout, and Policies -->
       <div class="form-row">
         <div class="form-group">
           <label for="cj-retries">Max Retries</label>
@@ -899,6 +902,10 @@
         <div class="form-group">
           <label for="cj-retry-delay">Retry Delay (s)</label>
           <input id="cj-retry-delay" type="number" min="1" value="30" style="width:80px;">
+        </div>
+        <div class="form-group">
+          <label for="cj-timeout">Timeout (s)</label>
+          <input id="cj-timeout" type="number" min="1" placeholder="Default" style="width:92px;">
         </div>
         <div class="form-group" style="flex:1">
           <label for="cj-hash-policy">Hash Policy</label>
@@ -1166,6 +1173,28 @@
     <div class="modal-actions">
       <button class="btn btn-primary" id="es-submitBtn">Save Watermark</button>
       <button class="btn btn-outline" data-dialog-close>Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Schedule / Notification Access & Ownership Modal ─────────────────────── -->
+<div id="catalogAccessModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="catalogAccessTitle">
+  <div class="modal-card modal-md">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Authorization</span>
+        <h3 class="modal-title" id="catalogAccessTitle">Access &amp; Ownership</h3>
+        <p class="modal-subtitle" id="catalogAccessSubtitle">Manage owner and READ / EXECUTE / OVERRIDE / MANAGE permissions.</p>
+      </div>
+      <button class="btn-icon" id="closeCatalogAccessBtn" data-dialog-close title="Close" type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="catalogAccessWrap">
+        <div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading…</span></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="catalogAccessCloseBtn" data-dialog-close type="button">Close</button>
     </div>
   </div>
 </div>

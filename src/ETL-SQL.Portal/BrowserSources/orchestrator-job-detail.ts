@@ -1,11 +1,11 @@
 import { asError } from './http-error.js';
 import type { ApiRequestOptions } from './portal-http.js';
 import { escHtml, fmtDt, renderJobAuditTrail, renderWatermarksTable } from './orchestrator-admin-ui.js';
-import { accessPanelHtml, ownerLabel } from './orchestrator-acl-ui.js';
+import { handleObjectAccessClick, loadObjectAccessPanel, ownerLabel } from './orchestrator-acl-ui.js';
 import { jobVersion, requireMutationStatus } from './orchestrator-job-actions.js';
 import { parsePipelineJobId, studioDocumentHref, targetKindLabel } from './orchestrator-job-table.js';
 import { readCatalogJson, readNotifications, readSchedules } from './orchestrator-catalog-responses.js';
-import { readAudit, readDependencyChain, readGrants, readHistory, readJobStates, readNotificationLinks,
+import { readAudit, readDependencyChain, readHistory, readJobStates, readNotificationLinks,
     readQualityFailures, readQualityStatuses, readScheduleLinks } from './orchestrator-detail-responses.js';
 import type { HistoryRun } from './orchestrator-detail-responses.js';
 
@@ -19,7 +19,8 @@ import type { HistoryRun } from './orchestrator-detail-responses.js';
  */
 
 type Job = Pick<JobDefinition, 'name' | 'script' | 'interval' | 'unit' | 'atTime' | 'lastRun' | 'nextRun'
-    | 'version' | 'jobType' | 'targetPath' | 'displayName' | 'description' | 'options' | 'createdBy'>;
+    | 'version' | 'jobType' | 'targetPath' | 'displayName' | 'description' | 'options' | 'createdBy'
+    | 'maxRetries' | 'retryDelaySeconds' | 'hashPolicy'>;
 type Tab = 'details' | 'flow' | 'deps' | 'quality' | 'audit';
 interface Chart { setOption(option: unknown, replace?: boolean): void; dispose(): void }
 interface Editor { getValue(): string; dispose(): void }
@@ -42,6 +43,7 @@ export interface JobDetailOptions {
     findCatalogPipeline?(jobName: string): CatalogPipelineLinkDto | null;
     onPipelineProvisioned?(result: ProvisionPipelineSlotResultDto): void | Promise<void>;
     isExternalScriptIngressEnabled?(): boolean;
+    editJob?(job: Job): void;
 }
 
 const TABS: Tab[] = ['details', 'flow', 'deps', 'quality', 'audit'];
@@ -359,54 +361,47 @@ export function createJobDetail(options: JobDetailOptions) {
     }, { signal: lifetime.signal });
 
     // ── Access ────────────────────────────────────────────────────────────────
-    function loadAccess(value: Job) {
-        const host = box('accessPanelWrap');
-        const draw = (state: Parameters<typeof accessPanelHtml>[0]) => { host.innerHTML = accessPanelHtml(state, escHtml, escHtml); };
-        const opened = scope;
-        return options.fetch(`/api/orchestrator/authorization/Job/${encodeURIComponent(value.name)}`, { signal: opened.signal, cache: 'no-store' })
-            .then(async response => {
-                if (response.status === 401) { options.sessionExpired(); return; }
-                // Listing grants requires MANAGE, so a refusal is an answer about this caller, not a fault.
-                const state = response.status === 403
-                    ? { job: value, error: 'You can reach this job but are not permitted to administer its access.' }
-                    : { job: value, grants: readGrants(await readCatalogJson(response)), isAdmin: options.isAdmin };
-                if (live(opened)) draw(state);
-            })
-            .catch(failure => { if (live(opened)) draw({ job: value, error: `Access could not be loaded: ${asError(failure).message}` }); });
-    }
-
-    box('accessPanelWrap').addEventListener('click', async event => {
-        const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button') : null;
-        const target = selected;
-        if (!button || !target) return;
-        const base = `/api/orchestrator/authorization/Job/${encodeURIComponent(target.name)}`;
-        const host = box('accessPanelWrap');
-        const value = (id: string) => host.querySelector<HTMLInputElement | HTMLSelectElement>(`#${id}`)?.value.trim() ?? '';
-        const principal = (kind: string, key: string) => `${base}/${encodeURIComponent(kind)}/${encodeURIComponent(key)}`;
-        if (button.dataset.revokeKind && button.dataset.revokeKey) {
-            const kind = button.dataset.revokeKind, key = button.dataset.revokeKey;
-            if (!await options.confirm(`Revoke access for '${key}' on job '${target.name}'?`, { title: 'Revoke access',
-                confirmLabel: 'Revoke access', danger: true, auditAction: 'orchestrator.grant.revoke' })) return;
-            await write(`grant:${kind}:${key}`, signal => options.fetch(principal(kind, key), { method: 'DELETE', signal }),
-                204, `Access revoked for '${key}'.`, () => loadAccess(target));
-        } else if (button.id === 'aclGrantBtn') {
-            const kind = value('aclPrincipalKind'), key = value('aclPrincipalKey'), permission = value('aclPermission');
-            if (!key) { options.notify('Error: Enter the principal key to grant access to.', true); return; }
-            await write(`grant:${kind}:${key}`, signal => options.fetch(principal(kind, key), { method: 'PUT', body: { permission }, signal }),
-                200, `${permission} granted to '${key}'.`, () => loadAccess(target));
-        } else if (button.id === 'aclOwnerBtn') {
-            const principalKind = value('aclOwnerKind'), principalId = value('aclOwnerKey');
-            if (!principalId) { options.notify('Error: Enter the principal key of the new owner.', true); return; }
+    const accessOptions = {
+        host: box('accessPanelWrap'),
+        idPrefix: 'acl',
+        isAdmin: options.isAdmin,
+        esc: escHtml,
+        fetch: options.fetch,
+        notify: options.notify,
+        confirm: options.confirm,
+        sessionExpired: options.sessionExpired,
+        write: (key: string, send: (signal: AbortSignal) => Promise<Response>, status: number, done: string, after: () => unknown) =>
+            write(key, send, status, done, after),
+        onOwnerUpdated: async () => {
+            const target = selected;
             const opened = scope;
-            const changed = await write('owner', signal => options.fetch(`${base}/owner`, { method: 'PUT', body: { principalKind, principalId }, signal }),
-                200, `Owner of '${target.name}' updated.`, () => undefined);
-            if (!changed) return;
+            if (!target) return;
             const current = await options.reloadJob(target.name);
             if (!live(opened) || !current) return;
             selected = current;
             box('metaOwner').textContent = ownerLabel(current.createdBy);
-            void loadAccess(current);
         }
+    };
+
+    function loadAccess(value: Job) {
+        const opened = scope;
+        return loadObjectAccessPanel(
+            accessOptions,
+            { kind: 'Job', name: value.name, createdBy: value.createdBy },
+            opened.signal,
+            () => live(opened) && selected?.name === value.name);
+    }
+
+    box('accessPanelWrap').addEventListener('click', event => {
+        const target = selected;
+        const opened = scope;
+        if (!target) return;
+        void handleObjectAccessClick(
+            accessOptions,
+            event,
+            { kind: 'Job', name: target.name, createdBy: target.createdBy },
+            opened.signal,
+            () => live(opened) && selected?.name === target.name);
     }, { signal: lifetime.signal });
 
     // ── History and trend ─────────────────────────────────────────────────────
@@ -656,6 +651,11 @@ export function createJobDetail(options: JobDetailOptions) {
     }
 
     get('closeDetailBtn', HTMLButtonElement).addEventListener('click', close, { signal: lifetime.signal });
+    const editJobBtn = root.getElementById('editJobBtn');
+    if (editJobBtn instanceof HTMLButtonElement) {
+        editJobBtn.style.display = (options.isManager ?? options.isAdmin) && options.editJob ? '' : 'none';
+        editJobBtn.addEventListener('click', () => { if (selected) options.editJob?.(selected); }, { signal: lifetime.signal });
+    }
 
     return {
         open, close,

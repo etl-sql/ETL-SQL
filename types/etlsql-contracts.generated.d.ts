@@ -2596,6 +2596,21 @@ interface UpdateGroupRequest {
     adGroup?: string | null;
 }
 
+interface UpdateJobRequest {
+    scriptText?: string | null;
+    interval?: number | null;
+    unit?: string | null;
+    atTime?: string | null;
+    isEnabled?: boolean | null;
+    maxRetries?: number | null;
+    retryDelaySeconds?: number | null;
+    hashPolicy?: string | null;
+    targetPath?: string | null;
+    displayName?: string | null;
+    description?: string | null;
+    options?: Record<string, string> | null;
+}
+
 interface UpdateNotificationRequest {
     connectionName?: string | null;
     recipient?: string | null;

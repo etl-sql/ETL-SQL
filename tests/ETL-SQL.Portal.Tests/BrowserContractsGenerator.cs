@@ -147,6 +147,7 @@ internal static class BrowserContractsGenerator
         typeof(ScheduleDefinitionDto),
         typeof(CreateScheduleRequest),
         typeof(UpdateScheduleRequest),
+        typeof(UpdateJobRequest),
         typeof(NotificationDefinitionDto),
         typeof(CreateNotificationRequest),
         typeof(UpdateNotificationRequest),

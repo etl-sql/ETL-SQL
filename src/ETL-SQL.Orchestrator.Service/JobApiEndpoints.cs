@@ -364,13 +364,12 @@ namespace ETL_SQL.Orchestrator.Service
                     // that names one gets it; one that names none keeps the hourly default (or, on
                     // CREATE OR ALTER, what the job already had). It was once discarded here, so a
                     // job created as "daily at 02:00" ran hourly.
-                    if (req.Interval is <= 0)
-                        return Results.BadRequest(new { Error = "Interval must be positive." });
+                    if (ValidateScheduledJobMetadata(
+                            req.Interval, req.Unit, req.AtTime,
+                            req.MaxRetries, req.RetryDelaySeconds, req.Options,
+                            out var metadataError) is false)
+                        return Results.BadRequest(new { Error = metadataError });
                     var intervalUnit = req.Unit?.ToUpperInvariant();
-                    if (intervalUnit is not (null or "SECOND" or "MINUTE" or "HOUR" or "DAY" or "WEEK" or "MONTH"))
-                        return Results.BadRequest(new { Error = "Unit must be one of: SECOND, MINUTE, HOUR, DAY, WEEK, MONTH" });
-                    if (!string.IsNullOrEmpty(req.AtTime) && !TimeSpan.TryParse(req.AtTime, CultureInfo.InvariantCulture, out _))
-                        return Results.BadRequest(new { Error = "AtTime must be a time of day, such as 02:00." });
 
                     job = new JobDefinition(
                         req.Name,
@@ -467,14 +466,12 @@ namespace ETL_SQL.Orchestrator.Service
                         OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
-                // The same schedule rules as creation. Without them an update could store a zero or
-                // negative interval, an unknown unit, or an unparseable time of day on the job.
-                if (req.Interval is <= 0)
-                    return Results.BadRequest(new { Error = "Interval must be positive." });
-                if (req.Unit?.ToUpperInvariant() is not (null or "SECOND" or "MINUTE" or "HOUR" or "DAY" or "WEEK" or "MONTH"))
-                    return Results.BadRequest(new { Error = "Unit must be one of: SECOND, MINUTE, HOUR, DAY, WEEK, MONTH" });
-                if (!string.IsNullOrEmpty(req.AtTime) && !TimeSpan.TryParse(req.AtTime, CultureInfo.InvariantCulture, out _))
-                    return Results.BadRequest(new { Error = "AtTime must be a time of day, such as 02:00." });
+                // The same schedule and policy rules as creation.
+                if (!ValidateScheduledJobMetadata(
+                        req.Interval, req.Unit, req.AtTime,
+                        req.MaxRetries, req.RetryDelaySeconds, req.Options,
+                        out var metadataError))
+                    return Results.BadRequest(new { Error = metadataError });
 
                 var bundleTenant = ResolveBundleTenantOrNull(ctx, cfg);
                 var pinnedScript = req.ScriptText != null ? await PinBundlePathsAsync(req.ScriptText, bundleStore, bundleTenant) : null;
@@ -494,7 +491,7 @@ namespace ETL_SQL.Orchestrator.Service
                     TargetPath = targetPath ?? existing.TargetPath,
                     Interval = req.Interval ?? existing.Interval,
                     Unit = req.Unit != null ? req.Unit.ToUpperInvariant() : existing.Unit,
-                    AtTime = req.AtTime ?? existing.AtTime,
+                    AtTime = req.AtTime is null ? existing.AtTime : (string.IsNullOrWhiteSpace(req.AtTime) ? null : req.AtTime.Trim()),
                     IsEnabled = req.IsEnabled ?? existing.IsEnabled,
                     MaxRetries = req.MaxRetries ?? existing.MaxRetries,
                     RetryDelaySeconds = req.RetryDelaySeconds ?? existing.RetryDelaySeconds,
@@ -3334,6 +3331,57 @@ namespace ETL_SQL.Orchestrator.Service
                         entry.CpuTimeSeconds);
                 }
             }
+        }
+
+        private static bool ValidateScheduledJobMetadata(
+            int? interval,
+            string? unit,
+            string? atTime,
+            int? maxRetries,
+            int? retryDelaySeconds,
+            Dictionary<string, string>? options,
+            out string? error)
+        {
+            if (interval is <= 0)
+            {
+                error = "Interval must be positive.";
+                return false;
+            }
+            if (unit?.ToUpperInvariant() is not (null or "SECOND" or "MINUTE" or "HOUR" or "DAY" or "WEEK" or "MONTH"))
+            {
+                error = "Unit must be one of: SECOND, MINUTE, HOUR, DAY, WEEK, MONTH";
+                return false;
+            }
+            if (!string.IsNullOrEmpty(atTime) && !TimeSpan.TryParse(atTime, CultureInfo.InvariantCulture, out _))
+            {
+                error = "AtTime must be a time of day, such as 02:00.";
+                return false;
+            }
+            if (maxRetries is < 0)
+            {
+                error = "MaxRetries must be zero or greater.";
+                return false;
+            }
+            if (retryDelaySeconds is <= 0)
+            {
+                error = "RetryDelaySeconds must be positive.";
+                return false;
+            }
+            if (options is not null)
+            {
+                foreach (var (key, value) in options)
+                {
+                    if (!key.Equals("TimeoutSeconds", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.IsNullOrWhiteSpace(value)
+                        && (!int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) || seconds <= 0))
+                    {
+                        error = "TimeoutSeconds must be a positive integer in seconds.";
+                        return false;
+                    }
+                }
+            }
+            error = null;
+            return true;
         }
 
         // ── Request / response models ─────────────────────────────────────────

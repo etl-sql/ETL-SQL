@@ -58,20 +58,68 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
       }
     ];
   }
+  const catalogGrants = {
+    Schedule: {
+      nightly_utc: [{ objectId: 'schedule-0', objectKind: 'SCHEDULE', principalKind: 'GROUP', principalId: 'ops-readers', permission: 'EXECUTE', grantedBy: 'user:operator', version: 1 }],
+      hourly_us: []
+    },
+    Notification: {
+      ops_mail: [{ objectId: 'notification-0', objectKind: 'NOTIFICATION', principalKind: 'USER', principalId: 'oncall-eng', permission: 'READ', grantedBy: 'user:operator', version: 1 }],
+      oncall_chat: []
+    }
+  };
   // Objects nobody is accountable for; adopting assigns one owner to all of them.
   let unowned = [{ objectId: 'job-1', kind: 'JOB', name: 'hourly_orders' }, { objectId: 'schedule-1', kind: 'SCHEDULE', name: 'hourly_us' }];
   const detailWaiters = [];
   let detailPausedFor = null;
+  async function objectAclRoute(objectKind, name, parts, method, init) {
+    const collection = objectKind === 'Job' ? jobs : objectKind === 'Schedule' ? schedules : notifications;
+    const item = collection.find(entry => entry.name === name);
+    const grants = objectKind === 'Job'
+      ? (details[name] ? details[name].grants : null)
+      : (catalogGrants[objectKind]?.[name] ?? null);
+    if (method === 'GET') {
+      if (!item || !grants) return json({ error: `The ${objectKind.toLowerCase()} no longer exists.` }, 404);
+      if (failure === 'detail-unavailable') return json({ error: `Orchestrator ${objectKind.toLowerCase()} access is temporarily unavailable. Please retry.` }, 503);
+      if (failure === 'detail-denied' || failure === 'acl-denied') return new Response(null, { status: 403 });
+      if (failure === 'detail-malformed') return json([{ unexpected: true }]);
+      return json(grants);
+    }
+    if (paused) await new Promise(resolve => pending.push(resolve));
+    if (failure === 'denied') return new Response(null, { status: 403 });
+    if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
+    if (failure === 'unexpected') return new Response(null, { status: 206 });
+    if (!item || !grants) return json({ error: `The ${objectKind.toLowerCase()} no longer exists.` }, 404);
+    const body = typeof init.body === 'string' ? JSON.parse(init.body) : {};
+    if (parts[6] === 'owner') {
+      item.createdBy = `${body.principalKind.toLowerCase()}:${body.principalId}`;
+      return json({ kind: objectKind.toUpperCase(), name, owner: body.principalId });
+    }
+    const [principalKind, principalId] = [parts[6], parts[7]];
+    const filtered = grants.filter(grant => !(grant.principalKind === principalKind && grant.principalId === principalId));
+    if (objectKind === 'Job') details[name].grants = filtered;
+    else catalogGrants[objectKind][name] = filtered;
+    if (method === 'DELETE') return new Response(null, { status: 204 });
+    const createdGrant = { objectId: item.id, objectKind: objectKind.toUpperCase(), principalKind, principalId, permission: body.permission, grantedBy: 'user:sandbox-admin', version: 1 };
+    filtered.push(createdGrant);
+    return json(createdGrant);
+  }
   async function detailRoute(path, method, init) {
     const parts = path.split('/').map(decodeURIComponent);
-    const authorization = parts[3] === 'authorization';
-    const name = authorization ? parts[5] : parts[4], kind = authorization ? 'grants' : parts[5];
+    if (parts[3] === 'authorization') {
+      const objectKind = parts[4], name = parts[5];
+      if (objectKind === 'Schedule' || objectKind === 'Notification') {
+        return objectAclRoute(objectKind, name, parts, method, init);
+      }
+      if (method === 'GET' && detailPausedFor === name) await new Promise(resolve => detailWaiters.push(resolve));
+      return objectAclRoute('Job', name, parts, method, init);
+    }
+    const name = parts[4], kind = parts[5];
     const detail = details[name];
     if (method === 'GET') {
       if (detailPausedFor === name) await new Promise(resolve => detailWaiters.push(resolve));
       if (!detail) return json({ error: 'The job no longer exists.' }, 404);
       if (failure === 'detail-unavailable') return json({ error: 'Orchestrator job details are temporarily unavailable. Please retry.' }, 503);
-      if (failure === 'detail-denied' && authorization) return new Response(null, { status: 403 });
       if (failure === 'detail-malformed') return json([{ unexpected: true }]);
       if (kind === 'dag') return json({ nodes: [], edges: [] });
       if (kind === 'audit') return json([{ id: 1, tenantId: 'portal-host', actorType: 'User', actorId: 'operator', action: 'JobScriptEdited',
@@ -87,17 +135,6 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
     if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
     if (failure === 'unexpected') return new Response(null, { status: 206 });
     const body = typeof init.body === 'string' ? JSON.parse(init.body) : {};
-    if (authorization) {
-      if (parts[6] === 'owner') {
-        jobs.find(job => job.name === name).createdBy = `${body.principalKind.toLowerCase()}:${body.principalId}`;
-        return json({ kind: 'JOB', name, owner: body.principalId });
-      }
-      const [principalKind, principalId] = [parts[6], parts[7]];
-      detail.grants = detail.grants.filter(grant => !(grant.principalKind === principalKind && grant.principalId === principalId));
-      if (method === 'DELETE') return new Response(null, { status: 204 });
-      detail.grants.push({ objectId: name, objectKind: 'JOB', principalKind, principalId, permission: body.permission, grantedBy: 'user:sandbox-admin', version: 1 });
-      return json(detail.grants.at(-1));
-    }
     const target = parts[6];
     if (kind === 'schedules' && failure === 'attach-refused') return new Response(null, { status: 403 });
     if (kind === 'schedules') {
@@ -140,11 +177,13 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
       return json({ notificationName: name, delivered: true, skipped: false, message: null });
     }
     const body = typeof init.body === 'string' ? JSON.parse(init.body) : {};
-    if (method === 'POST') {
-      if (items.some(item => item.name === body.name)) return relayed(`'${body.name}' already exists.`, 409);
-      items.push({ id: `${kind}-${items.length}`, createdBy: 'user:sandbox-admin', version: 1, recipient: null, ...body });
-      return new Response(null, { status: 201 });
-    }
+      if (method === 'POST') {
+        if (items.some(item => item.name === body.name)) return relayed(`'${body.name}' already exists.`, 409);
+        items.push({ id: `${kind}-${items.length}`, createdBy: 'user:sandbox-admin', version: 1, recipient: null, ...body });
+        const aclKind = kind === 'schedules' ? 'Schedule' : 'Notification';
+        catalogGrants[aclKind][body.name] = [];
+        return new Response(null, { status: 201 });
+      }
     const item = items.find(candidate => candidate.name === name);
     if (!item) return relayed(`'${name}' not found.`, 404);
     if (method === 'DELETE') {
@@ -217,7 +256,7 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
       if (path === '/api/orchestrator/triage') return json({ generatedAt: '2026-10-09T12:00:00Z', lookbackHours: 24,
         failureCount: 0, incidentCount: 0, runningCount: 0, missedCount: 0, truncated: false, incidents: [], running: [], missed: [] });
       if (/^\/api\/orchestrator\/jobs\/[^/]+\/(history|schedules|notifications|state|dag|audit|dependencies)(\/|$)/.test(path)
-        || path.startsWith('/api/orchestrator/authorization/Job/')) return detailRoute(path, method, { ...init, query: url.search });
+        || /^\/api\/orchestrator\/authorization\/(Job|Schedule|Notification)\//.test(path)) return detailRoute(path, method, { ...init, query: url.search });
       if (path === '/api/orchestrator/authorization/unowned') return failure === 'legacy'
         ? json({ error: 'Per-object grants and ownership require federated identity.' }, 409) : json(unowned);
       if (path === '/api/orchestrator/authorization/adopt') {
@@ -283,32 +322,43 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
         return failure === 'failed' ? json({ error: 'The Orchestrator service refused the stop request.' }, 500)
           : failure === 'denied' ? new Response(null, { status: 403 }) : json({ message: 'Stop signal sent.' });
       }
-      if (path === '/api/orchestrator/jobs' && method === 'POST') {
-        if (paused) await new Promise(resolve => pending.push(resolve));
-        const body = JSON.parse(init.body);
-        if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
-        if (jobs.some(item => item.name === body.name)) return relayed(`Job '${body.name}' already exists.`, 409);
-        jobs.push({ id: `job-${jobs.length}`, name: body.name, script: '', interval: body.interval ?? 1, unit: body.unit ?? 'HOUR', isEnabled: true,
-          maxRetries: body.maxRetries, retryDelaySeconds: body.retryDelaySeconds, hashPolicy: body.hashPolicy, version: 1,
-          jobType: String(body.jobType ?? '').toUpperCase() === 'REPORT' ? 1 : 0,
-          targetPath: body.targetPath, displayName: body.displayName, createdBy: 'user:sandbox-admin', lastRun: null, nextRun: null });
-        details[body.name] = { schedules: [], notifications: [], state: [], history: [], grants: [] };
-        return new Response(null, { status: 201 });
-      }
-      if (path.startsWith('/api/orchestrator/') && method !== 'GET') {
-        if (paused) await new Promise(resolve => pending.push(resolve));
-        if (failure === 'denied') return json({ error: 'Job management is denied.' }, 403);
-        if (failure === 'failed') return json({ error: 'Service rejected the write.' }, 503);
-        if (failure === 'conflict') return json({ error: 'The resource changed after it was read. Refresh it and retry.' }, 409);
-        if (failure === 'unexpected') return new Response(null, { status: 206 });
-        const name = decodeURIComponent(path.split('/')[4]);
-        const job = jobs.find(item => item.name === name);
-        if (method === 'PUT' || method === 'DELETE') {
-          if (headers.get('If-Match') !== `"${job?.version}"`) return json({ error: 'This mutation requires the current resource version in the If-Match header.' }, 428);
-          if (method === 'DELETE') jobs = jobs.filter(item => item !== job);
-          else { Object.assign(job, JSON.parse(init.body)); job.isEnabled = JSON.parse(init.body).isEnabled ?? JSON.parse(init.body).IsEnabled ?? job.isEnabled; job.version++; }
-          return new Response(null, { status: method === 'PUT' ? 204 : 200 });
+        if (path === '/api/orchestrator/jobs' && method === 'POST') {
+          if (paused) await new Promise(resolve => pending.push(resolve));
+          const body = JSON.parse(init.body);
+          if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
+          if (jobs.some(item => item.name === body.name)) return relayed(`Job '${body.name}' already exists.`, 409);
+          jobs.push({ id: `job-${jobs.length}`, name: body.name, script: '', interval: body.interval ?? 1, unit: body.unit ?? 'HOUR', isEnabled: true,
+            maxRetries: body.maxRetries, retryDelaySeconds: body.retryDelaySeconds, hashPolicy: body.hashPolicy, version: 1,
+            jobType: String(body.jobType ?? '').toUpperCase() === 'REPORT' ? 1 : 0,
+            options: body.options ? JSON.stringify(body.options) : null,
+            targetPath: body.targetPath, displayName: body.displayName, description: body.description ?? null,
+            createdBy: 'user:sandbox-admin', lastRun: null, nextRun: null });
+          details[body.name] = { schedules: [], notifications: [], state: [], history: [], grants: [] };
+          return new Response(null, { status: 201 });
         }
+        if (path.startsWith('/api/orchestrator/') && method !== 'GET') {
+          if (paused) await new Promise(resolve => pending.push(resolve));
+          if (failure === 'denied') return json({ error: 'Job management is denied.' }, 403);
+          if (failure === 'failed') return json({ error: 'Service rejected the write.' }, 503);
+          if (failure === 'conflict') return json({ error: 'The resource changed after it was read. Refresh it and retry.' }, 409);
+          if (failure === 'unexpected') return new Response(null, { status: 206 });
+          const name = decodeURIComponent(path.split('/')[4]);
+          const job = jobs.find(item => item.name === name);
+          if (method === 'PUT' || method === 'DELETE') {
+            if (headers.get('If-Match') !== `"${job?.version}"`) return json({ error: 'This mutation requires the current resource version in the If-Match header.' }, 428);
+            if (method === 'DELETE') jobs = jobs.filter(item => item !== job);
+            else {
+              const body = JSON.parse(init.body);
+              const { options: bodyOptions, ...rest } = body;
+              Object.assign(job, rest);
+              if (bodyOptions !== undefined && bodyOptions !== null) {
+                job.options = typeof bodyOptions === 'string' ? bodyOptions : JSON.stringify(bodyOptions);
+              }
+              job.isEnabled = body.isEnabled ?? body.IsEnabled ?? job.isEnabled;
+              job.version++;
+            }
+            return new Response(null, { status: method === 'PUT' ? 204 : 200 });
+          }
         if (path.endsWith('/trigger')) return new Response(null, { status: 202 });
         return new Response(null, { status: 200 });
       }

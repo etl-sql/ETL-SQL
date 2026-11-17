@@ -1,4 +1,7 @@
 import { asError } from './http-error.js';
+import type { ApiRequestOptions } from './portal-http.js';
+import { handleObjectAccessClick, loadObjectAccessPanel } from './orchestrator-acl-ui.js';
+import type { ObjectAccessTarget } from './orchestrator-acl-ui.js';
 import { escHtml, renderNotificationsTable, renderSchedulesTable } from './orchestrator-admin-ui.js';
 import { requireMutationStatus } from './orchestrator-job-actions.js';
 import { readDispatchOutcome, readNotifications, readSchedules } from './orchestrator-catalog-responses.js';
@@ -20,6 +23,16 @@ interface CatalogHost {
     root: Document;
     notify: Notify;
     confirm: Confirm;
+    openAccess?(target: ObjectAccessTarget, onOwnerUpdated: () => Promise<void>): void;
+}
+
+export interface CatalogAccessOptions {
+    root: Document;
+    isAdmin: boolean;
+    fetch(url: string, init?: ApiRequestOptions): Promise<Response>;
+    notify: Notify;
+    confirm: Confirm;
+    sessionExpired(): void;
 }
 
 export interface ScheduleCatalogApi {
@@ -208,6 +221,10 @@ export function createScheduleCatalog(host: CatalogHost, api: ScheduleCatalogApi
         render: items => renderSchedulesTable(items, null),
         async act(action, schedule) {
             if (action === 'edit-schedule') { edit(schedule); return; }
+            if (action === 'acl-schedule') {
+                host.openAccess?.({ kind: 'Schedule', name: schedule.name, createdBy: schedule.createdBy }, catalog.load);
+                return;
+            }
             if (action === 'toggle-schedule') {
                 const enable = !schedule.isEnabled;
                 await catalog.rowWrite(schedule.name, async signal => {
@@ -280,6 +297,18 @@ export function createNotificationCatalog(host: CatalogHost, api: NotificationCa
         render: items => renderNotificationsTable(items, null),
         async act(action, notification) {
             if (action === 'edit-notification') { edit(notification); return; }
+            if (action === 'acl-notification') {
+                host.openAccess?.({ kind: 'Notification', name: notification.name, createdBy: notification.createdBy }, catalog.load);
+                return;
+            }
+            if (action === 'toggle-notification') {
+                const enable = !notification.isEnabled;
+                await catalog.rowWrite(notification.name, async signal => {
+                    await requireMutationStatus(await api.update(notification.name, { isEnabled: enable }, signal), 200);
+                    return `Notification '${notification.name}' ${enable ? 'enabled' : 'disabled'}.`;
+                });
+                return;
+            }
             if (action === 'dispatch-notification') {
                 dispatching = notification.name;
                 dispatchTitle.textContent = `Test Dispatch to '${notification.name}'`;
@@ -352,4 +381,88 @@ export function createNotificationCatalog(host: CatalogHost, api: NotificationCa
     }, { signal: lifetime.signal });
 
     return { load: catalog.load, dispose() { lifetime.abort(); } };
+}
+
+export function createCatalogAccessDialog(options: CatalogAccessOptions) {
+    const { root } = options;
+    const lifetime = new AbortController();
+    const modal = element(root, 'catalogAccessModal', HTMLElement);
+    const title = element(root, 'catalogAccessTitle', HTMLElement);
+    const wrap = element(root, 'catalogAccessWrap', HTMLElement);
+    const pending = new Set<string>();
+    let scope = new AbortController();
+    scope.abort();
+    let currentTarget: ObjectAccessTarget | null = null;
+    let ownerReload: (() => Promise<void>) | null = null;
+
+    const live = (opened: AbortController) => !lifetime.signal.aborted && opened === scope && !opened.signal.aborted;
+
+    function close() {
+        scope.abort();
+        currentTarget = null;
+        ownerReload = null;
+        wrap.replaceChildren();
+        modal.style.display = 'none';
+    }
+
+    for (const id of ['closeCatalogAccessBtn', 'catalogAccessCloseBtn'])
+        element(root, id, HTMLButtonElement).addEventListener('click', close, { signal: lifetime.signal });
+    lifetime.signal.addEventListener('abort', close, { once: true });
+
+    const accessPanelOptions = {
+        host: wrap,
+        idPrefix: 'catalogAcl',
+        isAdmin: options.isAdmin,
+        esc: escHtml,
+        fetch: options.fetch,
+        notify: options.notify,
+        confirm: options.confirm,
+        sessionExpired: options.sessionExpired,
+        async write(key: string, send: (signal: AbortSignal) => Promise<Response>, status: number, done: string,
+            after: () => unknown): Promise<boolean> {
+            const opened = scope;
+            if (!live(opened) || pending.has(key)) return false;
+            pending.add(key);
+            try {
+                await requireMutationStatus(await send(lifetime.signal), status);
+                if (lifetime.signal.aborted) return false;
+                options.notify(done);
+                if (live(opened)) await after();
+                return true;
+            } catch (failure) {
+                if (!lifetime.signal.aborted) options.notify(`Error: ${asError(failure).message}`, true);
+                return false;
+            } finally {
+                pending.delete(key);
+            }
+        },
+        async onOwnerUpdated(updatedTarget: ObjectAccessTarget) {
+            currentTarget = updatedTarget;
+            if (ownerReload) await ownerReload();
+        }
+    };
+
+    const isSameTarget = (opened: AbortController, target: ObjectAccessTarget) =>
+        live(opened) && currentTarget?.kind === target.kind && currentTarget?.name === target.name;
+
+    wrap.addEventListener('click', event => {
+        const opened = scope;
+        const target = currentTarget;
+        if (!target || !live(opened)) return;
+        void handleObjectAccessClick(accessPanelOptions, event, target, opened.signal, () => isSameTarget(opened, target));
+    }, { signal: lifetime.signal });
+
+    function open(target: ObjectAccessTarget, onOwnerUpdated: () => Promise<void>) {
+        if (lifetime.signal.aborted) return;
+        scope.abort();
+        const opened = scope = new AbortController();
+        currentTarget = target;
+        ownerReload = onOwnerUpdated;
+        title.textContent = `Access — ${target.kind} '${target.name}'`;
+        wrap.innerHTML = '<div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading…</span></div>';
+        modal.style.display = 'flex';
+        void loadObjectAccessPanel(accessPanelOptions, target, opened.signal, () => isSameTarget(opened, target));
+    }
+
+    return { open, close, dispose() { close(); lifetime.abort(); } };
 }

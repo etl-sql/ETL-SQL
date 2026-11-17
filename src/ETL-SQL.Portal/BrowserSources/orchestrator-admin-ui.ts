@@ -162,6 +162,7 @@ export function renderSchedulesTable(schedules: LegacyProjection<ScheduleDefinit
             <td>
               <div class="table-actions">
                 <button class="btn btn-sm btn-outline" data-action="edit-schedule" data-name="${escHtml(name)}">Edit</button>
+                <button class="btn btn-sm btn-outline" data-action="acl-schedule" data-name="${escHtml(name)}">Access</button>
                 <button class="btn btn-sm btn-outline" data-action="toggle-schedule" data-name="${escHtml(name)}" data-enabled="${isEnabled}">
                   ${isEnabled ? 'Disable' : 'Enable'}
                 </button>
@@ -205,6 +206,7 @@ export function renderNotificationsTable(notifications: LegacyProjection<Notific
         const isEnabled = n.IsEnabled ?? n.isEnabled ?? true;
         const linkedCount = linkedCounts?.[name] || 0;
         const owner = n.CreatedBy ?? n.createdBy ?? '—';
+        const version = n.Version ?? n.version ?? 1;
 
         return `
           <tr data-notification-name="${escHtml(name)}">
@@ -224,11 +226,18 @@ export function renderNotificationsTable(notifications: LegacyProjection<Notific
                 ${linkedCount} job${linkedCount === 1 ? '' : 's'}
               </span>
             </td>` : ''}
-            <td style="font-size:.82em;color:var(--portal-muted)">${escHtml(owner)}</td>
+            <td style="font-size:.82em;color:var(--portal-muted)">
+              <div>${escHtml(owner)}</div>
+              <div style="font-size:.75em;">v${version}</div>
+            </td>
             <td>
               <div class="table-actions">
                 <button class="btn btn-sm btn-outline" data-action="dispatch-notification" data-name="${escHtml(name)}" title="Test notification dispatch">Test</button>
                 <button class="btn btn-sm btn-outline" data-action="edit-notification" data-name="${escHtml(name)}">Edit</button>
+                <button class="btn btn-sm btn-outline" data-action="acl-notification" data-name="${escHtml(name)}">Access</button>
+                <button class="btn btn-sm btn-outline" data-action="toggle-notification" data-name="${escHtml(name)}" data-enabled="${isEnabled}">
+                  ${isEnabled ? 'Disable' : 'Enable'}
+                </button>
                 <button class="btn btn-sm btn-outline btn-danger-outline" data-action="delete-notification" data-name="${escHtml(name)}">Delete</button>
               </div>
             </td>
