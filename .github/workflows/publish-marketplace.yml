@@ -28,7 +28,7 @@ jobs:
   publish:
     name: Publish VS Code Extensions to Marketplace
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 170
     permissions:
       contents: read
       attestations: read
@@ -69,18 +69,48 @@ jobs:
             echo "Provenance verified: $(basename "$vsix")"
           done
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         timeout-minutes: 3
         with:
           node-version: 22
 
       # vsce 4.1.1 is the first release whose OIDC token exchange the Marketplace accepts (it sends
       # api-version and the FederatedToken scheme); 4.0.0 failed v0.22.0 with 400 Bad Request.
+      # A vsce "Published" only means the upload was accepted; validation runs afterwards (~20 min).
+      # v0.22.0 uploaded four targets back to back, the run went green, and only the first target
+      # ever appeared. So each target waits until the public gallery lists it as validated before
+      # the next upload, and a target that is already live is skipped.
       - name: Publish platform VSIXs via OIDC Trusted Publishing
-        timeout-minutes: 10
+        timeout-minutes: 150
         run: |
           set -euo pipefail
+          listed() { # $1 version, $2 target -> exit 0 when the gallery lists that version+target validated
+            curl -fsS -X POST "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery" \
+              -H "Content-Type: application/json" -H "Accept: application/json;api-version=7.2-preview.1" \
+              -d "{\"filters\":[{\"criteria\":[{\"filterType\":7,\"value\":\"$EXT_ID\"}]}],\"flags\":1}" \
+            | jq -e --arg v "$1" --arg t "$2" \
+              '[.results[0].extensions[]?.versions[]? | select(.version==$v and .targetPlatform==$t and ((.flags // "") | test("validated")))] | length > 0' >/dev/null
+          }
           for vsix in dist/*.vsix; do
-            echo "Publishing $(basename "$vsix") to Visual Studio Marketplace via OIDC..."
+            name=$(basename "$vsix")
+            if [[ ! "$name" =~ ^(.+)-([0-9]+\.[0-9]+\.[0-9]+)-([a-z0-9]+-[a-z0-9]+)\.vsix$ ]]; then
+              echo "::error::Cannot read version and target from $name."; exit 1
+            fi
+            version=${BASH_REMATCH[2]}; target=${BASH_REMATCH[3]}
+            EXT_ID=$(unzip -p "$vsix" extension/package.json | jq -r '"\(.publisher).\(.name)"')
+            if listed "$version" "$target"; then
+              echo "$EXT_ID $version ($target) is already live; skipping."; continue
+            fi
+            echo "Publishing $name to Visual Studio Marketplace via OIDC..."
             npx --yes @vscode/vsce@4.1.1 publish --oidc --skip-duplicate --packagePath "$vsix"
+            echo "Waiting for the Marketplace to validate $target..."
+            deadline=$((SECONDS + 45 * 60))
+            until listed "$version" "$target"; do
+              if (( SECONDS > deadline )); then
+                echo "::error::$EXT_ID $version ($target) was uploaded but is not listed after 45 minutes. Check View status in the publisher hub."
+                exit 1
+              fi
+              sleep 60
+            done
+            echo "$EXT_ID $version ($target) is live."
           done
