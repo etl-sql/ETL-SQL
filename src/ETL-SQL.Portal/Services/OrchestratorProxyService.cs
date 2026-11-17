@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Security.Claims;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Orchestrator.Storage;
@@ -514,20 +515,54 @@ public class OrchestratorProxyService(
         catch (Exception ex) { logger.LogDebug(ex, "Failed to list dependencies for bundle {Name} v{Version}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name), version); return null; }
     }
 
+    public async Task<IReadOnlyList<BundleVersionInfo>> GetBundleVersionsAsync(string name, CancellationToken ct = default)
+    {
+        try { return await GetJsonAsync<List<BundleVersionInfo>>($"api/bundles/{Uri.EscapeDataString(name)}/versions", ct) ?? []; }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogDebug(ex, "Failed to list versions for bundle {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name));
+            return [];
+        }
+    }
+
+    public async Task<IReadOnlyList<BundleFileInfo>> GetBundleFilesAsync(string name, int version, CancellationToken ct = default)
+    {
+        try { return await GetJsonAsync<List<BundleFileInfo>>($"api/bundles/{Uri.EscapeDataString(name)}/versions/{version}/files", ct) ?? []; }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogDebug(ex, "Failed to list files for bundle {Name} v{Version}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name), version);
+            return [];
+        }
+    }
+
+    public async Task<IReadOnlyList<BundleDependencyInfo>> GetBundleDependenciesAsync(string name, int version, CancellationToken ct = default)
+    {
+        try { return await GetJsonAsync<List<BundleDependencyInfo>>($"api/bundles/{Uri.EscapeDataString(name)}/versions/{version}/dependencies", ct) ?? []; }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogDebug(ex, "Failed to list dependencies for bundle {Name} v{Version}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name), version);
+            return [];
+        }
+    }
+
     public async Task<OrchestratorScriptsDto?> GetScriptsAsync()
     {
         try { return await GetJsonAsync<OrchestratorScriptsDto>("api/scripts"); }
         catch (Exception ex) { logger.LogDebug(ex, "Failed to list scripts."); return null; }
     }
 
-    public async Task<string?> GetScriptContentAsync(string path)
+    public async Task<string?> GetScriptContentAsync(string path, CancellationToken ct = default)
     {
         try
         {
-            var resp = await GetJsonAsync<ScriptContentResponse>($"api/scripts/content?path={Uri.EscapeDataString(path)}");
+            var resp = await GetJsonAsync<ScriptContentResponse>($"api/scripts/content?path={Uri.EscapeDataString(path)}", ct);
             return resp?.Content;
         }
-        catch (Exception ex) { logger.LogDebug(ex, "Failed to get script content for {Path}.", ETL_SQL.Core.Common.LogSanitizer.Clean(path)); return null; }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogDebug(ex, "Failed to get script content for {Path}.", ETL_SQL.Core.Common.LogSanitizer.Clean(path));
+            return null;
+        }
     }
 
     public async Task<HttpResponseMessage?> StopServiceAsync()
@@ -593,11 +628,11 @@ public class OrchestratorProxyService(
             return new(StatusCodes.Status503ServiceUnavailable, null);
         }
     }
-    private async Task<T?> GetJsonAsync<T>(string path)
+    private async Task<T?> GetJsonAsync<T>(string path, CancellationToken ct = default)
     {
-        using var resp = await SendAsync(HttpMethod.Get, path);
+        using var resp = await SendAsync(HttpMethod.Get, path, cancellationToken: ct);
         if (resp == null || !resp.IsSuccessStatusCode) return default;
-        return await resp.Content.ReadFromJsonAsync<T>();
+        return await resp.Content.ReadFromJsonAsync<T>(ct);
     }
 
     private async Task<HttpResponseMessage?> SendAsync(
