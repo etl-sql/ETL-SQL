@@ -378,3 +378,143 @@ export function renderCalendarTimeline(jobs: LegacyProjection<JobDefinitionDto>[
         </div>`).join('')}
     </div>`;
 }
+
+// ── Run Waterfall & Fleet Telemetry ───────────────────────────────────────────
+
+export function formatBytes(bytes: number | null | undefined) {
+  if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) return '—';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[unit]}`;
+}
+
+export function renderRunWaterfallHtml(run: JobRunDetailResponseDto) {
+  const startMs = Date.parse(run.startTime);
+  const endMs = run.endTime ? Date.parse(run.endTime) : NaN;
+  const durationText = Number.isFinite(startMs) && Number.isFinite(endMs)
+    ? `${Math.max(0, Math.round((endMs - startMs) / 1000))}s`
+    : (run.completed ? '—' : 'Running');
+
+  const statements = Array.isArray(run.statements) ? run.statements : [];
+  const maxDuration = statements.reduce((max, item) => Math.max(max, item.durationMs || 0), 1);
+
+  const errorBlock = run.errorMessage
+    ? `<div class="orch-run-error" role="status"><strong>Output / Error</strong><div>${escHtml(run.errorMessage)}</div></div>`
+    : '';
+
+  const rows = statements.length
+    ? `<div class="orch-waterfall-list">${statements.map((stmt, index) => {
+        const pct = Math.max(2, Math.min(100, Math.round(((stmt.durationMs || 0) / maxDuration) * 100)));
+        return `<div class="orch-waterfall-item">
+          <div class="orch-waterfall-head">
+            <span class="orch-waterfall-sql" title="${escHtml(stmt.statement)}">${index + 1}. ${escHtml(stmt.statement)}</span>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+              <span>${stmt.durationMs.toLocaleString()} ms</span>
+              <span class="orch-link-meta">${stmt.rowsProcessed.toLocaleString()} rows</span>
+              <span class="badge ${stmt.failed ? 'badge-danger' : 'badge-success'}">${stmt.failed ? 'Failed' : 'OK'}</span>
+            </div>
+          </div>
+          <div class="orch-waterfall-track" aria-hidden="true">
+            <div class="orch-waterfall-fill${stmt.failed ? ' failed' : ''}" style="width:${pct}%"></div>
+          </div>
+        </div>`;
+      }).join('')}</div>`
+    : '<div class="empty-state" style="padding:16px 0;">No per-statement metrics were recorded for this run.</div>';
+
+  const truncatedNote = run.statementsTruncated
+    ? '<p class="orch-link-meta" style="margin:8px 0 0;font-size:.8em;">Showing the bounded statement log; additional statements were omitted.</p>'
+    : '';
+
+  return `
+    <div class="orch-meta-grid">
+      <div class="orch-meta-card"><div class="orch-meta-label">Status</div><div class="orch-meta-value">${escHtml(run.status)}</div></div>
+      <div class="orch-meta-card"><div class="orch-meta-label">Started</div><div class="orch-meta-value">${escHtml(fmtDt(run.startTime))}</div></div>
+      <div class="orch-meta-card"><div class="orch-meta-label">Duration</div><div class="orch-meta-value">${escHtml(durationText)}</div></div>
+      <div class="orch-meta-card"><div class="orch-meta-label">Rows</div><div class="orch-meta-value">${run.rowsProcessed.toLocaleString()}</div></div>
+    </div>
+    ${errorBlock}
+    <h4 style="margin:8px 0 8px;font-size:.88em;">Statement Execution Waterfall (${statements.length})</h4>
+    ${rows}
+    ${truncatedNote}`;
+}
+
+export function renderFleetNodesHtml(nodes: FleetNodeHeartbeatDto[] | null | undefined) {
+  if (!nodes || !nodes.length) {
+    return '<div class="empty-state" style="padding:20px 0;">No cluster node heartbeats have been recorded yet.</div>';
+  }
+
+  return `<div style="overflow-x:auto;"><table class="data-table">
+    <thead><tr>
+      <th>Node</th><th>Role</th><th>Health</th><th>Machine / PID</th>
+      <th>CPU (Proc / Host)</th><th>Memory (WS / Load)</th><th>Disk Free (State / Spill)</th>
+      <th>Last Heartbeat</th><th>Lease Expires</th>
+    </tr></thead>
+    <tbody>
+    ${nodes.map(node => {
+      const cap = node.capacity;
+      const cpu = cap ? `${cap.processCpuPercent.toFixed(1)}% / ${cap.hostCpuPercent.toFixed(1)}%` : '—';
+      const mem = cap ? `${formatBytes(cap.workingSetBytes)} (${cap.memoryLoadPercent.toFixed(1)}%)` : '—';
+      const disk = cap ? `${formatBytes(cap.stateDiskFreeBytes)} / ${formatBytes(cap.spillDiskFreeBytes)}` : '—';
+      const host = node.machine ? `${node.machine}${node.pid != null ? ` (pid ${node.pid})` : ''}` : '—';
+      const overloaded = cap?.isOverloaded ? ' <span class="badge badge-danger">Overloaded</span>' : '';
+      return `<tr>
+        <td><code>${escHtml(node.nodeId)}</code></td>
+        <td><span class="chip">${escHtml(node.role)}</span></td>
+        <td><span class="badge ${node.isLive ? 'badge-success' : 'badge-neutral'}">${node.isLive ? 'Live' : 'Expired'}</span>${overloaded}</td>
+        <td>${escHtml(host)}</td>
+        <td>${escHtml(cpu)}</td>
+        <td>${escHtml(mem)}</td>
+        <td>${escHtml(disk)}</td>
+        <td>${escHtml(fmtDt(node.lastHeartbeatUtc))}</td>
+        <td>${escHtml(fmtDt(node.expiresAtUtc))}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div>`;
+}
+
+export function renderSandboxPoolsHtml(
+  pools: SandboxPoolStateDto[] | null | undefined,
+  sandboxAdmissionEnabled: boolean
+) {
+  const modeNote = sandboxAdmissionEnabled
+    ? '<span class="badge badge-accent" style="margin-bottom:10px;display:inline-block;">Distributed Admission Ledger Active</span>'
+    : '<span class="badge badge-neutral" style="margin-bottom:10px;display:inline-block;">Local Admission Mode</span>';
+
+  if (!pools || !pools.length) {
+    return `${modeNote}<div class="empty-state" style="padding:16px 0;">No distributed sandbox admission pools are configured.</div>`;
+  }
+
+  const cards = `<div class="orch-pool-grid">${pools.map(pool => `
+    <div class="orch-meta-card">
+      <div class="orch-meta-label">${escHtml(pool.poolId)}</div>
+      <div class="orch-meta-value">${pool.activeCount + pool.retainedCount} / ${pool.capacity} occupied</div>
+      <div style="font-size:.82em;color:var(--portal-muted);margin-top:4px;">
+        Active: <strong>${pool.activeCount}</strong> · Retained: <strong>${pool.retainedCount}</strong> ·
+        Queued: <strong>${pool.queuedCount}</strong> · Free: <strong>${pool.availableSlots}</strong>
+      </div>
+    </div>`).join('')}</div>`;
+
+  const openAdmissions = pools.flatMap(pool => pool.openAdmissions || []);
+  const table = openAdmissions.length
+    ? `<div style="overflow-x:auto;"><table class="data-table data-table-sm">
+        <thead><tr><th>Admission</th><th>Pool</th><th>Tenant</th><th>State</th><th>Weight</th><th>Lease Owner</th><th>Enqueued</th></tr></thead>
+        <tbody>${openAdmissions.map(entry => `<tr>
+          <td><code>${escHtml(entry.admissionId)}</code></td>
+          <td>${escHtml(entry.poolId)}</td>
+          <td>${escHtml(entry.tenantId)}</td>
+          <td><span class="badge ${entry.state === 'Active' ? 'badge-success' : entry.state === 'Retained' ? 'badge-danger' : 'badge-neutral'}">${escHtml(entry.state)}</span></td>
+          <td>${entry.weight}</td>
+          <td><code>${escHtml(entry.leaseOwner || '—')}</code></td>
+          <td>${escHtml(fmtDt(entry.enqueuedUtc))}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`
+    : '<div class="orch-link-empty">No queued, active, or retained sandbox admissions across configured pools.</div>';
+
+  return `${modeNote}${cards}${table}`;
+}

@@ -157,6 +157,8 @@ internal static class BrowserContractsGenerator
         typeof(JobScheduleLinkDto),
         typeof(JobNotificationLinkDto),
         typeof(JobHistoryEntryDto),
+        typeof(JobRunDetailResponseDto),
+        typeof(OrchestratorFleetSnapshotDto),
         typeof(JobDependencyChainDto),
         typeof(CatalogPipelineLinkDto),
         typeof(ProvisionPipelineSlotResultDto),

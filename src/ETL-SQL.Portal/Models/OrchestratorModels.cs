@@ -288,3 +288,79 @@ public record JobDependencyChainDto(
     List<string> Downstream,
     List<string> SharedSchedules
 );
+
+
+public record JobRunStatementDto(
+    string Statement,
+    long DurationMs,
+    long RowsProcessed,
+    bool Failed
+);
+
+public record JobRunDetailResponseDto(
+    long RunId,
+    string JobName,
+    string Status,
+    bool Completed,
+    DateTime StartTime,
+    DateTime? EndTime,
+    string? ErrorMessage,
+    long RowsProcessed,
+    string? ScriptHashAtRunTime,
+    bool StatementsTruncated,
+    List<JobRunStatementDto> Statements
+);
+
+public record FleetNodeCapacityDto(
+    long WorkingSetBytes,
+    long GcHeapBytes,
+    long TotalAvailableMemoryBytes,
+    double MemoryLoadPercent,
+    double ProcessCpuPercent,
+    double HostCpuPercent,
+    int ProcessorCount,
+    bool IsOverloaded,
+    long? StateDiskFreeBytes,
+    long? SpillDiskFreeBytes
+);
+
+public record FleetNodeHeartbeatDto(
+    string NodeId,
+    string Role,
+    bool IsLive,
+    DateTime FirstSeenUtc,
+    DateTime LastHeartbeatUtc,
+    DateTime ExpiresAtUtc,
+    string? Machine,
+    int? Pid,
+    DateTimeOffset? StartedUtc,
+    FleetNodeCapacityDto? Capacity
+);
+
+public record SandboxPoolAdmissionDto(
+    string AdmissionId,
+    string PoolId,
+    string TenantId,
+    string State,
+    int Weight,
+    string? LeaseOwner,
+    DateTimeOffset EnqueuedUtc,
+    DateTimeOffset? LeaseExpiresUtc
+);
+
+public record SandboxPoolStateDto(
+    string PoolId,
+    int Capacity,
+    int QueuedCount,
+    int ActiveCount,
+    int RetainedCount,
+    int AvailableSlots,
+    List<SandboxPoolAdmissionDto> OpenAdmissions
+);
+
+public record OrchestratorFleetSnapshotDto(
+    DateTime GeneratedAtUtc,
+    bool SandboxAdmissionEnabled,
+    List<FleetNodeHeartbeatDto> Nodes,
+    List<SandboxPoolStateDto> SandboxPools
+);

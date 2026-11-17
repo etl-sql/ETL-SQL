@@ -1,6 +1,6 @@
-import { asError } from './http-error.js';
+import { asError, isObject } from './http-error.js';
 import type { ApiRequestOptions } from './portal-http.js';
-import { escHtml, fmtDt, renderJobAuditTrail, renderWatermarksTable } from './orchestrator-admin-ui.js';
+import { escHtml, fmtDt, renderJobAuditTrail, renderRunWaterfallHtml, renderWatermarksTable } from './orchestrator-admin-ui.js';
 import { handleObjectAccessClick, loadObjectAccessPanel, ownerLabel } from './orchestrator-acl-ui.js';
 import { jobVersion, requireMutationStatus } from './orchestrator-job-actions.js';
 import { parsePipelineJobId, studioDocumentHref, targetKindLabel } from './orchestrator-job-table.js';
@@ -44,6 +44,8 @@ export interface JobDetailOptions {
     onPipelineProvisioned?(result: ProvisionPipelineSlotResultDto): void | Promise<void>;
     isExternalScriptIngressEnabled?(): boolean;
     editJob?(job: Job): void;
+    runJob?(name: string): void;
+    killJob?(name: string): Promise<void> | void;
 }
 
 const TABS: Tab[] = ['details', 'flow', 'deps', 'quality', 'audit'];
@@ -431,16 +433,104 @@ export function createJobDetail(options: JobDetailOptions) {
     function historyRow(run: HistoryRun): string {
         const succeeded = run.status === 'Success' || run.status === 'Completed';
         const eligible = run.status === 'Failed' || run.status === 'Cancelled';
+        const isActive = !run.endTime || /^(running|queued)$/i.test(run.status);
         const duration = seconds(run);
         // Recovery needs three facts; when one is missing the reader is told which, not shown a dash.
-        const action = eligible && run.hasResumeSession && run.checkpointLabel
+        const resumeAction = eligible && run.hasResumeSession && run.checkpointLabel
             ? `<button class="btn btn-sm btn-outline history-resume-btn" type="button" data-resume-id="${run.id}" data-resume-label="${escHtml(run.checkpointLabel)}" title="Resume from named checkpoint">Resume · ${escHtml(run.checkpointLabel)}</button>`
             : `<button class="btn btn-sm btn-outline history-resume-btn" type="button" disabled>Unavailable</button><span class="history-resume-reason">${
                 eligible ? 'No resumable checkpoint: this run was not persistent or never reached a top-level label.' : 'Only failed or cancelled runs can resume.'}</span>`;
-        return `<tr><td>#${run.id}</td>
-            <td><span class="badge ${succeeded ? 'badge-success' : run.status === 'Running' ? 'badge-accent' : 'badge-danger'}">${escHtml(run.status)}</span></td>
+        const cancelAction = isActive
+            ? `<button class="btn btn-sm btn-outline btn-danger-soft history-cancel-btn" type="button" data-cancel-run-id="${run.id}">Cancel Run</button>`
+            : '';
+        return `<tr class="orch-history-row" data-run-id="${run.id}" title="Click to view statement execution waterfall">
+            <td><button class="btn btn-sm btn-outline" type="button" data-inspect-run-id="${run.id}" title="View statement execution waterfall">#${run.id}</button></td>
+            <td><span class="badge ${succeeded ? 'badge-success' : isActive ? 'badge-accent' : 'badge-danger'}">${escHtml(run.status)}</span></td>
             <td>${escHtml(fmtDt(run.startTime))}</td><td>${duration === null ? '—' : `${duration}s`}</td>
-            <td>${run.rowsProcessed.toLocaleString()}</td><td>${action}</td></tr>`;
+            <td>${run.rowsProcessed.toLocaleString()}</td><td><div class="table-actions">${cancelAction}${resumeAction}</div></td></tr>`;
+    }
+
+    const waterfallModal = root.getElementById('runWaterfallModal');
+    const waterfallTitle = root.getElementById('runWaterfallTitle');
+    const waterfallSubtitle = root.getElementById('runWaterfallSubtitle');
+    const waterfallBody = root.getElementById('runWaterfallBody');
+    const waterfallCancel = root.getElementById('runWaterfallCancelBtn');
+    let waterfallScope: AbortController | null = null;
+    let waterfallRun: { id: string; jobName: string } | null = null;
+
+    function closeWaterfall() {
+        waterfallScope?.abort();
+        waterfallScope = null;
+        waterfallRun = null;
+        if (waterfallModal instanceof HTMLElement) waterfallModal.style.display = 'none';
+        if (waterfallCancel instanceof HTMLButtonElement) waterfallCancel.style.display = 'none';
+    }
+    for (const id of ['closeRunWaterfallBtn', 'runWaterfallCloseBtn']) {
+        root.getElementById(id)?.addEventListener('click', closeWaterfall, { signal: lifetime.signal });
+    }
+
+    function readRunDetail(value: unknown): JobRunDetailResponseDto {
+        if (!isObject(value) || typeof value.runId !== 'number' || typeof value.jobName !== 'string'
+            || typeof value.status !== 'string' || typeof value.startTime !== 'string'
+            || typeof value.rowsProcessed !== 'number' || !Array.isArray(value.statements)) {
+            throw new TypeError('Invalid run execution waterfall response.');
+        }
+        return value as unknown as JobRunDetailResponseDto;
+    }
+
+    async function openWaterfall(runId: string) {
+        if (!(waterfallModal instanceof HTMLElement) || !(waterfallBody instanceof HTMLElement)) return;
+        const opened = scope;
+        if (!live(opened)) return;
+        waterfallScope?.abort();
+        const wfScope = waterfallScope = new AbortController();
+        waterfallRun = null;
+        if (waterfallTitle) waterfallTitle.textContent = `Run #${runId}`;
+        if (waterfallSubtitle) waterfallSubtitle.textContent = selected?.name ? `Job: ${selected.name}` : '';
+        if (waterfallCancel instanceof HTMLButtonElement) {
+            waterfallCancel.style.display = 'none';
+            waterfallCancel.disabled = false;
+        }
+        waterfallBody.innerHTML = loading('Loading statement waterfall…');
+        waterfallModal.style.display = 'flex';
+        try {
+            const detail = readRunDetail(await read(`/api/orchestrator/runs/${encodeURIComponent(runId)}`, wfScope));
+            if (wfScope.signal.aborted || !live(opened) || waterfallScope !== wfScope) return;
+            waterfallRun = { id: String(detail.runId), jobName: detail.jobName };
+            if (waterfallTitle) waterfallTitle.textContent = `Run #${detail.runId} — ${detail.jobName}`;
+            if (waterfallSubtitle) waterfallSubtitle.textContent = `${detail.status} · Started ${fmtDt(detail.startTime)}`;
+            if (waterfallCancel instanceof HTMLButtonElement) {
+                waterfallCancel.style.display = detail.completed ? 'none' : '';
+            }
+            waterfallBody.innerHTML = renderRunWaterfallHtml(detail);
+        } catch (failure) {
+            if (!wfScope.signal.aborted && live(opened) && waterfallScope === wfScope) {
+                waterfallBody.innerHTML = failed('Run waterfall', failure);
+            }
+        }
+    }
+
+    async function cancelRunById(jobName: string, id: string, button?: HTMLButtonElement | null): Promise<boolean> {
+        if (!await options.confirm(`Cancel in-flight run #${id} of job '${jobName}'?`, {
+            title: 'Cancel active run',
+            impact: 'The orchestrator signals the running execution to stop. Work already committed externally is not rolled back.',
+            confirmLabel: 'Cancel run', danger: true, auditAction: 'orchestrator.run.cancel'
+        })) return false;
+        if (button) button.disabled = true;
+        const cancelled = await write(`cancel:${id}`,
+            signal => options.fetch(`/api/orchestrator/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST', signal }),
+            202, `Cancellation requested for run #${id}.`, () => loadHistory(jobName));
+        if (!cancelled && button?.isConnected) button.disabled = false;
+        return cancelled;
+    }
+
+    if (waterfallCancel instanceof HTMLButtonElement) {
+        waterfallCancel.addEventListener('click', async () => {
+            const target = waterfallRun;
+            if (!target) return;
+            const cancelled = await cancelRunById(target.jobName, target.id, waterfallCancel);
+            if (cancelled) void openWaterfall(target.id);
+        }, { signal: lifetime.signal });
     }
 
     function loadHistory(name: string) {
@@ -456,16 +546,33 @@ export function createJobDetail(options: JobDetailOptions) {
     }
 
     box('historyTableWrap').addEventListener('click', async event => {
-        const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-resume-id]') : null;
-        const name = selected?.name, id = button?.dataset.resumeId, label = button?.dataset.resumeLabel;
-        if (!button || !name || !id) return;
-        // Resuming re-runs everything the checkpoint did not cover; say so before doing it.
-        if (!await options.confirm(`Resume run #${id} from checkpoint '${label}'?`, { title: 'Resume from named checkpoint',
-            impact: 'Work after that label may run again.', confirmLabel: 'Resume run', auditAction: 'orchestrator.run.resume' })) return;
-        button.disabled = true;
-        const resumed = await write(`resume:${id}`, signal => options.fetch(`/api/orchestrator/runs/${encodeURIComponent(id)}/resume`, { method: 'POST', signal }),
-            202, `Run #${id} queued to resume.`, () => loadHistory(name));
-        if (!resumed && button.isConnected) button.disabled = false;
+        if (!(event.target instanceof Element)) return;
+        const resumeButton = event.target.closest<HTMLButtonElement>('[data-resume-id]');
+        const name = selected?.name;
+        if (resumeButton && name && resumeButton.dataset.resumeId) {
+            const id = resumeButton.dataset.resumeId, label = resumeButton.dataset.resumeLabel;
+            // Resuming re-runs everything the checkpoint did not cover; say so before doing it.
+            if (!await options.confirm(`Resume run #${id} from checkpoint '${label}'?`, { title: 'Resume from named checkpoint',
+                impact: 'Work after that label may run again.', confirmLabel: 'Resume run', auditAction: 'orchestrator.run.resume' })) return;
+            resumeButton.disabled = true;
+            const resumed = await write(`resume:${id}`, signal => options.fetch(`/api/orchestrator/runs/${encodeURIComponent(id)}/resume`, { method: 'POST', signal }),
+                202, `Run #${id} queued to resume.`, () => loadHistory(name));
+            if (!resumed && resumeButton.isConnected) resumeButton.disabled = false;
+            return;
+        }
+        const cancelButton = event.target.closest<HTMLButtonElement>('[data-cancel-run-id]');
+        if (cancelButton && name && cancelButton.dataset.cancelRunId) {
+            await cancelRunById(name, cancelButton.dataset.cancelRunId, cancelButton);
+            return;
+        }
+        const inspectButton = event.target.closest<HTMLButtonElement>('[data-inspect-run-id]');
+        if (inspectButton?.dataset.inspectRunId) {
+            void openWaterfall(inspectButton.dataset.inspectRunId);
+            return;
+        }
+        if (event.target.closest('button, a')) return;
+        const row = event.target.closest<HTMLElement>('tr[data-run-id]');
+        if (row?.dataset.runId) void openWaterfall(row.dataset.runId);
     }, { signal: lifetime.signal });
 
     // ── Tabs ──────────────────────────────────────────────────────────────────
@@ -621,7 +728,7 @@ export function createJobDetail(options: JobDetailOptions) {
     }
 
     function closeDialogs() {
-        attachSchedule.close(); attachNotification.close();
+        attachSchedule.close(); attachNotification.close(); closeWaterfall();
         stateOwner = null; stateModal.style.display = 'none';
     }
 
@@ -651,6 +758,26 @@ export function createJobDetail(options: JobDetailOptions) {
     }
 
     get('closeDetailBtn', HTMLButtonElement).addEventListener('click', close, { signal: lifetime.signal });
+    const detailRunBtn = root.getElementById('detailRunBtn');
+    if (detailRunBtn instanceof HTMLButtonElement) {
+        detailRunBtn.style.display = options.runJob ? '' : 'none';
+        detailRunBtn.addEventListener('click', () => { if (selected) options.runJob?.(selected.name); }, { signal: lifetime.signal });
+    }
+    const detailKillBtn = root.getElementById('detailKillBtn');
+    if (detailKillBtn instanceof HTMLButtonElement) {
+        detailKillBtn.style.display = options.killJob ? '' : 'none';
+        detailKillBtn.addEventListener('click', async () => {
+            const current = selected;
+            if (!current || !options.killJob) return;
+            detailKillBtn.disabled = true;
+            try {
+                await options.killJob(current.name);
+                if (selected?.name === current.name && !lifetime.signal.aborted) void loadHistory(current.name);
+            } finally {
+                if (!lifetime.signal.aborted && detailKillBtn.isConnected) detailKillBtn.disabled = false;
+            }
+        }, { signal: lifetime.signal });
+    }
     const editJobBtn = root.getElementById('editJobBtn');
     if (editJobBtn instanceof HTMLButtonElement) {
         editJobBtn.style.display = (options.isManager ?? options.isAdmin) && options.editJob ? '' : 'none';

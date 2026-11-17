@@ -416,6 +416,64 @@ public sealed class OrchestratorJobDetailSandboxTests(SandboxStoryFixture fixtur
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task ClickingRunRowOpensStatementWaterfallAndOutput()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenJobAsync(page, "daily_sales");
+
+        await page.Locator("#historyTableWrap tr[data-run-id='42'] td").Nth(2).ClickAsync();
+        await Expect(page.Locator("#runWaterfallModal")).ToBeVisibleAsync();
+        await Expect(page.Locator("#runWaterfallTitle")).ToHaveTextAsync("Run #42 — daily_sales");
+        await Expect(page.Locator("#runWaterfallBody")).ToContainTextAsync("Timeout");
+        await Expect(page.Locator("#runWaterfallBody")).ToContainTextAsync("SELECT * FROM staging.orders;");
+        await Expect(page.Locator("#runWaterfallBody")).ToContainTextAsync("MERGE INTO dbo.daily_sales USING #orders;");
+        await Expect(page.Locator("#runWaterfallCancelBtn")).ToBeHiddenAsync();
+
+        await page.Locator("#runWaterfallCloseBtn").ClickAsync();
+        await Expect(page.Locator("#runWaterfallModal")).ToBeHiddenAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DetailDrawerRunsWithParametersCancelsActiveRunAndKillsJob()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenJobAsync(page, "hourly_orders");
+
+        // Trigger from the Detail Drawer via Run with Parameters...
+        await page.Locator("#detailRunBtn").ClickAsync();
+        await Expect(page.Locator("#runJobModal")).ToBeVisibleAsync();
+        await page.Locator("#runAddOverrideBtn").ClickAsync();
+        await page.Locator(".run-override-name").FillAsync("env");
+        await page.Locator(".run-override-value").FillAsync("prod");
+        await page.Locator("#runJobSubmitBtn").ClickAsync();
+        await WaitForMessageAsync(page, "Job 'hourly_orders' triggered.");
+        await Expect(page.Locator("#runJobModal")).ToBeHiddenAsync();
+
+        // Reload detail to observe the active run #43, inspect it, and cancel it via /runs/{id}/cancel.
+        await page.Locator("tr.job-row[data-name='hourly_orders'] td").First.ClickAsync();
+        await Expect(page.Locator("#historyTableWrap [data-cancel-run-id='43']")).ToBeVisibleAsync();
+        await page.Locator("#historyTableWrap [data-inspect-run-id='43']").ClickAsync();
+        await Expect(page.Locator("#runWaterfallModal")).ToBeVisibleAsync();
+        await Expect(page.Locator("#runWaterfallCancelBtn")).ToBeVisibleAsync();
+        await page.Locator("#runWaterfallCancelBtn").ClickAsync();
+        await page.Locator(".etlsql-feedback-btn-danger").ClickAsync();
+        await WaitForMessageAsync(page, "Cancellation requested for run #43.");
+        await page.Locator("#runWaterfallCloseBtn").ClickAsync();
+
+        // Kill running instance from Detail Drawer (/jobs/{name}/kill).
+        await page.Locator("#detailKillBtn").ClickAsync();
+        await WaitForMessageAsync(page, "Kill signal sent to 'hourly_orders'.");
+        Assert.Equal(1, await page.EvaluateAsync<int>(
+            "() => window.__orchestratorMock.calls.filter(c => c.method === 'POST' && c.path === '/api/orchestrator/runs/43/cancel').length"));
+        Assert.Equal(1, await page.EvaluateAsync<int>(
+            "() => window.__orchestratorMock.calls.filter(c => c.method === 'POST' && c.path === '/api/orchestrator/jobs/hourly_orders/kill').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
     private async Task OpenAsync(IPage page, string scenario = "healthy")
     {
         await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/orchestrator-page-frame.html?fixture={scenario}");

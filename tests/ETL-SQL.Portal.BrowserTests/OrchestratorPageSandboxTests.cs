@@ -229,6 +229,25 @@ public sealed class OrchestratorPageSandboxTests(SandboxStoryFixture fixture) : 
     }
 
     [Fact]
+    public async Task NodesAndSandboxesTabDisplaysNodeHeartbeatsAndPoolStates()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenAsync(page);
+
+        await Expect(page.Locator("#fleetNavCount")).ToHaveTextAsync("2");
+        await page.Locator("#orchNavFleet").ClickAsync();
+        await Expect(page.Locator("#viewFleetSection")).ToBeVisibleAsync();
+        await Expect(page.Locator("#fleetNodesWrap")).ToContainTextAsync("orch-win-01:4120");
+        await Expect(page.Locator("#fleetNodesWrap")).ToContainTextAsync("WIN-ORCH-01 (pid 4120)");
+        await Expect(page.Locator("#fleetNodesWrap")).ToContainTextAsync("14.2% / 27.5%");
+        await Expect(page.Locator("#fleetPoolsWrap")).ToContainTextAsync("Distributed Admission Ledger Active");
+        await Expect(page.Locator("#fleetPoolsWrap")).ToContainTextAsync("2 / 8 occupied");
+        await Expect(page.Locator("#fleetPoolsWrap")).ToContainTextAsync("adm-101");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task SandboxPrototypeMountsTheProductionPage()
     {
         await using var session = await fixture.NewSessionAsync();

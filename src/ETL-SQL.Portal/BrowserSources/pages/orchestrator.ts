@@ -11,7 +11,7 @@ import { activityQuery } from '../orchestrator-activity.js';
 import type { ActivityRequest } from '../orchestrator-activity.js';
 import { createScheduledJobActivityCoordinator } from '../orchestrator-activity-coordinator.js';
 import { renderScheduledJobsTable, studioDocumentHref } from '../orchestrator-job-table.js';
-import { escHtml } from '../orchestrator-admin-ui.js';
+import { escHtml, renderFleetNodesHtml, renderSandboxPoolsHtml } from '../orchestrator-admin-ui.js';
 import { createJobActionController, createJobRunDialog, jobVersion, requireMutationStatus } from '../orchestrator-job-actions.js';
 import { createCatalogAccessDialog, createNotificationCatalog, createScheduleCatalog } from '../orchestrator-catalogs.js';
 import { readCatalogJson } from '../orchestrator-catalog-responses.js';
@@ -24,8 +24,8 @@ import { createUnownedDialog } from '../orchestrator-unowned.js';
  * Page owner for orchestrator.html: checks who may be here, then composes the job list, timeline,
  * triage board, catalogs, detail panel, and dialogs, and takes them all down when the page is left.
  */
-type View = 'jobs' | 'schedules' | 'notifications';
-const VIEWS: View[] = ['jobs', 'schedules', 'notifications'];
+type View = 'jobs' | 'schedules' | 'notifications' | 'fleet';
+const VIEWS: View[] = ['jobs', 'schedules', 'notifications', 'fleet'];
 const job = (name: string) => `/api/orchestrator/jobs/${encodeURIComponent(name)}`;
 
 function mountOrchestratorPage(): void {
@@ -148,7 +148,19 @@ function mountOrchestratorPage(): void {
         findCatalogPipeline,
         onPipelineProvisioned: async () => { await Promise.all([loadPipelineCatalog(), activity.refresh()]); },
         isExternalScriptIngressEnabled: () => externalScriptIngressEnabled,
-        editJob: value => createDialog.openEdit(value)
+        editJob: value => createDialog.openEdit(value),
+        runJob: name => runDialog.open(name),
+        killJob: async name => {
+            try {
+                await requireMutationStatus(await apiFetch(`${job(name)}/kill`, { method: 'POST', signal: lifetime.signal }), 200);
+                if (!lifetime.signal.aborted) {
+                    notify(`Kill signal sent to '${name}'.`);
+                    await activity.refresh();
+                }
+            } catch (failure) {
+                if (!lifetime.signal.aborted) notify(`Error: ${asError(failure).message}`, true);
+            }
+        }
     });
     const timeline = createJobTimeline<JobDefinition>({ root: document, open: detail.open });
 
@@ -306,6 +318,38 @@ function mountOrchestratorPage(): void {
         dispatch: (name, body, signal) => apiFetch(`/api/orchestrator/notifications/${encodeURIComponent(name)}/dispatch`, { method: 'POST', body, signal })
     });
 
+    // ── Nodes & Sandbox Pools ─────────────────────────────────────────────────
+    let fleetGeneration = 0;
+    let fleetReads: AbortController | null = null;
+    async function loadFleet(): Promise<void> {
+        if (lifetime.signal.aborted) return;
+        const current = ++fleetGeneration;
+        fleetReads?.abort();
+        const scope = fleetReads = new AbortController();
+        const nodesWrap = box('fleetNodesWrap');
+        const poolsWrap = box('fleetPoolsWrap');
+        const badge = box('fleetNavCount');
+        try {
+            const raw = await readJson('/api/orchestrator/fleet', scope.signal);
+            if (lifetime.signal.aborted || current !== fleetGeneration) return;
+            if (!isObject(raw) || !Array.isArray(raw.nodes) || !Array.isArray(raw.sandboxPools)) {
+                throw new TypeError('Invalid fleet telemetry response.');
+            }
+            const snapshot = raw as unknown as OrchestratorFleetSnapshotDto;
+            const liveCount = snapshot.nodes.filter(node => node.isLive).length;
+            badge.textContent = String(liveCount);
+            nodesWrap.innerHTML = renderFleetNodesHtml(snapshot.nodes);
+            poolsWrap.innerHTML = renderSandboxPoolsHtml(snapshot.sandboxPools, Boolean(snapshot.sandboxAdmissionEnabled));
+        } catch (failure) {
+            if (lifetime.signal.aborted || current !== fleetGeneration) return;
+            badge.textContent = '—';
+            const alert = `<div class="error-msg show" role="alert">Fleet telemetry is unavailable: ${escHtml(asError(failure).message)}</div>`;
+            nodesWrap.innerHTML = alert;
+            poolsWrap.replaceChildren();
+        }
+    }
+    box('refreshFleetBtn').addEventListener('click', () => { void loadFleet(); }, { signal: lifetime.signal });
+
     function showView(view: View) {
         for (const name of VIEWS) {
             const suffix = name.charAt(0).toUpperCase() + name.slice(1);
@@ -315,6 +359,7 @@ function mountOrchestratorPage(): void {
         }
         if (view === 'schedules') void schedules.load();
         if (view === 'notifications') void notifications.load();
+        if (view === 'fleet') void loadFleet();
     }
     for (const name of VIEWS)
         box(`orchNav${name.charAt(0).toUpperCase() + name.slice(1)}`).addEventListener('click', () => showView(name), { signal: lifetime.signal });
@@ -373,9 +418,10 @@ function mountOrchestratorPage(): void {
         if (lifetime.signal.aborted) return;
         void activity.poll();
         void triage.reload();
-        // Both catalogs load with the page so their navigation counts are read, not assumed to be zero.
+        // Both catalogs and fleet telemetry load with the page so navigation counts reflect live state.
         void schedules.load();
         void notifications.load();
+        void loadFleet();
         if (isAdmin) void unowned.refreshCount();
         await Promise.all([loadPipelineCatalog(), activity.refresh()]);
         const requested = lifetime.signal.aborted ? null : findJob(new URLSearchParams(location.search).get('job'));
@@ -384,6 +430,7 @@ function mountOrchestratorPage(): void {
     const statusTimer = setInterval(() => { void activity.poll(); }, 5000);
     window.addEventListener('pagehide', () => {
         clearInterval(statusTimer);
+        fleetReads?.abort();
         lifetime.abort();
         for (const owner of [jobActions, runDialog, createDialog, unowned, triage, catalogAccess, schedules, notifications, detail, timeline, activity])
             owner.dispose();

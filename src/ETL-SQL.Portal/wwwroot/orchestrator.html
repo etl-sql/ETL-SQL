@@ -313,6 +313,17 @@
     .orch-link-row .btn { padding: 2px 6px; font-size: .92em; }
     .orch-link-meta, .orch-link-empty { color: var(--portal-muted); }
     .orch-link-empty { font-size: .82em; padding: 4px 0; }
+    .orch-history-row { cursor: pointer; transition: background 0.12s; }
+    .orch-history-row:hover { background: var(--portal-surface-subtle); }
+    .orch-waterfall-list { display: flex; flex-direction: column; gap: 8px; }
+    .orch-waterfall-item { padding: 8px 10px; background: var(--portal-surface-subtle); border: 1px solid var(--portal-border-soft); border-radius: 6px; font-size: .84em; }
+    .orch-waterfall-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .orch-waterfall-sql { font-family: var(--portal-mono, ui-monospace, monospace); font-size: .92em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 44ch; }
+    .orch-waterfall-track { height: 8px; border-radius: 4px; background: var(--portal-border-soft); overflow: hidden; }
+    .orch-waterfall-fill { height: 100%; background: var(--portal-accent); border-radius: 4px; min-width: 2px; }
+    .orch-waterfall-fill.failed { background: var(--portal-danger, #dc2626); }
+    .orch-run-error { margin: 8px 0 12px; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(220, 38, 38, 0.35); background: rgba(220, 38, 38, 0.08); font-family: var(--portal-mono, ui-monospace, monospace); font-size: .82em; white-space: pre-wrap; word-break: break-word; }
+    .orch-pool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -347,6 +358,10 @@
         <button class="orch-nav-btn" role="tab" aria-selected="false" aria-controls="viewNotificationsSection" id="orchNavNotifications" type="button">
           <span>🔔 Notifications</span>
           <span class="orch-nav-badge" id="notificationsNavCount">0</span>
+        </button>
+        <button class="orch-nav-btn" role="tab" aria-selected="false" aria-controls="viewFleetSection" id="orchNavFleet" type="button">
+          <span>🖥 Nodes &amp; Sandboxes</span>
+          <span class="orch-nav-badge" id="fleetNavCount">—</span>
         </button>
       </nav>
 
@@ -559,6 +574,36 @@
         </div>
       </div><!-- /viewNotificationsSection -->
 
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- VIEW 4: NODES & SANDBOXES FLEET HEALTH                              -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <div id="viewFleetSection" role="tabpanel" aria-labelledby="orchNavFleet" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <span class="section-kicker">Cluster Telemetry</span>
+              <h3>Nodes &amp; Sandbox Pools</h3>
+            </div>
+            <div class="orch-card-actions">
+              <button class="btn btn-sm btn-outline" id="refreshFleetBtn" type="button">↻ Refresh</button>
+            </div>
+          </div>
+          <div style="padding:12px 16px;">
+            <p style="font-size:.84em;color:var(--portal-muted);margin:0 0 12px;">
+              Live node leases from <code>NodeHeartbeatService</code> and sandbox pool capacity from <code>RelationalSandboxAdmissionLedger</code>.
+            </p>
+            <h4 style="margin:0 0 8px;font-size:.9em;">Registered Cluster Nodes</h4>
+            <div id="fleetNodesWrap">
+              <div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading node telemetry…</span></div>
+            </div>
+            <h4 style="margin:16px 0 8px;font-size:.9em;">Sandbox Admission Pools</h4>
+            <div id="fleetPoolsWrap">
+              <div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading sandbox pools…</span></div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /viewFleetSection -->
+
     </div><!-- /admin-content -->
 
     <!-- ── Job detail side panel ──────────────────────────────────────────── -->
@@ -568,8 +613,10 @@
           <h3 id="detailJobName" style="margin:0;">Job Details</h3>
           <div id="detailJobDisplayName" style="font-size:.82em;color:var(--portal-muted);margin-top:2px;"></div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btn btn-sm btn-outline" id="detailRunBtn" type="button" style="display:none" title="Run job with optional parameter overrides">▶ Run with Parameters…</button>
           <button class="btn btn-sm btn-outline" id="editJobBtn" type="button" style="display:none">Edit Metadata</button>
+          <button class="btn btn-sm btn-outline btn-danger-soft" id="detailKillBtn" type="button" style="display:none" title="Kill currently running instance">Kill</button>
           <button class="btn-icon" id="closeDetailBtn" title="Close">✕</button>
         </div>
       </div>
@@ -1195,6 +1242,31 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" id="catalogAccessCloseBtn" data-dialog-close type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Run Statement Execution Waterfall Modal ───────────────────────────── -->
+<div id="runWaterfallModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="runWaterfallTitle">
+  <div class="modal-card modal-lg">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Run Inspection</span>
+        <h3 class="modal-title" id="runWaterfallTitle">Run Waterfall</h3>
+        <p class="modal-subtitle" id="runWaterfallSubtitle"></p>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-sm btn-outline btn-danger-soft" id="runWaterfallCancelBtn" type="button" style="display:none">Cancel Run</button>
+        <button class="btn-icon" id="closeRunWaterfallBtn" data-dialog-close title="Close" type="button">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="runWaterfallBody">
+        <div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading statement waterfall…</span></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="runWaterfallCloseBtn" data-dialog-close type="button">Close</button>
     </div>
   </div>
 </div>

@@ -273,6 +273,86 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
         if (paused) await new Promise(resolve => pending.push(resolve));
         return failure === 'failed' ? json({ error: 'Resume failed: the checkpoint session expired.' }, 409) : new Response(null, { status: 202 });
       }
+      const cancelRunMatch = /^\/api\/orchestrator\/runs\/(\d+)\/cancel$/.exec(path);
+      if (cancelRunMatch && method === 'POST') {
+        if (paused) await new Promise(resolve => pending.push(resolve));
+        if (failure === 'denied') return new Response(null, { status: 403 });
+        if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
+        const runId = Number(cancelRunMatch[1]);
+        const entry = Object.values(details).flatMap(d => d.history).find(r => r.id === runId);
+        if (!entry) return json({ error: `Run '${runId}' not found.` }, 404);
+        if (entry.endTime && !/^(running|queued)$/i.test(entry.status)) {
+          return json({ code: 'run_already_finished', error: `Run ${runId} already finished as ${entry.status}.` }, 409);
+        }
+        entry.status = 'Cancelled';
+        entry.endTime = '2026-10-10T12:05:00Z';
+        return new Response(null, { status: 202 });
+      }
+      const getRunMatch = /^\/api\/orchestrator\/runs\/(\d+)$/.exec(path);
+      if (getRunMatch && method === 'GET') {
+        if (failure === 'failed' || failure === 'detail-unavailable') {
+          return json({ error: 'Run waterfall details are temporarily unavailable.' }, 503);
+        }
+        const runId = Number(getRunMatch[1]);
+        const entry = Object.values(details).flatMap(d => d.history).find(r => r.id === runId);
+        if (!entry) return json({ error: `Run '${runId}' not found.` }, 404);
+        const completed = Boolean(entry.endTime) && !/^(running|queued)$/i.test(entry.status);
+        return json({
+          runId: entry.id,
+          jobName: entry.jobName,
+          status: entry.status,
+          completed,
+          startTime: entry.startTime,
+          endTime: entry.endTime,
+          errorMessage: entry.errorMessage,
+          rowsProcessed: entry.rowsProcessed,
+          scriptHashAtRunTime: 'sha256:sandbox',
+          statementsTruncated: false,
+          statements: runId === 42
+            ? [
+                { statement: 'SELECT * FROM staging.orders;', durationMs: 1450, rowsProcessed: 1200, failed: false },
+                { statement: 'MERGE INTO dbo.daily_sales USING #orders;', durationMs: 39200, rowsProcessed: 0, failed: true }
+              ]
+            : [
+                { statement: 'SELECT 1 AS Ok;', durationMs: 42, rowsProcessed: entry.rowsProcessed, failed: false }
+              ]
+        });
+      }
+      if (path === '/api/orchestrator/fleet' && method === 'GET') {
+        if (readsPaused) await new Promise(resolve => pendingReads.push(resolve));
+        if (failure === 'fleet-unavailable') return json({ error: 'Fleet telemetry unavailable.' }, 503);
+        return json({
+          generatedAtUtc: '2026-10-09T12:00:00Z',
+          sandboxAdmissionEnabled: true,
+          nodes: [
+            {
+              nodeId: 'orch-win-01:4120', role: 'Orchestrator', isLive: true,
+              firstSeenUtc: '2026-10-08T00:00:00Z', lastHeartbeatUtc: '2026-10-09T11:59:55Z', expiresAtUtc: '2026-10-09T12:00:25Z',
+              machine: 'WIN-ORCH-01', pid: 4120, startedUtc: '2026-10-08T00:00:00Z',
+              capacity: { workingSetBytes: 268435456, gcHeapBytes: 134217728, totalAvailableMemoryBytes: 17179869184,
+                memoryLoadPercent: 38.4, processCpuPercent: 14.2, hostCpuPercent: 27.5, processorCount: 8, isOverloaded: false,
+                stateDiskFreeBytes: 53687091200, spillDiskFreeBytes: 107374182400 }
+            },
+            {
+              nodeId: 'portal-win-01:5100', role: 'Portal', isLive: true,
+              firstSeenUtc: '2026-10-08T00:00:00Z', lastHeartbeatUtc: '2026-10-09T11:59:52Z', expiresAtUtc: '2026-10-09T12:00:22Z',
+              machine: 'WIN-PORTAL-01', pid: 5100, startedUtc: '2026-10-08T00:00:00Z',
+              capacity: { workingSetBytes: 201326592, gcHeapBytes: 94371840, totalAvailableMemoryBytes: 17179869184,
+                memoryLoadPercent: 31.0, processCpuPercent: 5.1, hostCpuPercent: 20.0, processorCount: 8, isOverloaded: false,
+                stateDiskFreeBytes: 53687091200, spillDiskFreeBytes: null }
+            }
+          ],
+          sandboxPools: [
+            {
+              poolId: 'standard', capacity: 8, queuedCount: 1, activeCount: 2, retainedCount: 0, availableSlots: 6,
+              openAdmissions: [
+                { admissionId: 'adm-101', poolId: 'standard', tenantId: 'portal-host', state: 'Active', weight: 100,
+                  leaseOwner: 'orch-win-01:4120', enqueuedUtc: '2026-10-09T11:58:00Z', leaseExpiresUtc: '2026-10-09T12:02:00Z' }
+              ]
+            }
+          ]
+        });
+      }
       if (path === '/api/orchestrator/data-quality/status') return failure === 'quality-unavailable' ? json({ error: 'Quality status is unavailable.' }, 503)
         : json([{ runId: '42', jobName: 'daily_sales', startTime: '2026-10-09T02:00:00Z', endTime: null, status: 'Failed', rowsProcessed: 1200,
           rowsWarned: 7, rowsQuarantined: 3, failedRuleCount: 1, freshestValueUtc: null, freshnessState: 'Fresh', errorSummary: null },
@@ -359,7 +439,18 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
             }
             return new Response(null, { status: method === 'PUT' ? 204 : 200 });
           }
-        if (path.endsWith('/trigger')) return new Response(null, { status: 202 });
+        if (path.endsWith('/trigger')) {
+          const jobDetail = details[name];
+          if (jobDetail) {
+            const nextId = Math.max(42, ...Object.values(details).flatMap(d => d.history).map(h => h.id)) + 1;
+            jobDetail.history.unshift({
+              id: nextId, jobName: name, startTime: '2026-10-10T12:00:00Z', endTime: null, status: 'Running',
+              errorMessage: null, rowsProcessed: 0, peakMemoryBytes: 0, cpuTimeSeconds: 0,
+              rowsQuarantined: 0, rowsWarned: 0, checkpointLabel: null, hasResumeSession: false
+            });
+          }
+          return new Response(null, { status: 202 });
+        }
         return new Response(null, { status: 200 });
       }
       return json({ error: `Unexpected sandbox route: ${method} ${path}` }, 404);

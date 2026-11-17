@@ -360,6 +360,89 @@ public sealed class OrchestratorRemoteBridgeTests
         }
     }
 
+    [Fact]
+    public async Task RemoteFleetAndRunWaterfallEndpoints_ReturnNodeMetricsPoolStatesAndStatementWaterfall()
+    {
+        using var orchestrator = new RemoteOrchestratorFactory();
+        using var portal = new SeparateHostPortalFactory(orchestrator);
+        using var client = portal.CreateClient();
+        var adminToken = await LoginAdminAsync(client);
+
+        long runId;
+        using (var orchScope = orchestrator.Services.CreateScope())
+        {
+            var store = orchScope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
+            var job = new JobDefinition(
+                "fleet_waterfall_job", "SELECT 1;", 1, "HOUR", null, null, null,
+                CreatedBy: "user:admin", TenantId: "portal-host");
+            await store.SaveJobAsync(job);
+            var savedJob = await store.GetJobAsync("portal-host", job.Name);
+            runId = await store.LogJobStartAsync(savedJob!.Id);
+            await store.SaveJobStatementMetricsAsync(runId,
+            [
+                new StatementMetricsPayload { Statement = "SELECT 1 AS FirstStep;", DurationMs = 120, RowsProcessed = 10, Failed = false },
+                new StatementMetricsPayload { Statement = "SELECT 2 AS SlowStep;", DurationMs = 840, RowsProcessed = 250, Failed = false }
+            ]);
+            await store.LogJobEndAsync(runId, "SUCCESS", rowsProcessed: 260);
+
+            if (orchScope.ServiceProvider.GetService<INodeRegistryStore>() is { } nodeRegistry)
+            {
+                await nodeRegistry.RegisterOrRenewNodeAsync(
+                    "orch-test-node:101",
+                    "Orchestrator",
+                    TimeSpan.FromMinutes(2),
+                    JsonSerializer.Serialize(new
+                    {
+                        machine = "TEST-HOST",
+                        pid = 101,
+                        capacity = new
+                        {
+                            WorkingSetBytes = 100_000_000L,
+                            GcHeapBytes = 50_000_000L,
+                            TotalAvailableMemoryBytes = 8_000_000_000L,
+                            MemoryLoadPercent = 35.5,
+                            ProcessCpuPercent = 12.0,
+                            HostCpuPercent = 24.0,
+                            ProcessorCount = 4,
+                            IsOverloaded = false
+                        }
+                    }));
+            }
+        }
+
+        // 1. Run waterfall endpoint returns statements via Portal relay.
+        using (var runRes = await Send(client, HttpMethod.Get, $"/api/orchestrator/runs/{runId}", adminToken))
+        {
+            Assert.Equal(HttpStatusCode.OK, runRes.StatusCode);
+            var payload = (await runRes.Content.ReadFromJsonAsync<JsonObject>(Json))!;
+            Assert.Equal(runId, payload["runId"]!.GetValue<long>());
+            Assert.Equal("fleet_waterfall_job", payload["jobName"]!.GetValue<string>());
+            var statements = payload["statements"]!.AsArray();
+            Assert.Equal(2, statements.Count);
+            Assert.Equal("SELECT 2 AS SlowStep;", statements[1]!["statement"]!.GetValue<string>());
+            Assert.Equal(840, statements[1]!["durationMs"]!.GetValue<long>());
+        }
+
+        // 2. Cancelling a finished run relays 409 Conflict instead of claiming cancellation succeeded.
+        using (var cancelRes = await Send(client, HttpMethod.Post, $"/api/orchestrator/runs/{runId}/cancel", adminToken))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, cancelRes.StatusCode);
+        }
+
+        // 3. Fleet endpoint returns NodeHeartbeatService metrics & RelationalSandboxAdmissionLedger pool states.
+        using (var fleetRes = await Send(client, HttpMethod.Get, "/api/orchestrator/fleet", adminToken))
+        {
+            Assert.Equal(HttpStatusCode.OK, fleetRes.StatusCode);
+            var fleet = (await fleetRes.Content.ReadFromJsonAsync<JsonObject>(Json))!;
+            var nodes = fleet["nodes"]!.AsArray();
+            Assert.NotEmpty(nodes);
+            var node = Assert.Single(nodes, item => item!["nodeId"]!.GetValue<string>() == "orch-test-node:101")!;
+            Assert.Equal("TEST-HOST", node["machine"]!.GetValue<string>());
+            Assert.Equal(35.5, node["capacity"]!["memoryLoadPercent"]!.GetValue<double>(), 1);
+            Assert.NotNull(fleet["sandboxPools"]);
+        }
+    }
+
     private sealed class RemoteOrchestratorFactory() : OrchestratorWebFactory(requireFederatedIdentity: true)
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)

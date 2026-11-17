@@ -209,6 +209,25 @@ public class OrchestratorController(
         return Accepted(body);
     }
 
+    [HttpGet("runs/{historyId:long}")]
+    public Task<IActionResult> GetJobRun(long historyId, CancellationToken ct) =>
+        RelayAsync(() => proxy.GetJobRunAsync(historyId, ct));
+
+    [HttpPost("runs/{historyId:long}/cancel")]
+    public Task<IActionResult> CancelJobRun(long historyId, CancellationToken ct) =>
+        RelayAsync(
+            () => proxy.CancelJobRunAsync(historyId, ct),
+            () => audit.LogAsync(
+                CurrentUserId,
+                "JobRunCancelled",
+                "JobRun",
+                historyId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                null));
+
+    [HttpGet("fleet")]
+    public Task<IActionResult> GetFleetStatus(CancellationToken ct) =>
+        RelayAsync(() => proxy.GetFleetNodesAndSandboxesAsync(ct));
+
     // ── Operations triage ─────────────────────────────────────────────────────
 
     /// <summary>

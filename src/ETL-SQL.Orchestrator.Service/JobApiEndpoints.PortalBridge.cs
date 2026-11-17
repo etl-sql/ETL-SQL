@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Profiling;
 using ETL_SQL.Engine.Scheduling;
+using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Storage;
 using Microsoft.AspNetCore.Builder;
@@ -339,7 +341,174 @@ public static partial class JobApiEndpoints
             EmitConnectionAudit(RequestActor(ctx), "SECRET_DELETE", decodedName, "Status=deleted");
             return Results.NoContent();
         }).WithName("deleteAdminSecret");
+
+        // ── Nodes & Sandbox Fleet Health ──────────────────────────────────────
+        app.MapGet("/api/fleet/nodes-sandboxes", async (
+            HttpContext ctx,
+            IServiceProvider services,
+            IConfiguration cfg,
+            CancellationToken ct) =>
+        {
+            if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+            if (!TryResolveRequestTenant(ctx, cfg, out var requestTenant))
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            if (BundleReadDenied(ctx, cfg))
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+            var utcNow = DateTime.UtcNow;
+            var nodeStore = services.GetService<INodeRegistryStore>();
+            var rawNodes = nodeStore is not null
+                ? await nodeStore.GetAllNodesAsync()
+                : [];
+
+            var nodes = rawNodes
+                .OrderByDescending(n => n.ExpiresAtUtc > utcNow)
+                .ThenBy(n => n.Role, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(n => n.NodeId, StringComparer.OrdinalIgnoreCase)
+                .Select(n => ParseNodeHeartbeat(n, utcNow))
+                .ToList();
+
+            var registeredOptions = services.GetService<SandboxAdmissionHostOptions>();
+            var section = cfg.GetSection("Orchestration:SandboxAdmission");
+            var admissionEnabled = registeredOptions?.Enabled ?? section.GetValue("Enabled", false);
+            var poolCapacities = registeredOptions?.PoolCapacities
+                ?? section.GetSection("PoolCapacities").GetChildren().ToDictionary(
+                    child => child.Key,
+                    child => int.TryParse(child.Value, out var capacity) ? capacity : 0,
+                    StringComparer.Ordinal);
+            var ledger = services.GetService<ISandboxAdmissionLedger>();
+            var caller = RequestCaller(ctx);
+            var canViewAllTenants = string.IsNullOrWhiteSpace(requestTenant)
+                || IsPortalSystemOrAdmin(caller)
+                || caller.IsInRole("FleetReader");
+
+            var pools = new List<SandboxPoolStateApiResponse>();
+            foreach (var (poolId, capacity) in poolCapacities.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                var open = ledger is not null
+                    ? await ledger.ListOpenAsync(poolId, ct)
+                    : [];
+                var active = open.Count(e => e.State == SandboxAdmissionState.Active);
+                var retained = open.Count(e => e.State == SandboxAdmissionState.Retained);
+                var queued = open.Count(e => e.State == SandboxAdmissionState.Queued);
+                var visibleEntries = open
+                    .Where(e => canViewAllTenants || string.Equals(e.TenantId, requestTenant, StringComparison.Ordinal))
+                    .Take(50)
+                    .Select(e => new SandboxPoolAdmissionApiResponse(
+                        e.AdmissionId,
+                        e.PoolId,
+                        e.TenantId,
+                        e.State.ToString(),
+                        e.TenantWeight,
+                        e.LeaseOwner,
+                        e.EnqueuedUtc,
+                        e.LeaseExpiresUtc))
+                    .ToList();
+
+                pools.Add(new SandboxPoolStateApiResponse(
+                    poolId,
+                    capacity,
+                    queued,
+                    active,
+                    retained,
+                    Math.Max(0, capacity - active - retained),
+                    visibleEntries));
+            }
+
+            return Results.Ok(new OrchestratorFleetSnapshotApiResponse(
+                utcNow,
+                admissionEnabled,
+                nodes,
+                pools));
+        }).WithName("getFleetNodesAndSandboxes");
     }
+
+    private static FleetNodeHeartbeatApiResponse ParseNodeHeartbeat(NodeHeartbeat node, DateTime utcNow)
+    {
+        string? machine = null;
+        int? pid = null;
+        DateTimeOffset? startedUtc = null;
+        FleetNodeCapacityApiResponse? capacity = null;
+
+        if (!string.IsNullOrWhiteSpace(node.Metadata))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(node.Metadata);
+                var root = doc.RootElement;
+                if (root.ValueKind == JsonValueKind.Object)
+                {
+                    if (TryGetCaseInsensitive(root, "machine", out var m) && m.ValueKind == JsonValueKind.String)
+                        machine = m.GetString();
+                    if (TryGetCaseInsensitive(root, "pid", out var p) && p.ValueKind == JsonValueKind.Number && p.TryGetInt32(out var pidVal))
+                        pid = pidVal;
+                    if (TryGetCaseInsensitive(root, "startedUtc", out var s) && s.ValueKind == JsonValueKind.String
+                        && DateTimeOffset.TryParse(s.GetString(), out var parsedStarted))
+                        startedUtc = parsedStarted;
+                    if (TryGetCaseInsensitive(root, "capacity", out var cap) && cap.ValueKind == JsonValueKind.Object)
+                    {
+                        capacity = new FleetNodeCapacityApiResponse(
+                            TryGetInt64(cap, "WorkingSetBytes"),
+                            TryGetInt64(cap, "GcHeapBytes"),
+                            TryGetInt64(cap, "TotalAvailableMemoryBytes"),
+                            TryGetDouble(cap, "MemoryLoadPercent"),
+                            TryGetDouble(cap, "ProcessCpuPercent"),
+                            TryGetDouble(cap, "HostCpuPercent"),
+                            TryGetInt32(cap, "ProcessorCount"),
+                            TryGetBool(cap, "IsOverloaded"),
+                            TryGetNullableInt64(cap, "StateDiskFreeBytes"),
+                            TryGetNullableInt64(cap, "SpillDiskFreeBytes"));
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // Ignore unparseable node metadata rather than failing the fleet view.
+            }
+        }
+
+        return new FleetNodeHeartbeatApiResponse(
+            node.NodeId,
+            node.Role,
+            node.ExpiresAtUtc > utcNow,
+            node.FirstSeenUtc,
+            node.LastHeartbeatUtc,
+            node.ExpiresAtUtc,
+            machine,
+            pid,
+            startedUtc,
+            capacity);
+    }
+
+    private static bool TryGetCaseInsensitive(JsonElement obj, string name, out JsonElement value)
+    {
+        if (obj.TryGetProperty(name, out value)) return true;
+        foreach (var prop in obj.EnumerateObject())
+        {
+            if (prop.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = prop.Value;
+                return true;
+            }
+        }
+        value = default;
+        return false;
+    }
+
+    private static long TryGetInt64(JsonElement obj, string name) =>
+        TryGetCaseInsensitive(obj, name, out var prop) && prop.ValueKind == JsonValueKind.Number && prop.TryGetInt64(out var val) ? val : 0L;
+
+    private static long? TryGetNullableInt64(JsonElement obj, string name) =>
+        TryGetCaseInsensitive(obj, name, out var prop) && prop.ValueKind == JsonValueKind.Number && prop.TryGetInt64(out var val) ? val : null;
+
+    private static int TryGetInt32(JsonElement obj, string name) =>
+        TryGetCaseInsensitive(obj, name, out var prop) && prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out var val) ? val : 0;
+
+    private static double TryGetDouble(JsonElement obj, string name) =>
+        TryGetCaseInsensitive(obj, name, out var prop) && prop.ValueKind == JsonValueKind.Number && prop.TryGetDouble(out var val) ? val : 0d;
+
+    private static bool TryGetBool(JsonElement obj, string name) =>
+        TryGetCaseInsensitive(obj, name, out var prop) && (prop.ValueKind == JsonValueKind.True || prop.ValueKind == JsonValueKind.False) && prop.GetBoolean();
 
     private static bool IsPortalSystemOrAdmin(OrchestratorCaller caller) =>
         caller.IsInRole("PortalSystem")
@@ -374,4 +543,53 @@ public static partial class JobApiEndpoints
     public sealed record SetAdminSecretRequest(string Value);
 
     public sealed record SecretCatalogSummaryResponse(string Name, bool Disabled);
+
+    public sealed record FleetNodeCapacityApiResponse(
+        long WorkingSetBytes,
+        long GcHeapBytes,
+        long TotalAvailableMemoryBytes,
+        double MemoryLoadPercent,
+        double ProcessCpuPercent,
+        double HostCpuPercent,
+        int ProcessorCount,
+        bool IsOverloaded,
+        long? StateDiskFreeBytes,
+        long? SpillDiskFreeBytes);
+
+    public sealed record FleetNodeHeartbeatApiResponse(
+        string NodeId,
+        string Role,
+        bool IsLive,
+        DateTime FirstSeenUtc,
+        DateTime LastHeartbeatUtc,
+        DateTime ExpiresAtUtc,
+        string? Machine,
+        int? Pid,
+        DateTimeOffset? StartedUtc,
+        FleetNodeCapacityApiResponse? Capacity);
+
+    public sealed record SandboxPoolAdmissionApiResponse(
+        string AdmissionId,
+        string PoolId,
+        string TenantId,
+        string State,
+        int Weight,
+        string? LeaseOwner,
+        DateTimeOffset EnqueuedUtc,
+        DateTimeOffset? LeaseExpiresUtc);
+
+    public sealed record SandboxPoolStateApiResponse(
+        string PoolId,
+        int Capacity,
+        int QueuedCount,
+        int ActiveCount,
+        int RetainedCount,
+        int AvailableSlots,
+        IReadOnlyList<SandboxPoolAdmissionApiResponse> OpenAdmissions);
+
+    public sealed record OrchestratorFleetSnapshotApiResponse(
+        DateTime GeneratedAtUtc,
+        bool SandboxAdmissionEnabled,
+        IReadOnlyList<FleetNodeHeartbeatApiResponse> Nodes,
+        IReadOnlyList<SandboxPoolStateApiResponse> SandboxPools);
 }

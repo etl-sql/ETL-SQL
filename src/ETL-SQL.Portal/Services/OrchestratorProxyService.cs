@@ -256,6 +256,16 @@ public class OrchestratorProxyService(
         }
     }
 
+    public async Task<HttpResponseMessage?> GetFleetNodesAndSandboxesAsync(CancellationToken ct = default)
+    {
+        try { return await SendAsync(HttpMethod.Get, "api/fleet/nodes-sandboxes", cancellationToken: ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to read Orchestrator fleet nodes and sandbox pools.");
+            return null;
+        }
+    }
+
     // ── Per-object grants ─────────────────────────────────────────────────────
     //
     // Proxied rather than reimplemented. The Orchestrator owns the grant store and already enforces

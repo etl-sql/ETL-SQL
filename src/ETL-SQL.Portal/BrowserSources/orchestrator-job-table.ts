@@ -79,7 +79,7 @@ export function renderScheduledJobsTable(
           <td>${job.nextRun ? fmtDt(job.nextRun) : '—'}</td>
           <td><div class="table-actions">
             ${pipelineId !== null ? `<a class="btn btn-sm btn-outline" href="${escHtml(studioDocumentHref(pipelineId))}" title="Open this pipeline in Studio">Open in Studio ↗</a>` : ''}
-            <button class="btn btn-sm btn-outline" data-action="trigger" data-name="${escHtml(job.name)}" title="Run now">▶ Run</button>
+            <button class="btn btn-sm btn-outline" data-action="trigger" data-name="${escHtml(job.name)}" title="Run with optional parameter overrides">▶ Run with Parameters…</button>
             <button class="btn btn-sm btn-outline" data-action="edit" data-name="${escHtml(job.name)}" title="Edit job metadata">Edit</button>
             <button class="btn btn-sm btn-outline" data-action="toggle" data-name="${escHtml(job.name)}" data-enabled="${job.isEnabled}">${job.isEnabled ? 'Disable' : 'Enable'}</button>
             <button class="btn btn-sm btn-outline" data-action="kill" data-name="${escHtml(job.name)}" title="Cancel running instance">Kill</button>
