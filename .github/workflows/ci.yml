@@ -1185,3 +1185,38 @@ jobs:
             release-validation/test-lane-results
           if-no-files-found: warn
           retention-days: 30
+
+  merge-gate:
+    name: Merge Gate
+    if: always()
+    needs: [source-preflight, build-and-test, browser-consumer-contracts, build-vscode, sample-scripts, portal-browser-journey, portal-browser-gate, studio-performance-budgets, enterprise-certification, docker-integration-tests, engine-certification, spill-certification]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        timeout-minutes: 3
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+      - name: Verify every selected lane passed
+        timeout-minutes: 2
+        env:
+          CI_EVENT: ${{ github.event_name }}
+          PREFLIGHT_RESULT: ${{ needs.source-preflight.result }}
+          SELECTED_LANES: ${{ needs.source-preflight.outputs.lanes }}
+          BROWSER_SHARDS: ${{ needs.source-preflight.outputs.browser_shards }}
+          LANE_RESULTS: |
+            {
+              "build-and-test": "${{ needs.build-and-test.result }}",
+              "browser-consumer-contracts": "${{ needs.browser-consumer-contracts.result }}",
+              "build-vscode": "${{ needs.build-vscode.result }}",
+              "sample-scripts": "${{ needs.sample-scripts.result }}",
+              "portal-browser-journey": "${{ needs.portal-browser-journey.result }}",
+              "portal-browser-gate": "${{ needs.portal-browser-gate.result }}",
+              "studio-performance-budgets": "${{ needs.studio-performance-budgets.result }}",
+              "enterprise-certification": "${{ needs.enterprise-certification.result }}",
+              "docker-integration-tests": "${{ needs.docker-integration-tests.result }}",
+              "engine-certification": "${{ needs.engine-certification.result }}",
+              "spill-certification": "${{ needs.spill-certification.result }}"
+            }
+        run: node scripts/verify-merge-gate.mjs
