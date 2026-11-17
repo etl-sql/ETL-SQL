@@ -142,54 +142,11 @@ public class ExternalAggregateEngine
                     if (setCounts != null && setCounts[partitionIndex][setIdx] == 0) continue;
 
                     var activeGroupBy = expandedSets[setIdx];
-                    var partResults = await _inMemoryEngine.ApplyAggregation(
-                        ReadPartitionForSet(name, setIdx), activeGroupBy, finalColumns, colNames, havingClause);
-
-                    if (partResults.Count == 0) continue;
-                    _context.Telemetry.AggregateGroupsCount += partResults.Count;
-
-                    // Handle GROUPING() / NULL substitution for sub-sets
-                    if (groupBy != null)
+                    await foreach (var resRow in AggregateGroupingSetGoverned(
+                        name, setIdx, activeGroupBy, groupBy, finalColumns, colNames, havingClause, depth: 0, tempFiles))
                     {
-                        var activeKeys = new HashSet<string>(activeGroupBy!.Select(e => NormalizedToSql(e)), StringComparer.OrdinalIgnoreCase);
-                        foreach (var row in partResults)
-                        {
-                            foreach (var expr in groupBy)
-                            {
-                                if (!activeKeys.Contains(NormalizedToSql(expr)))
-                                {
-                                    var colName = expr is IdentifierExpression id ? id.Name.Split('.').Last() : NormalizedToSql(expr);
-                                    var matchIdx = colNames.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
-
-                                    if (matchIdx == -1)
-                                    {
-                                        // Fallback 1: match by the expression's SQL representation in the final columns
-                                        matchIdx = finalColumns.FindIndex(fc => NormalizedToSql(fc.Expression).Equals(NormalizedToSql(expr), StringComparison.OrdinalIgnoreCase));
-                                    }
-
-                                    if (matchIdx == -1)
-                                    {
-                                        // Fallback 2: match by alias if the expression is an identifier
-                                        if (expr is IdentifierExpression idExpr)
-                                        {
-                                            matchIdx = finalColumns.FindIndex(fc => string.Equals(fc.Alias, idExpr.Name, StringComparison.OrdinalIgnoreCase));
-                                        }
-                                    }
-
-                                    if (matchIdx >= 0) row[colNames[matchIdx]] = null;
-                                }
-                            }
-                            yieldedAny = true;
-                            yield return row;
-                        }
-                    }
-                    else
-                    {
-                        foreach (var resRow in partResults)
-                        {
-                            yieldedAny = true;
-                            yield return resRow;
-                        }
+                        yieldedAny = true;
+                        yield return resRow;
                     }
                 }
             }
@@ -228,15 +185,198 @@ public class ExternalAggregateEngine
     /// until each sub-partition fits, or — when it cannot be split further — the governor policy
     /// applies (SpillOrFail throws; SpillOnly churns the build to completion ungoverned).
     /// </summary>
+    private async IAsyncEnumerable<Row> AggregateGroupingSetGoverned(
+        string name,
+        int setIdx,
+        List<Expression> activeGroupBy,
+        List<Expression>? fullGroupBy,
+        List<SelectColumn> finalColumns,
+        List<string> colNames,
+        Expression? havingClause,
+        int depth,
+        List<string> tempFiles)
+    {
+        long ceiling = MemoryGovernor.Ceiling(_context);
+        List<Row>? partResults = null;
+
+        if (ceiling <= 0)
+        {
+            partResults = await _inMemoryEngine.ApplyAggregation(
+                ReadPartitionForSet(name, setIdx), activeGroupBy, finalColumns, colNames, havingClause);
+        }
+        else
+        {
+            try
+            {
+                partResults = await _inMemoryEngine.ApplyAggregation(
+                    ReadPartitionForSet(name, setIdx), activeGroupBy, finalColumns, colNames, havingClause, null, ceiling);
+            }
+            catch (AggregateMemoryPressureException)
+            {
+                // partResults stays null → repartition or enforce governor policy below.
+            }
+        }
+
+        if (partResults != null)
+        {
+            if (partResults.Count == 0) yield break;
+            _context.Telemetry.AggregateGroupsCount += partResults.Count;
+            ApplyGroupingSetNullSubstitution(partResults, activeGroupBy, fullGroupBy, finalColumns, colNames);
+            foreach (var row in partResults)
+                yield return row;
+            yield break;
+        }
+
+        PlanDecisionRecorder.Record(_context, "external-aggregate.memory", "ExternalAggregate",
+            PlanDecisionOutcome.Degraded, PlanDecisionReasonCodes.MemoryAdmissionRejected,
+            "External grouping-set partition exceeded the memory ceiling; attempting recursive repartition.",
+            ("depth", depth.ToString()),
+            ("setIndex", setIdx.ToString()),
+            ("memoryCeilingBytes", ceiling.ToString()),
+            ("fallbackDestination", "recursive-repartition"));
+
+        if (PartitionCount > 1 && depth < MaxRecursivePartitionDepth && activeGroupBy.Count > 0)
+        {
+            var sub = await RepartitionGroupingSet(name, setIdx, activeGroupBy, depth + 1, tempFiles);
+            var usedSub = sub.RowCounts.Count(c => c > 0);
+            var largestSub = sub.RowCounts.Length == 0 ? 0 : sub.RowCounts.Max();
+            var originalCount = sub.RowCounts.Sum();
+
+            if (usedSub > 1 && largestSub < originalCount)
+            {
+                _logger.Debug(
+                    "[MEMORY_GOVERNOR] Repartitioned grouping-set partition at depth {Depth} into {Used} sub-partitions under memory pressure.",
+                    depth + 1, usedSub);
+                for (var i = 0; i < sub.Names.Length; i++)
+                {
+                    if (sub.RowCounts[i] == 0) continue;
+                    await foreach (var row in AggregateGroupingSetGoverned(
+                        sub.Names[i], setIdx, activeGroupBy, fullGroupBy, finalColumns, colNames, havingClause, depth + 1, tempFiles))
+                    {
+                        yield return row;
+                    }
+                }
+                yield break;
+            }
+        }
+
+        PlanDecisionRecorder.Record(_context, "external-aggregate.memory", "ExternalAggregate",
+            _context.MemoryGovernorPolicy == MemoryGovernorPolicy.SpillOrFail
+                ? PlanDecisionOutcome.Rejected
+                : PlanDecisionOutcome.Degraded,
+            PlanDecisionReasonCodes.MemoryAdmissionRejected,
+            "External grouping-set partition could not be reduced under the memory ceiling.",
+            ("depth", depth.ToString()),
+            ("setIndex", setIdx.ToString()),
+            ("memoryCeilingBytes", ceiling.ToString()),
+            ("fallbackDestination", _context.MemoryGovernorPolicy == MemoryGovernorPolicy.SpillOrFail
+                ? "execution-error"
+                : "spill-only-churn"));
+
+        MemoryGovernor.EnforcePolicy(
+            _context,
+            "GROUPING SETS exceeded the memory governor ceiling (Engine:TotalMemoryGrantMB / OperatorMemoryGrantMB) and could not be reduced further by repartitioning. " +
+            "Increase memory grants, reduce grouping cardinality, or set Engine:MemoryGovernorPolicy = SpillOnly to churn to completion.");
+
+        _logger.Warning("[MEMORY_GOVERNOR] Grouping-set partition could not be reduced under the memory ceiling; churning to completion (MemoryGovernorPolicy=SpillOnly).");
+        var churn = await _inMemoryEngine.ApplyAggregation(
+            ReadPartitionForSet(name, setIdx), activeGroupBy, finalColumns, colNames, havingClause);
+        if (churn.Count == 0) yield break;
+        _context.Telemetry.AggregateGroupsCount += churn.Count;
+        ApplyGroupingSetNullSubstitution(churn, activeGroupBy, fullGroupBy, finalColumns, colNames);
+        foreach (var row in churn)
+            yield return row;
+    }
+
+    private void ApplyGroupingSetNullSubstitution(
+        List<Row> partResults,
+        List<Expression> activeGroupBy,
+        List<Expression>? fullGroupBy,
+        List<SelectColumn> finalColumns,
+        List<string> colNames)
+    {
+        if (fullGroupBy == null) return;
+        var activeKeys = new HashSet<string>(activeGroupBy.Select(NormalizedToSql), StringComparer.OrdinalIgnoreCase);
+        foreach (var row in partResults)
+        {
+            foreach (var expr in fullGroupBy)
+            {
+                if (!activeKeys.Contains(NormalizedToSql(expr)))
+                {
+                    var colName = expr is IdentifierExpression id ? id.Name.Split('.').Last() : NormalizedToSql(expr);
+                    var matchIdx = colNames.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
+                    if (matchIdx == -1)
+                        matchIdx = finalColumns.FindIndex(fc => NormalizedToSql(fc.Expression).Equals(NormalizedToSql(expr), StringComparison.OrdinalIgnoreCase));
+                    if (matchIdx == -1 && expr is IdentifierExpression idExpr)
+                        matchIdx = finalColumns.FindIndex(fc => string.Equals(fc.Alias, idExpr.Name, StringComparison.OrdinalIgnoreCase));
+                    if (matchIdx >= 0) row[colNames[matchIdx]] = null;
+                }
+            }
+        }
+    }
+
+    private async Task<PartitionResult> RepartitionGroupingSet(
+        string sourceName,
+        int setIdx,
+        List<Expression> activeGroupBy,
+        int depth,
+        List<string> tempFiles)
+    {
+        var names = new string[PartitionCount];
+        var rowCounts = new long[PartitionCount];
+        var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
+        var prefix = Guid.NewGuid().ToString("N");
+        for (int i = 0; i < PartitionCount; i++)
+        {
+            names[i] = $"agg_gs{setIdx}_d{depth}_{prefix}_{i}.tmp";
+            tempFiles.Add(names[i]);
+            writers[i] = await _context.SpillStore.CreateWriterAsync(
+                names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
+        }
+
+        try
+        {
+            var salt = HashCode.Combine(depth, setIdx);
+            await foreach (var row in ReadPartitionForSet(sourceName, setIdx))
+            {
+                var vals = new object?[activeGroupBy.Count];
+                for (int i = 0; i < activeGroupBy.Count; i++)
+                {
+                    var rawVal = await _context.EvaluateValue(activeGroupBy[i], row);
+                    vals[i] = ETL_SQL.Data.CompoundKey.NormalizeValue(rawVal);
+                }
+                int pIdx = (new ETL_SQL.Data.CompoundKey(salt, vals).GetHashCode() & 0x7FFFFFFF) % PartitionCount;
+                rowCounts[pIdx]++;
+                await writers[pIdx].WriteRowAsync(row);
+            }
+        }
+        finally
+        {
+            int used = 0;
+            foreach (var w in writers)
+            {
+                if (w != null)
+                {
+                    used++;
+                    await w.DisposeAsync();
+                }
+            }
+            _context.Telemetry.PartitionsCount += used;
+            _context.Telemetry.PartitionPassCount++;
+        }
+
+        return new PartitionResult(names, rowCounts);
+    }
+
     private async IAsyncEnumerable<Row> AggregatePartitionGoverned(
         string name, List<Expression>? groupBy, List<SelectColumn> finalColumns,
         List<string> colNames, Expression? havingClause, int depth, List<string> tempFiles)
     {
-        long ceiling = _context.MemoryArbiter?.TotalBudgetBytes ?? 0;
+        long ceiling = MemoryGovernor.Ceiling(_context);
 
-        var native = await TryAggregatePartitionColumnar(
+        var (nativeStatus, native) = await TryAggregatePartitionColumnar(
             name, groupBy, finalColumns, colNames, havingClause);
-        if (native != null)
+        if (nativeStatus == NativeAttemptStatus.Succeeded && native != null)
         {
             _context.Telemetry.AggregateGroupsCount += native.Count;
             foreach (var row in native) yield return row;
@@ -255,15 +395,18 @@ public class ExternalAggregateEngine
         }
 
         List<Row>? results = null;
-        try
+        if (nativeStatus == NativeAttemptStatus.NotApplicable)
         {
-            await using var reader = await _context.SpillStore.CreateReaderAsync(name);
-            results = await _inMemoryEngine.ApplyAggregation(
-                reader.AsEnumerableAsync(), groupBy, finalColumns, colNames, havingClause, null, ceiling);
-        }
-        catch (AggregateMemoryPressureException)
-        {
-            // results stays null → repartition / policy below.
+            try
+            {
+                await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+                results = await _inMemoryEngine.ApplyAggregation(
+                    reader.AsEnumerableAsync(), groupBy, finalColumns, colNames, havingClause, null, ceiling);
+            }
+            catch (AggregateMemoryPressureException)
+            {
+                // results stays null → repartition / policy below.
+            }
         }
 
         if (results != null)
@@ -330,7 +473,9 @@ public class ExternalAggregateEngine
         foreach (var r in churn) yield return r;
     }
 
-    private async Task<List<Row>?> TryAggregatePartitionColumnar(
+    private enum NativeAttemptStatus { NotApplicable, Succeeded, MemoryRejected }
+
+    private async Task<(NativeAttemptStatus Status, List<Row>? Rows)> TryAggregatePartitionColumnar(
         string name,
         List<Expression>? groupBy,
         List<SelectColumn> finalColumns,
@@ -346,33 +491,33 @@ public class ExternalAggregateEngine
         else if (ColumnarCompositeGroupedAggregatePlan.TryCreate(_context, statement, out var compositePlan))
             plan = compositePlan;
         if (plan == null)
-            return null;
+            return (NativeAttemptStatus.NotApplicable, null);
         try
         {
             using (plan)
             await using (var reader = await _context.SpillStore.CreateReaderAsync(name))
             {
-                if (reader is not IColumnarSpillReader columnarReader) return null;
+                if (reader is not IColumnarSpillReader columnarReader)
+                    return (NativeAttemptStatus.NotApplicable, null);
                 long nativeRows = 0;
                 await foreach (var batch in columnarReader.AsColumnBatchesAsync())
                 {
                     using (batch)
                     {
-                        if (!plan.CanApply(batch)) return null;
+                        if (!plan.CanApply(batch))
+                            return (NativeAttemptStatus.NotApplicable, null);
                         plan.Accumulate(batch, selection: null);
                         nativeRows += batch.RowCount;
                     }
                 }
                 var rows = (await plan.FinalizeResultAsync(colNames)).Rows;
                 ColumnarAggregateRows += nativeRows;
-                return rows;
+                return (NativeAttemptStatus.Succeeded, rows);
             }
         }
-        catch (ExecutionException ex) when (
-            ex.Message.StartsWith("Native ", StringComparison.Ordinal)
-            && ex.Message.Contains("GROUP BY requires", StringComparison.Ordinal))
+        catch (ExecutionException ex) when (MemoryGovernor.IsNativeAggregateMemoryRejection(ex))
         {
-            return null;
+            return (NativeAttemptStatus.MemoryRejected, null);
         }
     }
 

@@ -112,7 +112,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| SP15 | **Apply one aggregate memory contract across execution paths.** Honor the effective operator ceiling and shared reservations in ordinary aggregation, native-to-row fallback, and grouping sets. Account for retained group state and result materialization; repartition where possible and enforce the configured policy when no bounded path exists. Regress high cardinality, an operator grant smaller than the process grant, native rejection/fallback, and grouping sets; verify exact aggregate results and reservation release. | — | M |
 | SP16 | **Connect production allocations to one memory coordinator.** Consolidate `BufferManager` memory limits/floor/hysteresis with the active `IMemoryGrantArbiter` contract and wire external operator allocations into shared reservations. Define precedence for existing settings and avoid double accounting or waiting while holding memory needed for progress. Replace total-capacity reporting with current host/container memory headroom. Use deterministic pressure fixtures to prove that configured limits affect real operators, recovery resumes admission, and success/cancellation/failure release reservations; include concurrent jobs and compatibility documentation. | — | M |
 
 ### 2.6 Orchestrator and catalog cohesion

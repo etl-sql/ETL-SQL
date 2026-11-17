@@ -48,19 +48,49 @@ public class AggregateEngine
     /// </param>
     public async Task<List<Row>> ApplyAggregation(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null, long memoryCeilingBytes = 0)
     {
+        void ReserveOrThrow(IMemoryGrantLease lease, ref long trackedBytes, long nextBytes)
+        {
+            if (nextBytes == trackedBytes) return;
+            trackedBytes = nextBytes;
+            if ((memoryCeilingBytes > 0 && nextBytes > memoryCeilingBytes) || lease.RegisterAndCheckSpill(nextBytes))
+                throw new AggregateMemoryPressureException(
+                    $"Aggregation retained footprint ({nextBytes:N0} bytes) exceeded the memory governor ceiling (~{memoryCeilingBytes / (1024 * 1024)} MB).");
+        }
+
         // When groupingSet is present, expand into multiple GROUP BY passes and union the results.
         if (groupingSet != null && groupingSet.Type != GroupingSetType.None)
         {
             var expandedSets = ExpandGroupingSets(groupingSet);
             var allResults = new List<Row>();
+            using var groupingLease = memoryCeilingBytes > 0
+                ? (_context.MemoryArbiter ?? MemoryGrantArbiter.Shared).AcquireLease()
+                : UnlimitedMemoryGrantArbiter.Instance.AcquireLease();
+            long trackedGroupingBytes = 0;
+            var cancellation = _context.CancellationToken;
 
-            // For grouping sets, we must materialize once to avoid multiple enumerations.
-            var allBufferedRows = await inputStream.ToListAsync();
+            // For grouping sets, materialize once so multiple passes share the same stream, while accounting
+            // the buffered rows plus expanded output against the active ceiling and shared arbiter lease.
+            var allBufferedRows = new List<Row>();
+            long bufferedBytes = 0;
+            await foreach (var row in inputStream.WithCancellation(cancellation))
+            {
+                cancellation.ThrowIfCancellationRequested();
+                allBufferedRows.Add(row);
+                if (memoryCeilingBytes > 0)
+                {
+                    bufferedBytes = checked(bufferedBytes + row.EstimateHeapBytes() + 16L);
+                    ReserveOrThrow(groupingLease, ref trackedGroupingBytes, bufferedBytes);
+                }
+            }
 
+            long resultBytes = 0;
             foreach (var activeGroupBy in expandedSets)
             {
+                var remainingCeiling = memoryCeilingBytes > 0
+                    ? Math.Max(1L, memoryCeilingBytes - trackedGroupingBytes)
+                    : 0L;
                 // Pass the materialized list to avoid further materialization in recursive calls
-                var setRows = await ApplyAggregation(allBufferedRows.ToAsyncEnumerable(), activeGroupBy, finalColumns, colNames, havingClause, null, memoryCeilingBytes);
+                var setRows = await ApplyAggregation(allBufferedRows.ToAsyncEnumerable(), activeGroupBy, finalColumns, colNames, havingClause, null, remainingCeiling);
 
                 // Mark which columns were NULL-substituted (GROUPING() support)
                 var activeKeys = new HashSet<string>(activeGroupBy!.Select(e => NormalizedToSql(e)), StringComparer.OrdinalIgnoreCase);
@@ -98,9 +128,16 @@ public class AggregateEngine
                             }
                         }
                     }
+
+                    if (memoryCeilingBytes > 0)
+                    {
+                        resultBytes = checked(resultBytes + row.EstimateHeapBytes() + 24L);
+                        ReserveOrThrow(groupingLease, ref trackedGroupingBytes, checked(bufferedBytes + resultBytes));
+                    }
                 }
                 allResults.AddRange(setRows);
             }
+            allBufferedRows.Clear();
             return allResults;
         }
 
@@ -144,11 +181,13 @@ public class AggregateEngine
         // Single-Pass Aggregation
         var groupStates = new Dictionary<CompoundKey, (IAggregateState[] SelectStates, IAggregateState[] HavingStates)>();
 
-        // RAM governor (precise byte accounting): track the live group-state footprint and bail out
-        // (so the external engine can repartition) before it consumes unbounded RAM. We count bytes as
-        // groups are created — O(groups) is the real memory of incremental aggregation — instead of
-        // sampling the GC heap, which was process-wide and reactive.
-        var budget = new MemoryBudgetGuard(memoryCeilingBytes);
+        // RAM governor (precise byte accounting + shared arbiter lease): track live group-state
+        // growth (including DISTINCT/STRING_AGG/PERCENTILE/HLL allocations) and result materialization.
+        using var lease = memoryCeilingBytes > 0
+            ? (_context.MemoryArbiter ?? MemoryGrantArbiter.Shared).AcquireLease()
+            : UnlimitedMemoryGrantArbiter.Instance.AcquireLease();
+        long trackedBytes = 0;
+        long stateBytes = 0;
 
         // A scalar aggregate streams its whole input here, which can be billions of rows. Pass the
         // run's token to the source and check it ourselves too, since not every source observes it.
@@ -175,25 +214,30 @@ public class AggregateEngine
                 states = (sStates, hStates);
                 groupStates[key] = states;
 
-                if (budget.Enabled)
+                if (memoryCeilingBytes > 0)
                 {
-                    // Each new group adds its key plus a fixed per-state cost (most states are O(1)
-                    // running accumulators) plus dictionary-entry overhead.
-                    budget.Add(RowMemory.EstimateKeyBytes(key) + (sStates.Length + hStates.Length) * 64L + 48L);
-                    if (budget.Exceeded())
-                        throw new AggregateMemoryPressureException(
-                            $"Aggregation in-memory group state exceeded the memory governor ceiling (~{memoryCeilingBytes / (1024 * 1024)} MB).");
+                    long initialStateHeap = 0;
+                    foreach (var s in sStates) initialStateHeap += s.InitialHeapBytes;
+                    foreach (var h in hStates) initialStateHeap += h.InitialHeapBytes;
+                    stateBytes = checked(stateBytes + RowMemory.EstimateKeyBytes(key) + (sStates.Length + hStates.Length) * 64L + 48L + initialStateHeap);
+                    ReserveOrThrow(lease, ref trackedBytes, stateBytes);
                 }
             }
 
-            // Update states
+            // Update states and track dynamic per-row growth (e.g., DISTINCT, STRING_AGG, PERCENTILE).
+            long addedStateBytes = 0;
             for (int i = 0; i < aggregateSpecs.Count; i++)
             {
-                await states.SelectStates[i].Update(row, aggregateSpecs[i].Function, _context);
+                addedStateBytes = checked(addedStateBytes + await states.SelectStates[i].Update(row, aggregateSpecs[i].Function, _context));
             }
             for (int i = 0; i < havingAggSpecs.Count; i++)
             {
-                await states.HavingStates[i].Update(row, havingAggSpecs[i].Function, _context);
+                addedStateBytes = checked(addedStateBytes + await states.HavingStates[i].Update(row, havingAggSpecs[i].Function, _context));
+            }
+            if (memoryCeilingBytes > 0 && addedStateBytes > 0)
+            {
+                stateBytes = checked(stateBytes + addedStateBytes);
+                ReserveOrThrow(lease, ref trackedBytes, stateBytes);
             }
         }
 
@@ -207,6 +251,7 @@ public class AggregateEngine
 
         var resultRows = new List<Row>();
         var schema = new TableSchema(colNames);
+        long resultMaterializedBytes = 0;
         foreach (var kvp in groupStates)
         {
             var key = kvp.Key;
@@ -288,9 +333,16 @@ public class AggregateEngine
                 if (!await _context.EvaluateCondition(havingClause, havingContext)) continue;
             }
 
+            if (memoryCeilingBytes > 0)
+            {
+                resultMaterializedBytes = checked(resultMaterializedBytes + resRow.EstimateHeapBytes() + 24L);
+                ReserveOrThrow(lease, ref trackedBytes, checked(stateBytes + resultMaterializedBytes));
+            }
+
             resultRows.Add(resRow);
         }
 
+        groupStates.Clear();
         return resultRows;
     }
 
@@ -871,7 +923,8 @@ public class AggregateEngine
 
     private interface IAggregateState
     {
-        ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context);
+        long InitialHeapBytes => 0;
+        ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context);
         ValueTask<object?> Finalize(AggregateEngine engine);
     }
 
@@ -887,9 +940,9 @@ public class AggregateEngine
 
         public SumState(bool isDistinct) { _isDistinct = isDistinct; if (_isDistinct) _distinctValues = new HashSet<object?>(); }
 
-        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        public async ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context)
         {
-            if (!await PassesFilter(row, f, context)) return;
+            if (!await PassesFilter(row, f, context)) return 0;
             var val = await context.EvaluateValue(f.Arguments[0], row);
             if (val is not null and not DBNull)
             {
@@ -899,6 +952,7 @@ public class AggregateEngine
                     {
                         _sum += SafeToDecimal(val, context);
                         _hasValue = true;
+                        return checked(Row.EstimateValueBytes(val) + 32L);
                     }
                 }
                 else
@@ -907,6 +961,7 @@ public class AggregateEngine
                     _hasValue = true;
                 }
             }
+            return 0;
         }
 
         public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_hasValue ? _sum : null);
@@ -924,9 +979,9 @@ public class AggregateEngine
             if (_isDistinct) _distinctValues = new HashSet<object?>();
         }
 
-        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        public async ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context)
         {
-            if (!await PassesFilter(row, f, context)) return;
+            if (!await PassesFilter(row, f, context)) return 0;
             var val = await context.EvaluateValue(f.Arguments[0], row);
             if (val is not null and not DBNull)
             {
@@ -935,6 +990,7 @@ public class AggregateEngine
                     if (_distinctValues!.Add(val))
                     {
                         _sum += SafeToDecimal(val, context);
+                        return checked(Row.EstimateValueBytes(val) + 32L);
                     }
                 }
                 else
@@ -942,6 +998,7 @@ public class AggregateEngine
                     _sum += SafeToDecimal(val, context);
                 }
             }
+            return 0;
         }
 
         public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_sum);
@@ -956,13 +1013,13 @@ public class AggregateEngine
 
         public CountState(bool isDistinct, bool isStar) { _isDistinct = isDistinct; _isStar = isStar; if (_isDistinct) _distinctValues = new HashSet<object?>(); }
 
-        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        public async ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context)
         {
-            if (!await PassesFilter(row, f, context)) return;
+            if (!await PassesFilter(row, f, context)) return 0;
             if (_isStar)
             {
                 _count++;
-                return;
+                return 0;
             }
 
             var val = await context.EvaluateValue(f.Arguments[0], row);
@@ -970,10 +1027,15 @@ public class AggregateEngine
             {
                 if (_isDistinct)
                 {
-                    if (_distinctValues!.Add(val)) _count++;
+                    if (_distinctValues!.Add(val))
+                    {
+                        _count++;
+                        return checked(Row.EstimateValueBytes(val) + 32L);
+                    }
                 }
                 else _count++;
             }
+            return 0;
         }
 
         public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>((decimal)_count);
@@ -989,9 +1051,9 @@ public class AggregateEngine
 
         public AvgState(bool isDistinct) { _isDistinct = isDistinct; if (_isDistinct) _distinctValues = new HashSet<object?>(); }
 
-        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        public async ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context)
         {
-            if (!await PassesFilter(row, f, context)) return;
+            if (!await PassesFilter(row, f, context)) return 0;
             var val = await context.EvaluateValue(f.Arguments[0], row);
             if (val is not null and not DBNull)
             {
@@ -1009,6 +1071,7 @@ public class AggregateEngine
                     {
                         _sum += SafeToDecimal(val, context);
                         _count++;
+                        return checked(Row.EstimateValueBytes(val) + 32L);
                     }
                 }
                 else
@@ -1017,6 +1080,7 @@ public class AggregateEngine
                     _count++;
                 }
             }
+            return 0;
         }
 
         public ValueTask<object?> Finalize(AggregateEngine engine)
@@ -1035,15 +1099,20 @@ public class AggregateEngine
     {
         private object? _min = null;
 
-        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        public async ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context)
         {
-            if (!await PassesFilter(row, f, context)) return;
+            if (!await PassesFilter(row, f, context)) return 0;
             var val = await context.EvaluateValue(f.Arguments[0], row);
             if (val is not null and not DBNull)
             {
                 if (_min == null || ((IComparable)CompoundKey.NormalizeValue(val)!).CompareTo(CompoundKey.NormalizeValue(_min!)) < 0)
+                {
+                    long delta = Math.Max(0, Row.EstimateValueBytes(val) - (_min == null ? 0 : Row.EstimateValueBytes(_min)));
                     _min = val;
+                    return delta;
+                }
             }
+            return 0;
         }
 
         public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_min);
@@ -1053,15 +1122,20 @@ public class AggregateEngine
     {
         private object? _max = null;
 
-        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        public async ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context)
         {
-            if (!await PassesFilter(row, f, context)) return;
+            if (!await PassesFilter(row, f, context)) return 0;
             var val = await context.EvaluateValue(f.Arguments[0], row);
             if (val is not null and not DBNull)
             {
                 if (_max == null || ((IComparable)CompoundKey.NormalizeValue(val)!).CompareTo(CompoundKey.NormalizeValue(_max!)) > 0)
+                {
+                    long delta = Math.Max(0, Row.EstimateValueBytes(val) - (_max == null ? 0 : Row.EstimateValueBytes(_max)));
                     _max = val;
+                    return delta;
+                }
             }
+            return 0;
         }
 
         public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_max);
@@ -1079,11 +1153,11 @@ public class AggregateEngine
             _result = requireAll;
         }
 
-        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        public async ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context)
         {
-            if (!await PassesFilter(row, f, context)) return;
+            if (!await PassesFilter(row, f, context)) return 0;
             var val = await context.EvaluateValue(f.Arguments[0], row);
-            if (val == null || val == DBNull.Value) return;
+            if (val == null || val == DBNull.Value) return 0;
             _hasValue = true;
             bool boolVal;
             try { boolVal = Convert.ToBoolean(val); }
@@ -1092,6 +1166,7 @@ public class AggregateEngine
             if (_requireAll && !boolVal) _result = false;
             else if (!_requireAll && boolVal) _result = true;
             else if (!_requireAll && !_result) _result = false;
+            return 0;
         }
 
         public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_hasValue ? _result : null);
@@ -1101,11 +1176,14 @@ public class AggregateEngine
     {
         private readonly HyperLogLogState _state = new();
 
-        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        public long InitialHeapBytes => 16_384L;
+
+        public async ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context)
         {
-            if (!await PassesFilter(row, f, context)) return;
+            if (!await PassesFilter(row, f, context)) return 0;
             var val = await context.EvaluateValue(f.Arguments[0], row);
             _state.Add(val);
+            return 0;
         }
 
         public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_state.Estimate());
@@ -1177,10 +1255,11 @@ public class AggregateEngine
 
         public GenericState(FunctionCallExpression f) { _f = f; }
 
-        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        public async ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context)
         {
-            if (!await PassesFilter(row, f, context)) return;
+            if (!await PassesFilter(row, f, context)) return 0;
             _rows.Add(row);
+            return checked(row.EstimateHeapBytes() + 8L);
         }
 
         public async ValueTask<object?> Finalize(AggregateEngine engine)
@@ -1196,14 +1275,14 @@ public class AggregateEngine
         private string? _separator;
         private long _sequence;
 
-        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        public async ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context)
         {
-            if (!await PassesFilter(row, f, context)) return;
+            if (!await PassesFilter(row, f, context)) return 0;
             _function ??= f;
             var value = f.Arguments.Count == 0 ? null : await context.EvaluateValue(f.Arguments[0], row);
             // Aggregates skip NULL. STRING_AGG and LIST_AGG joined it as an empty string ('a,,b').
-            if (value == null || value == DBNull.Value) return;
-            if (f.IsDistinct && !(_distinct ??= new HashSet<object?>()).Add(value)) return;
+            if (value == null || value == DBNull.Value) return 0;
+            if (f.IsDistinct && !(_distinct ??= new HashSet<object?>()).Add(value)) return 0;
             if (_separator == null && f.Arguments.Count >= 2)
                 _separator = (await context.EvaluateValue(f.Arguments[1], row))?.ToString();
             object?[]? keys = null;
@@ -1214,6 +1293,8 @@ public class AggregateEngine
                     keys[index] = await context.EvaluateValue(f.WithinGroupOrderBy[index].Expression, row);
             }
             _values.Add(new CollectedValue(value, keys, _sequence++));
+            var orderBytes = keys == null ? 0L : RowMemory.EstimateValuesBytes(keys);
+            return checked(Row.EstimateValueBytes(value) + orderBytes + 32L + (f.IsDistinct ? 32L : 0L));
         }
 
         public ValueTask<object?> Finalize(AggregateEngine engine)
@@ -1251,9 +1332,9 @@ public class AggregateEngine
         private double? _percentile;
         private bool _descending;
 
-        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        public async ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context)
         {
-            if (!await PassesFilter(row, f, context) || f.WithinGroupOrderBy is not { Count: > 0 }) return;
+            if (!await PassesFilter(row, f, context) || f.WithinGroupOrderBy is not { Count: > 0 }) return 0;
             if (_percentile == null && f.Arguments.Count > 0)
             {
                 _percentile = Math.Clamp(
@@ -1261,7 +1342,12 @@ public class AggregateEngine
                 _descending = f.WithinGroupOrderBy[0].Descending;
             }
             var value = await context.EvaluateValue(f.WithinGroupOrderBy[0].Expression, row);
-            if (value is not null and not DBNull) _values.Add(SafeToDecimal(value, context));
+            if (value is not null and not DBNull)
+            {
+                _values.Add(SafeToDecimal(value, context));
+                return 16L;
+            }
+            return 0;
         }
 
         public ValueTask<object?> Finalize(AggregateEngine engine)
@@ -1306,16 +1392,17 @@ public class AggregateEngine
             _population = u is "VARP" or "VAR_POP" or "STDEVP" or "STDDEV_POP";
         }
 
-        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        public async ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context)
         {
-            if (!await PassesFilter(row, f, context)) return;
+            if (!await PassesFilter(row, f, context)) return 0;
             var val = await context.EvaluateValue(f.Arguments[0], row);
-            if (val is null or DBNull) return;
+            if (val is null or DBNull) return 0;
             double x = (double)SafeToDecimal(val, context);
             _n++;
             double delta = x - _mean;
             _mean += delta / _n;
             _m2 += delta * (x - _mean);
+            return 0;
         }
 
         public ValueTask<object?> Finalize(AggregateEngine engine)
@@ -1351,12 +1438,12 @@ public class AggregateEngine
             _population = _correlation || u == "COVAR_POP";
         }
 
-        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        public async ValueTask<long> Update(Row row, FunctionCallExpression f, IExecutionContext context)
         {
-            if (!await PassesFilter(row, f, context)) return;
+            if (!await PassesFilter(row, f, context)) return 0;
             var xv = await context.EvaluateValue(f.Arguments[0], row);
             var yv = await context.EvaluateValue(f.Arguments[1], row);
-            if (xv is null or DBNull || yv is null or DBNull) return;
+            if (xv is null or DBNull || yv is null or DBNull) return 0;
             double x = (double)SafeToDecimal(xv, context);
             double y = (double)SafeToDecimal(yv, context);
             _n++;
@@ -1367,6 +1454,7 @@ public class AggregateEngine
             _c += dx * (y - _meanY);
             _m2x += dx * (x - _meanX);
             _m2y += dy * (y - _meanY);
+            return 0;
         }
 
         public ValueTask<object?> Finalize(AggregateEngine engine)

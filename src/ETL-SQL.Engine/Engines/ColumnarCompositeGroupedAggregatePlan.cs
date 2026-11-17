@@ -18,6 +18,7 @@ internal sealed class ColumnarCompositeGroupedAggregatePlan : IColumnarGroupedAg
     private readonly Expression? _havingClause;
     private readonly Dictionary<CompositeKey, GroupState> _groups = new();
     private readonly IMemoryGrantLease _lease;
+    private readonly long _memoryCeilingBytes;
     private string[]? _keyLogicalTypes;
     private string[]? _valueLogicalTypes;
     private long _estimatedBytes;
@@ -35,6 +36,7 @@ internal sealed class ColumnarCompositeGroupedAggregatePlan : IColumnarGroupedAg
         _slots = slots;
         _havingClause = havingClause;
         _lease = context.MemoryArbiter.AcquireLease();
+        _memoryCeilingBytes = MemoryGovernor.Ceiling(context);
     }
 
     public static bool TryCreate(
@@ -132,7 +134,8 @@ internal sealed class ColumnarCompositeGroupedAggregatePlan : IColumnarGroupedAg
             if (!_groups.TryGetValue(key, out var state))
             {
                 var prospective = checked(_estimatedBytes + 96L + keyBytes + 40L * values.Length);
-                if (_lease.RegisterAndCheckSpill(prospective))
+                if ((_memoryCeilingBytes > 0 && prospective > _memoryCeilingBytes)
+                    || _lease.RegisterAndCheckSpill(prospective))
                     throw new ExecutionException(
                         $"Native composite GROUP BY requires more than {_estimatedBytes:N0} bytes of aggregate state. " +
                         "Increase Engine:TotalMemoryGrantMB or use spill-capable grouped execution.");
@@ -172,6 +175,8 @@ internal sealed class ColumnarCompositeGroupedAggregatePlan : IColumnarGroupedAg
     {
         var table = new DataTable();
         table.SetColumns(outputNames);
+        using var resultLease = _context.MemoryArbiter.AcquireLease();
+        long resultBytes = 0;
         foreach (var (key, state) in _groups)
         {
             var row = table.NewRow();
@@ -198,7 +203,17 @@ internal sealed class ColumnarCompositeGroupedAggregatePlan : IColumnarGroupedAg
                     _ => null
                 };
             }
-            if (_havingClause == null || await _context.EvaluateCondition(_havingClause, row)) table.Rows.Add(row);
+            if (_havingClause == null || await _context.EvaluateCondition(_havingClause, row))
+            {
+                resultBytes = checked(resultBytes + row.EstimateHeapBytes() + 24L);
+                var totalBytes = checked(_estimatedBytes + resultBytes);
+                if ((_memoryCeilingBytes > 0 && totalBytes > _memoryCeilingBytes)
+                    || resultLease.RegisterAndCheckSpill(resultBytes))
+                    throw new ExecutionException(
+                        $"Native composite GROUP BY requires more than {totalBytes:N0} bytes of aggregate state. " +
+                        "Increase Engine:TotalMemoryGrantMB or use spill-capable grouped execution.");
+                table.Rows.Add(row);
+            }
         }
         return table;
     }

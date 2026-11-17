@@ -318,86 +318,162 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         }
         else if (groupedPlan != null)
         {
-            using (groupedPlan)
+            var source = await context.ResolveReadSourceAsync(stmt.FromTable);
+            if (source is IColumnarDataSource columnarSource)
             {
-                var source = await context.ResolveReadSourceAsync(stmt.FromTable);
-                if (source is IColumnarDataSource columnarSource)
+                var sourceColumns = (await source.GetColumnsAsync(context.CancellationToken)).ToList();
+                var (groupedColumns, groupedNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
+                var nativeEnumerator = columnarSource.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken)
+                    .GetAsyncEnumerator(context.CancellationToken);
+                ColumnBatch? firstNative = null;
+                ColumnBatch? fallbackFirstNative = null;
+                IAsyncEnumerator<ColumnBatch>? fallbackEnumerator = null;
+                IReplayableColumnarDataSource? fallbackReplayable = null;
+                DataTable? nativeResult = null;
+                try
                 {
-                    var sourceColumns = (await source.GetColumnsAsync(context.CancellationToken)).ToList();
-                    var (groupedColumns, groupedNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
-                    var nativeEnumerator = columnarSource.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken)
-                        .GetAsyncEnumerator(context.CancellationToken);
-                    ColumnBatch? firstNative = null;
-                    try
+                    if (await nativeEnumerator.MoveNextAsync()) firstNative = nativeEnumerator.Current;
+                    if (firstNative == null)
                     {
-                        if (await nativeEnumerator.MoveNextAsync()) firstNative = nativeEnumerator.Current;
-                        if (firstNative == null)
-                        {
-                            yield return await groupedPlan.FinalizeResultAsync(groupedNames);
-                            yield break;
-                        }
-
+                        nativeResult = await groupedPlan.FinalizeResultAsync(groupedNames);
+                    }
+                    else
+                    {
                         SelectionVector? firstSelection = null;
                         var supported = groupedPlan.CanApply(firstNative)
                             && (stmt.WhereClause == null || ColumnarPredicateCompiler.TrySelect(
                                 firstNative, stmt.WhereClause, out firstSelection,
                                 cancellationToken: context.CancellationToken,
                                 caseSensitiveComparison: context.CaseSensitiveComparison));
-                        if (supported)
+                        if (!supported)
                         {
+                            firstSelection?.Dispose();
                             RecordPlanDecision(context, "select.grouped-aggregate", "ColumnarGroupedAggregate",
-                                PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
-                                "Columnar grouped aggregate path accepted.");
-                            using (firstNative)
-                            using (firstSelection)
-                                groupedPlan.Accumulate(firstNative, firstSelection);
+                                PlanDecisionOutcome.Fallback,
+                                groupedPlan.CanApply(firstNative)
+                                    ? PlanDecisionReasonCodes.UnsupportedExpression
+                                    : PlanDecisionReasonCodes.UnsupportedType,
+                                "Columnar grouped aggregate candidate replayed through the row pipeline.",
+                                ("fallbackDestination", "heavy-row-pipeline"));
+                            fallbackFirstNative = firstNative;
                             firstNative = null;
-                            while (await nativeEnumerator.MoveNextAsync())
-                            {
-                                using var nativeBatch = nativeEnumerator.Current;
-                                if (!groupedPlan.CanApply(nativeBatch))
-                                    throw new InvalidOperationException("Columnar source changed to an incompatible schema during grouped aggregation.");
-                                SelectionVector? selection = null;
-                                if (stmt.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
-                                    nativeBatch, stmt.WhereClause, out selection,
-                                    cancellationToken: context.CancellationToken,
-                                    caseSensitiveComparison: context.CaseSensitiveComparison))
-                                    throw new InvalidOperationException("Columnar source changed to an incompatible predicate type during grouped aggregation.");
-                                using (selection) groupedPlan.Accumulate(nativeBatch, selection);
-                            }
-                            yield return await groupedPlan.FinalizeResultAsync(groupedNames);
-                            yield break;
+                            fallbackEnumerator = nativeEnumerator;
+                            nativeEnumerator = null;
                         }
+                        else
+                        {
+                            bool firstBatchConsumed = false;
+                            try
+                            {
+                                using (firstNative)
+                                using (firstSelection)
+                                {
+                                    groupedPlan.Accumulate(firstNative, firstSelection);
+                                    firstBatchConsumed = true;
+                                }
+                                firstNative = null;
 
-                        firstSelection?.Dispose();
-                        RecordPlanDecision(context, "select.grouped-aggregate", "ColumnarGroupedAggregate",
-                            PlanDecisionOutcome.Fallback,
-                            groupedPlan.CanApply(firstNative)
-                                ? PlanDecisionReasonCodes.UnsupportedExpression
-                                : PlanDecisionReasonCodes.UnsupportedType,
-                            "Columnar grouped aggregate candidate replayed through the row pipeline.",
-                            ("fallbackDestination", "heavy-row-pipeline"));
-                        var rowBatches = ReplayNativeAsRows(firstNative, nativeEnumerator);
-                        firstNative = null;
+                                while (await nativeEnumerator.MoveNextAsync())
+                                {
+                                    using var nativeBatch = nativeEnumerator.Current;
+                                    if (!groupedPlan.CanApply(nativeBatch))
+                                        throw new InvalidOperationException("Columnar source changed to an incompatible schema during grouped aggregation.");
+                                    SelectionVector? selection = null;
+                                    if (stmt.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
+                                        nativeBatch, stmt.WhereClause, out selection,
+                                        cancellationToken: context.CancellationToken,
+                                        caseSensitiveComparison: context.CaseSensitiveComparison))
+                                        throw new InvalidOperationException("Columnar source changed to an incompatible predicate type during grouped aggregation.");
+                                    using (selection) groupedPlan.Accumulate(nativeBatch, selection);
+                                }
+
+                                nativeResult = await groupedPlan.FinalizeResultAsync(groupedNames);
+                                RecordPlanDecision(context, "select.grouped-aggregate", "ColumnarGroupedAggregate",
+                                    PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
+                                    "Columnar grouped aggregate path accepted.");
+                            }
+                            catch (ExecutionException ex) when (MemoryGovernor.IsNativeAggregateMemoryRejection(ex))
+                            {
+                                firstSelection?.Dispose();
+                                if (!firstBatchConsumed && firstNative != null)
+                                {
+                                    RecordPlanDecision(context, "select.grouped-aggregate", "ColumnarGroupedAggregate",
+                                        PlanDecisionOutcome.Fallback, PlanDecisionReasonCodes.MemoryAdmissionRejected,
+                                        "Columnar grouped aggregate exceeded the memory ceiling; replaying through the spill-capable row pipeline.",
+                                        ("fallbackDestination", "heavy-row-pipeline"));
+                                    fallbackFirstNative = firstNative;
+                                    firstNative = null;
+                                    fallbackEnumerator = nativeEnumerator;
+                                    nativeEnumerator = null;
+                                }
+                                else if (columnarSource is IReplayableColumnarDataSource replayable)
+                                {
+                                    RecordPlanDecision(context, "select.grouped-aggregate", "ColumnarGroupedAggregate",
+                                        PlanDecisionOutcome.Fallback, PlanDecisionReasonCodes.MemoryAdmissionRejected,
+                                        "Columnar grouped aggregate exceeded the memory ceiling mid-stream; replaying through the spill-capable row pipeline.",
+                                        ("fallbackDestination", "heavy-row-pipeline"));
+                                    fallbackReplayable = replayable;
+                                }
+                                else
+                                {
+                                    throw;
+                                }
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    // Always dispose the native plan and release its IMemoryGrantLease before yielding
+                    // results or transferring execution into the fallback row pipeline.
+                    groupedPlan.Dispose();
+                    firstNative?.Dispose();
+                    if (nativeEnumerator != null) await nativeEnumerator.DisposeAsync();
+                }
+
+                if (nativeResult != null)
+                {
+                    yield return nativeResult;
+                    yield break;
+                }
+
+                if (fallbackFirstNative != null && fallbackEnumerator != null)
+                {
+                    try
+                    {
+                        var rowBatches = ReplayNativeAsRows(fallbackFirstNative, fallbackEnumerator);
+                        fallbackFirstNative = null;
                         var executionEngine = new SelectExecutionEngine(context, _logger);
                         await foreach (var batch in executionEngine.ExecuteHeavyPipeline(
                             stmt, rowBatches, groupedColumns, groupedNames))
                             yield return batch;
-                        yield break;
                     }
                     finally
                     {
-                        firstNative?.Dispose();
-                        await nativeEnumerator.DisposeAsync();
+                        fallbackFirstNative?.Dispose();
+                        await fallbackEnumerator.DisposeAsync();
                     }
+                    yield break;
                 }
-                else
+
+                if (fallbackReplayable != null)
                 {
-                    RecordPlanDecision(context, "select.grouped-aggregate", "ColumnarGroupedAggregate",
-                        PlanDecisionOutcome.Fallback, PlanDecisionReasonCodes.ConnectorCapabilityMissing,
-                        "Columnar grouped aggregate candidate source does not expose columnar batches.",
-                        ("fallbackDestination", "row-engine"));
+                    var rowBatches = ReplayColumnarSourceAsRows(
+                        fallbackReplayable, context.EffectiveBatchSize, context.CancellationToken);
+                    var executionEngine = new SelectExecutionEngine(context, _logger);
+                    await foreach (var batch in executionEngine.ExecuteHeavyPipeline(
+                        stmt, rowBatches, groupedColumns, groupedNames))
+                        yield return batch;
+                    yield break;
                 }
+            }
+            else
+            {
+                groupedPlan.Dispose();
+                RecordPlanDecision(context, "select.grouped-aggregate", "ColumnarGroupedAggregate",
+                    PlanDecisionOutcome.Fallback, PlanDecisionReasonCodes.ConnectorCapabilityMissing,
+                    "Columnar grouped aggregate candidate source does not expose columnar batches.",
+                    ("fallbackDestination", "row-engine"));
             }
         }
 
@@ -1088,6 +1164,17 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         {
             using var batch = enumerator.Current;
             yield return ColumnBatchAdapter.ToDataTable(batch);
+        }
+    }
+
+    private static async IAsyncEnumerable<DataTable> ReplayColumnarSourceAsRows(
+        IReplayableColumnarDataSource source,
+        int batchSize,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken cancellationToken)
+    {
+        await foreach (var batch in source.ReadColumnBatches(batchSize, cancellationToken).WithCancellation(cancellationToken))
+        {
+            using (batch) yield return ColumnBatchAdapter.ToDataTable(batch);
         }
     }
 

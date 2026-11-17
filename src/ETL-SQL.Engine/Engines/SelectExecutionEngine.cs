@@ -237,8 +237,28 @@ public class SelectExecutionEngine
                     }
                     else
                     {
-                        allRows = await _aggregateEngine.ApplyAggregation(
-                            bufferedJoinRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                        try
+                        {
+                            allRows = await _aggregateEngine.ApplyAggregation(
+                                bufferedJoinRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames,
+                                stmt.HavingClause, stmt.GroupingSet, MemoryGovernor.Ceiling(_context));
+                        }
+                        catch (AggregateMemoryPressureException)
+                        {
+                            RecordRowPipelineDecision("select.join-aggregate", PlanDecisionOutcome.Degraded,
+                                "In-memory join aggregate exceeded memory budget; routing to external aggregate.",
+                                PlanDecisionReasonCodes.MemoryAdmissionRejected,
+                                ("executionMode", "external-streaming"),
+                                ("stage", "join-aggregate"),
+                                ("fallbackDestination", "ExternalAggregate"));
+                            var externalAggregate = new ExternalAggregateEngine(_context, _logger);
+                            externalEngineStream = externalAggregate.ApplyAggregationExternal(
+                                bufferedJoinRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames,
+                                stmt.HavingClause, stmt.GroupingSet,
+                                knownRowCount: bufferedJoinRows.Count,
+                                knownInputBytes: bufferedBytes);
+                            allRows = [];
+                        }
                     }
                     aggregateApplied = true;
                 }
@@ -325,7 +345,20 @@ public class SelectExecutionEngine
                     "Scalar aggregate with constant-memory states streams in memory.",
                     ("executionMode", "streaming"),
                     ("stage", "scalar-aggregate"));
-                allRows = await _aggregateEngine.ApplyAggregation(aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                try
+                {
+                    allRows = await _aggregateEngine.ApplyAggregation(
+                        aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet,
+                        MemoryGovernor.Ceiling(_context));
+                }
+                catch (AggregateMemoryPressureException)
+                {
+                    MemoryGovernor.EnforcePolicy(
+                        _context,
+                        "Scalar aggregation exceeded the memory governor ceiling (Engine:TotalMemoryGrantMB / OperatorMemoryGrantMB).");
+                    allRows = await _aggregateEngine.ApplyAggregation(
+                        aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                }
             }
             else
             {
@@ -370,7 +403,28 @@ public class SelectExecutionEngine
                     }
                     else
                     {
-                        allRows = await _aggregateEngine.ApplyAggregation(bufferedForSpill.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                        try
+                        {
+                            allRows = await _aggregateEngine.ApplyAggregation(
+                                bufferedForSpill.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames,
+                                stmt.HavingClause, stmt.GroupingSet, MemoryGovernor.Ceiling(_context));
+                        }
+                        catch (AggregateMemoryPressureException)
+                        {
+                            RecordRowPipelineDecision("select.aggregate-stream", PlanDecisionOutcome.Degraded,
+                                "In-memory aggregate exceeded the memory ceiling; routing to external aggregate.",
+                                PlanDecisionReasonCodes.MemoryAdmissionRejected,
+                                ("executionMode", "external-streaming"),
+                                ("stage", "aggregate"),
+                                ("fallbackDestination", "ExternalAggregate"));
+                            var externalAgg = new ExternalAggregateEngine(_context, _logger);
+                            externalEngineStream = externalAgg.ApplyAggregationExternal(
+                                bufferedForSpill.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames,
+                                stmt.HavingClause, stmt.GroupingSet,
+                                knownRowCount: bufferedForSpill.Count,
+                                knownInputBytes: aggBufferedBytes);
+                            allRows = [];
+                        }
                     }
                 }
                 finally
@@ -607,7 +661,22 @@ public class SelectExecutionEngine
             }
             else
             {
-                allRows = await _aggregateEngine.ApplyAggregation(allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                try
+                {
+                    allRows = await _aggregateEngine.ApplyAggregation(
+                        allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames,
+                        stmt.HavingClause, stmt.GroupingSet, MemoryGovernor.Ceiling(_context));
+                }
+                catch (AggregateMemoryPressureException)
+                {
+                    var externalAgg = new ExternalAggregateEngine(_context, _logger);
+                    externalEngineStream = externalAgg.ApplyAggregationExternal(
+                        allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames,
+                        stmt.HavingClause, stmt.GroupingSet,
+                        knownRowCount: allRows.Count,
+                        knownInputBytes: RowWidthEstimator.EstimateTotalBytes(allRows));
+                    allRows = [];
+                }
             }
         }
 

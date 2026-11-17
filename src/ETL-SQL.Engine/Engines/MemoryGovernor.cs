@@ -36,6 +36,10 @@ internal static class MemoryGovernor
         if (ctx.MemoryGovernorPolicy == MemoryGovernorPolicy.SpillOrFail)
             throw new ExecutionException(message);
     }
+
+    public static bool IsNativeAggregateMemoryRejection(ExecutionException ex)
+        => ex.Message.StartsWith("Native ", StringComparison.Ordinal)
+           && ex.Message.Contains("GROUP BY requires", StringComparison.Ordinal);
 }
 
 /// <summary>
