@@ -22,7 +22,12 @@ public sealed record SharedConnectionDefinition(
     IReadOnlyDictionary<string, string> Options,
     bool Disabled,
     IReadOnlyCollection<string>? SensitiveFields = null,
-    GatewayResourceBinding? Gateway = null);
+    GatewayResourceBinding? Gateway = null,
+    string? OwnerPrincipal = null,
+    IReadOnlyCollection<string>? AllowedPrincipals = null,
+    IReadOnlyCollection<string>? AllowedGroups = null,
+    string? TenantId = null,
+    bool RequireAcl = false);
 
 /// <summary>Resolves SHARED:alias references to cataloged connection definitions.</summary>
 public interface IConnectionCatalogProvider
@@ -70,10 +75,13 @@ public sealed class LocalConnectionCatalogProvider(
 
     private sealed record EntryPayload(
         string ConnectorType, string? Target, Dictionary<string, string> Options, List<string>? SensitiveFields = null,
-        GatewayResourceBinding? Gateway = null);
+        GatewayResourceBinding? Gateway = null,
+        string? OwnerPrincipal = null,
+        List<string>? AllowedPrincipals = null,
+        List<string>? AllowedGroups = null,
+        string? TenantId = null,
+        bool RequireAcl = false);
 
-    // The local catalog has no user model: its trust boundary is filesystem access on the single
-    // node, so the caller identity is not evaluated here.
     public async Task<SharedConnectionDefinition> ResolveAsync(
         string alias,
         ExecutionIdentity? identity = null,
@@ -91,9 +99,8 @@ public sealed class LocalConnectionCatalogProvider(
 
         var protectedValue = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         var payload = Deserialize(alias, CryptoUtils.Unprotect(protectedValue, alias));
-        return new SharedConnectionDefinition(
-            alias, payload.ConnectorType, payload.Target, payload.Options, Disabled: false, payload.SensitiveFields,
-            payload.Gateway);
+        EnforceAccess(alias, payload, identity);
+        return ToDefinition(alias, payload, disabled: false);
     }
 
     public async Task StoreAsync(SharedConnectionDefinition definition, CancellationToken cancellationToken = default)
@@ -113,7 +120,12 @@ public sealed class LocalConnectionCatalogProvider(
             definition.Target,
             new Dictionary<string, string>(definition.Options, StringComparer.OrdinalIgnoreCase),
             definition.SensitiveFields?.ToList(),
-            definition.Gateway);
+            definition.Gateway,
+            NormalizePrincipal(definition.OwnerPrincipal),
+            NormalizeDistinctList(definition.AllowedPrincipals),
+            NormalizeDistinctList(definition.AllowedGroups),
+            string.IsNullOrWhiteSpace(definition.TenantId) ? null : definition.TenantId.Trim(),
+            definition.RequireAcl);
         var protectedValue = LocalStoreProtection.ProtectValue(
             JsonSerializer.Serialize(payload), definition.Alias, protectionScope);
         await File.WriteAllTextAsync(path, protectedValue, cancellationToken).ConfigureAwait(false);
@@ -143,9 +155,81 @@ public sealed class LocalConnectionCatalogProvider(
 
         var protectedValue = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         var payload = Deserialize(alias, CryptoUtils.Unprotect(protectedValue, alias));
-        return new SharedConnectionDefinition(
-            alias, payload.ConnectorType, payload.Target, payload.Options, disabled, payload.SensitiveFields,
-            payload.Gateway);
+        return ToDefinition(alias, payload, disabled);
+    }
+
+    private static SharedConnectionDefinition ToDefinition(string alias, EntryPayload payload, bool disabled) =>
+        new(
+            alias,
+            payload.ConnectorType,
+            payload.Target,
+            payload.Options,
+            disabled,
+            payload.SensitiveFields,
+            payload.Gateway,
+            payload.OwnerPrincipal,
+            payload.AllowedPrincipals,
+            payload.AllowedGroups,
+            payload.TenantId,
+            payload.RequireAcl);
+
+    private static void EnforceAccess(string alias, EntryPayload payload, ExecutionIdentity? identity)
+    {
+        bool isAclProtected = payload.RequireAcl
+            || !string.IsNullOrWhiteSpace(payload.OwnerPrincipal)
+            || payload.AllowedPrincipals is { Count: > 0 }
+            || payload.AllowedGroups is { Count: > 0 }
+            || !string.IsNullOrWhiteSpace(payload.TenantId);
+
+        if (!isAclProtected)
+            return;
+
+        if (identity is null)
+        {
+            throw new UnauthorizedAccessException(
+                $"Identity '(none)' is not authorized to use shared connection '{alias}'.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(payload.TenantId) &&
+            !string.Equals(identity.TenantId, payload.TenantId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UnauthorizedAccessException(
+                $"Identity '{identity.EffectiveUser}' is not authorized to use shared connection '{alias}'.");
+        }
+
+        if (identity.IsAdmin)
+            return;
+
+        if (!string.IsNullOrWhiteSpace(payload.OwnerPrincipal) &&
+            string.Equals(identity.EffectiveUser, payload.OwnerPrincipal, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (payload.AllowedPrincipals is { Count: > 0 } &&
+            payload.AllowedPrincipals.Contains(identity.EffectiveUser, StringComparer.OrdinalIgnoreCase))
+            return;
+
+        if (payload.AllowedGroups is { Count: > 0 } &&
+            payload.AllowedGroups.Any(identity.HasGroup))
+            return;
+
+        throw new UnauthorizedAccessException(
+            $"Identity '{identity.EffectiveUser}' is not authorized to use shared connection '{alias}'.");
+    }
+
+    private static string? NormalizePrincipal(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static List<string>? NormalizeDistinctList(IReadOnlyCollection<string>? values)
+    {
+        if (values is null || values.Count == 0)
+            return null;
+
+        var list = values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return list.Count == 0 ? null : list;
     }
 
     public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default)

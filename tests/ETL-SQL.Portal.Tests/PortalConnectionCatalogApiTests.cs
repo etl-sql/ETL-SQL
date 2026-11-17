@@ -748,6 +748,143 @@ public class PortalConnectionCatalogApiTests
         Assert.False(directAfterGrant.Success);
     }
 
+    [Fact]
+    public async Task CachedReportSnapshot_RequiresSharedConnectionUsePermission()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+
+        // Create an ACL-restricted SHARED: MOCKDB connection (owned by admin, no grants initially).
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Put, adminToken, "/api/admin/connections/restricted_snap_db", new
+            {
+                connectorType = "MOCKDB",
+                options = new Dictionary<string, string>()
+            })).StatusCode);
+
+        // Create two Viewers: alice (in Finance group) and bob (not in Finance group).
+        var (aliceId, aliceUsername) = await CreateReadyUserWithNameAsync(client, adminToken, "snapalice", "Viewer");
+        var (bobId, bobUsername) = await CreateReadyUserWithNameAsync(client, adminToken, "snapbob", "Viewer");
+
+        var grpRes = await SendAsync(client, HttpMethod.Post, adminToken, "/api/admin/groups", new { name = "SnapFinance" });
+        Assert.Equal(HttpStatusCode.Created, grpRes.StatusCode);
+        var grpId = (await grpRes.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+        var grpEtag = grpRes.Headers.ETag?.ToString() ?? "\"1\"";
+        Assert.Equal(HttpStatusCode.OK,
+            (await SendAsync(client, HttpMethod.Post, adminToken, $"/api/admin/groups/{grpId}/members", new { userId = aliceId }, grpEtag)).StatusCode);
+
+        // Create a shared folder readable by both alice and bob via SnapReaders group.
+        var readersGrpRes = await SendAsync(client, HttpMethod.Post, adminToken, "/api/admin/groups", new { name = "SnapReaders" });
+        Assert.Equal(HttpStatusCode.Created, readersGrpRes.StatusCode);
+        var readersGrpId = (await readersGrpRes.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+        var readersEtag = readersGrpRes.Headers.ETag?.ToString() ?? "\"1\"";
+        var addAliceRes = await SendAsync(client, HttpMethod.Post, adminToken, $"/api/admin/groups/{readersGrpId}/members", new { userId = aliceId }, readersEtag);
+        Assert.Equal(HttpStatusCode.OK, addAliceRes.StatusCode);
+        readersEtag = addAliceRes.Headers.ETag?.ToString() ?? "\"2\"";
+        Assert.Equal(HttpStatusCode.OK,
+            (await SendAsync(client, HttpMethod.Post, adminToken, $"/api/admin/groups/{readersGrpId}/members", new { userId = bobId }, readersEtag)).StatusCode);
+
+        var folderRes = await SendAsync(client, HttpMethod.Post, adminToken, "/api/folders", new { name = "SharedSnapFolder" });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folderJson = await folderRes.Content.ReadFromJsonAsync<JsonObject>(Json);
+        var folderId = folderJson!["id"]!.GetValue<int>();
+        var folderEtag = folderRes.Headers.ETag?.ToString() ?? "\"1\"";
+        Assert.Equal(HttpStatusCode.OK,
+            (await SendAsync(client, HttpMethod.Post, adminToken, $"/api/folders/{folderId}/acl", new
+            {
+                groupId = readersGrpId,
+                permission = FolderPermission.Read
+            }, folderEtag)).StatusCode);
+
+        // Grant SnapFinance Use permission on restricted_snap_db.
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, adminToken, "/api/admin/connections/restricted_snap_db/acl", new { groupId = grpId })).StatusCode);
+
+        // Log in after group and folder ACL assignments so JWT SecurityStamps are current.
+        var aliceToken = (await LoginAsync(client, aliceUsername, "User@Test2!")).AccessToken;
+        var bobToken = (await LoginAsync(client, bobUsername, "User@Test2!")).AccessToken;
+
+        // Create report referencing SHARED:restricted_snap_db and build its cached snapshot as admin.
+        var scriptPath = Path.Combine(factory.TempDir, "scripts", $"snap_acl_{Guid.NewGuid():N}.rptsql");
+        Directory.CreateDirectory(Path.GetDirectoryName(scriptPath)!);
+        await File.WriteAllTextAsync(scriptPath, """
+            CREATE CONNECTION dw AS MOCKDB('SHARED:restricted_snap_db');
+            CREATE VISUAL Summary AS CARD (
+              SOURCE = (SELECT 42 AS Answer),
+              MAPPINGS (VALUE = Answer)
+            );
+            """);
+
+        int reportId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var adminUser = await db.Users.SingleAsync(u => u.UserName == "admin");
+            var report = new Report
+            {
+                FolderId = folderId,
+                Name = "RestrictedSnapshotReport",
+                ScriptPath = scriptPath,
+                ScriptLastModified = DateTime.UtcNow,
+                CreatedBy = adminUser.Id
+            };
+            db.Reports.Add(report);
+            await db.SaveChangesAsync();
+            reportId = report.Id;
+
+            var manifestKey = $"report_{reportId}_test.etlsnap";
+            await scope.ServiceProvider.GetRequiredService<SnapshotPackageService>().SaveAsync(new ETL_SQL.Reporting.ReportManifest
+            {
+                Source = scriptPath,
+                Title = "RestrictedSnapshotReport",
+                Visuals =
+                {
+                    new ETL_SQL.Reporting.VisualManifest
+                    {
+                        Name = "Summary",
+                        VisualType = "CARD",
+                        Columns = ["Answer"],
+                        Rows = [["42"]]
+                    }
+                }
+            }, manifestKey);
+
+            db.ReportSnapshots.Add(new ReportSnapshot
+            {
+                ReportId = reportId,
+                ManifestPath = manifestKey,
+                BuiltAt = DateTime.UtcNow,
+                BuiltBy = adminUser.Id
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // Bob has Folder Read but NO connection Use -> 403 Forbidden on all snapshot routes.
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Get, bobToken, $"/api/reports/{reportId}/snapshot?includeManifest=true", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Get, bobToken, $"/api/reports/{reportId}/manifest", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Get, bobToken, $"/api/reports/{reportId}/snapshot/manifest", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Get, bobToken, $"/api/reports/{reportId}/snapshot/rows/0", null)).StatusCode);
+
+        // Alice is in SnapFinance (has Use) -> 200 OK on snapshot and manifest.
+        Assert.Equal(HttpStatusCode.OK,
+            (await SendAsync(client, HttpMethod.Get, aliceToken, $"/api/reports/{reportId}/snapshot?includeManifest=true", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await SendAsync(client, HttpMethod.Get, aliceToken, $"/api/reports/{reportId}/manifest", null)).StatusCode);
+
+        // Revoking SnapFinance's Use grant immediately blocks Alice from the cached snapshot.
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Delete, adminToken, $"/api/admin/connections/restricted_snap_db/acl/{grpId}", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Get, aliceToken, $"/api/reports/{reportId}/snapshot", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Get, aliceToken, $"/api/reports/{reportId}/manifest", null)).StatusCode);
+    }
+
     private sealed class CatalogFactory : PortalWebFactory
     {
         protected override void CustomizeConfiguration(Dictionary<string, string?> settings)
@@ -781,6 +918,16 @@ public class PortalConnectionCatalogApiTests
         string usernamePrefix,
         string role)
     {
+        var (userId, username) = await CreateReadyUserWithNameAsync(client, adminToken, usernamePrefix, role);
+        return (userId, (await LoginAsync(client, username, "User@Test2!")).AccessToken);
+    }
+
+    private static async Task<(int UserId, string Username)> CreateReadyUserWithNameAsync(
+        HttpClient client,
+        string adminToken,
+        string usernamePrefix,
+        string role)
+    {
         var username = $"{usernamePrefix}_{Guid.NewGuid():N}"[..20];
         const string initialPassword = "User@Test1!";
         const string changedPassword = "User@Test2!";
@@ -802,7 +949,7 @@ public class PortalConnectionCatalogApiTests
         });
         Assert.Equal(HttpStatusCode.NoContent, change.StatusCode);
 
-        return (userId, (await LoginAsync(client, username, changedPassword)).AccessToken);
+        return (userId, username);
     }
 
     private static async Task<HttpResponseMessage> SendAsync(HttpClient client, HttpMethod method,

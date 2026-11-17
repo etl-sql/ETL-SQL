@@ -488,7 +488,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// </summary>
         public async Task<ManualTriggerResult> TriggerJobWithOverridesAsync(
             JobId jobId,
-            IReadOnlyDictionary<string, string>? variableOverrides)
+            IReadOnlyDictionary<string, string>? variableOverrides,
+            ExecutionIdentity? callerIdentity = null)
         {
             var job = await _store.GetJobByIdAsync(jobId);
             if (job == null) return ManualTriggerResult.JobNotFound;
@@ -519,7 +520,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 return ManualTriggerResult.AlreadyRunning;
             }
 
-            QueueJob(job, () => ExecuteAdmittedJobAsync(job, capturedOverrides));
+            QueueJob(job, () => ExecuteAdmittedJobAsync(job, capturedOverrides, callerIdentity: callerIdentity));
             return ManualTriggerResult.Accepted;
         }
 
@@ -796,7 +797,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
             IReadOnlyDictionary<string, string>? variableOverrides = null,
             string? initialSessionId = null,
             bool resumeFromCheckpoint = false,
-            RevisionRun? revision = null)
+            RevisionRun? revision = null,
+            ExecutionIdentity? callerIdentity = null)
         {
             // P1.1: claim the per-job execution lease before doing anything observable. This is the
             // single choke point for both scheduled and manually triggered runs — another scheduler
@@ -825,7 +827,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             {
                 await ExecuteLeasedJobAsync(
                     job, leaseDuration, fenceToken.Value, variableOverrides,
-                    initialSessionId, resumeFromCheckpoint, revision);
+                    initialSessionId, resumeFromCheckpoint, revision, callerIdentity);
             }
             finally
             {
@@ -841,6 +843,35 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
         }
 
+        internal static ExecutionIdentity? ResolveJobExecutionIdentity(
+            JobDefinition job,
+            ExecutionIdentity? explicitIdentity = null)
+        {
+            if (!string.IsNullOrWhiteSpace(job.CreatedBy))
+            {
+                if (explicitIdentity is not null &&
+                    string.Equals(explicitIdentity.EffectiveUser, job.CreatedBy, StringComparison.OrdinalIgnoreCase))
+                {
+                    return string.IsNullOrWhiteSpace(job.TenantId)
+                        ? explicitIdentity
+                        : explicitIdentity with { TenantId = job.TenantId };
+                }
+
+                return new ExecutionIdentity
+                {
+                    EffectiveUser = job.CreatedBy,
+                    RealUser = job.CreatedBy,
+                    TenantId = job.TenantId,
+                    IsAdmin = false,
+                    Scopes = job.CreatedBy.StartsWith("service:", StringComparison.OrdinalIgnoreCase)
+                        ? [OrchestratorObjectAuthorizer.ScopeExecute, OrchestratorObjectAuthorizer.ScopeRead]
+                        : []
+                };
+            }
+
+            return explicitIdentity;
+        }
+
         private async Task ExecuteLeasedJobAsync(
             JobDefinition job,
             TimeSpan leaseDuration,
@@ -848,7 +879,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
             IReadOnlyDictionary<string, string>? variableOverrides,
             string? initialSessionId,
             bool resumeFromCheckpoint,
-            RevisionRun? revision = null)
+            RevisionRun? revision = null,
+            ExecutionIdentity? callerIdentity = null)
         {
             _logger.LogInformation("Job runner: {JobName} starting execution cycle (MaxRetries={Max}).", job.Name, job.MaxRetries);
 
@@ -954,19 +986,20 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         attemptQueueWaitMs = queueWaitMs;
                         _logger.LogInformation("Job {JobName} acquired throttle slot. Queue wait: {QueueWaitMs} ms.", job.Name, queueWaitMs);
                         using var scope = _serviceProvider.CreateScope();
+                        var effectiveIdentity = ResolveJobExecutionIdentity(job, revision?.Identity ?? callerIdentity);
                         var sandboxExecutor = scope.ServiceProvider.GetService<ISandboxScheduledJobExecutor>();
                         if (sandboxExecutor is not null)
                         {
-                            // RunRevisionAsync refuses this up front; submitted text must never
-                            // reach an executor that would run it as the tenant.
-                            if (revision is not null && !sandboxExecutor.SupportsSubmitterIdentity)
+                            // RunRevisionAsync refuses this up front; submitted text and owned jobs must
+                            // never reach an executor that would drop their identity.
+                            if (effectiveIdentity is not null && !sandboxExecutor.SupportsSubmitterIdentity)
                                 throw new InvalidOperationException(
-                                    "Sandbox execution cannot carry a revision run's submitter identity.");
+                                    "Sandbox execution cannot carry the job's execution identity.");
                             usedSandbox = true;
                             lastResult = await sandboxExecutor.ExecuteAsync(
                                 revision is null ? job : job with { Script = script },
                                 historyId, attempt, sessionId, resumeFromCheckpoint, queueWaitMs,
-                                variableOverrides, cycleCts.Token, revision?.Identity);
+                                variableOverrides, cycleCts.Token, effectiveIdentity);
                         }
                         else
                         {
@@ -974,16 +1007,18 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             lastResult = revision is not null
                                 ? await executor.ExecuteTextAsync(
                                     script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
-                                    executionIdentity: revision.Identity)
+                                    executionIdentity: effectiveIdentity)
                                 : resumeFromCheckpoint
                                 ? await executor.ResumeTextAsync(
-                                    job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs)
+                                    job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
+                                    executionIdentity: effectiveIdentity)
                                 : variableOverrides is { Count: > 0 }
                                 ? await executor.ExecuteTextAsync(
                                     job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
-                                    executionIdentity: null, variableOverrides: variableOverrides)
+                                    executionIdentity: effectiveIdentity, variableOverrides: variableOverrides)
                                 : await executor.ExecuteTextAsync(
-                                    job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs);
+                                    job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
+                                    executionIdentity: effectiveIdentity);
                         }
                         sessionId = lastResult.SessionId ?? sessionId;
 

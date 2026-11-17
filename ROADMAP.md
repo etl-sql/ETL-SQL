@@ -1373,7 +1373,7 @@ object the caller cannot use; and a test where a forged, altered or expired enve
 
 ### Security & Governance — Local Vault Isolation and Connection ACLs on Orchestrator Runs and Snapshots
 
-**Status:** Planned (v0.23.0, tasks in `TODO.md`)  
+**Status:** Implemented (v0.23.0: `SC04` local vault ACL hardening/User scope and `SC05` Orchestrator/snapshot connection ACL enforcement)  
 **Horizon:** Next (v0.23.0)  
 **Authoritative design:** [Governance Administration](docs/administration/platform/governance.md),
 [SaaS Tenant Isolation Architecture](docs/architecture/saas-tenant-isolation.md),

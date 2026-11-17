@@ -12,6 +12,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Enforced `SHARED:` connection ACLs on Orchestrator runs and cached Portal report snapshots (`SC05` in `SharedConnectionReferenceScan`, `LocalConnectionCatalogProvider`, `SchedulerService`, `JobApiEndpoints`, `PortalConnectionCatalogService`, and `ExecutionController`): added owner/principal/group/tenant/ACL enforcement to `LocalConnectionCatalogProvider.ResolveAsync`; bound scheduled, triggered, and resumed Orchestrator jobs in `SchedulerService` (and `/api/scheduled-jobs/{name}/trigger`) to an explicit owning `ExecutionIdentity` propagated to `IScriptExecutor` and `ISandboxScheduledJobExecutor`; added AST `SHARED:<alias>` extraction (fail-closed on parse errors or dynamic targets); and enforced caller `Use` permission checks in `ExecutionController` snapshot and manifest endpoints (`GetSnapshot`, `GetManifest`, `GetManifestAlias`, `GetSnapshotRows`, `GetSnapshotArrowRows`), auditing `SHARED_CONNECTION_SNAPSHOT_DENIED` on denial.
 - Prepare v0.23.0: version sources set to 0.23.0 on `release/v0.23.0` and draft release notes
   added, so source preflight accepts the branch and installed-upgrade checks test the published
   v0.22.0 predecessor.

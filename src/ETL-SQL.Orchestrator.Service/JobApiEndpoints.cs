@@ -1471,8 +1471,15 @@ namespace ETL_SQL.Orchestrator.Service
                 if (entries is null || entries.Count == 0)
                     return Results.BadRequest(new { Error = "No entries to import." });
 
-                var created = 0;
+                var caller = RequestCaller(ctx);
+                var ownerPrincipal = caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase) &&
+                                     caller.SubjectId.Equals("legacy-api-key", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : caller.PrincipalKey;
+                var tenantScope = ownerPrincipal is null ? null : caller.TenantId;
+
                 var updated = 0;
+                var createdCount = 0;
                 try
                 {
                     foreach (var entry in entries)
@@ -1484,7 +1491,12 @@ namespace ETL_SQL.Orchestrator.Service
                             entry.Target,
                             new Dictionary<string, string>(entry.Options ?? [], StringComparer.OrdinalIgnoreCase),
                             Disabled: false,
-                            entry.SensitiveFields);
+                            entry.SensitiveFields,
+                            OwnerPrincipal: entry.OwnerPrincipal ?? ownerPrincipal,
+                            AllowedPrincipals: entry.AllowedPrincipals,
+                            AllowedGroups: entry.AllowedGroups,
+                            TenantId: entry.TenantId ?? tenantScope,
+                            RequireAcl: entry.RequireAcl || (ownerPrincipal is not null));
                         var rawCredential = SharedConnectionValidator.FindRawCredential(definition.Options, definition.Target);
                         if (rawCredential is not null)
                         {
@@ -1500,7 +1512,7 @@ namespace ETL_SQL.Orchestrator.Service
                         if (entry.Status.Equals("disabled", StringComparison.OrdinalIgnoreCase))
                             await writable.DisableAsync(entry.Alias, ct);
 
-                        if (statusBefore == SecretLifecycleStatus.NotFound) created++;
+                        if (statusBefore == SecretLifecycleStatus.NotFound) createdCount++;
                         else updated++;
                     }
                 }
@@ -1509,8 +1521,8 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.BadRequest(new { Error = ex.Message });
                 }
 
-                EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_IMPORT", null, $"Created={created}; Updated={updated}");
-                return Results.Ok(new { Created = created, Updated = updated });
+                EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_IMPORT", null, $"Created={createdCount}; Updated={updated}");
+                return Results.Ok(new { Created = createdCount, Updated = updated });
             }).WithName("importAdminConnections");
 
             app.MapGet("/api/admin/connections/{alias}", async (HttpContext ctx, string alias,
@@ -1541,13 +1553,21 @@ namespace ETL_SQL.Orchestrator.Service
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
 
+                var caller = RequestCaller(ctx);
+                var isLegacyApiKey = caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase) &&
+                                     caller.SubjectId.Equals("legacy-api-key", StringComparison.OrdinalIgnoreCase);
                 var entry = new SharedConnectionDefinition(
                     decodedAlias,
                     request?.ConnectorType ?? "",
                     request?.Target,
                     new Dictionary<string, string>(request?.Options ?? [], StringComparer.OrdinalIgnoreCase),
                     Disabled: false,
-                    request?.SensitiveFields);
+                    request?.SensitiveFields,
+                    OwnerPrincipal: request?.OwnerPrincipal ?? (isLegacyApiKey ? null : caller.PrincipalKey),
+                    AllowedPrincipals: request?.AllowedPrincipals,
+                    AllowedGroups: request?.AllowedGroups,
+                    TenantId: request?.TenantId ?? (isLegacyApiKey ? null : caller.TenantId),
+                    RequireAcl: request?.RequireAcl ?? !isLegacyApiKey);
                 var rawCredential = SharedConnectionValidator.FindRawCredential(entry.Options, entry.Target);
                 if (rawCredential is not null)
                 {
@@ -1639,9 +1659,10 @@ namespace ETL_SQL.Orchestrator.Service
                 SharedConnectionDefinition entry;
                 try
                 {
-                    entry = await writable.ResolveAsync(decodedAlias, null, ct);
+                    var testIdentity = ToExecutionIdentity(RequestCaller(ctx));
+                    entry = await writable.ResolveAsync(decodedAlias, testIdentity, ct);
                 }
-                catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
+                catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException or UnauthorizedAccessException)
                 {
                     EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_TEST_DENIED", decodedAlias, "Status=unresolvable", allowed: false);
                     return Results.Conflict(new { Alias = decodedAlias, Status = "unresolvable", Error = ex.Message });
@@ -1809,7 +1830,11 @@ namespace ETL_SQL.Orchestrator.Service
                         required, job.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
-                var triggerResult = await scheduler.TriggerJobWithOverridesAsync(job.Id, overrides);
+                var triggerIdentity = caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase) &&
+                                      caller.SubjectId.Equals("legacy-api-key", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : ToExecutionIdentity(caller);
+                var triggerResult = await scheduler.TriggerJobWithOverridesAsync(job.Id, overrides, triggerIdentity);
                 if (triggerResult == ManualTriggerResult.JobNotFound)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
                 if (triggerResult == ManualTriggerResult.AlreadyRunning)
@@ -3311,7 +3336,12 @@ namespace ETL_SQL.Orchestrator.Service
             string ConnectorType,
             string? Target,
             Dictionary<string, string>? Options,
-            List<string>? SensitiveFields = null
+            List<string>? SensitiveFields = null,
+            string? OwnerPrincipal = null,
+            List<string>? AllowedPrincipals = null,
+            List<string>? AllowedGroups = null,
+            string? TenantId = null,
+            bool? RequireAcl = null
         );
 
         private sealed record ConnectionCatalogEntryResponse(
@@ -3320,7 +3350,12 @@ namespace ETL_SQL.Orchestrator.Service
             string? Target,
             Dictionary<string, string> Options,
             string Status,
-            IReadOnlyCollection<string>? SensitiveFields = null
+            IReadOnlyCollection<string>? SensitiveFields = null,
+            string? OwnerPrincipal = null,
+            IReadOnlyCollection<string>? AllowedPrincipals = null,
+            IReadOnlyCollection<string>? AllowedGroups = null,
+            string? TenantId = null,
+            bool RequireAcl = false
         );
 
         private sealed record ImpactConsumerResponse(
@@ -3349,7 +3384,12 @@ namespace ETL_SQL.Orchestrator.Service
                 definition?.Target,
                 options,
                 status.ToString().ToLowerInvariant(),
-                definition?.SensitiveFields);
+                definition?.SensitiveFields,
+                definition?.OwnerPrincipal,
+                definition?.AllowedPrincipals,
+                definition?.AllowedGroups,
+                definition?.TenantId,
+                definition?.RequireAcl ?? false);
         }
 
         private static async Task<StewardshipEvaluation> EvaluateStewardshipAsync(

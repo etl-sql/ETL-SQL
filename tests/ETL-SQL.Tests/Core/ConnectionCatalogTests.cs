@@ -249,4 +249,108 @@ public class ConnectionCatalogTests
 
         Directory.Delete(root, recursive: true);
     }
+
+    [Fact]
+    public async Task LocalProvider_EnforcesOwnerPrincipalGroupAndTenantAcls()
+    {
+        var root = TempRoot();
+        var provider = new LocalConnectionCatalogProvider(root, LocalVaultProtectionScope.CurrentUser);
+
+        try
+        {
+            await provider.StoreAsync(new SharedConnectionDefinition(
+                "restricted_dw",
+                "MOCKDB",
+                Target: null,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                Disabled: false,
+                OwnerPrincipal: "user:alice",
+                AllowedPrincipals: ["user:carol"],
+                AllowedGroups: ["Finance"],
+                TenantId: "tenant-a",
+                RequireAcl: true));
+
+            // Anonymous / null identity is denied.
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+                provider.ResolveAsync("restricted_dw", identity: null));
+
+            // Same-tenant non-owner without grant is denied.
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+                provider.ResolveAsync("restricted_dw", new ExecutionIdentity
+                {
+                    EffectiveUser = "user:bob",
+                    RealUser = "user:bob",
+                    TenantId = "tenant-a",
+                    IsAdmin = false
+                }));
+
+            // Cross-tenant caller (even matching owner or admin) is denied.
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+                provider.ResolveAsync("restricted_dw", new ExecutionIdentity
+                {
+                    EffectiveUser = "user:alice",
+                    RealUser = "user:alice",
+                    TenantId = "tenant-b",
+                    IsAdmin = true
+                }));
+
+            // Owner, explicitly allowed principal, group member, and same-tenant admin are allowed.
+            Assert.Equal("MOCKDB", (await provider.ResolveAsync("restricted_dw", new ExecutionIdentity
+            {
+                EffectiveUser = "user:alice",
+                RealUser = "user:alice",
+                TenantId = "tenant-a",
+                IsAdmin = false
+            })).ConnectorType);
+
+            Assert.Equal("MOCKDB", (await provider.ResolveAsync("restricted_dw", new ExecutionIdentity
+            {
+                EffectiveUser = "user:carol",
+                RealUser = "user:carol",
+                TenantId = "tenant-a",
+                IsAdmin = false
+            })).ConnectorType);
+
+            Assert.Equal("MOCKDB", (await provider.ResolveAsync("restricted_dw", new ExecutionIdentity
+            {
+                EffectiveUser = "user:dave",
+                RealUser = "user:dave",
+                TenantId = "tenant-a",
+                IsAdmin = false,
+                Groups = ["Finance"]
+            })).ConnectorType);
+
+            Assert.Equal("MOCKDB", (await provider.ResolveAsync("restricted_dw", new ExecutionIdentity
+            {
+                EffectiveUser = "user:admin",
+                RealUser = "user:admin",
+                TenantId = "tenant-a",
+                IsAdmin = true
+            })).ConnectorType);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SharedConnectionReferenceScan_ExtractsAliasesAndFailsClosedOnInvalidScripts()
+    {
+        var scan = SharedConnectionReferenceScan.ExtractAliases(@"
+            CREATE CONNECTION a AS MSSQL('SHARED:finance_dw');
+            CREATE CONNECTION b AS POSTGRES(TARGET = 'SHARED:ops_pg', USER = 'u');
+            DECLARE @c VARCHAR = 'SHARED:var_db';
+            -- CREATE CONNECTION ignored AS MSSQL('SHARED:commented_out');
+        ");
+        Assert.True(scan.IsResolved);
+        Assert.Equal(["finance_dw", "ops_pg", "var_db"], scan.Aliases);
+
+        var invalid = SharedConnectionReferenceScan.ExtractAliases("CREATE CONNECTION broken AS (;");
+        Assert.False(invalid.IsResolved);
+
+        var dynamicConn = SharedConnectionReferenceScan.ExtractAliases("CREATE CONNECTION dyn AS MSSQL(@conn);");
+        Assert.False(dynamicConn.IsResolved);
+    }
 }

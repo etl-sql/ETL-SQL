@@ -263,6 +263,65 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
             (await SendAsAsync(client, admin, HttpMethod.Delete, "/api/admin/connections/probe", null)).StatusCode);
     }
 
+    [Fact]
+    public async Task FederatedConnectionCatalogEntry_EnforcesOwnerAndAclAgainstExecutionIdentity()
+    {
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var client = factory.CreateClient();
+        var alice = new OrchestratorCaller(
+            "user", "alice", "Alice", ["Admin"], ["g1"], "tenant-a",
+            ["orchestrator.admin"], ["Finance"]);
+        var bob = new OrchestratorCaller(
+            "user", "bob", "Bob", ["Viewer"], [], "tenant-a",
+            ["orchestrator.execute"], []);
+
+        var put = await SendAsAsync(client, alice, HttpMethod.Put, "/api/admin/connections/tenant_a_conn", new
+        {
+            connectorType = "MOCKDB",
+            options = new Dictionary<string, string>(),
+            allowedGroups = new[] { "Engineering" }
+        });
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+
+        var detail = await SendAsAsync(client, alice, HttpMethod.Get, "/api/admin/connections/tenant_a_conn", null);
+        Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
+        var body = await detail.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("user:alice", body!["ownerPrincipal"]!.GetValue<string>());
+        Assert.Equal("tenant-a", body["tenantId"]!.GetValue<string>());
+        Assert.True(body["requireAcl"]!.GetValue<bool>());
+
+        var provider = factory.Services.GetRequiredService<IConnectionCatalogProvider>();
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            provider.ResolveAsync("tenant_a_conn", identity: null));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            provider.ResolveAsync("tenant_a_conn", new ExecutionIdentity
+            {
+                EffectiveUser = bob.PrincipalKey,
+                RealUser = bob.AuditActor,
+                TenantId = "tenant-a",
+                IsAdmin = false
+            }));
+
+        var ownerResolved = await provider.ResolveAsync("tenant_a_conn", new ExecutionIdentity
+        {
+            EffectiveUser = alice.PrincipalKey,
+            RealUser = alice.AuditActor,
+            TenantId = "tenant-a",
+            IsAdmin = false
+        });
+        Assert.Equal("MOCKDB", ownerResolved.ConnectorType);
+
+        var groupResolved = await provider.ResolveAsync("tenant_a_conn", new ExecutionIdentity
+        {
+            EffectiveUser = "user:eng",
+            RealUser = "user:eng",
+            TenantId = "tenant-a",
+            IsAdmin = false,
+            Groups = ["Engineering"]
+        });
+        Assert.Equal("MOCKDB", groupResolved.ConnectorType);
+    }
+
     private static Task<HttpResponseMessage> SendAsAsync(
         HttpClient client, OrchestratorCaller caller, HttpMethod method, string uri, object? body)
     {

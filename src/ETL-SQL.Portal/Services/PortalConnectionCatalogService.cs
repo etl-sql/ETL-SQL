@@ -251,6 +251,36 @@ public sealed class PortalConnectionCatalogService(
     }
 
     /// <summary>
+    /// Verifies that <paramref name="identity"/> holds <c>Use</c> permission for every catalog alias
+    /// referenced by a report before serving a cached snapshot. Does not record connection usage.
+    /// </summary>
+    public async Task EnsureCallerCanUseAliasesAsync(
+        IReadOnlyCollection<string> aliases,
+        ExecutionIdentity? identity,
+        CancellationToken cancellationToken = default)
+    {
+        if (aliases.Count == 0)
+            return;
+
+        foreach (var alias in aliases.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            SecretNameValidator.Validate(alias);
+            var entity = await db.PortalSharedConnections
+                .AsNoTracking()
+                .Include(c => c.Acls)
+                    .ThenInclude(a => a.Group)
+                .SingleOrDefaultAsync(c => c.TenantId == TenantScope && c.Alias == alias, cancellationToken);
+            if (entity is null || entity.Disabled)
+            {
+                throw new UnauthorizedAccessException(
+                    $"Identity '{identity?.EffectiveUser ?? "(none)"}' is not authorized to use shared connection '{alias}'.");
+            }
+
+            await EnforceUseAclAsync(entity, identity, cancellationToken);
+        }
+    }
+
+    /// <summary>
     /// Shared connections are deny-by-default: even when no group grants exist, only an admin or
     /// the entry owner may resolve the connection. Identity-less callers and non-member users are
     /// denied, and revoking the last group grant returns the connection to admin/owner-only access.
