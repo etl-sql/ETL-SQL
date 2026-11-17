@@ -11,7 +11,9 @@ namespace ETL_SQL.Portal.Services;
 /// from the Orchestrator. The direct read preserves detailed offline diagnostics without allowing a
 /// coarse Portal role to bypass the Orchestrator's per-job ACL.
 /// </summary>
-public sealed class OperationsTriageService(PortalTenantJobEvidenceStore jobHistory)
+public sealed class OperationsTriageService(
+    PortalTenantJobEvidenceStore jobHistory,
+    OrchestratorProxyService? proxy = null)
 {
     /// <summary>Row cap for the history read; also the value that decides <c>Truncated</c>.</summary>
     private const int HistoryReadLimit = 1000;
@@ -38,7 +40,10 @@ public sealed class OperationsTriageService(PortalTenantJobEvidenceStore jobHist
         var now = DateTime.Now;
         var since = now.AddHours(-lookbackHours);
 
-        var history = (await jobHistory.GetHistoryAsync(null, HistoryReadLimit))
+        var rawHistory = proxy is { IsConfigured: true }
+            ? (await proxy.GetHistoryAsync(limit: HistoryReadLimit, ct: cancellationToken) ?? [])
+            : await jobHistory.GetHistoryAsync(null, HistoryReadLimit);
+        var history = rawHistory
             .Where(row => readableJobNames is null || readableJobNames.Contains(row.JobName))
             .ToList();
         cancellationToken.ThrowIfCancellationRequested();
@@ -103,6 +108,14 @@ public sealed class OperationsTriageService(PortalTenantJobEvidenceStore jobHist
     {
         if (runId <= 0) return null;
 
+        if (proxy is { IsConfigured: true })
+        {
+            var remote = await proxy.GetTriageRunDetailAsync(runId, cancellationToken);
+            if (remote is null) return null;
+            if (readableJobNames is not null && !readableJobNames.Contains(remote.Run.JobName)) return null;
+            return remote;
+        }
+
         var run = await jobHistory.GetHistoryEntryAsync(runId);
         cancellationToken.ThrowIfCancellationRequested();
         if (run is null) return null;
@@ -123,6 +136,23 @@ public sealed class OperationsTriageService(PortalTenantJobEvidenceStore jobHist
         CancellationToken cancellationToken)
     {
         var cutoff = now.AddMinutes(-graceMinutes);
+        if (proxy is { IsConfigured: true })
+        {
+            var remoteJobs = await proxy.GetJobsAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            return remoteJobs
+                .Where(j => (readableJobNames is null || readableJobNames.Contains(j.Name))
+                            && j.IsEnabled && j.NextRun.HasValue && j.NextRun.Value < cutoff)
+                .Select(j => new TriageMissedJobDto(
+                    j.Name,
+                    j.DisplayName,
+                    j.NextRun!.Value,
+                    Math.Round((now - j.NextRun!.Value).TotalMinutes, 1),
+                    j.LastRun))
+                .OrderByDescending(m => m.OverdueMinutes)
+                .ToList();
+        }
+
         var jobs = await jobHistory.GetAllJobsAsync();
         cancellationToken.ThrowIfCancellationRequested();
 

@@ -548,7 +548,7 @@ public class SubscriptionDeliveryService(
             return null;
 
         var fallback = new SubscriptionDeliveryDestination(null, row.SmtpAlias, row.Recipients);
-        var notification = await TryLoadNotificationAsync(subscriptionId);
+        var notification = await TryLoadNotificationAsync(subscriptionId, ct);
         if (notification is null)
             return fallback;
 
@@ -558,35 +558,41 @@ public class SubscriptionDeliveryService(
             notification.Recipient ?? row.Recipients);
     }
 
-    private async Task<NotificationDefinition?> TryLoadNotificationAsync(int subscriptionId)
+    private async Task<NotificationDefinition?> TryLoadNotificationAsync(int subscriptionId, CancellationToken ct)
     {
-        if (dbLocator is null || orchestratorStoreFactory is null)
-            return null;
-
-        var orchDbPath = dbLocator.Resolve();
-        if (orchestratorStoreFactory.Provider == DatabaseProvider.Sqlite
-            && (orchDbPath is null || !File.Exists(orchDbPath)))
+        var notificationName = SubscriptionOrchestration.NotificationName(subscriptionId);
+        if (dbLocator is not null && orchestratorStoreFactory is not null)
         {
-            return null;
+            var orchDbPath = dbLocator.Resolve();
+            var localAvailable = orchestratorStoreFactory.Provider != DatabaseProvider.Sqlite
+                || (orchDbPath is not null && File.Exists(orchDbPath));
+            if (localAvailable)
+            {
+                try
+                {
+                    var store = orchestratorStoreFactory.Create(orchDbPath);
+                    await store.InitializeAsync();
+                    if (store is IJobCatalogStore catalog)
+                    {
+                        var local = await catalog.GetNotificationAsync(config.TenantId, notificationName);
+                        if (local is not null)
+                            return local;
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    log.LogWarning(
+                        "Could not load notification metadata for subscription {SubscriptionId}: {Message}",
+                        subscriptionId,
+                        ETL_SQL.Core.Common.SecretRedactor.Redact(ex.Message));
+                }
+            }
         }
 
-        try
-        {
-            var store = orchestratorStoreFactory.Create(orchDbPath);
-            await store.InitializeAsync();
-            return store is IJobCatalogStore catalog
-                ? await catalog.GetNotificationAsync(
-                    config.TenantId, SubscriptionOrchestration.NotificationName(subscriptionId))
-                : null;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            log.LogWarning(
-                "Could not load notification metadata for subscription {SubscriptionId}: {Message}",
-                subscriptionId,
-                ETL_SQL.Core.Common.SecretRedactor.Redact(ex.Message));
-            return null;
-        }
+        if (orchestrator is { IsConfigured: true })
+            return await orchestrator.GetNotificationDefinitionAsync(notificationName, ct);
+
+        return null;
     }
 
     // ── In-memory delivery script (P0.1) ──────────────────────────────────────

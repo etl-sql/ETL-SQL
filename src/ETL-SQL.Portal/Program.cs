@@ -613,6 +613,7 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalTenantJobEvidenceStore>
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetAtRestKeyRotationService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalSecretStoreService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalConnectionCatalogService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.OrchestratorGovernanceSyncService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DesignerAnalysisService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DesignerScriptGenerationService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DesignerScriptPatcher>();

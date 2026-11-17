@@ -631,6 +631,193 @@ public class OrchestratorProxyService(
         string jobName, CancellationToken ct = default) =>
         ReadJsonAsync<List<JobStateEntryDto>>(
             $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/state", "job state", ct);
+    // ── Remote history, triage, subscriptions, and governance sync (OR04) ──────
+
+    public async Task<List<JobHistoryEntry>?> GetHistoryAsync(
+        string? jobName = null, int limit = 1000, CancellationToken ct = default)
+    {
+        try
+        {
+            var path = string.IsNullOrWhiteSpace(jobName)
+                ? $"api/history?limit={Math.Clamp(limit, 1, 1000)}"
+                : $"api/history?jobName={Uri.EscapeDataString(jobName)}&limit={Math.Clamp(limit, 1, 1000)}";
+            using var resp = await SendAsync(HttpMethod.Get, path, cancellationToken: ct);
+            if (resp is null || !resp.IsSuccessStatusCode) return null;
+            return await resp.Content.ReadFromJsonAsync<List<JobHistoryEntry>>(ct) ?? [];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to read Orchestrator history over HTTP.");
+            return null;
+        }
+    }
+
+    public async Task<TriageRunDetailDto?> GetTriageRunDetailAsync(long historyId, CancellationToken ct = default)
+    {
+        try
+        {
+            using var resp = await SendAsync(HttpMethod.Get, $"api/history/{historyId}/detail", cancellationToken: ct);
+            if (resp is null || resp.StatusCode == System.Net.HttpStatusCode.NotFound || !resp.IsSuccessStatusCode)
+                return null;
+            var payload = await resp.Content.ReadFromJsonAsync<RemoteTriageRunDetailPayload>(ct);
+            if (payload is null) return null;
+            var h = payload.Run;
+            var run = new TriageRunDto(
+                h.Id, h.JobName, h.StartTime, h.EndTime, h.Status, h.ErrorMessage,
+                h.RowsProcessed, h.RowsQuarantined, h.RowsWarned, h.DataQualityFailures,
+                h.ScriptHashAtRunTime, h.HashMatched);
+            return new TriageRunDetailDto(run, payload.Statements, payload.QualityFailures);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to read triage detail for run {RunId}.", historyId);
+            return null;
+        }
+    }
+
+    public async Task<List<JobHistoryEntry>?> GetCompletedHistoryAsync(
+        DateTime sinceUtc, DateTime untilUtc, int limit = 1000, int offset = 0, CancellationToken ct = default)
+    {
+        var path = $"api/history/completions?sinceUtc={Uri.EscapeDataString(sinceUtc.ToUniversalTime().ToString("O"))}"
+            + $"&untilUtc={Uri.EscapeDataString(untilUtc.ToUniversalTime().ToString("O"))}"
+            + $"&limit={Math.Clamp(limit, 1, 1000)}&offset={Math.Max(0, offset)}";
+        using var resp = await SendAsPortalSystemAsync(HttpMethod.Get, path, ct: ct);
+        if (resp is null || !resp.IsSuccessStatusCode) return null;
+        return await resp.Content.ReadFromJsonAsync<List<JobHistoryEntry>>(ct) ?? [];
+    }
+
+    public async Task<bool> SyncSubscriptionJobAsync(
+        int subscriptionId, object request, CancellationToken ct = default)
+    {
+        try
+        {
+            using var resp = await SendAsPortalSystemAsync(
+                HttpMethod.Put, $"api/portal/subscriptions/{subscriptionId}/job", request, ct);
+            return resp is { IsSuccessStatusCode: true };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to sync subscription {SubscriptionId} job over HTTP.", subscriptionId);
+            return false;
+        }
+    }
+
+    public async Task<bool> DeleteSubscriptionJobAsync(
+        int subscriptionId, string jobName, CancellationToken ct = default)
+    {
+        try
+        {
+            using var resp = await SendAsPortalSystemAsync(
+                HttpMethod.Delete,
+                $"api/portal/subscriptions/{subscriptionId}/job?jobName={Uri.EscapeDataString(jobName)}",
+                ct: ct);
+            return resp is { IsSuccessStatusCode: true };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to delete subscription {SubscriptionId} job over HTTP.", subscriptionId);
+            return false;
+        }
+    }
+
+    public async Task<List<JobHistoryEntry>?> GetSubscriptionHistoryAsync(
+        int subscriptionId, string jobName, int limit = 50, CancellationToken ct = default)
+    {
+        var path = $"api/portal/subscriptions/{subscriptionId}/history?jobName={Uri.EscapeDataString(jobName)}&limit={Math.Clamp(limit, 1, 1000)}";
+        using var resp = await SendAsPortalSystemAsync(HttpMethod.Get, path, ct: ct);
+        if (resp is null || !resp.IsSuccessStatusCode) return null;
+        return await resp.Content.ReadFromJsonAsync<List<JobHistoryEntry>>(ct) ?? [];
+    }
+
+    public async Task<NotificationDefinition?> GetNotificationDefinitionAsync(
+        string name, CancellationToken ct = default)
+    {
+        try
+        {
+            using var resp = await SendAsPortalSystemAsync(
+                HttpMethod.Get, $"api/notifications/{Uri.EscapeDataString(name)}", ct: ct);
+            if (resp is null || !resp.IsSuccessStatusCode) return null;
+            return await resp.Content.ReadFromJsonAsync<NotificationDefinition>(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogDebug(ex, "Failed to read notification {Name} over HTTP.", ETL_SQL.Core.Common.LogSanitizer.Clean(name));
+            return null;
+        }
+    }
+
+    public async Task<bool> UpsertRemoteConnectionAsync(string alias, object payload, CancellationToken ct = default)
+    {
+        using var resp = await SendAsPortalSystemAsync(
+            HttpMethod.Put, $"api/admin/connections/{Uri.EscapeDataString(alias)}", payload, ct);
+        return resp is { IsSuccessStatusCode: true };
+    }
+
+    public async Task<bool> SetRemoteConnectionEnabledAsync(string alias, bool enabled, CancellationToken ct = default)
+    {
+        var verb = enabled ? "enable" : "disable";
+        using var resp = await SendAsPortalSystemAsync(
+            HttpMethod.Post, $"api/admin/connections/{Uri.EscapeDataString(alias)}/{verb}", ct: ct);
+        return resp is { IsSuccessStatusCode: true } || resp?.StatusCode == System.Net.HttpStatusCode.NotFound;
+    }
+
+    public async Task<bool> DeleteRemoteConnectionAsync(string alias, CancellationToken ct = default)
+    {
+        using var resp = await SendAsPortalSystemAsync(
+            HttpMethod.Delete, $"api/admin/connections/{Uri.EscapeDataString(alias)}", ct: ct);
+        return resp is { IsSuccessStatusCode: true } || resp?.StatusCode == System.Net.HttpStatusCode.NotFound;
+    }
+
+    public async Task<bool> ImportRemoteConnectionsAsync(IEnumerable<object> entries, CancellationToken ct = default)
+    {
+        using var resp = await SendAsPortalSystemAsync(
+            HttpMethod.Post, "api/admin/connections/import", entries, ct);
+        return resp is { IsSuccessStatusCode: true };
+    }
+
+    public async Task<bool> UpsertRemoteSecretAsync(string name, string value, CancellationToken ct = default)
+    {
+        using var resp = await SendAsPortalSystemAsync(
+            HttpMethod.Put, $"api/admin/secrets/{Uri.EscapeDataString(name)}", new { Value = value }, ct);
+        return resp is { IsSuccessStatusCode: true };
+    }
+
+    public async Task<bool> SetRemoteSecretEnabledAsync(string name, bool enabled, CancellationToken ct = default)
+    {
+        var verb = enabled ? "enable" : "disable";
+        using var resp = await SendAsPortalSystemAsync(
+            HttpMethod.Post, $"api/admin/secrets/{Uri.EscapeDataString(name)}/{verb}", ct: ct);
+        return resp is { IsSuccessStatusCode: true } || resp?.StatusCode == System.Net.HttpStatusCode.NotFound;
+    }
+
+    public async Task<bool> DeleteRemoteSecretAsync(string name, CancellationToken ct = default)
+    {
+        using var resp = await SendAsPortalSystemAsync(
+            HttpMethod.Delete, $"api/admin/secrets/{Uri.EscapeDataString(name)}", ct: ct);
+        return resp is { IsSuccessStatusCode: true } || resp?.StatusCode == System.Net.HttpStatusCode.NotFound;
+    }
+
+    private async Task<HttpResponseMessage?> SendAsPortalSystemAsync(
+        HttpMethod method, string path, object? body = null, CancellationToken ct = default)
+    {
+        using var req = settings.CreateRequest(method, path);
+        if (req is null) return null;
+
+        var assertion = (assertionIssuer ?? new OrchestratorAssertionIssuer(portalConfig, portalDb))
+            .IssueForBackground();
+        if (assertion is not null)
+            req.Headers.TryAddWithoutValidation(OrchestratorIdentityAssertion.HeaderName, assertion);
+        if (body is not null)
+            req.Content = JsonContent.Create(body);
+
+        return await http.SendAsync(req, ct);
+    }
+
+    private sealed record RemoteTriageRunDetailPayload(
+        JobHistoryEntry Run,
+        List<ETL_SQL.Core.Profiling.StatementMetricsPayload> Statements,
+        List<JobDataQualityFailure> QualityFailures);
+
     private async Task<OrchestratorRead<T>> ReadJsonAsync<T>(string path, string subject, CancellationToken ct)
         where T : class
     {

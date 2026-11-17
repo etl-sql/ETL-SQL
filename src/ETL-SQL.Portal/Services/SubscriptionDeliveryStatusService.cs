@@ -13,11 +13,31 @@ public class SubscriptionDeliveryStatusService(
     OrchestratorDbLocator dbLocator,
     IOrchestratorStoreFactory orchestratorStoreFactory,
     ILogger<SubscriptionDeliveryStatusService> log,
-    DatasetTenantScope? tenantScope = null)
+    DatasetTenantScope? tenantScope = null,
+    OrchestratorProxyService? orchestratorProxy = null)
 {
     public async Task<IReadOnlyList<JobHistoryEntry>> SynchronizeAsync(Subscription subscription, int limit = 100)
     {
         if (limit <= 0) return [];
+        var jobName = SubscriptionOrchestration.JobName(subscription.Id, subscription.Report?.Name);
+        if (orchestratorProxy is { IsConfigured: true })
+        {
+            try
+            {
+                var remote = await orchestratorProxy.GetSubscriptionHistoryAsync(
+                    subscription.Id, jobName, Math.Clamp(limit, 1, 1000));
+                if (remote is null)
+                    throw new InvalidOperationException("Orchestrator HTTP history endpoint returned an unsuccessful status.");
+                return remote.Take(Math.Max(0, limit)).ToList();
+            }
+            catch (Exception ex) when (ex is not SubscriptionHistoryUnavailableException)
+            {
+                log.LogWarning("Unable to read remote Orchestrator history for subscription {SubscriptionId} ({FailureType}).",
+                    subscription.Id, ex.GetType().Name);
+                throw new SubscriptionHistoryUnavailableException(ex);
+            }
+        }
+
         var orchDbPath = dbLocator.Resolve();
         if (orchestratorStoreFactory.Provider == DatabaseProvider.Sqlite
             && (orchDbPath is null || !File.Exists(orchDbPath)))
@@ -30,7 +50,6 @@ public class SubscriptionDeliveryStatusService(
         {
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
-            var jobName = SubscriptionOrchestration.JobName(subscription.Id, subscription.Report?.Name);
             // Read by name, not identity: history outlives the job, so a re-created subscription job
             // must still show its earlier runs. The caller's verified tenant is what keeps a name
             // shared with another tenant's subscription from reaching that tenant's runs.

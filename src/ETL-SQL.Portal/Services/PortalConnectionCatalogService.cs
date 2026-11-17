@@ -780,6 +780,81 @@ public sealed class PortalConnectionCatalogService(
         return normalized.Count == 0 ? null : string.Join(',', normalized);
     }
 
+    public sealed record OrchestratorSyncConnectionPayload(
+        string Alias,
+        string ConnectorType,
+        string? Target,
+        Dictionary<string, string> Options,
+        string Status,
+        IReadOnlyList<string> SensitiveFields,
+        string? OwnerPrincipal,
+        IReadOnlyList<string>? AllowedPrincipals,
+        IReadOnlyList<string>? AllowedGroups,
+        string? TenantId,
+        bool RequireAcl);
+
+    /// <summary>
+    /// Exports tenant-scoped catalog connections together with resolved owner/group principals for
+    /// replication to remote Orchestrator workers.
+    /// </summary>
+    public async Task<IReadOnlyList<OrchestratorSyncConnectionPayload>> ExportForOrchestratorSyncAsync(
+        string? alias = null, CancellationToken cancellationToken = default)
+    {
+        var query = db.PortalSharedConnections
+            .AsNoTracking()
+            .Include(c => c.Acls).ThenInclude(a => a.Group)
+            .Where(c => c.TenantId == TenantScope);
+        if (!string.IsNullOrWhiteSpace(alias))
+            query = query.Where(c => c.Alias == alias);
+
+        var rows = await query.OrderBy(c => c.Alias).ToListAsync(cancellationToken);
+        if (rows.Count == 0) return [];
+
+        var ownerIds = rows
+            .Select(c => c.OwnerUserId ?? c.CreatedByUserId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        var owners = ownerIds.Count == 0
+            ? new Dictionary<int, string?>()
+            : await db.Users.AsNoTracking()
+                .Where(u => ownerIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.PrincipalKey, cancellationToken);
+
+        var payloads = new List<OrchestratorSyncConnectionPayload>(rows.Count);
+        foreach (var entity in rows)
+        {
+            var (options, _) = DeserializeOptionsAndGateway(entity);
+            var ownerId = entity.OwnerUserId ?? entity.CreatedByUserId;
+            string? ownerPrincipal = null;
+            if (ownerId.HasValue && owners.TryGetValue(ownerId.Value, out var pk) && !string.IsNullOrWhiteSpace(pk))
+                ownerPrincipal = $"user:{pk}";
+
+            var allowedGroups = entity.Acls
+                .Select(a => a.Group?.Name)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            payloads.Add(new OrchestratorSyncConnectionPayload(
+                entity.Alias,
+                entity.ConnectorType,
+                entity.Target,
+                new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase),
+                entity.Disabled ? "disabled" : "active",
+                FromCsv(entity.SensitiveFieldsCsv).ToList(),
+                ownerPrincipal,
+                AllowedPrincipals: null,
+                AllowedGroups: allowedGroups.Count == 0 ? null : allowedGroups,
+                TenantId: entity.TenantId,
+                RequireAcl: true));
+        }
+
+        return payloads;
+    }
+
     private static IReadOnlyList<string> FromCsv(string? csv) =>
         string.IsNullOrWhiteSpace(csv)
             ? []

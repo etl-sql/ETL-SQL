@@ -106,14 +106,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
 - [ ] **W7 Fast pre-push hook and local gate hygiene.** Overlaps RG03's docs-only skip; see the
   [Release Engineering entry](ROADMAP.md#release-engineering--routine-github-built-releases).
 
-### 2.6 Orchestrator and catalog cohesion
-
-**Design:** [ROADMAP: Unified Operations Console](ROADMAP.md#portal-orchestrator--studio--unified-operations-console-catalog-job-cohesion-and-saas-authoring-boundary).
-
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| OR04 | **Retire direct SQLite file coupling (`OrchestratorDbLocator`) in Triage, Poller, and Subscriptions.** Route `OperationsTriageService`, `OrchestratorPollerService`, and `SubscriptionsController` through `OrchestratorProxyService` (or a shared remote store contract) instead of opening a local SQLite path via `OrchestratorDbLocator.Resolve()`, and synchronize or federate Portal's `SHARED:` connection catalog and `SECRET:` store with remote Orchestrator workers. | — | M |
-
 ### 2.7 MSI installer: services own their configuration
 
 **Design:** [ROADMAP: Windows Installer](ROADMAP.md#windows-installer--the-msi-copies-files-and-registers-services-only).

@@ -24,7 +24,8 @@ public class OrchestratorController(
     IArtifactStorage? artifacts = null,
     PortalConfig? portalConfig = null,
     DatasetTenantScope? tenantScope = null,
-    StudioAuthorizationService? studioAuthorization = null) : ControllerBase
+    StudioAuthorizationService? studioAuthorization = null,
+    OrchestratorGovernanceSyncService? governanceSync = null) : ControllerBase
 {
     private static readonly JsonSerializerOptions CatalogJson = new(JsonSerializerDefaults.Web);
     /// <summary>Upper bound on one bulk re-run, so a mis-click cannot enqueue the whole estate.</summary>
@@ -974,6 +975,26 @@ public class OrchestratorController(
     private sealed record ProvisionSlotProxyResponse(string JobName, bool Created);
 
     private sealed record ObjectGrantEntry(string PrincipalKind, string PrincipalId, string Permission);
+
+    [HttpPost("sync-governance")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> SyncGovernance(CancellationToken ct = default)
+    {
+        if (governanceSync is null || !governanceSync.IsRemoteOrchestratorConfigured)
+            return StatusCode(503, new { Error = "Remote Orchestrator service is not configured." });
+
+        var summary = await governanceSync.SyncAllAsync(ct);
+        if (summary is null)
+            return StatusCode(503, new { Error = "Orchestrator governance synchronization failed." });
+
+        await audit.LogAsync(
+            CurrentUserId,
+            "ORCHESTRATOR_GOVERNANCE_SYNC",
+            "OrchestratorService",
+            "governance",
+            $"secrets={summary.SecretsSynced}; connections={summary.ConnectionsSynced}; warnings={summary.Warnings.Count}");
+        return Ok(summary);
+    }
 
     // ── Service control ───────────────────────────────────────────────────────
 

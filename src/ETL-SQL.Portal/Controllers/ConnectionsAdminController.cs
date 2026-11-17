@@ -24,7 +24,8 @@ public class ConnectionsAdminController(
     ISecretProvider secrets,
     ConnectionDiagnosticEngine diagnostics,
     ETL_SQL.Services.SecurityService security,
-    IConfiguration config) : ControllerBase
+    IConfiguration config,
+    OrchestratorGovernanceSyncService? orchSync = null) : ControllerBase
 {
     public sealed record SetConnectionRequest(
         string ConnectorType,
@@ -76,6 +77,7 @@ public class ConnectionsAdminController(
                 "PortalSharedConnection", alias, $"ConnectorType={entry.ConnectorType.Trim()}");
             await catalog.StoreAsync(entry, CurrentUserId, ct);
             await catalog.SaveAsync(ct);
+            if (orchSync is not null) await orchSync.TrySyncConnectionAsync(alias, ct);
             return NoContent();
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
@@ -194,6 +196,7 @@ public class ConnectionsAdminController(
         audit.Stage(CurrentUserId, "SHARED_CONNECTION_DISABLE", "PortalSharedConnection", alias);
         await catalog.DisableAsync(alias, CurrentUserId, ct);
         await catalog.SaveAsync(ct);
+        if (orchSync is not null) await orchSync.TrySyncConnectionStateAsync(alias, enabled: false, ct);
         return NoContent();
     }
 
@@ -207,6 +210,7 @@ public class ConnectionsAdminController(
         audit.Stage(CurrentUserId, "SHARED_CONNECTION_ENABLE", "PortalSharedConnection", alias);
         await catalog.EnableAsync(alias, CurrentUserId, ct);
         await catalog.SaveAsync(ct);
+        if (orchSync is not null) await orchSync.TrySyncConnectionStateAsync(alias, enabled: true, ct);
         return NoContent();
     }
 
@@ -219,6 +223,7 @@ public class ConnectionsAdminController(
         audit.Stage(CurrentUserId, "SHARED_CONNECTION_DELETE", "PortalSharedConnection", alias);
         await catalog.DeleteAsync(alias, ct);
         await catalog.SaveAsync(ct);
+        if (orchSync is not null) await orchSync.TryDeleteConnectionAsync(alias, ct);
         return NoContent();
     }
 
@@ -270,6 +275,7 @@ public class ConnectionsAdminController(
                 $"GroupId={request.GroupId}");
             var created = await catalog.GrantUseAsync(alias, request.GroupId, ct);
             await catalog.SaveAsync(ct);
+            if (orchSync is not null) await orchSync.TrySyncConnectionAsync(alias, ct);
             return created ? NoContent() : Ok(new { alreadyGranted = true });
         }
         catch (KeyNotFoundException ex)
@@ -288,6 +294,7 @@ public class ConnectionsAdminController(
             $"GroupId={groupId}");
         var removed = await catalog.RevokeUseAsync(alias, groupId, ct);
         await catalog.SaveAsync(ct);
+        if (removed && orchSync is not null) await orchSync.TrySyncConnectionAsync(alias, ct);
         return removed
             ? NoContent()
             : NotFound(new { error = $"No use grant for group {groupId} on '{alias}'." });
@@ -321,6 +328,8 @@ public class ConnectionsAdminController(
             }
 
             await catalog.SaveAsync(ct);
+            if (orchSync is not null)
+                await orchSync.TrySyncConnectionsBatchAsync(entries.Select(e => e.Alias).ToList(), ct);
             return Ok(new SharedConnectionImportDto(created, updated));
         }
         catch (ArgumentException ex)

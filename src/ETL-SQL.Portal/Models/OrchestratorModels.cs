@@ -274,6 +274,12 @@ public record OrchestratorAuthoringModeDto(
     bool CanCreateInlineScriptJobs
 );
 
+public record GovernanceSyncSummaryDto(
+    int SecretsSynced,
+    int ConnectionsSynced,
+    IReadOnlyList<string> Warnings
+);
+
 public record JobDependencyChainDto(
     string JobName,
     List<JobDependencyNodeDto> Nodes,

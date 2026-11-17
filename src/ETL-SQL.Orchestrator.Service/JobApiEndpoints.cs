@@ -289,6 +289,7 @@ namespace ETL_SQL.Orchestrator.Service
 
             app.MapScheduledJobActivity();
             app.MapJobRevisionRuns();
+            app.MapPortalBridgeEndpoints();
 
             app.MapGet("/api/scheduled-jobs", async (HttpContext ctx, IJobHistoryStore store,
                 OrchestratorObjectAuthorizationService authorization, IConfiguration cfg,
@@ -2748,8 +2749,12 @@ namespace ETL_SQL.Orchestrator.Service
         /// wherever callers carry an identity. In legacy mode the API key is the only identity there
         /// is, and holding it is the authorization — as for <c>/management/stop</c>.
         /// </summary>
-        private static bool ConnectionAdministrationDenied(HttpContext ctx, IConfiguration cfg) =>
-            !OrchestratorAuthorizationMode.IsLegacy(cfg) && !IsObjectAdministrator(RequestCaller(ctx));
+        private static bool ConnectionAdministrationDenied(HttpContext ctx, IConfiguration cfg)
+        {
+            if (OrchestratorAuthorizationMode.IsLegacy(cfg)) return false;
+            var caller = RequestCaller(ctx);
+            return !IsObjectAdministrator(caller) && !caller.IsInRole("PortalSystem");
+        }
 
         // Roles that see Orchestrator state but never run anything through it.
         private static readonly string[] ReadOnlyRoles = ["OrchestratorViewer", "FleetReader", "StewardshipViewer"];
