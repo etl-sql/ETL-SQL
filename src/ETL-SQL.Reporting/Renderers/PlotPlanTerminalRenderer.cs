@@ -686,8 +686,8 @@ internal static class PlotPlanTerminalRenderer
         var run = new List<(decimal X, decimal Y)>();
         decimal Ratio(decimal value, ResolvedScale scale)
         {
-            var low = PlotPlanResolver.Number(scale.Domain[0])!.Value;
-            var high = PlotPlanResolver.Number(scale.Domain[^1])!.Value;
+            var low = PlotPlanResolver.PositionNumber(scale.Domain[0])!.Value;
+            var high = PlotPlanResolver.PositionNumber(scale.Domain[^1])!.Value;
             if (high == low) high = low + 1m;
             var ratio = scale.Kind == ScaleKind.Logarithmic
                 ? value <= 0m ? 0m : (decimal)((Math.Log10((double)value) - Math.Log10((double)low)) /

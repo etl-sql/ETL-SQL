@@ -1315,4 +1315,144 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
             .Channels.Single(c => c.Channel == FieldChannel.Y).Value.Decimal);
         Assert.True(targetLayer.Data.Single(d => d.Channels.Any(c => c.Channel == FieldChannel.X && c.Value.Text == "Ops")).IsGap);
     }
+
+    [Fact]
+    public void ContinuousTimeScale_OrdersChronologicallyKeepsDuplicateTimestampsAndPositionsPointsWithTimeUnit()
+    {
+        const string sql = """
+            CREATE VISUAL Telemetry AS CUSTOM (
+              SOURCE = #events,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (
+                  t = TIME (
+                    CHANNEL = X,
+                    MIN = '2026-01-01',
+                    MAX = '2027-01-01',
+                    TIME_UNIT = MONTH,
+                    TICK_FORMAT = 'MMM yyyy',
+                    TICK_INTERVAL = 3
+                  ),
+                  v = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+                ),
+                LAYERS (
+                  pts = POINT (
+                    ENCODINGS (
+                      X = RecordedAt (TYPE = TEMPORAL, SCALE = t),
+                      Y = Value (TYPE = QUANTITATIVE, SCALE = v)
+                    )
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var statement = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(statement));
+
+        // Intentionally out-of-order and includes duplicate timestamps plus unequal time gaps
+        var manifest = new VisualManifest
+        {
+            Name = "Telemetry",
+            Columns = ["RecordedAt", "Value"],
+            Rows =
+            [
+                ["2026-12-31", "80"],
+                ["2026-01-01", "10"],
+                ["2026-01-02", "20"],
+                ["2026-01-02", "55"]
+            ]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 600, 350));
+
+        var xScale = plan.Scales.Single(s => s.Id == "t");
+        Assert.Equal(ScaleKind.Time, xScale.Kind);
+        Assert.Empty(xScale.Categories);
+        Assert.StartsWith("2026-01-01", PlotPlanResolver.Display(xScale.Domain[0]));
+        Assert.StartsWith("2027-01-01", PlotPlanResolver.Display(xScale.Domain[^1]));
+        // Quarterly intervals across [2026-01-01 .. 2027-01-01]: Jan 2026, Apr 2026, Jul 2026, Oct 2026, Jan 2027
+        Assert.Equal(5, xScale.Ticks.Length);
+        Assert.Equal(["Jan 2026", "Apr 2026", "Jul 2026", "Oct 2026", "Jan 2027"], xScale.Ticks.Select(t => t.Label));
+
+        // Duplicate timestamps must be preserved
+        var ptsLayer = Assert.Single(plan.Layers);
+        Assert.Equal(4, ptsLayer.Data.Length);
+
+        var svg = new SvgChartRenderer().Render(plan);
+        var doc = System.Xml.Linq.XDocument.Parse(svg);
+        var circles = doc.Descendants().Where(e => e.Name.LocalName == "circle").ToList();
+        Assert.Equal(4, circles.Count);
+
+        // 2026-01-02 (index 2, 3) is 1/365 of the span away from 2026-01-01 (index 1),
+        // while 2026-12-31 (index 0) is 364/365 of the span — proportional, not uniform category slots.
+        decimal Cx(int rowIndex) => decimal.Parse(
+            circles.Single(c => c.Attribute("data-row-index")?.Value == rowIndex.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .Attribute("cx")!.Value,
+            System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Equal(Cx(2), Cx(3));
+        Assert.True(Cx(2) - Cx(1) < 5m, $"Expected 1-day gap on 1-year axis to be < 5px, got {Cx(2) - Cx(1)}px");
+        Assert.True(Cx(0) - Cx(2) > 400m, $"Expected 363-day gap on 1-year axis to be > 400px, got {Cx(0) - Cx(2)}px");
+    }
+
+    [Fact]
+    public void ContinuousTimeScale_HonorsMajorTickCountAndIndependentFacets()
+    {
+        const string sql = """
+            CREATE VISUAL FacetTime AS CUSTOM (
+              SOURCE = #events,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (
+                  t = TIME (CHANNEL = X, MAJOR_TICK_COUNT = 3),
+                  v = LINEAR (CHANNEL = Y)
+                ),
+                FACET (WRAP = Region, COLUMNS = 2),
+                RESOLVE (X = INDEPENDENT, Y = INDEPENDENT),
+                LAYERS (
+                  line = LINE (
+                    ENCODINGS (
+                      X = Day (TYPE = TEMPORAL, SCALE = t),
+                      Y = Value (TYPE = QUANTITATIVE, SCALE = v)
+                    )
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var statement = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+
+        var manifest = new VisualManifest
+        {
+            Name = "FacetTime",
+            Columns = ["Region", "Day", "Value"],
+            Rows =
+            [
+                ["East", "2026-01-01", "10"],
+                ["East", "2026-01-07", "30"],
+                ["West", "2026-06-01", "20"],
+                ["West", "2026-06-30", "40"]
+            ]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 800, 400));
+
+        Assert.Equal(2, plan.Facets.Length);
+        var eastTime = plan.Facets[0].Scales.Single(s => s.Id == "t");
+        var westTime = plan.Facets[1].Scales.Single(s => s.Id == "t");
+
+        Assert.Empty(eastTime.Categories);
+        Assert.Empty(westTime.Categories);
+        Assert.StartsWith("2026-01-01", PlotPlanResolver.Display(eastTime.Domain[0]));
+        Assert.StartsWith("2026-01-07", PlotPlanResolver.Display(eastTime.Domain[^1]));
+        Assert.StartsWith("2026-06-01", PlotPlanResolver.Display(westTime.Domain[0]));
+        Assert.StartsWith("2026-06-30", PlotPlanResolver.Display(westTime.Domain[^1]));
+        Assert.InRange(eastTime.Ticks.Length, 2, 4);
+        Assert.InRange(westTime.Ticks.Length, 2, 4);
+    }
 }

@@ -525,39 +525,21 @@ public sealed class PlotPlanResolver
             }
             if (scale.Kind == ScaleKind.Time)
             {
-                var timeUnitFormat = scale.TimeUnit?.ToUpperInvariant() switch
+                var temporalInputs = raw.ToList();
+                if (scale.Channel == FieldChannel.X)
                 {
-                    "DAY" => "yyyy-MM-dd",
-                    "WEEK" => "yyyy-MM-dd",
-                    "MONTH" => "yyyy-MM",
-                    "QUARTER" => "yyyy-Q",
-                    "YEAR" => "yyyy",
-                    _ => null
-                };
-                var effectiveTimeFormat = scale.TickFormat ?? timeUnitFormat;
-                var temporalValues = bindings.SelectMany(binding =>
-                {
-                    if (binding.Field is null || !columns.TryGetValue(binding.Field, out var column))
-                        return BindingValues(binding, columns).Select(value => new { Value = value, Display = effectiveTimeFormat != null ? formatter.FormatWithPattern(value, effectiveTimeFormat) : formatter.Format(value, binding.Field) });
-                    return column.Values.Select((value, index) => new
-                    {
-                        Value = value,
-                        Display = effectiveTimeFormat != null
-                            ? formatter.FormatWithPattern(value, effectiveTimeFormat)
-                            : (column.DisplayValues.IsDefaultOrEmpty ? formatter.Format(value, binding.Field) : column.DisplayValues[index] ?? formatter.Format(value, binding.Field))
-                    });
-                })
-                    .Where(item => item.Value.Kind != ChartValueKind.Null)
-                    .GroupBy(item => ValueKey(item.Value), StringComparer.Ordinal)
-                    .Select(group => group.First())
-                    .OrderBy(item => ValueKey(item.Value), StringComparer.Ordinal)
-                    .ToImmutableArray();
-                yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
-                    temporalValues.Select(item => item.Value).ToImmutableArray(),
-                    temporalValues.Select(item => item.Display).ToImmutableArray(),
-                    temporalValues.Select(item => new PlotTick(item.Value, item.Display)).ToImmutableArray(), scale.IncludeZero,
-                    scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding,
-                    scale.TickFormat, scale.TimeUnit);
+                    temporalInputs.AddRange(resolvedLayers
+                        .Where(layer => layer.Style.Any(token =>
+                            token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase) &&
+                            token.Value.Equals("AnnotationPoint", StringComparison.OrdinalIgnoreCase)))
+                        .SelectMany(layer => layer.Data)
+                        .Select(datum => Channel(datum, FieldChannel.X) ?? ChartValue.Null()));
+                }
+                yield return ResolveTimeScale(
+                    scale.Id, scale.Kind, scale.Channel, temporalInputs,
+                    scale.DomainMinimum, scale.DomainMaximum, scale.IncludeZero, scale.Reverse,
+                    scale.MajorTickCount, scale.TickInterval, scale.MinorTicks, scale.LabelRotation,
+                    scale.LabelSkip, scale.OuterPadding, scale.TickFormat, scale.TimeUnit, formatter);
                 continue;
             }
 
@@ -984,7 +966,11 @@ public sealed class PlotPlanResolver
             || layerBindings.Any(binding => binding.Channel is FieldChannel.XOffset or FieldChannel.YOffset)
             || layer.Style.Any(token => token.Name.Equals("preserveRows", StringComparison.OrdinalIgnoreCase)
             && token.Value.Equals("true", StringComparison.OrdinalIgnoreCase));
-        if (!preserveRows && categoryBinding is not null && categoryBinding.SemanticKind != DataSemanticKind.Quantitative &&
+        var xScaleIsContinuous = categoryBinding is not null &&
+            (categoryBinding.SemanticKind is DataSemanticKind.Quantitative or DataSemanticKind.Temporal ||
+             spec.Scales.Any(s => string.Equals(s.Id, categoryBinding.ScaleId, StringComparison.OrdinalIgnoreCase) &&
+                s.Kind is ScaleKind.Linear or ScaleKind.Logarithmic or ScaleKind.Time));
+        if (!preserveRows && categoryBinding is not null && !xScaleIsContinuous &&
             categoryBinding.Field is { } categoryField && columns.TryGetValue(categoryField, out var categoryColumn) && !categories.IsDefaultOrEmpty)
         {
             var measureFields = layerBindings
@@ -2004,16 +1990,13 @@ public sealed class PlotPlanResolver
         }
         if (scale.Kind == ScaleKind.Time)
         {
-            var temporal = bindings.SelectMany(binding => rows.Select(index => BindingValue(binding, columns, index)))
-                .Where(value => value.Kind != ChartValueKind.Null)
-                .GroupBy(ValueKey, StringComparer.Ordinal).Select(group => group.First())
-                .OrderBy(ValueKey, StringComparer.Ordinal).ToImmutableArray();
-            return scale with
-            {
-                Domain = temporal,
-                Categories = temporal.Select(value => formatter.Format(value)).ToImmutableArray(),
-                Ticks = temporal.Select(value => new PlotTick(value, formatter.Format(value))).ToImmutableArray()
-            };
+            var panelIntent = spec.Scales.Single(candidate => candidate.Id.Equals(scale.Id, StringComparison.OrdinalIgnoreCase));
+            var temporalInputs = bindings.SelectMany(binding => rows.Select(index => BindingValue(binding, columns, index)));
+            return ResolveTimeScale(
+                scale.Id, scale.Kind, scale.Channel, temporalInputs,
+                panelIntent.DomainMinimum, panelIntent.DomainMaximum, scale.IncludesZero, scale.Reverse,
+                panelIntent.MajorTickCount, panelIntent.TickInterval, scale.MinorTicks, scale.LabelRotation,
+                scale.LabelSkip, scale.OuterPadding, scale.TickFormat, scale.TimeUnit, formatter);
         }
         var values = bindings.SelectMany(binding => rows.Select(index => Number(BindingValue(binding, columns, index))))
             .Where(value => value.HasValue).Select(value => value!.Value).ToList();
@@ -2337,6 +2320,378 @@ public sealed class PlotPlanResolver
         ChartValueKind.Decimal => value.Decimal,
         _ => null
     };
+
+    private enum TemporalValueShape { None, Date, Time, LocalDateTime, OffsetDateTime }
+
+    internal static decimal? TemporalTicks(ChartValue? value) =>
+        value is not null && TryGetTemporalShape(value, out var ticks, out _) ? (decimal)ticks : null;
+
+    internal static decimal? PositionNumber(ChartValue? value) => value is null
+        ? null
+        : Number(value) ?? TemporalTicks(value);
+
+    private static bool TryGetTemporalShape(ChartValue value, out long ticks, out TemporalValueShape shape)
+    {
+        switch (value.Kind)
+        {
+            case ChartValueKind.Date when value.Date.HasValue:
+                ticks = value.Date.Value.DayNumber * TimeSpan.TicksPerDay;
+                shape = TemporalValueShape.Date;
+                return true;
+            case ChartValueKind.Time when value.Time.HasValue:
+                ticks = value.Time.Value.Ticks;
+                shape = TemporalValueShape.Time;
+                return true;
+            case ChartValueKind.LocalDateTime when value.LocalDateTime.HasValue:
+                ticks = value.LocalDateTime.Value.Ticks;
+                shape = TemporalValueShape.LocalDateTime;
+                return true;
+            case ChartValueKind.OffsetDateTime when value.OffsetDateTime.HasValue:
+                ticks = value.OffsetDateTime.Value.UtcTicks;
+                shape = TemporalValueShape.OffsetDateTime;
+                return true;
+            case ChartValueKind.Text when !string.IsNullOrWhiteSpace(value.Text):
+                {
+                    var text = value.Text.Trim();
+                    if (DateOnly.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var dateOnly))
+                    {
+                        ticks = dateOnly.DayNumber * TimeSpan.TicksPerDay;
+                        shape = TemporalValueShape.Date;
+                        return true;
+                    }
+                    if (TimeOnly.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var timeOnly))
+                    {
+                        ticks = timeOnly.Ticks;
+                        shape = TemporalValueShape.Time;
+                        return true;
+                    }
+                    if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces, out var dt))
+                    {
+                        if (dt.Kind == DateTimeKind.Unspecified)
+                        {
+                            ticks = dt.Ticks;
+                            shape = TemporalValueShape.LocalDateTime;
+                            return true;
+                        }
+                        ticks = dt.ToUniversalTime().Ticks;
+                        shape = TemporalValueShape.OffsetDateTime;
+                        return true;
+                    }
+                    if (DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AllowWhiteSpaces, out var dto))
+                    {
+                        ticks = dto.UtcTicks;
+                        shape = TemporalValueShape.OffsetDateTime;
+                        return true;
+                    }
+                    ticks = 0;
+                    shape = TemporalValueShape.None;
+                    return false;
+                }
+            default:
+                ticks = 0;
+                shape = TemporalValueShape.None;
+                return false;
+        }
+    }
+
+    private static ResolvedScale ResolveTimeScale(
+        string scaleId,
+        ScaleKind kind,
+        FieldChannel channel,
+        IEnumerable<ChartValue> rawValues,
+        ChartValue? domainMinimum,
+        ChartValue? domainMaximum,
+        bool includeZero,
+        bool reverse,
+        int? majorTickCount,
+        decimal? tickInterval,
+        bool minorTicks,
+        string? labelRotation,
+        int? labelSkip,
+        decimal outerPadding,
+        string? tickFormat,
+        string? timeUnit,
+        ChartValueFormatter formatter)
+    {
+        if (majorTickCount is < 2 or > 100)
+            throw new InvalidOperationException($"MAJOR_TICK_COUNT for scale '{scaleId}' must be between 2 and 100.");
+        if (tickInterval is <= 0m)
+            throw new InvalidOperationException($"TICK_INTERVAL for scale '{scaleId}' must be greater than zero.");
+
+        var parsedTicks = new List<long>();
+        bool hasDate = false, hasTime = false, hasLocal = false, hasOffset = false;
+
+        void RecordShape(TemporalValueShape shape)
+        {
+            switch (shape)
+            {
+                case TemporalValueShape.Date: hasDate = true; break;
+                case TemporalValueShape.Time: hasTime = true; break;
+                case TemporalValueShape.LocalDateTime: hasLocal = true; break;
+                case TemporalValueShape.OffsetDateTime: hasOffset = true; break;
+            }
+        }
+
+        foreach (var item in rawValues)
+        {
+            if (item.Kind == ChartValueKind.Null) continue;
+            if (TryGetTemporalShape(item, out var itemTicks, out var shape))
+            {
+                parsedTicks.Add(itemTicks);
+                RecordShape(shape);
+            }
+        }
+
+        long? minOverride = null;
+        if (domainMinimum is { Kind: not ChartValueKind.Null })
+        {
+            if (!TryGetTemporalShape(domainMinimum, out var minTickValue, out var minShape))
+                throw new InvalidOperationException($"MIN bound '{Display(domainMinimum)}' for temporal scale '{scaleId}' must be a valid date or time.");
+            minOverride = minTickValue;
+            RecordShape(minShape);
+        }
+
+        long? maxOverride = null;
+        if (domainMaximum is { Kind: not ChartValueKind.Null })
+        {
+            if (!TryGetTemporalShape(domainMaximum, out var maxTickValue, out var maxShape))
+                throw new InvalidOperationException($"MAX bound '{Display(domainMaximum)}' for temporal scale '{scaleId}' must be a valid date or time.");
+            maxOverride = maxTickValue;
+            RecordShape(maxShape);
+        }
+
+        if (minOverride.HasValue && maxOverride.HasValue && minOverride.Value > maxOverride.Value)
+            throw new InvalidOperationException($"MIN bound for scale '{scaleId}' cannot exceed MAX bound.");
+
+        if (parsedTicks.Count == 0 && !minOverride.HasValue && !maxOverride.HasValue)
+        {
+            return new ResolvedScale(scaleId, channel, kind, [], [], [], includeZero,
+                reverse, minorTicks, labelRotation, labelSkip, outerPadding, tickFormat, timeUnit);
+        }
+
+        var minTicks = minOverride ?? (parsedTicks.Count > 0 ? parsedTicks.Min() : maxOverride!.Value);
+        var maxTicks = maxOverride ?? (parsedTicks.Count > 0 ? parsedTicks.Max() : minOverride!.Value);
+        if (minTicks > maxTicks) (minTicks, maxTicks) = (maxTicks, minTicks);
+
+        var isTimeOnly = hasTime && !hasDate && !hasLocal && !hasOffset;
+        var isDateOnly = hasDate && !hasTime && !hasLocal && !hasOffset;
+
+        if (minTicks == maxTicks)
+        {
+            if (isTimeOnly)
+            {
+                if (minTicks + TimeSpan.TicksPerHour <= TimeSpan.TicksPerDay - 1L)
+                    maxTicks = minTicks + TimeSpan.TicksPerHour;
+                else
+                    minTicks = Math.Max(0L, maxTicks - TimeSpan.TicksPerHour);
+            }
+            else
+            {
+                maxTicks = minTicks + TimeSpan.TicksPerDay;
+            }
+        }
+
+        ChartValue ToChartValue(long ticks)
+        {
+            if (isTimeOnly)
+                return ChartValue.From(new TimeOnly(Math.Clamp(ticks, 0L, TimeSpan.TicksPerDay - 1L)));
+            if (hasOffset)
+                return ChartValue.From(new DateTimeOffset(ticks, TimeSpan.Zero));
+            if (isDateOnly && ticks % TimeSpan.TicksPerDay == 0L)
+                return ChartValue.From(DateOnly.FromDayNumber((int)(ticks / TimeSpan.TicksPerDay)));
+            return ChartValue.FromLocal(new DateTime(ticks, DateTimeKind.Unspecified));
+        }
+
+        var normalizedUnit = timeUnit?.Trim().ToUpperInvariant();
+        var unitFormat = normalizedUnit switch
+        {
+            "DAY" => "yyyy-MM-dd",
+            "WEEK" => "yyyy-MM-dd",
+            "MONTH" => "yyyy-MM",
+            "QUARTER" => "QUARTER",
+            "YEAR" => "yyyy",
+            _ => null
+        };
+
+        string FormatTickLabel(ChartValue tickValue, long ticks)
+        {
+            if (tickFormat is not null)
+                return formatter.FormatWithPattern(tickValue, tickFormat);
+            if (unitFormat == "QUARTER")
+            {
+                var dt = new DateTime(ticks, DateTimeKind.Unspecified);
+                return $"{dt.Year}-Q{(dt.Month - 1) / 3 + 1}";
+            }
+            if (unitFormat is not null)
+                return formatter.FormatWithPattern(tickValue, unitFormat);
+            return formatter.Format(tickValue);
+        }
+
+        List<long> GenerateFixedStepTicks(long min, long max, long stepTicks, bool alignToDay)
+        {
+            var result = new List<long>();
+            if (stepTicks <= 0L) return result;
+            long current;
+            if (alignToDay && !isTimeOnly && stepTicks % TimeSpan.TicksPerDay == 0L)
+            {
+                var startDay = new DateTime(min, DateTimeKind.Unspecified).Date;
+                if (startDay.Ticks < min) startDay = startDay.AddDays(1);
+                current = startDay.Ticks;
+            }
+            else
+            {
+                var rem = min % stepTicks;
+                current = rem == 0L ? min : min + (stepTicks - rem);
+            }
+            while (current <= max && result.Count < 100)
+            {
+                result.Add(current);
+                if (max - current < stepTicks) break;
+                current += stepTicks;
+            }
+            return result;
+        }
+
+        List<long> GenerateCalendarTicks(long min, long max, int monthsStep)
+        {
+            var result = new List<long>();
+            if (monthsStep <= 0) return result;
+            var startDt = new DateTime(min, DateTimeKind.Unspecified);
+            var startMonth = monthsStep >= 12 ? 1 : ((startDt.Month - 1) / monthsStep) * monthsStep + 1;
+            var yearsStep = monthsStep >= 12 ? monthsStep / 12 : 1;
+            var startYear = yearsStep > 1 ? Math.Max(1, (startDt.Year / yearsStep) * yearsStep) : startDt.Year;
+            var current = new DateTime(startYear, startMonth, 1, 0, 0, 0, DateTimeKind.Unspecified);
+            while (current.Ticks < min)
+            {
+                if (current > DateTime.MaxValue.AddMonths(-monthsStep)) return result;
+                current = current.AddMonths(monthsStep);
+            }
+            while (current.Ticks <= max && result.Count < 100)
+            {
+                result.Add(current.Ticks);
+                if (current > DateTime.MaxValue.AddMonths(-monthsStep)) break;
+                current = current.AddMonths(monthsStep);
+            }
+            return result;
+        }
+
+        List<long> tickPositions;
+        if (tickInterval is { } interval)
+        {
+            tickPositions = normalizedUnit switch
+            {
+                "YEAR" => GenerateCalendarTicks(minTicks, maxTicks, Math.Max(1, (int)Math.Round(interval)) * 12),
+                "QUARTER" => GenerateCalendarTicks(minTicks, maxTicks, Math.Max(1, (int)Math.Round(interval)) * 3),
+                "MONTH" => GenerateCalendarTicks(minTicks, maxTicks, Math.Max(1, (int)Math.Round(interval))),
+                "WEEK" => GenerateFixedStepTicks(minTicks, maxTicks, Math.Max(1L, (long)Math.Round((double)interval * 7d * TimeSpan.TicksPerDay)), alignToDay: true),
+                "DAY" => GenerateFixedStepTicks(minTicks, maxTicks, Math.Max(1L, (long)Math.Round((double)interval * TimeSpan.TicksPerDay)), alignToDay: true),
+                _ when isTimeOnly => GenerateFixedStepTicks(
+                    minTicks, maxTicks,
+                    (maxTicks - minTicks) / ((decimal)interval * TimeSpan.TicksPerHour) >= 1m
+                        ? Math.Max(1L, (long)Math.Round((double)interval * TimeSpan.TicksPerHour))
+                        : (maxTicks - minTicks) / ((decimal)interval * TimeSpan.TicksPerMinute) >= 1m
+                            ? Math.Max(1L, (long)Math.Round((double)interval * TimeSpan.TicksPerMinute))
+                            : Math.Max(1L, (long)Math.Round((double)interval * TimeSpan.TicksPerSecond)),
+                    alignToDay: false),
+                _ => GenerateFixedStepTicks(minTicks, maxTicks, Math.Max(1L, (long)Math.Round((double)interval * TimeSpan.TicksPerDay)), alignToDay: true)
+            };
+            if (tickPositions.Count == 0) tickPositions = [minTicks, maxTicks];
+        }
+        else
+        {
+            var targetCount = majorTickCount ?? 5;
+            var span = maxTicks - minTicks;
+            var candidates = new List<List<long>>();
+            var minStepFloor = span / 120L;
+
+            if (!isDateOnly && normalizedUnit is null or "AUTO")
+            {
+                long[] subDaySteps =
+                [
+                    TimeSpan.TicksPerSecond,
+                    5L * TimeSpan.TicksPerSecond,
+                    15L * TimeSpan.TicksPerSecond,
+                    30L * TimeSpan.TicksPerSecond,
+                    TimeSpan.TicksPerMinute,
+                    2L * TimeSpan.TicksPerMinute,
+                    5L * TimeSpan.TicksPerMinute,
+                    10L * TimeSpan.TicksPerMinute,
+                    15L * TimeSpan.TicksPerMinute,
+                    30L * TimeSpan.TicksPerMinute,
+                    TimeSpan.TicksPerHour,
+                    2L * TimeSpan.TicksPerHour,
+                    3L * TimeSpan.TicksPerHour,
+                    4L * TimeSpan.TicksPerHour,
+                    6L * TimeSpan.TicksPerHour,
+                    12L * TimeSpan.TicksPerHour
+                ];
+                foreach (var step in subDaySteps)
+                {
+                    if (step < minStepFloor || step > span) continue;
+                    candidates.Add(GenerateFixedStepTicks(minTicks, maxTicks, step, alignToDay: false));
+                }
+            }
+
+            if (!isTimeOnly && normalizedUnit is null or "AUTO" or "DAY" or "WEEK")
+            {
+                int[] daySteps = normalizedUnit == "WEEK" ? [7, 14, 28] : [1, 2, 3, 4, 5, 7, 10, 14];
+                foreach (var days in daySteps)
+                {
+                    var step = days * TimeSpan.TicksPerDay;
+                    if (step < minStepFloor || step > span) continue;
+                    candidates.Add(GenerateFixedStepTicks(minTicks, maxTicks, step, alignToDay: true));
+                }
+            }
+
+            if (!isTimeOnly && normalizedUnit is not "DAY" and not "WEEK")
+            {
+                int[] monthSteps = normalizedUnit switch
+                {
+                    "YEAR" => [12, 24, 60, 120, 240, 600, 1200],
+                    "QUARTER" => [3, 6, 12, 24, 60, 120],
+                    "MONTH" => [1, 2, 3, 6, 12, 24, 60, 120],
+                    _ => [1, 2, 3, 6, 12, 24, 60, 120, 240, 600, 1200]
+                };
+                foreach (var months in monthSteps)
+                    candidates.Add(GenerateCalendarTicks(minTicks, maxTicks, months));
+            }
+
+            var best = candidates
+                .Where(list => list.Count >= 2 && list.Count <= Math.Max(2, targetCount + 2))
+                .OrderBy(list => Math.Abs(list.Count - targetCount))
+                .ThenByDescending(list => list.Count)
+                .FirstOrDefault();
+
+            if (best is not null)
+            {
+                tickPositions = best;
+            }
+            else
+            {
+                var count = Math.Clamp(targetCount, 2, 100);
+                tickPositions = Enumerable.Range(0, count)
+                    .Select(index => minTicks + (long)Math.Round((decimal)span * index / (count - 1m)))
+                    .Distinct()
+                    .ToList();
+                if (tickPositions.Count < 2) tickPositions = [minTicks, maxTicks];
+            }
+        }
+
+        var ticks = tickPositions
+            .Select(tick =>
+            {
+                var value = ToChartValue(tick);
+                return new PlotTick(value, FormatTickLabel(value, tick));
+            })
+            .ToImmutableArray();
+
+        return new ResolvedScale(
+            scaleId, channel, kind,
+            [ToChartValue(minTicks), ToChartValue(maxTicks)],
+            [],
+            ticks,
+            includeZero, reverse, minorTicks, labelRotation, labelSkip, outerPadding, tickFormat, timeUnit);
+    }
 
     internal static string Display(ChartValue value) => value.Kind switch
     {

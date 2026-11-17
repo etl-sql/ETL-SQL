@@ -69,28 +69,10 @@
         },
         {
           "kind": "offsetDateTime",
-          "offsetDateTime": "2026-01-05T00:00:00+00:00"
-        },
-        {
-          "kind": "offsetDateTime",
-          "offsetDateTime": "2026-01-06T00:00:00+00:00"
-        },
-        {
-          "kind": "offsetDateTime",
-          "offsetDateTime": "2026-01-12T00:00:00+00:00"
-        },
-        {
-          "kind": "offsetDateTime",
           "offsetDateTime": "2026-01-13T00:00:00+00:00"
         }
       ],
-      "categories": [
-        "2026-01-01",
-        "2026-01-05",
-        "2026-01-06",
-        "2026-01-12",
-        "2026-01-13"
-      ],
+      "categories": [],
       "ticks": [
         {
           "value": {
@@ -102,23 +84,23 @@
         {
           "value": {
             "kind": "offsetDateTime",
-            "offsetDateTime": "2026-01-05T00:00:00+00:00"
+            "offsetDateTime": "2026-01-04T00:00:00+00:00"
           },
-          "label": "2026-01-05"
+          "label": "2026-01-04"
         },
         {
           "value": {
             "kind": "offsetDateTime",
-            "offsetDateTime": "2026-01-06T00:00:00+00:00"
+            "offsetDateTime": "2026-01-07T00:00:00+00:00"
           },
-          "label": "2026-01-06"
+          "label": "2026-01-07"
         },
         {
           "value": {
             "kind": "offsetDateTime",
-            "offsetDateTime": "2026-01-12T00:00:00+00:00"
+            "offsetDateTime": "2026-01-10T00:00:00+00:00"
           },
-          "label": "2026-01-12"
+          "label": "2026-01-10"
         },
         {
           "value": {

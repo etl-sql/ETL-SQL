@@ -107,9 +107,9 @@ internal static class CartesianPlotLayout
             if (d.IsGap) continue;
             var v = PlotPlanResolver.Number(Channel(d, FieldChannel.Y) ?? Channel(d, FieldChannel.Y2) ?? ChartValue.Null());
             if (!v.HasValue) continue;
-            if (xScale is not null && xScale.Kind is ScaleKind.Linear or ScaleKind.Logarithmic)
+            if (xScale is not null && xScale.Kind is ScaleKind.Linear or ScaleKind.Logarithmic or ScaleKind.Time)
             {
-                var xv = PlotPlanResolver.Number(Channel(d, FieldChannel.X) ?? ChartValue.Null());
+                var xv = PlotPlanResolver.PositionNumber(Channel(d, FieldChannel.X));
                 if (!xv.HasValue) continue;
             }
             return true;
