@@ -107,7 +107,7 @@ public class ForeachStatementHandler(IBufferManager bufferManager) : IStatementH
         if (ds is not IDatabaseSource db || !db.SupportsSqlPushdown) return false;
 
         // Request a streaming cursor slot from the BufferManager
-        using (await _bufferManager.AcquireCursorAsync(context.SessionId ?? "DEFAULT", owner: this))
+        using (await PipelineCursorScope.AcquireCursorAsync(_bufferManager, context.SessionId ?? "DEFAULT", context.CancellationToken, owner: this))
         {
             if (context.IsVerbose)
                 context.Log($"Starting FAST-PATH Streaming FOREACH for {sel.FromTable.TableName} on {sel.FromTable.ConnectionName}");

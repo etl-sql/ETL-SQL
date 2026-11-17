@@ -33,6 +33,10 @@ namespace ETL_SQL.Orchestrator.Execution
         private int _activeCursors;
         private int _queuedCursors;
 
+        internal int ActiveCursors => Volatile.Read(ref _activeCursors);
+        internal int QueuedCursors => Volatile.Read(ref _queuedCursors);
+        internal int AvailableCursorSlots => _cursorSemaphore.CurrentCount;
+
         /// <summary>Tracks active reservations per session to prevent 'Zombie References'.</summary>
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, IResourceReservation>> _sessionReservations = new();
 

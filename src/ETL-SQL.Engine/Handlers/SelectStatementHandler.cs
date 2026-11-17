@@ -7,6 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Planning;
 using ETL_SQL.Core.Quality;
@@ -194,6 +195,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
     /// <summary>Evaluates a query statement and returns a stream of row batches.</summary>
     public async IAsyncEnumerable<DataTable> EvaluateQuery(Statement query, IExecutionContext context)
     {
+        using var pipelineCursorScope = PipelineCursorScope.EnterDeferred();
         // The CTEs live only while this query is read: the scope restores what their names meant before.
         CteScope? cteScope = null;
         if (query.Ctes != null && query.Ctes.Count > 0) cteScope = await _cteManager.RegisterCtes(query.Ctes, context);
@@ -222,6 +224,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
     /// </summary>
     public async IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt, IExecutionContext context)
     {
+        using var pipelineCursorScope = PipelineCursorScope.EnterDeferred();
         WatermarkConfig? wmConfig = null;
         if (stmt.FromTable != null && WatermarkManager.HasWatermark(stmt.FromTable))
         {

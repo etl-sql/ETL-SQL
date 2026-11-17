@@ -1,11 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Engines;
 
@@ -20,11 +24,13 @@ internal sealed class ExternalDistinctEngine
     private const long MaxFanOutSampleBytes = 16L * 1024 * 1024;
 
     private readonly IExecutionContext _context;
+    private readonly IBufferManager? _bufferManager;
     private int _partitionCount;
 
     public ExternalDistinctEngine(IExecutionContext context)
     {
         _context = context;
+        _bufferManager = context.ServiceProvider?.GetService<IBufferManager>();
         _partitionCount = Math.Max(1, context.ExternalHashPartitions);
     }
 
@@ -32,11 +38,14 @@ internal sealed class ExternalDistinctEngine
     internal long ColumnarBuildRows { get; private set; }
     internal long ColumnarRepartitionRows { get; private set; }
 
-    public async IAsyncEnumerable<Row> ApplyAsync(IAsyncEnumerable<Row> source)
+    public async IAsyncEnumerable<Row> ApplyAsync(
+        IAsyncEnumerable<Row> source,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        using var linkedCts = PipelineCursorScope.LinkCancellationTokens(_context.CancellationToken, cancellationToken, out var effectiveCancellationToken);
         var threshold = Math.Max(1, _context.JoinSpillThreshold);
         var prefix = new List<Row>(Math.Min(threshold, 4096));
-        await using var enumerator = source.GetAsyncEnumerator();
+        await using var enumerator = source.GetAsyncEnumerator(effectiveCancellationToken);
         while (prefix.Count < threshold && await enumerator.MoveNextAsync())
             prefix.Add(enumerator.Current);
 
@@ -48,6 +57,11 @@ internal sealed class ExternalDistinctEngine
             yield break;
         }
 
+        using var cursor = await PipelineCursorScope.AcquireCursorAsync(
+            _bufferManager,
+            _context.SessionId ?? "DEFAULT",
+            effectiveCancellationToken,
+            owner: this);
         ConfigurePartitionCount(prefix);
 
         var tempFiles = new List<string>();

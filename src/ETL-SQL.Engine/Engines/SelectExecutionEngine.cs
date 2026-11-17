@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
@@ -45,6 +46,7 @@ public class SelectExecutionEngine
         List<SelectColumn> finalColumns,
         List<string> colNames)
     {
+        using var pipelineCursorScope = PipelineCursorScope.EnterDeferred();
         // Hold a grant-pool lease for the lifetime of the pipeline; disposed when the consumer
         // finishes or abandons enumeration, releasing this query's reserved footprint.
         using var lease = _context.MemoryArbiter.AcquireLease();

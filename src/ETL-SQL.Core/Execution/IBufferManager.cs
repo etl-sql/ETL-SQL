@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 
@@ -16,10 +17,30 @@ public interface IBufferManager
     Task<IDisposable> ReserveMemoryAsync(string sessionId, long bytes, bool isOverride = false, object? owner = null);
 
     /// <summary>
+    /// Requests a specific amount of memory with cancellation support.
+    /// Returns a disposable that releases the memory when disposed.
+    /// </summary>
+    Task<IDisposable> ReserveMemoryAsync(string sessionId, long bytes, CancellationToken cancellationToken, bool isOverride = false, object? owner = null)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ReserveMemoryAsync(sessionId, bytes, isOverride, owner);
+    }
+
+    /// <summary>
     /// Requests a streaming cursor slot.
     /// Returns a disposable that releases the slot when disposed.
     /// </summary>
     Task<IDisposable> AcquireCursorAsync(string sessionId, bool isOverride = false, object? owner = null);
+
+    /// <summary>
+    /// Requests a streaming cursor slot with cancellation support.
+    /// Returns a disposable that releases the slot when disposed.
+    /// </summary>
+    Task<IDisposable> AcquireCursorAsync(string sessionId, CancellationToken cancellationToken, bool isOverride = false, object? owner = null)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return AcquireCursorAsync(sessionId, isOverride, owner);
+    }
 
     /// <summary>
     /// Forcefully releases all memory and cursor reservations associated with a session.

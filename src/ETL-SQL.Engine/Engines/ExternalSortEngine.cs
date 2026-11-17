@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Data;
@@ -74,32 +76,40 @@ public class ExternalSortEngine
     public IAsyncEnumerable<Row> SortStreamAsync(
         IAsyncEnumerable<Row> inputStream,
         List<OrderByClause> orderBy,
-        Func<Row, Task<object?[]>>? extractKeysAsync = null) =>
-        SortStreamCoreAsync(inputStream, orderBy, extractKeysAsync, null, null);
+        Func<Row, Task<object?[]>>? extractKeysAsync = null,
+        CancellationToken cancellationToken = default) =>
+        SortStreamCoreAsync(inputStream, orderBy, extractKeysAsync, null, null, cancellationToken);
 
     internal IAsyncEnumerable<Row> SortStreamWithPrefixAsync(
         IAsyncEnumerable<Row> inputStream,
         List<OrderByClause> orderBy,
         Func<Row, Task<object?[]>> extractKeysAsync,
         List<(Row Row, object?[] Keys)> prefix,
-        IMemoryGrantLease prefixLease) =>
-        SortStreamCoreAsync(inputStream, orderBy, extractKeysAsync, prefix, prefixLease);
+        IMemoryGrantLease prefixLease,
+        CancellationToken cancellationToken = default) =>
+        SortStreamCoreAsync(inputStream, orderBy, extractKeysAsync, prefix, prefixLease, cancellationToken);
 
     private async IAsyncEnumerable<Row> SortStreamCoreAsync(
         IAsyncEnumerable<Row> inputStream,
         List<OrderByClause> orderBy,
         Func<Row, Task<object?[]>>? extractKeysAsync,
         List<(Row Row, object?[] Keys)>? prefix,
-        IMemoryGrantLease? prefixLease)
+        IMemoryGrantLease? prefixLease,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         using var retainedLease = prefixLease;
+        using var linkedCts = PipelineCursorScope.LinkCancellationTokens(_context.CancellationToken, cancellationToken, out var effectiveCancellationToken);
         PlanDecisionRecorder.Record(_context, "external-sort", "ExternalSort",
             PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
             "External sort path accepted.",
             ("chunkSizeRows", ChunkSize.ToString()),
             ("memoryCeilingBytes", MemoryGovernor.Ceiling(_context).ToString()));
 
-        using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
+        using var cursor = await PipelineCursorScope.AcquireCursorAsync(
+            _bufferManager,
+            _context.SessionId ?? "DEFAULT",
+            effectiveCancellationToken,
+            owner: this);
         var arbiter = _context.MemoryArbiter ?? MemoryGrantArbiter.Shared;
         var chunkLease = arbiter.AcquireLease();
         var chunkPaths = new List<string>();
@@ -151,16 +161,16 @@ public class ExternalSortEngine
             // more input, preserving the evaluated keys and releasing its row references.
             if (currentChunk.Count > 0)
             {
-                _context.CancellationToken.ThrowIfCancellationRequested();
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 foreach (var entry in currentChunk)
                     for (int i = 0; i < entry.Keys.Length; i++)
                         entry.Keys[i] = CompoundKey.NormalizeValue(entry.Keys[i]);
                 await SpillCurrentChunkAsync();
                 retainedLease?.Dispose();
             }
-            await foreach (var row in inputStream)
+            await foreach (var row in inputStream.WithCancellation(effectiveCancellationToken))
             {
-                _context.CancellationToken.ThrowIfCancellationRequested();
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 var keys = new object?[orderBy.Count];
                 var extracted = extractKeysAsync != null ? await extractKeysAsync(row) : null;
                 for (int i = 0; i < orderBy.Count; i++)
@@ -186,7 +196,7 @@ public class ExternalSortEngine
                 {
                     foreach (var entry in currentChunk)
                     {
-                        _context.CancellationToken.ThrowIfCancellationRequested();
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
                         yield return entry.Row;
                     }
 
@@ -244,7 +254,7 @@ public class ExternalSortEngine
 
             // Final pass: merge the remaining (<= MaxMergeFanIn) chunks and stream rows out.
             MergePassCount++;
-            await foreach (var entry in MergeChunksAsync(chunkPaths, keyColumnNames, Compare))
+            await foreach (var entry in MergeChunksAsync(chunkPaths, keyColumnNames, Compare).WithCancellation(effectiveCancellationToken))
                 yield return entry.Row;
         }
         finally

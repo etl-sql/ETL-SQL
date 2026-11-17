@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -78,9 +80,19 @@ public class ExternalWindowEngine
         public WindowGroup(WindowSignature sig) => Signature = sig;
     }
 
-    public async IAsyncEnumerable<Row> ApplyWindowFunctionsExternal(IAsyncEnumerable<Row> inputStream, SelectStatement stmt, long? knownRowCount = null, long? knownInputBytes = null)
+    public async IAsyncEnumerable<Row> ApplyWindowFunctionsExternal(
+        IAsyncEnumerable<Row> inputStream,
+        SelectStatement stmt,
+        long? knownRowCount = null,
+        long? knownInputBytes = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
+        using var linkedCts = PipelineCursorScope.LinkCancellationTokens(_context.CancellationToken, cancellationToken, out var effectiveCancellationToken);
+        using var cursor = await PipelineCursorScope.AcquireCursorAsync(
+            _bufferManager,
+            _context.SessionId ?? "DEFAULT",
+            effectiveCancellationToken,
+            owner: this);
         var allWindowCalls = stmt.Columns
             .Where(c => WindowEngine.ContainsWindowFunction(c.Expression))
             .SelectMany(c => WindowEngine.CollectWindowCalls(c.Expression))
@@ -89,7 +101,7 @@ public class ExternalWindowEngine
             .ToList();
         if (allWindowCalls.Count == 0)
         {
-            await foreach (var row in inputStream) yield return row;
+            await foreach (var row in inputStream.WithCancellation(effectiveCancellationToken)) yield return row;
             yield break;
         }
 

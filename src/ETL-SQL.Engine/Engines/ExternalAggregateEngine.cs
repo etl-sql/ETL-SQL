@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -51,8 +53,18 @@ public class ExternalAggregateEngine
     }
 
     /// <summary>Applies aggregation by partitioning the stream into disk files and processing each partition sequentially.</summary>
-    public async IAsyncEnumerable<Row> ApplyAggregationExternal(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null, long? knownRowCount = null, long? knownInputBytes = null)
+    public async IAsyncEnumerable<Row> ApplyAggregationExternal(
+        IAsyncEnumerable<Row> inputStream,
+        List<Expression>? groupBy,
+        List<SelectColumn> finalColumns,
+        List<string> colNames,
+        Expression? havingClause = null,
+        GroupingSetClause? groupingSet = null,
+        long? knownRowCount = null,
+        long? knownInputBytes = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        using var linkedCts = PipelineCursorScope.LinkCancellationTokens(_context.CancellationToken, cancellationToken, out var effectiveCancellationToken);
         PlanDecisionRecorder.Record(_context, "external-aggregate", "ExternalAggregate",
             PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
             "External aggregate path accepted.",
@@ -61,7 +73,11 @@ public class ExternalAggregateEngine
             ("knownInputBytes", knownInputBytes?.ToString()),
             ("memoryCeilingBytes", MemoryGovernor.Ceiling(_context).ToString()));
 
-        using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
+        using var cursor = await PipelineCursorScope.AcquireCursorAsync(
+            _bufferManager,
+            _context.SessionId ?? "DEFAULT",
+            effectiveCancellationToken,
+            owner: this);
         bool yieldedAny = false;
         string[]? partitionPaths = null;
         long[]? partitionRowCounts = null;

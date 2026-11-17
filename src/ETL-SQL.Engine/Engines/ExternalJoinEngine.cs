@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Data;
@@ -49,13 +51,26 @@ public class ExternalJoinEngine
     internal OuterJoinShape Shape { get; init; } = new();
 
     /// <summary>Performs an external hash join by partitioning both left and right streams to disk before join processing.</summary>
-    public async IAsyncEnumerable<Row> ApplyHashJoinExternal(IAsyncEnumerable<Row> leftStream, IAsyncEnumerable<Row> rightStream, JoinClause join, List<string> leftKeys, List<string> rightKeys, long? knownBuildRowCount = null, long? knownBuildBytes = null)
+    public async IAsyncEnumerable<Row> ApplyHashJoinExternal(
+        IAsyncEnumerable<Row> leftStream,
+        IAsyncEnumerable<Row> rightStream,
+        JoinClause join,
+        List<string> leftKeys,
+        List<string> rightKeys,
+        long? knownBuildRowCount = null,
+        long? knownBuildBytes = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
+        using var linkedCts = PipelineCursorScope.LinkCancellationTokens(_context.CancellationToken, cancellationToken, out var effectiveCancellationToken);
+        using var cursor = await PipelineCursorScope.AcquireCursorAsync(
+            _bufferManager,
+            _context.SessionId ?? "DEFAULT",
+            effectiveCancellationToken,
+            owner: this);
         var tempFiles = new List<string>();
         try
         {
-            await using var rightEnumerator = rightStream.GetAsyncEnumerator(_context.CancellationToken);
+            await using var rightEnumerator = rightStream.GetAsyncEnumerator(effectiveCancellationToken);
             var rightSample = new List<Row>(MaxFanOutSampleRows);
             long sampledBytes = 0;
             while (rightSample.Count < MaxFanOutSampleRows
