@@ -14,6 +14,7 @@ public sealed class GrammarOfGraphicsContractTests
         var value = GrammarOfGraphicsContractFixtures.ChartSpec();
         var json = ChartContractSerializer.Serialize(value);
 
+        Goldens.ReportingGoldenHarness.AssertMatchesSnapshot("contracts/chart-spec.v2.json", json);
         Assert.Equal("5e2806d46818b8a16a4d2d5ee46446e5e68f49ebc2d9e09d7fc30de0cc41ff90", Fingerprint(json));
         Assert.Equal(json, ChartContractSerializer.Serialize(ChartContractSerializer.DeserializeChartSpec(json)));
     }
@@ -25,6 +26,7 @@ public sealed class GrammarOfGraphicsContractTests
         var json = ChartContractSerializer.Serialize(value);
         var roundTrip = ChartContractSerializer.DeserializeChartData(json);
 
+        Goldens.ReportingGoldenHarness.AssertMatchesSnapshot("contracts/chart-data.v2.json", json);
         Assert.Equal("d5a71c729f99833df2597784c7f33bd3f71b1b0c87615c2a09ccb4da522bbed7", Fingerprint(json));
         Assert.Equal(json, ChartContractSerializer.Serialize(roundTrip));
         Assert.Equal(ChartValueKind.Decimal, roundTrip.Columns.Single(column => column.Name == "revenue").ValueKind);
@@ -40,6 +42,7 @@ public sealed class GrammarOfGraphicsContractTests
         var value = GrammarOfGraphicsContractFixtures.PlotPlan();
         var json = ChartContractSerializer.Serialize(value);
 
+        Goldens.ReportingGoldenHarness.AssertMatchesSnapshot("contracts/plot-plan.v3.json", json);
         Assert.Equal("1e5a2d959955bbb62e623d67aaf6bf7cd5b17e03760d9dd9c22b4d95d806b0bd", Fingerprint(json));
         Assert.Equal(json, ChartContractSerializer.Serialize(ChartContractSerializer.DeserializePlotPlan(json)));
         Assert.Equal(["North", "South"], value.Series.Select(series => series.Key));

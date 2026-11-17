@@ -2371,6 +2371,7 @@ public static class AstSerializer
         if (!string.IsNullOrWhiteSpace(overlay.ConfidenceLowField)) options.Add($"CONFIDENCE_LOW = {overlay.ConfidenceLowField}");
         if (!string.IsNullOrWhiteSpace(overlay.ConfidenceHighField)) options.Add($"CONFIDENCE_HIGH = {overlay.ConfidenceHighField}");
         if (!string.IsNullOrWhiteSpace(overlay.AnomalyField)) options.Add($"ANOMALY = {overlay.AnomalyField}");
+        if (!string.IsNullOrWhiteSpace(overlay.SeriesName)) options.Add($"SERIES = {Quote(overlay.SeriesName)}");
         if (!string.IsNullOrWhiteSpace(overlay.Color)) options.Add($"COLOR = {Quote(overlay.Color)}");
         if (!string.IsNullOrWhiteSpace(overlay.Label)) options.Add($"LABEL = {Quote(overlay.Label)}");
         return $"{type} AS {overlay.LineStyle.ToString().ToUpperInvariant()}"

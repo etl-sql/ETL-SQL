@@ -15,7 +15,7 @@ linked `ROADMAP.md` entry.
 | Tier | What is in it |
 | :--- | :--- |
 | [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Release follow-ups, merge gates, the script and test review, caller identity, local vault, `TRANSFORM` correctness, archives, database docs, the New Job bundle target |
-| [Tier 2 — next](#tier-2--next) | PR test lane, resource-control bypasses, overlay correctness, Orchestrator cohesion, MSI first slices, fast pre-push |
+| [Tier 2 — next](#tier-2--next) | PR test lane, resource-control bypasses, Orchestrator cohesion, MSI first slices, fast pre-push |
 | [Tier 3 — if time allows](#tier-3--if-time-allows) | Spill framing and performance, reporting authoring parity and golden fixtures, Orchestrator console completion, remaining MSI slices, performance certification redesign |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -117,19 +117,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
 | SP14 | **Prevent cursor hold-and-wait in nested pipelines.** Make cursor admission safe for complete operator pipelines so an outer window/sort/join cannot hold the last slot while waiting on its upstream operator. Expose and propagate cancellation through `IBufferManager` and all engine callers. Regress nested sorts and window-to-sort execution with one slot, competing pipelines at capacity, cancellation while queued, and restoration of all permits after failure. | — | M |
 | SP15 | **Apply one aggregate memory contract across execution paths.** Honor the effective operator ceiling and shared reservations in ordinary aggregation, native-to-row fallback, and grouping sets. Account for retained group state and result materialization; repartition where possible and enforce the configured policy when no bounded path exists. Regress high cardinality, an operator grant smaller than the process grant, native rejection/fallback, and grouping sets; verify exact aggregate results and reservation release. | — | M |
 | SP16 | **Connect production allocations to one memory coordinator.** Consolidate `BufferManager` memory limits/floor/hysteresis with the active `IMemoryGrantArbiter` contract and wire external operator allocations into shared reservations. Define precedence for existing settings and avoid double accounting or waiting while holding memory needed for progress. Replace total-capacity reporting with current host/container memory headroom. Use deterministic pressure fixtures to prove that configured limits affect real operators, recovery resumes admission, and success/cancellation/failure release reservations; include concurrent jobs and compatibility documentation. | — | M |
-
-### 2.5 Analytical overlay correctness and a fail-closed golden harness
-
-**Design:** [ROADMAP: Analytical Overlays, Authoring Parity, and Golden Conformance](ROADMAP.md#reporting--presentation--analytical-overlays-authoring-parity-and-golden-conformance).
-
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| GG01 | **Decide or implement `EXPONENTIAL`, `LOGARITHMIC`, and `POWER` trendlines.** Either implement exact least-squares fitting in `PlotPlanResolver.ResolveOverlay` with domain guards (rejecting non-positive Y for `EXPONENTIAL`/`POWER` and non-positive X for `LOGARITHMIC`/`POWER`) or reject them at parse/lowering time until implemented. Remove the silent all-null fallback. | — | S |
-| GG02 | **Exclude `NULL` Y pairs from statistical overlays.** Stop coercing `NULL` to `0m` in `PlotPlanResolver.ResolveOverlay` for `AVERAGE`, `MOVING_AVG`, `LINEAR`, and `POLYNOMIAL`. Skip null `(x, y)` pairs in regressions and averages, and define deterministic window behavior for `MOVING_AVG` over gaps. | — | S |
-| GG03 | **Define multi-series trendline ownership.** Either partition overlay computation per series (or bind to an explicit target series) or fail validation when a statistical trendline is authored on a multi-series visual without a target series. | GG02 | S |
-| GG04 | **Center/scale X in `PolynomialRegression` and guard singular/overflow cases.** Normalize X into `[-1, 1]` (or `[0, 1]`) before building the Vandermonde sums so large X domains (e.g., epoch dates or revenue) do not overflow `decimal.MaxValue`, and fail or emit a diagnostic when degree exceeds distinct X points. | GG02 | S |
-| GG05 | **Preserve unstacked `FieldChannel.Y` in mixed stacked/unstacked Y domains.** Include `FieldChannel.Y` alongside `YStart`/`YEnd`/`ErrorLow`/`ErrorHigh`/`ConfidenceLow`/`ConfidenceHigh` in `PlotPlanResolver.ResolveScales` when stacked and unstacked layers share a primary or secondary Y axis; include explicit `AnnotationPoint` coordinates in scale domain resolution. | — | S |
-| GG06 | **Fail closed in `ReportingGoldenHarness` and retire legacy `SvgChartRenderer` fallbacks.** Assert `visual.Error is null` in `ReportingGoldenHarness.ProduceAsync` so golden updates never record `null` artifacts for failed visuals; replace legacy `PlotPlan is null` fallback paths in `SvgChartRenderer.Render` with an explicit error for plot-plan-backed visual types; back `NativeSvgGeometryGoldenTests` and `GrammarOfGraphicsContractTests` with diffable artifact snapshots. | — | S |
 
 ### 2.6 Orchestrator and catalog cohesion
 

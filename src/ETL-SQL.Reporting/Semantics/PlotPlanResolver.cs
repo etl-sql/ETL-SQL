@@ -469,19 +469,30 @@ public sealed class PlotPlanResolver
                     .Select(channel => channel.Value).ToList();
                 if (boxOrWaterfallRaw.Count > 0) raw = boxOrWaterfallRaw;
             }
-            if (scale.Channel is FieldChannel.Y or FieldChannel.Y2 && resolvedLayers.Any(layer => layer.Stack != StackMode.None))
+            if (scale.Channel is FieldChannel.Y or FieldChannel.Y2)
             {
-                // Stacked baselines replace the raw measure values (NORMALIZE rescales them entirely), but a
-                // ranged layer sharing the chart still owns its authored endpoints and must stay inside the domain.
-                raw = resolvedLayers.Where(layer => layer.Stack != StackMode.None).SelectMany(layer => layer.Data)
-                    .SelectMany(datum => datum.Channels)
-                    .Where(channel => channel.Channel is FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh && channel.Value.Kind != ChartValueKind.Null)
-                    .Select(channel => channel.Value)
-                    .Concat(resolvedLayers.Where(layer => layer.Stack == StackMode.None).SelectMany(layer => layer.Data)
+                var axisLayers = resolvedLayers.Where(layer =>
+                    LayerTargetsYScale(layer, spec, scale)).ToList();
+                if (axisLayers.Any(layer => layer.Stack != StackMode.None))
+                {
+                    // Stacked baselines replace the raw measure values (NORMALIZE rescales them entirely),
+                    // while unstacked layers sharing the axis still own their point/line Y (or Y2) values
+                    // alongside ranged channels.
+                    var stacked = axisLayers.Where(layer => layer.Stack != StackMode.None)
+                        .SelectMany(layer => layer.Data)
                         .SelectMany(datum => datum.Channels)
-                        .Where(channel => channel.Channel is FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh && channel.Value.Kind != ChartValueKind.Null)
-                        .Select(channel => channel.Value))
-                    .ToList();
+                        .Where(channel => channel.Channel is FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh
+                            && channel.Value.Kind != ChartValueKind.Null)
+                        .Select(channel => channel.Value);
+                    var unstacked = axisLayers.Where(layer => layer.Stack == StackMode.None)
+                        .SelectMany(layer => layer.Data)
+                        .SelectMany(datum => datum.Channels)
+                        .Where(channel => (channel.Channel == scale.Channel
+                                || channel.Channel is FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh)
+                            && channel.Value.Kind != ChartValueKind.Null)
+                        .Select(channel => channel.Value);
+                    raw = stacked.Concat(unstacked).ToList();
+                }
             }
             if (scale.Kind == ScaleKind.Time)
             {
@@ -522,6 +533,17 @@ public sealed class PlotPlanResolver
             }
 
             var numbers = raw.Select(Number).Where(number => number.HasValue).Select(number => number!.Value).ToList();
+            if (scale.Channel == FieldChannel.X)
+            {
+                numbers.AddRange(resolvedLayers
+                    .Where(layer => layer.Style.Any(token =>
+                        token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase) &&
+                        token.Value.Equals("AnnotationPoint", StringComparison.OrdinalIgnoreCase)))
+                    .SelectMany(layer => layer.Data)
+                    .Select(datum => Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null()))
+                    .Where(number => number.HasValue)
+                    .Select(number => number!.Value));
+            }
             if (scale.Channel is FieldChannel.Y or FieldChannel.Y2)
             {
                 numbers.AddRange(resolvedLayers
@@ -613,7 +635,7 @@ public sealed class PlotPlanResolver
             var overlayType = layer.Style.FirstOrDefault(token => token.Name == "overlayType")?.Value;
             if (overlayType is not null && layer.Bindings.IsEmpty)
             {
-                yield return ResolveOverlay(layer, spec, columns, categories, formatter);
+                yield return ResolveOverlay(layer, spec, columns, categories, series, formatter);
                 continue;
             }
 
@@ -1107,11 +1129,32 @@ public sealed class PlotPlanResolver
         };
     }
 
+    private static bool LayerTargetsYScale(ResolvedMarkLayer layer, ChartSpec spec, ScaleSpec scale)
+    {
+        if (layer.Style.Any(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        var layerSpec = spec.Layers.FirstOrDefault(candidate =>
+            candidate.Id.Equals(layer.Id, StringComparison.OrdinalIgnoreCase) ||
+            layer.Id.StartsWith(candidate.Id + ":", StringComparison.OrdinalIgnoreCase));
+        if (layerSpec is not null)
+        {
+            var yBinding = layerSpec.Bindings.FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd);
+            if (yBinding is not null)
+                return string.Equals(yBinding.ScaleId, scale.Id, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (scale.Channel == FieldChannel.Y2)
+            return layer.Data.Any(datum => datum.Channels.Any(c => c.Channel == FieldChannel.Y2));
+        return layer.Data.Any(datum => datum.Channels.Any(c => c.Channel is FieldChannel.Y or FieldChannel.YStart or FieldChannel.YEnd));
+    }
+
     private static ResolvedMarkLayer ResolveOverlay(
         MarkLayerSpec layer,
         ChartSpec spec,
         IReadOnlyDictionary<string, ChartColumn> columns,
         ImmutableArray<string> categories,
+        ImmutableArray<ResolvedSeries> series,
         ChartValueFormatter formatter)
     {
         var type = layer.Style.First(token => token.Name == "overlayType").Value;
@@ -1131,68 +1174,214 @@ public sealed class PlotPlanResolver
                 ], false)])
             { Style = layer.Style, Stack = StackMode.None, BandSize = layer.BandSize };
         }
-        var xBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X);
-        var yBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y && binding.Axis != AxisRole.Secondary)
+        if (type == "AnnotationPoint")
+        {
+            var annotType = layer.Style.FirstOrDefault(token => token.Name == "annotationType")?.Value ?? "MAX";
+            var annotData = ImmutableArray<ResolvedDatum>.Empty;
+            if (annotType.Equals("COORD", StringComparison.OrdinalIgnoreCase))
+            {
+                var coordChannels = new List<ResolvedChannelValue>();
+                var coordXString = layer.Style.FirstOrDefault(token => token.Name == "coordXString")?.Value;
+                var coordXText = layer.Style.FirstOrDefault(token => token.Name == "coordX")?.Value;
+                var coordYText = layer.Style.FirstOrDefault(token => token.Name == "coordY")?.Value;
+                if (!string.IsNullOrEmpty(coordXString))
+                {
+                    coordChannels.Add(new ResolvedChannelValue(FieldChannel.X, ChartValue.From(coordXString), coordXString));
+                }
+                else if (decimal.TryParse(coordXText, NumberStyles.Number, CultureInfo.InvariantCulture, out var cx))
+                {
+                    coordChannels.Add(new ResolvedChannelValue(FieldChannel.X, ChartValue.From(cx), formatter.Number(cx, "G")));
+                }
+                if (decimal.TryParse(coordYText, NumberStyles.Number, CultureInfo.InvariantCulture, out var cy))
+                {
+                    coordChannels.Add(new ResolvedChannelValue(FieldChannel.Y, ChartValue.From(cy), formatter.Number(cy, "G")));
+                }
+                if (coordChannels.Count > 0)
+                    annotData = [new ResolvedDatum(0, coordChannels.ToImmutableArray(), false)];
+            }
+            return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, null, annotData)
+            { Style = layer.Style, Stack = StackMode.None, BandSize = layer.BandSize };
+        }
+
+        var isStatistical = type is "Average" or "MovingAvg" or "Linear" or "Polynomial" or "Exponential" or "Logarithmic" or "Power";
+        var targetSeries = layer.Style.FirstOrDefault(token => token.Name.Equals("series", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (isStatistical && series.Length > 1)
+        {
+            if (string.IsNullOrWhiteSpace(targetSeries))
+            {
+                throw new InvalidOperationException(
+                    $"Statistical overlay '{type}' requires SERIES = '<name>' when the chart has multiple series ({series.Length} series).");
+            }
+            if (!series.Any(item => item.Key.Equals(targetSeries, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException(
+                    $"Statistical overlay '{type}' referenced unknown series '{targetSeries}'.");
+            }
+        }
+        else if (isStatistical && !string.IsNullOrWhiteSpace(targetSeries) && series.Length > 0 &&
+            !series.Any(item => item.Key.Equals(targetSeries, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                $"Statistical overlay '{type}' referenced unknown series '{targetSeries}'.");
+        }
+
+        var matchingSeriesLayer = !string.IsNullOrWhiteSpace(targetSeries)
+            ? spec.Layers.FirstOrDefault(candidate =>
+                !candidate.Style.Any(token => token.Name == "overlayType") &&
+                (candidate.Id.Equals(targetSeries, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(candidate.Style.FirstOrDefault(t => t.Name == "series")?.Value, targetSeries, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(candidate.Bindings.FirstOrDefault(b => b.Channel is FieldChannel.Y or FieldChannel.Y2)?.Field, targetSeries, StringComparison.OrdinalIgnoreCase)))
+            : null;
+
+        var xBinding = matchingSeriesLayer?.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X)
+            ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X);
+        var yBinding = matchingSeriesLayer?.Bindings.FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Close)
+            ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y && binding.Axis != AxisRole.Secondary)
             ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y)
             ?? spec.Bindings.FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2)
             ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Close)
             ?? spec.Bindings.First(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Close);
-        var yValues = columns[yBinding.Field!].Values.Select(Number).Select(value => value ?? 0m).ToList();
+
+        var yColumn = columns[yBinding.Field!];
         var xColumn = xBinding?.Field is { } xField && columns.TryGetValue(xField, out var resolvedXColumn) ? resolvedXColumn : null;
-        var regressionX = Enumerable.Range(0, yValues.Count)
-            .Select(index => xColumn is null ? index : Number(xColumn.Values[index]) ?? index)
-            .ToList();
-        var resolvedValues = type switch
+        var colorBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color)
+            ?? spec.Layers.FirstOrDefault(candidate => !candidate.Style.Any(t => t.Name == "overlayType"))
+                ?.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color);
+        var colorColumn = colorBinding?.Field is { } colorField && columns.TryGetValue(colorField, out var resolvedColorColumn)
+            ? resolvedColorColumn
+            : null;
+
+        var rowIndices = (!string.IsNullOrWhiteSpace(targetSeries) && colorColumn is not null)
+            ? Enumerable.Range(0, yColumn.Values.Length)
+                .Where(index => string.Equals(ValueKey(colorColumn.Values[index]), targetSeries, StringComparison.OrdinalIgnoreCase))
+                .ToList()
+            : Enumerable.Range(0, yColumn.Values.Length).ToList();
+
+        var rawY = rowIndices.Select(index => Number(yColumn.Values[index])).ToList();
+        var rawX = rowIndices.Select((index, pos) =>
         {
-            "Goal" => Enumerable.Repeat(parameter, Math.Max(1, yValues.Count)).Select(value => (decimal?)value).ToList(),
-            "ReferenceLine" => Enumerable.Repeat(parameter, Math.Max(1, yValues.Count)).Select(value => (decimal?)value).ToList(),
-            "Average" => Enumerable.Repeat(yValues.DefaultIfEmpty(0m).Average(), Math.Max(1, yValues.Count)).Select(value => (decimal?)value).ToList(),
-            "MovingAvg" => MovingAverage(yValues, Math.Max(1, (int)(parameter == 0 ? 3 : parameter))),
-            "Linear" => PolynomialRegression(regressionX, yValues, 1),
-            "Polynomial" => PolynomialRegression(regressionX, yValues, Math.Max(1, (int)(parameter == 0 ? 2 : parameter))),
-            _ => Enumerable.Repeat((decimal?)null, Math.Max(1, yValues.Count)).ToList()
+            if (xColumn is null) return (decimal?)pos;
+            var xVal = xColumn.Values[index];
+            if (xVal.Kind == ChartValueKind.Null) return (decimal?)null;
+            return Number(xVal) ?? (type is "Logarithmic" or "Power" ? (decimal?)null : (decimal)pos);
+        }).ToList();
+
+        if (type is "Logarithmic" or "Power" && xColumn is not null)
+        {
+            foreach (var index in rowIndices)
+            {
+                var xVal = xColumn.Values[index];
+                if (xVal.Kind != ChartValueKind.Null && Number(xVal) is null)
+                    throw new InvalidOperationException($"{type} overlay requires positive numeric X values.");
+            }
+        }
+
+        List<decimal?> resolvedValues = type switch
+        {
+            "Goal" or "ReferenceLine" => Enumerable.Repeat((decimal?)parameter, Math.Max(1, rowIndices.Count)).ToList(),
+            "Average" => ComputeAverageOverlay(rawY),
+            "MovingAvg" => MovingAverage(rawY, Math.Max(1, (int)(parameter == 0 ? 3 : parameter))),
+            "Linear" => PolynomialRegression(rawX, rawY, 1),
+            "Polynomial" => PolynomialRegression(rawX, rawY, Math.Max(1, (int)(parameter == 0 ? 2 : parameter))),
+            "Exponential" => ExponentialRegression(rawX, rawY),
+            "Logarithmic" => LogarithmicRegression(rawX, rawY),
+            "Power" => PowerRegression(rawX, rawY),
+            _ => throw new InvalidOperationException($"Unsupported overlay type '{type}'.")
         };
-        var data = resolvedValues.Select((value, index) =>
+
+        var datumIndices = rowIndices.Count > 0 ? rowIndices : [0];
+        var data = resolvedValues.Select((value, pos) =>
         {
-            var xValue = xColumn is null || index >= xColumn.Values.Length ? ChartValue.From(index) : xColumn.Values[index];
-            var xDisplay = xColumn is null || index >= xColumn.Values.Length || xColumn.DisplayValues.IsDefaultOrEmpty
+            var sourceIndex = pos < datumIndices.Count ? datumIndices[pos] : pos;
+            var xValue = xColumn is null || sourceIndex >= xColumn.Values.Length ? ChartValue.From(pos) : xColumn.Values[sourceIndex];
+            var xDisplay = xColumn is null || sourceIndex >= xColumn.Values.Length || xColumn.DisplayValues.IsDefaultOrEmpty
                 ? formatter.Format(xValue)
-                : xColumn.DisplayValues[index] ?? formatter.Format(xValue);
-            return new ResolvedDatum(index,
+                : xColumn.DisplayValues[sourceIndex] ?? formatter.Format(xValue);
+            return new ResolvedDatum(pos,
                 [
                     new ResolvedChannelValue(FieldChannel.X, xValue, xDisplay),
                     new ResolvedChannelValue(FieldChannel.Y, value.HasValue ? ChartValue.From(value.Value) : ChartValue.Null(),
                         value.HasValue ? formatter.Number(value.Value, "G") : formatter.NullLabel)
                 ], !value.HasValue);
         }).ToImmutableArray();
-        return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, null, data)
+        return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, string.IsNullOrWhiteSpace(targetSeries) ? null : targetSeries, data)
         { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
     }
 
-    private static List<decimal?> MovingAverage(IReadOnlyList<decimal> values, int window) =>
-        values.Select((_, index) => index < window - 1 ? (decimal?)null : values.Skip(index - window + 1).Take(window).Average()).ToList();
+    private static List<decimal?> ComputeAverageOverlay(IReadOnlyList<decimal?> yValues)
+    {
+        var valid = yValues.Where(value => value.HasValue).Select(value => value!.Value).ToList();
+        if (valid.Count == 0)
+            return Enumerable.Repeat((decimal?)null, Math.Max(1, yValues.Count)).ToList();
+        var mean = valid.Average();
+        return Enumerable.Repeat((decimal?)mean, yValues.Count).ToList();
+    }
+
+    private static List<decimal?> MovingAverage(IReadOnlyList<decimal?> values, int window)
+    {
+        var result = new List<decimal?>(values.Count);
+        for (var index = 0; index < values.Count; index++)
+        {
+            if (index < window - 1)
+            {
+                result.Add(null);
+                continue;
+            }
+
+            decimal sum = 0m;
+            var count = 0;
+            for (var k = index - window + 1; k <= index; k++)
+            {
+                if (values[k] is { } v)
+                {
+                    sum += v;
+                    count++;
+                }
+            }
+            result.Add(count > 0 ? sum / count : null);
+        }
+        return result;
+    }
 
     private static List<decimal?> PolynomialRegression(
-        IReadOnlyList<decimal> xValues,
-        IReadOnlyList<decimal> yValues,
+        IReadOnlyList<decimal?> xValues,
+        IReadOnlyList<decimal?> yValues,
         int requestedDegree)
     {
         if (yValues.Count == 0 || xValues.Count != yValues.Count) return [];
-        var degree = Math.Min(requestedDegree, yValues.Count - 1);
-        var size = degree + 1;
-        var matrix = new decimal[size, size + 1];
+        var valid = CollectValidPairs(xValues, yValues);
+        if (valid.Count == 0)
+            return Enumerable.Repeat((decimal?)null, yValues.Count).ToList();
+
+        var distinctX = valid.Select(pair => pair.X).Distinct().Count();
+        if (distinctX < requestedDegree + 1)
+        {
+            throw new InvalidOperationException(
+                $"Polynomial degree {requestedDegree} requires at least {requestedDegree + 1} distinct X points (found {distinctX}).");
+        }
+
+        // Scale X into [-1, 1] before raising to powers so large domains (epoch ms, revenue)
+        // stay well within floating-point and decimal dynamic range and condition cleanly.
+        var xMin = valid.Min(pair => (double)pair.X);
+        var xMax = valid.Max(pair => (double)pair.X);
+        var span = xMax - xMin;
+        double NormalizeX(decimal x) => span == 0d ? 0d : (2d * ((double)x - xMin) / span) - 1d;
+
+        var size = requestedDegree + 1;
+        var matrix = new double[size, size + 1];
         for (var row = 0; row < size; row++)
         {
             for (var column = 0; column < size; column++)
-                matrix[row, column] = xValues.Sum(value => Power(value, row + column));
-            matrix[row, size] = Enumerable.Range(0, yValues.Count).Sum(index => yValues[index] * Power(xValues[index], row));
+                matrix[row, column] = valid.Sum(pair => Math.Pow(NormalizeX(pair.X), row + column));
+            matrix[row, size] = valid.Sum(pair => (double)pair.Y * Math.Pow(NormalizeX(pair.X), row));
         }
 
         for (var pivot = 0; pivot < size; pivot++)
         {
             var best = Enumerable.Range(pivot, size - pivot)
                 .OrderByDescending(row => Math.Abs(matrix[row, pivot])).First();
-            if (matrix[best, pivot] == 0m) return Enumerable.Repeat((decimal?)null, yValues.Count).ToList();
+            if (Math.Abs(matrix[best, pivot]) <= 1e-12d)
+                throw new InvalidOperationException("Regression system is singular for the supplied data points.");
             if (best != pivot)
                 for (var column = pivot; column <= size; column++)
                     (matrix[pivot, column], matrix[best, column]) = (matrix[best, column], matrix[pivot, column]);
@@ -1207,16 +1396,149 @@ public sealed class PlotPlanResolver
         }
 
         var coefficients = Enumerable.Range(0, size).Select(index => matrix[index, size]).ToArray();
-        return xValues
-            .Select(value => (decimal?)coefficients.Select((coefficient, power) => coefficient * Power(value, power)).Sum())
-            .ToList();
+        return xValues.Select(x =>
+        {
+            if (!x.HasValue) return (decimal?)null;
+            var u = NormalizeX(x.Value);
+            double prediction = 0d;
+            double power = 1d;
+            for (var degree = 0; degree < coefficients.Length; degree++)
+            {
+                prediction += coefficients[degree] * power;
+                power *= u;
+            }
+            return ToFiniteDecimal(prediction);
+        }).ToList();
     }
 
-    private static decimal Power(decimal value, int exponent)
+    private static List<decimal?> ExponentialRegression(
+        IReadOnlyList<decimal?> xValues,
+        IReadOnlyList<decimal?> yValues)
     {
-        var result = 1m;
-        for (var index = 0; index < exponent; index++) result *= value;
-        return result;
+        if (yValues.Count == 0 || xValues.Count != yValues.Count) return [];
+        foreach (var y in yValues)
+        {
+            if (y.HasValue && y.Value <= 0m)
+                throw new InvalidOperationException($"Exponential overlay requires strictly positive Y values (found {y.Value}).");
+        }
+
+        var valid = CollectValidPairs(xValues, yValues);
+        if (valid.Count == 0)
+            return Enumerable.Repeat((decimal?)null, yValues.Count).ToList();
+        var distinctX = valid.Select(pair => pair.X).Distinct().Count();
+        if (distinctX < 2)
+            throw new InvalidOperationException($"Exponential overlay requires at least 2 distinct X points (found {distinctX}).");
+
+        // Fit ln(y) = alpha + beta * (x - xMean) to avoid exp(intercept) overflow on shifted X.
+        var xMean = valid.Average(pair => (double)pair.X);
+        var (alpha, beta) = FitSimpleLinear(
+            valid.Select(pair => (X: (double)pair.X - xMean, Y: Math.Log((double)pair.Y))).ToList(),
+            "Exponential");
+
+        return xValues.Select(x =>
+            !x.HasValue ? (decimal?)null : ToFiniteDecimal(Math.Exp(alpha + beta * ((double)x.Value - xMean)))).ToList();
+    }
+
+    private static List<decimal?> LogarithmicRegression(
+        IReadOnlyList<decimal?> xValues,
+        IReadOnlyList<decimal?> yValues)
+    {
+        if (yValues.Count == 0 || xValues.Count != yValues.Count) return [];
+        foreach (var x in xValues)
+        {
+            if (x.HasValue && x.Value <= 0m)
+                throw new InvalidOperationException($"Logarithmic overlay requires strictly positive X values (found {x.Value}).");
+        }
+
+        var valid = CollectValidPairs(xValues, yValues);
+        if (valid.Count == 0)
+            return Enumerable.Repeat((decimal?)null, yValues.Count).ToList();
+        var distinctX = valid.Select(pair => pair.X).Distinct().Count();
+        if (distinctX < 2)
+            throw new InvalidOperationException($"Logarithmic overlay requires at least 2 distinct positive X points (found {distinctX}).");
+
+        var (alpha, beta) = FitSimpleLinear(
+            valid.Select(pair => (X: Math.Log((double)pair.X), Y: (double)pair.Y)).ToList(),
+            "Logarithmic");
+
+        return xValues.Select(x =>
+            !x.HasValue ? (decimal?)null : ToFiniteDecimal(alpha + beta * Math.Log((double)x.Value))).ToList();
+    }
+
+    private static List<decimal?> PowerRegression(
+        IReadOnlyList<decimal?> xValues,
+        IReadOnlyList<decimal?> yValues)
+    {
+        if (yValues.Count == 0 || xValues.Count != yValues.Count) return [];
+        foreach (var x in xValues)
+        {
+            if (x.HasValue && x.Value <= 0m)
+                throw new InvalidOperationException($"Power overlay requires strictly positive X values (found {x.Value}).");
+        }
+        foreach (var y in yValues)
+        {
+            if (y.HasValue && y.Value <= 0m)
+                throw new InvalidOperationException($"Power overlay requires strictly positive Y values (found {y.Value}).");
+        }
+
+        var valid = CollectValidPairs(xValues, yValues);
+        if (valid.Count == 0)
+            return Enumerable.Repeat((decimal?)null, yValues.Count).ToList();
+        var distinctX = valid.Select(pair => pair.X).Distinct().Count();
+        if (distinctX < 2)
+            throw new InvalidOperationException($"Power overlay requires at least 2 distinct positive X points (found {distinctX}).");
+
+        var (alpha, beta) = FitSimpleLinear(
+            valid.Select(pair => (X: Math.Log((double)pair.X), Y: Math.Log((double)pair.Y))).ToList(),
+            "Power");
+
+        return xValues.Select(x =>
+            !x.HasValue ? (decimal?)null : ToFiniteDecimal(Math.Exp(alpha + beta * Math.Log((double)x.Value)))).ToList();
+    }
+
+    private static List<(decimal X, decimal Y)> CollectValidPairs(
+        IReadOnlyList<decimal?> xValues,
+        IReadOnlyList<decimal?> yValues)
+    {
+        var pairs = new List<(decimal X, decimal Y)>(yValues.Count);
+        for (var index = 0; index < yValues.Count; index++)
+        {
+            if (xValues[index] is { } x && yValues[index] is { } y)
+                pairs.Add((x, y));
+        }
+        return pairs;
+    }
+
+    private static (double Intercept, double Slope) FitSimpleLinear(
+        IReadOnlyList<(double X, double Y)> points,
+        string overlayName)
+    {
+        var meanX = points.Average(p => p.X);
+        var meanY = points.Average(p => p.Y);
+        double sxx = 0d;
+        double sxy = 0d;
+        foreach (var (x, y) in points)
+        {
+            var dx = x - meanX;
+            sxx += dx * dx;
+            sxy += dx * (y - meanY);
+        }
+
+        if (Math.Abs(sxx) <= 1e-18d)
+            throw new InvalidOperationException($"{overlayName} overlay regression is singular for identical transformed X inputs.");
+
+        var slope = sxy / sxx;
+        var intercept = meanY - slope * meanX;
+        return (intercept, slope);
+    }
+
+    private static decimal? ToFiniteDecimal(double value)
+    {
+        if (!double.IsFinite(value))
+            throw new InvalidOperationException("Overlay regression produced a non-finite value.");
+        if (value > (double)decimal.MaxValue || value < (double)decimal.MinValue)
+            throw new InvalidOperationException("Overlay regression prediction exceeded decimal range.");
+        return (decimal)value;
     }
 
     private static string? ConfidenceIntervalDetail(ResolvedDatum datum, ChartValueFormatter formatter)

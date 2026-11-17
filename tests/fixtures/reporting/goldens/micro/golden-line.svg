@@ -1,0 +1,8 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='160' height='42' viewBox='0 0 160 42' role='img' aria-labelledby='golden-line-title golden-line-desc' font-family='sans-serif'>
+<title id='golden-line-title'>golden-line</title>
+<desc id='golden-line-desc'>golden-line: 5 rows, 1 ordered layers, 1 series, 1 facet panels, 1 gaps, 0 skipped rows.</desc>
+<path d='M 3 39 L 41.5 23.571' fill='none' stroke='#5470c6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/>
+<path d='M 118.5 28.714 L 157 3' fill='none' stroke='#5470c6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/>
+<circle cx='3' cy='39' r='2' fill='#5470c6'/>
+<circle cx='157' cy='3' r='2' fill='#5470c6'/>
+</svg>

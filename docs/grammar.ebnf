@@ -801,7 +801,7 @@ overlay_type = ( "GOAL" | "MOVING_AVG" | "POLYNOMIAL" ) "(" number ")"
              | "FORECAST" "(" identifier ")"
              | ( "RUNNING_TOTAL" | "PERCENT_OF_TOTAL" ) "(" identifier ")"
              | "AVERAGE" | "LINEAR" | "EXPONENTIAL" | "LOGARITHMIC" | "POWER" ;
-overlay_with_option = ( "COLOR" | "LABEL" ) "=" string_literal
+overlay_with_option = ( "COLOR" | "LABEL" | "SERIES" ) "=" string_literal
                     | ( "CONFIDENCE_LOW" | "CONFIDENCE_HIGH" | "ANOMALY" ) "=" identifier ;
 reference_line_option = "VALUE" "=" [ "+" | "-" ] number
                       | "LABEL" "=" string_literal

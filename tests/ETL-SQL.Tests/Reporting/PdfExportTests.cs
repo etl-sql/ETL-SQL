@@ -45,9 +45,14 @@ namespace ETL_SQL.Tests
                 Source = "charts.rptsql",
                 Visuals = new List<VisualManifest>
                 {
-                    new() { Name = "Bars", VisualType = "BAR",
-                            Columns = ["Category", "Value"],
-                            Rows = [["A", "5"], ["B", "20"], ["C", "36"]] },
+                    new()
+                    {
+                        Name = "Bars",
+                        VisualType = "BAR",
+                        Columns = ["Category", "Value"],
+                        Rows = [["A", "5"], ["B", "20"], ["C", "36"]],
+                        PlotPlan = ETL_SQL.Tests.Reporting.GrammarOfGraphics.GrammarOfGraphicsContractFixtures.PlotPlan()
+                    },
                 }
             };
 

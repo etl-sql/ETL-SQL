@@ -17,6 +17,7 @@ namespace ETL_SQL.Tests.Reporting
             VisualType = "BAR",
             Columns = new List<string> { "Month", "Revenue" },
             Rows = new List<List<string?>> { new() { "January", "320" } },
+            PlotPlan = GrammarOfGraphics.GrammarOfGraphicsContractFixtures.PlotPlan(),
             Tooltip = tooltip
         };
 

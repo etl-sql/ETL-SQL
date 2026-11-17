@@ -718,6 +718,9 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 new("color", overlay.Color ?? "#888888")
             };
 
+            if (!string.IsNullOrWhiteSpace(overlay.SeriesName))
+                styleTokens.Add(new("series", overlay.SeriesName));
+
             if (hasAuthoredLabel)
             {
                 styleTokens.Add(new("label", overlay.Label!));

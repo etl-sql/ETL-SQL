@@ -1,0 +1,159 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/chart-spec/v2",
+  "version": 2,
+  "id": "monthly-revenue",
+  "title": "Monthly Revenue",
+  "dataReference": "\u0026monthly_revenue",
+  "bindings": [
+    {
+      "channel": "x",
+      "field": "month",
+      "semanticKind": "temporal",
+      "scaleId": "x",
+      "axis": "none",
+      "sort": "none"
+    },
+    {
+      "channel": "y",
+      "field": "revenue",
+      "semanticKind": "quantitative",
+      "scaleId": "y",
+      "axis": "primary",
+      "sort": "none",
+      "format": "C2"
+    },
+    {
+      "channel": "color",
+      "field": "region",
+      "semanticKind": "nominal",
+      "scaleId": "color",
+      "axis": "none",
+      "sort": "none"
+    }
+  ],
+  "layers": [
+    {
+      "id": "revenue-bars",
+      "mark": "rect",
+      "zIndex": 0,
+      "bindings": [],
+      "style": [
+        {
+          "name": "opacity",
+          "value": "0.9"
+        }
+      ],
+      "conditions": [],
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "target-rule",
+      "mark": "rule",
+      "zIndex": 1,
+      "bindings": [
+        {
+          "channel": "y",
+          "field": "target",
+          "semanticKind": "quantitative",
+          "scaleId": "y",
+          "axis": "none",
+          "sort": "none"
+        }
+      ],
+      "style": [],
+      "conditions": [],
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "time",
+      "includeZero": false,
+      "categoryOrder": []
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "includeZero": true,
+      "categoryOrder": []
+    },
+    {
+      "id": "color",
+      "channel": "color",
+      "kind": "ordinal",
+      "includeZero": false,
+      "categoryOrder": [
+        "North",
+        "South"
+      ]
+    }
+  ],
+  "scaleResolution": {
+    "x": "shared",
+    "y": "shared",
+    "color": "shared"
+  },
+  "formatting": {
+    "locale": "en-US",
+    "timeZone": "America/Chicago",
+    "nullLabel": "\u2014",
+    "fields": [
+      {
+        "field": "revenue",
+        "format": "C2"
+      }
+    ]
+  },
+  "nullHandling": {
+    "default": "gap",
+    "fields": [
+      {
+        "field": "target",
+        "policy": "skip"
+      }
+    ]
+  },
+  "interactions": {
+    "selections": [
+      {
+        "id": "region-selection",
+        "mode": "single",
+        "fields": [
+          "region"
+        ]
+      }
+    ],
+    "bindings": [
+      {
+        "trigger": "ON_SELECT",
+        "effect": "filter",
+        "target": "detail-table"
+      }
+    ]
+  },
+  "theme": {
+    "name": "default",
+    "tokens": [
+      {
+        "name": "accent",
+        "value": "#2563eb"
+      }
+    ]
+  },
+  "accessibility": {
+    "label": "Monthly revenue by region",
+    "description": "Bars show revenue and a rule shows the target.",
+    "summaryTemplate": "{series}: {value}",
+    "includeDataTableFallback": true
+  }
+}

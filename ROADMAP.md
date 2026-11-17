@@ -1114,7 +1114,7 @@ Select individual IDs into `TODO.md` when scheduling.
 
 #### Fail-closed overlay semantics and multi-layer domain resolution
 
-Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
+Implemented in v0.23.0 (`GG01`–`GG05`).
 
 #### Core scale, layer, and `CUSTOM ... CHART` authoring parity
 
@@ -1122,7 +1122,7 @@ Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](T
 
 #### Harness fail-fast guarantees and golden SVG hash coverage
 
-Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
+Implemented in v0.23.0 (`GG06`).
 
 **Acceptance evidence:** Zero silent null-layer fallbacks in `PlotPlanResolver.ResolveOverlay`;
 verified regression accuracy with `NULL` values and large X domains; unclipped mixed stacked/unstacked

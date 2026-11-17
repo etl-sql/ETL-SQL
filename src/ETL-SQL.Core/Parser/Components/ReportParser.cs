@@ -5288,6 +5288,7 @@ public class ReportParser : ParserComponent
 
             string? color = null;
             string? label = null;
+            string? seriesName = null;
             if (Match(TokenType.WITH))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after WITH in overlay");
@@ -5303,6 +5304,12 @@ public class ReportParser : ParserComponent
                         Advance();
                         Consume(TokenType.EQUALS, "Expected = after LABEL");
                         label = Consume(TokenType.STRING_LITERAL, "Expected label string").Value;
+                    }
+                    else if (IsCurrentValue("SERIES"))
+                    {
+                        Advance();
+                        Consume(TokenType.EQUALS, "Expected = after SERIES");
+                        seriesName = Consume(TokenType.STRING_LITERAL, "Expected series name string").Value;
                     }
                     else if (IsCurrentValue("CONFIDENCE_LOW"))
                     {
@@ -5335,6 +5342,7 @@ public class ReportParser : ParserComponent
                 LineStyle = lineStyle,
                 Color = color,
                 Label = label,
+                SeriesName = seriesName,
                 ForecastField = forecastField,
                 ConfidenceLowField = confidenceLowField,
                 ConfidenceHighField = confidenceHighField,

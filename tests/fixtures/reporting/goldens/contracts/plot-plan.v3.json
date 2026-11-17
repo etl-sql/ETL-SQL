@@ -1,0 +1,230 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
+  "specId": "monthly-revenue",
+  "title": "Monthly Revenue",
+  "bounds": {
+    "x": 40,
+    "y": 20,
+    "width": 720,
+    "height": 360
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "2026-07"
+        },
+        {
+          "kind": "text",
+          "text": "2026-08"
+        }
+      ],
+      "categories": [
+        "2026-07",
+        "2026-08"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "2026-07"
+          },
+          "label": "Jul"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "2026-08"
+          },
+          "label": "Aug"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 1500
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0
+          },
+          "label": "$0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 1500
+          },
+          "label": "$1,500"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "North",
+      "label": "North",
+      "order": 0,
+      "color": "#2563eb"
+    },
+    {
+      "key": "South",
+      "label": "South",
+      "order": 1,
+      "color": "#dc2626"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "North",
+      "color": "#2563eb"
+    },
+    {
+      "seriesKey": "South",
+      "color": "#dc2626"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "North",
+      "label": "North",
+      "order": 0,
+      "color": "#2563eb"
+    },
+    {
+      "seriesKey": "South",
+      "label": "South",
+      "order": 1,
+      "color": "#dc2626"
+    }
+  ],
+  "layers": [
+    {
+      "id": "revenue-bars",
+      "mark": "rect",
+      "zIndex": 0,
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "2026-07"
+              },
+              "displayValue": "Jul"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 1234.50
+              },
+              "displayValue": "$1,234.50"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "2026-08"
+              },
+              "displayValue": "Aug"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              },
+              "displayValue": "\u2014"
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "target-rule",
+      "mark": "rule",
+      "zIndex": 1,
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 1000
+              },
+              "displayValue": "$1,000"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [
+      1
+    ],
+    "skippedRows": []
+  },
+  "accessibleSummary": "North revenue was $1,234.50; South revenue is missing. Target was $1,000.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Monthly Revenue",
+    "items": [
+      {
+        "label": "North",
+        "value": "$1,234.50",
+        "order": 0
+      },
+      {
+        "label": "South",
+        "value": "\u2014",
+        "order": 1
+      }
+    ]
+  }
+}

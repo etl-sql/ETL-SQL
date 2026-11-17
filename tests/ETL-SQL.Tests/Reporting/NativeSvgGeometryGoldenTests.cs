@@ -33,6 +33,15 @@ public sealed class NativeSvgGeometryGoldenTests(ITestOutputHelper output)
             "2976C14C5B1BB0AD42870E56C5190AE3841B86B590C45B9D69E87FD34B280250",
             "6E4D572BB3C9FB38C30371A5790E2997D293EA1B0DFABF66E146E08650B96BA7"
         };
+        var snapshotFiles = new[]
+        {
+            "micro/golden-line.svg",
+            "micro/golden-area.svg",
+            "micro/golden-bar.svg",
+            "micro/golden-progress.svg"
+        };
+        for (var i = 0; i < samples.Length; i++)
+            Goldens.ReportingGoldenHarness.AssertMatchesSnapshot(snapshotFiles[i], samples[i].Svg);
         var actualHashes = samples.Select(sample => Hash(sample.Svg)).ToArray();
         Assert.True(expected.SequenceEqual(actualHashes), string.Join(Environment.NewLine,
             actualHashes.Select((hash, index) => $"micro-{index}={hash}")));
@@ -76,8 +85,10 @@ public sealed class NativeSvgGeometryGoldenTests(ITestOutputHelper output)
             ]
         };
 
+        var rendered = new MarkdownRenderer().Render(report);
+        Goldens.ReportingGoldenHarness.AssertMatchesSnapshot("micro/micro-export.md", rendered);
         Assert.Equal("5B8810452FB0D9CC6ED41B0A1AD6AB34402504495AB044ABCFFA50B5485FF471",
-            Hash(new MarkdownRenderer().Render(report)));
+            Hash(rendered));
     }
 
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));

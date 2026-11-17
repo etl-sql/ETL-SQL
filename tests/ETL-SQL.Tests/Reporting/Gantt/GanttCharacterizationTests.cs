@@ -133,7 +133,7 @@ CREATE VISUAL TechnicalRoadmap AS GANTT (
     }
 
     [Fact]
-    public void SvgChartRenderer_EmitsPlaceholder_WhenGanttLacksPlotPlan()
+    public void SvgChartRenderer_ThrowsExplicitError_WhenGanttLacksPlotPlan()
     {
         var manifest = new VisualManifest
         {
@@ -148,10 +148,7 @@ CREATE VISUAL TechnicalRoadmap AS GANTT (
         };
 
         var renderer = new SvgChartRenderer();
-        var svg = renderer.Render(manifest);
-
-        Assert.NotNull(svg);
-        Assert.Contains("GANTT chart", svg);
-        Assert.Contains("UnmigratedGantt", svg);
+        var ex = Assert.Throws<InvalidOperationException>(() => renderer.Render(manifest));
+        Assert.Contains("PlotPlan", ex.Message, StringComparison.Ordinal);
     }
 }

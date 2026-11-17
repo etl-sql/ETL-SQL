@@ -87,6 +87,8 @@ public static class ReportingGoldenHarness
     public static async Task<GoldenFixture> ProduceAsync(string fixtureFileName)
     {
         var (_, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync(fixtureFileName);
+        AssertManifestSucceeded(fixtureFileName, manifest);
+
         var svgRenderer = new SvgChartRenderer();
 
         var visuals = manifest.Visuals.Select(visual => new GoldenVisual(
@@ -96,6 +98,50 @@ public static class ReportingGoldenHarness
             Fallback: Normalize(SerializeFallback(visual)))).ToImmutableArray();
 
         return new GoldenFixture(fixtureFileName, RenderTerminal(manifest), visuals);
+    }
+
+    public static void AssertManifestSucceeded(string fixtureFileName, ReportManifest manifest)
+    {
+        if (manifest.Error is not null)
+        {
+            throw new InvalidOperationException(
+                $"Golden fixture '{fixtureFileName}' failed manifest compilation: {manifest.Error}");
+        }
+
+        foreach (var visual in manifest.Visuals)
+        {
+            if (visual.Error is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Golden fixture '{fixtureFileName}' visual '{visual.Name}' failed: {visual.Error}");
+            }
+        }
+    }
+
+    public static void AssertMatchesSnapshot(string relativePath, string actualContent)
+    {
+        var path = Path.Combine(GoldenDirectory, relativePath);
+        var normalized = Normalize(actualContent);
+        if (IsUpdating)
+        {
+            Write(path, normalized);
+            return;
+        }
+
+        var onDisk = ReadOrNull(path);
+        if (onDisk is null)
+        {
+            throw new InvalidOperationException(
+                $"Snapshot '{relativePath}' does not exist at '{path}'. Run with {UpdateEnvironmentVariable}=1 to create it.");
+        }
+
+        if (!string.Equals(onDisk, normalized, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Snapshot '{relativePath}' drifted from disk.{Environment.NewLine}" +
+                $"Expected ({path}):{Environment.NewLine}{onDisk}{Environment.NewLine}" +
+                $"Actual:{Environment.NewLine}{normalized}");
+        }
     }
 
     /// <summary>
