@@ -172,24 +172,25 @@ internal sealed class PlotPlanSvgRenderer
         int Order
     );
 
-    private static bool HasRenderablePoints(ResolvedMarkLayer layer, ResolvedScale? xScale)
+    private static int CategoryIndexForDatum(ResolvedDatum datum, ResolvedScale? scale, int fallbackIndex)
     {
-        if (layer.Data.IsDefaultOrEmpty) return false;
-        for (var i = 0; i < layer.Data.Length; i++)
-        {
-            var d = layer.Data[i];
-            if (d.IsGap) continue;
-            var v = PlotPlanResolver.Number(Channel(d, FieldChannel.Y) ?? Channel(d, FieldChannel.Y2) ?? ChartValue.Null());
-            if (!v.HasValue) continue;
-            if (xScale is not null && xScale.Kind is ScaleKind.Linear or ScaleKind.Logarithmic)
-            {
-                var xv = PlotPlanResolver.Number(Channel(d, FieldChannel.X) ?? ChartValue.Null());
-                if (!xv.HasValue) continue;
-            }
-            return true;
-        }
-        return false;
+        if (scale is null || scale.Categories.IsDefaultOrEmpty)
+            return fallbackIndex;
+        var category = DisplayChannel(datum, FieldChannel.X);
+        if (category is null)
+            return fallbackIndex;
+        var found = scale.Categories.IndexOf(category);
+        return found >= 0 ? found : fallbackIndex;
     }
+
+    private static bool HasOffsetChannel(ResolvedMarkLayer layer) =>
+        HasOffsetChannel(layer, FieldChannel.XOffset) || HasOffsetChannel(layer, FieldChannel.YOffset);
+
+    private static bool HasOffsetChannel(ResolvedMarkLayer layer, FieldChannel channel) =>
+        layer.Data.Any(datum => Channel(datum, channel) is { Kind: not ChartValueKind.Null });
+
+    private static int OffsetCategoryCount(PlotPlan plan, FieldChannel channel) =>
+        Math.Max(1, plan.Scales.FirstOrDefault(scale => scale.Channel == channel)?.Categories.Length ?? 1);
 
     private static void RenderCartesian(StringBuilder builder, PlotPlan plan, bool transposedPointAxes = false)
     {
@@ -235,18 +236,6 @@ internal sealed class PlotPlanSvgRenderer
             return;
         }
 
-        var totalWidth = plan.Bounds.Width;
-        var minPlotWidth = totalWidth >= 180m ? MinimumPlotWidth : Math.Max(30m, totalWidth - 40m);
-
-        var hasRightLegend = LegendEnabled(plan) && LegendPosition(plan) == "RIGHT" && plan.Legend.Length > 1;
-        var legendWidth = hasRightLegend ? 120m : 0m;
-        var hasLeftLegend = LegendEnabled(plan) && LegendPosition(plan) == "LEFT" && plan.Legend.Length > 1;
-        var leftLegendWidth = hasLeftLegend ? 120m : 0m;
-
-        var seriesLabelsEnabled = IsEnabled(plan.Style, "SERIES_LABELS");
-        var seriesLabelsPos = (Style(plan, "SERIES_LABELS:POSITION") ?? "END").Trim().ToUpperInvariant();
-        var isStartPos = seriesLabelsPos == "START";
-
         var xScale = plan.Scales.FirstOrDefault(scale => plan.CartesianAxes is { } axes ? scale.Id.Equals(axes.XScaleId, StringComparison.OrdinalIgnoreCase) : scale.Channel == FieldChannel.X);
         var categories = xScale?.Categories ?? ImmutableArray<string>.Empty;
         var yScale = plan.Scales.FirstOrDefault(scale => plan.CartesianAxes is { } axes ? scale.Id.Equals(axes.YScaleId, StringComparison.OrdinalIgnoreCase) : scale.Channel == FieldChannel.Y);
@@ -257,53 +246,11 @@ internal sealed class PlotPlanSvgRenderer
             string.Equals(layer.AreaRibbonScaleId, sharedRibbonScaleId, StringComparison.OrdinalIgnoreCase)))
             yScale = plan.Scales.Single(scale => scale.Id.Equals(sharedRibbonScaleId, StringComparison.OrdinalIgnoreCase));
 
-        var maxSeriesLabelWidth = 0m;
-        if (seriesLabelsEnabled)
-        {
-            var lineCandidates = plan.Layers
-                .Where(layer => layer.Mark == MarkKind.Line && LayerStyle(layer, "overlayType") is null && HasRenderablePoints(layer, xScale))
-                .Select(layer =>
-                {
-                    var series = plan.Series.FirstOrDefault(item => item.Key.Equals(layer.SeriesKey ?? layer.Id, StringComparison.Ordinal));
-                    return series?.Label ?? layer.SeriesKey ?? layer.Id;
-                })
-                .Where(label => !string.IsNullOrWhiteSpace(label))
-                .Select(label => Math.Max(30m, label!.Length * 5.6m + 14m))
-                .ToList();
-            if (lineCandidates.Count > 0)
-            {
-                maxSeriesLabelWidth = lineCandidates.Max();
-            }
-        }
-
-        var maxOverlayWidth = plan.Layers
-            .Select(layer => LayerStyle(layer, "overlayType") is null ? null : LayerStyle(layer, "label"))
-            .Where(label => !string.IsNullOrWhiteSpace(label))
-            .Select(label => Math.Min(140m, label!.Length * 5.4m + 8m))
-            .DefaultIfEmpty(0m)
-            .Max();
-
-        var remainingWidth = Math.Max(0m, totalWidth - minPlotWidth - BaseLeftMargin - BaseRightMargin - legendWidth - leftLegendWidth);
-
-        var plotLeft = BaseLeftMargin + leftLegendWidth;
-        if (seriesLabelsEnabled && isStartPos && maxSeriesLabelWidth > 0m)
-        {
-            var startGutter = Math.Min(maxSeriesLabelWidth, remainingWidth);
-            plotLeft = BaseLeftMargin + startGutter;
-            remainingWidth = Math.Max(0m, remainingWidth - startGutter);
-        }
-
-        var desiredRightSide = 0m;
-        if (seriesLabelsEnabled && !isStartPos && maxSeriesLabelWidth > 0m)
-            desiredRightSide = Math.Max(desiredRightSide, maxSeriesLabelWidth);
-        if (maxOverlayWidth > 0m)
-            desiredRightSide = Math.Max(desiredRightSide, maxOverlayWidth + 14m);
-
-        var sideLabelsGutter = Math.Min(desiredRightSide, remainingWidth);
-        var plotRight = BaseRightMargin + legendWidth + sideLabelsGutter;
-
-        var plotWidth = Math.Max(minPlotWidth, totalWidth - plotLeft - plotRight);
-        var plotHeight = plan.Bounds.Height - Top - Bottom;
+        var (areaBounds, sideLabelsGutter, sideLabelsRight) = CartesianPlotLayout.ResolveCartesianMetrics(
+            plan.Bounds, plan.Style, plan.Layers, plan.Series, xScale, plan.Legend.Length);
+        var plotLeft = areaBounds.X;
+        var plotWidth = areaBounds.Width;
+        var plotHeight = areaBounds.Height;
 
         if (transposedPointAxes)
         {
@@ -454,7 +401,6 @@ internal sealed class PlotPlanSvgRenderer
         }
         builder.AppendLine("</g>");
         RenderSmartLabels(builder, plan, smartLabels, area);
-        var sideLabelsRight = totalWidth - BaseRightMargin - legendWidth;
         RenderSideLabels(builder, area, overlayLabels, seriesLabelPlacements, sideLabelsGutter, sideLabelsRight);
 
         if (categories.Length > 0)
@@ -521,7 +467,13 @@ internal sealed class PlotPlanSvgRenderer
         var stacked = rectLayers.Any(layer => layer.Stack != StackMode.None);
         var (slot, outerOffset) = CategoryLayout(categories.Length, plotHeight, bandScale);
         var showLabels = IsEnabled(plan.Style, "DATA_LABELS");
-        var isGrouped = rectLayers.Count > 1 && rectLayers.Any(l => LayerStyle(l, "series") is not null);
+        var hasOffsetDodging = rectLayers.Any(l => HasOffsetChannel(l));
+        var hasDistinctSeries = rectLayers
+            .Select(l => l.SeriesKey)
+            .Where(k => !string.IsNullOrWhiteSpace(k))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count() > 1;
+        var isGrouped = rectLayers.Count > 1 && !hasOffsetDodging && (hasDistinctSeries || rectLayers.Any(l => LayerStyle(l, "series") is not null));
         var transposedValueScale = plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y);
         var sharedRibbonScaleId = plan.Layers.FirstOrDefault()?.AreaRibbonScaleId;
         if (sharedRibbonScaleId is not null && plan.Layers.All(layer => string.Equals(layer.AreaRibbonScaleId, sharedRibbonScaleId, StringComparison.OrdinalIgnoreCase)))
@@ -640,7 +592,8 @@ internal sealed class PlotPlanSvgRenderer
                 value ??= rangedY ? rangeEnd : null;
                 if (datum.IsGap || !value.HasValue) continue;
                 var x = MapHorizontal(value.Value, scale, plotWidth) + datum.DisplayOffsetX;
-                var y = Top + outerOffset + slot * (index + .5m) + datum.DisplayOffsetY;
+                var categoryIndex = CategoryIndexForDatum(datum, bandScale, index);
+                var y = Top + outerOffset + slot * (categoryIndex + .5m) + datum.DisplayOffsetY;
                 var datumColor = EncodingText(datum, ConditionalEncodingChannel.Color) is { } candidate ? SafePaint(candidate, color) : color;
                 var datumOpacity = EncodingNumber(datum, ConditionalEncodingChannel.Opacity) ?? layerOpacity;
                 if (layer.Mark == MarkKind.Rect)
@@ -665,6 +618,18 @@ internal sealed class PlotPlanSvgRenderer
                     {
                         barHeight = groupHeight;
                         top = y - groupHeight / 2m;
+                    }
+                    else if (HasOffsetChannel(layer, FieldChannel.XOffset))
+                    {
+                        var offsetCount = OffsetCategoryCount(plan, FieldChannel.XOffset);
+                        var seriesGap = UnitStyle(plan, "SERIES_GAP");
+                        var gapHeight = seriesGap.HasValue
+                            ? groupHeight * seriesGap.Value / (offsetCount + seriesGap.Value * (offsetCount - 1))
+                            : 0m;
+                        barHeight = seriesGap.HasValue
+                            ? (groupHeight - gapHeight * (offsetCount - 1)) / offsetCount
+                            : groupHeight / offsetCount;
+                        top = y - barHeight / 2m;
                     }
                     else if (isGrouped)
                     {
@@ -1446,16 +1411,19 @@ internal sealed class PlotPlanSvgRenderer
             layer.Data.Any(datum => Channel(datum, FieldChannel.XStart) is not null && Channel(datum, FieldChannel.XEnd) is not null);
         if (categoryCount == 0 && !rangedX) return;
         var layerIndex = Enumerable.Range(0, layers.Count).First(index => ReferenceEquals(layers[index], layer));
-        var layerCount = Math.Max(1, layers.Count);
+        var hasOffsetDodging = !stacked && layers.Any(l => HasOffsetChannel(l));
+        var layerHasXOffset = !stacked && HasOffsetChannel(layer, FieldChannel.XOffset);
+        var layerCount = Math.Max(1, hasOffsetDodging ? 1 : layers.Count);
         var (slot, outerOffset) = CategoryLayout(categoryCount, area.Width, xScale);
         var groupWidth = slot * layer.BandSize;
-        var seriesGap = !stacked && layerCount > 1 ? UnitStyle(plan, "SERIES_GAP") : null;
+        var countForWidth = layerHasXOffset ? OffsetCategoryCount(plan, FieldChannel.XOffset) : layerCount;
+        var seriesGap = !stacked && countForWidth > 1 ? UnitStyle(plan, "SERIES_GAP") : null;
         var gapWidth = seriesGap.HasValue
-            ? groupWidth * seriesGap.Value / (layerCount + seriesGap.Value * (layerCount - 1))
+            ? groupWidth * seriesGap.Value / (countForWidth + seriesGap.Value * (countForWidth - 1))
             : 0m;
         var barWidth = stacked ? groupWidth : seriesGap.HasValue
-            ? (groupWidth - gapWidth * (layerCount - 1)) / layerCount
-            : groupWidth / layerCount;
+            ? (groupWidth - gapWidth * (countForWidth - 1)) / countForWidth
+            : groupWidth / countForWidth;
         // Loop-invariant: style lookups are linear scans over the token array and the extent
         // attributes depend only on the layer, so both resolve once per layer, not once per mark.
         var dataFormat = DataFormat(plan);
@@ -1486,8 +1454,11 @@ internal sealed class PlotPlanSvgRenderer
                     : start + value!.Value;
             var startY = MapY(start, scale, area.Height) + datum.DisplayOffsetY;
             var endY = MapY(end, scale, area.Height) + datum.DisplayOffsetY;
-            var x = area.Left + outerOffset + slot * index + (slot - groupWidth) / 2m +
-                (stacked ? 0m : layerIndex * (barWidth + gapWidth)) + datum.DisplayOffsetX;
+            var categoryIndex = CategoryIndexForDatum(datum, xScale, index);
+            var x = layerHasXOffset
+                ? area.Left + outerOffset + slot * (categoryIndex + .5m) - barWidth / 2m + datum.DisplayOffsetX
+                : area.Left + outerOffset + slot * categoryIndex + (slot - groupWidth) / 2m +
+                  (stacked || hasOffsetDodging ? 0m : layerIndex * (barWidth + gapWidth)) + datum.DisplayOffsetX;
             var width = Math.Max(1m, barWidth - (seriesGap.HasValue ? 0m : 1m));
             if (rangedX)
             {
@@ -4652,7 +4623,7 @@ internal sealed class PlotPlanSvgRenderer
             var xValue = PlotPlanResolver.Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
             var x = xScale is not null && Continuous(xScale) && xValue.HasValue
                 ? MapX(xValue.Value, xScale, area)
-                : CategoryX(index, categoryCount, area, xScale);
+                : CategoryX(CategoryIndexForDatum(datum, xScale, index), categoryCount, area, xScale);
             x += datum.DisplayOffsetX;
             var y = MapY(value.Value, scale, area.Height) + datum.DisplayOffsetY;
             var labelColor = transposedAspect ? ResolveDatumColor(colorScale, datum, color) : color;

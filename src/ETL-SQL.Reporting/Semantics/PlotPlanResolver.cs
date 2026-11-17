@@ -29,7 +29,7 @@ public sealed class PlotPlanResolver
         var columns = data.Columns.ToDictionary(column => column.Name, StringComparer.OrdinalIgnoreCase);
         var formatter = new ChartValueFormatter(spec.Formatting);
         var facets = ResolveFacets(spec, columns, plan.Scales, bounds, formatter);
-        var layers = ResolveDisplayOffsets(spec, data, columns, plan.Layers, plan.Scales, facets, bounds, plan.Legend.Length);
+        var layers = ResolveDisplayOffsets(spec, data, columns, plan.Layers, plan.Scales, plan.Series, facets, bounds, plan.Legend.Length);
         layers = ResolveMarkExtents(spec, layers);
         var summary = BuildSummary(spec, data, plan.Series, layers, plan.Scales, facets,
             plan.Nulls.GapRows, plan.Nulls.SkippedRows);
@@ -188,7 +188,7 @@ public sealed class PlotPlanResolver
     {
         var facets = ResolveFacets(spec, independent.Columns, independent.Scales, bounds, independent.Formatter);
         var layers = ResolveDisplayOffsets(spec, data, independent.Columns, independent.Layers,
-            independent.Scales, facets, bounds, independent.Legend.Length);
+            independent.Scales, independent.Series, facets, bounds, independent.Legend.Length);
         if (spec.HasOrdinaryInterpolation)
             layers = layers.Select(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && layer.Connections.IsDefault
                 ? layer with { PathInterpolation = ResolvedConnectionGeometry.Kind(layer.Style) } : layer).ToImmutableArray();
@@ -946,7 +946,9 @@ public sealed class PlotPlanResolver
         } : spec.NullHandling;
         var categoryBinding = layerBindings.FirstOrDefault(binding => binding.Channel is FieldChannel.X or FieldChannel.Theta);
         var rows = new List<ResolvedDatum>();
-        var preserveRows = spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Radius && binding.Stack != StackMode.None) || layer.Style.Any(token => token.Name.Equals("preserveRows", StringComparison.OrdinalIgnoreCase)
+        var preserveRows = spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Radius && binding.Stack != StackMode.None)
+            || layerBindings.Any(binding => binding.Channel is FieldChannel.XOffset or FieldChannel.YOffset)
+            || layer.Style.Any(token => token.Name.Equals("preserveRows", StringComparison.OrdinalIgnoreCase)
             && token.Value.Equals("true", StringComparison.OrdinalIgnoreCase));
         if (!preserveRows && categoryBinding is not null && categoryBinding.SemanticKind != DataSemanticKind.Quantitative &&
             categoryBinding.Field is { } categoryField && columns.TryGetValue(categoryField, out var categoryColumn) && !categories.IsDefaultOrEmpty)
@@ -1987,6 +1989,7 @@ public sealed class PlotPlanResolver
         IReadOnlyDictionary<string, ChartColumn> columns,
         ImmutableArray<ResolvedMarkLayer> layers,
         ImmutableArray<ResolvedScale> scales,
+        ImmutableArray<ResolvedSeries> series,
         ImmutableArray<ResolvedFacetPanel> facets,
         PlotBounds bounds,
         int legendCount)
@@ -2034,24 +2037,57 @@ public sealed class PlotPlanResolver
         }
 
         var axes = spec.ResolveCartesianAxes();
+        var cartesianViewport = spec.Coordinate.Kind == CoordinateKind.Cartesian && spec.Coordinate.AspectRatio is not null
+            ? ResolveCartesianViewport(spec.Coordinate, scales, bounds, axes)
+            : null;
+        var cartesianAreas = new Dictionary<PlotBounds, PlotBounds>();
+        PlotBounds CartesianArea(PlotBounds frame, ResolvedScale? frameXScale)
+        {
+            if (!cartesianAreas.TryGetValue(frame, out var area))
+            {
+                cartesianAreas[frame] = area = CartesianPlotLayout.ResolveCartesianArea(
+                    frame, spec.Theme.Tokens, layers, series, frameXScale, legendCount);
+            }
+            return area;
+        }
+
         return layers.Select(layer => layer with
         {
             Data = layer.Data.Select(datum =>
             {
                 var panel = panelByRow.GetValueOrDefault(datum.RowIndex);
                 var datumScales = panel?.Scales ?? scales;
-                var datumBounds = panel?.CartesianViewport ?? panel?.Bounds ?? bounds;
+                var datumBounds = panel?.CartesianViewport ?? panel?.Bounds ?? cartesianViewport ?? bounds;
                 var xScale = datumScales.FirstOrDefault(scale => axes is null ? scale.Channel == FieldChannel.X : scale.Id.Equals(axes.XScaleId, StringComparison.OrdinalIgnoreCase));
                 var yScale = datumScales.FirstOrDefault(scale => axes is null ? scale.Channel is FieldChannel.Y or FieldChannel.Y2 : scale.Id.Equals(axes.YScaleId, StringComparison.OrdinalIgnoreCase));
-                var xBand = datumBounds.Width / Math.Max(1, xScale?.Categories.Length ?? 1);
-                var yBand = datumBounds.Height / Math.Max(1, yScale?.Categories.Length ?? 1);
-                var offsetX = ResolveOffsetChannel(datum, FieldChannel.XOffset, datumScales, xBand);
-                var offsetY = ResolveOffsetChannel(datum, FieldChannel.YOffset, datumScales, yBand);
+                decimal xBand;
+                decimal yBand;
+                decimal offsetX;
+                decimal offsetY;
                 if (transposedPlacementViewport is not null)
                 {
                     var viewport = panel?.CartesianViewport ?? panel?.Bounds ?? transposedPlacementViewport;
+                    xBand = datumBounds.Width / Math.Max(1, xScale?.Categories.Length ?? 1);
+                    yBand = datumBounds.Height / Math.Max(1, yScale?.Categories.Length ?? 1);
                     offsetX = ResolveOffsetChannel(datum, FieldChannel.YOffset, datumScales, viewport.Width - 80m, respectReverse: true);
                     offsetY = -ResolveOffsetChannel(datum, FieldChannel.XOffset, datumScales, viewport.Height - 100m, respectReverse: true);
+                }
+                else if (spec.Coordinate.Kind == CoordinateKind.TransposedCartesian)
+                {
+                    var plotWidth = Math.Max(0m, datumBounds.Width - CartesianPlotLayout.BaseLeftMargin - CartesianPlotLayout.BaseRightMargin);
+                    var plotHeight = Math.Max(0m, datumBounds.Height - CartesianPlotLayout.TopMargin - CartesianPlotLayout.BottomMargin);
+                    xBand = plotHeight / Math.Max(1, xScale?.Categories.Length ?? 1);
+                    yBand = plotWidth / Math.Max(1, yScale?.Categories.Length ?? 1);
+                    offsetX = ResolveOffsetChannel(datum, FieldChannel.YOffset, datumScales, yBand, respectReverse: true);
+                    offsetY = ResolveOffsetChannel(datum, FieldChannel.XOffset, datumScales, xBand);
+                }
+                else
+                {
+                    var cartesianArea = CartesianArea(datumBounds, xScale);
+                    xBand = cartesianArea.Width / Math.Max(1, xScale?.Categories.Length ?? 1);
+                    yBand = cartesianArea.Height / Math.Max(1, yScale?.Categories.Length ?? 1);
+                    offsetX = ResolveOffsetChannel(datum, FieldChannel.XOffset, datumScales, xBand);
+                    offsetY = ResolveOffsetChannel(datum, FieldChannel.YOffset, datumScales, yBand);
                 }
                 if (layer.Position is { } position)
                 {

@@ -275,4 +275,179 @@ public sealed class TransposedAspectOffsetTests
         var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
         return (spec, new VisualChartDataBuilder().Build(spec, manifest));
     }
+
+    [Fact]
+    public void TransposedCustomGroupedBars_WithColorSeries_DodgeIntoNonOverlappingLanes()
+    {
+        const string sql = """
+            CREATE VISUAL DeptSpend AS CUSTOM (
+              SOURCE = #spend,
+              CHART (
+                COORDINATE (TYPE = TRANSPOSED_CARTESIAN),
+                LAYERS (bars = RECT (
+                  ENCODINGS (
+                    X = Dept (TYPE = NOMINAL),
+                    Y = Amount (TYPE = QUANTITATIVE),
+                    COLOR = Region (TYPE = NOMINAL)
+                  )
+                ))
+              )
+            );
+            """;
+        var statement = Parse(sql);
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(statement));
+        var manifest = new VisualManifest
+        {
+            Name = "DeptSpend",
+            Columns = ["Dept", "Region", "Amount"],
+            Rows =
+            [
+                ["Eng", "North", "100"],
+                ["Eng", "South", "80"],
+                ["Sales", "North", "60"],
+                ["Sales", "South", "90"]
+            ]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 600, 350));
+        var svg = XDocument.Parse(new SvgChartRenderer().Render(plan));
+
+        var rects = svg.Descendants()
+            .Where(el => el.Name.LocalName == "rect" && el.Attribute("data-row-index") is not null)
+            .ToArray();
+        Assert.Equal(4, rects.Length);
+
+        var engNorth = rects.Single(r => (string?)r.Attribute("data-row-index") == "0");
+        var engSouth = rects.Single(r => (string?)r.Attribute("data-row-index") == "1");
+        var northTop = Read(engNorth, "y");
+        var northBottom = northTop + Read(engNorth, "height");
+        var southTop = Read(engSouth, "y");
+        Assert.True(southTop >= northBottom - .01m, $"Expected dodged horizontal bars not to overlap (north bottom {northBottom}, south top {southTop}).");
+    }
+
+    [Theory]
+    [InlineData("CARTESIAN")]
+    [InlineData("TRANSPOSED_CARTESIAN")]
+    public void OffsetBars_PreserveRowsAlignPlotAreaAndPreventDoubleDodging(string coordinate)
+    {
+        var sql = $$"""
+            CREATE VISUAL DodgedSpend AS CUSTOM (
+              SOURCE = #spend,
+              CHART (
+                COORDINATE (TYPE = {{coordinate}}),
+                LAYERS (bars = RECT (
+                  ENCODINGS (
+                    X = Dept (TYPE = NOMINAL),
+                    Y = Amount (TYPE = QUANTITATIVE),
+                    COLOR = Quarter (TYPE = NOMINAL),
+                    X_OFFSET = Quarter (TYPE = NOMINAL)
+                  )
+                ))
+              )
+            );
+            """;
+        var statement = Parse(sql);
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(statement));
+        var manifest = new VisualManifest
+        {
+            Name = "DodgedSpend",
+            Columns = ["Dept", "Quarter", "Amount"],
+            Options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["LEGEND_POSITION"] = "RIGHT"
+            },
+            Rows =
+            [
+                ["Eng", "Q1", "100"],
+                ["Eng", "Q2", "80"],
+                ["Sales", "Q1", "60"],
+                ["Sales", "Q2", "90"]
+            ]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 600, 350));
+
+        var q1Layer = Assert.Single(plan.Layers, l => string.Equals(l.SeriesKey, "Q1", StringComparison.OrdinalIgnoreCase));
+        var q2Layer = Assert.Single(plan.Layers, l => string.Equals(l.SeriesKey, "Q2", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(2, q1Layer.Data.Length);
+        Assert.Equal(2, q2Layer.Data.Length);
+
+        var svg = XDocument.Parse(new SvgChartRenderer().Render(plan));
+        var rects = svg.Descendants()
+            .Where(el => el.Name.LocalName == "rect" && el.Attribute("data-row-index") is not null)
+            .ToArray();
+        Assert.Equal(4, rects.Length);
+
+        if (coordinate == "CARTESIAN")
+        {
+            // Right legend reserves 120px on top of 60 + 20 margins -> 400px plot width / 2 categories = 200px band -> +/- 50px offset.
+            Assert.All(q1Layer.Data, d => Assert.Equal(-50m, d.DisplayOffsetX));
+            Assert.All(q2Layer.Data, d => Assert.Equal(50m, d.DisplayOffsetX));
+            var engQ1 = rects.Single(r => (string?)r.Attribute("data-row-index") == "0");
+            var engQ2 = rects.Single(r => (string?)r.Attribute("data-row-index") == "1");
+            Assert.True(Read(engQ2, "x") >= Read(engQ1, "x") + Read(engQ1, "width") - .01m);
+        }
+        else
+        {
+            // Transposed height is 350 - 100 = 250px / 2 categories = 125px band -> +/- 31.25px vertical offset.
+            Assert.All(q1Layer.Data, d => Assert.Equal(-31.25m, d.DisplayOffsetY));
+            Assert.All(q2Layer.Data, d => Assert.Equal(31.25m, d.DisplayOffsetY));
+            var engQ1 = rects.Single(r => (string?)r.Attribute("data-row-index") == "0");
+            var engQ2 = rects.Single(r => (string?)r.Attribute("data-row-index") == "1");
+            Assert.True(Read(engQ2, "y") >= Read(engQ1, "y") + Read(engQ1, "height") - .01m);
+        }
+    }
+
+    [Fact]
+    public void OffsetBars_SingleLayerDuplicates_AreNotDeduplicatedAndPositionInCategorySlots()
+    {
+        const string sql = """
+            CREATE VISUAL SingleLayerDodged AS CUSTOM (
+              SOURCE = #spend,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                LAYERS (bars = RECT (
+                  ENCODINGS (
+                    X = Dept (TYPE = NOMINAL),
+                    Y = Amount (TYPE = QUANTITATIVE),
+                    X_OFFSET = Quarter (TYPE = NOMINAL)
+                  )
+                ))
+              )
+            );
+            """;
+        var statement = Parse(sql);
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(statement));
+        var manifest = new VisualManifest
+        {
+            Name = "SingleLayerDodged",
+            Columns = ["Dept", "Quarter", "Amount"],
+            Rows =
+            [
+                ["Eng", "Q1", "100"],
+                ["Eng", "Q2", "80"],
+                ["Sales", "Q1", "60"],
+                ["Sales", "Q2", "90"]
+            ]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 600, 350));
+
+        Assert.Equal(4, Assert.Single(plan.Layers).Data.Length);
+        var svg = XDocument.Parse(new SvgChartRenderer().Render(plan));
+        var rects = svg.Descendants()
+            .Where(el => el.Name.LocalName == "rect" && el.Attribute("data-row-index") is not null)
+            .ToArray();
+        Assert.Equal(4, rects.Length);
+
+        var engQ1X = Read(rects.Single(r => (string?)r.Attribute("data-row-index") == "0"), "x");
+        var engQ2X = Read(rects.Single(r => (string?)r.Attribute("data-row-index") == "1"), "x");
+        var engQ1W = Read(rects.Single(r => (string?)r.Attribute("data-row-index") == "0"), "width");
+        var salesQ1X = Read(rects.Single(r => (string?)r.Attribute("data-row-index") == "2"), "x");
+        Assert.True(engQ2X >= engQ1X + engQ1W - .01m);
+        Assert.True(salesQ1X > engQ2X);
+    }
 }
