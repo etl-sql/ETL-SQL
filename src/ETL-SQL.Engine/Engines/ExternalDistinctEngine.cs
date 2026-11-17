@@ -149,15 +149,36 @@ internal sealed class ExternalDistinctEngine
             yield break;
         }
 
-        // Governor on → build with a memory backstop so wide rows under the row threshold still
-        // can't blow the ceiling. On pressure (null), try to repartition; if that can't help,
-        // apply the governor policy.
-        var built = await DedupToList(name, ceiling);
+        // Governor on → build with a memory backstop and shared coordinator lease so wide rows under
+        // the row threshold still can't blow the ceiling. On pressure (null), release the lease,
+        // try to repartition; if that can't help, apply the governor policy.
+        var arbiter = _context.MemoryArbiter ?? MemoryGrantArbiter.Shared;
+        var dedupLease = arbiter.AcquireLease();
+        PackedRows? built = null;
+        try
+        {
+            built = await DedupToList(name, ceiling, dedupLease);
+        }
+        catch
+        {
+            dedupLease.Dispose();
+            throw;
+        }
+
         if (built != null)
         {
-            foreach (var blob in built.Blobs) yield return RowPacker.Unpack(blob, built.Columns);
+            try
+            {
+                foreach (var blob in built.Blobs) yield return RowPacker.Unpack(blob, built.Columns);
+            }
+            finally
+            {
+                dedupLease.Dispose();
+            }
             yield break;
         }
+
+        dedupLease.Dispose();
 
         if (canRepartition)
         {
@@ -262,7 +283,7 @@ internal sealed class ExternalDistinctEngine
     /// rows count against the budget — a duplicate adds nothing to the in-memory set. The duplicate
     /// check still needs the <see cref="CompoundKey"/> in <c>seen</c>; only the output rows are packed.
     /// </summary>
-    private async Task<PackedRows?> DedupToList(string name, long ceiling)
+    private async Task<PackedRows?> DedupToList(string name, long ceiling, IMemoryGrantLease lease)
     {
         var seen = new HashSet<CompoundKey>();
         var packed = new PackedRows();
@@ -289,7 +310,7 @@ internal sealed class ExternalDistinctEngine
                         var blob = packer.Pack(batch, rowIndex);
                         packed.Blobs.Add(blob);
                         guard.Add(blob.Length + 24 + RowMemory.EstimateKeyBytes(key));
-                        if (guard.Exceeded()) return null;
+                        if (guard.Exceeded() || lease.RegisterAndCheckSpill(guard.BytesAccumulated)) return null;
                     }
                 }
             }
@@ -310,7 +331,7 @@ internal sealed class ExternalDistinctEngine
                 var blob = packer.Pack(row, packed.Columns);
                 packed.Blobs.Add(blob);
                 guard.Add(blob.Length + 24 + RowMemory.EstimateKeyBytes(key)); // blob + seen-set key
-                if (guard.Exceeded()) return null;
+                if (guard.Exceeded() || lease.RegisterAndCheckSpill(guard.BytesAccumulated)) return null;
             }
         }
         return packed;

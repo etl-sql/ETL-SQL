@@ -47,12 +47,19 @@ public class SelectExecutionEngine
         List<string> colNames)
     {
         using var pipelineCursorScope = PipelineCursorScope.EnterDeferred();
-        // Hold a grant-pool lease for the lifetime of the pipeline; disposed when the consumer
-        // finishes or abandons enumeration, releasing this query's reserved footprint.
-        using var lease = _context.MemoryArbiter.AcquireLease();
-        _memLease = lease;
-        await foreach (var batch in ExecuteHeavyPipelineCore(stmt, sourceBatches, finalColumns, colNames))
-            yield return batch;
+        // Hold a grant-pool lease for the lifetime of in-memory probe/row buffers; released when
+        // transitioning to external engines or when the consumer finishes or abandons enumeration.
+        _memLease = _context.MemoryArbiter.AcquireLease();
+        try
+        {
+            await foreach (var batch in ExecuteHeavyPipelineCore(stmt, sourceBatches, finalColumns, colNames))
+                yield return batch;
+        }
+        finally
+        {
+            _memLease.Dispose();
+            _memLease = UnlimitedMemoryGrantArbiter.Instance.AcquireLease();
+        }
     }
 
     private async IAsyncEnumerable<DataTable> ExecuteHeavyPipelineCore(
@@ -234,6 +241,7 @@ public class SelectExecutionEngine
                         externalEngineStream = externalAggregate.ApplyAggregationExternal(
                             aggregateInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
                         allRows = [];
+                        ResetProbeMemoryLease();
                     }
                     else
                     {
@@ -303,6 +311,7 @@ public class SelectExecutionEngine
                         joinEnumeratorHandedOff = true;
                         externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(windowInput, stmt);
                         allRows = [];
+                        ResetProbeMemoryLease();
                         windowApplied = true;
                     }
                     else
@@ -400,6 +409,7 @@ public class SelectExecutionEngine
                         enumeratorHandedOff = true;
                         externalEngineStream = externalAgg.ApplyAggregationExternal(combinedStream, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
                         allRows = [];
+                        ResetProbeMemoryLease();
                     }
                     else
                     {
@@ -581,6 +591,7 @@ public class SelectExecutionEngine
                                 externalEngineStream = PrependRows(winPrefix, ContinueStreamAndDispose(winEnumerator));
                                 winHandedOff = true;
                                 allRows = [];
+                                ResetProbeMemoryLease();
                             }
                             else
                             {
@@ -658,6 +669,7 @@ public class SelectExecutionEngine
                     knownRowCount: allRows.Count,
                     knownInputBytes: RowWidthEstimator.EstimateTotalBytes(allRows));
                 allRows = [];
+                ResetProbeMemoryLease();
             }
             else
             {
@@ -676,6 +688,7 @@ public class SelectExecutionEngine
                         knownRowCount: allRows.Count,
                         knownInputBytes: RowWidthEstimator.EstimateTotalBytes(allRows));
                     allRows = [];
+                    ResetProbeMemoryLease();
                 }
             }
         }
@@ -697,6 +710,7 @@ public class SelectExecutionEngine
                     knownRowCount: allRows.Count,
                     knownInputBytes: RowWidthEstimator.EstimateTotalBytes(allRows));
                 allRows = [];
+                ResetProbeMemoryLease();
             }
             else
             {
@@ -740,6 +754,7 @@ public class SelectExecutionEngine
             externalEngineStream = new ExternalDistinctEngine(_context).ApplyAsync(
                 ProjectRows(distinctInput, stmt, finalColumns, colNames, hasPreEvaluatedColumns, canDeferWhere));
             allRows = [];
+            ResetProbeMemoryLease();
             hasPreEvaluatedColumns = true;
             whereApplied = true;
             canDeferWhere = false;
@@ -785,6 +800,7 @@ public class SelectExecutionEngine
                     var externalSort = new ExternalSortEngine(_context, _logger);
                     externalEngineStream = externalSort.SortStreamAsync(allRows.ToAsyncEnumerable(), stmt.OrderBy);
                     allRows = [];
+                    ResetProbeMemoryLease();
                 }
                 else
                 {
@@ -1475,6 +1491,12 @@ public class SelectExecutionEngine
                 compiled[i] = value;
         }
         return compiled;
+    }
+
+    private void ResetProbeMemoryLease()
+    {
+        _memLease.Dispose();
+        _memLease = _context.MemoryArbiter.AcquireLease();
     }
 
     private bool ShouldSpill(IReadOnlyList<Row> rows)

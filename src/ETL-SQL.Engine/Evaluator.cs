@@ -714,8 +714,16 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         ExternalSortChunkSize = DefaultThresholds.ExternalSortChunkSize(config);
         WindowSpillThreshold = DefaultThresholds.WindowSpillThreshold(config);
         OperatorMemoryGrantMB = DefaultThresholds.OperatorMemoryGrantMB(config);
-        // Configure the process-wide grant pool (shared across concurrent jobs). 0 = unbounded.
-        MemoryGrantArbiter.Shared.TotalBudgetBytes = (long)DefaultThresholds.TotalMemoryGrantMB(config) * 1024 * 1024;
+        // Bind to the host's unified resource coordinator when available (via IBufferManager);
+        // otherwise configure the fallback shared arbiter from Engine:TotalMemoryGrantMB.
+        if (_bufferManager is IMemoryGrantArbiter coordinatorArbiter)
+        {
+            MemoryArbiter = new SessionScopedMemoryArbiter(_bufferManager, coordinatorArbiter, () => SessionId);
+        }
+        else
+        {
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = (long)DefaultThresholds.TotalMemoryGrantMB(config) * 1024 * 1024;
+        }
         MemoryGovernorPolicy = DefaultThresholds.MemoryGovernorPolicy(config);
         _options.AdaptiveExecutionOptions = LoadAdaptiveOptions(config);
         TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
@@ -2079,5 +2087,17 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         public override bool Equals(object? obj) => obj is NodeReuseKey k && Equals(k);
 
         public override int GetHashCode() => HashCode.Combine(_hasParent, _parentId, _stmtHash);
+    }
+
+    private sealed class SessionScopedMemoryArbiter(
+        IBufferManager bufferManager,
+        IMemoryGrantArbiter innerArbiter,
+        Func<string?> sessionIdAccessor) : IMemoryGrantArbiter
+    {
+        public long TotalBudgetBytes => innerArbiter.TotalBudgetBytes;
+        public long ReservedBytes => innerArbiter.ReservedBytes;
+
+        public IMemoryGrantLease AcquireLease()
+            => bufferManager.AcquireMemoryLease(sessionIdAccessor());
     }
 }

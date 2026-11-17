@@ -1,22 +1,29 @@
 # Resource Governance
 
-To prevent Out-Of-Memory (OOM) errors and database connection exhaustion in multi-user environments, the Orchestrator employs a **Buffer Manager**.
+To prevent Out-Of-Memory (OOM) errors and database connection exhaustion in multi-user environments, the Orchestrator and Execution Engine share one coordinator (**`BufferManager`** implementing both `IBufferManager` and `IMemoryGrantArbiter`). Both async session reservations and synchronous external-operator leases (`Sort`, `Window`, `Join`, `Aggregate`, `Distinct`, `TopN`, `#temp`) draw from the same byte counter without double counting.
 
-## Resource Queuing (FIFO)
-When global limits for RAM (`MaxGlobalMemoryMB`) or Database Cursors (`MaxStreamingCursors`) are reached, new requests are placed in a **First-In, First-Out (FIFO)** queue. 
+## Precedence & Compatibility
 
-- **Graceful Wait**: The engine will block and wait for resources to become available.
-- **Visual Feedback**: Every minute, the engine prints a status update to the console or session log: `Waiting for resources... (T-4 minutes remaining)`. This allows operators to differentiate between a hung process and a resource-constrained wait.
-- **Timeout**: If the resource is not granted within the configured `ResourceWaitTimeoutSeconds` (default 10 minutes), the script fails with a `TimeoutException`.
+- **`Engine:TotalMemoryGrantMB >= 0`**: Explicit engine ceiling takes precedence (`0` disables the global ceiling while preserving any active `SystemMemoryFloorMB`; positive values override `MaxGlobalMemoryMB`).
+- **`Engine:TotalMemoryGrantMB < 0` or unset (`auto`)**: Resolves to `min(auto80PercentOfRam, Orchestration:ResourceManagement:MaxGlobalMemoryMB)` when `MaxGlobalMemoryMB > 0`.
+- **`Engine:OperatorMemoryGrantMB`** (or `SET OPERATOR_MEMORY_GRANT = n`): Bounds a single operator's in-memory buffer by `min(OperatorMemoryGrantMB, coordinatorCeiling)`.
+- **`SystemMemoryFloorMB` (default `512` MB)**: `DefaultSystemResources` measures **current host/container free memory headroom** (Windows `GlobalMemoryStatusEx` + job limits; Linux `/proc/meminfo` `MemAvailable` + cgroups v1/v2) rather than static total RAM capacity. Because free headroom on 2–8 GB hosts and containers can sit below 4 GB while idle, the default floor moved from `4096` MB to `512` MB (set explicitly to `4096` to keep the legacy server floor, or `0` to disable).
+
+## Resource Queuing (FIFO) & Operator Spill
+
+When global limits for RAM or Database Cursors (`MaxStreamingCursors`) are reached, or when live host/container headroom drops below `SystemMemoryFloorMB`:
+
+- **Async reservations (`ReserveMemoryAsync`)**: New callers wait in a **FIFO** queue and resume automatically once released reservations clear hysteresis or host headroom recovers above the floor.
+- **External operators (`IMemoryGrantLease`)**: Never block while holding buffers needed for downstream progress; `RegisterAndCheckSpill` signals pressure immediately so the operator spills to disk and frees its reservation.
+- **Visual Feedback**: Waiting requests log progress updates (`Session ... still waiting for ...`).
+- **Timeout**: If a queued wait is not granted within `ResourceWaitTimeoutSeconds` (default `600` seconds), it fails with `TimeoutException`.
 
 ## Hysteresis (Memory Cooldown)
-To prevent "resource thrashing" (where the engine constantly starts and immediately stalls tasks as tiny amounts of memory fluctuate), the Buffer Manager employs a **Hysteresis Threshold**.
+To prevent resource thrashing when the global limit is hit:
 
-Once the global memory limit is hit and the engine enters the "Exhausted" state:
-1. All new memory requests are queued.
-2. Queue processing is **suspended** until memory usage drops below a safe threshold.
-3. Safe threshold = `MaxGlobalMemoryMB - HysteresisMemoryMB`.
-4. This ensures that when the engine resumes, it has enough room to process at least a few full batches without immediately re-entering the exhausted state.
+1. Entering exhaustion triggers proactive spills on registered spillable buffers (`InMemoryDataSource`) and pauses new admissions.
+2. Safe threshold = `max(EffectiveMaxMemory - HysteresisMemoryMB, EffectiveMaxMemory / 2)`.
+3. Admission resumes when active usage + the requested allocation fit under the safe threshold (or when all reservations drain to zero).
 
 ## Policy Overrides
 Users can bypass global resource governors using `SET` commands (e.g., `SET MAX_MEMORY = 4096`). 

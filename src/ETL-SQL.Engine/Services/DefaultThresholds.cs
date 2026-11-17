@@ -62,13 +62,17 @@ public static class DefaultThresholds
     /// a 128 GB server without per-host tuning.
     /// </summary>
     internal static int AutoMemoryGrantMB()
+        => MemoryCoordinatorPolicy.ComputeAutoMemoryGrantMB();
+
+    /// <summary>
+    /// Consolidated global ceiling in MB resolving <c>Engine:TotalMemoryGrantMB</c> against
+    /// <c>Orchestration:ResourceManagement:MaxGlobalMemoryMB</c>.
+    /// </summary>
+    public static int ResolveGlobalMemoryGrantMB(IConfiguration? config, int? maxGlobalMemoryMB = null)
     {
-        long totalBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
-        if (totalBytes <= 0) return 4096; // unknown environment — safe fallback
-        long autoMB = (long)(totalBytes * 0.80 / (1024 * 1024));
-        if (autoMB < 512) autoMB = 512;
-        if (autoMB > int.MaxValue) autoMB = int.MaxValue;
-        return (int)autoMB;
+        var engineConfigured = config?.GetValue<int?>("Engine:TotalMemoryGrantMB");
+        var orchConfigured = maxGlobalMemoryMB ?? config?.GetValue<int?>("Orchestration:ResourceManagement:MaxGlobalMemoryMB");
+        return MemoryCoordinatorPolicy.ResolveEffectiveGlobalMemoryMB(engineConfigured, orchConfigured);
     }
 
     /// <summary>

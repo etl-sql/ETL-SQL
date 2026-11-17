@@ -89,11 +89,11 @@ Polling reloads the table and timeline catalog when the connection recovers.
 
 | Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `Orchestration:ResourceManagement:MaxGlobalMemoryMB` | integer | `2048` | Memory floor threshold for scheduling new background tasks. |
+| `Orchestration:ResourceManagement:MaxGlobalMemoryMB` | integer | `2048` | Shared global RAM ceiling (MB) across async reservations and operator leases when `Engine:TotalMemoryGrantMB` is unset or `-1` (`auto`). When both are active under `auto`, the coordinator takes `min(auto, MaxGlobalMemoryMB)`. Explicit `Engine:TotalMemoryGrantMB >= 0` takes precedence. |
 | `Orchestration:ResourceManagement:MaxStreamingCursors` | integer | `50` | Max open active cursors across all jobs. |
 | `Orchestration:ResourceManagement:ResourceWaitTimeoutSeconds` | integer | `600` | Duration jobs wait in queue for RAM to free before timing out. |
-| `Orchestration:ResourceManagement:HysteresisMemoryMB` | integer | `256` | Memory buffer required before the queue restarts paused jobs. |
-| `Orchestration:ResourceManagement:SystemMemoryFloorMB` | integer | `4096` | Target free system RAM floor; new jobs wait if host free RAM is lower. |
+| `Orchestration:ResourceManagement:HysteresisMemoryMB` | integer | `256` | Memory cooldown buffer required before admission resumes after exhaustion (`safe = max(MaxGlobalMemory - Hysteresis, MaxGlobalMemory / 2)`). |
+| `Orchestration:ResourceManagement:SystemMemoryFloorMB` | integer | `512` | Minimum live host/container free memory headroom (MB); new allocations wait and operators spill when live headroom drops below this floor (0 disables). Default lowered from `4096` because headroom now measures current free memory instead of total capacity. |
 
 ---
 

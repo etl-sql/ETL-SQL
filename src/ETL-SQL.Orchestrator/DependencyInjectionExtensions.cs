@@ -115,9 +115,10 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<ETL_SQL.Core.Interfaces.ILanguageHelpRegistry>(helpRegistry);
 
             services.AddSingleton<ISystemResources, DefaultSystemResources>();
-            services.AddSingleton<IBufferManager, BufferManager>();
-            services.AddSingleton<BufferManager>();
             services.Configure<BufferManagerOptions>(configuration.GetSection("Orchestration:ResourceManagement"));
+            services.AddSingleton<BufferManager>();
+            services.AddSingleton<IBufferManager>(sp => sp.GetRequiredService<BufferManager>());
+            services.AddSingleton<IMemoryGrantArbiter>(sp => sp.GetRequiredService<BufferManager>());
 
             services.AddSingleton<ETL_SQL.Core.Execution.ISessionStateManager>(sp =>
             {

@@ -102,15 +102,30 @@ namespace ETL_SQL.Tests.Orchestration
         public async Task BufferManager_EnforcesSystemMemoryFloor()
         {
             var mockSys = new Mock<ISystemResources>();
-            // Simulate 2GB available (below 4GB default floor)
-            mockSys.Setup(r => r.GetAvailableMemoryBytes()).Returns(2L * 1024 * 1024 * 1024);
+            // Simulate 256MB available (below default 512MB floor)
+            mockSys.Setup(r => r.GetAvailableMemoryBytes()).Returns(256L * 1024 * 1024);
 
             var bm = CreateBufferManager(maxMemMB: 100, sysRes: mockSys.Object);
 
-            // Request 1MB - should timeout even though engine has 100MB free, 
-            // because system memory is below floor.
+            // Request 1MB - should timeout even though engine has 100MB free,
+            // because system memory is below default 512MB floor.
             await Assert.ThrowsAsync<TimeoutException>(() =>
                 bm.ReserveMemoryAsync("session1", 1 * 1024 * 1024));
+
+            // Explicit custom floor also remains honored.
+            var mockExplicitSys = new Mock<ISystemResources>();
+            mockExplicitSys.Setup(r => r.GetAvailableMemoryBytes()).Returns(2L * 1024 * 1024 * 1024);
+            var explicitOptions = Options.Create(new BufferManagerOptions
+            {
+                MaxGlobalMemoryMB = 100,
+                MaxStreamingCursors = 2,
+                ResourceWaitTimeoutSeconds = 1,
+                HysteresisMemoryMB = 0,
+                SystemMemoryFloorMB = 4096
+            });
+            using var explicitBm = new BufferManager(explicitOptions, new TestLogger<BufferManager>(), mockExplicitSys.Object);
+            await Assert.ThrowsAsync<TimeoutException>(() =>
+                explicitBm.ReserveMemoryAsync("session2", 1 * 1024 * 1024));
         }
 
         [Fact]

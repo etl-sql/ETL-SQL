@@ -62,6 +62,13 @@ public interface IBufferManager
     /// Proactively triggers spills on registered objects to free memory.
     /// </summary>
     Task<long> TriggerSpillsUnderPressureAsync(long requiredBytes);
+
+    /// <summary>
+    /// Acquires a synchronous, delta-accounted memory lease backed by the coordinator's shared
+    /// budget, hysteresis state, and system memory floor.
+    /// </summary>
+    IMemoryGrantLease AcquireMemoryLease(string? sessionId = null, object? owner = null)
+        => (this as IMemoryGrantArbiter ?? UnlimitedMemoryGrantArbiter.Instance).AcquireLease();
 }
 
 /// <summary>

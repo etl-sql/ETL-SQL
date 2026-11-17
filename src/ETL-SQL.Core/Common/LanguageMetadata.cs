@@ -242,8 +242,8 @@ public static class LanguageMetadata
     /// <summary>Default maximum size in bytes for a persisted session payload.</summary>
     public const long DefaultMaxSessionSize = 200 * 1024 * 1024; // 200 MiB
 
-    /// <summary>Default minimum OS physical memory that must remain free (4GB).</summary>
-    public const int DefaultSystemMemoryFloorMB = 4096;
+    /// <summary>Default minimum live OS/container available memory headroom (512 MB).</summary>
+    public const int DefaultSystemMemoryFloorMB = 512;
 
     public static bool IsKeyword(string word) => DmlKeywords.Contains(word) || DdlKeywords.Contains(word) || ControlFlowKeywords.Contains(word) || JoinKeywords.Contains(word) || OperatorKeywords.Contains(word) || Keywords.Contains(word) || ConnectorTypes.Contains(word) || Functions.Contains(word);
     public static bool IsFunction(string word) => Functions.Contains(word);

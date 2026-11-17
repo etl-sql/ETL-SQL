@@ -99,6 +99,7 @@ public class ExternalJoinEngine
             // 2. Join Phase (one partition at a time)
             for (int i = 0; i < PartitionCount; i++)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 await foreach (var row in JoinPartition(
                     leftPartitions.Names[i],
                     rightPartitions.Names[i],
@@ -108,8 +109,10 @@ public class ExternalJoinEngine
                     leftKeys,
                     rightKeys,
                     depth: 0,
-                    tempFiles))
+                    tempFiles,
+                    effectiveCancellationToken))
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     yield return row;
                 }
             }
@@ -192,16 +195,31 @@ public class ExternalJoinEngine
         List<string> leftKeys,
         List<string> rightKeys,
         int depth,
-        List<string> tempFiles)
+        List<string> tempFiles,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         // Memory-guarded direct join. The (right) build side is read fully before any probe row is
         // emitted, so if heap growth crosses the governor ceiling mid-build (e.g. wide rows under the
         // row threshold) we can repartition or apply policy without having yielded anything.
         long ceiling = MemoryGovernor.Ceiling(_context);
-        var hashTable = await BuildJoinHashTable(rightName, rightKeys, new MemoryBudgetGuard(ceiling));
+        var arbiter = _context.MemoryArbiter ?? MemoryGrantArbiter.Shared;
+        var buildLease = arbiter.AcquireLease();
+        PackedBuildTable? hashTable = null;
+        try
+        {
+            hashTable = await BuildJoinHashTable(rightName, rightKeys, new MemoryBudgetGuard(ceiling), buildLease);
+        }
+        catch
+        {
+            buildLease.Dispose();
+            throw;
+        }
 
         if (hashTable == null)
         {
+            // Release rejected build footprint before recursing or enforcing policy.
+            buildLease.Dispose();
             PlanDecisionRecorder.Record(_context, "external-join.memory", "ExternalJoin",
                 PlanDecisionOutcome.Degraded, PlanDecisionReasonCodes.MemoryAdmissionRejected,
                 "External join build partition exceeded the memory ceiling; attempting recursive repartition.",
@@ -215,7 +233,7 @@ public class ExternalJoinEngine
                 var split = await TryRepartitionBothSides(leftName, rightName, leftKeys, rightKeys, rightRowCount, depth + 1, tempFiles);
                 if (split != null)
                 {
-                    await foreach (var row in JoinSubPartitions(split.Value.Left, split.Value.Right, join, leftKeys, rightKeys, depth + 1, tempFiles))
+                    await foreach (var row in JoinSubPartitions(split.Value.Left, split.Value.Right, join, leftKeys, rightKeys, depth + 1, tempFiles, cancellationToken))
                         yield return row;
                     yield break;
                 }
@@ -240,19 +258,28 @@ public class ExternalJoinEngine
                 "Engine:MemoryGovernorPolicy = SpillOnly to churn to completion.");
 
             // SpillOnly churn: rebuild unguarded and continue.
-            hashTable = await BuildJoinHashTable(rightName, rightKeys, new MemoryBudgetGuard(0));
+            hashTable = await BuildJoinHashTable(rightName, rightKeys, new MemoryBudgetGuard(0), lease: null);
         }
 
-        await foreach (var row in ProbeJoin(leftName, hashTable!, join, leftKeys))
-            yield return row;
+        try
+        {
+            await foreach (var row in ProbeJoin(leftName, hashTable!, join, leftKeys, cancellationToken))
+                yield return row;
+        }
+        finally
+        {
+            buildLease.Dispose();
+        }
     }
 
     /// <summary>Recurses into the per-partition joins produced by a repartition step.</summary>
-    private async IAsyncEnumerable<Row> JoinSubPartitions(PartitionSet left, PartitionSet right, JoinClause join, List<string> leftKeys, List<string> rightKeys, int depth, List<string> tempFiles)
+    private async IAsyncEnumerable<Row> JoinSubPartitions(
+        PartitionSet left, PartitionSet right, JoinClause join, List<string> leftKeys, List<string> rightKeys,
+        int depth, List<string> tempFiles, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         for (int i = 0; i < PartitionCount; i++)
         {
-            await foreach (var row in JoinPartition(left.Names[i], right.Names[i], left.Counts[i], right.Counts[i], join, leftKeys, rightKeys, depth, tempFiles))
+            await foreach (var row in JoinPartition(left.Names[i], right.Names[i], left.Counts[i], right.Counts[i], join, leftKeys, rightKeys, depth, tempFiles, cancellationToken))
                 yield return row;
         }
     }
@@ -286,7 +313,7 @@ public class ExternalJoinEngine
     /// accounting, using the exact blob lengths) crosses the governor ceiling mid-build, so the caller
     /// can repartition or apply policy before any probe row has been emitted.
     /// </summary>
-    private async Task<PackedBuildTable?> BuildJoinHashTable(string rightName, List<string> rightKeys, MemoryBudgetGuard guard)
+    private async Task<PackedBuildTable?> BuildJoinHashTable(string rightName, List<string> rightKeys, MemoryBudgetGuard guard, IMemoryGrantLease? lease)
     {
         var table = new PackedBuildTable();
         var packer = new RowPacker();
@@ -315,7 +342,8 @@ public class ExternalJoinEngine
                         var blob = packer.Pack(batch, rowIndex);
                         AddBuildRow(table, key, blob, guard);
                         ColumnarBuildRows++;
-                        if (guard.Exceeded()) return null;
+                        if (guard.Exceeded() || (lease?.RegisterAndCheckSpill(guard.BytesAccumulated) == true))
+                            return null;
                     }
                 }
             }
@@ -335,7 +363,8 @@ public class ExternalJoinEngine
             var key = GetHashKey(rightRow, rightKeys);
             var blob = packer.Pack(rightRow, table.Columns);
             AddBuildRow(table, key, blob, guard);
-            if (guard.Exceeded()) return null;
+            if (guard.Exceeded() || (lease?.RegisterAndCheckSpill(guard.BytesAccumulated) == true))
+                return null;
         }
         return table;
     }
@@ -359,7 +388,9 @@ public class ExternalJoinEngine
     }
 
     /// <summary>Streams the probe (left) side against a packed build table, emitting join results.</summary>
-    private async IAsyncEnumerable<Row> ProbeJoin(string leftName, PackedBuildTable table, JoinClause join, List<string> leftKeys)
+    private async IAsyncEnumerable<Row> ProbeJoin(
+        string leftName, PackedBuildTable table, JoinClause join, List<string> leftKeys,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // SEMI and ANTI return left rows only, each at most once. "LEFT SEMI JOIN" is not an outer join.
         bool isSemi = join.JoinType.Contains("SEMI", StringComparison.OrdinalIgnoreCase);
@@ -379,6 +410,7 @@ public class ExternalJoinEngine
                 {
                     for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         ColumnarProbeRows++;
                         var key = GetHashKey(batch, rowIndex, leftKeys);
                         bool producedMatch = false;
@@ -414,6 +446,7 @@ public class ExternalJoinEngine
         {
             await foreach (var left in leftReader.AsEnumerableAsync())
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var key = GetHashKey(left, leftKeys);
                 bool producedMatch = false;
 

@@ -106,14 +106,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
 - [ ] **W7 Fast pre-push hook and local gate hygiene.** Overlaps RG03's docs-only skip; see the
   [Release Engineering entry](ROADMAP.md#release-engineering--routine-github-built-releases).
 
-### 2.3 Resource-control bypasses
-
-**Design:** [ROADMAP: Engine & Security](ROADMAP.md#engine--security--encrypted-spill-framing-byte-budgeted-scale-and-plaintext-memory-hygiene).
-
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| SP16 | **Connect production allocations to one memory coordinator.** Consolidate `BufferManager` memory limits/floor/hysteresis with the active `IMemoryGrantArbiter` contract and wire external operator allocations into shared reservations. Define precedence for existing settings and avoid double accounting or waiting while holding memory needed for progress. Replace total-capacity reporting with current host/container memory headroom. Use deterministic pressure fixtures to prove that configured limits affect real operators, recovery resumes admission, and success/cancellation/failure release reservations; include concurrent jobs and compatibility documentation. | — | M |
-
 ### 2.6 Orchestrator and catalog cohesion
 
 **Design:** [ROADMAP: Unified Operations Console](ROADMAP.md#portal-orchestrator--studio--unified-operations-console-catalog-job-cohesion-and-saas-authoring-boundary).

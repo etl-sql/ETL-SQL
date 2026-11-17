@@ -133,3 +133,53 @@ public sealed class UnlimitedMemoryGrantArbiter : IMemoryGrantArbiter
         public void Dispose() { }
     }
 }
+
+/// <summary>
+/// Shared precedence and sizing rules for consolidating <c>Engine:TotalMemoryGrantMB</c>
+/// with <c>Orchestration:ResourceManagement:MaxGlobalMemoryMB</c>.
+/// </summary>
+public static class MemoryCoordinatorPolicy
+{
+    /// <summary>
+    /// Auto memory-grant ceiling: ~80% of physical/cgroup capacity, floored at 512 MB.
+    /// Uses the provided capacity or GC's view of <c>TotalAvailableMemoryBytes</c>.
+    /// </summary>
+    public static int ComputeAutoMemoryGrantMB(long totalAvailableCapacityBytes = 0)
+    {
+        long totalBytes = totalAvailableCapacityBytes > 0
+            ? totalAvailableCapacityBytes
+            : GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        if (totalBytes <= 0) return 4096;
+        long autoMB = (long)(totalBytes * 0.80 / (1024 * 1024));
+        if (autoMB < 512) autoMB = 512;
+        if (autoMB > int.MaxValue) autoMB = int.MaxValue;
+        return (int)autoMB;
+    }
+
+    /// <summary>
+    /// Resolves the global memory limit in MB across Engine and Orchestrator configuration:
+    /// <list type="number">
+    /// <item>Explicit <c>Engine:TotalMemoryGrantMB &gt;= 0</c> takes precedence (<c>0</c> = unbounded).</item>
+    /// <item>When <c>Engine:TotalMemoryGrantMB</c> is unset or <c>&lt; 0</c> (auto) and
+    /// <c>MaxGlobalMemoryMB &gt; 0</c>, returns <c>min(auto, MaxGlobalMemoryMB)</c> so container
+    /// limits still constrain the default Orchestrator pool.</item>
+    /// <item>When <c>Engine:TotalMemoryGrantMB</c> is auto and <c>MaxGlobalMemoryMB &lt;= 0</c>,
+    /// honors unbounded (<c>0</c>) if <paramref name="maxGlobalMemoryMB"/> was explicitly non-null,
+    /// otherwise <see cref="ComputeAutoMemoryGrantMB"/>.</item>
+    /// </list>
+    /// </summary>
+    public static int ResolveEffectiveGlobalMemoryMB(
+        int? engineTotalMemoryGrantMB,
+        int? maxGlobalMemoryMB,
+        long totalAvailableCapacityBytes = 0)
+    {
+        if (engineTotalMemoryGrantMB is int engineExplicit && engineExplicit >= 0)
+            return engineExplicit;
+
+        int autoMB = ComputeAutoMemoryGrantMB(totalAvailableCapacityBytes);
+        if (maxGlobalMemoryMB is int bmLimit)
+            return bmLimit > 0 ? Math.Min(autoMB, bmLimit) : 0;
+
+        return autoMB;
+    }
+}

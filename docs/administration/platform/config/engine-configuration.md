@@ -22,9 +22,9 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 
 | Key | Type | Default | Ad-Hoc SET Command | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `Engine:TotalMemoryGrantMB` | integer | `-1` (auto) | — | RAM ceiling for in-memory operator state. `-1` = auto (~80% of physical RAM, floored at 512 MB). `0` disables the governor (unbounded — can consume all RAM). |
+| `Engine:TotalMemoryGrantMB` | integer | `-1` (auto) | — | Global coordinator RAM ceiling for in-memory operator state across queries. `-1` = auto (~80% of physical/container RAM, floored at 512 MB, capped by `Orchestration:ResourceManagement:MaxGlobalMemoryMB` when positive). `0` disables the ceiling (unbounded — can consume all RAM, subject to the OS headroom floor). Explicit `>= 0` takes precedence over `MaxGlobalMemoryMB`. |
 | `Engine:MemoryGovernorPolicy` | string | `SpillOrFail` | — | Behavior when an operator hits the ceiling: `SpillOrFail` aborts with a clear error; `SpillOnly` churns to completion (slower, higher RAM). |
-| `Engine:OperatorMemoryGrantMB` | integer | `256` | `SET OPERATOR_MEMORY_GRANT = n` | RAM granted per execution operator in MB. |
+| `Engine:OperatorMemoryGrantMB` | integer | `256` | `SET OPERATOR_MEMORY_GRANT = n` | Per-operator RAM limit in MB (`min(OperatorMemoryGrantMB, coordinatorCeiling)`). |
 
 ---
 

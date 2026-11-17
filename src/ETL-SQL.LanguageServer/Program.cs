@@ -146,8 +146,10 @@ namespace ETL_SQL.LSP
                             return sec;
                         });
                         services.AddSingleton<ISystemResources, DefaultSystemResources>();
-                        services.AddSingleton<IBufferManager, ETL_SQL.Orchestrator.Execution.BufferManager>();
-                        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BufferManagerOptions()));
+                        services.Configure<BufferManagerOptions>(configuration.GetSection("Orchestration:ResourceManagement"));
+                        services.AddSingleton<ETL_SQL.Orchestrator.Execution.BufferManager>();
+                        services.AddSingleton<IBufferManager>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Execution.BufferManager>());
+                        services.AddSingleton<ETL_SQL.Core.IMemoryGrantArbiter>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Execution.BufferManager>());
                         services.AddSingleton<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>();
                         services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>());
                         services.AddSingleton<IJobCatalogStore>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>());

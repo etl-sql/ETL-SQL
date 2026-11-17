@@ -120,8 +120,10 @@ namespace ETL_SQL.TUI
             services.AddSingleton<ETL_SQL.Services.SecurityService>(securityService);
             services.AddSingleton<ETL_SQL.TUI.Services.IClipboardService, ETL_SQL.TUI.Services.ClipboardService>();
             services.AddSingleton<ISystemResources, DefaultSystemResources>();
-            services.AddSingleton<ETL_SQL.Core.Execution.IBufferManager, BufferManager>();
-            services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BufferManagerOptions()));
+            services.Configure<BufferManagerOptions>(configuration.GetSection("Orchestration:ResourceManagement"));
+            services.AddSingleton<BufferManager>();
+            services.AddSingleton<ETL_SQL.Core.Execution.IBufferManager>(sp => sp.GetRequiredService<BufferManager>());
+            services.AddSingleton<ETL_SQL.Core.IMemoryGrantArbiter>(sp => sp.GetRequiredService<BufferManager>());
             services.AddTransient<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
 
             // ── Connectors ─────────────────────────────────────────────────────
@@ -185,10 +187,6 @@ namespace ETL_SQL.TUI
             // ── Storage & Scheduling ───────────────────────────────────────────
             services.Configure<JobThrottleOptions>(configuration.GetSection("Scheduling:Throttle"));
             services.AddSingleton<JobThrottle>();
-
-            services.Configure<BufferManagerOptions>(configuration.GetSection("Orchestration:ResourceManagement"));
-            services.AddSingleton<BufferManager>();
-            services.AddSingleton<IBufferManager>(sp => sp.GetRequiredService<BufferManager>());
 
             services.AddSingleton<SQLiteJobHistoryStore>();
             services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
