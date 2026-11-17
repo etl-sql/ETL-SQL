@@ -100,7 +100,10 @@ update_file "src/etl-sql-vscode/package.json" \
     "(\"version\": \")[0-9]+\.[0-9]+\.[0-9]+(\")" \
     "\1${VERSION}\2"
 
-# VS Code extension README version badge updates automatically via shields.io Marketplace badge
+# VS Code extension README version badge (static: shields.io retired its Marketplace badges)
+update_file "src/etl-sql-vscode/README.md" \
+    "(VS%20Marketplace-v)[0-9]+\.[0-9]+\.[0-9]+(-007ACC)" \
+    "\1${VERSION}\2"
 
 
 # VS Code extension lock file (context-aware)

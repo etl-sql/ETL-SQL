@@ -1111,7 +1111,10 @@ namespace ETL_SQL.Tests.Docs
             var readmePath = RepoFile("src/etl-sql-vscode/README.md");
             Assert.True(File.Exists(readmePath), $"Missing VS Code README.md");
             var readme = File.ReadAllText(readmePath);
-            Assert.Contains("img.shields.io/visual-studio-marketplace/v/Octocolee.etl-sql-vscode", readme);
+            // Static badge: shields.io retired its dynamic visual-studio-marketplace badges (they
+            // render "retired badge"). Set-Version bumps this one, so it must match the release.
+            Assert.Contains($"img.shields.io/badge/VS%20Marketplace-v{currentVersion}-007ACC", readme);
+            Assert.DoesNotContain("img.shields.io/visual-studio-marketplace", readme);
 
             // 4. Verify WelcomeView.ts uses correct restructured documentation links
             var welcomeViewPath = RepoFile("src/etl-sql-vscode/src/WelcomeView.ts");
