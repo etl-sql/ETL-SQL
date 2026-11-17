@@ -1,9 +1,13 @@
+using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text.Json;
+using ETL_SQL.Core.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.Portal.Controllers;
 
@@ -14,8 +18,13 @@ public class OrchestratorController(
     OrchestratorProxyService proxy,
     AuditService audit,
     ScriptDagProjectionService scriptDag,
-    OperationsTriageService triage) : ControllerBase
+    OperationsTriageService triage,
+    PortalDbContext? db = null,
+    IArtifactStorage? artifacts = null,
+    PortalConfig? portalConfig = null,
+    DatasetTenantScope? tenantScope = null) : ControllerBase
 {
+    private static readonly JsonSerializerOptions CatalogJson = new(JsonSerializerDefaults.Web);
     /// <summary>Upper bound on one bulk re-run, so a mis-click cannot enqueue the whole estate.</summary>
     private const int MaxRerunBatch = 50;
 
@@ -73,6 +82,15 @@ public class OrchestratorController(
     [HttpPut("jobs/{name}")]
     public async Task<IActionResult> UpdateJob(string name, [FromBody] UpdateJobRequest req)
     {
+        var unescaped = Uri.UnescapeDataString(name);
+        if (IsCatalogPipelineSlot(unescaped) && req.ScriptText is not null)
+        {
+            return Conflict(new
+            {
+                Code = "catalog_managed_script",
+                Error = $"Job '{unescaped}' is backed by a Studio catalog pipeline. Edit its script in Studio so catalog and Orchestrator scripts stay aligned."
+            });
+        }
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
@@ -695,6 +713,201 @@ public class OrchestratorController(
         Response.StatusCode = (int)response.StatusCode;
         return Content(body, "application/json");
     }
+
+    // ── Studio pipeline catalog & run-slot provisioning ───────────────────────
+
+    [HttpGet("pipelines/catalog")]
+    public async Task<ActionResult<IReadOnlyList<CatalogPipelineLinkDto>>> GetPipelineCatalog(
+        CancellationToken ct = default)
+    {
+        if (db is null || portalConfig is null)
+            return Ok(Array.Empty<CatalogPipelineLinkDto>());
+
+        var scope = tenantScope ?? new DatasetTenantScope(portalConfig);
+        var pipelines = await new PortalTenantCatalogScope(db, scope).Documents.AsNoTracking()
+            .Include(doc => doc.Folder)
+            .Where(doc => !doc.IsDeleted && doc.Kind == CatalogDocumentKind.Pipeline)
+            .OrderBy(doc => doc.Folder.Path)
+            .ThenBy(doc => doc.Name)
+            .ToListAsync(ct);
+
+        if (pipelines.Count == 0)
+            return Ok(Array.Empty<CatalogPipelineLinkDto>());
+
+        var jobs = await proxy.GetJobsAsync();
+        var jobsByName = jobs
+            .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        var ownerIds = pipelines
+            .Select(doc => doc.CreatedBy)
+            .Distinct()
+            .ToList();
+        var owners = ownerIds.Count == 0
+            ? new Dictionary<int, (string? PrincipalKey, string? DisplayName)>()
+            : await db.Users.AsNoTracking()
+                .Where(user => ownerIds.Contains(user.Id))
+                .ToDictionaryAsync(
+                    user => user.Id,
+                    user => (user.PrincipalKey, DisplayName: FormatOwnerDisplayName(user)),
+                    ct);
+
+        var result = pipelines.Select(doc =>
+        {
+            var jobName = StudioPipelineRunsController.JobName(doc.Id);
+            jobsByName.TryGetValue(jobName, out var job);
+            owners.TryGetValue(doc.CreatedBy, out var owner);
+
+            return new CatalogPipelineLinkDto(
+                doc.Id,
+                jobName,
+                doc.Name,
+                doc.Description,
+                doc.FolderId,
+                doc.Folder?.Path ?? "/",
+                owner.PrincipalKey,
+                owner.DisplayName,
+                doc.Version,
+                job is not null,
+                job?.CreatedBy);
+        }).ToList();
+
+        return Ok(result);
+    }
+
+    [HttpPost("pipelines/{id:int}/provision")]
+    [Authorize(Roles = "Admin,OrchestratorManager")]
+    public async Task<ActionResult<ProvisionPipelineSlotResultDto>> ProvisionPipelineSlot(
+        int id, CancellationToken ct = default)
+    {
+        if (db is null || artifacts is null || portalConfig is null)
+            return StatusCode(503, new { Error = "Catalog storage is unavailable." });
+
+        var scope = tenantScope ?? new DatasetTenantScope(portalConfig);
+        var document = await new PortalTenantCatalogScope(db, scope).Documents.AsNoTracking()
+            .Include(doc => doc.Folder)
+            .FirstOrDefaultAsync(doc => doc.Id == id && !doc.IsDeleted && doc.Kind == CatalogDocumentKind.Pipeline, ct);
+        if (document is null)
+            return NotFound(new { Error = $"Catalog pipeline '{id}' not found." });
+
+        var scriptKey = PortalPathGuard.ToScriptKey(portalConfig, document.ScriptPath);
+        if (scriptKey is null || !await artifacts.ExistsAsync(ArtifactArea.Scripts, scriptKey, ct))
+            return StatusCode(503, new { Error = "The saved revision of this pipeline could not be read." });
+
+        var scriptText = await artifacts.ReadAllTextAsync(ArtifactArea.Scripts, scriptKey, ct);
+        if (string.IsNullOrWhiteSpace(scriptText))
+            return UnprocessableEntity(new
+            {
+                Code = "empty_revision",
+                Error = "The saved revision of this pipeline is empty; save a script in Studio before provisioning its Orchestrator slot."
+            });
+
+        var jobName = StudioPipelineRunsController.JobName(document.Id);
+        var folderPath = document.Folder?.Path ?? "/";
+        using var provisionResp = await proxy.ProvisionJobSlotAsync(
+            jobName, scriptText, document.Name, $"Portal pipeline {folderPath}/{document.Name}", ct);
+        if (provisionResp is null)
+            return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!provisionResp.IsSuccessStatusCode)
+        {
+            var body = await provisionResp.Content.ReadAsStringAsync(ct);
+            return string.IsNullOrWhiteSpace(body)
+                ? StatusCode((int)provisionResp.StatusCode)
+                : new ContentResult
+                {
+                    StatusCode = (int)provisionResp.StatusCode,
+                    ContentType = "application/json",
+                    Content = body
+                };
+        }
+
+        var provisioned = await provisionResp.Content.ReadFromJsonAsync<ProvisionSlotProxyResponse>(CatalogJson, ct);
+        var slotCreated = provisioned?.Created ?? false;
+
+        var ownerPrincipalKey = await db.Users.AsNoTracking()
+            .Where(user => user.Id == document.CreatedBy)
+            .Select(user => user.PrincipalKey)
+            .FirstOrDefaultAsync(ct);
+
+        var executeGrantApplied = false;
+        if (!string.IsNullOrWhiteSpace(ownerPrincipalKey))
+        {
+            var alreadyPermitted = false;
+            using var existingGrantsResp = await proxy.GetObjectGrantsAsync("JOB", jobName, ct);
+            if (existingGrantsResp is { IsSuccessStatusCode: true })
+            {
+                var existingGrants = await existingGrantsResp.Content
+                    .ReadFromJsonAsync<List<ObjectGrantEntry>>(CatalogJson, ct);
+                alreadyPermitted = existingGrants?.Any(entry =>
+                    string.Equals(entry.PrincipalKind, "USER", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(entry.PrincipalId, ownerPrincipalKey, StringComparison.OrdinalIgnoreCase)
+                    && (string.Equals(entry.Permission, "EXECUTE", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(entry.Permission, "MANAGE", StringComparison.OrdinalIgnoreCase))) == true;
+            }
+
+            if (!alreadyPermitted)
+            {
+                using var grantResp = await proxy.SetObjectGrantAsync(
+                    "JOB", jobName, "USER", ownerPrincipalKey, "EXECUTE", ct);
+                if (grantResp is null)
+                    return StatusCode(503, new { Error = "Orchestrator service unavailable while applying author grant." });
+                if (!grantResp.IsSuccessStatusCode)
+                {
+                    var body = await grantResp.Content.ReadAsStringAsync(ct);
+                    return string.IsNullOrWhiteSpace(body)
+                        ? StatusCode((int)grantResp.StatusCode)
+                        : new ContentResult
+                        {
+                            StatusCode = (int)grantResp.StatusCode,
+                            ContentType = "application/json",
+                            Content = body
+                        };
+                }
+
+                executeGrantApplied = true;
+                await audit.LogAsync(CurrentUserId, "ORCHESTRATOR_GRANT", "OrchestratorJOB", jobName,
+                    $"USER:{ownerPrincipalKey}=EXECUTE");
+            }
+        }
+
+        await audit.LogAsync(
+            CurrentUserId,
+            "PIPELINE_SLOT_PROVISIONED",
+            "Job",
+            jobName,
+            $"pipelineId={document.Id}; slotCreated={slotCreated}; executeGranted={executeGrantApplied}; principal={ownerPrincipalKey ?? "none"}");
+
+        var message = slotCreated && executeGrantApplied
+            ? $"Provisioned '{jobName}' and granted EXECUTE to pipeline owner."
+            : slotCreated
+                ? $"Provisioned '{jobName}' as a manual run slot."
+                : executeGrantApplied
+                    ? $"Granted EXECUTE on existing slot '{jobName}' to pipeline owner."
+                    : $"Run slot '{jobName}' is already provisioned and executable by its owner.";
+
+        return Ok(new ProvisionPipelineSlotResultDto(
+            document.Id,
+            jobName,
+            slotCreated,
+            executeGrantApplied,
+            ownerPrincipalKey,
+            message));
+    }
+
+    private static bool IsCatalogPipelineSlot(string jobName) =>
+        jobName.StartsWith("PIPELINE:", StringComparison.OrdinalIgnoreCase)
+        && int.TryParse(jobName.AsSpan("PIPELINE:".Length), out var pipelineId)
+        && pipelineId > 0;
+
+    private static string? FormatOwnerDisplayName(PortalUser user)
+    {
+        var fullName = string.Join(" ", new[] { user.FirstName, user.LastName }.Where(part => !string.IsNullOrWhiteSpace(part))).Trim();
+        return string.IsNullOrWhiteSpace(fullName) ? user.UserName : fullName;
+    }
+
+    private sealed record ProvisionSlotProxyResponse(string JobName, bool Created);
+
+    private sealed record ObjectGrantEntry(string PrincipalKind, string PrincipalId, string Permission);
 
     // ── Service control ───────────────────────────────────────────────────────
 

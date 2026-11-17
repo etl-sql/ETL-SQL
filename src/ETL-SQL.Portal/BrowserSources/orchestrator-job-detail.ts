@@ -3,7 +3,7 @@ import type { ApiRequestOptions } from './portal-http.js';
 import { escHtml, fmtDt, renderJobAuditTrail, renderWatermarksTable } from './orchestrator-admin-ui.js';
 import { accessPanelHtml, ownerLabel } from './orchestrator-acl-ui.js';
 import { jobVersion, requireMutationStatus } from './orchestrator-job-actions.js';
-import { targetKindLabel } from './orchestrator-job-table.js';
+import { parsePipelineJobId, studioDocumentHref, targetKindLabel } from './orchestrator-job-table.js';
 import { readCatalogJson, readNotifications, readSchedules } from './orchestrator-catalog-responses.js';
 import { readAudit, readDependencyChain, readGrants, readHistory, readJobStates, readNotificationLinks,
     readQualityFailures, readQualityStatuses, readScheduleLinks } from './orchestrator-detail-responses.js';
@@ -27,6 +27,7 @@ interface Editor { getValue(): string; dispose(): void }
 export interface JobDetailOptions {
     root: Document;
     isAdmin: boolean;
+    isManager?: boolean;
     fetch(url: string, init?: ApiRequestOptions): Promise<Response>;
     notify(message: string, failed?: boolean): void;
     confirm(message: string, options: Parameters<EtlSqlFeedback['confirm']>[1]): Promise<boolean>;
@@ -38,6 +39,8 @@ export interface JobDetailOptions {
     reloadJob(name: string): Promise<Job | null>;
     selectionChanged(name: string | null): void;
     sessionExpired(): void;
+    findCatalogPipeline?(jobName: string): CatalogPipelineLinkDto | null;
+    onPipelineProvisioned?(result: ProvisionPipelineSlotResultDto): void | Promise<void>;
 }
 
 const TABS: Tab[] = ['details', 'flow', 'deps', 'quality', 'audit'];
@@ -296,6 +299,19 @@ export function createJobDetail(options: JobDetailOptions) {
         host.replaceChildren();
         savedScript = value.script ?? '';
         saveScript.style.display = 'none';
+        const pipelineId = parsePipelineJobId(value.name);
+        if (pipelineId !== null) {
+            // Catalog-backed pipelines are authored in Studio; never allow raw Jobs.Script mutations here.
+            host.innerHTML = `<div class="orch-catalog-script-notice" data-catalog-managed="true">
+                <div>
+                  <strong>Managed in Studio</strong>
+                  <div class="orch-link-meta">Catalog pipeline revisions live in Studio so catalog and Orchestrator scripts cannot diverge.</div>
+                </div>
+                <a class="btn btn-sm btn-primary" href="${escHtml(studioDocumentHref(pipelineId))}">Open in Studio ↗</a>
+              </div>
+              <pre class="orch-script-readonly"><code>${escHtml(savedScript || '-- No script snapshot stored on this run slot yet --')}</code></pre>`;
+            return;
+        }
         try {
             const created = await options.createEditor(host, { value: savedScript,
                 onChange: text => { if (live(opened)) saveScript.style.display = text !== savedScript ? '' : 'none'; } });
@@ -308,7 +324,7 @@ export function createJobDetail(options: JobDetailOptions) {
 
     saveScript.addEventListener('click', async () => {
         const target = selected, text = editor?.getValue();
-        if (!target || text === undefined) return;
+        if (!target || parsePipelineJobId(target.name) !== null || text === undefined) return;
         const opened = scope;
         saveScript.disabled = true;
         try {
@@ -529,11 +545,42 @@ export function createJobDetail(options: JobDetailOptions) {
     for (const name of TABS)
         box(`detailTab${name.charAt(0).toUpperCase() + name.slice(1)}`).addEventListener('click', () => showTab(name), { signal: lifetime.signal });
 
+    const catalogNotice = root.getElementById('detailCatalogNotice');
+    catalogNotice?.addEventListener('click', async event => {
+        const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-grant-pipeline-owner]') : null;
+        const pipelineId = button ? Number(button.dataset.grantPipelineOwner) : NaN;
+        const current = selected;
+        if (!button || !current || !Number.isSafeInteger(pipelineId) || pipelineId <= 0 || lifetime.signal.aborted) return;
+        const opened = scope;
+        if (pending.has('provision-slot') || !live(opened)) return;
+        pending.add('provision-slot');
+        button.disabled = true;
+        try {
+            const response = await options.fetch(`/api/orchestrator/pipelines/${encodeURIComponent(String(pipelineId))}/provision`, {
+                method: 'POST', signal: lifetime.signal
+            });
+            await requireMutationStatus(response, 200);
+            const result = await response.json().catch(() => null) as ProvisionPipelineSlotResultDto | null;
+            if (lifetime.signal.aborted) return;
+            options.notify(result?.message || `Updated EXECUTE access on '${current.name}'.`);
+            if (result && options.onPipelineProvisioned) await options.onPipelineProvisioned(result);
+            if (live(opened)) void loadAccess(current);
+        } catch (failure) {
+            if (!lifetime.signal.aborted) options.notify(`Error: ${asError(failure).message}`, true);
+        } finally {
+            pending.delete('provision-slot');
+            if (!lifetime.signal.aborted) button.disabled = false;
+        }
+    }, { signal: lifetime.signal });
+
     // ── Open and close ────────────────────────────────────────────────────────
     function header(value: Job) {
+        const pipelineId = parsePipelineJobId(value.name);
+        const link = pipelineId !== null ? (options.findCatalogPipeline?.(value.name) ?? null) : null;
+        const displayName = link?.name || (value.displayName && value.displayName !== value.name ? value.displayName : '');
         box('detailJobName').textContent = value.name;
-        box('detailJobDisplayName').textContent = value.displayName && value.displayName !== value.name ? value.displayName : '';
-        box('metaTargetKind').textContent = targetKindLabel(value.jobType, value.targetPath);
+        box('detailJobDisplayName').textContent = displayName && displayName !== value.name ? displayName : '';
+        box('metaTargetKind').textContent = targetKindLabel(value.jobType, value.targetPath, value.name);
         box('metaSandboxProfile').textContent = sandboxProfile(value.options);
         box('metaVersion').textContent = `v${value.version}`;
         box('metaOwner').textContent = ownerLabel(value.createdBy);
@@ -542,6 +589,29 @@ export function createJobDetail(options: JobDetailOptions) {
         box('detailSchedule').textContent = scheduleText(value);
         box('detailLastRun').textContent = value.lastRun ? fmtDt(value.lastRun) : 'Never';
         box('detailNextRun').textContent = value.nextRun ? fmtDt(value.nextRun) : '—';
+        if (catalogNotice) {
+            if (pipelineId === null) {
+                catalogNotice.style.display = 'none';
+                catalogNotice.replaceChildren();
+            } else {
+                const canManage = options.isManager ?? options.isAdmin;
+                catalogNotice.style.display = '';
+                catalogNotice.innerHTML = `<div class="orch-catalog-banner">
+                  <div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
+                      <strong>Studio Catalog Pipeline</strong>
+                      ${link?.folderPath ? `<span class="badge" style="font-size:.75em;background:var(--portal-surface-subtle)">📁 ${escHtml(link.folderPath)}</span>` : ''}
+                      ${link?.ownerDisplayName ? `<span class="orch-link-meta">Catalog owner: ${escHtml(link.ownerDisplayName)}</span>` : ''}
+                    </div>
+                    <div class="orch-link-meta">Script edits belong in Studio. Orchestrator owns execution, grants, and run schedules.</div>
+                  </div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                    <a class="btn btn-sm btn-outline" href="${escHtml(studioDocumentHref(pipelineId))}">Open in Studio ↗</a>
+                    ${canManage && link?.ownerPrincipalKey ? `<button class="btn btn-sm btn-outline" type="button" data-grant-pipeline-owner="${pipelineId}">Grant Owner EXECUTE</button>` : ''}
+                  </div>
+                </div>`;
+            }
+        }
     }
 
     function closeDialogs() {

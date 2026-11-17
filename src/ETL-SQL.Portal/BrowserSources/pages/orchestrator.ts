@@ -10,7 +10,8 @@ import { createTriageController } from '../triage-controller.js';
 import { activityQuery } from '../orchestrator-activity.js';
 import type { ActivityRequest } from '../orchestrator-activity.js';
 import { createScheduledJobActivityCoordinator } from '../orchestrator-activity-coordinator.js';
-import { renderScheduledJobsTable } from '../orchestrator-job-table.js';
+import { renderScheduledJobsTable, studioDocumentHref } from '../orchestrator-job-table.js';
+import { escHtml } from '../orchestrator-admin-ui.js';
 import { createJobActionController, createJobRunDialog, jobVersion, requireMutationStatus } from '../orchestrator-job-actions.js';
 import { createNotificationCatalog, createScheduleCatalog } from '../orchestrator-catalogs.js';
 import { readCatalogJson } from '../orchestrator-catalog-responses.js';
@@ -68,12 +69,71 @@ function mountOrchestratorPage(): void {
 
     // ── Jobs: list, actions, timeline, detail ──────────────────────────────────
     let catalogJobs: JobDefinition[] = [], visibleJobs: JobDefinition[] = [];
+    let catalogPipelines: CatalogPipelineLinkDto[] = [];
+    const catalogPipelinesByJob = new Map<string, CatalogPipelineLinkDto>();
     const findJob = (name: string | null | undefined) =>
         visibleJobs.find(item => item.name === name) ?? catalogJobs.find(item => item.name === name) ?? null;
+    const findCatalogPipeline = (name: string | null | undefined) =>
+        name ? (catalogPipelinesByJob.get(name) ?? null) : null;
     const jobsWrap = box('jobsTableWrap');
+    const pendingPipelinesCard = box('pendingPipelinesCard');
+    const pendingPipelinesList = box('pendingPipelinesList');
+    const pendingPipelinesCount = box('pendingPipelinesCount');
+
+    function renderPendingPipelines() {
+        if (!isManager) {
+            pendingPipelinesCard.style.display = 'none';
+            pendingPipelinesList.replaceChildren();
+            return;
+        }
+        const pending = catalogPipelines.filter(item => !item.isProvisioned);
+        pendingPipelinesCount.textContent = String(pending.length);
+        if (!pending.length) {
+            pendingPipelinesCard.style.display = 'none';
+            pendingPipelinesList.replaceChildren();
+            return;
+        }
+        pendingPipelinesCard.style.display = '';
+        pendingPipelinesList.innerHTML = pending.map(item => `<div class="orch-pending-pipeline-row">
+            <div>
+              <strong>${escHtml(item.name)}</strong>
+              <span class="badge" style="font-size:.75em;margin-left:6px;background:var(--portal-surface-subtle)">📁 ${escHtml(item.folderPath)}</span>
+              <span class="orch-link-meta" style="margin-left:6px;">${escHtml(item.jobName)}${item.ownerDisplayName ? ` · Owner: ${escHtml(item.ownerDisplayName)}` : ''}</span>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+              <a class="btn btn-sm btn-outline" href="${escHtml(studioDocumentHref(item.pipelineId))}">Open in Studio ↗</a>
+              <button class="btn btn-sm btn-primary" type="button" data-provision-pipeline="${item.pipelineId}">Provision &amp; Grant EXECUTE</button>
+            </div>
+          </div>`).join('');
+    }
+
+    async function loadPipelineCatalog(): Promise<void> {
+        try {
+            const raw = await readJson('/api/orchestrator/pipelines/catalog', lifetime.signal);
+            if (lifetime.signal.aborted || !Array.isArray(raw)) return;
+            const parsed: CatalogPipelineLinkDto[] = [];
+            for (const entry of raw) {
+                if (isObject(entry) && typeof entry.pipelineId === 'number' && typeof entry.jobName === 'string'
+                    && typeof entry.name === 'string' && typeof entry.folderPath === 'string') {
+                    parsed.push(entry as unknown as CatalogPipelineLinkDto);
+                }
+            }
+            catalogPipelines = parsed;
+            catalogPipelinesByJob.clear();
+            for (const item of parsed) catalogPipelinesByJob.set(item.jobName, item);
+            renderPendingPipelines();
+            const open = findOpenJob();
+            if (visibleJobs.length) {
+                jobsWrap.innerHTML = renderScheduledJobsTable(visibleJobs, open?.id, catalogPipelinesByJob);
+            }
+            if (open) detail.refresh(open);
+        } catch {
+            // Non-fatal: table and detail still render Orchestrator-native fields if catalog lookup fails.
+        }
+    }
 
     const detail = createJobDetail({
-        root: document, isAdmin, fetch: apiFetch, notify, confirm: ask, charts, createEditor: createScriptEditor,
+        root: document, isAdmin, isManager, fetch: apiFetch, notify, confirm: ask, charts, createEditor: createScriptEditor,
         renderDag: (container, dag) => {
             if (!isObject(dag) || !Array.isArray(dag.nodes) || !Array.isArray(dag.edges)) throw new TypeError('Invalid job flow response.');
             renderDag(container, dag as Parameters<typeof renderDag>[1]);
@@ -83,7 +143,9 @@ function mountOrchestratorPage(): void {
             for (const row of jobsWrap.querySelectorAll<HTMLElement>('tr.job-row'))
                 row.classList.toggle('selected', name !== null && row.dataset.name === name);
         },
-        sessionExpired
+        sessionExpired,
+        findCatalogPipeline,
+        onPipelineProvisioned: async () => { await Promise.all([loadPipelineCatalog(), activity.refresh()]); }
     });
     const timeline = createJobTimeline<JobDefinition>({ root: document, open: detail.open });
 
@@ -94,7 +156,7 @@ function mountOrchestratorPage(): void {
         const open = findOpenJob();
         // The open panel follows the job as each poll reports it, so a later save sends the current version.
         if (open) detail.refresh(open);
-        jobsWrap.innerHTML = renderScheduledJobsTable(visibleJobs, open?.id);
+        jobsWrap.innerHTML = renderScheduledJobsTable(visibleJobs, open?.id, catalogPipelinesByJob);
         if (!focused?.action || !focused.name) return;
         const replacement = Array.from(jobsWrap.querySelectorAll<HTMLElement>('[data-action][data-name]'))
             .find(button => button.dataset.action === focused.action && button.dataset.name === focused.name);
@@ -154,11 +216,35 @@ function mountOrchestratorPage(): void {
             else void jobActions.run(button);
             return;
         }
-        if (event.target.closest('button')) return;
+        if (event.target.closest('button, a')) return;
         const selected = findJob(event.target.closest<HTMLElement>('tr.job-row')?.dataset.name);
         if (selected) detail.open(selected);
     }, { signal: lifetime.signal });
-    box('refreshJobsBtn').addEventListener('click', () => { void activity.refresh(); }, { signal: lifetime.signal });
+    pendingPipelinesList.addEventListener('click', async event => {
+        const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-provision-pipeline]') : null;
+        const pipelineId = button ? Number(button.dataset.provisionPipeline) : NaN;
+        if (!button || !Number.isSafeInteger(pipelineId) || pipelineId <= 0 || lifetime.signal.aborted) return;
+        button.disabled = true;
+        try {
+            const response = await apiFetch(`/api/orchestrator/pipelines/${encodeURIComponent(String(pipelineId))}/provision`, {
+                method: 'POST', signal: lifetime.signal
+            });
+            await requireMutationStatus(response, 200);
+            const result = await response.json().catch(() => null) as ProvisionPipelineSlotResultDto | null;
+            if (lifetime.signal.aborted) return;
+            notify(result?.message || `Provisioned Orchestrator run slot PIPELINE:${pipelineId}.`);
+            await Promise.all([loadPipelineCatalog(), activity.refresh()]);
+        } catch (failure) {
+            if (!lifetime.signal.aborted) {
+                notify(`Error: ${asError(failure).message}`, true);
+                button.disabled = false;
+            }
+        }
+    }, { signal: lifetime.signal });
+    box('refreshJobsBtn').addEventListener('click', () => {
+        void loadPipelineCatalog();
+        void activity.refresh();
+    }, { signal: lifetime.signal });
 
     const createDialog = createJobDialog({ root: document, fetch: apiFetch, notify, sessionExpired, created: () => activity.refresh() });
     const unowned = createUnownedDialog({ root: document, fetch: apiFetch, notify, confirm: ask, sessionExpired,
@@ -254,7 +340,7 @@ function mountOrchestratorPage(): void {
         void schedules.load();
         void notifications.load();
         if (isAdmin) void unowned.refreshCount();
-        await activity.refresh();
+        await Promise.all([loadPipelineCatalog(), activity.refresh()]);
         const requested = lifetime.signal.aborted ? null : findJob(new URLSearchParams(location.search).get('job'));
         if (requested) detail.open(requested);
     }

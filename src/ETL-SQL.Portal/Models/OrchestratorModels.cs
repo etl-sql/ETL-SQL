@@ -245,6 +245,29 @@ public record JobDependencyEdgeDto(
     string Detail
 );
 
+public record CatalogPipelineLinkDto(
+    int PipelineId,
+    string JobName,
+    string Name,
+    string? Description,
+    int FolderId,
+    string FolderPath,
+    string? OwnerPrincipalKey,
+    string? OwnerDisplayName,
+    long Version,
+    bool IsProvisioned,
+    string? OrchestratorCreatedBy
+);
+
+public record ProvisionPipelineSlotResultDto(
+    int PipelineId,
+    string JobName,
+    bool SlotCreated,
+    bool ExecuteGrantApplied,
+    string? GrantedPrincipalKey,
+    string? Message
+);
+
 public record JobDependencyChainDto(
     string JobName,
     List<JobDependencyNodeDto> Nodes,

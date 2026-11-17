@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { activityQuery, createActivityLoader, loadScheduledJobCatalog, readScheduledJobActivity } from '../../src/ETL-SQL.Portal/wwwroot/js/orchestrator-activity.js';
-import { renderScheduledJobsTable } from '../../src/ETL-SQL.Portal/wwwroot/js/orchestrator-job-table.js';
+import { parsePipelineJobId, renderScheduledJobsTable, studioDocumentHref } from '../../src/ETL-SQL.Portal/wwwroot/js/orchestrator-job-table.js';
 
 const request = { filter: 'all', status: 'all', search: '', limit: 25, offset: 0 };
 function job(index = 0) {
@@ -71,5 +71,19 @@ const orchBundleHtml = renderScheduledJobsTable([{ ...job(), jobType: 0, targetP
 assert.match(orchBundleHtml, /📦 Bundle/);
 const reportHtml = renderScheduledJobsTable([{ ...job(), jobType: 1, targetPath: '/Reports/Sales' }]);
 assert.match(reportHtml, /📊 Report/);
+assert.equal(parsePipelineJobId('PIPELINE:42'), 42);
+assert.equal(parsePipelineJobId('daily_sales'), null);
+assert.equal(studioDocumentHref(42), '/studio.html?reportId=42');
+const pipelineMap = new Map([['PIPELINE:42', {
+    pipelineId: 42, jobName: 'PIPELINE:42', name: 'Customer Sync', description: null,
+    folderId: 7, folderPath: '/Finance/Daily', ownerPrincipalKey: 'user:alice',
+    ownerDisplayName: 'Alice', version: 3, isProvisioned: true, orchestratorCreatedBy: 'user:admin'
+}]]);
+const pipelineHtml = renderScheduledJobsTable([{ ...job(), name: 'PIPELINE:42', displayName: 'PIPELINE:42' }], null, pipelineMap);
+assert.match(pipelineHtml, /Customer Sync/);
+assert.match(pipelineHtml, /🔀 Pipeline/);
+assert.match(pipelineHtml, /📁 \/Finance\/Daily/);
+assert.match(pipelineHtml, /href="\/studio\.html\?reportId=42"/);
+assert.match(pipelineHtml, /Open in Studio ↗/);
 assert.match(renderScheduledJobsTable([]), /No jobs match/);
 console.log('Scheduled-job activity validation, request lifetime, catalog pagination, and table rendering checks passed.');

@@ -143,6 +143,25 @@ public class OrchestratorProxyService(
     // A saved catalog pipeline runs through one Orchestrator job. The Orchestrator decides whether
     // the caller may run or provision it; these carry the caller's assertion and return its answer.
 
+    public async Task<HttpResponseMessage?> ProvisionJobSlotAsync(
+        string jobName, string scriptText, string? displayName, string? description,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            return await SendAsync(
+                HttpMethod.Post,
+                $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/provision",
+                new { ScriptText = scriptText, DisplayName = displayName, Description = description },
+                cancellationToken: ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to provision run slot for job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName));
+            return null;
+        }
+    }
+
     public async Task<HttpResponseMessage?> RunJobRevisionAsync(
         string jobName, string scriptText, string? displayName, string? description,
         CancellationToken ct = default)

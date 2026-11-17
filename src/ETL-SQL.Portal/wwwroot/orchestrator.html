@@ -173,6 +173,52 @@
       margin-bottom: 6px;
     }
     .orch-script-header label { margin: 0; }
+    .orch-catalog-banner, .orch-catalog-script-notice {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 10px 12px;
+      border-radius: 6px;
+      background: var(--portal-surface-subtle);
+      border: 1px solid var(--portal-border-soft);
+      font-size: 0.84em;
+    }
+    .orch-catalog-script-notice {
+      margin-bottom: 8px;
+    }
+    .orch-script-readonly {
+      margin: 0;
+      padding: 10px 12px;
+      max-height: 185px;
+      overflow: auto;
+      background: var(--portal-surface);
+      border: 1px solid var(--portal-border-soft);
+      border-radius: 6px;
+      font-family: var(--portal-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+      font-size: 0.8em;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .orch-pending-pipelines {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px 16px;
+    }
+    .orch-pending-pipeline-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 8px 12px;
+      border: 1px solid var(--portal-border-soft);
+      border-radius: 6px;
+      background: var(--portal-surface-subtle);
+      font-size: 0.86em;
+    }
 
     /* ── Toggle buttons ────────────────────────────────────────── */
     .orch-toggle-group {
@@ -392,6 +438,18 @@
           <div id="timelineCalendarWrap" style="display:none;padding:12px 16px;"></div>
         </div>
 
+        <!-- Unprovisioned Studio Pipelines -->
+        <div class="card" id="pendingPipelinesCard" style="display:none;margin-bottom:16px;">
+          <div class="card-header">
+            <div>
+              <span class="section-kicker">Studio Integration</span>
+              <h3>Studio Pipelines Awaiting Orchestrator Provisioning</h3>
+            </div>
+            <span class="badge" id="pendingPipelinesCount">0</span>
+          </div>
+          <div class="orch-pending-pipelines" id="pendingPipelinesList"></div>
+        </div>
+
         <!-- Jobs table card with Search & Pagination -->
         <div class="card">
           <div class="card-header">
@@ -548,6 +606,8 @@
           <label>Description</label>
           <p id="detailDescription" style="font-size:.84em;color:var(--portal-text);margin:0;"></p>
         </div>
+
+        <div class="orch-detail-section" id="detailCatalogNotice" style="display:none;"></div>
 
         <!-- Schedule & Linked Schedules -->
         <div class="orch-detail-section">

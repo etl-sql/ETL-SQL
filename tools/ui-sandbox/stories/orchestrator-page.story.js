@@ -36,6 +36,28 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
     },
     hourly_orders: { schedules: [], notifications: [], state: [], history: [], grants: [] }
   };
+  let pipelineCatalog = [];
+  if (fixtureId === 'catalog-pipelines') {
+    jobs.push({
+      id: 'job-pipeline-42', name: 'PIPELINE:42', script: 'SELECT 42 AS PipelineRow;', interval: 1, unit: 'DAY',
+      isEnabled: true, maxRetries: 0, retryDelaySeconds: 30, hashPolicy: 'Off',
+      version: 1, jobType: 0, createdBy: 'user:sandbox-admin', lastRun: null, nextRun: null,
+      displayName: 'Nightly Customer Sync'
+    });
+    details['PIPELINE:42'] = { schedules: [], notifications: [], state: [], history: [], grants: [] };
+    pipelineCatalog = [
+      {
+        pipelineId: 42, jobName: 'PIPELINE:42', name: 'Nightly Customer Sync', description: 'Syncs customer ledger',
+        folderId: 7, folderPath: '/Finance/Daily', ownerPrincipalKey: 'author-key',
+        ownerDisplayName: 'Alice Author', version: 3, isProvisioned: true, orchestratorCreatedBy: 'user:sandbox-admin'
+      },
+      {
+        pipelineId: 43, jobName: 'PIPELINE:43', name: 'Hourly Lead Enrichment', description: null,
+        folderId: 8, folderPath: '/Growth', ownerPrincipalKey: 'lead-author-key',
+        ownerDisplayName: 'Bob Author', version: 1, isProvisioned: false, orchestratorCreatedBy: null
+      }
+    ];
+  }
   // Objects nobody is accountable for; adopting assigns one owner to all of them.
   let unowned = [{ objectId: 'job-1', kind: 'JOB', name: 'hourly_orders' }, { objectId: 'schedule-1', kind: 'SCHEDULE', name: 'hourly_us' }];
   const detailWaiters = [];
@@ -154,6 +176,29 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
       if (path === '/api/portal/branding') return json({ displayName: 'ETL-SQL Portal', footerText: 'Sandbox', logoUrl: null });
       if (path === '/api/portal/navigation') return json([{ id: 'navOrchestrator', visible: true, reason: null }]);
       if (path === '/api/orchestrator/status') return json({ online: true, status: 'Online' });
+      if (path === '/api/orchestrator/pipelines/catalog' && method === 'GET') return json(pipelineCatalog);
+      const provisionMatch = /^\/api\/orchestrator\/pipelines\/(\d+)\/provision$/.exec(path);
+      if (provisionMatch && method === 'POST') {
+        const id = Number(provisionMatch[1]);
+        const entry = pipelineCatalog.find(item => item.pipelineId === id);
+        if (!entry) return json({ error: 'Catalog pipeline not found.' }, 404);
+        const slotCreated = !entry.isProvisioned;
+        entry.isProvisioned = true;
+        if (!jobs.some(item => item.name === entry.jobName)) {
+          jobs.push({
+            id: `job-pipeline-${id}`, name: entry.jobName, script: 'SELECT 1;', interval: 1, unit: 'DAY',
+            isEnabled: true, maxRetries: 0, retryDelaySeconds: 30, hashPolicy: 'Off',
+            version: 1, jobType: 0, createdBy: 'user:sandbox-admin', lastRun: null, nextRun: null,
+            displayName: entry.name
+          });
+          details[entry.jobName] = { schedules: [], notifications: [], state: [], history: [], grants: [] };
+        }
+        return json({
+          pipelineId: id, jobName: entry.jobName, slotCreated, executeGrantApplied: true,
+          grantedPrincipalKey: entry.ownerPrincipalKey,
+          message: `Provisioned '${entry.jobName}' and granted EXECUTE to pipeline owner.`
+        });
+      }
       if (path === '/api/orchestrator/metrics') return json({ online: true, metrics: { activeJobs: 0, queuedJobs: 0, completedToday: 0, failedToday: 0 } });
       if (path === '/api/orchestrator/jobs' && method === 'GET') return json(jobs);
       if (path === '/api/orchestrator/jobs/activity') {

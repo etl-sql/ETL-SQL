@@ -71,19 +71,9 @@ public static partial class JobApiEndpoints
 
                 // Enabled, unscheduled and never due: the slot exists to be run on request. Its stored
                 // script is the revision that provisioned it; later runs supply their own text.
-                await store.SaveJobAsync(new JobDefinition(
-                    unescaped, req.ScriptText, 1, "DAY", null, null, SchedulerService.ManualOnlyNextRun,
-                    HashPolicy: "Off",
-                    DisplayName: string.IsNullOrWhiteSpace(req.DisplayName) ? unescaped : req.DisplayName.Trim(),
-                    Description: string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(),
-                    CreatedBy: caller.PrincipalKey,
-                    ModifiedBy: ReadActor(ctx),
-                    TenantId: requestTenant));
-                job = await store.GetJobAsync(requestTenant, unescaped);
+                job = await ProvisionRunSlotJobAsync(
+                    ctx, store, caller, requestTenant, unescaped, req.ScriptText, req.DisplayName, req.Description);
                 if (job is null) return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
-                EmitObjectMutationAudit(
-                    caller, $"JOB:{unescaped}", "CREATE_JOB",
-                    $"Job '{unescaped}' provisioned as a run slot.", ctx.TraceIdentifier);
             }
 
             if (!await authorization.CanAsync(
@@ -263,18 +253,9 @@ public static partial class JobApiEndpoints
                         new RunRefusal("job_not_provisioned",
                             $"No Orchestrator job named '{unescaped}' is provisioned for this caller."),
                         statusCode: req.ProvisionIfMissing ? StatusCodes.Status403Forbidden : StatusCodes.Status404NotFound);
-                await store.SaveJobAsync(new JobDefinition(
-                    unescaped, req.ScriptText, 1, "DAY", null, null, SchedulerService.ManualOnlyNextRun,
-                    HashPolicy: "Off",
-                    DisplayName: string.IsNullOrWhiteSpace(req.DisplayName) ? unescaped : req.DisplayName.Trim(),
-                    CreatedBy: caller.PrincipalKey,
-                    ModifiedBy: ReadActor(ctx),
-                    TenantId: requestTenant));
-                job = await store.GetJobAsync(requestTenant, unescaped);
+                job = await ProvisionRunSlotJobAsync(
+                    ctx, store, caller, requestTenant, unescaped, req.ScriptText, req.DisplayName, description: null);
                 if (job is null) return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
-                EmitObjectMutationAudit(
-                    caller, $"JOB:{unescaped}", "CREATE_JOB",
-                    $"Job '{unescaped}' provisioned as a run slot.", ctx.TraceIdentifier);
             }
 
             if (!await authorization.CanAsync(
@@ -395,6 +376,70 @@ public static partial class JobApiEndpoints
             }
             return Results.Ok(await ReadRevisionScheduleAsync(store, catalog, requestTenant, unescaped));
         }).WithName("unscheduleJobRevision");
+
+        // Pre-provisions a manual-only run slot without starting an execution so an administrator
+        // can grant EXECUTE on PIPELINE:{id} before the pipeline's author runs it.
+        app.MapPost("/api/scheduled-jobs/{name}/provision", async (HttpContext ctx, string name,
+            ProvisionRunSlotRequest req, IJobHistoryStore store, IConfiguration cfg) =>
+        {
+            if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+            if (string.IsNullOrWhiteSpace(req.ScriptText))
+                return Results.BadRequest(new { Error = "ScriptText is required." });
+            if (req.ScriptText.Length > MaxRevisionCharacters)
+                return Results.BadRequest(new { Error = $"ScriptText exceeds the {MaxRevisionCharacters} character limit." });
+            if (!TryResolveRequestTenant(ctx, cfg, out var requestTenant))
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+            var unescaped = Uri.UnescapeDataString(name);
+            if (!SchedulerService.IsRunSlot(unescaped))
+                return Results.Json(
+                    new RunRefusal("not_a_run_slot",
+                        $"Only a run slot named '{SchedulerService.RunSlotNamePrefix}<id>' can be provisioned for Studio execution."),
+                    statusCode: StatusCodes.Status403Forbidden);
+
+            var caller = RequestCaller(ctx);
+            if (!OrchestratorObjectAuthorizationService.CanCreate(caller))
+                return Results.Json(
+                    new RunRefusal("provision_forbidden",
+                        $"This caller may not provision Orchestrator run slot '{unescaped}'."),
+                    statusCode: StatusCodes.Status403Forbidden);
+
+            var existing = await store.GetJobAsync(requestTenant, unescaped);
+            if (existing is not null)
+                return Results.Ok(new ProvisionRunSlotResponse(existing.Name, false, existing.Id));
+
+            var job = await ProvisionRunSlotJobAsync(
+                ctx, store, caller, requestTenant, unescaped, req.ScriptText, req.DisplayName, req.Description);
+            if (job is null) return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+
+            return Results.Ok(new ProvisionRunSlotResponse(job.Name, true, job.Id));
+        }).WithName("provisionScheduledJobSlot");
+    }
+
+    private static async Task<JobDefinition?> ProvisionRunSlotJobAsync(
+        HttpContext ctx,
+        IJobHistoryStore store,
+        OrchestratorCaller caller,
+        string? requestTenant,
+        string jobName,
+        string scriptText,
+        string? displayName,
+        string? description)
+    {
+        await store.SaveJobAsync(new JobDefinition(
+            jobName, scriptText, 1, "DAY", null, null, SchedulerService.ManualOnlyNextRun,
+            HashPolicy: "Off",
+            DisplayName: string.IsNullOrWhiteSpace(displayName) ? jobName : displayName.Trim(),
+            Description: string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
+            CreatedBy: caller.PrincipalKey,
+            ModifiedBy: ReadActor(ctx),
+            TenantId: requestTenant));
+        var job = await store.GetJobAsync(requestTenant, jobName);
+        if (job is null) return null;
+        EmitObjectMutationAudit(
+            caller, $"JOB:{jobName}", "CREATE_JOB",
+            $"Job '{jobName}' provisioned as a run slot.", ctx.TraceIdentifier);
+        return job;
     }
 
     /// <summary>The job's own schedule and the revision pinned for it, as stored now.</summary>
@@ -431,6 +476,13 @@ public static partial class JobApiEndpoints
     private static bool IsTerminalRunStatus(JobHistoryEntry history) =>
         history.EndTime is not null
         || !string.Equals(history.Status, "RUNNING", StringComparison.OrdinalIgnoreCase);
+
+    private sealed record ProvisionRunSlotRequest(
+        string ScriptText,
+        string? DisplayName = null,
+        string? Description = null);
+
+    public sealed record ProvisionRunSlotResponse(string JobName, bool Created, JobId JobId = default);
 
     private sealed record RunJobRevisionRequest(
         string ScriptText,

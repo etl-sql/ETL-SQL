@@ -252,6 +252,20 @@ interface CatalogLineageHistoryDto {
     folderPath?: string | null;
 }
 
+interface CatalogPipelineLinkDto {
+    pipelineId: number;
+    jobName: string;
+    name: string;
+    description?: string | null;
+    folderId: number;
+    folderPath: string;
+    ownerPrincipalKey?: string | null;
+    ownerDisplayName?: string | null;
+    version: number;
+    isProvisioned: boolean;
+    orchestratorCreatedBy?: string | null;
+}
+
 interface ConnectionHelpDto {
     content: string;
 }
@@ -1802,6 +1816,15 @@ interface ProtectedLineageHistoryEntry {
     quality?: string | null;
     sourceFile?: string | null;
     line: number;
+}
+
+interface ProvisionPipelineSlotResultDto {
+    pipelineId: number;
+    jobName: string;
+    slotCreated: boolean;
+    executeGrantApplied: boolean;
+    grantedPrincipalKey?: string | null;
+    message?: string | null;
 }
 
 interface ProvisionTenantAdminRequest {

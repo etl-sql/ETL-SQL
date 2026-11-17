@@ -157,6 +157,8 @@ internal static class BrowserContractsGenerator
         typeof(JobNotificationLinkDto),
         typeof(JobHistoryEntryDto),
         typeof(JobDependencyChainDto),
+        typeof(CatalogPipelineLinkDto),
+        typeof(ProvisionPipelineSlotResultDto),
         typeof(ETL_SQL.Core.Data.JobDataQualityStatus),
         typeof(ETL_SQL.Portal.Data.AuditLog),
         typeof(ETL_SQL.Orchestrator.Service.JobApiEndpoints.ObjectGrantResponse),

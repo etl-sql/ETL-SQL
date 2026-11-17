@@ -381,6 +381,41 @@ public sealed class OrchestratorJobDetailSandboxTests(SandboxStoryFixture fixtur
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task CatalogBackedPipelineShowsMetadataBlocksInlineEditingAndCanProvision()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenAsync(page, "catalog-pipelines");
+
+        // Unprovisioned catalog pipeline appears in the pending provisioning card and provisions in 1 click.
+        var pendingCard = page.Locator("#pendingPipelinesCard");
+        await Expect(pendingCard).ToBeVisibleAsync();
+        await Expect(pendingCard).ToContainTextAsync("Hourly Lead Enrichment");
+        await Expect(pendingCard).ToContainTextAsync("/Growth");
+        await pendingCard.Locator("[data-provision-pipeline='43']").ClickAsync();
+        await WaitForMessageAsync(page, "Provisioned 'PIPELINE:43' and granted EXECUTE");
+        await Expect(pendingCard).ToBeHiddenAsync();
+        await Expect(page.Locator("tr.job-row[data-name='PIPELINE:43']")).ToBeVisibleAsync();
+
+        // Provisioned catalog pipeline row renders catalog display name, folder badge, and Studio link.
+        var row = page.Locator("tr.job-row[data-name='PIPELINE:42']");
+        await Expect(row).ToContainTextAsync("Nightly Customer Sync");
+        await Expect(row).ToContainTextAsync("/Finance/Daily");
+        await Expect(row.Locator("a[href='/studio.html?reportId=42']")).ToHaveTextAsync("Open in Studio ↗");
+
+        // Opening PIPELINE:42 shows catalog metadata and replaces editable CodeMirror + Save with Studio preview.
+        await row.Locator("td").First.ClickAsync();
+        await Expect(page.Locator("#detailPanel")).ToHaveClassAsync(new System.Text.RegularExpressions.Regex("\\bopen\\b"));
+        await Expect(page.Locator("#detailCatalogNotice")).ToContainTextAsync("Studio Catalog Pipeline");
+        await Expect(page.Locator("#detailCatalogNotice a[href='/studio.html?reportId=42']")).ToBeVisibleAsync();
+        await Expect(page.Locator("#detailScriptEditor [data-catalog-managed='true']")).ToBeVisibleAsync();
+        await Expect(page.Locator("#detailScriptEditor .orch-script-readonly")).ToContainTextAsync("SELECT 42 AS PipelineRow;");
+        await Expect(page.Locator("#detailScriptEditor .cm-content")).ToHaveCountAsync(0);
+        await Expect(page.Locator("#saveScriptBtn")).ToBeHiddenAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
     private async Task OpenAsync(IPage page, string scenario = "healthy")
     {
         await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/orchestrator-page-frame.html?fixture={scenario}");
