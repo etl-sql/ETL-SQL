@@ -164,4 +164,4 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
   [Release Engineering entry](ROADMAP.md#release-engineering--routine-github-built-releases).
   Design approved 2026-11-18 ([design note](docs/releases/v0.23.0-w6-performance-gates-design.md)).
   Slices 1 (measure) and 2 (comparator classes, hosted baselines) done; slice 3 (ABBA job) and
-  slice 4 (policy cleanup) open.
+  slice 4 (policy cleanup) and slice 5 (report-only trend tracking over CI history) open.
