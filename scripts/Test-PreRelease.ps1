@@ -134,11 +134,11 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Format verify"; Command = "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)"; Reason = "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run." })
     if (-not $EffectiveSkipScale) {
         $phases.Add([ordered]@{ Phase = "Scale certification smoke"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke -OutDir <run>\scale-smoke"; Reason = "Small certification workload still meets baseline before the long test lanes heat the machine." })
-        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (smoke)"; Command = ".\scripts\Compare-CertBaseline.ps1 -NewReport <run>\scale-smoke\cert-report.json -MarkdownReport <run>\cert-baseline-smoke.md"; Reason = "Smoke certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
+        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (smoke)"; Command = ".\scripts\Compare-CertBaseline.ps1 -NewReport <run>\scale-smoke\cert-report.json -DeterministicReportOnly -MarkdownReport <run>\cert-baseline-smoke.md"; Reason = "Smoke certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
     }
     if ($EffectiveIncludeStandardScale) {
         $phases.Add([ordered]@{ Phase = "Scale certification standard"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Standard -OutDir <run>\scale-standard"; Reason = "Release-size certification workload still meets baseline before the long test lanes heat the machine." })
-        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (standard)"; Command = ".\scripts\Compare-CertBaseline.ps1 -NewReport <run>\scale-standard\cert-report.json -MarkdownReport <run>\cert-baseline-standard.md"; Reason = "Standard certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
+        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (standard)"; Command = ".\scripts\Compare-CertBaseline.ps1 -NewReport <run>\scale-standard\cert-report.json -DeterministicReportOnly -MarkdownReport <run>\cert-baseline-standard.md"; Reason = "Standard certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
         $phases.Add([ordered]@{ Phase = "Spill allocation budget (10M)"; Command = ".\scripts\Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild -OutDir <run>\spill-allocation"; Reason = "Gate F round-trip allocation, GC, and peak-memory containment stay within the checked-in budget." })
     }
     $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
@@ -1093,8 +1093,8 @@ try {
             $previousPhaseMap $fingerprint $results @($smokeScaleJson, (Join-Path $smokeScaleOutput 'cert-report.md'))
 
         Invoke-LoggedPhase "Cert baseline regression check (smoke)" `
-            ".\scripts\Compare-CertBaseline.ps1 -NewReport $smokeScaleJson -MarkdownReport $smokeBaselineReport" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-NewReport" $smokeScaleJson "-MarkdownReport" $smokeBaselineReport } `
+            ".\scripts\Compare-CertBaseline.ps1 -NewReport $smokeScaleJson -DeterministicReportOnly -MarkdownReport $smokeBaselineReport" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-NewReport" $smokeScaleJson "-DeterministicReportOnly" "-MarkdownReport" $smokeBaselineReport } `
             $previousPhaseMap $fingerprint $results @($smokeBaselineReport)
     }
 
@@ -1105,8 +1105,8 @@ try {
             $previousPhaseMap $fingerprint $results @($standardScaleJson, (Join-Path $standardScaleOutput 'cert-report.md'))
 
         Invoke-LoggedPhase "Cert baseline regression check (standard)" `
-            ".\scripts\Compare-CertBaseline.ps1 -NewReport $standardScaleJson -MarkdownReport $standardBaselineReport" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-NewReport" $standardScaleJson "-MarkdownReport" $standardBaselineReport } `
+            ".\scripts\Compare-CertBaseline.ps1 -NewReport $standardScaleJson -DeterministicReportOnly -MarkdownReport $standardBaselineReport" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-NewReport" $standardScaleJson "-DeterministicReportOnly" "-MarkdownReport" $standardBaselineReport } `
             $previousPhaseMap $fingerprint $results @($standardBaselineReport)
 
         # Release configuration is already built by the Dotnet build phase, hence -SkipBuild.

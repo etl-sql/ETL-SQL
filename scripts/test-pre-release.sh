@@ -119,11 +119,11 @@ show_pre_release_plan() {
     print_plan_phase "$i" "Format verify" "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)" "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run."; i=$((i + 1))
     if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
         print_plan_phase "$i" "Scale certification smoke" "./scripts/test-scale-certification.sh --tier Smoke --out-dir <run>/scale-smoke" "Small certification workload still meets baseline before the long test lanes heat the machine."; i=$((i + 1))
-        print_plan_phase "$i" "Cert baseline regression check (smoke)" "./scripts/Compare-CertBaseline.ps1 -NewReport <run>/scale-smoke/cert-report.json -MarkdownReport <run>/cert-baseline-smoke.md (via pwsh)" "Smoke certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
+        print_plan_phase "$i" "Cert baseline regression check (smoke)" "./scripts/Compare-CertBaseline.ps1 -NewReport <run>/scale-smoke/cert-report.json -DeterministicReportOnly -MarkdownReport <run>/cert-baseline-smoke.md (via pwsh)" "Smoke certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
     fi
     if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
         print_plan_phase "$i" "Scale certification standard" "./scripts/test-scale-certification.sh --tier Standard --out-dir <run>/scale-standard" "Release-size certification workload still meets baseline before the long test lanes heat the machine."; i=$((i + 1))
-        print_plan_phase "$i" "Cert baseline regression check (standard)" "./scripts/Compare-CertBaseline.ps1 -NewReport <run>/scale-standard/cert-report.json -MarkdownReport <run>/cert-baseline-standard.md (via pwsh)" "Standard certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
+        print_plan_phase "$i" "Cert baseline regression check (standard)" "./scripts/Compare-CertBaseline.ps1 -NewReport <run>/scale-standard/cert-report.json -DeterministicReportOnly -MarkdownReport <run>/cert-baseline-standard.md (via pwsh)" "Standard certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
         print_plan_phase "$i" "Spill allocation budget (10M)" "./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild -OutDir <run>/spill-allocation (via pwsh)" "Gate F round-trip allocation, GC, and peak-memory containment stay within the checked-in budget."; i=$((i + 1))
     fi
     print_plan_phase "$i" "Smoke lane" "./scripts/test-lane.sh --lane smoke" "Critical startup, security, report, and portal checks."; i=$((i + 1))
@@ -355,7 +355,7 @@ cert_baseline_phase() {
     local new_report="$1"
     local report_path="$2"
     local pwsh; pwsh="$(resolve_pwsh)" || return 1
-    "$pwsh" -NoProfile -File ./scripts/Compare-CertBaseline.ps1 -NewReport "$new_report" -MarkdownReport "$report_path"
+    "$pwsh" -NoProfile -File ./scripts/Compare-CertBaseline.ps1 -NewReport "$new_report" -DeterministicReportOnly -MarkdownReport "$report_path"
 }
 
 ha_soak_contract_phase() {
@@ -673,7 +673,7 @@ if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
         bash "./scripts/test-scale-certification.sh" "--tier" "Smoke" "--out-dir" "$RUN_DIR/scale-smoke"
 
     run_phase "Cert baseline regression check (smoke)" \
-        "./scripts/Compare-CertBaseline.ps1 -NewReport $RUN_DIR/scale-smoke/cert-report.json -MarkdownReport $RUN_DIR/cert-baseline-smoke.md (via pwsh)" \
+        "./scripts/Compare-CertBaseline.ps1 -NewReport $RUN_DIR/scale-smoke/cert-report.json -DeterministicReportOnly -MarkdownReport $RUN_DIR/cert-baseline-smoke.md (via pwsh)" \
         cert_baseline_phase "$RUN_DIR/scale-smoke/cert-report.json" "$RUN_DIR/cert-baseline-smoke.md"
 fi
 
@@ -683,7 +683,7 @@ if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
         bash "./scripts/test-scale-certification.sh" "--tier" "Standard" "--out-dir" "$RUN_DIR/scale-standard"
 
     run_phase "Cert baseline regression check (standard)" \
-        "./scripts/Compare-CertBaseline.ps1 -NewReport $RUN_DIR/scale-standard/cert-report.json -MarkdownReport $RUN_DIR/cert-baseline-standard.md (via pwsh)" \
+        "./scripts/Compare-CertBaseline.ps1 -NewReport $RUN_DIR/scale-standard/cert-report.json -DeterministicReportOnly -MarkdownReport $RUN_DIR/cert-baseline-standard.md (via pwsh)" \
         cert_baseline_phase "$RUN_DIR/scale-standard/cert-report.json" "$RUN_DIR/cert-baseline-standard.md"
 
     run_phase "Spill allocation budget (10M)" \

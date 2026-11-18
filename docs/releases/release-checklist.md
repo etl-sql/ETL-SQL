@@ -732,11 +732,14 @@ and on pushes that change the engine. It builds Release, then runs the EBNF and 
 10M-row spill allocation profile, and Smoke and Standard scale certification. The EBNF and SLT
 lanes run under the `de_DE.UTF-8` culture (comma decimal, day-first dates); Windows CI is en-US and
 other Linux jobs are invariant, so engine text that follows the host locale fails here. Each scale tier is
-compared with `certification-results/baseline-<tier>.json` using
-`Compare-CertBaseline.ps1 -PerformanceReportOnly`: timing misses are warnings, while row counts,
-checksums and failed scenarios fail the job. The spill budget gates allocated bytes per row and
-spill evidence; GC counts, GC pause and peak working set depend on the host and only warn there
-(`-MachineMetricsReportOnly`). Its artifact `engine-certification-<run>-<attempt>`
+compared with the hosted baseline `certification-results/baseline-<tier>.json` by
+`Compare-CertBaseline.ps1`. Failed scenarios, row counts, checksums, work counters (spill bytes,
+extents, partition passes, plan counts; exact) and allocated MB (median, +5%) fail the job. Elapsed
+time, GC pause and peak working set only warn. The spill budget gates allocated bytes per row
+(+5%) and spill evidence; GC counts, pause and peak only warn. An intended work or allocation
+change recalibrates the baselines in the same commit from a Performance Calibration run
+(`perf-calibration.yml`). See the
+[W6 design note](v0.23.0-w6-performance-gates-design.md). Its artifact `engine-certification-<run>-<attempt>`
 keeps the logs, results and comparison reports. Release requires the job through
 `scripts/hosted-release-policy.json`.
 

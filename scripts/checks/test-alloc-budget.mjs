@@ -1,5 +1,5 @@
-// Spill allocation budget: hosted CI warns on host-dependent metrics (GC counts, pause, peak
-// working set) but still fails on allocation and missing spill evidence (CI 42725899666).
+// Spill allocation budget: host-dependent metrics (GC counts, pause, peak working set) only warn
+// in every mode (W6); allocation and missing spill evidence fail (CI 42725899666).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -27,13 +27,14 @@ try {
     ['pause', r => { r.gc.pauseMs *= 3; }],
     ['peak', r => { r.memory.peakWorkingSetMB *= 2; }],
   ]) {
-    assert.equal(compare(name, mutate, false).status, 1, `${name} fails against the workstation budget`);
+    const local = compare(name, mutate, false);
+    assert.equal(local.status, 0, `${name} only warns locally: ${local.output}`);
     const hosted = compare(name, mutate, true);
     assert.equal(hosted.status, 0, `${name} only warns in hosted CI: ${hosted.output}`);
     assert.match(hosted.output, /\[WARN\] 1 host-dependent metric/);
   }
   for (const [name, mutate] of [
-    ['allocation', r => { r.allocation.bytesPerRow *= 1.2; }],
+    ['allocation', r => { r.allocation.bytesPerRow *= 1.06; }],
     ['no spill', r => { r.spillBytes = 0; }],
   ]) assert.equal(compare(name, mutate, true).status, 1, `${name} still fails in hosted CI`);
   // A hosted gate with no budget to compare against proves nothing, so it fails. A workstation
@@ -51,7 +52,8 @@ try {
   assert.match(hostedUnblessed.output, /No allocation budget found/);
   const ci = readFileSync(path.join(repo, '.github/workflows/ci.yml'), 'utf8');
   assert.match(ci, /Test-SpillAllocProfile\.ps1 -ScriptArguments @\([^)]*'-MachineMetricsReportOnly'/);
-  console.log('Allocation budget: host-dependent metrics warn in hosted CI; allocation and spill evidence still fail.');
+  assert.equal(compare('within band', r => { r.allocation.bytesPerRow *= 1.04; }, true).status, 0, '4% more allocation is within the 5% band');
+  console.log('Allocation budget: host-dependent metrics only warn; allocation (+5%) and spill evidence fail.');
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

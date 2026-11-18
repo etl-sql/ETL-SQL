@@ -150,7 +150,7 @@ package-origin check replay real recordings from dry run 42699535102
 ### W4b. Remove the workstation from the release path (owner decided 2026-11-04)
 **Status 2026-11-09: done, unpushed.** The hosted Engine Certification job in `ci.yml` runs the
 EBNF and SLT lanes, 10M-row spill and Smoke/Standard scale; scale timing is report-only
-(`Compare-CertBaseline -PerformanceReportOnly`). Build Verification checks third-party drift and
+(`Compare-CertBaseline`). Build Verification checks third-party drift and
 Docker Integration Tests runs local/container smoke parity. `release.yml` and both drivers no longer
 need workstation evidence, and the workstation and hosted-local tooling is deleted. The first CI
 run on hosted runners still has to prove the new job and smoke parity.

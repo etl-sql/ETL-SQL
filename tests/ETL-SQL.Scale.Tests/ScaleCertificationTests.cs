@@ -26,6 +26,18 @@ using Xunit.Abstractions;
 namespace ETL_SQL.Tests.Scale
 {
     /// <summary>
+    /// A fact that reports Skipped (not Passed) unless an opt-in environment variable is set.
+    /// Returning early from a plain [Fact] recorded an unrun certification as a pass.
+    /// </summary>
+    public sealed class RequiresEnvironmentFactAttribute : FactAttribute
+    {
+        public RequiresEnvironmentFactAttribute(string variable, string skipReason)
+        {
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(variable)))
+                Skip = skipReason;
+        }
+    }
+    /// <summary>
     /// Scale certification uses a dedicated fixture so unrelated test discovery cannot change GC.
     /// Smoke-tier scenarios (50k–100k rows). Run from this project with:
     ///   dotnet test --filter "Category=ScaleCertification"
@@ -513,33 +525,21 @@ namespace ETL_SQL.Tests.Scale
         public Task Cert_Standard_SmokeScenarioSet_RowScale10()
             => RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_STANDARD_ROW_SCALE", 10.0), "Standard");
 
-        [Fact]
+        [RequiresEnvironmentFact("CERT_STRESS_ROW_SCALE",
+            "Set CERT_STRESS_ROW_SCALE to run stress-tier scale tests (100x = 5M+ rows).")]
         [Trait("Tier", "Stress")]
         public Task Cert_Stress_SmokeScenarioSet_RowScale100()
-        {
-            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CERT_STRESS_ROW_SCALE")))
-            {
-                _out.WriteLine("SKIP: Set CERT_STRESS_ROW_SCALE to run stress-tier scale tests (100x = 5M+ rows).");
-                return Task.CompletedTask;
-            }
-            return RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_STRESS_ROW_SCALE", 100.0), "Stress");
-        }
+            => RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_STRESS_ROW_SCALE", 100.0), "Stress");
 
-        [Fact]
+        // ~50M+ rows (1000x of the 50k base). Very heavy — opt-in only, and needs a capable host
+        // (lots of RAM, free disk for spill, and time). Run with a real 50M tier to measure the
+        // large-tier behavior (external sort merge fan-in, DISTINCT high-cardinality partitions,
+        // statistical/holistic aggregate buffering, external-aggregate spill).
+        [RequiresEnvironmentFact("CERT_HUGE_ROW_SCALE",
+            "Set CERT_HUGE_ROW_SCALE to run huge-tier scale tests (1000x ~= 50M+ rows; capable host required).")]
         [Trait("Tier", "Huge")]
         public Task Cert_Huge_SmokeScenarioSet_RowScale1000()
-        {
-            // ~50M+ rows (1000x of the 50k base). Very heavy — opt-in only, and needs a capable host
-            // (lots of RAM, free disk for spill, and time). Run with a real 50M tier to measure the
-            // large-tier behavior (external sort merge fan-in, DISTINCT high-cardinality partitions,
-            // statistical/holistic aggregate buffering, external-aggregate spill).
-            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CERT_HUGE_ROW_SCALE")))
-            {
-                _out.WriteLine("SKIP: Set CERT_HUGE_ROW_SCALE to run huge-tier scale tests (1000x ~= 50M+ rows; capable host required).");
-                return Task.CompletedTask;
-            }
-            return RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_HUGE_ROW_SCALE", 1000.0), "Huge");
-        }
+            => RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_HUGE_ROW_SCALE", 1000.0), "Huge");
 
         [Fact]
         [Trait("Tier", "Provider")]

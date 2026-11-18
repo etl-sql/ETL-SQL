@@ -108,7 +108,8 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
 
 ### 2.8 Scale baseline recalibration
 
-- [ ] **Re-land the Stress/Huge Skipped fix with the next scale recalibration.** Commit `8b50435fe`
+- [x] **Re-land the Stress/Huge Skipped fix with the next scale recalibration.** Done in W6
+  slice 2 (2026-11-18): re-applied with the hosted baselines; a fixture-hash change now only warns. Commit `8b50435fe`
   made the opt-in `Cert_Stress_*`/`Cert_Huge_*` facts report Skipped instead of a false Passed when
   their row-scale variable is unset. It changed the fixture hash, so both baseline checks failed;
   reverted for v0.22.0 (owner, 2026-11-03). Re-apply it in the change that recalibrates
@@ -161,3 +162,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
 - [ ] **W6 Deterministic performance gates.** Gate on deterministic metrics (allocations, work
   counts); time only by same-host interleaved A/B; no waivers. See the
   [Release Engineering entry](ROADMAP.md#release-engineering--routine-github-built-releases).
+  Design approved 2026-11-18 ([design note](docs/releases/v0.23.0-w6-performance-gates-design.md)).
+  Slices 1 (measure) and 2 (comparator classes, hosted baselines) done; slice 3 (ABBA job) and
+  slice 4 (policy cleanup) open.
