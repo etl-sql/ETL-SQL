@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
@@ -214,8 +215,9 @@ internal static class AuthenticatedSpillEncryption
         private readonly AesGcm _aesGcm;
         private readonly CancellationToken _cancellationToken;
         private readonly int _maxFramePlaintextBytes;
-        private readonly byte[] _plainBuf;
-        private readonly byte[] _frameBuf;
+        private readonly int _maxFrameBufferBytes;
+        private byte[] _plainBuf;
+        private byte[] _frameBuf;
         private readonly byte[] _aadBuf;
         private readonly int _identityLength;
         private readonly byte[] _nonce = new byte[12];
@@ -237,10 +239,20 @@ internal static class AuthenticatedSpillEncryption
             _header = header;
             _aesGcm = new AesGcm(derivedKey, TagSizeV3);
             _maxFramePlaintextBytes = maxFramePlaintextBytes;
+            _maxFrameBufferBytes = FrameHeaderSizeV3 + TagSizeV3 + maxFramePlaintextBytes;
             _cancellationToken = cancellationToken;
 
-            _plainBuf = new byte[maxFramePlaintextBytes];
-            _frameBuf = new byte[FrameHeaderSizeV3 + TagSizeV3 + maxFramePlaintextBytes];
+            _plainBuf = ArrayPool<byte>.Shared.Rent(maxFramePlaintextBytes);
+            try
+            {
+                _frameBuf = ArrayPool<byte>.Shared.Rent(_maxFrameBufferBytes);
+            }
+            catch
+            {
+                ArrayPool<byte>.Shared.Return(_plainBuf);
+                _plainBuf = Array.Empty<byte>();
+                throw;
+            }
 
             var identity = BuildIdentityPrefix(header, chunkName);
             _identityLength = identity.Length;
@@ -332,8 +344,18 @@ internal static class AuthenticatedSpillEncryption
             if (!_disposed && disposing)
             {
                 _disposed = true;
-                CryptographicOperations.ZeroMemory(_plainBuf);
-                CryptographicOperations.ZeroMemory(_frameBuf);
+                if (_plainBuf.Length > 0)
+                {
+                    CryptographicOperations.ZeroMemory(_plainBuf.AsSpan(0, _maxFramePlaintextBytes));
+                    ArrayPool<byte>.Shared.Return(_plainBuf);
+                    _plainBuf = Array.Empty<byte>();
+                }
+                if (_frameBuf.Length > 0)
+                {
+                    CryptographicOperations.ZeroMemory(_frameBuf.AsSpan(0, _maxFrameBufferBytes));
+                    ArrayPool<byte>.Shared.Return(_frameBuf);
+                    _frameBuf = Array.Empty<byte>();
+                }
                 CryptographicOperations.ZeroMemory(_aadBuf);
                 CryptographicOperations.ZeroMemory(_nonce);
                 _aesGcm.Dispose();
@@ -347,8 +369,9 @@ internal static class AuthenticatedSpillEncryption
         private readonly Stream _file;
         private readonly AesGcm _aesGcm;
         private readonly int _maxFramePlaintextBytes;
-        private readonly byte[] _plainBuf;
-        private readonly byte[] _cipherBuf;
+        private readonly int _maxCipherBufferBytes;
+        private byte[] _plainBuf;
+        private byte[] _cipherBuf;
         private readonly byte[] _aadBuf;
         private readonly int _identityLength;
         private readonly byte[] _nonce = new byte[12];
@@ -372,9 +395,19 @@ internal static class AuthenticatedSpillEncryption
             _file = file;
             _aesGcm = new AesGcm(derivedKey, TagSizeV3);
             _maxFramePlaintextBytes = maxFramePlaintextBytes;
+            _maxCipherBufferBytes = TagSizeV3 + maxFramePlaintextBytes;
 
-            _plainBuf = new byte[maxFramePlaintextBytes];
-            _cipherBuf = new byte[TagSizeV3 + maxFramePlaintextBytes];
+            _plainBuf = ArrayPool<byte>.Shared.Rent(maxFramePlaintextBytes);
+            try
+            {
+                _cipherBuf = ArrayPool<byte>.Shared.Rent(_maxCipherBufferBytes);
+            }
+            catch
+            {
+                ArrayPool<byte>.Shared.Return(_plainBuf);
+                _plainBuf = Array.Empty<byte>();
+                throw;
+            }
 
             var identity = BuildIdentityPrefix(header, chunkName);
             _identityLength = identity.Length;
@@ -474,13 +507,15 @@ internal static class AuthenticatedSpillEncryption
             catch (ExecutionException)
             {
                 _failed = true;
-                CryptographicOperations.ZeroMemory(_plainBuf);
+                if (_plainBuf.Length >= _maxFramePlaintextBytes)
+                    CryptographicOperations.ZeroMemory(_plainBuf.AsSpan(0, _maxFramePlaintextBytes));
                 throw;
             }
             catch (Exception error) when (error is CryptographicException or EndOfStreamException)
             {
                 _failed = true;
-                CryptographicOperations.ZeroMemory(_plainBuf);
+                if (_plainBuf.Length >= _maxFramePlaintextBytes)
+                    CryptographicOperations.ZeroMemory(_plainBuf.AsSpan(0, _maxFramePlaintextBytes));
                 throw new ExecutionException(AuthenticationFailedMessage);
             }
         }
@@ -501,8 +536,18 @@ internal static class AuthenticatedSpillEncryption
             if (!_disposed && disposing)
             {
                 _disposed = true;
-                CryptographicOperations.ZeroMemory(_plainBuf);
-                CryptographicOperations.ZeroMemory(_cipherBuf);
+                if (_plainBuf.Length > 0)
+                {
+                    CryptographicOperations.ZeroMemory(_plainBuf.AsSpan(0, _maxFramePlaintextBytes));
+                    ArrayPool<byte>.Shared.Return(_plainBuf);
+                    _plainBuf = Array.Empty<byte>();
+                }
+                if (_cipherBuf.Length > 0)
+                {
+                    CryptographicOperations.ZeroMemory(_cipherBuf.AsSpan(0, _maxCipherBufferBytes));
+                    ArrayPool<byte>.Shared.Return(_cipherBuf);
+                    _cipherBuf = Array.Empty<byte>();
+                }
                 CryptographicOperations.ZeroMemory(_aadBuf);
                 CryptographicOperations.ZeroMemory(_nonce);
                 CryptographicOperations.ZeroMemory(_frameHeader);

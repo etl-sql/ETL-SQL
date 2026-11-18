@@ -117,6 +117,118 @@ namespace ETL_SQL.Tests.Operations.Operations
             Assert.Equal(2, engine.MergePassCount);
             Assert.Equal(3, engine.IntermediateMergeRunCount);
             Assert.Equal(153, eval.Telemetry.SpillExtentCount - startExtents);
+            Assert.Equal(0, engine.IntermediateKeyStripCount);
+            Assert.True(engine.PrefixResolvedComparisons > 0);
+            Assert.All(sorted, r => Assert.DoesNotContain(r.GetColumnNames(), c => c.StartsWith("_SYS_SK_", StringComparison.Ordinal)));
+        }
+
+        [Theory]
+        [InlineData(false, null, false)]
+        [InlineData(false, false, false)]
+        [InlineData(true, null, false)]
+        [InlineData(true, true, false)]
+        [InlineData(false, null, true)]
+        public async Task SortExternal_KeyPrefixAndMultiPass_PreservesNullPlacementMixedTypesAndFractionalDecimals(
+            bool descending, bool? nullsFirst, bool caseSensitive)
+        {
+            var numericValues = new object?[] { null, -2.75m, -2.25m, -2m, 1m, 1.0m, 1.2m, 1.8m };
+            var dateValues = new object?[]
+            {
+                null,
+                new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 1, 12, 30, 0, DateTimeKind.Utc),
+                new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc),
+            };
+            var textValues = new object?[] { null, "Alpha", "alpha", "beta", "zebra" };
+
+            foreach (var values in new[] { numericValues, dateValues, textValues })
+            {
+                var (eval, logger) = BuildContext(chunkSize: 2);
+                eval.CaseSensitiveComparison = caseSensitive;
+
+                // Expand to >64 chunks (chunkSize=2 -> >=135 rows -> >=68 chunks) to force intermediate merge passes.
+                var rows = new List<Row>();
+                int repeat = Math.Max(18, 140 / values.Length);
+                int seq = 0;
+                for (int rep = 0; rep < repeat; rep++)
+                {
+                    foreach (var val in values)
+                        rows.Add(new Row { ["k"] = val, ["seq"] = (decimal)seq++ });
+                }
+
+                // Deterministic permutation before external sort.
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    int j = (i * 73 + 19) % rows.Count;
+                    (rows[i], rows[j]) = (rows[j], rows[i]);
+                }
+
+                var orderBy = new List<OrderByClause>
+                {
+                    new OrderByClause(new IdentifierExpression("k"), descending, nullsFirst),
+                    new OrderByClause(new IdentifierExpression("seq"), false)
+                };
+
+                var engine = new ExternalSortEngine(eval, logger);
+                var sorted = await engine.SortExternal(rows, orderBy);
+
+                Assert.Equal(rows.Count, sorted.Count);
+                Assert.Equal(0, engine.IntermediateKeyStripCount);
+                Assert.True(engine.IntermediateMergeRunCount > 0);
+                Assert.True(engine.PrefixResolvedComparisons > 0);
+                Assert.All(sorted, r => Assert.DoesNotContain(r.GetColumnNames(), c => c.StartsWith("_SYS_SK_", StringComparison.Ordinal)));
+
+                for (int i = 1; i < sorted.Count; i++)
+                {
+                    var prev = sorted[i - 1];
+                    var curr = sorted[i];
+                    var kCmp = orderBy[0].OutputOrder(eval.CompareConstants(prev["k"], curr["k"]), prev["k"], curr["k"]);
+                    Assert.True(kCmp <= 0, $"Out-of-order primary keys at index {i}: '{prev["k"]}' before '{curr["k"]}'");
+                    if (kCmp == 0)
+                    {
+                        var sCmp = orderBy[1].OutputOrder(eval.CompareConstants(prev["seq"], curr["seq"]), prev["seq"], curr["seq"]);
+                        Assert.True(sCmp <= 0, $"Out-of-order tie-breaker at index {i}");
+                    }
+                }
+            }
+
+            // Direct ComputeKeyPrefix monotonic consistency across NULL placement, equivalent decimals, mixed types, and bytes.
+            var checkOrder = new List<OrderByClause> { new(new IdentifierExpression("k"), descending, nullsFirst) };
+            Assert.Equal(
+                ExternalSortEngine.ComputeKeyPrefix(new object?[] { 1m }, checkOrder, caseSensitive),
+                ExternalSortEngine.ComputeKeyPrefix(new object?[] { 1.0m }, checkOrder, caseSensitive));
+            bool expectNullsFirst = nullsFirst ?? !descending;
+            ulong nullPrefix = ExternalSortEngine.ComputeKeyPrefix(new object?[] { null }, checkOrder, caseSensitive);
+            Assert.Equal(expectNullsFirst ? 0UL : ulong.MaxValue, nullPrefix);
+
+            var (evalCheck, _) = BuildContext(chunkSize: 2);
+            evalCheck.CaseSensitiveComparison = caseSensitive;
+            var mixedSamples = new object?[]
+            {
+                null,
+                -2.75m,
+                -2m,
+                1m,
+                1.8m,
+                new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                "Alpha",
+                "zebra",
+                new byte[] { 1, 2 },
+                new byte[] { 2, 0 },
+            };
+            foreach (var a in mixedSamples)
+            {
+                ulong pa = ExternalSortEngine.ComputeKeyPrefix(new object?[] { a }, checkOrder, caseSensitive);
+                foreach (var b in mixedSamples)
+                {
+                    ulong pb = ExternalSortEngine.ComputeKeyPrefix(new object?[] { b }, checkOrder, caseSensitive);
+                    if (pa != pb)
+                    {
+                        int oracle = checkOrder[0].OutputOrder(evalCheck.CompareConstants(a, b), a, b);
+                        Assert.Equal(Math.Sign(pa.CompareTo(pb)), Math.Sign(oracle));
+                    }
+                }
+            }
         }
 
         // Note: no dedicated "early-flush under a 1-byte ceiling" test — asserting the guard tripped

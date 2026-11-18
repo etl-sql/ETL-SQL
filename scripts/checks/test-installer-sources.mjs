@@ -20,7 +20,9 @@ function run() {
 const installer = 'src/ETL-SQL.Installer/';
 try {
   const property = '<Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" Secure="yes"/>';
-  const xml = `<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"><Product>${property}<File Source="$(var.PublishDir)\\app.exe"/><File Source="..\\..\\LICENSE.md"/><Binary SourceFile="installer-actions.js"/></Product></Wix>`;
+  const orchStop = '<ServiceControl Id="StopOrch" Name="ETL-SQL-Orchestrator" Stop="both" Remove="uninstall" Wait="yes"/>';
+  const portalStop = '<ServiceControl Id="StopPortal" Name="ETL-SQL-Portal" Stop="both" Remove="uninstall" Wait="yes"/>';
+  const xml = `<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"><Product>${property}${orchStop}${portalStop}<File Source="$(var.PublishDir)\\app.exe"/><File Source="..\\..\\LICENSE.md"/><Binary SourceFile="installer-actions.js"/></Product></Wix>`;
   write(installer + 'Installer.wxs', xml);
   write('LICENSE.md', 'fixture');
   write('scripts/build-msi.ps1', 'throw "Must never execute"');
@@ -37,7 +39,22 @@ try {
     assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
     assert.match(rejected.stdout, /MSIRESTARTMANAGERCONTROL=Disable exactly once/);
   }
+  for (const [changed, expectedPattern] of [
+    [xml.replace(property, property + '<util:CloseApplication xmlns:util="http://schemas.microsoft.com/wix/UtilExtension" Id="CloseService" Target="ETL-SQL-Service.exe" TerminateProcess="1"/>'), /CloseApplication or TerminateProcess/],
+    [xml.replace(orchStop, ''), /ETL-SQL-Orchestrator.*ServiceControl/],
+    [xml.replace(portalStop, portalStop.replace('Wait="yes"', 'Wait="no"')), /ETL-SQL-Portal.*ServiceControl/],
+  ]) {
+    write(installer + 'Installer.wxs', changed);
+    const rejected = run();
+    assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+    assert.match(rejected.stdout, expectedPattern);
+  }
   write(installer + 'Installer.wxs', xml);
+  write('scripts/build-msi.ps1', '# -ext WixUtilExtension');
+  const rejectedUtilExt = run();
+  assert.equal(rejectedUtilExt.status, 1, rejectedUtilExt.stdout + rejectedUtilExt.stderr);
+  assert.match(rejectedUtilExt.stdout, /must not link WixUtilExtension/);
+  write('scripts/build-msi.ps1', 'throw "Must never execute"');
   write(installer + 'Installer.wxs', xml.replace('LICENSE.md', 'missing.md'));
   write(installer + 'configure-portal-jwt.ps1', 'function Broken {');
   write(installer + 'installer-actions.js', 'function broken( {');

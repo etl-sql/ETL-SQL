@@ -127,7 +127,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             _throttle = throttle;
             _configuration = configuration;
             _sessionManager = sessionManager;
-            _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor();
+            _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor(configuration);
             _meteringLedger = meteringLedger;
         }
 
@@ -779,8 +779,13 @@ namespace ETL_SQL.Orchestrator.Scheduling
             if (capacity.IsOverloaded)
             {
                 _logger.LogWarning(
-                    "Job {JobName}: skipping lease claim because this node is overloaded (CPU={Cpu:F1}%, memory={Memory:F1}%).",
-                    job.Name, capacity.ProcessCpuPercent, capacity.MemoryLoadPercent);
+                    "Job {JobName}: skipping lease claim because this node is overloaded (CPU={Cpu:F1}%, hostCPU={HostCpu}, memory={Memory:F1}%, workerReserved={ReservedPct:F1}%, spillFreeMB={SpillFreeMB}).",
+                    job.Name,
+                    capacity.ProcessCpuPercent,
+                    capacity.HostCpuPercent?.ToString("F1") ?? "n/a",
+                    capacity.MemoryLoadPercent,
+                    capacity.WorkerMemoryReservationPercent,
+                    capacity.SpillDiskFreeBytes / (1024L * 1024L));
                 return;
             }
 
@@ -982,7 +987,10 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     {
                         await SetRunStateOrCancelAsync(job, fenceToken, ScheduledJobRunState.Queued, cycleCts);
                         var throttleSw = System.Diagnostics.Stopwatch.StartNew();
-                        await using var slot = (IAsyncDisposable)await _throttle.AcquireAsync(job.Name, cycleCts.Token);
+                        var (workloadOptions, slotWeight) = ReadJobSchedulingHints(job.Options);
+                        var workloadClass = JobThrottle.ClassifyWorkload(script, workloadOptions);
+                        await using var slot = (IAsyncDisposable)await _throttle.AcquireAsync(
+                            job.Name, workloadClass, slotWeight, cycleCts.Token);
                         // COMPAT_BREAK: 0.21.0 — a lease lost while queued cannot start execution.
                         await SetRunStateOrCancelAsync(job, fenceToken, ScheduledJobRunState.Running, cycleCts);
                         throttleSw.Stop();
@@ -1552,6 +1560,46 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
 
             return earliest;
+        }
+
+        private static (IReadOnlyDictionary<string, string>? Options, int SlotWeight) ReadJobSchedulingHints(string? options)
+        {
+            if (string.IsNullOrWhiteSpace(options)) return (null, 0);
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(options);
+                if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return (null, 0);
+                Dictionary<string, string>? parsedOptions = null;
+                int slotWeight = 0;
+                foreach (var property in document.RootElement.EnumerateObject())
+                {
+                    if ((property.Name.Equals("WorkloadClass", StringComparison.OrdinalIgnoreCase)
+                         || property.Name.Equals("WORKLOAD_CLASS", StringComparison.OrdinalIgnoreCase)
+                         || property.Name.Equals("Priority", StringComparison.OrdinalIgnoreCase))
+                        && property.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var val = property.Value.GetString();
+                        if (!string.IsNullOrWhiteSpace(val))
+                        {
+                            parsedOptions ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                            parsedOptions[property.Name] = val;
+                        }
+                    }
+                    else if ((property.Name.Equals("SlotWeight", StringComparison.OrdinalIgnoreCase)
+                              || property.Name.Equals("SLOT_WEIGHT", StringComparison.OrdinalIgnoreCase))
+                             && property.Value.ValueKind == System.Text.Json.JsonValueKind.Number
+                             && property.Value.TryGetInt32(out var weight)
+                             && weight > 0)
+                    {
+                        slotWeight = weight;
+                    }
+                }
+                return (parsedOptions, slotWeight);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return (null, 0);
+            }
         }
 
         private static int? ReadJobTimeoutSeconds(string? options)

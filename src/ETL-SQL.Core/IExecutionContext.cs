@@ -361,6 +361,7 @@ public interface IEngineContext
     int MaxRecursiveDepth { get; set; }
     int CurrentRecursiveDepth { get; set; }
     int BatchSize { get; set; }
+    long BatchTargetBytes { get => SpillFanOut.DefaultTargetBatchBytes; set { } }
     long TempTableSpillThresholdRows { get; set; }
     int MaxLastResultRows { get; set; }
     int ForeachPageSize { get; set; }
@@ -557,6 +558,8 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
     int EffectiveBatchSize => AdaptiveExecutionEnabled && AdaptiveAdvisor != null
         ? AdaptiveAdvisor.Snapshot().BatchRows
         : BatchSize;
+    /// <summary>Effective target byte budget per batch.</summary>
+    long EffectiveBatchTargetBytes => BatchTargetBytes;
     /// <summary>Effective PARALLEL worker ceiling, including adaptive advice when enabled.</summary>
     int EffectiveMaxParallelDegree => AdaptiveExecutionEnabled && AdaptiveAdvisor != null
         ? AdaptiveAdvisor.Snapshot().WorkerDegree

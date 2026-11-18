@@ -1,4 +1,4 @@
-<# Validate authored installer inputs without publishing applications or installing WiX. #>
+﻿<# Validate authored installer inputs without publishing applications or installing WiX. #>
 [CmdletBinding()]
 param([string]$Root = (Split-Path $PSScriptRoot -Parent))
 
@@ -27,6 +27,16 @@ try {
     if ($restartManager.Count -ne 1 -or $restartManager[0].Value -cne 'Disable') {
         $findings.Add('MSI must not let Restart Manager shut down other software: author MSIRESTARTMANAGERCONTROL=Disable exactly once.')
     }
+    if ($manifest.SelectNodes('//*[local-name()="CloseApplication" or namespace-uri()="http://schemas.microsoft.com/wix/UtilExtension"] | //@TerminateProcess').Count -gt 0 -or
+        $manifest.DocumentElement.GetAttribute('xmlns:util') -eq 'http://schemas.microsoft.com/wix/UtilExtension') {
+        $findings.Add('MSI must not force-kill processes with CloseApplication or TerminateProcess; use ServiceControl Stop="both" Wait="yes".')
+    }
+    foreach ($serviceName in @('ETL-SQL-Orchestrator', 'ETL-SQL-Portal')) {
+        $stopControls = $manifest.SelectNodes("//w:ServiceControl[@Name='$serviceName' and @Stop='both' and @Remove='uninstall' and @Wait='yes']", $namespaces)
+        if ($stopControls.Count -ne 1) {
+            $findings.Add("MSI must stop and remove $serviceName via one ServiceControl with Stop=""both"", Remove=""uninstall"", and Wait=""yes"".")
+        }
+    }
     foreach ($attribute in $manifest.SelectNodes('//@Source | //@SourceFile')) {
         $source = $attribute.Value
         # Published binaries are checked after publish; heat generates wwwroot.wxs then too.
@@ -47,6 +57,9 @@ foreach ($relative in @('scripts/build-msi.ps1', 'src/ETL-SQL.Installer/configur
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
         $findings.Add("Missing PowerShell source: $relative")
         continue
+    }
+    if ($relative -ceq 'scripts/build-msi.ps1' -and (Get-Content -LiteralPath $file -Raw).Contains('WixUtilExtension')) {
+        $findings.Add('scripts/build-msi.ps1 must not link WixUtilExtension.')
     }
     $tokens = $null
     $parseErrors = $null

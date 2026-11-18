@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,10 +12,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Profiling;
 using ETL_SQL.Core.Quality;
+using ETL_SQL.Engine.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -39,6 +43,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly ChildProcessTracker _tracker;
         private readonly ILogger<ProcessJobExecutor> _logger;
         private readonly IConfiguration? _configuration;
+        private readonly IBufferManager? _bufferManager;
         private static readonly object CleanupLock = new();
         private static DateTime _lastTempScriptCleanupUtc = DateTime.MinValue;
 
@@ -52,11 +57,23 @@ namespace ETL_SQL.Orchestrator.Execution
             ChildProcessTracker tracker,
             ILogger<ProcessJobExecutor> logger,
             IConfiguration? configuration = null)
+            : this(options, tracker, logger, configuration, bufferManager: null)
+        {
+        }
+
+        [ActivatorUtilitiesConstructor]
+        public ProcessJobExecutor(
+            IOptions<ProcessJobExecutorOptions> options,
+            ChildProcessTracker tracker,
+            ILogger<ProcessJobExecutor> logger,
+            IConfiguration? configuration,
+            IBufferManager? bufferManager)
         {
             _options = options.Value;
             _tracker = tracker;
             _logger = logger;
             _configuration = configuration;
+            _bufferManager = bufferManager;
 
             var templateWarning = DescribeArgumentsTemplateRisk(_options.ArgumentsTemplate);
             if (templateWarning is not null) _logger.LogWarning("{Warning}", templateWarning);
@@ -144,6 +161,26 @@ namespace ETL_SQL.Orchestrator.Execution
                 }
             }
 
+            var workerGrantBytes = ResolveWorkerMemoryGrantBytes();
+            IDisposable? workerReservation = null;
+            if (_bufferManager is not null && workerGrantBytes > 0)
+            {
+                var reservationSession = $"worker-{jobName ?? sessionId ?? Guid.NewGuid().ToString("N")}";
+                try
+                {
+                    workerReservation = await _bufferManager.ReserveMemoryAsync(
+                        reservationSession, workerGrantBytes, cancellationToken, owner: this);
+                }
+                catch (OperationCanceledException)
+                {
+                    return new ScriptExecutionResult(false, 0, "Job execution was cancelled or timed out.", SessionId: sessionId);
+                }
+                catch (TimeoutException ex)
+                {
+                    return new ScriptExecutionResult(false, 0, SecretRedactor.Redact(ex.Message), SessionId: sessionId);
+                }
+            }
+
             CleanupOldTempScripts(force: false);
 
             // Isolate each job's temp script and caller identity envelope in a dedicated per-run directory
@@ -177,6 +214,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 }
 
                 envelopeFile = await WriteCallerEnvelopeAsync();
+                bool backedByBufferManager = workerReservation is not null;
 
                 if (_options.UseWarmRunner)
                 {
@@ -184,7 +222,8 @@ namespace ETL_SQL.Orchestrator.Execution
                     {
                         return await RunWarmProcessAsync(
                             tempFile, sessionId, cancellationToken, jobName, queueWaitMs,
-                            variableOverrides, resume, envelopeFile, signingSecret);
+                            variableOverrides, resume, envelopeFile, signingSecret,
+                            workerGrantBytes, backedByBufferManager);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
@@ -196,13 +235,61 @@ namespace ETL_SQL.Orchestrator.Execution
 
                 return await RunProcessAsync(
                     tempFile, sessionId, cancellationToken, jobName, queueWaitMs,
-                    variableOverrides, resume, envelopeFile, signingSecret);
+                    variableOverrides, resume, envelopeFile, signingSecret,
+                    workerGrantBytes, backedByBufferManager);
             }
             finally
             {
                 try { Directory.Delete(runDir, recursive: true); } catch { /* best effort */ }
+                workerReservation?.Dispose();
             }
         }
+
+        internal int ResolveHostMemoryCeilingMB()
+        {
+            if (_bufferManager is IMemoryGrantArbiter arbiter)
+            {
+                return arbiter.TotalBudgetBytes > 0
+                    ? (int)Math.Clamp(arbiter.TotalBudgetBytes / (1024L * 1024L), 1, int.MaxValue)
+                    : 0;
+            }
+
+            if (_configuration is not null)
+                return DefaultThresholds.ResolveGlobalMemoryGrantMB(_configuration);
+
+            return 0;
+        }
+
+        internal int ResolveWorkerMemoryGrantMB()
+        {
+            int hostGlobalMB = ResolveHostMemoryCeilingMB();
+            int operatorGrantMB = _configuration is not null
+                ? DefaultThresholds.OperatorMemoryGrantMB(_configuration)
+                : 256;
+
+            if (_options.WorkerMemoryGrantMB > 0)
+            {
+                return hostGlobalMB > 0
+                    ? Math.Min(_options.WorkerMemoryGrantMB, hostGlobalMB)
+                    : _options.WorkerMemoryGrantMB;
+            }
+
+            int maxWorkers = _configuration?.GetValue<int?>("Orchestration:JobThrottle:MaxConcurrentJobs")
+                ?? _configuration?.GetValue<int?>("Jobs:MaxConcurrentJobs")
+                ?? 0;
+            if (maxWorkers <= 0)
+                maxWorkers = Math.Max(1, Environment.ProcessorCount / 2);
+
+            if (hostGlobalMB > 0)
+            {
+                int fairShareMB = Math.Max(1, hostGlobalMB / Math.Max(2, maxWorkers));
+                return operatorGrantMB > 0 ? Math.Min(operatorGrantMB, fairShareMB) : fairShareMB;
+            }
+
+            return Math.Max(0, operatorGrantMB);
+        }
+
+        internal long ResolveWorkerMemoryGrantBytes() => (long)ResolveWorkerMemoryGrantMB() * 1024L * 1024L;
 
         private string? ResolveSigningSecret()
         {
@@ -223,24 +310,54 @@ namespace ETL_SQL.Orchestrator.Execution
             }
         }
 
-        private void ApplyChildHostEnvironment(ProcessStartInfo psi, string? signingSecret)
+        private Dictionary<string, string> BuildChildHostEnvironment(string? signingSecret)
         {
+            var childEnv = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (!string.IsNullOrWhiteSpace(signingSecret))
-                psi.EnvironmentVariables["Orchestrator__IdentitySigningSecret"] = signingSecret;
+                childEnv["Orchestrator__IdentitySigningSecret"] = signingSecret;
 
-            if (_configuration is null)
-                return;
+            if (_configuration is not null)
+            {
+                foreach (var (cfgKey, envKey) in new[]
+                         {
+                             ("Orchestrator:DatabasePath", "Orchestrator__DatabasePath"),
+                             ("Orchestrator:Database:Provider", "Orchestrator__Database__Provider"),
+                             ("Orchestrator:Database:ConnectionString", "Orchestrator__Database__ConnectionString"),
+                             ("Engine:SpillRoot", "Engine__SpillRoot"),
+                             ("Engine:SpillMinimumFreeDiskMB", "Engine__SpillMinimumFreeDiskMB"),
+                             ("Session:Root", "Session__Root"),
+                             ("Session:PersistenceDefault", "Session__PersistenceDefault"),
+                             ("Orchestration:ResourceManagement:SystemMemoryFloorMB", "Orchestration__ResourceManagement__SystemMemoryFloorMB")
+                         })
+                {
+                    var val = _configuration[cfgKey];
+                    if (!string.IsNullOrWhiteSpace(val))
+                        childEnv[envKey] = val;
+                }
+            }
 
-            ForwardIfSet(psi, "Orchestrator:DatabasePath", "Orchestrator__DatabasePath");
-            ForwardIfSet(psi, "Orchestrator:Database:Provider", "Orchestrator__Database__Provider");
-            ForwardIfSet(psi, "Orchestrator:Database:ConnectionString", "Orchestrator__Database__ConnectionString");
+            int workerGrantMB = ResolveWorkerMemoryGrantMB();
+            if (workerGrantMB > 0)
+            {
+                childEnv["Engine__TotalMemoryGrantMB"] = workerGrantMB.ToString(CultureInfo.InvariantCulture);
+                childEnv["Orchestration__ResourceManagement__MaxGlobalMemoryMB"] = workerGrantMB.ToString(CultureInfo.InvariantCulture);
+
+                int operatorGrantMB = _configuration is not null
+                    ? DefaultThresholds.OperatorMemoryGrantMB(_configuration)
+                    : 256;
+                int boundedOperatorGrantMB = operatorGrantMB > 0
+                    ? Math.Min(operatorGrantMB, workerGrantMB)
+                    : workerGrantMB;
+                childEnv["Engine__OperatorMemoryGrantMB"] = boundedOperatorGrantMB.ToString(CultureInfo.InvariantCulture);
+            }
+
+            return childEnv;
         }
 
-        private void ForwardIfSet(ProcessStartInfo psi, string configKey, string envKey)
+        private void ApplyChildHostEnvironment(ProcessStartInfo psi, string? signingSecret)
         {
-            var value = _configuration?[configKey];
-            if (!string.IsNullOrWhiteSpace(value))
-                psi.EnvironmentVariables[envKey] = value;
+            foreach (var (key, value) in BuildChildHostEnvironment(signingSecret))
+                psi.EnvironmentVariables[key] = value;
         }
 
         private void CleanupOldTempScripts(bool force)
@@ -301,7 +418,9 @@ namespace ETL_SQL.Orchestrator.Execution
             IReadOnlyDictionary<string, string>? variableOverrides = null,
             bool resume = false,
             string? envelopeFile = null,
-            string? signingSecret = null)
+            string? signingSecret = null,
+            long reservedMemoryBytes = 0,
+            bool backedByBufferManager = false)
         {
             var exePath = ResolveExecutablePath();
             var argList = BuildArguments(
@@ -354,7 +473,7 @@ namespace ETL_SQL.Orchestrator.Execution
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            _tracker.Register(process.Id, scriptFile);
+            _tracker.Register(process.Id, scriptFile, reservedMemoryBytes, backedByBufferManager);
             _logger.LogDebug("Job process PID={Pid} started for {Script}", process.Id, scriptFile);
 
             try
@@ -411,26 +530,12 @@ namespace ETL_SQL.Orchestrator.Execution
             IReadOnlyDictionary<string, string>? variableOverrides,
             bool resume,
             string? envelopeFile = null,
-            string? signingSecret = null)
+            string? signingSecret = null,
+            long reservedMemoryBytes = 0,
+            bool backedByBufferManager = false)
         {
             var exePath = ResolveExecutablePath();
-            var childEnv = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (!string.IsNullOrWhiteSpace(signingSecret))
-                childEnv["Orchestrator__IdentitySigningSecret"] = signingSecret;
-            if (_configuration is not null)
-            {
-                foreach (var (cfgKey, envKey) in new[]
-                         {
-                             ("Orchestrator:DatabasePath", "Orchestrator__DatabasePath"),
-                             ("Orchestrator:Database:Provider", "Orchestrator__Database__Provider"),
-                             ("Orchestrator:Database:ConnectionString", "Orchestrator__Database__ConnectionString")
-                         })
-                {
-                    var val = _configuration[cfgKey];
-                    if (!string.IsNullOrWhiteSpace(val))
-                        childEnv[envKey] = val;
-                }
-            }
+            var childEnv = BuildChildHostEnvironment(signingSecret);
 
             var envFingerprint = childEnv.Count == 0
                 ? string.Empty
@@ -462,7 +567,9 @@ namespace ETL_SQL.Orchestrator.Execution
                         variableOverrides,
                         resume,
                         envelopeFile),
-                    cts.Token);
+                    cts.Token,
+                    reservedMemoryBytes,
+                    backedByBufferManager);
             }
             catch (OperationCanceledException)
             {
@@ -751,6 +858,11 @@ namespace ETL_SQL.Orchestrator.Execution
         public int WarmRunnerBatchSize { get; set; } = 10000;
         /// <summary>Optional HMAC secret used to sign single-use caller identity envelopes when spawning child processes (falls back to Orchestrator:IdentitySigningSecret).</summary>
         public string? IdentitySigningSecret { get; set; }
+        /// <summary>
+        /// Maximum memory grant (MB) allocated to each spawned child worker process (and reserved in
+        /// the host BufferManager while active). 0 = auto fair-share bounded by host ceiling and worker concurrency.
+        /// </summary>
+        public int WorkerMemoryGrantMB { get; set; } = 0;
     }
 
     internal sealed class WarmRunnerPool : IDisposable
@@ -780,14 +892,18 @@ namespace ETL_SQL.Orchestrator.Execution
             _slots = new SemaphoreSlim(Math.Max(1, poolSize));
         }
 
-        public async Task<ScriptExecutionResult> ExecuteAsync(WarmRunnerRequest request, CancellationToken ct)
+        public async Task<ScriptExecutionResult> ExecuteAsync(
+            WarmRunnerRequest request,
+            CancellationToken ct,
+            long reservedMemoryBytes = 0,
+            bool backedByBufferManager = false)
         {
             await _slots.WaitAsync(ct);
             WarmRunnerClient? client = null;
             try
             {
                 client = await RentAsync(ct);
-                _tracker.Register(client.ProcessId, request.ScriptFile);
+                _tracker.Register(client.ProcessId, request.ScriptFile, reservedMemoryBytes, backedByBufferManager);
                 try
                 {
                     return await client.ExecuteAsync(request, ct);

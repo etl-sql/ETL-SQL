@@ -1,0 +1,613 @@
+{
+  "schemaVersion": 1,
+  "scope": "hosted-release-evidence",
+  "repository": "etl-sql/ETL-SQL",
+  "sourceSha": "0a1507282fed84084e0d49df7bcf4d7a5956f3ee",
+  "branch": "release/v0.22.0",
+  "collectedAt": "2026-11-16T15:09:23.165Z",
+  "run": {
+    "workflow": "release-evidence.yml",
+    "id": 43786591392,
+    "attempt": 2,
+    "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392",
+    "createdAt": "2026-11-16T01:29:47Z",
+    "jobs": [
+      {
+        "id": 133068070923,
+        "name": "Candidate",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:30:14Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068070923"
+      },
+      {
+        "id": 133068051509,
+        "name": "Deployment Profiles",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:55:43Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068051509"
+      },
+      {
+        "id": 133068018162,
+        "name": "Deployment Transitions",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:36:39Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018162"
+      },
+      {
+        "id": 133068060544,
+        "name": "Production-canary contracts",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:32:44Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068060544"
+      },
+      {
+        "id": 133068018269,
+        "name": "Report contracts",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:56:05Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018269"
+      },
+      {
+        "id": 133068072499,
+        "name": "Scale Stress",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:53:05Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068072499"
+      },
+      {
+        "id": 133068056242,
+        "name": "Scale Provider",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:35:37Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068056242"
+      },
+      {
+        "id": 133068050181,
+        "name": "Scale Huge ExternalSort",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T02:00:14Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068050181"
+      },
+      {
+        "id": 133068047830,
+        "name": "Scale Huge ExternalAggregate",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:50:46Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068047830"
+      },
+      {
+        "id": 133068065597,
+        "name": "Scale Huge ExternalJoin",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:52:25Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068065597"
+      },
+      {
+        "id": 133068018211,
+        "name": "Scale Huge TempTableSpill",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:44:55Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018211"
+      },
+      {
+        "id": 133068018205,
+        "name": "Scale Huge StreamingSelect",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:41:31Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018205"
+      },
+      {
+        "id": 133068018320,
+        "name": "Scale Huge WindowFunction",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T02:11:05Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018320"
+      },
+      {
+        "id": 133068018072,
+        "name": "Scale Huge CsvIngest",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:36:29Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018072"
+      },
+      {
+        "id": 133068018309,
+        "name": "Scale Huge ParquetRoundTrip",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:37:20Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018309"
+      },
+      {
+        "id": 133068018628,
+        "name": "Scale Huge ReportDatasetSnapshotReload",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:51:39Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018628"
+      },
+      {
+        "id": 133068018367,
+        "name": "Scale Huge CubeGroupingSets",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T02:01:49Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018367"
+      },
+      {
+        "id": 133068017035,
+        "name": "Scale Huge ScalarSubqueryCache",
+        "attempt": 2,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T03:38:16Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068017035"
+      },
+      {
+        "id": 133068018526,
+        "name": "Scale Huge SpillCleanupSuccess",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:39:09Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018526"
+      },
+      {
+        "id": 133068018293,
+        "name": "Scale Huge SpillCleanupFailure",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:44:03Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018293"
+      },
+      {
+        "id": 133068017710,
+        "name": "Columnar Storage gate",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:34:15Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068017710"
+      },
+      {
+        "id": 133068018318,
+        "name": "Columnar Operator gate",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:33:45Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018318"
+      },
+      {
+        "id": 133068045878,
+        "name": "Service capacity (reference)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:41:09Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068045878"
+      },
+      {
+        "id": 133068072100,
+        "name": "Service capacity (full)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T02:06:33Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068072100"
+      },
+      {
+        "id": 133068017888,
+        "name": "HA soak (Compose topology)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T03:14:23Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068017888"
+      },
+      {
+        "id": 133068018619,
+        "name": "Billion-row ExternalSort (10000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:48:12Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018619"
+      },
+      {
+        "id": 133068018631,
+        "name": "Billion-row ExternalSort (100000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T02:00:38Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018631"
+      },
+      {
+        "id": 133068019188,
+        "name": "Billion-row ExternalJoin (10000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:36:00Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068019188"
+      },
+      {
+        "id": 133068019389,
+        "name": "Billion-row ExternalJoin (100000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T02:00:36Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068019389"
+      },
+      {
+        "id": 133068019344,
+        "name": "Billion-row EligibleWindowRowNumber (10000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:51:14Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068019344"
+      },
+      {
+        "id": 133068019017,
+        "name": "Billion-row EligibleWindowRowNumber (100000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:57:17Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068019017"
+      },
+      {
+        "id": 133068019352,
+        "name": "Billion-row HighCardinalityGrouping (10000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:45:03Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068019352"
+      },
+      {
+        "id": 133068019076,
+        "name": "Billion-row HighCardinalityGrouping (100000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:51:01Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068019076"
+      },
+      {
+        "id": 133068018127,
+        "name": "Billion-row TempTableRoundTrip (10000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:39:43Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018127"
+      },
+      {
+        "id": 133068051651,
+        "name": "Billion-row TempTableRoundTrip (100000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:49:37Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068051651"
+      },
+      {
+        "id": 133068017409,
+        "name": "Billion-row ColumnarCore (10000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:35:28Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068017409"
+      },
+      {
+        "id": 133068047740,
+        "name": "Billion-row ColumnarCore (100000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:49:10Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068047740"
+      },
+      {
+        "id": 133068018277,
+        "name": "Billion-row AllocProfile (10000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:39:00Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068018277"
+      },
+      {
+        "id": 133068071898,
+        "name": "Billion-row AllocProfile (100000000 rows)",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T01:55:54Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068071898"
+      },
+      {
+        "id": 133068020182,
+        "name": "Billion-row memory flatness",
+        "attempt": 1,
+        "conclusion": "success",
+        "completedAt": "2026-11-16T02:01:00Z",
+        "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43786591392/job/133068020182"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "id": 14191151546,
+      "name": "release-evidence-billion-row-AllocProfile-10000000-43786591392-1",
+      "bytes": 17131,
+      "digest": "sha256:bc7b102aac1b8e6da07853fbfee369713dafb5d34983c77f6cf90b69f16cf1d7"
+    },
+    {
+      "id": 14191886433,
+      "name": "release-evidence-billion-row-AllocProfile-100000000-43786591392-1",
+      "bytes": 17182,
+      "digest": "sha256:3040e661e6601cd4924501405d5772ce53ba2d65e95380317e3a64cb18fe21b1"
+    },
+    {
+      "id": 14191295217,
+      "name": "release-evidence-billion-row-ColumnarCore-10000000-43786591392-1",
+      "bytes": 14469,
+      "digest": "sha256:4dd64cbdad7f03715c07ffa0cc84600af74cdf28145f9f263b0a99513e5cfbda"
+    },
+    {
+      "id": 14191735809,
+      "name": "release-evidence-billion-row-ColumnarCore-100000000-43786591392-1",
+      "bytes": 14472,
+      "digest": "sha256:6ba83c59fd9ea49b963ff12a942d8535eb3401a2b012fe85644cb0b8dbdf3b7b"
+    },
+    {
+      "id": 14190274782,
+      "name": "release-evidence-billion-row-EligibleWindowRowNumber-10000000-43786591392-1",
+      "bytes": 14877,
+      "digest": "sha256:9000a1a43c996427863e8c6485cac392b1ef6f732ae697449661d5e2d1b66f0d"
+    },
+    {
+      "id": 14191617496,
+      "name": "release-evidence-billion-row-EligibleWindowRowNumber-100000000-43786591392-1",
+      "bytes": 14896,
+      "digest": "sha256:65ca1aa8b52672a1f727af207c1cc76c5096ea95c42556c9e15452de9b3df2b6"
+    },
+    {
+      "id": 14190588363,
+      "name": "release-evidence-billion-row-ExternalJoin-10000000-43786591392-1",
+      "bytes": 14601,
+      "digest": "sha256:4d73987d70a5f9b7ff3eb7f7665a42051f21a6336f9bd35ce9f66d0e22adf8a3"
+    },
+    {
+      "id": 14191762746,
+      "name": "release-evidence-billion-row-ExternalJoin-100000000-43786591392-1",
+      "bytes": 14629,
+      "digest": "sha256:d9749bb82fbd9277ef13791a81898a57f5e9a26922cd08e58afa58541b801c9f"
+    },
+    {
+      "id": 14190678553,
+      "name": "release-evidence-billion-row-ExternalSort-10000000-43786591392-1",
+      "bytes": 14668,
+      "digest": "sha256:6d2239114b26bf7700067652894066cb605c19f814d8cc8b4131dd23a23a450b"
+    },
+    {
+      "id": 14191917061,
+      "name": "release-evidence-billion-row-ExternalSort-100000000-43786591392-1",
+      "bytes": 14709,
+      "digest": "sha256:a830528a392212fb0156c3597cc4203dc07a9d6cb67c4e93d6951fa4cf9e77ef"
+    },
+    {
+      "id": 14191882284,
+      "name": "release-evidence-billion-row-flatness-43786591392-1",
+      "bytes": 1054,
+      "digest": "sha256:086e5e0beea6de0b2f639cad4e58d659eefe1020abf0266f57480b6a9723b54c"
+    },
+    {
+      "id": 14190714680,
+      "name": "release-evidence-billion-row-HighCardinalityGrouping-10000000-43786591392-1",
+      "bytes": 14887,
+      "digest": "sha256:fbacbd3deef6fcaa08acb474517b13eea553ee3156237d06aebba6a9f3b5fa17"
+    },
+    {
+      "id": 14191032816,
+      "name": "release-evidence-billion-row-HighCardinalityGrouping-100000000-43786591392-1",
+      "bytes": 14902,
+      "digest": "sha256:1d3ac91f25a67a8e4b7f0114e819233d69535028acf53e57605ceb1b401b167a"
+    },
+    {
+      "id": 14190519193,
+      "name": "release-evidence-billion-row-TempTableRoundTrip-10000000-43786591392-1",
+      "bytes": 28764,
+      "digest": "sha256:91acc1bbc7c880e457fa8599141f047098ffd8634f633f622164af3807afce7e"
+    },
+    {
+      "id": 14191177032,
+      "name": "release-evidence-billion-row-TempTableRoundTrip-100000000-43786591392-1",
+      "bytes": 29034,
+      "digest": "sha256:f0ac15c7981e452d38cca50de2dcf08fd1f7bb9721df861ed6dc48ad2e82d1b9"
+    },
+    {
+      "id": 14190985659,
+      "name": "release-evidence-canary-43786591392-1",
+      "bytes": 10148,
+      "digest": "sha256:14855affee43e3b172457706db18c502660168056cf7d8a9cc91970cf9a207a9"
+    },
+    {
+      "id": 14190832227,
+      "name": "release-evidence-columnar-Operator-43786591392-1",
+      "bytes": 6805,
+      "digest": "sha256:08922389e459dc9449c2b7e0161be268cc049420d0586fcdb3dd799bcbf61940"
+    },
+    {
+      "id": 14190204477,
+      "name": "release-evidence-columnar-Storage-43786591392-1",
+      "bytes": 6786,
+      "digest": "sha256:41ff91c4ef9375dc84c0ba13272c5100826cf83e342d21552650c74fb4dbf866"
+    },
+    {
+      "id": 14191023570,
+      "name": "release-evidence-deployment-Profile-43786591392-1",
+      "bytes": 305613,
+      "digest": "sha256:88e368035924400ae4767977d737d6ae8fa1ffd353536ccc6b8f668603b5c677"
+    },
+    {
+      "id": 14189974827,
+      "name": "release-evidence-deployment-Transition-43786591392-1",
+      "bytes": 98984,
+      "digest": "sha256:c06744d5324a2c029bcacd45186fa99770494d931f43008fa268330725b3a044"
+    },
+    {
+      "id": 14194546898,
+      "name": "release-evidence-ha-soak-43786591392-1",
+      "bytes": 119315,
+      "digest": "sha256:e3c04525465ef57e7a48d85ab45862d7755f2648ca3c326f99a201cee7c166f3"
+    },
+    {
+      "id": 14191846744,
+      "name": "release-evidence-report-contracts-43786591392-1",
+      "bytes": 1089,
+      "digest": "sha256:3354d0d63546971131ab12ba3f7f67db0ee96799d519c11bb75814ebb476f93b"
+    },
+    {
+      "id": 14190044470,
+      "name": "release-evidence-scale-Huge-CsvIngest-43786591392-1",
+      "bytes": 18177,
+      "digest": "sha256:b8c84f9510d24265f0b380475f4379f04b401c2d48fab2e4512e0c60bab1c462"
+    },
+    {
+      "id": 14190954623,
+      "name": "release-evidence-scale-Huge-CubeGroupingSets-43786591392-1",
+      "bytes": 21270,
+      "digest": "sha256:a843bf284702336549ff50e44ad6d54724b00aa38adcd7edc17af4ed7b958ca0"
+    },
+    {
+      "id": 14191890537,
+      "name": "release-evidence-scale-Huge-ExternalAggregate-43786591392-1",
+      "bytes": 19865,
+      "digest": "sha256:beffb82ddbb645e2b7f55f6c48b1cb753429baef63bcdf6ec814f9a183cd68f7"
+    },
+    {
+      "id": 14191560926,
+      "name": "release-evidence-scale-Huge-ExternalJoin-43786591392-1",
+      "bytes": 20929,
+      "digest": "sha256:9b25e829e521774ecb66801287b2131761e32b45937aaa18bf91b67e08235e64"
+    },
+    {
+      "id": 14190839531,
+      "name": "release-evidence-scale-Huge-ExternalSort-43786591392-1",
+      "bytes": 20700,
+      "digest": "sha256:916790340c8cc46bd1376bca7010203946d618be84a8a352d3ebcdb78582a42e"
+    },
+    {
+      "id": 14191270583,
+      "name": "release-evidence-scale-Huge-ParquetRoundTrip-43786591392-1",
+      "bytes": 18283,
+      "digest": "sha256:7a5fa8bf2e4b3a55bf418363bc3ee140995d51e4be35aa2060c22de74663780d"
+    },
+    {
+      "id": 14190973144,
+      "name": "release-evidence-scale-Huge-ReportDatasetSnapshotReload-43786591392-1",
+      "bytes": 20699,
+      "digest": "sha256:838851c4f8be13afc1d8ccf04252edd487afc6070457e1dbadcde64cbe7c1585"
+    },
+    {
+      "id": 14195647906,
+      "name": "release-evidence-scale-Huge-ScalarSubqueryCache-43786591392-2",
+      "bytes": 20462,
+      "digest": "sha256:8a45f49fd9b8eb68d19b7003d2cee51e3dd0cc64e15e940338bdadca678ddf93"
+    },
+    {
+      "id": 14191416077,
+      "name": "release-evidence-scale-Huge-SpillCleanupFailure-43786591392-1",
+      "bytes": 19296,
+      "digest": "sha256:4c8591dfd0289741aa11fc04e7ffbe3af25febbc3c7cc83e89a5ee4d63c06291"
+    },
+    {
+      "id": 14191126173,
+      "name": "release-evidence-scale-Huge-SpillCleanupSuccess-43786591392-1",
+      "bytes": 19395,
+      "digest": "sha256:6ea989ff5342aaef789562f682cd9d7cd83acad91ba3c2e9649b7ed73d159a67"
+    },
+    {
+      "id": 14191535004,
+      "name": "release-evidence-scale-Huge-StreamingSelect-43786591392-1",
+      "bytes": 968127,
+      "digest": "sha256:c53fa86d7cab4fcfecf138ba6f8fdbff613eb65313b47fd23513d4e2ab7ed5ea"
+    },
+    {
+      "id": 14191266980,
+      "name": "release-evidence-scale-Huge-TempTableSpill-43786591392-1",
+      "bytes": 19244,
+      "digest": "sha256:1c778d961de33cc60a82dbf47bb01b8433b5a3d91880a7c592eeb522336be1c7"
+    },
+    {
+      "id": 14191824489,
+      "name": "release-evidence-scale-Huge-WindowFunction-43786591392-1",
+      "bytes": 21950,
+      "digest": "sha256:38638bdb79092cbc6d05248c1b84314f12a3b489d46e6db20db45dec4c6cfbee"
+    },
+    {
+      "id": 14190144995,
+      "name": "release-evidence-scale-Provider-43786591392-1",
+      "bytes": 21862,
+      "digest": "sha256:61bdf76df330230ff1925f9017bbc486a76c156f4021f57cec8c4e1d8e2181f4"
+    },
+    {
+      "id": 14190958403,
+      "name": "release-evidence-scale-Stress-43786591392-1",
+      "bytes": 997875,
+      "digest": "sha256:f23f9ce968e2615f335c3e0e1c23d2b9f17dadf176ec62c0418248619ea160da"
+    },
+    {
+      "id": 14191328625,
+      "name": "release-evidence-service-capacity-full-43786591392-1",
+      "bytes": 103116,
+      "digest": "sha256:a71280290c28651a9d1b1b9ecdc42df08712c40525a5d227fc52ba7e94556dec"
+    },
+    {
+      "id": 14191345319,
+      "name": "release-evidence-service-capacity-reference-43786591392-1",
+      "bytes": 48914,
+      "digest": "sha256:828a4f05372dbf7b34d48a1a052cc48f1a291e2894c4e3ed7114f6d807b1e1b7"
+    }
+  ],
+  "codeql": {
+    "ref": "refs/heads/release/v0.22.0",
+    "openAlerts": 0
+  },
+  "reviews": [
+    {
+      "id": "source-and-security",
+      "check": "The candidate diff since the previous release has no unreviewed security-sensitive change; the security review findings are fixed or tracked."
+    },
+    {
+      "id": "dependency-and-license",
+      "check": "New or upgraded dependencies are in the third-party inventory and NOTICES; no license conflicts."
+    },
+    {
+      "id": "evidence-redaction",
+      "check": "The Release Evidence artifacts and job logs carry no secrets, credentials or customer data."
+    },
+    {
+      "id": "release-notes-and-upgrade-guidance",
+      "check": "Release notes, CHANGELOG and upgrade guidance describe the shipped scope."
+    },
+    {
+      "id": "deployment-claims-and-overlays",
+      "check": "The deployment-profile claims match the Deployment Profiles/Transitions evidence; no Shared SaaS or hosted-production claim is promoted."
+    },
+    {
+      "id": "codeql-alert-triage",
+      "check": "CodeQL has no open alerts on the release branch (the collector enforces this) and every dismissal since the previous release has a reason."
+    }
+  ],
+  "approval": {
+    "workflow": "tag-release.yml",
+    "environment": "release-approval",
+    "runId": 43888292114,
+    "url": "https://github.com/etl-sql/ETL-SQL/actions/runs/43888292114",
+    "approvedBy": [
+      "etl-sql"
+    ],
+    "comments": []
+  }
+}

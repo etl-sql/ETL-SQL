@@ -493,7 +493,7 @@ switch ($Lane) {
     }
     "portal" {
         if ($PortalShardCount -gt 1) {
-            $evidenceDir = if ($CollectCoverage) {
+            $evidenceDir = if ($CollectCoverage -or $ResultsDirectory -ne "coverage") {
                 Join-Path $repoRoot $ResultsDirectory
             } else {
                 Join-Path $repoRoot ("release-validation\portal-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))

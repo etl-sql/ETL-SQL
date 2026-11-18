@@ -526,8 +526,7 @@ The first-attempt runner loss is explained (2026-11-07): Windows Restart Manager
 hosted runner's `provjobd`, which reads newly installed files for about a minute, so an uninstall
 soon after an install lost the runner. The MSI authors `MSIRESTARTMANAGERCONTROL=Disable` and the
 source preflight rejects missing, weakened or duplicate authoring. `DisableShutdown` is not enough:
-Restart Manager still shut applications down in silent mode. The MSI's `ServiceControl` and
-`CloseApplication` entries stop ETL-SQL's own services and programs. The
+Restart Manager still shut applications down in silent mode. The MSI's `ServiceControl` entries (`Stop="both" Wait="yes"`) stop ETL-SQL's services without force-killing processes. The
 [Windows Installer property reference](https://learn.microsoft.com/en-us/windows/win32/msi/msirestartmanagercontrol)
 defines the values.
 Do not infer its cause from a successful diagnostic or retry. The frozen release candidate still

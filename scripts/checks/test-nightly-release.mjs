@@ -40,7 +40,8 @@ function fakeGitHub({ head = sha, conclusion = () => 'success', annotation = () 
   const gh = args => {
     if (args[0] === 'workflow') {
       dispatched.push(args);
-      if (registers) runs.push({ id: 100 + runs.length, file: args[2], head_sha: sha, head_branch: branch,
+      const currentHead = typeof head === 'function' ? head('dispatch', args[2]) : head;
+      if (registers) runs.push({ id: 100 + runs.length, file: args[2], head_sha: currentHead, head_branch: branch,
         event: 'workflow_dispatch', created_at: '2026-11-08T06:31:00Z', run_attempt: 1 });
       return '';
     }
@@ -51,9 +52,15 @@ function fakeGitHub({ head = sha, conclusion = () => 'success', annotation = () 
       return '';
     }
     const endpoint = args[1];
-    if (endpoint.includes('/commits/')) return JSON.stringify({ sha: head });
+    if (endpoint.includes('/commits/')) {
+      const currentHead = typeof head === 'function' ? head('commit', endpoint) : head;
+      return JSON.stringify({ sha: currentHead });
+    }
     const listed = /workflows\/([\w-]+\.yml)\/runs/.exec(endpoint);
-    if (listed) return JSON.stringify({ workflow_runs: runs.filter(run => run.file === listed[1]) });
+    if (listed) {
+      const requestedSha = /head_sha=([a-f0-9]+)/.exec(endpoint)?.[1];
+      return JSON.stringify({ workflow_runs: runs.filter(run => run.file === listed[1] && (!requestedSha || run.head_sha === requestedSha)) });
+    }
     const attemptJobs = /runs\/(\d+)\/attempts\/(\d+)\/jobs/.exec(endpoint);
     if (attemptJobs) {
       const run = runs.find(candidate => candidate.id === Number(attemptJobs[1]));
@@ -102,8 +109,27 @@ assert.equal(github.dispatched.length, rehearsalWorkflows.length, 'Yesterday\'s 
 result = await rehearse(options, deps(fakeGitHub({ conclusion: file => file === 'msi-upgrade.yml' ? 'failure' : 'success' }), selecting));
 assert.equal(result.failedStep, 'msi-upgrade.yml');
 assert.match(summarize(result, { sha, branch }), /FAIL at "msi-upgrade.yml"/);
-result = await rehearse(options, deps(fakeGitHub({ head: 'b'.repeat(40) }), selecting));
-assert.equal(result.failedStep, 'Start release-certification.yml');
+// When the release branch moves before or during start, rehearse adopts the new HEAD and starts all workflows on it.
+const movedHead = 'b'.repeat(40);
+github = fakeGitHub({ head: movedHead });
+result = await rehearse(options, { ...deps(github, selecting), phase: 'start' });
+assert.equal(result.ok, true, JSON.stringify(result));
+assert.equal(result.sha, movedHead);
+assert.deepEqual(github.dispatched.map(args => args[2]), rehearsalWorkflows.map(workflow => workflow.file));
+assert.deepEqual(github.dispatched[0].slice(-2), ['-f', `candidate_sha=${movedHead}`]);
+let midStartMoves = 0;
+let midHead = sha;
+const midStartGithub = fakeGitHub({
+  head: phase => {
+    if (phase === 'commit' && midHead === sha && ++midStartMoves === 2) midHead = movedHead;
+    return midHead;
+  },
+});
+result = await rehearse(options, deps(midStartGithub, selecting));
+assert.equal(result.ok, true, JSON.stringify(result));
+assert.equal(result.sha, movedHead);
+assert.deepEqual(midStartGithub.dispatched.slice(1).map(args => args[2]), rehearsalWorkflows.map(workflow => workflow.file));
+assert.deepEqual(midStartGithub.dispatched[1].slice(-2), ['-f', `candidate_sha=${movedHead}`]);
 result = await rehearse(options, deps(fakeGitHub({ registers: false }), selecting));
 assert.match(result.steps.at(-1).detail, /no run appeared/);
 result = await rehearse(options, deps(fakeGitHub({ stuck: true }), selecting));
@@ -127,7 +153,7 @@ for (const previousTag of [undefined, 'v0.22', 'latest']) {
 
 // Phases, one per job: start only starts; a first wait hands over unfinished runs; collect needs them done.
 github = fakeGitHub({ stuck: true });
-assert.deepEqual(await rehearse(options, { ...deps(github), phase: 'start' }), { ok: true, steps: [] });
+assert.deepEqual(await rehearse(options, { ...deps(github), phase: 'start' }), { ok: true, sha, steps: [] });
 assert.equal(github.dispatched.length, rehearsalWorkflows.length);
 result = await rehearse(options, { ...deps(github), phase: 'wait' });
 assert.equal(result.ok, true);
@@ -179,9 +205,18 @@ assert.equal(github.dispatched.length, 1, 'A rerun of the dry-run job reuses its
 result = await rehearse(options, { ...deps(fakeGitHub({ conclusion: file => file === 'release.yml' ? 'failure' : 'success' })), phase: 'dry-run' });
 assert.equal(result.failedStep, 'release.yml (dry run)');
 assert.match(summarize(result, { sha, branch }), /FAIL at "release.yml \(dry run\)"/);
+// When the release branch moves after start, dry-run still validates the original candidate_sha on the branch.
+const movedDryRunGithub = fakeGitHub({ head: movedHead });
+result = await rehearse(options, { ...deps(movedDryRunGithub), phase: 'dry-run' });
+assert.equal(result.ok, true, JSON.stringify(result));
+assert.equal(result.sha, sha);
+assert.deepEqual(movedDryRunGithub.dispatched[0].slice(-6), ['-f', 'tag=v0.22.0', '-f', 'dry_run=true', '-f', `candidate_sha=${sha}`]);
+result = await rehearse(options, { ...deps(movedDryRunGithub), phase: 'dry-run' });
+assert.equal(movedDryRunGithub.dispatched.length, 1, 'A dry-run rerun reuses the dispatched release run even when its head_sha differs from candidate_sha.');
 // A job without its own if: inherits success(), which is false when any earlier job (here the
 // optional second wait) was skipped. The dry run must depend only on the collectors' result.
 const nightlyWorkflow = readFileSync(new URL('../../.github/workflows/nightly-release.yml', import.meta.url), 'utf8');
 const dryRunJob = nightlyWorkflow.slice(nightlyWorkflow.search(/^  dry-run:/m));
 assert.ok(dryRunJob.includes("if: ${{ !cancelled() && needs.collect.result == 'success' }}"),'The dry run must start when the collectors pass, even if the second wait was skipped.');
-console.log('Nightly selection: version ordering, released/draft/prerelease boundaries, exact SHA, active-run suppression, API failure and the release rehearsal (single start, rerun reuse, named failing step, one runner-not-acquired retry reported as infrastructure, dry run not skipped after a skipped wait) passed.');
+assert.ok(nightlyWorkflow.includes('outputs:\n      candidate_sha: ${{ steps.start.outputs.candidate_sha }}') || nightlyWorkflow.includes('outputs:\r\n      candidate_sha: ${{ steps.start.outputs.candidate_sha }}'));
+console.log('Nightly selection: version ordering, released/draft/prerelease boundaries, exact SHA, active-run suppression, API failure and the release rehearsal (single start, branch-move recovery, rerun reuse, named failing step, one runner-not-acquired retry reported as infrastructure, dry run not skipped after a skipped wait) passed.');

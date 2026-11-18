@@ -25,6 +25,12 @@ To prevent resource thrashing when the global limit is hit:
 2. Safe threshold = `max(EffectiveMaxMemory - HysteresisMemoryMB, EffectiveMaxMemory / 2)`.
 3. Admission resumes when active usage + the requested allocation fit under the safe threshold (or when all reservations drain to zero).
 
+## Host-Wide Admission & Short-Job Progress
+
+- **Host capacity admission (`NodeCapacityMonitor`)**: Tracks process CPU, whole-host CPU, memory load, configured spill-volume free space (`Engine:SpillRoot`, `Session:Root`, active sandbox `WorkspaceRoot`, or temp against `Engine:SpillMinimumFreeDiskMB`), and aggregate reservations across in-process leases (`BufferManager`) plus tracked child workers (`ChildProcessTracker`). Admission applies hysteresis (`95%`/`85%` CPU & RAM load, `90%`/`80%` worker reservation, and spill reserve recovery slack) so oscillating workloads do not thrash admission.
+- **Child-worker budget isolation (`ProcessJobExecutor`)**: Reserves each spawned child worker's bounded share (`Jobs:WorkerMemoryGrantMB` or fair share of `TotalMemoryGrantMB`) in the host `BufferManager` while the child runs, and passes that bounded grant into the worker environment. A worker's process-local arbiter cannot stand in for a host-wide reservation or oversubscribe sibling workers. Exit bursts coalesce `ChildProcessTracker.Unregister` spill-directory sweeps instead of scanning the spill folder on every exit.
+- **Short-job progress (`JobThrottle`)**: Reserves capacity from heavy spilling jobs (`Orchestration:JobThrottle:ReservedShortJobSlots`), supports weighted heavy admission (`HeavyJobSlotWeight`), and wakes queued `Short` jobs ahead of waiting `Heavy` jobs on slot release.
+
 ## Policy Overrides
 Users can bypass global resource governors using `SET` commands (e.g., `SET MAX_MEMORY = 4096`). 
 

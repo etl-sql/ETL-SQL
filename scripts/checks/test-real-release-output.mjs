@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collectHostedEvidence, hostedPolicy } from '../collect-hosted-release-evidence.mjs';
+import { collectReleaseEvidence, sameSelection } from '../collect-release-evidence.mjs';
 import { findCertifiedDeb } from '../find-certified-deb.mjs';
 import { checkWindowsPackageOrigin } from '../check-windows-package-origin.mjs';
 
@@ -91,4 +92,38 @@ const replay = responses => endpoint => {
   assert.equal(draft.assets['ETL-SQL-v0.22.0-x64-Setup.msi'].sha256, msi.files.find(file => file.name === 'current.msi').sha256.toLowerCase());
 }
 
-console.log('Real release output: hosted CI/CodeQL evidence and the DEB selection for dry run 42699535102 reproduced exactly from their recorded GitHub responses; its real MSI and native Windows selections pass the shared-payload check and match the draft.');
+// Release Evidence and Tag Release approval: v0.22.0 candidate 0a1507282 (Release Evidence 43786591392,
+// Tag Release 43888292114, Release run 43893010630, and dry run 43871241433 on 2026-11-16).
+{
+  const recorded = fixture('release-evidence-0a1507282.json');
+  const expected = fixture('release-evidence-0a1507282.expected.json');
+  const actual = await collectReleaseEvidence(recorded.repository, recorded.sha, {
+    query: replay(recorded.responses), now: Date.parse(recorded.now), policy: recorded.policy, requireApproval: true });
+  assert.deepEqual(actual, expected);
+  sameSelection(expected, actual);
+
+  const rehearsed = await collectReleaseEvidence(recorded.repository, recorded.sha, {
+    query: replay(recorded.responses), now: Date.parse(recorded.now), policy: recorded.policy, rehearsalBranch: recorded.branch });
+  assert.equal(rehearsed.run.id, 43786591392);
+  assert.equal(rehearsed.run.attempt, 2);
+  assert.equal(rehearsed.run.jobs.length, 40);
+  assert.equal(rehearsed.run.jobs.find(job => job.name === 'Scale Huge ScalarSubqueryCache')?.attempt, 2);
+  assert.equal(rehearsed.artifacts.length, 39);
+  assert.equal(rehearsed.codeql.openAlerts, 0);
+  assert.equal(rehearsed.approval, null);
+
+  const alertsEndpoint = `repos/${recorded.repository}/code-scanning/alerts?state=open&ref=${encodeURIComponent(`refs/heads/${recorded.branch}`)}&per_page=100`;
+  const withOpenAlert = structuredClone(recorded.responses);
+  withOpenAlert[alertsEndpoint] = [[{ number: 586 }]];
+  await assert.rejects(collectReleaseEvidence(recorded.repository, recorded.sha, {
+    query: replay(withOpenAlert), now: Date.parse(recorded.now), policy: recorded.policy, requireApproval: true }), /open alert/);
+  await assert.rejects(collectReleaseEvidence(recorded.repository, recorded.sha, {
+    query: replay(withOpenAlert), now: Date.parse(recorded.now), policy: recorded.policy, rehearsalBranch: recorded.branch }), /open alert/);
+
+  const withExpiredArtifact = structuredClone(recorded.responses);
+  withExpiredArtifact[`repos/${recorded.repository}/actions/runs/43786591392/artifacts?per_page=100`][0].artifacts[0].expired = true;
+  await assert.rejects(collectReleaseEvidence(recorded.repository, recorded.sha, {
+    query: replay(withExpiredArtifact), now: Date.parse(recorded.now), policy: recorded.policy, requireApproval: true }), /expired/);
+}
+
+console.log('Real release output: hosted CI/CodeQL evidence, Release Evidence selection (0a1507282) and the DEB selection for dry run 42699535102 reproduced exactly from their recorded GitHub responses; its real MSI and native Windows selections pass the shared-payload check and match the draft.');

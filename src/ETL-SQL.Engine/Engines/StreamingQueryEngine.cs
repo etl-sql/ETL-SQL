@@ -27,6 +27,8 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
     {
         var resultBatch = new DataTable();
         resultBatch.SetColumns(colNames);
+        long targetBytes = _context.EffectiveBatchTargetBytes;
+        long resultBatchBytes = 0;
 
         bool yielded = false;
         int rowsYielded = 0;
@@ -157,14 +159,17 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
                 }
 
                 await resultBatch.AddRowAsync(resRow);
+                resultBatchBytes += resRow.EstimateHeapBytes();
                 rowsYielded++;
 
-                if (resultBatch.Rows.Count >= _context.EffectiveBatchSize)
+                if (resultBatch.Rows.Count >= _context.EffectiveBatchSize
+                    || (targetBytes > 0 && resultBatchBytes >= targetBytes))
                 {
                     yield return resultBatch;
                     yielded = true;
                     resultBatch = new DataTable();
                     resultBatch.SetColumns(colNames);
+                    resultBatchBytes = 0;
                 }
             }
             if (limit.HasValue && rowsYielded >= limit.Value) break;

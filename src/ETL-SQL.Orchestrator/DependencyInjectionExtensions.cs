@@ -39,6 +39,7 @@ using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace ETL_SQL.Orchestrator
 {
@@ -255,6 +256,7 @@ namespace ETL_SQL.Orchestrator
                     sp.GetRequiredService<IJobHistoryStore>(),
                     sp.GetRequiredService<IClusterLockStore>()));
             services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
+            services.TryAddSingleton<ChildProcessTracker>();
             services.AddSingleton<INodeCapacityMonitor, NodeCapacityMonitor>();
             services.AddSingleton<JobThrottle>();
             services.AddSingleton<NotificationDispatchService>();

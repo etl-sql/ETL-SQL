@@ -234,24 +234,17 @@ namespace ETL_SQL.Tests.Operations.Operations
         {
             var (eval, logger) = BuildContext();
             eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
-            var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = 1;
-            try
-            {
-                var rows = MakeRows(30, new[] { "A", "B", "C" });
-                var (groupBy, columns, names) = CountSumByCategory();
-                var engine = new ExternalAggregateEngine(eval, logger);
+            eval.MemoryArbiter = new MemoryGrantArbiter(1);
 
-                var result = await engine.ApplyAggregationExternal(rows, groupBy, columns, names).ToListAsync();
+            var rows = MakeRows(30, new[] { "A", "B", "C" });
+            var (groupBy, columns, names) = CountSumByCategory();
+            var engine = new ExternalAggregateEngine(eval, logger);
 
-                Assert.Equal(3, result.Count);
-                Assert.Equal(30m, result.Sum(row => Convert.ToDecimal(row["cnt"])));
-                Assert.Equal(0, engine.ColumnarAggregateRows);
-            }
-            finally
-            {
-                MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
-            }
+            var result = await engine.ApplyAggregationExternal(rows, groupBy, columns, names).ToListAsync();
+
+            Assert.Equal(3, result.Count);
+            Assert.Equal(30m, result.Sum(row => Convert.ToDecimal(row["cnt"])));
+            Assert.Equal(0, engine.ColumnarAggregateRows);
         }
 
         [Fact]
@@ -260,32 +253,25 @@ namespace ETL_SQL.Tests.Operations.Operations
             var (eval, logger) = BuildContext();
             eval.ExternalHashPartitions = 2;
             eval.OperatorMemoryGrantMB = 1;
-            var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = 0;
-            try
-            {
-                var payload = new string('x', 1024);
-                var rows = Enumerable.Range(0, 4096)
-                    .Select(id => new Row
-                    {
-                        ["category"] = "g" + id,
-                        ["value"] = 1m,
-                        ["payload"] = payload + id
-                    })
-                    .ToAsyncEnumerable();
-                var (groupBy, columns, names) = CountSumByCategory();
-                var engine = new ExternalAggregateEngine(eval, logger);
+            eval.MemoryArbiter = new MemoryGrantArbiter(0);
 
-                var result = await engine.ApplyAggregationExternal(rows, groupBy, columns, names).ToListAsync();
+            var payload = new string('x', 1024);
+            var rows = Enumerable.Range(0, 4096)
+                .Select(id => new Row
+                {
+                    ["category"] = "g" + id,
+                    ["value"] = 1m,
+                    ["payload"] = payload + id
+                })
+                .ToAsyncEnumerable();
+            var (groupBy, columns, names) = CountSumByCategory();
+            var engine = new ExternalAggregateEngine(eval, logger);
 
-                Assert.Equal(4096, result.Count);
-                Assert.Equal(4096m, result.Sum(row => Convert.ToDecimal(row["cnt"])));
-                Assert.True(engine.PartitionCount > 2);
-            }
-            finally
-            {
-                MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
-            }
+            var result = await engine.ApplyAggregationExternal(rows, groupBy, columns, names).ToListAsync();
+
+            Assert.Equal(4096, result.Count);
+            Assert.Equal(4096m, result.Sum(row => Convert.ToDecimal(row["cnt"])));
+            Assert.True(engine.PartitionCount > 2);
         }
 
         [Fact]
@@ -498,21 +484,17 @@ namespace ETL_SQL.Tests.Operations.Operations
             var (eval, logger) = BuildContext();
             eval.ExternalHashPartitions = 2;
             eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
-            long savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = 1;
-            try
-            {
-                // Unsplittable single group with value-only holistic state; churn mode completes.
-                var (groupBy, cols, names) = ConcatByCategory();
-                var engine = new ExternalAggregateEngine(eval, logger);
+            eval.MemoryArbiter = new MemoryGrantArbiter(1);
 
-                var result = await engine.ApplyAggregationExternal(
-                    MakeGroupedRows(20000, distinctGroups: 1), groupBy, cols, names).ToListAsync();
+            // Unsplittable single group with value-only holistic state; churn mode completes.
+            var (groupBy, cols, names) = ConcatByCategory();
+            var engine = new ExternalAggregateEngine(eval, logger);
 
-                Assert.Single(result);
-                Assert.False(string.IsNullOrEmpty(result[0]["g"]?.ToString()));
-            }
-            finally { MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget; }
+            var result = await engine.ApplyAggregationExternal(
+                MakeGroupedRows(20000, distinctGroups: 1), groupBy, cols, names).ToListAsync();
+
+            Assert.Single(result);
+            Assert.False(string.IsNullOrEmpty(result[0]["g"]?.ToString()));
         }
 
         [Fact]

@@ -301,6 +301,9 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     /// <summary>Size of row batches used during streaming operations.</summary>
     public int BatchSize { get => _options.BatchSize; set => _options.BatchSize = value; }
 
+    /// <summary>Target byte footprint per batch before flushing or splitting.</summary>
+    public long BatchTargetBytes { get => _options.BatchTargetBytes; set => _options.BatchTargetBytes = value; }
+
     /// <summary>Number of batches held in memory before spilling to disk for #temp tables.</summary>
     public int MaxInMemoryBatches { get => _options.MaxInMemoryBatches; set => _options.MaxInMemoryBatches = value; }
 
@@ -710,6 +713,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         JoinSpillThreshold = DefaultThresholds.JoinSpillThreshold(config);
         ExternalHashPartitions = DefaultThresholds.ExternalHashPartitions(config);
         BatchSize = DefaultThresholds.BatchSize(config);
+        BatchTargetBytes = DefaultThresholds.BatchTargetBytes(config);
         MaxRecursiveDepth = DefaultThresholds.MaxRecursiveDepth(config);
         _securityService.MaxCteRecursionDepth = MaxRecursiveDepth;
         ExternalSortChunkSize = DefaultThresholds.ExternalSortChunkSize(config);
@@ -730,6 +734,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
 
         _options.BatchSize = BatchSize;
+        _options.BatchTargetBytes = BatchTargetBytes;
         _options.SubqueryCacheSize = DefaultThresholds.SubqueryCacheSize(config);
         _options.TempTableSpillThresholdRows = TempTableSpillThresholdRows;
         SpillEncryptionEnabled = (ExecutionPolicy?.IsEnrolled == true
@@ -1818,7 +1823,13 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         => _batchPipelineHelper.AlignColumns(batches, targetCols);
 
     public IAsyncEnumerable<DataTable> Buffer(IAsyncEnumerable<DataTable> batches)
-        => _batchPipelineHelper.Buffer(batches, CancellationToken);
+    {
+        var targetBatchBytes = ((IExecutionContext)this).EffectiveBatchTargetBytes;
+        long maxQueuedBytes = targetBatchBytes > 0
+            ? Math.Max(targetBatchBytes, targetBatchBytes <= long.MaxValue / 2 ? targetBatchBytes * 2 : long.MaxValue)
+            : 0;
+        return _batchPipelineHelper.Buffer(batches, CancellationToken, maxQueuedBytes: maxQueuedBytes, targetBatchBytes: targetBatchBytes);
+    }
 
     public ForClause? GetForClause(Statement stmt)
     {
@@ -1924,6 +1935,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             NoSaveConnection = NoSaveConnection,
             ConnectionEncryption = ConnectionEncryption,
             BatchSize = BatchSize,
+            BatchTargetBytes = BatchTargetBytes,
             PreviewLimit = PreviewLimit,
             ScriptPassword = ScriptPassword,
             SessionId = SessionId,

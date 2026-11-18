@@ -154,6 +154,8 @@ namespace ETL_SQL.Connectors.SqlServer
 
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
+                long targetBytes = _context?.EffectiveBatchTargetBytes ?? ETL_SQL.Core.Spill.SpillFanOut.DefaultTargetBatchBytes;
+                long currentBatchBytes = 0;
 
                 var noRows = true;
                 while (await reader.ReadAsync(effectiveCancellationToken))
@@ -165,12 +167,14 @@ namespace ETL_SQL.Connectors.SqlServer
                         row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
                     }
                     await currentBatch.AddRowAsync(row);
+                    currentBatchBytes += row.EstimateHeapBytes();
 
-                    if (currentBatch.Rows.Count >= batchSize)
+                    if (currentBatch.Rows.Count >= batchSize || (targetBytes > 0 && currentBatchBytes >= targetBytes))
                     {
                         yield return currentBatch;
                         currentBatch = new DataTable();
                         currentBatch.SetColumns(columns);
+                        currentBatchBytes = 0;
                     }
                 }
 

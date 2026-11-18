@@ -24,6 +24,9 @@ public static class DefaultThresholds
     public static int BatchSize(IConfiguration? config)
         => config?.GetValue<int?>("Engine:BatchSize") ?? 10000;
 
+    public static long BatchTargetBytes(IConfiguration? config)
+        => config?.GetValue<long?>("Engine:BatchTargetBytes") ?? Core.Spill.SpillFanOut.DefaultTargetBatchBytes;
+
     public static int MaxLastResultRows(IConfiguration? config)
         => config?.GetValue<int?>("Engine:MaxLastResultRows") ?? LanguageMetadata.DefaultMaxLastResultRows;
 

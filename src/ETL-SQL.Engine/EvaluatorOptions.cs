@@ -39,6 +39,7 @@ public class EvaluatorOptions
 
     // --- Engine Thresholds ---
     public int BatchSize { get; set; } = 10000;
+    public long BatchTargetBytes { get; set; } = Core.Spill.SpillFanOut.DefaultTargetBatchBytes;
     public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
     public int ForeachPageSize { get; set; } = 0;
     public int JoinSpillThreshold { get; set; } = 100000;

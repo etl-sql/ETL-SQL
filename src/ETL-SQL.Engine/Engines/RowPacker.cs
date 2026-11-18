@@ -71,6 +71,26 @@ internal sealed class RowPacker : IDisposable
         return CopyAndResetScratch();
     }
 
+    /// <summary>Packs the named columns of <paramref name="row"/> directly into a pooled build slab.</summary>
+    internal (int RowIndex, int ByteLength) PackInto(Row row, IReadOnlyList<string> columns, ExternalJoinEngine.PackedBuildTable table)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _ms.SetLength(0);
+        for (int i = 0; i < columns.Count; i++)
+            WriteValue(_writer, row[columns[i]]);
+        return CopyToTableAndResetScratch(table);
+    }
+
+    /// <summary>Packs one native batch row directly into a pooled build slab.</summary>
+    internal (int RowIndex, int ByteLength) PackInto(ColumnBatch batch, int rowIndex, ExternalJoinEngine.PackedBuildTable table)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _ms.SetLength(0);
+        for (var column = 0; column < batch.Schema.Count; column++)
+            WriteValue(_writer, ReadBatchValue(batch, column, rowIndex));
+        return CopyToTableAndResetScratch(table);
+    }
+
     internal byte[] GetBackingBufferSnapshotForTests()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -82,6 +102,38 @@ internal sealed class RowPacker : IDisposable
         _writer.Flush();
         var written = (int)_ms.Length;
         var result = _ms.ToArray();
+        ResetScratch(written);
+        return result;
+    }
+
+    private (int RowIndex, int ByteLength) CopyToTableAndResetScratch(ExternalJoinEngine.PackedBuildTable table)
+    {
+        _writer.Flush();
+        var written = (int)_ms.Length;
+        try
+        {
+            if (written == 0)
+                return table.AppendRowBytes(Array.Empty<byte>(), 0, 0);
+            if (_ms.TryGetBuffer(out var seg) && seg.Array != null)
+                return table.AppendRowBytes(seg.Array, seg.Offset, written);
+            var fallback = _ms.ToArray();
+            try
+            {
+                return table.AppendRowBytes(fallback, 0, written);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(fallback);
+            }
+        }
+        finally
+        {
+            ResetScratch(written);
+        }
+    }
+
+    private void ResetScratch(int written)
+    {
         ClearScratchBuffer(written);
         if (_ms.Capacity > MaxRetainedBufferBytes)
         {
@@ -95,7 +147,6 @@ internal sealed class RowPacker : IDisposable
         {
             _ms.SetLength(0);
         }
-        return result;
     }
 
     private void ClearScratchBuffer(int byteCount)
@@ -158,10 +209,14 @@ internal sealed class RowPacker : IDisposable
     }
 
     /// <summary>Reconstructs a <see cref="Row"/> from a blob produced by <see cref="Pack"/>.</summary>
-    public static Row Unpack(byte[] data, IReadOnlyList<string> columns)
+    public static Row Unpack(byte[] data, IReadOnlyList<string> columns) =>
+        Unpack(data, 0, data.Length, columns);
+
+    /// <summary>Reconstructs a <see cref="Row"/> from a pooled slab slice produced by <see cref="PackInto"/>.</summary>
+    public static Row Unpack(byte[] data, int offset, int count, IReadOnlyList<string> columns)
     {
         var row = new Row();
-        using var ms = new MemoryStream(data, writable: false);
+        using var ms = new MemoryStream(data, offset, count, writable: false);
         using var reader = new BinaryReader(ms, Encoding.UTF8);
         for (int i = 0; i < columns.Count; i++)
             row[columns[i]] = ReadValue(reader);

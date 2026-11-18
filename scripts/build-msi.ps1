@@ -168,7 +168,7 @@ try {
         exit $LASTEXITCODE
     }
 
-    & $WixToolset.Candle Installer.wxs wwwroot.wxs "-dProductVersion=$WixVersion" "-dWwwrootSource=$wwwrootSource" "-dPublishDir=$BuildDir" -arch x64 -ext WixUtilExtension
+    & $WixToolset.Candle Installer.wxs wwwroot.wxs "-dProductVersion=$WixVersion" "-dWwwrootSource=$wwwrootSource" "-dPublishDir=$BuildDir" -arch x64
     if ($LASTEXITCODE -ne 0) {
         Write-Error "candle.exe failed (exit code $LASTEXITCODE)"
         exit $LASTEXITCODE
@@ -176,7 +176,7 @@ try {
 
     # 3. Link MSI
     Write-Host "Linking MSI package..." -ForegroundColor Gray
-    & $WixToolset.Light Installer.wixobj wwwroot.wixobj -o "ETL-SQL-v$Version.msi" -ext WixUIExtension -ext WixUtilExtension
+    & $WixToolset.Light Installer.wixobj wwwroot.wixobj -o "ETL-SQL-v$Version.msi" -ext WixUIExtension
     if ($LASTEXITCODE -ne 0) {
         Write-Error "light.exe failed (exit code $LASTEXITCODE)"
         exit $LASTEXITCODE

@@ -76,7 +76,9 @@ Polling reloads the table and timeline catalog when the connection recovers.
 
 | Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `Orchestration:JobThrottle:MaxConcurrentJobs` | integer | `0` | Max concurrent scheduled jobs. `0` resolves dynamically to logical core count. |
+| `Orchestration:JobThrottle:MaxConcurrentJobs` | integer | `0` | Max concurrent scheduled jobs. `0` resolves dynamically to half of logical core count (minimum 1). |
+| `Orchestration:JobThrottle:ReservedShortJobSlots` | integer | `-1` (`auto`) | Execution slots held back from heavy jobs so short jobs keep moving when heavy spills fill the remaining slots. `-1` reserves 1 slot when `MaxConcurrentJobs >= 2`; `0` disables reservation. |
+| `Orchestration:JobThrottle:HeavyJobSlotWeight` | integer | `1` | Default slot weight charged to heavy jobs when no per-job weight is set. |
 | `Orchestration:JobThrottle:PollInitialDelayMs` | integer | `100` | Initial delay before retrying a saturated cross-process throttle slot. |
 | `Orchestration:JobThrottle:PollMaxDelayMs` | integer | `2000` | Maximum throttle retry delay after exponential backoff. |
 | `Orchestration:JobThrottle:PollJitterRatio` | number | `0.2` | Symmetric jitter applied to throttle retries to prevent synchronized database polling. |
@@ -121,7 +123,8 @@ Polling reloads the table and timeline catalog when the connection recovers.
 | `Jobs:WarmRunnerPoolSize` | integer | `2` | Maximum number of reusable runner processes for concurrent job execution. |
 | `Jobs:WarmRunnerStartupTimeoutSeconds` | integer | `10` | Time allowed for a newly spawned warm runner to publish its ready handshake. |
 | `Jobs:WarmRunnerBatchSize` | integer | `10000` | Batch size passed into warm runner execution sessions. |
-| `Jobs:MaxConcurrentJobs` | integer | `0` | Process scale throttle. `0` = logical processor count. |
+| `Jobs:MaxConcurrentJobs` | integer | `0` | Process scale throttle. `0` = auto (half of logical core count, minimum 1). |
+| `Jobs:WorkerMemoryGrantMB` | integer | `0` (`auto`) | Memory grant (MB) reserved in the host coordinator and passed into each spawned child process as its ceiling. `0` sizes a fair share from the host global ceiling and worker concurrency so workers cannot oversubscribe the host. |
 
 ### A custom `Jobs:ArgumentsTemplate` must keep `--json`
 

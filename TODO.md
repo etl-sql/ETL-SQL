@@ -14,8 +14,8 @@ linked `ROADMAP.md` entry.
 
 | Tier | What is in it |
 | :--- | :--- |
-| [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Release follow-ups, merge gates, the script and test review, caller identity, local vault, `TRANSFORM` correctness, archives, database docs, the New Job bundle target |
-| [Tier 2 — next](#tier-2--next) | PR test lane, resource-control bypasses, Orchestrator cohesion, MSI first slices, fast pre-push |
+| [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Release follow-ups, merge gates, the script and test review, caller identity, local vault, `TRANSFORM` correctness, archives, database docs |
+| [Tier 2 — next](#tier-2--next) | PR test lane, resource-control bypasses, Orchestrator cohesion, MSI first slices |
 | [Tier 3 — if time allows](#tier-3--if-time-allows) | Spill framing and performance, reporting authoring parity and golden fixtures, Orchestrator console completion, remaining MSI slices, performance certification redesign |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -48,11 +48,6 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 
 ### 1.1 Release follow-ups
 
-- [ ] **Marketplace verification of v0.22.0.** As of 2026-11-16 18:00 UTC only `darwin-arm64` is
-  public; `darwin-x64`, `linux-x64` and `win32-x64` were accepted 16:16–16:19 with no failure shown.
-  **Left:** confirm all four are public (owner checks 2026-11-17); if not, read the publisher page
-  status and run 43904773280, then re-dispatch `publish-marketplace.yml` with `tag=v0.22.0`
-  (`--skip-duplicate` keeps the published ones).
 - [ ] **First release through the Marketplace call.** v0.23.0 is the first Release that calls
   `publish-marketplace.yml`. Keep the Marketplace trusted-publisher entries for both `release.yml`
   and `publish-marketplace.yml` until it has published; then delete the one the OIDC token does not
@@ -65,11 +60,14 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 
 - [ ] **W1 Five green nights running.** Not met for v0.22.0: 2 of the last 5 nights were green;
   2 failures were our own pushes mid-rehearsal ("release/v0.22.0 moved"), 1 was the certification
-  wait step (43247226793). **Left:** the streak on `release/v0.23.0`, and a rehearsal that does
-  not fail when the branch moves under it.
-- [ ] **W4 Release tooling tested on real output.** **Left:** the native Windows and macOS
-  collectors and the draft-manifest check (about 1 GB of packages per platform); a recorded
-  replay of `collect-release-evidence.mjs` from the first real v0.22.0 run (dry run 43871241433).
+  wait step (43247226793). Updated `nightly-rehearsal.mjs`, `nightly-release.yml`, and
+  `release.yml` so rehearsals adopt a newer release-branch tip during `start` and validate an
+  ancestor `candidate_sha` on `dry-run`. **Left:** confirm the five-night green streak on
+  `release/v0.23.0`.
+- [ ] **W4 Release tooling tested on real output.** Added real-output replay for
+  `collect-release-evidence.mjs` from v0.22.0 candidate `0a1507282` (`43786591392` / `43888292114` /
+  `43893010630`) in `scripts/checks/test-real-release-output.mjs`. **Left:** the native Windows and
+  macOS collectors and the draft-manifest check (about 1 GB of packages per platform).
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
@@ -79,17 +77,14 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 
 ### 1.3 Full script and test review
 
-Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
+Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
+[the v0.23.0 script and test review plan](docs/releases/v0.23.0-script-and-test-review-plan.md).
 
-- [ ] **Scope the review (D).** Inventory `scripts/` and `tests/` by owner and lane, list what the
-  v0.22.0 tooling review already swept, and write the review plan (what is read, by whom, what
-  counts as a finding) with an estimate. **Finish line:** a plan in `docs/releases/` that the owner
-  accepts.
-- [x] **Open items from the v0.22.0 tooling review.** (`Compare-CertBaseline.ps1` now warns `MISSING_NEW_SCENARIO` on baseline scenarios absent from the current report; fixed all four SQL review paths with `ToolingReviewSqlPathTests`: outer-join / unknown-schema qualification & `LeftSingle` pre-join pushdown guard, `LEFT SEMI`/`LEFT ANTI` handling in `JoinEngine.PerformMergeJoin`, transitive type-ranked `CompoundKey.CompareValues`, and `ExternalWindowEngine.ProcessBucketDeepSpill` `RANGE` peer-group folding — Reviewed with 81 targeted cases passing across SQL-path, join, pushdown and window tests; RANGE eligibility and bounded peer-spill cleanup are covered.)
-
-### 1.8 Orchestrator New Job bundle target
-
-- [x] **OR01: Portal New Job bundle URIs (`orch://`), Report target creation, and target kind labeling.** Restored the bundle target in `orchestrator-create-job.ts` and `#createJobModal` with `readBundleChoices` / `readBundleVersions` / `readBundleFiles`, Portal proxy route `GET /api/orchestrator/bundles/{name}/versions/{version}/files`, canonical `orch://<bundle>@<version>/<entryPath>` URIs matching `BundleUri.TryParse`, `JobType = REPORT` support, and `'Report'` / `'Bundle'` / `'Script'` labeling across `orchestrator-job-detail.ts` and `orchestrator-job-table.ts` (browser type/lint gates clean, JS owner/activity checks pass, 36/36 Playwright sandbox browser tests and 52/52 Portal integration tests pass; delayed catalog reads preserve manual URIs and refresh removed-version selections).
+- [ ] **Scope the review (D).** Inventoried `scripts/` (474 files) and `tests/` (1,355 `.cs` files +
+  corpora/fixtures) by owner and lane, summarized the v0.22.0 tooling review baseline, and defined
+  the review criteria and `RV01`–`RV05` slice estimate (14–15 developer-days) in
+  [v0.23.0-script-and-test-review-plan.md](docs/releases/v0.23.0-script-and-test-review-plan.md).
+  **Left:** owner acceptance of the plan (and scheduling `RV01`–`RV05`).
 
 ### 1.9 Spill GC-pause gap
 
@@ -97,14 +92,11 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
 
 ## Tier 2 — next
 
-### 2.1 PR regression lane and a light pre-push hook
+### 2.1 PR regression lane
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| RG02 | **PR regression lane for ordinary tests.** Run the deterministic unit/integration tests of the projects a PR affects (from `ci-impact.json`), so a new test runs before merge. Keep Engine Coverage's full sharding for pushes. Prove with a PR whose only change is a failing new test outside the smoke filters. | RG01 | M |
-
-- [ ] **W7 Fast pre-push hook and local gate hygiene.** Overlaps RG03's docs-only skip; see the
-  [Release Engineering entry](ROADMAP.md#release-engineering--routine-github-built-releases).
+| RG02 | **PR regression lane for ordinary tests.** Added `testProjects` / `testProjectRules` and narrow `.cs` test rules in `scripts/ci-impact.json` and `scripts/select-ci-lanes.mjs`, enabled `-ResultsDirectory` on `-Lane portal` in `scripts/test-lane.ps1`, and wired conditional PR regression steps into `build-verification` (`engine`, `language-server`) and `portal-smoke` (`portal`) in `.github/workflows/ci.yml` while keeping push sharding in `engine-coverage` (`test-ci-impact.mjs`, `test-engine-coverage.mjs`, `test-hosted-release-evidence.mjs`, `test-merge-gate.mjs`, and workflow checks pass). **Left:** prove with a PR whose only change is a failing new test outside the smoke filters. | RG01 | M |
 
 ### 2.7 MSI installer: services own their configuration
 
@@ -113,8 +105,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
 - [ ] **MI01 Services create and migrate their own configuration.** The Orchestrator and Portal
   generate missing secrets and migrate settings on first start; the `WriteJwt`, `ReadSettings` and
   `RestoreSettings` custom actions are removed.
-- [ ] **MI02 Stop services without force-killing.** Remove `util:CloseApplication` /
-  `TerminateProcess`; `ServiceControl Stop="both" Wait="yes"` stops the services.
 
 ### 2.8 Scale baseline recalibration
 
@@ -132,10 +122,7 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| SP06 | **Byte-budgeted batch sizing and bounded inter-stage queues.** Size batches by byte footprint as well as row count across input readers, `ArrowSpillWriter` builders, compression buffers, and partition writers; bound queues between pipeline stages so fast upstream readers cannot outrun encrypted spill sinks on wide string columns. | — | M |
-| SP07 | **Reduce spill volume via projection pruning and bounded dictionary encoding.** Carry only required columns through `ExternalJoinEngine`, `ExternalSortEngine`, and `ExternalWindowEngine` (delaying full row reconstruction where correctness permits), and evaluate bounded Arrow dictionary encoding for repeated low-cardinality strings with a fallback for high-cardinality columns. | SP06 | M |
-| SP09 | **Eliminate intermediate sort-merge column stripping and join build-table object churn.** Retain `_SYS_SK_*` sort keys through intermediate merge passes in `ExternalSortEngine.MergeChunksToFileAsync` (stripping only on the final pass), evaluate a normalized 64-bit key prefix in the tournament tree, and replace per-row `byte[]` + `List<int>` buckets in `ExternalJoinEngine.PackedBuildTable` with budget-capped pooled `byte[]` slabs and flat index arrays. | — | M |
-| SP11 | **Host-wide admission and short-job progress.** Preserve the host CPU check; add configured spill-volume free space and aggregate worker memory reservations to admission with hysteresis. Use SP16's shared accounting, coalesce `ChildProcessTracker.Unregister` spill sweeps, and reserve capacity or weight admission in `JobThrottle`. Validate heavy spilling jobs alongside short runs in both in-process and child-worker execution; one worker's process-local grant must not stand in for a host-wide reservation. | SP16 | M |
+| SP07 | **Reduce spill volume via projection pruning and bounded dictionary encoding.** Carry only required columns through `ExternalJoinEngine`, `ExternalSortEngine`, and `ExternalWindowEngine` (delaying full row reconstruction where correctness permits), and evaluate bounded Arrow dictionary encoding for repeated low-cardinality strings with a fallback for high-cardinality columns. | — | M |
 
 - [ ] **Cut allocation churn in the external sort, window and join** (measures SP08/SP09). At 100M
   rows (Scale Measurement 43504065542) the sort allocated 593 GB (about 6 KB per row), the window

@@ -868,16 +868,21 @@ public class SelectExecutionEngine
             : ProjectRows(rows, stmt, finalColumns, colNames, hasPreEvaluatedColumns, canDeferWhere);
         var batch = new DataTable();
         batch.SetColumns(colNames);
+        long targetBytes = _context.EffectiveBatchTargetBytes;
+        long batchBytes = 0;
         bool yielded = false;
         await foreach (var row in projectedRows)
         {
             await batch.AddRowAsync(row);
-            if (batch.Rows.Count >= _context.EffectiveBatchSize)
+            batchBytes += row.EstimateHeapBytes();
+            if (batch.Rows.Count >= _context.EffectiveBatchSize
+                || (targetBytes > 0 && batchBytes >= targetBytes))
             {
                 yield return batch;
                 yielded = true;
                 batch = new DataTable();
                 batch.SetColumns(colNames);
+                batchBytes = 0;
             }
         }
         if (batch.Rows.Count > 0 || !yielded) yield return batch;

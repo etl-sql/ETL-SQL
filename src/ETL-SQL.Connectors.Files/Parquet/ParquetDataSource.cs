@@ -99,6 +99,7 @@ namespace ETL_SQL.Connectors.Parquet
                 await using var reader = await ParquetReader.CreateAsync(stream);
                 var dataFields = reader.Schema.GetDataFields();
                 var colNames = dataFields.Select(f => f.Name).ToList();
+                long targetBytes = _context?.EffectiveBatchTargetBytes ?? ETL_SQL.Core.Spill.SpillFanOut.DefaultTargetBatchBytes;
 
                 for (int i = 0; i < reader.RowGroupCount; i++)
                 {
@@ -113,6 +114,7 @@ namespace ETL_SQL.Connectors.Parquet
                     }
 
                     DataTable? currentBatch = null;
+                    long currentBatchBytes = 0;
 
                     for (int r = 0; r < rowCount; r++)
                     {
@@ -129,11 +131,13 @@ namespace ETL_SQL.Connectors.Parquet
                             etlRow[colNames[c]] = columns[c][r];
                         }
                         await currentBatch.AddRowAsync(etlRow);
+                        currentBatchBytes += etlRow.EstimateHeapBytes();
 
-                        if (currentBatch.Rows.Count >= batchSize)
+                        if (currentBatch.Rows.Count >= batchSize || (targetBytes > 0 && currentBatchBytes >= targetBytes))
                         {
                             yield return currentBatch;
                             currentBatch = null;
+                            currentBatchBytes = 0;
                         }
                     }
 

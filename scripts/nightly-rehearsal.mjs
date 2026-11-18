@@ -60,23 +60,39 @@ export async function rehearse({ repository, sha, branch, directory, version, pr
     throw new Error('Expected repository, exact SHA, release/vX.Y.Z branch matching VersionPrefix, previous tag, start time and phase.');
   }
   const steps = [];
-  const fail = (name, detail) => { steps.push({ name, ok: false, detail }); return { ok: false, failedStep: name, steps }; };
+  const fail = (name, detail) => { steps.push({ name, ok: false, detail }); return { ok: false, sha, failedStep: name, steps }; };
   const api = endpoint => JSON.parse(gh(['api', endpoint]));
-  const dispatched = run => run.head_sha === sha && run.head_branch === branch && run.event === 'workflow_dispatch' &&
-    Date.parse(run.created_at) >= Date.parse(startedAt);
+  const dispatched = run => (phase === 'dry-run' || run.head_sha === sha) && run.head_branch === branch &&
+    run.event === 'workflow_dispatch' && Date.parse(run.created_at) >= Date.parse(startedAt);
   const tracked = phase === 'dry-run' ? dryRunWorkflows : rehearsalWorkflows;
   const latestRun = file => {
-    const runs = api(`repos/${repository}/actions/workflows/${file}/runs?event=workflow_dispatch&head_sha=${sha}&per_page=100`).workflow_runs;
+    const filter = phase === 'dry-run' ? `branch=${encodeURIComponent(branch)}` : `head_sha=${sha}`;
+    const runs = api(`repos/${repository}/actions/workflows/${file}/runs?event=workflow_dispatch&${filter}&per_page=100`).workflow_runs;
     if (!Array.isArray(runs)) throw new Error(`Invalid ${file} run inventory.`);
     return runs.filter(dispatched).sort((a, b) => b.id - a.id)[0];
   };
 
   if (phase === 'start' || phase === 'all' || phase === 'dry-run') {
-    for (const workflow of tracked) {
+    let redirects = 0;
+    for (let index = 0; index < tracked.length; index++) {
+      const workflow = tracked[index];
       let run = latestRun(workflow.file);
       if (run) { report(`${workflow.file}: reusing run ${run.id} started by this rehearsal.`); continue; }
       const head = api(`repos/${repository}/commits/${encodeURIComponent(branch)}`).sha;
-      if (head !== sha) return fail(`Start ${workflow.file}`, `${branch} moved to ${head}; tonight's candidate is gone, nothing was started.`);
+      if (head !== sha) {
+        if (phase === 'dry-run') {
+          report(`${branch} moved to ${head}; rehearsing release.yml dry run on candidate ${sha}.`);
+        } else {
+          if (!/^[a-f0-9]{40}$/.test(head ?? '') || ++redirects > 5) {
+            return fail(`Start ${workflow.file}`, `${branch} kept moving (latest ${head}); cannot settle candidate.`);
+          }
+          sha = head;
+          report(`${branch} moved to ${head}; rehearsing ${head} instead.`);
+          steps.length = 0;
+          index = -1;
+          continue;
+        }
+      }
       gh(['workflow', 'run', workflow.file, '--repo', repository, '--ref', branch,
         ...(workflow.inputs?.({ sha, version }) ?? [])]);
       const deadline = now() + registerMinutes * 60000;
@@ -84,7 +100,7 @@ export async function rehearse({ repository, sha, branch, directory, version, pr
       if (!run) return fail(`Start ${workflow.file}`, `GitHub accepted the request but no run appeared within ${registerMinutes} minutes.`);
       report(`${workflow.file}: started run ${run.id}.`);
     }
-    if (phase === 'start') return { ok: true, steps };
+    if (phase === 'start') return { ok: true, sha, steps };
   }
 
   const current = () => tracked.map(({ file, name }) => {
@@ -135,17 +151,17 @@ export async function rehearse({ repository, sha, branch, directory, version, pr
     // A runner that is still not acquired after the retry is reported as infrastructure.
     if (infrastructure(failedRun)) {
       steps.find(step => step.name === failedRun.file).detail += ': runner not acquired after one retry (infrastructure)';
-      return { ok: false, failedStep: failedRun.file, failureKind: 'infrastructure', steps };
+      return { ok: false, sha, failedStep: failedRun.file, failureKind: 'infrastructure', steps };
     }
-    return { ok: false, failedStep: failedRun.file, failureKind: 'product', steps };
+    return { ok: false, sha, failedStep: failedRun.file, failureKind: 'product', steps };
   }
   if (!runs.every(settled)) {
     // A first wait job hands over to the second; anywhere else, an unfinished run fails.
-    if (phase === 'wait') return { ok: true, settled: false, steps };
-    return { ok: false, failedStep: runs.find(run => !settled(run)).file, steps };
+    if (phase === 'wait') return { ok: true, sha, settled: false, steps };
+    return { ok: false, sha, failedStep: runs.find(run => !settled(run)).file, steps };
   }
-  if (phase === 'wait') return { ok: true, settled: true, steps };
-  if (phase === 'dry-run') return { ok: true, steps };
+  if (phase === 'wait') return { ok: true, sha, settled: true, steps };
+  if (phase === 'dry-run') return { ok: true, sha, steps };
 
   for (const step of collectorSteps({ repository, sha, version, previousTag, directory })) {
     const outputs = path.join(directory, `${step.name.replace(/\W+/g, '-').toLowerCase()}.outputs`);
@@ -158,7 +174,7 @@ export async function rehearse({ repository, sha, branch, directory, version, pr
       (result.status === 0 ? `exit 0 without ${step.selects}: ${lines.at(-1) ?? ''}` : lines.slice(-3).join(' | ')) });
   }
   const failedCollector = steps.find(step => !step.ok);
-  return failedCollector ? { ok: false, failedStep: failedCollector.name, steps } : { ok: true, steps };
+  return failedCollector ? { ok: false, sha, failedStep: failedCollector.name, steps } : { ok: true, sha, steps };
 }
 
 export function summarize(result, { sha, branch }) {
@@ -191,9 +207,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const result = await rehearse({ repository, sha, branch, directory, version, previousTag: previous.stdout.trim(), startedAt },
       { gh, phase, execute: (command, args, env) => run(command, args, env) });
     writeFileSync(path.join(directory, `rehearsal-${phase}.json`), `${JSON.stringify({ sha, branch, version, phase, ...result }, null, 2)}\n`);
+    if (process.env.GITHUB_OUTPUT && phase === 'start' && result.ok) appendFileSync(process.env.GITHUB_OUTPUT, `candidate_sha=${result.sha}\n`);
     if (process.env.GITHUB_OUTPUT && phase === 'wait') appendFileSync(process.env.GITHUB_OUTPUT, `settled=${result.settled === true}\n`);
     if (phase === 'collect' || phase === 'dry-run' || !result.ok) {
-      const summary = summarize(result, { sha, branch });
+      const summary = summarize(result, { sha: result.sha ?? sha, branch });
       if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
       console.log(summary);
     }

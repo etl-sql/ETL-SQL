@@ -23,6 +23,48 @@ export function validateManifest(policy) {
         (rule.lanes !== '*' && !validLanes(rule.lanes))) throw new Error('Invalid CI impact rule.');
     new RegExp(rule.pattern);
   }
+  if (policy.testProjects !== undefined) {
+    if (!Array.isArray(policy.testProjects) || !policy.testProjects.length ||
+        new Set(policy.testProjects).size !== policy.testProjects.length ||
+        policy.testProjects.some(project => typeof project !== 'string' || !/^[a-z0-9-]+$/.test(project))) {
+      throw new Error('Invalid CI impact test projects.');
+    }
+  }
+  if (policy.testProjectRules !== undefined) {
+    if (!Array.isArray(policy.testProjects) || !Array.isArray(policy.testProjectRules) || !policy.testProjectRules.length) {
+      throw new Error('Invalid CI impact test project rules.');
+    }
+    for (const rule of policy.testProjectRules) {
+      if (!rule.name || typeof rule.pattern !== 'string' || !rule.pattern.startsWith('^') ||
+          (rule.projects !== '*' && (!Array.isArray(rule.projects) || !rule.projects.length ||
+            rule.projects.some(project => typeof project !== 'string' || !policy.testProjects.includes(project))))) {
+        throw new Error('Invalid CI impact test project rule.');
+      }
+      new RegExp(rule.pattern);
+    }
+  }
+}
+
+function selectTestProjects(changedPaths, selectedLanes, { full, fallbackReason, lanes, policy }) {
+  const declaredProjects = Array.isArray(policy.testProjects) ? policy.testProjects : ['engine', 'portal', 'language-server'];
+  if (!selectedLanes.includes('build-and-test')) return [];
+  if (full || fallbackReason || lanes !== undefined || !Array.isArray(policy.testProjectRules)) {
+    return [...declaredProjects];
+  }
+  const selectedProjects = new Set();
+  for (const changedPath of changedPaths) {
+    const laneRule = policy.rules.find(r => new RegExp(r.pattern).test(changedPath));
+    const ruleLanes = !laneRule || laneRule.lanes === '*' ? policy.lanes : laneRule.lanes;
+    if (!ruleLanes.includes('build-and-test')) continue;
+    const projectRule = policy.testProjectRules.find(r => new RegExp(r.pattern).test(changedPath));
+    if (!projectRule || projectRule.projects === '*') {
+      declaredProjects.forEach(project => selectedProjects.add(project));
+    } else {
+      projectRule.projects.forEach(project => selectedProjects.add(project));
+    }
+  }
+  if (selectedProjects.size === 0) return [...declaredProjects];
+  return declaredProjects.filter(project => selectedProjects.has(project));
 }
 
 export function selectLanes(paths, { full = false, fallbackReason = null, lanes, policy = manifest } = {}) {
@@ -39,14 +81,17 @@ export function selectLanes(paths, { full = false, fallbackReason = null, lanes,
       throw new Error('Diagnostic selection requires known lane names and cannot request full certification.');
     }
     lanes.forEach(lane => selected.add(lane));
+    const selectedLanes = policy.lanes.filter(lane => selected.has(lane));
     return { schemaVersion: 1, advisory: false, certification: false, selection: 'diagnostic', nativePackages: true,
-      lanes: policy.lanes.filter(lane => selected.has(lane)), reasons: [{ path: null, rule: 'Explicit diagnostic selection', lanes }] };
+      lanes: selectedLanes, testProjects: selectTestProjects([], selectedLanes, { full, fallbackReason, lanes, policy }),
+      reasons: [{ path: null, rule: 'Explicit diagnostic selection', lanes }] };
   }
   if (full || fallbackReason) {
     policy.lanes.forEach(lane => selected.add(lane));
     reasons.push({ path: null, rule: fallbackReason ?? 'Explicit full selection', lanes: [...policy.lanes], nativePackages: true });
   }
-  for (const changedPath of [...new Set(paths)].sort()) {
+  const uniquePaths = [...new Set(paths)].sort();
+  for (const changedPath of uniquePaths) {
     const rule = policy.rules.find(r => new RegExp(r.pattern).test(changedPath));
     const lanes = !rule || rule.lanes === '*' ? policy.lanes : rule.lanes;
     const packages = rule?.nativePackages ?? true;
@@ -54,10 +99,11 @@ export function selectLanes(paths, { full = false, fallbackReason = null, lanes,
     lanes.forEach(lane => selected.add(lane));
     reasons.push({ path: changedPath, rule: rule?.name ?? 'Unknown path: full selection', lanes, nativePackages: packages });
   }
+  const selectedLanes = policy.lanes.filter(lane => selected.has(lane));
   return {
     schemaVersion: 1, advisory: false, certification: false, nativePackages,
     selection: full || fallbackReason || selected.size === policy.lanes.length ? 'full' : 'targeted',
-    lanes: policy.lanes.filter(lane => selected.has(lane)), reasons,
+    lanes: selectedLanes, testProjects: selectTestProjects(uniquePaths, selectedLanes, { full, fallbackReason, lanes, policy }), reasons,
   };
 }
 

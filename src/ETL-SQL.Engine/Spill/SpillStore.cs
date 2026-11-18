@@ -234,9 +234,12 @@ public partial class SpillStore : ISpillStore
     }
 
     public Task<ISpillWriter> CreateWriterAsync(string chunkName) =>
-        CreateWriterAsync(chunkName, _context.EffectiveBatchSize);
+        CreateWriterAsync(chunkName, _context.EffectiveBatchSize, _context.EffectiveBatchTargetBytes);
 
-    public async Task<ISpillWriter> CreateWriterAsync(string chunkName, int flushBatchRows)
+    public Task<ISpillWriter> CreateWriterAsync(string chunkName, int flushBatchRows) =>
+        CreateWriterAsync(chunkName, flushBatchRows, _context.EffectiveBatchTargetBytes);
+
+    public async Task<ISpillWriter> CreateWriterAsync(string chunkName, int flushBatchRows, long flushBatchBytes)
     {
         EnsureInitialized();
         AdmitNewExtent();
@@ -253,7 +256,7 @@ public partial class SpillStore : ISpillStore
             if (_context.SpillFormat == "Json")
                 writer = new SecureSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress, compressionLevel);
             else
-                writer = new ArrowSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress, flushBatchRows, compressionLevel);
+                writer = new ArrowSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress, flushBatchRows, compressionLevel, flushBatchBytes);
         }
         catch
         {
@@ -969,22 +972,34 @@ public partial class SpillStore : ISpillStore
         private readonly IExecutionContext _context;
         private readonly string _chunkName;
         private readonly int _flushBatchSize;
+        private readonly long _flushBatchBytes;
 
         private const string JsonPrefix = "\x1Ejson:";
 
         private Schema? _schema;
         private ArrowStreamWriter? _arrowWriter;
         private readonly List<Row> _buffer = new();
+        private long _bufferedBytes;
         private long _acceptedRowCount;
 
         public string ChunkName => _chunkName;
         public long BytesWritten { get; private set; }
 
-        public ArrowSpillWriter(string path, string chunkName, byte[] key, IExecutionContext context, bool encrypt, bool compress, int flushBatchSize, CompressionLevel compressionLevel = CompressionLevel.Optimal)
+        public ArrowSpillWriter(
+            string path,
+            string chunkName,
+            byte[] key,
+            IExecutionContext context,
+            bool encrypt,
+            bool compress,
+            int flushBatchSize,
+            CompressionLevel compressionLevel = CompressionLevel.Optimal,
+            long flushBatchBytes = SpillFanOut.DefaultTargetBatchBytes)
         {
             _chunkName = chunkName;
             _context = context;
             _flushBatchSize = Math.Max(1, flushBatchSize);
+            _flushBatchBytes = flushBatchBytes > 0 ? Math.Max(4096L, flushBatchBytes) : 0;
             _fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
 
             try
@@ -993,7 +1008,10 @@ public partial class SpillStore : ISpillStore
 
                 if (encrypt)
                 {
-                    _encryptionWriter = AuthenticatedSpillEncryption.CreateWriter(_fileStream, key, chunkName, 2, compress, context.CancellationToken);
+                    int maxFrameBytes = _flushBatchBytes > 0
+                        ? (int)Math.Clamp(_flushBatchBytes, 16 * 1024L, AuthenticatedSpillEncryption.DefaultMaxFramePlaintextBytes)
+                        : AuthenticatedSpillEncryption.DefaultMaxFramePlaintextBytes;
+                    _encryptionWriter = AuthenticatedSpillEncryption.CreateWriter(_fileStream, key, chunkName, 2, compress, context.CancellationToken, maxFrameBytes);
                     current = _encryptionWriter;
                 }
 
@@ -1030,6 +1048,7 @@ public partial class SpillStore : ISpillStore
                 }
 
                 _buffer.Add(snapshot);
+                _bufferedBytes += snapshot.EstimateHeapBytes();
                 _acceptedRowCount++;
 
                 if (_context.Telemetry != null)
@@ -1043,7 +1062,7 @@ public partial class SpillStore : ISpillStore
                         _context, _context.Telemetry.TotalSpilledBytes);
                 }
 
-                if (_buffer.Count >= _flushBatchSize)
+                if (_buffer.Count >= _flushBatchSize || (_flushBatchBytes > 0 && _bufferedBytes >= _flushBatchBytes))
                     await FlushBatchAsync();
             }
             catch
@@ -1155,9 +1174,10 @@ public partial class SpillStore : ISpillStore
                     }
 
                     _buffer.Add(snapshot);
+                    _bufferedBytes += snapshot.EstimateHeapBytes();
                     _acceptedRowCount++;
                     telemetryBytes += row.ColumnCount * 16L; // allocation-free; see WriteRowAsync
-                    if (_buffer.Count >= _flushBatchSize)
+                    if (_buffer.Count >= _flushBatchSize || (_flushBatchBytes > 0 && _bufferedBytes >= _flushBatchBytes))
                         await FlushBatchAsync();
                 }
 
@@ -1193,8 +1213,24 @@ public partial class SpillStore : ISpillStore
                     ValidateSchema(batch);
                 }
 
-                using var recordBatch = BuildBatch(batch);
-                await _arrowWriter!.WriteRecordBatchAsync(recordBatch);
+                if (_flushBatchBytes > 0 && batch.RowCount > 1 && batch.AllocatedBytes > _flushBatchBytes)
+                {
+                    int sliceRows = (int)Math.Clamp(
+                        (long)batch.RowCount * _flushBatchBytes / Math.Max(1L, batch.AllocatedBytes),
+                        1L,
+                        _flushBatchSize);
+                    for (int offset = 0; offset < batch.RowCount; offset += sliceRows)
+                    {
+                        int count = Math.Min(sliceRows, batch.RowCount - offset);
+                        using var recordBatch = BuildBatch(batch, offset, count);
+                        await _arrowWriter!.WriteRecordBatchAsync(recordBatch);
+                    }
+                }
+                else
+                {
+                    using var recordBatch = BuildBatch(batch, 0, batch.RowCount);
+                    await _arrowWriter!.WriteRecordBatchAsync(recordBatch);
+                }
                 if (_context.Telemetry != null)
                 {
                     var increment = batch.AllocatedBytes;
@@ -1217,6 +1253,7 @@ public partial class SpillStore : ISpillStore
             using var batch = BuildBatch(_buffer);
             await _arrowWriter.WriteRecordBatchAsync(batch);
             _buffer.Clear();
+            _bufferedBytes = 0;
         }
 
         private static Schema InferSchema(Row row)
@@ -1322,51 +1359,67 @@ public partial class SpillStore : ISpillStore
             return new RecordBatch(_schema, arrays, rows.Count);
         }
 
-        private RecordBatch BuildBatch(ColumnBatch batch)
+        private RecordBatch BuildBatch(ColumnBatch batch, int startRow, int length)
         {
-            var arrays = batch.Columns.Select(BuildArray).ToList();
-            return new RecordBatch(_schema!, arrays, batch.RowCount);
+            var arrays = new List<IArrowArray>(batch.Columns.Count);
+            for (var i = 0; i < batch.Columns.Count; i++)
+                arrays.Add(BuildArray(batch.Columns[i], startRow, length));
+            return new RecordBatch(_schema!, arrays, length);
         }
 
-        private static IArrowArray BuildArray(IColumnBuffer column)
+        private static IArrowArray BuildArray(IColumnBuffer column, int startRow, int length)
         {
-            if (column is ColumnBuffer<byte> bytes) return BuildInt64(bytes);
-            if (column is ColumnBuffer<short> shorts) return BuildInt64(shorts);
-            if (column is ColumnBuffer<int> integers) return BuildInt64(integers);
-            if (column is ColumnBuffer<long> longs) return BuildInt64(longs);
+            if (column is ColumnBuffer<byte> bytes) return BuildInt64(bytes, startRow, length);
+            if (column is ColumnBuffer<short> shorts) return BuildInt64(shorts, startRow, length);
+            if (column is ColumnBuffer<int> integers) return BuildInt64(integers, startRow, length);
+            if (column is ColumnBuffer<long> longs) return BuildInt64(longs, startRow, length);
             if (column is ColumnBuffer<decimal> decimals)
-                return BuildBinaryDecimalArray(decimals);
+                return BuildBinaryDecimalArray(decimals, startRow, length);
             if (column is ColumnBuffer<double> doubles)
             {
                 var builder = new DoubleArray.Builder();
-                for (var i = 0; i < doubles.Count; i++)
-                    if (doubles.IsNull(i)) builder.AppendNull(); else builder.Append(doubles.Values.Span[i]);
+                var span = doubles.Values.Span;
+                for (var i = 0; i < length; i++)
+                {
+                    var idx = startRow + i;
+                    if (doubles.IsNull(idx)) builder.AppendNull(); else builder.Append(span[idx]);
+                }
                 return builder.Build();
             }
             if (column is ColumnBuffer<bool> booleans)
             {
                 var builder = new BooleanArray.Builder();
-                for (var i = 0; i < booleans.Count; i++)
-                    if (booleans.IsNull(i)) builder.AppendNull(); else builder.Append(booleans.Values.Span[i]);
+                var span = booleans.Values.Span;
+                for (var i = 0; i < length; i++)
+                {
+                    var idx = startRow + i;
+                    if (booleans.IsNull(idx)) builder.AppendNull(); else builder.Append(span[idx]);
+                }
                 return builder.Build();
             }
             if (column is ColumnBuffer<DateOnly> dateOnlyValues)
             {
                 var builder = new StringArray.Builder();
-                for (var i = 0; i < dateOnlyValues.Count; i++)
-                    if (dateOnlyValues.IsNull(i)) builder.AppendNull();
-                    else builder.Append(dateOnlyValues.Values.Span[i].ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+                var span = dateOnlyValues.Values.Span;
+                for (var i = 0; i < length; i++)
+                {
+                    var idx = startRow + i;
+                    if (dateOnlyValues.IsNull(idx)) builder.AppendNull();
+                    else builder.Append(span[idx].ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+                }
                 return builder.Build();
             }
             if (column is ColumnBuffer<DateTime> dates)
             {
                 var builder = new TimestampArray.Builder(TimeUnit.Microsecond, "UTC");
-                for (var i = 0; i < dates.Count; i++)
+                var span = dates.Values.Span;
+                for (var i = 0; i < length; i++)
                 {
-                    if (dates.IsNull(i)) builder.AppendNull();
+                    var idx = startRow + i;
+                    if (dates.IsNull(idx)) builder.AppendNull();
                     else
                     {
-                        var value = dates.Values.Span[i];
+                        var value = span[idx];
                         var offset = value.Kind == DateTimeKind.Unspecified
                             ? new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc))
                             : new DateTimeOffset(value);
@@ -1378,17 +1431,25 @@ public partial class SpillStore : ISpillStore
             if (column is ColumnBuffer<DateTimeOffset> offsets)
             {
                 var builder = new StringArray.Builder();
-                for (var i = 0; i < offsets.Count; i++)
-                    if (offsets.IsNull(i)) builder.AppendNull();
-                    else builder.Append(offsets.Values.Span[i].ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+                var span = offsets.Values.Span;
+                for (var i = 0; i < length; i++)
+                {
+                    var idx = startRow + i;
+                    if (offsets.IsNull(idx)) builder.AppendNull();
+                    else builder.Append(span[idx].ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+                }
                 return builder.Build();
             }
             if (column is ColumnBuffer<Guid> guids)
             {
                 var builder = new StringArray.Builder();
-                for (var i = 0; i < guids.Count; i++)
-                    if (guids.IsNull(i)) builder.AppendNull();
-                    else builder.Append(guids.Values.Span[i].ToString("D"));
+                var span = guids.Values.Span;
+                for (var i = 0; i < length; i++)
+                {
+                    var idx = startRow + i;
+                    if (guids.IsNull(idx)) builder.AppendNull();
+                    else builder.Append(span[idx].ToString("D"));
+                }
                 return builder.Build();
             }
             if (column is ColumnBuffer<TimeSpan> times)
@@ -1397,32 +1458,66 @@ public partial class SpillStore : ISpillStore
                 // time type: a TIME column here holds a TimeSpan, which may be negative or exceed
                 // 24 hours, and neither is representable as a time-of-day.
                 var builder = new StringArray.Builder();
-                for (var i = 0; i < times.Count; i++)
-                    if (times.IsNull(i)) builder.AppendNull();
-                    else builder.Append(times.Values.Span[i].ToString("c", System.Globalization.CultureInfo.InvariantCulture));
+                var span = times.Values.Span;
+                for (var i = 0; i < length; i++)
+                {
+                    var idx = startRow + i;
+                    if (times.IsNull(idx)) builder.AppendNull();
+                    else builder.Append(span[idx].ToString("c", System.Globalization.CultureInfo.InvariantCulture));
+                }
                 return builder.Build();
             }
             if (column is Utf8ColumnBuffer strings)
             {
-                var builder = new StringArray.Builder();
-                for (var i = 0; i < strings.Count; i++)
-                    if (strings.IsNull(i)) builder.AppendNull(); else builder.Append(System.Text.Encoding.UTF8.GetString(strings.GetUtf8Bytes(i)));
-                return builder.Build();
+                var offsetsSpan = strings.Offsets.Span;
+                var baseByteOffset = offsetsSpan[startRow];
+                var totalByteLength = offsetsSpan[startRow + length] - baseByteOffset;
+                var offsetBuilder = new ArrowBuffer.Builder<int>();
+                offsetBuilder.Reserve(length + 1);
+                for (var i = 0; i <= length; i++)
+                    offsetBuilder.Append(offsetsSpan[startRow + i] - baseByteOffset);
+
+                var valueBuilder = new ArrowBuffer.Builder<byte>();
+                if (totalByteLength > 0)
+                {
+                    valueBuilder.Reserve(totalByteLength);
+                    valueBuilder.Append(strings.Utf8Data.Span.Slice(baseByteOffset, totalByteLength));
+                }
+
+                var nullCount = 0;
+                ArrowBuffer validityBuffer;
+                if (strings.NullBitmap.Span.IndexOfAnyExcept((byte)0) < 0)
+                {
+                    validityBuffer = ArrowBuffer.Empty;
+                }
+                else
+                {
+                    var bitmapBuilder = new ArrowBuffer.BitmapBuilder(length);
+                    for (var i = 0; i < length; i++)
+                    {
+                        var valid = !strings.IsNull(startRow + i);
+                        bitmapBuilder.Append(valid);
+                        if (!valid) nullCount++;
+                    }
+                    validityBuffer = nullCount == 0 ? ArrowBuffer.Empty : bitmapBuilder.Build();
+                }
+
+                return new StringArray(length, offsetBuilder.Build(), valueBuilder.Build(), validityBuffer, nullCount);
             }
             throw new NotSupportedException($"Native spill writing does not support '{column.ElementType.Name}' columns.");
         }
 
-        private static FixedSizeBinaryArray BuildBinaryDecimalArray(ColumnBuffer<decimal> decimals)
+        private static FixedSizeBinaryArray BuildBinaryDecimalArray(ColumnBuffer<decimal> decimals, int startRow, int length)
         {
-            var count = decimals.Count;
-            if (count == 0)
+            if (length == 0)
             {
                 return new FixedSizeBinaryArray(
                     new ArrayData(BinaryDecimalType, 0, 0, 0, [ArrowBuffer.Empty, ArrowBuffer.Empty]));
             }
 
             var valueBuilder = new ArrowBuffer.Builder<byte>();
-            valueBuilder.Append(MemoryMarshal.AsBytes(decimals.Values.Span));
+            valueBuilder.Reserve(checked(length * 16));
+            valueBuilder.Append(MemoryMarshal.AsBytes(decimals.Values.Span.Slice(startRow, length)));
             var valueBuffer = valueBuilder.Build();
 
             var nullCount = 0;
@@ -1433,25 +1528,29 @@ public partial class SpillStore : ISpillStore
             }
             else
             {
-                var bitmapBuilder = new ArrowBuffer.BitmapBuilder(count);
-                for (var i = 0; i < count; i++)
+                var bitmapBuilder = new ArrowBuffer.BitmapBuilder(length);
+                for (var i = 0; i < length; i++)
                 {
-                    var valid = !decimals.IsNull(i);
+                    var valid = !decimals.IsNull(startRow + i);
                     bitmapBuilder.Append(valid);
                     if (!valid) nullCount++;
                 }
-                validityBuffer = bitmapBuilder.Build();
+                validityBuffer = nullCount == 0 ? ArrowBuffer.Empty : bitmapBuilder.Build();
             }
 
             return new FixedSizeBinaryArray(
-                new ArrayData(BinaryDecimalType, count, nullCount, 0, [validityBuffer, valueBuffer]));
+                new ArrayData(BinaryDecimalType, length, nullCount, 0, [validityBuffer, valueBuffer]));
         }
 
-        private static Int64Array BuildInt64<T>(ColumnBuffer<T> column) where T : unmanaged
+        private static Int64Array BuildInt64<T>(ColumnBuffer<T> column, int startRow, int length) where T : unmanaged
         {
             var builder = new Int64Array.Builder();
-            for (var i = 0; i < column.Count; i++)
-                if (column.IsNull(i)) builder.AppendNull(); else builder.Append(Convert.ToInt64(column.Values.Span[i]));
+            var span = column.Values.Span;
+            for (var i = 0; i < length; i++)
+            {
+                var idx = startRow + i;
+                if (column.IsNull(idx)) builder.AppendNull(); else builder.Append(Convert.ToInt64(span[idx]));
+            }
             return builder.Build();
         }
 
@@ -1628,6 +1727,7 @@ public partial class SpillStore : ISpillStore
             finally
             {
                 _buffer.Clear();
+                _bufferedBytes = 0;
                 _arrowWriter?.Dispose();
                 try
                 {

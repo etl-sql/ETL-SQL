@@ -41,6 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       lanes: ${{ steps.impact.outputs.lanes }}
+      test_projects: ${{ steps.impact.outputs.test_projects }}
       browser_shards: ${{ steps.impact.outputs.browser_shards }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -80,6 +81,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $selection = Get-Content release-validation/preflight/ci-impact.json -Raw | ConvertFrom-Json
           "lanes=$($selection.lanes | ConvertTo-Json -Compress -AsArray)" >> $env:GITHUB_OUTPUT
+          "test_projects=$(ConvertTo-Json -InputObject @($selection.testProjects | Where-Object { $_ }) -Compress)" >> $env:GITHUB_OUTPUT
           "browser_shards=$($selection.browserShards | ConvertTo-Json -Compress -AsArray)" >> $env:GITHUB_OUTPUT
       - name: Prepare pinned workflow checker
         timeout-minutes: 13
@@ -103,7 +105,7 @@ jobs:
     if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
     name: Build Verification
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 135
 
     steps:
       - name: Checkout
@@ -167,8 +169,14 @@ jobs:
           DOTNET_GCHeapHardLimit: '200000000'
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-smoke.ps1 -ScriptArguments @('-Lane', 'all', '-ProjectGroup', 'engine', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/build/engine-smoke -TimeoutSeconds 1200
 
+      - name: Run engine regression tests (Pull Requests)
+        if: github.event_name == 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.test_projects || '["engine"]'), 'engine')
+        shell: pwsh
+        timeout-minutes: 45
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'engine', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-ResultsDirectory', 'release-validation/build/engine-regression') -EvidenceDirectory release-validation/build/engine-regression-process -TimeoutSeconds 2580
+
       - name: Run language server tests (Pull Requests)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.test_projects || '["language-server"]'), 'language-server')
         shell: pwsh
         timeout-minutes: 22
         env:
@@ -208,6 +216,11 @@ jobs:
         env:
           DOTNET_GCHeapHardLimit: '200000000'
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-smoke.ps1 -ScriptArguments @('-Lane', 'all', '-ProjectGroup', 'portal', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/portal-smoke/tests -TimeoutSeconds 1500
+      - name: Run Portal regression tests (Pull Requests)
+        if: github.event_name == 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.test_projects || '["portal"]'), 'portal')
+        shell: pwsh
+        timeout-minutes: 35
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'portal', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-ResultsDirectory', 'release-validation/portal-smoke/regression') -EvidenceDirectory release-validation/portal-smoke/regression-process -TimeoutSeconds 1980
       - name: Retain Portal smoke diagnostics
         if: always()
         timeout-minutes: 5

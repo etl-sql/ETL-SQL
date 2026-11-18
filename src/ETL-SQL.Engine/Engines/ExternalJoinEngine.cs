@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -200,7 +201,7 @@ public class ExternalJoinEngine
         PackedBuildTable? hashTable = null;
         try
         {
-            hashTable = await BuildJoinHashTable(rightName, rightKeys, new MemoryBudgetGuard(ceiling), buildLease);
+            hashTable = await BuildJoinHashTable(rightName, rightKeys, ceiling, buildLease);
         }
         catch
         {
@@ -253,7 +254,7 @@ public class ExternalJoinEngine
                 "Engine:MemoryGovernorPolicy = SpillOnly to churn to completion.");
 
             // SpillOnly churn: rebuild unguarded and continue.
-            hashTable = await BuildJoinHashTable(rightName, rightKeys, new MemoryBudgetGuard(0), lease: null);
+            hashTable = await BuildJoinHashTable(rightName, rightKeys, 0, lease: null);
         }
 
         // Build side is materialized in PackedBuildTable and its reader has closed; delete build partition before probing.
@@ -328,16 +329,16 @@ public class ExternalJoinEngine
     }
 
     /// <summary>
-    /// Builds the hash table from the (right) build side, holding each build row as a compact packed
-    /// <c>byte[]</c> (see <see cref="RowPacker"/>) rather than a fat <see cref="Row"/> object graph —
-    /// the dominant memory cost of a large hash-join build. Rows are decoded back to a <see cref="Row"/>
-    /// only on a probe-key match. Returns null if the accumulated build footprint (precise byte
-    /// accounting, using the exact blob lengths) crosses the governor ceiling mid-build, so the caller
-    /// can repartition or apply policy before any probe row has been emitted.
+    /// Builds the hash table from the (right) build side, packing each build row into budget-capped
+    /// pooled <c>byte[]</c> slabs rather than fat <see cref="Row"/> object graphs or per-row arrays.
+    /// Rows are decoded back to a <see cref="Row"/> only on a probe-key match. Returns null if the
+    /// accumulated build footprint crosses the governor ceiling mid-build, so the caller can
+    /// repartition or apply policy before any probe row has been emitted.
     /// </summary>
-    private async Task<PackedBuildTable?> BuildJoinHashTable(string rightName, List<string> rightKeys, MemoryBudgetGuard guard, IMemoryGrantLease? lease)
+    private async Task<PackedBuildTable?> BuildJoinHashTable(string rightName, List<string> rightKeys, long budgetBytes, IMemoryGrantLease? lease)
     {
-        var table = new PackedBuildTable();
+        var guard = new MemoryBudgetGuard(budgetBytes);
+        var table = new PackedBuildTable(budgetBytes);
         using var packer = new RowPacker();
         bool columnsCaptured = false;
         try
@@ -363,8 +364,8 @@ public class ExternalJoinEngine
                                 keyValues[keyIndex] = RowPacker.ReadBatchValue(batch, columnIndex, rowIndex);
                             }
                             var key = CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, keyValues);
-                            var blob = packer.Pack(batch, rowIndex);
-                            AddBuildRow(table, key, blob, guard);
+                            var (slotIdx, byteLength) = packer.PackInto(batch, rowIndex, table);
+                            table.IndexRow(key, slotIdx, byteLength, guard);
                             ColumnarBuildRows++;
                             if (guard.Exceeded() || (lease?.RegisterAndCheckSpill(guard.BytesAccumulated) == true))
                             {
@@ -388,8 +389,8 @@ public class ExternalJoinEngine
                 }
 
                 var key = GetHashKey(rightRow, rightKeys);
-                var blob = packer.Pack(rightRow, table.Columns);
-                AddBuildRow(table, key, blob, guard);
+                var (slotIdx, byteLength) = packer.PackInto(rightRow, table.Columns, table);
+                table.IndexRow(key, slotIdx, byteLength, guard);
                 if (guard.Exceeded() || (lease?.RegisterAndCheckSpill(guard.BytesAccumulated) == true))
                 {
                     table.Dispose();
@@ -405,24 +406,6 @@ public class ExternalJoinEngine
         }
     }
 
-    private static void AddBuildRow(
-        PackedBuildTable table,
-        CompoundKey key,
-        byte[] blob,
-        MemoryBudgetGuard guard)
-    {
-        int idx = table.Rows.Count;
-        table.Rows.Add(blob);
-        if (!table.Index.TryGetValue(key, out var bucket))
-        {
-            bucket = new List<int>();
-            table.Index[key] = bucket;
-            guard.Add(RowMemory.EstimateKeyBytes(key) + 48);
-        }
-        bucket.Add(idx);
-        guard.Add(blob.Length + 24);
-    }
-
     /// <summary>Streams the probe (left) side against a packed build table, emitting join results.</summary>
     private async IAsyncEnumerable<Row> ProbeJoin(
         string leftName, PackedBuildTable table, JoinClause join, List<string> leftKeys,
@@ -434,8 +417,8 @@ public class ExternalJoinEngine
         bool leftOnly = isSemi || isAnti;
         bool isLeftJoin = !leftOnly && (join.JoinType.Contains("LEFT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase));
         bool isRightJoin = !leftOnly && (join.JoinType.Contains("RIGHT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase));
-        // Track matched build rows by physical index (one bit per packed blob) for RIGHT/FULL outer.
-        var matched = isRightJoin ? new bool[table.Rows.Count] : null;
+        // Track matched build rows by physical index (one bit per packed slot) for RIGHT/FULL outer.
+        var matched = isRightJoin ? new bool[table.RowCount] : null;
 
         await using var leftReader = await _context.SpillStore.CreateReaderAsync(leftName);
         if (leftReader is IColumnarSpillReader columnarReader)
@@ -451,12 +434,12 @@ public class ExternalJoinEngine
                         var key = GetHashKey(batch, rowIndex, leftKeys);
                         bool producedMatch = false;
                         Row? left = null;
-                        if (table.Index.TryGetValue(key, out var matches))
+                        if (table.Index.TryGetValue(key, out var chain))
                         {
                             left = RowPacker.MaterializeBatchRow(batch, rowIndex);
-                            foreach (var idx in matches)
+                            for (var idx = chain.Head; idx >= 0; idx = table.GetNextInBucket(idx))
                             {
-                                var right = RowPacker.Unpack(table.Rows[idx], table.Columns);
+                                var right = table.UnpackRow(idx);
                                 var combined = CombineRows(left, right);
                                 if (await _context.EvaluateCondition(join.Condition, combined))
                                 {
@@ -486,11 +469,11 @@ public class ExternalJoinEngine
                 var key = GetHashKey(left, leftKeys);
                 bool producedMatch = false;
 
-                if (table.Index.TryGetValue(key, out var matches))
+                if (table.Index.TryGetValue(key, out var chain))
                 {
-                    foreach (var idx in matches)
+                    for (var idx = chain.Head; idx >= 0; idx = table.GetNextInBucket(idx))
                     {
-                        var right = RowPacker.Unpack(table.Rows[idx], table.Columns);
+                        var right = table.UnpackRow(idx);
                         var combined = CombineRows(left, right);
                         if (await _context.EvaluateCondition(join.Condition, combined))
                         {
@@ -513,11 +496,11 @@ public class ExternalJoinEngine
 
         if (isRightJoin && matched != null)
         {
-            for (int idx = 0; idx < table.Rows.Count; idx++)
+            for (int idx = 0; idx < table.RowCount; idx++)
             {
                 if (!matched[idx])
                 {
-                    var unmatched = CombineRows(null, RowPacker.Unpack(table.Rows[idx], table.Columns));
+                    var unmatched = CombineRows(null, table.UnpackRow(idx));
                     Shape.Complete(unmatched);
                     yield return unmatched;
                 }
@@ -552,7 +535,10 @@ public class ExternalJoinEngine
         {
             names[i] = $"{uniquePrefix}_{prefix}_{i}.tmp";
             tempFiles.Add(names[i]);
-            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
+            writers[i] = await _context.SpillStore.CreateWriterAsync(
+                names[i],
+                SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount),
+                SpillFanOut.FlushBytes(_context.EffectiveBatchTargetBytes, PartitionCount));
         }
 
         try
@@ -606,7 +592,10 @@ public class ExternalJoinEngine
         {
             names[i] = $"{uniquePrefix}_{prefix}_{i}.tmp";
             tempFiles.Add(names[i]);
-            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
+            writers[i] = await _context.SpillStore.CreateWriterAsync(
+                names[i],
+                SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount),
+                SpillFanOut.FlushBytes(_context.EffectiveBatchTargetBytes, PartitionCount));
         }
 
         try
@@ -693,25 +682,143 @@ public class ExternalJoinEngine
     private readonly record struct PartitionSet(string[] Names, long[] Counts);
 
     /// <summary>
-    /// The probe-side hash table: build rows held as compact packed blobs (<see cref="Rows"/>) with a
-    /// key index (<see cref="Index"/>) mapping each join key to the physical row indices that carry it.
+    /// The probe-side hash table: build rows held in budget-capped pooled <c>byte[]</c> slabs with
+    /// a pooled flat <see cref="RowSlot"/> index chaining duplicate keys in insertion order.
     /// <see cref="Columns"/> is the shared column order captured from the first build row, used to
-    /// decode a blob back into a <see cref="Row"/> on a probe match.
+    /// decode a slab slice back into a <see cref="Row"/> on a probe match.
     /// </summary>
-    private sealed class PackedBuildTable : IDisposable
+    internal sealed class PackedBuildTable : IDisposable
     {
+        internal const int MinSlabBytes = 4 * 1024;
+        internal const int MaxDefaultSlabBytes = 64 * 1024;
+        private const int InitialSlotCapacity = 64;
+
+        private sealed class Slab
+        {
+            public readonly byte[] Buffer;
+            public int Used;
+            public Slab(byte[] buffer) => Buffer = buffer;
+        }
+
+        internal struct RowSlot
+        {
+            public int SlabIndex;
+            public int Offset;
+            public int Length;
+            public int NextInBucket;
+        }
+
+        internal readonly record struct BucketChain(int Head, int Tail);
+
+        private readonly List<Slab> _slabs = new();
+        private RowSlot[] _rows;
+        private int _rowCount;
+        private bool _disposed;
+
         public readonly List<string> Columns = new();
-        public readonly List<byte[]> Rows = new();
-        public readonly Dictionary<CompoundKey, List<int>> Index = new();
+        public readonly Dictionary<CompoundKey, BucketChain> Index = new();
+        public int TargetSlabBytes { get; }
+
+        public PackedBuildTable(long budgetBytes = 0)
+        {
+            TargetSlabBytes = budgetBytes > 0
+                ? (int)Math.Clamp(budgetBytes / 4, MinSlabBytes, MaxDefaultSlabBytes)
+                : MaxDefaultSlabBytes;
+            _rows = ArrayPool<RowSlot>.Shared.Rent(InitialSlotCapacity);
+        }
+
+        public int RowCount => _rowCount;
+        public int SlabCount => _slabs.Count;
+
+        public (int RowIndex, int ByteLength) AppendRowBytes(byte[] source, int sourceOffset, int length)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            int slabIndex = _slabs.Count - 1;
+            if (slabIndex < 0 || length > _slabs[slabIndex].Buffer.Length - _slabs[slabIndex].Used)
+            {
+                int requestBytes = Math.Max(TargetSlabBytes, Math.Max(1, length));
+                _slabs.Add(new Slab(ArrayPool<byte>.Shared.Rent(requestBytes)));
+                slabIndex = _slabs.Count - 1;
+            }
+
+            var slab = _slabs[slabIndex];
+            int offset = slab.Used;
+            if (length > 0)
+            {
+                Buffer.BlockCopy(source, sourceOffset, slab.Buffer, offset, length);
+                slab.Used += length;
+            }
+
+            int rowIndex = _rowCount;
+            if (rowIndex == _rows.Length)
+            {
+                var grown = ArrayPool<RowSlot>.Shared.Rent(_rows.Length * 2);
+                Array.Copy(_rows, 0, grown, 0, _rowCount);
+                ArrayPool<RowSlot>.Shared.Return(_rows, clearArray: true);
+                _rows = grown;
+            }
+
+            _rows[rowIndex] = new RowSlot
+            {
+                SlabIndex = slabIndex,
+                Offset = offset,
+                Length = length,
+                NextInBucket = -1,
+            };
+            _rowCount++;
+            return (rowIndex, length);
+        }
+
+        public void IndexRow(CompoundKey key, int rowIndex, int blobLength, MemoryBudgetGuard guard)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (!Index.TryGetValue(key, out var chain))
+            {
+                Index[key] = new BucketChain(rowIndex, rowIndex);
+                guard.Add(RowMemory.EstimateKeyBytes(key) + 32);
+            }
+            else
+            {
+                _rows[chain.Tail].NextInBucket = rowIndex;
+                Index[key] = chain with { Tail = rowIndex };
+            }
+            guard.Add(blobLength + 16);
+        }
+
+        public Row UnpackRow(int rowIndex)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var slot = _rows[rowIndex];
+            return RowPacker.Unpack(_slabs[slot.SlabIndex].Buffer, slot.Offset, slot.Length, Columns);
+        }
+
+        public int GetNextInBucket(int rowIndex)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _rows[rowIndex].NextInBucket;
+        }
+
+        internal IReadOnlyList<(byte[] Buffer, int Used)> GetSlabBuffersForTests() =>
+            _slabs.Select(s => (s.Buffer, s.Used)).ToArray();
 
         public void Dispose()
         {
-            for (var i = 0; i < Rows.Count; i++)
+            if (_disposed) return;
+            _disposed = true;
+            for (var i = 0; i < _slabs.Count; i++)
             {
-                if (Rows[i] is { Length: > 0 } blob)
-                    CryptographicOperations.ZeroMemory(blob);
+                var slab = _slabs[i];
+                if (slab.Used > 0)
+                    CryptographicOperations.ZeroMemory(slab.Buffer.AsSpan(0, slab.Used));
+                ArrayPool<byte>.Shared.Return(slab.Buffer);
             }
-            Rows.Clear();
+            _slabs.Clear();
+            if (_rows != null)
+            {
+                ArrayPool<RowSlot>.Shared.Return(_rows, clearArray: true);
+                _rows = null!;
+            }
+            _rowCount = 0;
             Index.Clear();
             Columns.Clear();
         }

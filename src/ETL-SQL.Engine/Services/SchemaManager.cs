@@ -76,7 +76,8 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
                     stmt.Columns,
                     segmentRowCapacity: _evaluator.BatchSize,
                     memoryArbiter: ((IExecutionContext)_evaluator).MemoryArbiter,
-                    tableConstraints: stmt.TableConstraints);
+                    tableConstraints: stmt.TableConstraints,
+                    segmentByteCapacity: ((IExecutionContext)_evaluator).EffectiveBatchTargetBytes);
                 return;
             }
             var mem = new InMemoryDataSource();

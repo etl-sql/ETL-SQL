@@ -105,15 +105,27 @@ internal sealed class BatchPipelineHelper
     }
 
     /// <summary>
-    /// Decouples reading from writing using an asynchronous bounded channel.
-    /// Runs the source enumeration in a background thread and yields batches.
+    /// Decouples reading from writing using an asynchronous byte- and batch-bounded channel.
+    /// Splits oversized batches and blocks the producer when queued bytes exceed the budget.
     /// </summary>
     public async IAsyncEnumerable<DataTable> Buffer(
         IAsyncEnumerable<DataTable> source,
-        [EnumeratorCancellation] CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default,
+        long maxQueuedBytes = 0,
+        long targetBatchBytes = 0)
     {
-        // Buffer up to 4 batches (e.g. 40,000 rows by default) to allow background reading
-        var channel = System.Threading.Channels.Channel.CreateBounded<DataTable>(
+        long effectiveTargetBytes = targetBatchBytes > 0
+            ? targetBatchBytes
+            : ETL_SQL.Core.Spill.SpillFanOut.DefaultTargetBatchBytes;
+        long effectiveMaxQueuedBytes = maxQueuedBytes > 0
+            ? maxQueuedBytes
+            : effectiveTargetBytes <= long.MaxValue / 2 ? effectiveTargetBytes * 2 : long.MaxValue;
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var producerCt = linkedCts.Token;
+
+        // Bound both batch count (4) and total queued heap bytes so wide strings cannot outrun consumers.
+        var channel = System.Threading.Channels.Channel.CreateBounded<(DataTable Batch, long Bytes)>(
             new System.Threading.Channels.BoundedChannelOptions(4)
             {
                 SingleWriter = true,
@@ -121,13 +133,55 @@ internal sealed class BatchPipelineHelper
                 FullMode = System.Threading.Channels.BoundedChannelFullMode.Wait
             });
 
-        _ = Task.Run(async () =>
+        object gate = new();
+        long queuedBytes = 0;
+        int queuedBatches = 0;
+        TaskCompletionSource<bool>? spaceAvailable = null;
+
+        _ = System.Threading.Tasks.Task.Run(async () =>
         {
             try
             {
-                await foreach (var batch in source.WithCancellation(ct))
+                await foreach (var rawBatch in source.WithCancellation(producerCt))
                 {
-                    await channel.Writer.WriteAsync(batch, ct);
+                    foreach (var (subBatch, batchBytes) in SplitByByteBudget(rawBatch, effectiveTargetBytes))
+                    {
+                        while (true)
+                        {
+                            System.Threading.Tasks.Task? waitTask = null;
+                            lock (gate)
+                            {
+                                if (queuedBatches == 0 || queuedBytes + batchBytes <= effectiveMaxQueuedBytes)
+                                {
+                                    queuedBytes += batchBytes;
+                                    queuedBatches++;
+                                    break;
+                                }
+                                spaceAvailable ??= new System.Threading.Tasks.TaskCompletionSource<bool>(
+                                    System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+                                waitTask = spaceAvailable.Task;
+                            }
+                            await waitTask.WaitAsync(producerCt).ConfigureAwait(false);
+                        }
+
+                        try
+                        {
+                            await channel.Writer.WriteAsync((subBatch, batchBytes), producerCt).ConfigureAwait(false);
+                        }
+                        catch
+                        {
+                            System.Threading.Tasks.TaskCompletionSource<bool>? toRelease = null;
+                            lock (gate)
+                            {
+                                queuedBytes = Math.Max(0, queuedBytes - batchBytes);
+                                if (queuedBatches > 0) queuedBatches--;
+                                toRelease = spaceAvailable;
+                                spaceAvailable = null;
+                            }
+                            toRelease?.TrySetResult(true);
+                            throw;
+                        }
+                    }
                 }
                 channel.Writer.Complete();
             }
@@ -135,14 +189,65 @@ internal sealed class BatchPipelineHelper
             {
                 channel.Writer.Complete(ex);
             }
-        }, ct);
+        }, producerCt);
 
-        while (await channel.Reader.WaitToReadAsync(ct))
+        try
         {
-            while (channel.Reader.TryRead(out var batch))
+            while (await channel.Reader.WaitToReadAsync(ct))
             {
-                yield return batch;
+                while (channel.Reader.TryRead(out var item))
+                {
+                    System.Threading.Tasks.TaskCompletionSource<bool>? toRelease = null;
+                    lock (gate)
+                    {
+                        queuedBytes = Math.Max(0, queuedBytes - item.Bytes);
+                        if (queuedBatches > 0) queuedBatches--;
+                        toRelease = spaceAvailable;
+                        spaceAvailable = null;
+                    }
+                    toRelease?.TrySetResult(true);
+                    yield return item.Batch;
+                }
             }
         }
+        finally
+        {
+            linkedCts.Cancel();
+        }
+    }
+
+    private static IEnumerable<(DataTable Batch, long Bytes)> SplitByByteBudget(DataTable batch, long targetBatchBytes)
+    {
+        long totalBytes = EstimateBatchBytes(batch);
+        if (batch.Rows.Count <= 1 || targetBatchBytes <= 0 || totalBytes <= targetBatchBytes)
+        {
+            yield return (batch, totalBytes);
+            yield break;
+        }
+
+        var sub = new DataTable { Schema = batch.Schema };
+        long subBytes = 0;
+        foreach (var row in batch.Rows)
+        {
+            long rowBytes = row.EstimateHeapBytes();
+            if (sub.Rows.Count > 0 && subBytes + rowBytes > targetBatchBytes)
+            {
+                yield return (sub, subBytes);
+                sub = new DataTable { Schema = batch.Schema };
+                subBytes = 0;
+            }
+            sub.Rows.Add(row);
+            subBytes += rowBytes;
+        }
+        if (sub.Rows.Count > 0)
+            yield return (sub, subBytes);
+    }
+
+    private static long EstimateBatchBytes(DataTable batch)
+    {
+        long total = 0;
+        foreach (var row in batch.Rows)
+            total += row.EstimateHeapBytes();
+        return total;
     }
 }

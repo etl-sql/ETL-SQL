@@ -13,6 +13,7 @@ public interface ITrackedChildProcess : IDisposable
 {
     bool HasExited { get; }
     ChildProcessIdentity Identity { get; }
+    long WorkingSetBytes => 0;
     void Kill();
 }
 
@@ -40,6 +41,21 @@ internal sealed class TrackedChildProcessFactory : ITrackedChildProcessFactory
         public bool HasExited => _process.HasExited;
         public ChildProcessIdentity Identity => new(_process.StartTime.ToUniversalTime().Ticks,
             GetExecutablePath(_process));
+        public long WorkingSetBytes
+        {
+            get
+            {
+                try
+                {
+                    _process.Refresh();
+                    return _process.HasExited ? 0L : Math.Max(0L, _process.WorkingSet64);
+                }
+                catch
+                {
+                    return 0L;
+                }
+            }
+        }
         public void Kill() => _process.Kill(entireProcessTree: true);
         public void Dispose() => _process.Dispose();
 

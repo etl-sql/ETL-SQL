@@ -11,6 +11,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Engines;
 using ETL_SQL.Engine.Planning;
+using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -394,6 +395,57 @@ namespace ETL_SQL.Tests.Operations.Operations
                     new List<string> { "id" }).ToListAsync();
             });
             Assert.Empty(Directory.GetFiles(eval.SpillStore.RootPath, "*.tmp"));
+        }
+
+        [Fact]
+        public void PackedBuildTable_UsesBudgetCappedPooledSlabsFlatBucketChainsAndZeroesOnDispose()
+        {
+            const long budgetBytes = 16 * 1024;
+            var table = new ExternalJoinEngine.PackedBuildTable(budgetBytes);
+            Assert.Equal(ExternalJoinEngine.PackedBuildTable.MinSlabBytes, table.TargetSlabBytes);
+            Assert.Equal(4096, table.TargetSlabBytes);
+
+            var columns = new[] { "Key", "SecretPayload" };
+            table.Columns.AddRange(columns);
+            var guard = new MemoryBudgetGuard(budgetBytes);
+            using var packer = new RowPacker();
+
+            var dupKey = CompoundKey.CreateJoinKey(caseSensitive: false, new object?[] { "dup" });
+            var soloKey = CompoundKey.CreateJoinKey(caseSensitive: false, new object?[] { "solo" });
+
+            var expectedDupSecrets = new List<string>();
+            for (int i = 0; i < 40; i++)
+            {
+                string secret = $"SECRET_SLAB_ROW_{i:D2}_PAYLOAD";
+                var key = i % 10 == 0 ? soloKey : dupKey;
+                if (i % 10 != 0) expectedDupSecrets.Add(secret);
+                var row = new Row { ["Key"] = i % 10 == 0 ? "solo" : "dup", ["SecretPayload"] = secret };
+                var (rowIdx, byteLen) = packer.PackInto(row, columns, table);
+                table.IndexRow(key, rowIdx, byteLen, guard);
+            }
+
+            Assert.Equal(40, table.RowCount);
+            Assert.True(table.SlabCount >= 1 && table.SlabCount < table.RowCount,
+                $"Expected multiple rows packed per slab, saw {table.SlabCount} slabs for {table.RowCount} rows.");
+
+            var chain = table.Index[dupKey];
+            var observedDupSecrets = new List<string?>();
+            for (int idx = chain.Head; idx >= 0; idx = table.GetNextInBucket(idx))
+                observedDupSecrets.Add(table.UnpackRow(idx)["SecretPayload"]?.ToString());
+
+            Assert.Equal(expectedDupSecrets, observedDupSecrets);
+
+            var slabs = table.GetSlabBuffersForTests();
+            Assert.Contains(slabs, slab => slab.Used > 0 && slab.Buffer.AsSpan(0, slab.Used).IndexOf((byte)'S') >= 0);
+
+            table.Dispose();
+            Assert.Equal(0, table.RowCount);
+            Assert.Equal(0, table.SlabCount);
+            foreach (var slab in slabs)
+            {
+                for (int i = 0; i < slab.Used; i++)
+                    Assert.Equal((byte)0, slab.Buffer[i]);
+            }
         }
     }
 }

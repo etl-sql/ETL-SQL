@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi" xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
     <Product Id="*" Name="ETL-SQL" Language="1033" Version="$(var.ProductVersion)" Manufacturer="Charles Clemens" UpgradeCode="7e3da743-19a2-463e-a794-b9fb9a1757e1">
         <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="x64" />
 
@@ -7,17 +7,8 @@
              it shut down the runner host's own provjobd, which reads newly installed files for about a
              minute, and the runner was lost: a quick uninstall lost 4 of 6 runners by default and 0 of
              6 with this property (2026-11-07). DisableShutdown does not stop the shutdown in silent
-             mode, so it is not enough. ServiceControl stops our services and the CloseApplication
-             entries below close our own programs. -->
+             mode, so it is not enough. ServiceControl (Stop="both" Wait="yes") stops our services. -->
         <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" Secure="yes" />
-
-        <!-- Close running applications to avoid locked files during upgrade/install -->
-        <util:CloseApplication Id="CloseLSP" Target="ETL-SQL-LSP.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
-        <util:CloseApplication Id="CloseCLI" Target="ETL-SQL.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
-        <util:CloseApplication Id="CloseReport" Target="ETL-SQL-Report.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
-        <util:CloseApplication Id="ClosePlayer" Target="ETL-SQL-Player.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
-        <util:CloseApplication Id="CloseService" Target="ETL-SQL-Service.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
-        <util:CloseApplication Id="ClosePortal" Target="ETL-SQL-Portal.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
 
         <!-- Default schedule (afterInstallValidate). RemoveExistingProducts must directly follow
              InstallValidate or InstallInitialize (error 2613), so the installed configuration is

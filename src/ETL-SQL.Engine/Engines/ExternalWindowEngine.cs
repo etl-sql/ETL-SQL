@@ -1699,7 +1699,10 @@ public class ExternalWindowEngine
         for (int i = 0; i < PartitionCount; i++)
         {
             names[i] = $"win_part_{Guid.NewGuid():N}.tmp";
-            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
+            writers[i] = await _context.SpillStore.CreateWriterAsync(
+                names[i],
+                SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount),
+                SpillFanOut.FlushBytes(_context.EffectiveBatchTargetBytes, PartitionCount));
         }
 
         try

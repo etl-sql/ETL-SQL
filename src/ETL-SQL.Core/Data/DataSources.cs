@@ -970,6 +970,8 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
         }
         finally { _lock.Release(); }
 
+        long targetBytes = ExecutionContext?.EffectiveBatchTargetBytes ?? ETL_SQL.Core.Spill.SpillFanOut.DefaultTargetBatchBytes;
+
         if (ExecutionContext != null)
         {
             foreach (var spillName in chunks)
@@ -981,15 +983,18 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                 await using var reader = await ExecutionContext.SpillStore.CreateReaderAsync(spillName);
                 var batch = new DataTable();
                 batch.SetColumns(_columnOrder);
+                long batchBytes = 0;
 
                 await foreach (var row in reader.AsEnumerableAsync().WithCancellation(cancellationToken))
                 {
                     await batch.AddRowAsync(row);
-                    if (batch.Rows.Count >= batchSize)
+                    batchBytes += row.EstimateHeapBytes();
+                    if (batch.Rows.Count >= batchSize || (targetBytes > 0 && batchBytes >= targetBytes))
                     {
                         yield return batch;
                         batch = new DataTable();
                         batch.SetColumns(_columnOrder);
+                        batchBytes = 0;
                     }
                 }
 
@@ -1004,7 +1009,28 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
         foreach (var b in memoryCopy)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            yield return b;
+            if (b.Rows.Count > 1 && (b.Rows.Count > batchSize || (targetBytes > 0 && EstimateResidentMemoryBytes(b) > targetBytes)))
+            {
+                var sub = new DataTable { Schema = b.Schema };
+                long subBytes = 0;
+                foreach (var row in b.Rows)
+                {
+                    sub.Rows.Add(row);
+                    subBytes += row.EstimateHeapBytes();
+                    if (sub.Rows.Count >= batchSize || (targetBytes > 0 && subBytes >= targetBytes))
+                    {
+                        yield return sub;
+                        sub = new DataTable { Schema = b.Schema };
+                        subBytes = 0;
+                    }
+                }
+                if (sub.Rows.Count > 0)
+                    yield return sub;
+            }
+            else
+            {
+                yield return b;
+            }
         }
     }
 

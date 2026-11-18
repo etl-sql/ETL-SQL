@@ -20,21 +20,37 @@ namespace ETL_SQL.Orchestrator.Execution
     ///
     /// Thread-safety: all operations are protected by a ConcurrentDictionary.
     /// </summary>
-    public class ChildProcessTracker
+    public class ChildProcessTracker : IDisposable
     {
         private readonly string _persistPath;
         private readonly ILogger<ChildProcessTracker> _logger;
         private readonly ConcurrentDictionary<int, PersistedPid> _active = new();
         private readonly ITrackedChildProcessFactory _processes;
         private readonly object _storeLock = new();
+        private readonly object _sweepLock = new();
         private readonly string _owner = $"{Environment.MachineName}/{Environment.UserDomainName}/{Environment.UserName}";
+        private long _lastSweepUtcTicks;
+        private int _sweepPending;
+        private int _sweepInFlight;
+        private int _sweepExecutionCount;
+        private bool _timerArmed;
+        private bool _disposed;
+        private Timer? _coalesceTimer;
+
+        /// <summary>Minimum interval between spill-directory sweeps triggered by exiting child processes.</summary>
+        public TimeSpan SweepCoalesceInterval { get; set; } = TimeSpan.FromSeconds(5);
+
+        internal string? SpillParentOverride { get; set; }
+        internal int SweepExecutionCount => Volatile.Read(ref _sweepExecutionCount);
 
         public ChildProcessTracker(ILogger<ChildProcessTracker> logger, string? persistPath = null,
-            ITrackedChildProcessFactory? processes = null)
+            ITrackedChildProcessFactory? processes = null, TimeSpan? sweepCoalesceInterval = null)
         {
             _logger = logger;
             _persistPath = Path.GetFullPath(persistPath ?? Path.Combine("logs", "child-pids.json"));
             _processes = processes ?? new TrackedChildProcessFactory();
+            if (sweepCoalesceInterval.HasValue)
+                SweepCoalesceInterval = sweepCoalesceInterval.Value;
         }
 
         /// <summary>
@@ -47,7 +63,7 @@ namespace ETL_SQL.Orchestrator.Execution
             finally
             {
                 // After the kill: a root belongs to a dead owner only once that owner is dead.
-                SweepTempSpillDirectories();
+                ExecuteSpillSweep(forceTimestampUpdate: true);
             }
         }
 
@@ -111,7 +127,7 @@ namespace ETL_SQL.Orchestrator.Execution
         }
 
         /// <summary>Records a newly spawned child process.</summary>
-        public void Register(int pid, string scriptPath)
+        public void Register(int pid, string scriptPath, long reservedMemoryBytes = 0, bool backedByBufferManager = false)
         {
             try
             {
@@ -119,7 +135,13 @@ namespace ETL_SQL.Orchestrator.Execution
                 if (process.HasExited) return;
                 // Ownership is established by the executor's registration of its newly spawned
                 // child, bound to this service account and the exact creation/executable identity.
-                _active[pid] = new PersistedPid(pid, scriptPath, process.Identity, _owner);
+                _active[pid] = new PersistedPid(
+                    pid,
+                    scriptPath,
+                    process.Identity,
+                    _owner,
+                    Math.Max(0L, reservedMemoryBytes),
+                    backedByBufferManager);
                 Persist();
             }
             catch (ArgumentException) { /* Child exited before registration. */ }
@@ -134,12 +156,70 @@ namespace ETL_SQL.Orchestrator.Execution
         {
             _active.TryRemove(pid, out _);
             Persist();
-            // A child that crashed or was killed cannot delete its own spill root.
-            SweepTempSpillDirectories();
+            // A child that crashed or was killed cannot delete its own spill root; coalesce
+            // sweeps during exit bursts so unregistering workers do not repeatedly walk %TEMP%.
+            RequestCoalescedSpillSweep();
         }
 
         /// <summary>Returns the number of currently tracked active child processes.</summary>
         public int ActiveCount => _active.Count;
+
+        /// <summary>
+        /// Returns total memory reserved or held across all live tracked child workers.
+        /// </summary>
+        public long GetAggregateWorkerMemoryBytes() => ComputeWorkerMemoryBytes(unaccountedOnly: false);
+
+        /// <summary>
+        /// Returns worker memory not already reserved in the host's <see cref="BufferManager"/>
+        /// (plus any live working-set excess beyond a worker's reservation).
+        /// </summary>
+        public long GetUnaccountedWorkerMemoryBytes() => ComputeWorkerMemoryBytes(unaccountedOnly: true);
+
+        private long ComputeWorkerMemoryBytes(bool unaccountedOnly)
+        {
+            long total = 0;
+            foreach (var entry in _active.Values)
+            {
+                long workingSet = 0;
+                try
+                {
+                    if (entry.Identity is null)
+                        continue;
+
+                    using var process = _processes.Open(entry.Pid);
+                    if (process.HasExited)
+                        continue;
+
+                    var identity = process.Identity;
+                    if (identity.StartedUtcTicks != entry.Identity.StartedUtcTicks
+                        || !string.Equals(identity.ExecutablePath, entry.Identity.ExecutablePath,
+                            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    workingSet = Math.Max(0L, process.WorkingSetBytes);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                long contribution;
+                if (unaccountedOnly && entry.BackedByBufferManager)
+                {
+                    contribution = Math.Max(0L, workingSet - entry.ReservedMemoryBytes);
+                }
+                else
+                {
+                    contribution = Math.Max(entry.ReservedMemoryBytes, workingSet);
+                }
+
+                total = checked(total + contribution);
+            }
+
+            return total;
+        }
 
         private void Persist()
         {
@@ -164,8 +244,108 @@ namespace ETL_SQL.Orchestrator.Execution
             }
         }
 
+        private void RequestCoalescedSpillSweep()
+        {
+            var interval = SweepCoalesceInterval;
+            if (interval <= TimeSpan.Zero)
+            {
+                ExecuteSpillSweep(forceTimestampUpdate: true);
+                return;
+            }
+
+            long nowTicks = DateTime.UtcNow.Ticks;
+            bool runNow = false;
+            lock (_sweepLock)
+            {
+                if (_disposed)
+                    return;
+
+                long elapsedTicks = nowTicks - _lastSweepUtcTicks;
+                if ((_lastSweepUtcTicks == 0 || elapsedTicks >= interval.Ticks)
+                    && Volatile.Read(ref _sweepInFlight) == 0)
+                {
+                    _lastSweepUtcTicks = nowTicks;
+                    Volatile.Write(ref _sweepPending, 0);
+                    runNow = true;
+                }
+                else
+                {
+                    Volatile.Write(ref _sweepPending, 1);
+                    if (!_timerArmed)
+                    {
+                        var delay = _lastSweepUtcTicks == 0 || elapsedTicks >= interval.Ticks
+                            ? TimeSpan.FromMilliseconds(50)
+                            : TimeSpan.FromTicks(Math.Max(TimeSpan.TicksPerMillisecond, interval.Ticks - elapsedTicks));
+                        _coalesceTimer ??= new Timer(OnCoalesceTimer, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+                        _coalesceTimer.Change(delay, Timeout.InfiniteTimeSpan);
+                        _timerArmed = true;
+                    }
+                }
+            }
+
+            if (runNow)
+                ExecuteSpillSweep(forceTimestampUpdate: false);
+        }
+
+        private void OnCoalesceTimer(object? _)
+        {
+            lock (_sweepLock)
+            {
+                _timerArmed = false;
+                if (_disposed || Interlocked.Exchange(ref _sweepPending, 0) == 0)
+                    return;
+                _lastSweepUtcTicks = DateTime.UtcNow.Ticks;
+            }
+
+            ExecuteSpillSweep(forceTimestampUpdate: false);
+        }
+
+        internal void FlushCoalescedSweep()
+        {
+            bool hadPending;
+            lock (_sweepLock)
+            {
+                _timerArmed = false;
+                _coalesceTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+                hadPending = Interlocked.Exchange(ref _sweepPending, 0) != 0;
+                if (hadPending)
+                    _lastSweepUtcTicks = DateTime.UtcNow.Ticks;
+            }
+
+            if (hadPending)
+                ExecuteSpillSweep(forceTimestampUpdate: false);
+        }
+
+        private void ExecuteSpillSweep(bool forceTimestampUpdate)
+        {
+            if (Interlocked.CompareExchange(ref _sweepInFlight, 1, 0) != 0)
+            {
+                Volatile.Write(ref _sweepPending, 1);
+                return;
+            }
+
+            try
+            {
+                if (forceTimestampUpdate)
+                {
+                    lock (_sweepLock)
+                        _lastSweepUtcTicks = DateTime.UtcNow.Ticks;
+                }
+
+                SweepTempSpillDirectories();
+                Interlocked.Increment(ref _sweepExecutionCount);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _sweepInFlight, 0);
+            }
+        }
+
         private void SweepTempSpillDirectories() =>
-            SweepSpillRoots(Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill"), TimeSpan.FromHours(24), _logger);
+            SweepSpillRoots(
+                SpillParentOverride ?? Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill"),
+                TimeSpan.FromHours(24),
+                _logger);
 
         /// <summary>
         /// Removes disposable spill roots under <paramref name="spillParent"/> whose owning process is
@@ -222,6 +402,25 @@ namespace ETL_SQL.Orchestrator.Execution
             return pruned;
         }
 
-        private record PersistedPid(int Pid, string ScriptPath, ChildProcessIdentity? Identity = null, string? Owner = null);
+        public void Dispose()
+        {
+            lock (_sweepLock)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                _timerArmed = false;
+                _sweepPending = 0;
+                _coalesceTimer?.Dispose();
+                _coalesceTimer = null;
+            }
+        }
+
+        private record PersistedPid(
+            int Pid,
+            string ScriptPath,
+            ChildProcessIdentity? Identity = null,
+            string? Owner = null,
+            long ReservedMemoryBytes = 0,
+            bool BackedByBufferManager = false);
     }
 }

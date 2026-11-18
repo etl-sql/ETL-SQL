@@ -57,6 +57,12 @@ public interface ISpillStore : IDisposable
     /// <see cref="SpillFanOut.FlushRows"/>.
     /// </summary>
     Task<ISpillWriter> CreateWriterAsync(string chunkName, int flushBatchRows) => CreateWriterAsync(chunkName);
+    /// <summary>
+    /// Creates a writer that flushes when buffered rows reach <paramref name="flushBatchRows"/> or
+    /// buffered heap bytes reach <paramref name="flushBatchBytes"/>.
+    /// </summary>
+    Task<ISpillWriter> CreateWriterAsync(string chunkName, int flushBatchRows, long flushBatchBytes)
+        => CreateWriterAsync(chunkName, flushBatchRows);
     Task<ISpillReader> CreateReaderAsync(string chunkName);
     /// <summary>Deletes a specific chunk from the store.</summary>
     void DeleteChunk(string chunkName);

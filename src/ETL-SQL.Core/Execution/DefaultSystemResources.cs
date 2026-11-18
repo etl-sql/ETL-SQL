@@ -48,33 +48,113 @@ public class DefaultSystemResources : ISystemResources
 
     public long GetTotalMemoryBytes() => GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
 
+    /// <summary>
+    /// Computes effective memory load % (0–100) using host OS memory, Linux cgroup limits, and the
+    /// current process's working set against any configured GC heap cap so a per-process
+    /// <c>GCHeapHardLimit</c> smaller than physical host RAM does not read whole-host usage as 100%.
+    /// </summary>
+    public static double GetMemoryLoadPercent(long processWorkingSetBytes = 0)
+    {
+        var gcInfo = GC.GetGCMemoryInfo();
+        TryGetHostMemoryStats(out var hostTotal, out var hostAvailable);
+        long? cgroupLimit = null;
+        long? cgroupHeadroom = null;
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            TryGetLinuxCgroupStats(out cgroupLimit, out cgroupHeadroom);
+
+        long effectiveWorkingSet = processWorkingSetBytes > 0
+            ? processWorkingSetBytes
+            : Environment.WorkingSet;
+
+        return ComputeMemoryLoadPercent(
+            hostTotal,
+            hostAvailable,
+            cgroupLimit,
+            cgroupHeadroom,
+            gcInfo.TotalAvailableMemoryBytes,
+            gcInfo.MemoryLoadBytes,
+            effectiveWorkingSet);
+    }
+
+    internal static double ComputeMemoryLoadPercent(
+        long? hostTotalBytes,
+        long? hostAvailableBytes,
+        long? cgroupLimitBytes,
+        long? cgroupHeadroomBytes,
+        long gcTotalAvailableBytes,
+        long gcMemoryLoadBytes,
+        long processWorkingSetBytes)
+    {
+        double load = 0.0;
+        if (hostTotalBytes is > 0 && hostAvailableBytes is >= 0)
+        {
+            double hostLoad = (hostTotalBytes.Value - hostAvailableBytes.Value) * 100.0 / hostTotalBytes.Value;
+            load = Math.Max(load, Math.Clamp(hostLoad, 0.0, 100.0));
+        }
+
+        if (cgroupLimitBytes is > 0 && cgroupHeadroomBytes is >= 0)
+        {
+            double cgroupLoad = (cgroupLimitBytes.Value - cgroupHeadroomBytes.Value) * 100.0 / cgroupLimitBytes.Value;
+            load = Math.Max(load, Math.Clamp(cgroupLoad, 0.0, 100.0));
+        }
+
+        if (gcTotalAvailableBytes > 0)
+        {
+            long boundedWorkingSet = Math.Max(0L, processWorkingSetBytes);
+            long processOrFallbackUsed = (hostTotalBytes is > 0 || cgroupLimitBytes is > 0 || gcMemoryLoadBytes > gcTotalAvailableBytes)
+                ? boundedWorkingSet
+                : Math.Max(gcMemoryLoadBytes, boundedWorkingSet);
+            double processLoad = processOrFallbackUsed * 100.0 / gcTotalAvailableBytes;
+            load = Math.Max(load, Math.Clamp(processLoad, 0.0, 100.0));
+        }
+
+        return Math.Clamp(load, 0.0, 100.0);
+    }
+
     private static long? TryGetHostAvailableBytes()
     {
+        TryGetHostMemoryStats(out _, out var available);
+        return available;
+    }
+
+    private static void TryGetHostMemoryStats(out long? totalBytes, out long? availableBytes)
+    {
+        totalBytes = null;
+        availableBytes = null;
         try
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 var status = MEMORYSTATUSEX.Create();
                 if (GlobalMemoryStatusEx(ref status))
-                    return (long)Math.Min(status.ullAvailPhys, (ulong)long.MaxValue);
+                {
+                    totalBytes = (long)Math.Min(status.ullTotalPhys, (ulong)long.MaxValue);
+                    availableBytes = (long)Math.Min(status.ullAvailPhys, (ulong)long.MaxValue);
+                }
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 const string memInfoPath = "/proc/meminfo";
                 if (File.Exists(memInfoPath))
-                    return ParseProcMemInfoAvailableBytes(File.ReadAllText(memInfoPath));
+                    ParseProcMemInfoStats(File.ReadAllText(memInfoPath), out totalBytes, out availableBytes);
             }
         }
         catch
         {
             // Fall through to GC-based headroom estimate.
         }
-
-        return null;
     }
 
     private static long? TryGetLinuxCgroupHeadroomBytes()
     {
+        TryGetLinuxCgroupStats(out _, out var headroom);
+        return headroom;
+    }
+
+    private static void TryGetLinuxCgroupStats(out long? limitBytes, out long? headroomBytes)
+    {
+        limitBytes = null;
+        headroomBytes = null;
         try
         {
             const string v2MaxPath = "/sys/fs/cgroup/memory.max";
@@ -86,8 +166,12 @@ public class DefaultSystemResources : ISystemResources
                 var curText = File.ReadAllText(v2CurPath);
                 var statText = File.Exists(v2StatPath) ? File.ReadAllText(v2StatPath) : null;
                 var headroom = ComputeCgroupV2Headroom(maxText, curText, statText);
-                if (headroom.HasValue)
-                    return headroom.Value;
+                if (headroom.HasValue && TryParseBoundedCgroupLimit(maxText, out var v2Limit))
+                {
+                    limitBytes = v2Limit;
+                    headroomBytes = headroom.Value;
+                    return;
+                }
             }
 
             const string v1LimitPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes";
@@ -99,23 +183,44 @@ public class DefaultSystemResources : ISystemResources
                 var usageText = File.ReadAllText(v1UsagePath);
                 var statText = File.Exists(v1StatPath) ? File.ReadAllText(v1StatPath) : null;
                 var headroom = ComputeCgroupV1Headroom(limitText, usageText, statText);
-                if (headroom.HasValue)
-                    return headroom.Value;
+                if (headroom.HasValue && TryParseBoundedCgroupLimit(limitText, out var v1Limit))
+                {
+                    limitBytes = v1Limit;
+                    headroomBytes = headroom.Value;
+                }
             }
         }
         catch
         {
             // Best effort; fallback uses /proc/meminfo or GC.
         }
+    }
 
-        return null;
+    private static bool TryParseBoundedCgroupLimit(string text, out long limitBytes)
+    {
+        limitBytes = 0;
+        var trimmed = text.Trim();
+        if (string.Equals(trimmed, "max", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return long.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out limitBytes)
+            && limitBytes > 0
+            && limitBytes < UnlimitedSentinelBytes;
     }
 
     internal static long? ParseProcMemInfoAvailableBytes(string memInfoContent)
     {
-        if (string.IsNullOrWhiteSpace(memInfoContent))
-            return null;
+        ParseProcMemInfoStats(memInfoContent, out _, out var available);
+        return available;
+    }
 
+    internal static void ParseProcMemInfoStats(string memInfoContent, out long? totalBytes, out long? availableBytes)
+    {
+        totalBytes = null;
+        availableBytes = null;
+        if (string.IsNullOrWhiteSpace(memInfoContent))
+            return;
+
+        long? memTotalKb = null;
         long? memAvailableKb = null;
         long memFreeKb = 0;
         long buffersKb = 0;
@@ -127,7 +232,12 @@ public class DefaultSystemResources : ISystemResources
             var line = rawLine.Trim();
             if (line.Length == 0) continue;
 
-            if (line.StartsWith("MemAvailable:", StringComparison.Ordinal))
+            if (line.StartsWith("MemTotal:", StringComparison.Ordinal))
+            {
+                if (TryParseMemInfoKb(line, out var kb))
+                    memTotalKb = kb;
+            }
+            else if (line.StartsWith("MemAvailable:", StringComparison.Ordinal))
             {
                 if (TryParseMemInfoKb(line, out var kb))
                     memAvailableKb = kb;
@@ -146,12 +256,13 @@ public class DefaultSystemResources : ISystemResources
             }
         }
 
-        if (memAvailableKb.HasValue)
-            return Math.Max(0L, checked(memAvailableKb.Value * 1024L));
+        if (memTotalKb.HasValue)
+            totalBytes = Math.Max(0L, checked(memTotalKb.Value * 1024L));
 
-        return hasFallback
-            ? Math.Max(0L, checked((memFreeKb + buffersKb + cachedKb) * 1024L))
-            : null;
+        if (memAvailableKb.HasValue)
+            availableBytes = Math.Max(0L, checked(memAvailableKb.Value * 1024L));
+        else if (hasFallback)
+            availableBytes = Math.Max(0L, checked((memFreeKb + buffersKb + cachedKb) * 1024L));
     }
 
     private static bool TryParseMemInfoKb(string line, out long kb)

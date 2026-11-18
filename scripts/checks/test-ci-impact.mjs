@@ -96,6 +96,38 @@ const noFallback = { ...manifest, rules: manifest.rules.slice(0, -1) };
 assert.deepEqual(selectLanes(['unmapped.file'], { policy: noFallback }).lanes, all);
 assert.equal(selectLanes(['unmapped.file'], { policy: noFallback }).nativePackages, true);
 
+assert.deepEqual(manifest.testProjects, ['engine', 'portal', 'language-server']);
+for (const file of ['TODO.md', 'src/etl-sql-vscode/src/extension.ts', 'tests/ETL-SQL.Portal.BrowserTests/Journey.cs', ...msiOnlyPaths]) {
+  assert.deepEqual(selectLanes([file]).testProjects, [], file);
+}
+const lsTestResult = selectLanes(['tests/ETL-SQL.LanguageServer.Tests/HoverTests.cs']);
+assert.deepEqual(lsTestResult.lanes, ['source-preflight', 'build-and-test']);
+assert.equal(lsTestResult.nativePackages, false);
+assert.deepEqual(lsTestResult.testProjects, ['language-server']);
+const lsSrcResult = selectLanes(['src/ETL-SQL.LanguageServer/Program.cs']);
+assert.deepEqual(lsSrcResult.lanes, all);
+assert.deepEqual(lsSrcResult.testProjects, ['language-server']);
+
+const portalTestResult = selectLanes(['tests/ETL-SQL.Portal.Tests/CatalogTests.cs']);
+assert.deepEqual(portalTestResult.lanes, ['source-preflight', 'build-and-test', 'enterprise-certification', 'docker-integration-tests']);
+assert.equal(portalTestResult.nativePackages, false);
+assert.deepEqual(portalTestResult.testProjects, ['portal']);
+const portalSrcResult = selectLanes(['src/ETL-SQL.Portal/Controllers/ReportsController.cs']);
+assert.deepEqual(portalSrcResult.lanes, all);
+assert.deepEqual(portalSrcResult.testProjects, ['portal']);
+assert.deepEqual(selectLanes(['src/ETL-SQL.Portal/BrowserSources/editor.ts']).testProjects, ['engine', 'portal', 'language-server']);
+
+const engineTestResult = selectLanes(['tests/ETL-SQL.Tests/Core/ParserTests.cs']);
+assert.deepEqual(engineTestResult.lanes, ['source-preflight', 'build-and-test', 'enterprise-certification', 'docker-integration-tests', 'engine-certification']);
+assert.equal(engineTestResult.nativePackages, false);
+assert.deepEqual(engineTestResult.testProjects, ['engine']);
+assert.deepEqual(selectLanes(['src/ETL-SQL.Core/Ast.cs']).testProjects, ['engine', 'portal', 'language-server']);
+assert.deepEqual(selectLanes(['TODO.md'], { full: true }).testProjects, ['engine', 'portal', 'language-server']);
+assert.deepEqual(selectLanes([], { lanes: ['build-and-test'] }).testProjects, ['engine', 'portal', 'language-server']);
+assert.deepEqual(selectLanes([], { lanes: ['build-vscode'] }).testProjects, []);
+assert.throws(() => validateManifest({ ...manifest, testProjects: ['Engine'] }), /Invalid CI impact test projects/);
+assert.throws(() => validateManifest({ ...manifest, testProjectRules: [{ name: 'bad', pattern: '^', projects: ['unknown'] }] }), /Invalid CI impact test project rule/);
+
 // Bind path selection to the actual job conditions, including the independent consumer lane.
 const ciSource = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const browserJob = ciSource.split(/^  portal-browser-journey:\r?\n/m)[1].split(/^  [\w-]+:\r?\n/m)[0];
@@ -131,6 +163,35 @@ for (const selection of [selectLanes(msiOnlyPaths), selectLanes(['src/etl-sql-vs
         github: { event_name: event }, always: () => true, fromJSON: JSON.parse, contains: (items, value) => items.includes(value) }, { timeout: 1000 });
       const excludedOnPr = event === 'pull_request' && ['enterprise-certification', 'docker-integration-tests'].includes(lane);
       assert.equal(selected, selection.lanes.includes(lane) && !excludedOnPr, `${lane}/${event}`);
+    }
+  }
+}
+
+const buildJob = ciSource.split(/^  build-verification:\r?\n/m)[1].split(/^  [\w-]+:\r?\n/m)[0];
+const portalJob = ciSource.split(/^  portal-smoke:\r?\n/m)[1].split(/^  [\w-]+:\r?\n/m)[0];
+const stepIf = (jobBlock, stepName) => {
+  const stepBlock = jobBlock.split(`      - name: ${stepName}`)[1]?.split(/^      - /m)[0];
+  assert.ok(stepBlock, `Missing workflow step: ${stepName}`);
+  const match = stepBlock.match(/^        if: (.+)$/m);
+  assert.ok(match, `Missing condition on workflow step: ${stepName}`);
+  return match[1].replaceAll('needs.source-preflight', 'needs.source');
+};
+const prSteps = [
+  [stepIf(buildJob, 'Run engine regression tests (Pull Requests)'), 'engine'],
+  [stepIf(buildJob, 'Run language server tests (Pull Requests)'), 'language-server'],
+  [stepIf(portalJob, 'Run Portal regression tests (Pull Requests)'), 'portal'],
+];
+for (const [expression, project] of prSteps) {
+  for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
+    for (const selectedProjects of ['', '[]', '["language-server"]', '["portal"]', '["engine"]', '["engine","portal","language-server"]']) {
+      const actual = runInNewContext(expression, {
+        needs: { source: { outputs: { test_projects: selectedProjects } } },
+        github: { event_name: event },
+        fromJSON: JSON.parse,
+        contains: (items, value) => items.includes(value),
+      }, { timeout: 1000 });
+      const expectedProjects = selectedProjects ? JSON.parse(selectedProjects) : [project];
+      assert.equal(actual, event === 'pull_request' && expectedProjects.includes(project), `${project}/${event}/${selectedProjects}`);
     }
   }
 }
@@ -254,6 +315,9 @@ ConvertTo-Json -InputObject @($results)
       const values = Object.fromEntries(readFileSync(output, 'utf8').trim().split(/\r?\n/).map(line => line.split('=')));
       assert.deepEqual(JSON.parse(values.browser_shards), shard === '2' ? [2] : [1, 2, 3]);
       if (full === 'true') assert.deepEqual(JSON.parse(values.lanes), all);
+      const selectedLanes = JSON.parse(values.lanes);
+      assert.deepEqual(JSON.parse(values.test_projects),
+        selectedLanes.includes('build-and-test') ? ['engine', 'portal', 'language-server'] : []);
     }
   }
   const historicalPrePush = legacyPrePush ?? legacyMixedPrePush;

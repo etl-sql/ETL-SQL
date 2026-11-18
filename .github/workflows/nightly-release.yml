@@ -37,12 +37,14 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$GITHUB_REF" == refs/heads/release/v* ]]
-          [[ "$CANDIDATE_SHA" == "$GITHUB_SHA" ]]
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
   start:
     name: Start certification runs
     needs: candidate
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      candidate_sha: ${{ steps.start.outputs.candidate_sha }}
     permissions:
       contents: read
       actions: write
@@ -50,11 +52,12 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 8
         with:
-          ref: ${{ inputs.candidate_sha }}
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Start Release Certification, MSI, DEB and native package runs
+        id: start
         timeout-minutes: 20
         env:
           GH_TOKEN: ${{ github.token }}
@@ -64,6 +67,8 @@ jobs:
     needs: start
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    env:
+      CANDIDATE_SHA: ${{ needs.start.outputs.candidate_sha || inputs.candidate_sha }}
     outputs:
       settled: ${{ steps.wait.outputs.settled }}
     permissions:
@@ -73,7 +78,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 8
         with:
-          ref: ${{ inputs.candidate_sha }}
+          ref: ${{ needs.start.outputs.candidate_sha || inputs.candidate_sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
@@ -85,10 +90,12 @@ jobs:
         run: node scripts/nightly-rehearsal.mjs wait "$GITHUB_REPOSITORY" "$CANDIDATE_SHA" "$GITHUB_REF_NAME" release-validation/nightly
   wait-more:
     name: Keep waiting for certification runs
-    needs: wait
+    needs: [start, wait]
     if: needs.wait.outputs.settled != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    env:
+      CANDIDATE_SHA: ${{ needs.start.outputs.candidate_sha || inputs.candidate_sha }}
     permissions:
       contents: read
       actions: write # reruns jobs whose runner was never acquired
@@ -96,7 +103,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 8
         with:
-          ref: ${{ inputs.candidate_sha }}
+          ref: ${{ needs.start.outputs.candidate_sha || inputs.candidate_sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
@@ -107,10 +114,12 @@ jobs:
         run: node scripts/nightly-rehearsal.mjs wait "$GITHUB_REPOSITORY" "$CANDIDATE_SHA" "$GITHUB_REF_NAME" release-validation/nightly
   collect:
     name: Release rehearsal
-    needs: [wait, wait-more]
+    needs: [start, wait, wait-more]
     if: ${{ !cancelled() && needs.wait.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.wait-more.result) }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      CANDIDATE_SHA: ${{ needs.start.outputs.candidate_sha || inputs.candidate_sha }}
     permissions:
       contents: read
       actions: read
@@ -118,7 +127,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 8
         with:
-          ref: ${{ inputs.candidate_sha }}
+          ref: ${{ needs.start.outputs.candidate_sha || inputs.candidate_sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
@@ -138,12 +147,14 @@ jobs:
           retention-days: 30
   dry-run:
     name: Release dry run
-    needs: collect
+    needs: [start, collect]
     # The default success() also requires every earlier job to have run, and wait-more is skipped
     # whenever the first wait is enough, so without this the dry run never starts.
     if: ${{ !cancelled() && needs.collect.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    env:
+      CANDIDATE_SHA: ${{ needs.start.outputs.candidate_sha || inputs.candidate_sha }}
     permissions:
       contents: read
       actions: write # starts release.yml in dry-run mode and reruns a job whose runner was never acquired
@@ -151,7 +162,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 8
         with:
-          ref: ${{ inputs.candidate_sha }}
+          ref: ${{ needs.start.outputs.candidate_sha || inputs.candidate_sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
