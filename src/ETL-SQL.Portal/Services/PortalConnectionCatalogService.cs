@@ -791,7 +791,8 @@ public sealed class PortalConnectionCatalogService(
         IReadOnlyList<string>? AllowedPrincipals,
         IReadOnlyList<string>? AllowedGroups,
         string? TenantId,
-        bool RequireAcl);
+        bool RequireAcl,
+        GatewayResourceBinding? Gateway = null);
 
     /// <summary>
     /// Exports tenant-scoped catalog connections together with resolved owner/group principals for
@@ -825,7 +826,7 @@ public sealed class PortalConnectionCatalogService(
         var payloads = new List<OrchestratorSyncConnectionPayload>(rows.Count);
         foreach (var entity in rows)
         {
-            var (options, _) = DeserializeOptionsAndGateway(entity);
+            var (options, gateway) = DeserializeOptionsAndGateway(entity);
             var ownerId = entity.OwnerUserId ?? entity.CreatedByUserId;
             string? ownerPrincipal = null;
             if (ownerId.HasValue && owners.TryGetValue(ownerId.Value, out var pk) && !string.IsNullOrWhiteSpace(pk))
@@ -849,7 +850,8 @@ public sealed class PortalConnectionCatalogService(
                 AllowedPrincipals: null,
                 AllowedGroups: allowedGroups.Count == 0 ? null : allowedGroups,
                 TenantId: entity.TenantId,
-                RequireAcl: true));
+                RequireAcl: true,
+                Gateway: gateway)); // COMPAT_BREAK: 0.23 - preserve remote Gateway routing.
         }
 
         return payloads;

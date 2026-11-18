@@ -135,17 +135,20 @@ internal sealed class JobDependencyGraphBuilder(OrchestratorProxyService proxy)
         JobAnalysis analysis,
         HashSet<string> visitedTargets,
         int depth,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? currentScriptPath = null)
     {
         if (depth >= MaxScriptDepth || string.IsNullOrWhiteSpace(targetPath))
             return;
 
         var effectiveTarget = targetPath.Trim();
-        analysis.ReferencedTargets.Add(effectiveTarget);
-        analysis.ReferencedTargets.Add(NormalizePathKey(effectiveTarget));
-
         if (currentBundleUri != null && !effectiveTarget.StartsWith("orch://", StringComparison.OrdinalIgnoreCase))
             effectiveTarget = BundleUri.CombineRelative(currentBundleUri, effectiveTarget);
+        else if (currentScriptPath != null && !effectiveTarget.StartsWith("orch://", StringComparison.OrdinalIgnoreCase))
+            effectiveTarget = ResolveRelativeScriptPath(currentScriptPath, effectiveTarget);
+
+        analysis.ReferencedTargets.Add(effectiveTarget);
+        analysis.ReferencedTargets.Add(NormalizePathKey(effectiveTarget));
 
         if (BundleUri.TryParse(effectiveTarget, out var bundleUri) && bundleUri != null)
         {
@@ -159,7 +162,8 @@ internal sealed class JobDependencyGraphBuilder(OrchestratorProxyService proxy)
 
         var content = await GetScriptCachedAsync(effectiveTarget, ct);
         if (!string.IsNullOrWhiteSpace(content))
-            await AnalyzeScriptTextAsync(content, currentBundleUri: null, analysis, visitedTargets, depth + 1, ct);
+            await AnalyzeScriptTextAsync(content, currentBundleUri: null, analysis, visitedTargets, depth + 1, ct,
+                currentScriptPath: effectiveTarget);
     }
 
     private async Task ResolveBundleTargetAsync(
@@ -207,7 +211,8 @@ internal sealed class JobDependencyGraphBuilder(OrchestratorProxyService proxy)
         JobAnalysis analysis,
         HashSet<string> visitedTargets,
         int depth,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? currentScriptPath = null)
     {
         Script? script;
         try
@@ -224,7 +229,8 @@ internal sealed class JobDependencyGraphBuilder(OrchestratorProxyService proxy)
         WalkStatements(script.Statements, analysis, nestedTargets);
 
         foreach (var nested in nestedTargets)
-            await ResolveAndAnalyzeTargetAsync(nested, currentBundleUri, analysis, visitedTargets, depth + 1, ct);
+            await ResolveAndAnalyzeTargetAsync(nested, currentBundleUri, analysis, visitedTargets, depth + 1, ct,
+                currentScriptPath);
     }
 
     private static void WalkStatements(
@@ -376,6 +382,31 @@ internal sealed class JobDependencyGraphBuilder(OrchestratorProxyService proxy)
     }
 
     private static string NormalizePathKey(string path) => path.Trim().Replace('\\', '/').TrimStart('/');
+
+    private static string ResolveRelativeScriptPath(string parentScript, string target)
+    {
+        // These paths belong to the remote host. Recognize both Windows and Unix roots
+        // without resolving them against the Portal's own operating system or directory.
+        var path = target.Replace('\\', '/');
+        if (!path.StartsWith('/') && !(path.Length > 1 && path[1] == ':'))
+        {
+            var parent = parentScript.Replace('\\', '/');
+            var separator = parent.LastIndexOf('/');
+            if (separator >= 0) path = parent[..(separator + 1)] + path;
+        }
+
+        var segments = new List<string>();
+        foreach (var segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".") continue;
+            if (segment == ".." && segments.Count > 0 && segments[^1] != ".." && !segments[^1].EndsWith(':'))
+                segments.RemoveAt(segments.Count - 1);
+            else
+                segments.Add(segment);
+        }
+        var root = path.StartsWith("//", StringComparison.Ordinal) ? "//" : path.StartsWith('/') ? "/" : "";
+        return root + string.Join('/', segments);
+    }
 
     private async Task<string?> GetScriptCachedAsync(string path, CancellationToken ct)
     {

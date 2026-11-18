@@ -1492,6 +1492,7 @@ namespace ETL_SQL.Orchestrator.Service
                             new Dictionary<string, string>(entry.Options ?? [], StringComparer.OrdinalIgnoreCase),
                             Disabled: false,
                             entry.SensitiveFields,
+                            Gateway: entry.Gateway,
                             OwnerPrincipal: entry.OwnerPrincipal ?? ownerPrincipal,
                             AllowedPrincipals: entry.AllowedPrincipals,
                             AllowedGroups: entry.AllowedGroups,
@@ -1563,6 +1564,7 @@ namespace ETL_SQL.Orchestrator.Service
                     new Dictionary<string, string>(request?.Options ?? [], StringComparer.OrdinalIgnoreCase),
                     Disabled: false,
                     request?.SensitiveFields,
+                    Gateway: request?.Gateway,
                     OwnerPrincipal: request?.OwnerPrincipal ?? (isLegacyApiKey ? null : caller.PrincipalKey),
                     AllowedPrincipals: request?.AllowedPrincipals,
                     AllowedGroups: request?.AllowedGroups,
@@ -3569,7 +3571,8 @@ namespace ETL_SQL.Orchestrator.Service
             List<string>? AllowedPrincipals = null,
             List<string>? AllowedGroups = null,
             string? TenantId = null,
-            bool? RequireAcl = null
+            bool? RequireAcl = null,
+            GatewayResourceBinding? Gateway = null
         );
 
         private sealed record ConnectionCatalogEntryResponse(
@@ -3583,7 +3586,8 @@ namespace ETL_SQL.Orchestrator.Service
             IReadOnlyCollection<string>? AllowedPrincipals = null,
             IReadOnlyCollection<string>? AllowedGroups = null,
             string? TenantId = null,
-            bool RequireAcl = false
+            bool RequireAcl = false,
+            GatewayResourceBinding? Gateway = null
         );
 
         private sealed record ImpactConsumerResponse(
@@ -3617,7 +3621,8 @@ namespace ETL_SQL.Orchestrator.Service
                 definition?.AllowedPrincipals,
                 definition?.AllowedGroups,
                 definition?.TenantId,
-                definition?.RequireAcl ?? false);
+                definition?.RequireAcl ?? false,
+                definition?.Gateway);
         }
 
         private static async Task<StewardshipEvaluation> EvaluateStewardshipAsync(

@@ -21,9 +21,110 @@ namespace ETL_SQL.Portal.Tests;
 /// federation operate strictly over HTTP via <see cref="OrchestratorProxyService"/> when Portal
 /// and Orchestrator run on separate hosts without sharing a local SQLite database file.
 /// </summary>
+[Trait("CompatBreak", "0.23")]
 public sealed class OrchestratorRemoteBridgeTests
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    [Fact]
+    public async Task RemoteGovernanceSync_PreservesGatewayBinding()
+    {
+        using var orchestrator = new RemoteOrchestratorFactory();
+        using var portal = new SeparateHostPortalFactory(orchestrator);
+        using var client = portal.CreateClient();
+        _ = await LoginAdminAsync(client);
+        using (var scope = portal.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.PortalSharedConnections.Add(new PortalSharedConnection
+            {
+                TenantId = "portal-host",
+                Alias = "gateway_sync",
+                ConnectorType = "Postgres",
+                OptionsJson = JsonSerializer.Serialize(new Dictionary<string, string>
+                {
+                    ["__gateway_id"] = "test-gateway",
+                    ["__gateway_resource_id"] = "warehouse"
+                })
+            });
+            await db.SaveChangesAsync();
+            await scope.ServiceProvider.GetRequiredService<OrchestratorGovernanceSyncService>()
+                .TrySyncConnectionAsync("gateway_sync");
+        }
+
+        using var workerScope = orchestrator.Services.CreateScope();
+        var catalog = workerScope.ServiceProvider.GetRequiredService<IConnectionCatalogProvider>();
+        var definition = await catalog.ResolveAsync("gateway_sync", new ExecutionIdentity
+        {
+            EffectiveUser = "admin",
+            RealUser = "admin",
+            IsAdmin = true,
+            TenantId = "portal-host"
+        });
+        Assert.Equal(new GatewayResourceBinding("test-gateway", "warehouse"), definition.Gateway);
+        Assert.Null(definition.Target);
+        Assert.Empty(definition.Options);
+    }
+
+    [Fact]
+    public async Task RemoteTriage_SameJobNameInAnotherTenant_DoesNotAuthorizeItsHistory()
+    {
+        using var orchestrator = new RemoteOrchestratorFactory();
+        using var portal = new SeparateHostPortalFactory(orchestrator);
+        using var client = portal.CreateClient();
+        var token = await LoginAdminAsync(client);
+        long foreignRun;
+        using (var scope = orchestrator.Services.CreateScope())
+        {
+            var store = scope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
+            foreach (var tenant in new[] { "other-tenant", "portal-host" })
+                await store.SaveJobAsync(new JobDefinition("same_name", "SELECT 1;", 1, "DAY",
+                    null, null, null, false, TenantId: tenant));
+            var job = await store.GetJobAsync("other-tenant", "same_name");
+            foreignRun = await store.LogJobStartAsync(job!.Id);
+            await store.LogJobEndAsync(foreignRun, "FAILED", "Other tenant's diagnostic");
+        }
+
+        using var response = await Send(client, HttpMethod.Get,
+            $"/api/orchestrator/triage/runs/{foreignRun}", token);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RemoteCompletions_PagesWithinTenant_WithoutLegacyOrForeignRows()
+    {
+        using var orchestrator = new RemoteOrchestratorFactory();
+        using var portal = new SeparateHostPortalFactory(orchestrator);
+        using var client = portal.CreateClient();
+        _ = await LoginAdminAsync(client);
+        var expected = new List<long>();
+        using (var scope = orchestrator.Services.CreateScope())
+        {
+            var store = scope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
+            foreach (var tenant in new string?[] { "other-tenant", null, "portal-host", "portal-host" })
+            {
+                var name = $"completion_{Guid.NewGuid():N}";
+                await store.SaveJobAsync(new JobDefinition(name, "SELECT 1;", 1, "DAY",
+                    null, null, null, false, TenantId: tenant));
+                var job = await store.GetJobAsync(tenant, name);
+                var run = await store.LogJobStartAsync(job!.Id);
+                await store.LogJobEndAsync(run, "SUCCESS");
+                if (tenant == "portal-host") expected.Add(run);
+            }
+        }
+
+        using var portalScope = portal.Services.CreateScope();
+        var proxy = portalScope.ServiceProvider.GetRequiredService<OrchestratorProxyService>();
+        var since = DateTime.UtcNow.AddMinutes(-5);
+        var until = DateTime.UtcNow.AddMinutes(1);
+        for (var offset = 0; offset < expected.Count; offset++)
+        {
+            var page = await proxy.GetCompletedHistoryAsync(since, until, 1, offset);
+            Assert.NotNull(page);
+            Assert.Equal(expected[offset], Assert.Single(page).Id);
+        }
+        Assert.Empty((await proxy.GetCompletedHistoryAsync(since, until, 1, expected.Count))!);
+    }
 
     [Fact]
     public async Task RemoteTriage_ReadsBoardAndRunDetailOverHttp_WithoutLocalSqlite()

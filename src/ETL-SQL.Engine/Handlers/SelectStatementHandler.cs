@@ -365,12 +365,15 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                             bool firstBatchConsumed = false;
                             try
                             {
-                                using (firstNative)
+                                // COMPAT_BREAK: 0.23 - first-batch fallback retains live native input.
                                 using (firstSelection)
                                 {
                                     groupedPlan.Accumulate(firstNative, firstSelection);
                                     firstBatchConsumed = true;
                                 }
+                                // Keep the first batch alive if admission fails: the row fallback
+                                // consumes it without reopening a possibly non-replayable source.
+                                firstNative.Dispose();
                                 firstNative = null;
 
                                 while (await nativeEnumerator.MoveNextAsync())

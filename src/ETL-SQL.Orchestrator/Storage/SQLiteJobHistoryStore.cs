@@ -2334,7 +2334,8 @@ namespace ETL_SQL.Orchestrator.Storage
         }
 
         public async Task<IEnumerable<JobHistoryEntry>> GetCompletedHistoryAsync(
-            DateTime completedAfter, DateTime completedThrough, int limit = 1000, int offset = 0)
+            DateTime completedAfter, DateTime completedThrough, int limit = 1000, int offset = 0,
+            string? tenantId = null)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
@@ -2342,7 +2343,9 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = "SELECT * FROM job_history WHERE end_time > @after AND end_time <= @through " +
+                (tenantId is null ? "" : "AND tenant_id = @tenantId ") +
                 "ORDER BY end_time, id LIMIT @limit OFFSET @offset;";
+            if (tenantId is not null) command.AddParam("@tenantId", tenantId);
             // JobHistory is currently persisted with DateTime.Now, including the local UTC offset.
             // Compare using the same representation; parsing at the API boundary still returns
             // absolute instants. A future schema migration can normalize the column itself to UTC.

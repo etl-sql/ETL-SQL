@@ -42,11 +42,17 @@ public static partial class JobApiEndpoints
                 return Results.StatusCode(StatusCodes.Status403Forbidden);
 
             var history = await store.GetHistoryEntryAsync(historyId);
-            if (history is null)
+            // COMPAT_BREAK: 0.23 - a same-named job cannot authorize another tenant's run.
+            if (history is null || (requestTenant is not null
+                    && !string.Equals(history.TenantId, requestTenant, StringComparison.Ordinal)))
                 return Results.NotFound(new { Error = $"Run '{historyId}' not found." });
 
             var caller = RequestCaller(ctx);
-            var job = await store.GetJobAsync(requestTenant, history.JobName);
+            // Authorize the durable job identity, not a same-named job in another tenant
+            // or one recreated after the original job was deleted.
+            var job = history.JobId.IsAssigned
+                ? await store.GetJobByIdAsync(history.JobId)
+                : await store.GetJobAsync(requestTenant, history.JobName);
             if (job is not null)
             {
                 if (!await authorization.CanAsync(
@@ -86,11 +92,9 @@ public static partial class JobApiEndpoints
 
             var boundedUntil = (untilUtc ?? DateTime.UtcNow).ToUniversalTime();
             var boundedSince = (sinceUtc ?? boundedUntil.AddMinutes(-5)).ToUniversalTime();
+            // COMPAT_BREAK: 0.23 - tenant filtering precedes pagination and excludes legacy rows.
             var entries = (await store.GetCompletedHistoryAsync(
-                boundedSince, boundedUntil, Math.Clamp(limit, 1, 1000), Math.Max(0, offset)))
-                .Where(entry => requestTenant is null
-                    || entry.TenantId is null
-                    || string.Equals(entry.TenantId, requestTenant, StringComparison.Ordinal))
+                boundedSince, boundedUntil, Math.Clamp(limit, 1, 1000), Math.Max(0, offset), requestTenant))
                 .ToList();
             return Results.Ok(entries);
         }).WithName("getCompletedHistory");

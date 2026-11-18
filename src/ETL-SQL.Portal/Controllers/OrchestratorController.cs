@@ -25,7 +25,8 @@ public class OrchestratorController(
     PortalConfig? portalConfig = null,
     DatasetTenantScope? tenantScope = null,
     StudioAuthorizationService? studioAuthorization = null,
-    OrchestratorGovernanceSyncService? governanceSync = null) : ControllerBase
+    OrchestratorGovernanceSyncService? governanceSync = null,
+    FolderPermissionService? folderPermissions = null) : ControllerBase
 {
     private static readonly JsonSerializerOptions CatalogJson = new(JsonSerializerDefaults.Web);
     /// <summary>Upper bound on one bulk re-run, so a mis-click cannot enqueue the whole estate.</summary>
@@ -783,6 +784,12 @@ public class OrchestratorController(
         if (pipelines.Count == 0)
             return Ok(Array.Empty<CatalogPipelineLinkDto>());
 
+        var permissions = folderPermissions ?? new FolderPermissionService(db, new PortalTenantCatalogScope(db, scope));
+        var readable = await permissions.GetEffectiveReportPermissionsAsync(pipelines, User, ct);
+        pipelines = pipelines.Where(doc => readable[doc.Id].AtLeast(FolderPermission.Read)).ToList();
+        if (pipelines.Count == 0)
+            return Ok(Array.Empty<CatalogPipelineLinkDto>());
+
         var jobs = await proxy.GetJobsAsync();
         var jobsByName = jobs
             .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
@@ -838,6 +845,11 @@ public class OrchestratorController(
             .FirstOrDefaultAsync(doc => doc.Id == id && !doc.IsDeleted && doc.Kind == CatalogDocumentKind.Pipeline, ct);
         if (document is null)
             return NotFound(new { Error = $"Catalog pipeline '{id}' not found." });
+
+        // COMPAT_BREAK: 0.23 - Orchestrator administration does not grant access to private Studio content.
+        var permissions = folderPermissions ?? new FolderPermissionService(db, new PortalTenantCatalogScope(db, scope));
+        if (!(await permissions.GetEffectiveReportPermissionAsync(document, User)).AtLeast(FolderPermission.Read))
+            return Forbid();
 
         var scriptKey = PortalPathGuard.ToScriptKey(portalConfig, document.ScriptPath);
         if (scriptKey is null || !await artifacts.ExistsAsync(ArtifactArea.Scripts, scriptKey, ct))

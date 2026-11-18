@@ -17,6 +17,27 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.23.0 — Runtime: pipeline provisioning respects Studio content permissions
+- **What changed**: The Orchestrator pipeline catalog and provisioning endpoints require read access to the Studio document. An Orchestrator role alone no longer exposes private pipeline metadata or copies its script into a job.
+- **Who is affected**: Orchestrator managers and viewers accessing Studio pipelines.
+- **Migration**: Grant read access to the appropriate Studio folder or document before provisioning its job.
+- **Diagnostic**: Unauthorized provisioning returns HTTP 403; unreadable pipelines are omitted from the catalog.
+- **Earliest removal**: N/A
+
+### v0.23.0 — Runtime: remote orchestration preserves tenant and Gateway boundaries
+- **What changed**: Run-detail reads authorize the recorded tenant and job identity. Completion feeds filter by tenant before pagination and exclude unscoped legacy runs from tenant-scoped requests. Connection synchronization retains Gateway bindings instead of converting them to direct connections.
+- **Who is affected**: Portals connected to a remote Orchestrator.
+- **Migration**: Re-synchronize Gateway connections previously exported without their binding. Tenant-scoped callers must use their own run identifiers.
+- **Diagnostic**: Foreign run identifiers return HTTP 404.
+- **Earliest removal**: N/A
+
+### v0.23.0 — Runtime: first-batch grouped aggregation fallback retains its input
+- **What changed**: Native grouped aggregation can fall back to row execution when its first batch exceeds the memory grant. Previously the fallback received an already-disposed batch.
+- **Who is affected**: Native columnar grouped queries with small memory grants or large first batches.
+- **Migration**: None.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.23.0 — Runtime: Top-N retains evaluated sort keys when spilling
 - **What changed**: Switching from Top-N to external sorting keeps the sort keys already evaluated for buffered rows. Previously those expressions ran again during the handoff, which could change ordering for volatile expressions.
 - **Who is affected**: Queries with `ORDER BY` and `TOP`, `LIMIT`, or `OFFSET`/`FETCH` that exceed their memory grant.

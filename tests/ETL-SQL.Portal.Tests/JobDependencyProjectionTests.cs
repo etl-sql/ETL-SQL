@@ -50,8 +50,10 @@ public sealed class JobDependencyProjectionTests : IDisposable
         return new OrchestratorController(proxy, null!, new ScriptDagProjectionService(), null!);
     }
 
-    [Fact]
-    public async Task GetJobDependencies_NormalizedAndBundleJobs_ResolvesTableAndExplicitEdges()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetJobDependencies_NormalizedAndBundleJobs_ResolvesTableAndExplicitEdges(bool nestedFile)
     {
         var handler = new FakeOrchestratorHandler
         {
@@ -178,6 +180,11 @@ public sealed class JobDependencyProjectionTests : IDisposable
             }
         };
 
+        if (nestedFile)
+        {
+            handler.Scripts["etl/steps/transform.etlsql"] = handler.Scripts["etl/transform.etlsql"];
+            handler.Scripts["etl/transform.etlsql"] = "RUN SCRIPT './steps/transform.etlsql';";
+        }
         var controller = CreateController(handler);
 
         // 1. Normalized transform_job sees upstream normalized extract_job, downstream bundle_job, and trigger audit_job.

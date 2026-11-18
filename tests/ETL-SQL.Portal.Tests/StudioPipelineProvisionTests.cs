@@ -16,11 +16,46 @@ namespace ETL_SQL.Portal.Tests;
 /// catalog enrichment, one-click provisioning + author EXECUTE grants, and rejection of
 /// diverging inline <c>Jobs.Script</c> edits.
 /// </summary>
+[Trait("CompatBreak", "0.23")]
 public sealed class StudioPipelineProvisionTests(StudioPipelineRunFixture fixture)
     : IClassFixture<StudioPipelineRunFixture>
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private const string Script = "SELECT 1 AS Value INTO #rows;\nASSERT (SELECT COUNT(*) FROM #rows) = 1;\n";
+
+    [Fact]
+    public async Task CatalogAndProvision_RequireAccessToThePipelineFolder()
+    {
+        var managerName = $"manager_{Guid.NewGuid():N}";
+        var (managerId, _) = await StudioPipelineRunFixture.CreateUserAsync(
+            fixture.Portal, managerName, "OrchestratorManager");
+        var managerToken = await StudioPipelineRunFixture.LoginAsync(
+            fixture.Client, managerName, StudioPipelineRunFixture.Password);
+        var folderId = await CreateFolderAsync(fixture.AuthorId, "Private");
+        var (id, _, _) = await CreateDocumentAsync(fixture.AuthorToken, folderId, "Pipeline", Script);
+
+        using (var response = await Send(HttpMethod.Get, "/api/orchestrator/pipelines/catalog", managerToken))
+        {
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var entries = (await response.Content.ReadFromJsonAsync<JsonArray>(Json))!;
+            Assert.DoesNotContain(entries, entry => entry!["pipelineId"]!.GetValue<int>() == id);
+        }
+        using (var denied = await Send(HttpMethod.Post, $"/api/orchestrator/pipelines/{id}/provision", managerToken))
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+
+        using (var scope = fixture.Portal.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var group = new Group { Name = $"Readers-{Guid.NewGuid():N}" };
+            db.Groups.Add(group);
+            await db.SaveChangesAsync();
+            db.UserGroups.Add(new UserGroup { UserId = managerId, GroupId = group.Id });
+            db.FolderAcls.Add(new FolderAcl { FolderId = folderId, GroupId = group.Id, Permission = FolderPermission.Read });
+            await db.SaveChangesAsync();
+        }
+        using var allowed = await Send(HttpMethod.Post, $"/api/orchestrator/pipelines/{id}/provision", managerToken);
+        Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+    }
 
     [Fact]
     public async Task GetPipelineCatalog_ReturnsPipelinesOnlyWithFolderAndProvisionStatus()

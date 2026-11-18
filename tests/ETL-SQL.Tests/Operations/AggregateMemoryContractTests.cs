@@ -20,6 +20,7 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Operations;
 
+[Trait("CompatBreak", "0.23")]
 public class AggregateMemoryContractTests
 {
     private static Evaluator CreateEvaluator(
@@ -88,8 +89,10 @@ public class AggregateMemoryContractTests
         AssertSpillRootEmpty(evaluator);
     }
 
-    [Fact]
-    public async Task NativeSingleAndCompositeGroupBy_ExceedOperatorGrantMidStream_FallBackToExactRowResults()
+    [Theory]
+    [InlineData(1000)]
+    [InlineData(4000)]
+    public async Task NativeSingleAndCompositeGroupBy_ExceedOperatorGrant_FallBackToExactRowResults(int rowsPerBatch)
     {
         var arbiter = new MemoryGrantArbiter(64L * 1024 * 1024);
         await using var evaluator = CreateEvaluator(
@@ -99,12 +102,10 @@ public class AggregateMemoryContractTests
             joinSpillThreshold: 100,
             policy: MemoryGovernorPolicy.SpillOrFail);
 
-        // Construct multi-batch native columnar input where batch 0 fits under 1 MiB,
-        // and cumulative distinct 320-char keys across batches cross the 1 MiB operator ceiling
-        // (well below the 64 MiB process grant).
+        // Cross the 1 MiB operator ceiling either in the first batch or mid-stream,
+        // while remaining below the 64 MiB process grant.
         var pad = new string('p', 320);
-        const int batchCount = 4;
-        const int rowsPerBatch = 1000;
+        var batchCount = 4000 / rowsPerBatch;
         var batches = new List<ColumnBatch>(batchCount);
         var schema = new ColumnBatchSchema(new[]
         {

@@ -434,9 +434,10 @@ public interface IJobHistoryStore
     /// <summary>Reads one durable run by identity, or null when it has expired or never existed.</summary>
     async Task<JobHistoryEntry?> GetHistoryEntryAsync(long entryId) =>
         (await GetHistoryAsync(JobId.None, 1000)).FirstOrDefault(row => row.Id == entryId);
-    /// <summary>Returns a completion-time page for bounded incremental pollers.</summary>
+    /// <summary>Returns a completion-time page, filtering by tenant before pagination when specified.</summary>
     Task<IEnumerable<JobHistoryEntry>> GetCompletedHistoryAsync(
-        DateTime completedAfter, DateTime completedThrough, int limit = 1000, int offset = 0);
+        DateTime completedAfter, DateTime completedThrough, int limit = 1000, int offset = 0,
+        string? tenantId = null);
 
     /// <summary>
     /// Deletes completed job-history rows older than <paramref name="maxAge"/> (in-flight RUNNING rows
