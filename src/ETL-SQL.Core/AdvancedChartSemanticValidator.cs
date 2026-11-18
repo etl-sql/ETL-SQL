@@ -54,8 +54,36 @@ public static class AdvancedChartSemanticValidator
         return results;
     }
 
+    private static readonly HashSet<string> NamedVisualOnlyCustomOptions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "AXIS_X", "AXIS_Y", "AXIS_Y2",
+        "STACKED", "ORIENTATION", "SHOW_VALUES", "CUMULATIVE",
+        "LINE_WIDTH", "INTERPOLATION", "LINE_DASH",
+        "SYMBOL_STROKE_COLOR", "SYMBOL_STROKE_WIDTH", "ERROR_BAR_STYLE", "AREA_BASELINE",
+        "SIZE_RANGE", "MIN_BUBBLE_SIZE", "MAX_BUBBLE_SIZE",
+        "JITTER", "JITTER:WIDTH", "JITTER:HEIGHT", "JITTER:KEY", "JITTER:SEED",
+        "JITTER_WIDTH", "JITTER_HEIGHT", "JITTER_KEY", "JITTER_SEED",
+        "INNER_RADIUS", "START_ANGLE", "END_ANGLE",
+        "PROJECTION", "MAP_NAME", "MAP_FILE", "FEATURE_KEY",
+        "FUNNEL_SHAPE", "GAP", "BAR_GAP", "Y_MARK", "Y2_MARK",
+        "VOLUME", "VOLUME_COLOR", "WHISKER_MODE", "SHOW_OUTLIERS", "SHOW_MEDIAN", "BOX_WIDTH",
+        "BIN_COUNT", "RADAR_SHAPE", "RADAR_SCALE", "TODAY_LINE", "TODAY_COLOR", "TODAY_DATE",
+        "WATERFALL_TOTAL_COLOR", "INCREASE_COLOR", "DECREASE_COLOR", "GRADIENT_COLORS",
+        "GAUGE_STYLE", "TARGET_LABEL"
+    };
+
     private static void ValidateVisualExtras(List<Diagnostic> results, AdvancedChartDefinition chart, CreateVisualStatement visual, AstNode chartNode)
     {
+        if (visual.AxisOptions is { Count: > 0 })
+        {
+            var axes = string.Join(", ", visual.AxisOptions.Select(a => $"{a.Axis.ToUpperInvariant()}_AXIS").Distinct(StringComparer.OrdinalIgnoreCase));
+            Add(results, chartNode, $"CUSTOM visuals configure axes inside CHART (SCALES (...)) and cannot use outer {axes}.");
+        }
+        foreach (var opt in visual.Options)
+        {
+            if (NamedVisualOnlyCustomOptions.Contains(opt.Key))
+                Add(results, chartNode, $"Option '{opt.Key.ToUpperInvariant()}' is a named-visual option and cannot be used in outer OPTIONS on a CUSTOM visual; configure it inside CHART (...).");
+        }
         if (visual.SegmentStyles.Count > 0 && !chart.Layers.Any(layer => layer.Mark == AdvancedChartMarkKind.Line))
             Add(results, chartNode, "SEGMENT_STYLE requires at least one LINE layer in CUSTOM CHART.");
 
@@ -176,6 +204,89 @@ public static class AdvancedChartSemanticValidator
                 if (tu is not ("AUTO" or "DAY" or "WEEK" or "MONTH" or "QUARTER" or "YEAR"))
                     Add(results, node, $"Scale '{scale.Name}' TIME_UNIT accepts only AUTO, DAY, WEEK, MONTH, QUARTER, or YEAR; found '{scale.TimeUnit}'.");
             }
+            if (scale.Title is not null && scale.Channel is not (AdvancedChartChannel.X or AdvancedChartChannel.Y or AdvancedChartChannel.Y2))
+                Add(results, node, $"Scale '{scale.Name}' TITLE/LABEL is supported only on X, Y, and Y2 scales.");
+
+            if (!scale.DiscreteColorMap.IsDefaultOrEmpty)
+            {
+                if (scale.Channel != AdvancedChartChannel.Color ||
+                    scale.Kind is not (AdvancedChartScaleKind.Ordinal or AdvancedChartScaleKind.Band or AdvancedChartScaleKind.Point))
+                {
+                    Add(results, node, $"Scale '{scale.Name}' discrete RANGE mapping requires a NOMINAL/ORDINAL COLOR scale.");
+                }
+                else
+                {
+                    var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var entry in scale.DiscreteColorMap)
+                    {
+                        var entryNode = Anchor(entry, node);
+                        if (!IsConstant(entry.Domain) || !IsConstant(entry.Color))
+                        {
+                            Add(results, entryNode, $"Scale '{scale.Name}' discrete RANGE entries must use literals or parameters.");
+                            continue;
+                        }
+                        if (LiteralNumberText(entry.Domain) is { } keyText && !seenKeys.Add(keyText))
+                            Add(results, entryNode, $"Scale '{scale.Name}' discrete RANGE has duplicate domain key '{keyText}'.");
+                        if (LiteralText(entry.Color) is { } colorText && !IsPortableColor(colorText))
+                            Add(results, entryNode, $"Scale '{scale.Name}' discrete RANGE accepts portable #RRGGBB colors only; found '{colorText}'.");
+                        else if (ConstantKind(entry.Color) is { } ck && ck != LiteralKind.Text)
+                            Add(results, entryNode, $"Scale '{scale.Name}' discrete RANGE requires #RRGGBB color strings.");
+                    }
+                }
+            }
+
+            if (!scale.RangeValues.IsDefaultOrEmpty)
+            {
+                if (scale.Channel == AdvancedChartChannel.Color)
+                {
+                    if (scale.Kind is not (AdvancedChartScaleKind.Ordinal or AdvancedChartScaleKind.Band or AdvancedChartScaleKind.Point))
+                        Add(results, node, $"Scale '{scale.Name}' discrete color RANGE requires an ORDINAL, BAND, or POINT COLOR scale.");
+                    else
+                        foreach (var item in scale.RangeValues)
+                        {
+                            if (!IsConstant(item))
+                                Add(results, node, $"Scale '{scale.Name}' RANGE colors must be literals or parameters.");
+                            else if (LiteralText(item) is { } colorText && !IsPortableColor(colorText))
+                                Add(results, node, $"Scale '{scale.Name}' RANGE accepts portable #RRGGBB colors only; found '{colorText}'.");
+                            else if (ConstantKind(item) is { } ck && ck != LiteralKind.Text)
+                                Add(results, node, $"Scale '{scale.Name}' discrete COLOR RANGE requires #RRGGBB color strings.");
+                        }
+                }
+                else if (scale.Channel is AdvancedChartChannel.Size or AdvancedChartChannel.Opacity)
+                {
+                    if (scale.Kind is not (AdvancedChartScaleKind.Linear or AdvancedChartScaleKind.Logarithmic))
+                        Add(results, node, $"Scale '{scale.Name}' numeric RANGE requires a LINEAR or LOGARITHMIC {scale.Channel} scale.");
+                    else if (scale.RangeValues.Length != 2)
+                        Add(results, node, $"Scale '{scale.Name}' {scale.Channel} RANGE requires exactly two numeric values (min, max).");
+                    else
+                    {
+                        var minExpr = scale.RangeValues[0];
+                        var maxExpr = scale.RangeValues[1];
+                        if (!IsConstant(minExpr) || !IsConstant(maxExpr))
+                            Add(results, node, $"Scale '{scale.Name}' RANGE bounds must be literals or parameters.");
+                        else
+                        {
+                            var minOk = decimal.TryParse(LiteralNumberText(SignedNumericLiteral(minExpr) ?? minExpr), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var minVal);
+                            var maxOk = decimal.TryParse(LiteralNumberText(SignedNumericLiteral(maxExpr) ?? maxExpr), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var maxVal);
+                            if ((ConstantKind(SignedNumericLiteral(minExpr) ?? minExpr) is not (null or LiteralKind.Numeric)) ||
+                                (ConstantKind(SignedNumericLiteral(maxExpr) ?? maxExpr) is not (null or LiteralKind.Numeric)))
+                                Add(results, node, $"Scale '{scale.Name}' {scale.Channel} RANGE requires numeric bounds.");
+                            else if (minOk && maxOk)
+                            {
+                                if (minExpr is UnaryExpression { Operator: TokenType.MINUS } || minExpr is BinaryExpression { Operator: TokenType.MINUS }) minVal = -minVal;
+                                if (maxExpr is UnaryExpression { Operator: TokenType.MINUS } || maxExpr is BinaryExpression { Operator: TokenType.MINUS }) maxVal = -maxVal;
+                                if (minVal < 0m || (scale.Channel == AdvancedChartChannel.Opacity && maxVal > 1m) || maxVal < minVal)
+                                    Add(results, node, $"Scale '{scale.Name}' {scale.Channel} RANGE requires 0 <= min <= max{(scale.Channel == AdvancedChartChannel.Opacity ? " <= 1" : "")}.");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    Add(results, node, $"Scale '{scale.Name}' RANGE = (...) is supported only on COLOR, SIZE, or OPACITY scales.");
+                }
+            }
+
             if (scale.ColorRange is not { } range) continue;
 
             var rangeNode = Anchor(range, node);
@@ -351,6 +462,20 @@ public static class AdvancedChartSemanticValidator
 
         if (encoding.Axis == AdvancedChartAxisRole.Secondary && encoding.Channel != AdvancedChartChannel.Y2)
             Add(results, node, $"Layer '{layer.Name}' may use AXIS=SECONDARY only on the Y2 channel.");
+
+        if (encoding.Channel == AdvancedChartChannel.Opacity)
+        {
+            if (encoding.DataKind != AdvancedChartDataKind.Quantitative)
+                Add(results, node, $"Layer '{layer.Name}' OPACITY encoding requires TYPE = QUANTITATIVE.");
+            if (encoding.Source.Kind == AdvancedChartBindingSourceKind.Value && encoding.Source.Constant is { } opConst &&
+                ConstantKind(SignedNumericLiteral(opConst) ?? opConst) == LiteralKind.Numeric &&
+                decimal.TryParse(LiteralNumberText(SignedNumericLiteral(opConst) ?? opConst), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var ov))
+            {
+                if (opConst is UnaryExpression { Operator: TokenType.MINUS } || opConst is BinaryExpression { Operator: TokenType.MINUS }) ov = -ov;
+                if (ov < 0m || ov > 1m)
+                    Add(results, node, $"Layer '{layer.Name}' OPACITY VALUE must be between 0 and 1; found {ov}.");
+            }
+        }
 
         if (encoding.Channel == AdvancedChartChannel.Shape)
         {

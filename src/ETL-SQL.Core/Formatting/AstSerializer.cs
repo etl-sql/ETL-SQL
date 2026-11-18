@@ -1741,9 +1741,14 @@ public static class AstSerializer
         if (scale.OuterPadding != 0m) options.Add($"OUTER_PADDING = {Number(scale.OuterPadding)}");
         if (scale.TickFormat is not null) options.Add($"TICK_FORMAT = {Quote(scale.TickFormat)}");
         if (scale.TimeUnit is not null) options.Add($"TIME_UNIT = {scale.TimeUnit}");
+        if (scale.Title is not null) options.Add($"TITLE = {Quote(scale.Title)}");
         options.Add(scale.ExplicitOrder.IsDefaultOrEmpty
             ? $"ORDER = {Upper(scale.Order)}"
             : "ORDER = (" + string.Join(", ", scale.ExplicitOrder.Select(Format)) + ")");
+        if (!scale.DiscreteColorMap.IsDefaultOrEmpty)
+            options.Add("RANGE = ( " + string.Join(", ", scale.DiscreteColorMap.Select(entry => $"{entry.Domain.ToSql()} = {entry.Color.ToSql()}")) + " )");
+        else if (!scale.RangeValues.IsDefaultOrEmpty)
+            options.Add("RANGE = ( " + string.Join(", ", scale.RangeValues.Select(Format)) + " )");
         if (scale.ColorRange is { } range)
         {
             var rangeOptions = new List<string> { $"LOW = {range.Low.ToSql()}" };

@@ -36,6 +36,7 @@ public enum FieldChannel
     ConfidenceLow,
     ConfidenceHigh,
     Color,
+    Opacity,
     Size,
     Shape,
     Theta,
@@ -185,6 +186,8 @@ public sealed record ColorRangeSpec(
     decimal? Midpoint = null,
     string NullColor = "#9ca3af");
 
+public sealed record NumericRangeSpec(decimal Minimum, decimal Maximum);
+
 public sealed record PositionAdjustmentSpec(
     PositionAdjustmentKind Kind,
     decimal X = 0m,
@@ -272,10 +275,17 @@ public sealed record ScaleSpec(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? LabelSkip = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] decimal OuterPadding = 0m,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TickFormat = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TimeUnit = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TimeUnit = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Title = null)
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ColorRangeSpec? ColorRange { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NumericRangeSpec? NumericRange { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public ImmutableArray<string> DiscreteRange { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public ImmutableArray<PaletteAssignment> DiscreteColorMap { get; init; }
 }
 
 public sealed record ScaleResolutionSpec(
@@ -547,6 +557,25 @@ public sealed record ChartSpec(
                 if (!Bindings.Concat(Layers.SelectMany(layer => layer.Bindings)).Any(binding =>
                     binding.ScaleId == scale.Id && (binding.Channel == FieldChannel.Color || binding.Channel == FieldChannel.Size) && binding.SemanticKind == DataSemanticKind.Quantitative))
                     throw new InvalidDataException($"Scale '{scale.Id}' color RANGE requires a quantitative COLOR binding.");
+            }
+            if (scale.NumericRange is { } numRange)
+            {
+                if (scale.Channel is not (FieldChannel.Size or FieldChannel.Opacity) || scale.Kind is not (ScaleKind.Linear or ScaleKind.Logarithmic))
+                    throw new InvalidDataException($"Scale '{scale.Id}' numeric RANGE requires a linear/logarithmic SIZE or OPACITY scale.");
+                if (numRange.Minimum < 0m || (scale.Channel == FieldChannel.Opacity && numRange.Maximum > 1m) || numRange.Maximum < numRange.Minimum)
+                    throw new InvalidDataException($"Scale '{scale.Id}' numeric RANGE bounds are invalid.");
+            }
+            if (!scale.DiscreteRange.IsDefaultOrEmpty)
+            {
+                if (scale.Channel != FieldChannel.Color || scale.Kind is not (ScaleKind.Ordinal or ScaleKind.Band or ScaleKind.Point))
+                    throw new InvalidDataException($"Scale '{scale.Id}' discrete RANGE requires a categorical COLOR scale.");
+                foreach (var color in scale.DiscreteRange) ValidatePortableColor(color, scale.Id);
+            }
+            if (!scale.DiscreteColorMap.IsDefaultOrEmpty)
+            {
+                if (scale.Channel != FieldChannel.Color || scale.Kind is not (ScaleKind.Ordinal or ScaleKind.Band or ScaleKind.Point))
+                    throw new InvalidDataException($"Scale '{scale.Id}' discrete color map requires a categorical COLOR scale.");
+                foreach (var entry in scale.DiscreteColorMap) ValidatePortableColor(entry.Color, scale.Id);
             }
         }
         foreach (var binding in Bindings.Concat(Layers.SelectMany(layer => layer.Bindings)))

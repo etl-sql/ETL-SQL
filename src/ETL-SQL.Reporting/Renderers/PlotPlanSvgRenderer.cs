@@ -447,8 +447,8 @@ internal sealed class PlotPlanSvgRenderer
             RenderVerticalMinorTicks(builder, y2Scale, area.Height, area.Right, 4m);
         }
 
-        var xTitle = Style(plan, "axis:x:label") ?? Style(plan, "axis:x:title");
-        var yTitle = Style(plan, "axis:y:label") ?? Style(plan, "axis:y:title");
+        var xTitle = xScale?.Title ?? Style(plan, "axis:x:label") ?? Style(plan, "axis:x:title");
+        var yTitle = yScale?.Title ?? Style(plan, "axis:y:label") ?? Style(plan, "axis:y:title");
         if (!string.IsNullOrWhiteSpace(xTitle))
             builder.AppendLine($"<text x='{N(area.Left + area.Width / 2m)}' y='{N(plan.Bounds.Height - 8m)}' text-anchor='middle' {AxisTitleFont(plan)}>{Esc(xTitle)}</text>");
         if (!string.IsNullOrWhiteSpace(yTitle))
@@ -597,7 +597,7 @@ internal sealed class PlotPlanSvgRenderer
                     ? MapVertical(bandPos, bandScale, plotHeight) + datum.DisplayOffsetY
                     : Top + outerOffset + slot * (categoryIndex + .5m) + datum.DisplayOffsetY;
                 var datumColor = EncodingText(datum, ConditionalEncodingChannel.Color) is { } candidate ? SafePaint(candidate, color) : color;
-                var datumOpacity = EncodingNumber(datum, ConditionalEncodingChannel.Opacity) ?? layerOpacity;
+                var datumOpacity = DatumOpacity(plan.Scales.FirstOrDefault(s => s.Channel == FieldChannel.Opacity), datum, layerOpacity);
                 if (layer.Mark == MarkKind.Rect)
                 {
                     var layerIndex = Math.Max(0, rectLayers.IndexOf(layer));
@@ -813,8 +813,8 @@ internal sealed class PlotPlanSvgRenderer
             }
         }
         RenderVerticalCategoryAxisLabels(builder, plan, categories, plotHeight, bandScale);
-        var xTitle = Style(plan, "axis:x:label");
-        var yTitle = Style(plan, "axis:y:label");
+        var xTitle = bandScale?.Title ?? Style(plan, "axis:x:label") ?? Style(plan, "axis:x:title");
+        var yTitle = transposedValueScale?.Title ?? Style(plan, "axis:y:label") ?? Style(plan, "axis:y:title");
         if (!string.IsNullOrWhiteSpace(yTitle))
             builder.AppendLine($"<text x='{N(Left + plotWidth / 2m)}' y='{N(plan.Bounds.Height - 8m)}' text-anchor='middle' {AxisTitleFont(plan)}>{Esc(yTitle)}</text>");
         if (!string.IsNullOrWhiteSpace(xTitle))
@@ -1564,7 +1564,9 @@ internal sealed class PlotPlanSvgRenderer
                 : FormatDataLabel(value ?? (end - start), dataFormat);
             var hoverFocus = LayerStyle(layer, "hoverFocus") ?? LayerStyle(layer, "hover_focus") ?? Style(plan, "HOVER_FOCUS");
             var seriesAttr = (hoverFocus?.Equals("SERIES", StringComparison.OrdinalIgnoreCase) == true && (layer.SeriesKey ?? layer.Id) is { } sk) ? $" data-series='{Esc(sk)}'" : string.Empty;
-            builder.AppendLine($"<rect{rangedClass} x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}'{rxAttr} fill='{Esc(datumColor)}'{extentAttributes} data-row-index='{datum.RowIndex}'{seriesAttr}><title>{Esc(title)}</title></rect>");
+            var rectOpacity = DatumOpacity(plan.Scales.FirstOrDefault(s => s.Channel == FieldChannel.Opacity), datum, decimal.TryParse(LayerStyle(layer, "opacity"), NumberStyles.Any, CultureInfo.InvariantCulture, out var ro) ? ro : 1m);
+            var opacityAttr = OpacityAttribute(rectOpacity);
+            builder.AppendLine($"<rect{rangedClass} x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}'{rxAttr} fill='{Esc(datumColor)}'{opacityAttr}{extentAttributes} data-row-index='{datum.RowIndex}'{seriesAttr}><title>{Esc(title)}</title></rect>");
             if (showLabels)
             {
                 var label = transposedAspect ? title : FormatDataLabel(value ?? (end - start), dataFormat);
@@ -2223,8 +2225,19 @@ internal sealed class PlotPlanSvgRenderer
                 if (size.Value > maximumSize) maximumSize = size.Value;
             }
         }
+        var sizeScale = plan.Scales.FirstOrDefault(s => s.Channel == FieldChannel.Size);
+        if (sizeScale is { Domain.Length: >= 2 } && sawSize)
+        {
+            if (PlotPlanResolver.Number(sizeScale.Domain[0]) is { } domMin) minimumSize = domMin;
+            if (PlotPlanResolver.Number(sizeScale.Domain[^1]) is { } domMax) maximumSize = domMax;
+        }
         var minRadius = 4m;
         var maxRadius = 22m;
+        if (sizeScale?.NumericRange is { } sizeRange)
+        {
+            minRadius = sizeRange.Minimum;
+            maxRadius = sizeRange.Maximum;
+        }
         var minBubbleStr = Style(plan, "MIN_BUBBLE_SIZE") ?? LayerStyle(layer, "MIN_BUBBLE_SIZE");
         var maxBubbleStr = Style(plan, "MAX_BUBBLE_SIZE") ?? LayerStyle(layer, "MAX_BUBBLE_SIZE");
         var sizeRangeStr = Style(plan, "SIZE_RANGE") ?? LayerStyle(layer, "SIZE_RANGE");
@@ -2253,6 +2266,8 @@ internal sealed class PlotPlanSvgRenderer
         var labelFontSize = FontSize(Style(plan, "DATA_LABELS:FONT_SIZE"));
         var labelColor = SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444");
         var colorScale = ColorScale(plan);
+        var opacityScale = plan.Scales.FirstOrDefault(s => s.Channel == FieldChannel.Opacity);
+        var layerOpacity = decimal.TryParse(LayerStyle(layer, "opacity"), NumberStyles.Any, CultureInfo.InvariantCulture, out var lo) ? lo : 1m;
         var overlayType = LayerStyle(layer, "overlayType");
         var isOverlay = overlayType is not null;
         var pointClass = overlayType == "ForecastAnomaly"
@@ -2269,7 +2284,7 @@ internal sealed class PlotPlanSvgRenderer
             if (datum.IsGap || !yValue.HasValue) continue;
             var radius = NormalizePointRadius(Numeric(datum, FieldChannel.Size), minimumSize, maximumSize, minRadius, maxRadius);
             var datumColor = ResolveDatumColor(colorScale, datum, color);
-            var opacity = EncodingNumber(datum, ConditionalEncodingChannel.Opacity) ?? 1m;
+            var opacity = DatumOpacity(opacityScale, datum, layerOpacity);
             var label = Channel(datum, FieldChannel.Text) is { } labelValue ? PlotPlanResolver.Display(labelValue) : null;
             decimal x;
             if (!xScale.Categories.IsDefaultOrEmpty)
@@ -3096,8 +3111,8 @@ internal sealed class PlotPlanSvgRenderer
             }
         }
 
-        var xTitle = Style(plan, "axis:x:label");
-        var yTitle = Style(plan, "axis:y:label");
+        var xTitle = plan.Scales.FirstOrDefault(s => s.Channel == FieldChannel.X)?.Title ?? Style(plan, "axis:x:label") ?? Style(plan, "axis:x:title");
+        var yTitle = plan.Scales.FirstOrDefault(s => s.Channel == FieldChannel.Y)?.Title ?? Style(plan, "axis:y:label") ?? Style(plan, "axis:y:title");
         if (!string.IsNullOrWhiteSpace(xTitle))
             builder.AppendLine($"<text x='{N(Left + plotWidth / 2m)}' y='{N(plan.Bounds.Height - 8m)}' text-anchor='middle' {AxisTitleFont(plan)}>{Esc(xTitle)}</text>");
         if (!string.IsNullOrWhiteSpace(yTitle))
@@ -5203,6 +5218,16 @@ internal sealed class PlotPlanSvgRenderer
     {
         if (EncodingText(datum, ConditionalEncodingChannel.Color) is { } conditional)
             return SafePaint(conditional, fallback);
+        if (scale is not null && !scale.DiscreteColors.IsDefaultOrEmpty &&
+            Channel(datum, FieldChannel.Color) is { Kind: not ChartValueKind.Null } discreteRaw)
+        {
+            var key = PlotPlanResolver.Display(discreteRaw);
+            foreach (var entry in scale.DiscreteColors)
+            {
+                if (string.Equals(entry.SeriesKey, key, StringComparison.OrdinalIgnoreCase))
+                    return SafePaint(entry.Color, fallback);
+            }
+        }
         if (scale?.ColorRange is not { } range) return fallback;
         var raw = Channel(datum, FieldChannel.Color);
         var value = raw is null ? null : PlotPlanResolver.Number(raw);
@@ -5217,6 +5242,27 @@ internal sealed class PlotPlanSvgRenderer
                 : InterpolateColor(range.Mid, range.High, middle == 1m ? 1m : (ratio - middle) / (1m - middle));
         }
         return InterpolateColor(range.Low, range.High, ratio);
+    }
+
+    private static decimal DatumOpacity(ResolvedScale? opacityScale, ResolvedDatum datum, decimal fallback)
+    {
+        if (EncodingNumber(datum, ConditionalEncodingChannel.Opacity) is { } conditional)
+            return Math.Clamp(conditional, 0m, 1m);
+        if (Channel(datum, FieldChannel.Opacity) is { Kind: not ChartValueKind.Null } raw &&
+            PlotPlanResolver.Number(raw) is { } num)
+        {
+            if (opacityScale is not null)
+            {
+                var (min, max) = Domain(opacityScale);
+                var ratio = Math.Clamp(Ratio(num, min, max, opacityScale.Kind), 0m, 1m);
+                if (opacityScale.Reverse) ratio = 1m - ratio;
+                return opacityScale.NumericRange is { } range
+                    ? Math.Clamp(range.Minimum + (range.Maximum - range.Minimum) * ratio, 0m, 1m)
+                    : ratio;
+            }
+            return Math.Clamp(num, 0m, 1m);
+        }
+        return Math.Clamp(fallback, 0m, 1m);
     }
 
     private static string OpacityAttribute(decimal opacity)

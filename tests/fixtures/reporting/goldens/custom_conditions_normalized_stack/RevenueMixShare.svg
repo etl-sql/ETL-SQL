@@ -14,13 +14,13 @@
 <g clip-path='url(#RevenueMixShare-plot-clip)'>
 <rect x='77.333' y='190' width='137.667' height='100' rx='1' fill='#5470c6' data-extent-axis='y' data-extent-anchor='end' data-row-index='0'><title>40</title></rect>
 <rect x='250.667' y='152.5' width='137.667' height='137.5' rx='1' fill='#5470c6' data-extent-axis='y' data-extent-anchor='end' data-row-index='1'><title>55</title></rect>
-<rect x='424' y='215' width='137.667' height='75' rx='1' fill='#5470c6' data-extent-axis='y' data-extent-anchor='end' data-row-index='2'><title>30</title></rect>
+<rect x='424' y='215' width='137.667' height='75' rx='1' fill='#5470c6' fill-opacity='0.5' data-extent-axis='y' data-extent-anchor='end' data-row-index='2'><title>30</title></rect>
 <rect x='77.333' y='102.5' width='137.667' height='87.5' rx='1' fill='#5470c6' data-extent-axis='y' data-extent-anchor='end' data-row-index='0'><title>35</title></rect>
 <rect x='250.667' y='77.5' width='137.667' height='75' rx='1' fill='#5470c6' data-extent-axis='y' data-extent-anchor='end' data-row-index='1'><title>30</title></rect>
-<rect x='424' y='140' width='137.667' height='75' rx='1' fill='#5470c6' data-extent-axis='y' data-extent-anchor='end' data-row-index='2'><title>30</title></rect>
+<rect x='424' y='140' width='137.667' height='75' rx='1' fill='#5470c6' fill-opacity='0.5' data-extent-axis='y' data-extent-anchor='end' data-row-index='2'><title>30</title></rect>
 <rect x='77.333' y='40' width='137.667' height='62.5' rx='1' fill='#5470c6' data-extent-axis='y' data-extent-anchor='end' data-row-index='0'><title>25</title></rect>
 <rect x='250.667' y='40' width='137.667' height='37.5' rx='1' fill='#5470c6' data-extent-axis='y' data-extent-anchor='end' data-row-index='1'><title>15</title></rect>
-<rect x='424' y='40' width='137.667' height='100' rx='1' fill='#5470c6' data-extent-axis='y' data-extent-anchor='end' data-row-index='2'><title>40</title></rect>
+<rect x='424' y='40' width='137.667' height='100' rx='1' fill='#5470c6' fill-opacity='0.5' data-extent-axis='y' data-extent-anchor='end' data-row-index='2'><title>40</title></rect>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='146.667' y='306' text-anchor='middle' font-size='9' fill='#666'>Q1</text>
 <text class='plot-axis-label' data-axis-index='1' x='320' y='306' text-anchor='middle' font-size='9' fill='#666'>Q2</text>

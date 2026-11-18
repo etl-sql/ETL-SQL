@@ -13,13 +13,13 @@
 <defs><clipPath id='InferredScatterVisual-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#InferredScatterVisual-plot-clip)'>
 <g class='plot-points' data-layer='primary-00'>
-<circle class='plot-point' fill='#5470c6' data-row-index='0' cx='83.636' cy='100.54' r='11.2'></circle>
-<circle class='plot-point' fill='#5470c6' data-row-index='1' cx='242.139' cy='51.364' r='22'></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='0' cx='83.636' cy='100.54' r='8.5'></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='1' cx='242.139' cy='51.364' r='15.25'></circle>
 <circle class='plot-point' fill='#5470c6' data-row-index='2' cx='425.668' cy='146.393' r='4'></circle>
 </g>
 <g class='plot-points' data-layer='primary-01'>
-<circle class='plot-point' fill='#91cc75' data-row-index='3' cx='153.155' cy='236.77' r='4'></circle>
-<circle class='plot-point' fill='#91cc75' data-row-index='4' cx='350.588' cy='193.575' r='14.8'></circle>
+<circle class='plot-point' fill='#91cc75' data-row-index='3' cx='153.155' cy='236.77' r='10.75'></circle>
+<circle class='plot-point' fill='#91cc75' data-row-index='4' cx='350.588' cy='193.575' r='17.5'></circle>
 <circle class='plot-point' fill='#91cc75' data-row-index='5' cx='556.364' cy='278.636' r='22'></circle>
 </g>
 </g>

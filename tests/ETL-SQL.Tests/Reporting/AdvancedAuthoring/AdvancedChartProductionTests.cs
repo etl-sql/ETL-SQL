@@ -1589,4 +1589,146 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
         Assert.Contains("stroke-dasharray='7 5'", svg);
         Assert.Contains("stroke='#64748b'", svg);
     }
+
+    [Fact]
+    public void CustomChart_SupportsDiscreteColorMapSizeRangeOpacityChannelAndScaleTitle()
+    {
+        const string sql = """
+            CREATE VISUAL RichCustom AS CUSTOM (
+              SOURCE = #metrics,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (
+                  x = LINEAR (CHANNEL = X, TITLE = 'Score Index'),
+                  y = LINEAR (CHANNEL = Y, LABEL = 'Return (%)'),
+                  c = ORDINAL (CHANNEL = COLOR, RANGE = ('North' = '#112233', 'South' = '#445566')),
+                  s = LINEAR (CHANNEL = SIZE, RANGE = (6, 28)),
+                  op = LINEAR (CHANNEL = OPACITY)
+                ),
+                LAYERS (
+                  pts = POINT (
+                    ENCODE (
+                      X = Score (TYPE = QUANTITATIVE, SCALE = x),
+                      Y = ReturnPct (TYPE = QUANTITATIVE, SCALE = y),
+                      COLOR = Region (TYPE = NOMINAL, SCALE = c),
+                      SIZE = Volume (TYPE = QUANTITATIVE, SCALE = s),
+                      OPACITY = Confidence (TYPE = QUANTITATIVE, SCALE = op)
+                    )
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var stmt = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(stmt));
+
+        var roundTripped = stmt.ToSql();
+        var reparsed = Assert.Single(new Parser(new Lexer(roundTripped).Tokenize(), roundTripped).Parse().Statements.OfType<CreateVisualStatement>());
+        Assert.Equal(roundTripped, reparsed.ToSql());
+
+        var manifest = new VisualManifest
+        {
+            Name = "RichCustom",
+            Columns = ["Score", "ReturnPct", "Region", "Volume", "Confidence"],
+            Rows =
+            [
+                ["10", "5", "North", "100", "0.25"],
+                ["50", "15", "South", "500", "0.85"]
+            ]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(stmt, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 700, 400));
+
+        Assert.Equal("#112233", plan.Series.Single(s => s.Key == "North").Color);
+        Assert.Equal("#445566", plan.Series.Single(s => s.Key == "South").Color);
+        var xScale = plan.Scales.Single(s => s.Id == "x");
+        var yScale = plan.Scales.Single(s => s.Id == "y");
+        Assert.Equal("Score Index", xScale.Title);
+        Assert.Equal("Return (%)", yScale.Title);
+
+        var svg = new SvgChartRenderer().Render(plan);
+        Assert.Contains("Score Index", svg);
+        Assert.Contains("Return (%)", svg);
+
+        var doc = System.Xml.Linq.XDocument.Parse(svg);
+        var circles = doc.Descendants().Where(e => e.Name.LocalName == "circle").ToList();
+        Assert.Equal(2, circles.Count);
+        var north = circles.Single(c => c.Attribute("data-row-index")?.Value == "0");
+        var south = circles.Single(c => c.Attribute("data-row-index")?.Value == "1");
+        Assert.Equal("#112233", north.Attribute("fill")?.Value);
+        Assert.Equal("6", north.Attribute("r")?.Value);
+        Assert.Equal("0.25", north.Attribute("fill-opacity")?.Value);
+        Assert.Equal("#445566", south.Attribute("fill")?.Value);
+        Assert.Equal("28", south.Attribute("r")?.Value);
+        Assert.Equal("0.85", south.Attribute("fill-opacity")?.Value);
+    }
+
+    [Fact]
+    public void CustomChart_SupportsPositionalDiscreteColorRangeWithExplicitOrder()
+    {
+        const string sql = """
+            CREATE VISUAL PositionalPaletteCustom AS CUSTOM (
+              SOURCE = #metrics,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (
+                  c = ORDINAL (CHANNEL = COLOR, ORDER = ('North', 'South'), RANGE = ('#112233', '#445566'))
+                ),
+                LAYERS (
+                  bars = RECT (
+                    ENCODE (
+                      X = Region (TYPE = NOMINAL),
+                      Y = Volume (TYPE = QUANTITATIVE),
+                      COLOR = Region (TYPE = NOMINAL, SCALE = c)
+                    )
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var stmt = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(stmt));
+
+        var manifest = new VisualManifest
+        {
+            Name = "PositionalPaletteCustom",
+            Columns = ["Region", "Volume"],
+            Rows = [["South", "40"], ["North", "25"]]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(stmt, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 600, 350));
+
+        Assert.Equal("#112233", plan.Series.Single(s => s.Key == "North").Color);
+        Assert.Equal("#445566", plan.Series.Single(s => s.Key == "South").Color);
+    }
+
+    [Theory]
+    [InlineData("OPTIONS (X_AXIS (MIN = 0), Y_AXIS (LABEL = 'Sales'))", "X_AXIS")]
+    [InlineData("OPTIONS (AXIS_X = 'Category', AXIS_Y = 'Value')", "AXIS_X")]
+    [InlineData("OPTIONS (STACKED = ON)", "STACKED")]
+    [InlineData("OPTIONS (LINE_WIDTH = 3)", "LINE_WIDTH")]
+    public void CustomChart_RejectsOuterAxisBlocksAndNamedVisualOnlyOptions(string extraClause, string expectedToken)
+    {
+        var sql = $$"""
+            CREATE VISUAL BadCustomOptions AS CUSTOM (
+              SOURCE = #prepared,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                LAYERS (bars = RECT (ENCODINGS (X = Category (TYPE = NOMINAL), Y = Value (TYPE = QUANTITATIVE))))
+              ),
+              {{extraClause}}
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var stmt = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        var diagnostics = AdvancedChartSemanticValidator.Validate(stmt);
+        Assert.Contains(diagnostics, d => d.Message.Contains(expectedToken, StringComparison.OrdinalIgnoreCase));
+    }
 }

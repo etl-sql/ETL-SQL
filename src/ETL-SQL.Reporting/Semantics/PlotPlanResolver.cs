@@ -475,13 +475,20 @@ public sealed class PlotPlanResolver
                     }
                 }
 
+                var discreteColors = scale.Channel == FieldChannel.Color &&
+                    (!scale.DiscreteColorMap.IsDefaultOrEmpty || !scale.DiscreteRange.IsDefaultOrEmpty)
+                        ? values.Select((v, idx) => new PaletteAssignment(v, ResolveColor(spec, v, idx))).ToImmutableArray()
+                        : default;
                 yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
                     values.Select(ChartValue.From).ToImmutableArray(), values,
                     values.Select(value => new PlotTick(ChartValue.From(value),
                         scale.TickFormat is not null ? (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var nv) ? formatter.Number(nv, scale.TickFormat) : value) : value)).ToImmutableArray(),
                     scale.IncludeZero,
                     scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding,
-                    scale.TickFormat, scale.TimeUnit);
+                    scale.TickFormat, scale.TimeUnit, scale.Title)
+                {
+                    DiscreteColors = discreteColors
+                };
                 continue;
             }
 
@@ -539,7 +546,7 @@ public sealed class PlotPlanResolver
                     scale.Id, scale.Kind, scale.Channel, temporalInputs,
                     scale.DomainMinimum, scale.DomainMaximum, scale.IncludeZero, scale.Reverse,
                     scale.MajorTickCount, scale.TickInterval, scale.MinorTicks, scale.LabelRotation,
-                    scale.LabelSkip, scale.OuterPadding, scale.TickFormat, scale.TimeUnit, formatter);
+                    scale.LabelSkip, scale.OuterPadding, scale.TickFormat, scale.TimeUnit, formatter, scale.Title);
                 continue;
             }
 
@@ -571,8 +578,11 @@ public sealed class PlotPlanResolver
                     .Where(number => number.HasValue)
                     .Select(number => number!.Value));
             }
-            var minimum = scale.DomainMinimum is not null ? Number(scale.DomainMinimum) ?? 0m : numbers.DefaultIfEmpty(0m).Min();
-            var maximum = scale.DomainMaximum is not null ? Number(scale.DomainMaximum) ?? 1m : numbers.DefaultIfEmpty(1m).Max();
+            var isNormalizedOpacity = scale.Channel == FieldChannel.Opacity &&
+                scale.DomainMinimum is null && scale.DomainMaximum is null &&
+                numbers.Count > 0 && numbers.All(n => n is >= 0m and <= 1m);
+            var minimum = isNormalizedOpacity ? 0m : scale.DomainMinimum is not null ? Number(scale.DomainMinimum) ?? 0m : numbers.DefaultIfEmpty(0m).Min();
+            var maximum = isNormalizedOpacity ? 1m : scale.DomainMaximum is not null ? Number(scale.DomainMaximum) ?? 1m : numbers.DefaultIfEmpty(1m).Max();
             if (scale.Kind == ScaleKind.Logarithmic && (minimum <= 0m || maximum <= 0m || numbers.Any(number => number <= 0m)))
                 throw new InvalidOperationException($"Logarithmic scale '{scale.Id}' requires positive values and domain bounds.");
             if (scale.IncludeZero) { minimum = Math.Min(0m, minimum); maximum = Math.Max(0m, maximum); }
@@ -614,7 +624,10 @@ public sealed class PlotPlanResolver
                 ticks.Select(value => new PlotTick(ChartValue.From(value),
                     scale.TickFormat is not null ? formatter.Number(value, scale.TickFormat) : formatter.Number(value))).ToImmutableArray(),
                 scale.IncludeZero, scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding,
-                scale.TickFormat, scale.TimeUnit);
+                scale.TickFormat, scale.TimeUnit, scale.Title)
+            {
+                NumericRange = scale.NumericRange
+            };
             if (scale.ColorRange is { } colorRange)
             {
                 if (colorRange.Midpoint is { } midpoint && (midpoint < minimum || midpoint > maximum))
@@ -2018,7 +2031,7 @@ public sealed class PlotPlanResolver
                 scale.Id, scale.Kind, scale.Channel, temporalInputs,
                 panelIntent.DomainMinimum, panelIntent.DomainMaximum, scale.IncludesZero, scale.Reverse,
                 panelIntent.MajorTickCount, panelIntent.TickInterval, scale.MinorTicks, scale.LabelRotation,
-                scale.LabelSkip, scale.OuterPadding, scale.TickFormat, scale.TimeUnit, formatter);
+                scale.LabelSkip, scale.OuterPadding, scale.TickFormat, scale.TimeUnit, formatter, scale.Title);
         }
         var values = bindings.SelectMany(binding => rows.Select(index => Number(BindingValue(binding, columns, index))))
             .Where(value => value.HasValue).Select(value => value!.Value).ToList();
@@ -2313,8 +2326,38 @@ public sealed class PlotPlanResolver
         return zeroCount > 0 ? summary + $" {zeroCount} null Y values rendered at zero; raw values retained." : summary;
     }
 
-    private static string ResolveColor(ChartSpec spec, string key, int index) =>
-        ChartPalette.Resolve(spec.Theme.Tokens, key, index);
+    private static string ResolveColor(ChartSpec spec, string key, int index)
+    {
+        foreach (var scale in spec.Scales.Where(s => s.Channel == FieldChannel.Color))
+        {
+            if (!scale.DiscreteColorMap.IsDefaultOrEmpty)
+            {
+                foreach (var entry in scale.DiscreteColorMap)
+                {
+                    if (string.Equals(entry.SeriesKey, key, StringComparison.OrdinalIgnoreCase))
+                        return entry.Color;
+                }
+            }
+            if (!scale.DiscreteRange.IsDefaultOrEmpty)
+            {
+                var slot = index;
+                if (!scale.CategoryOrder.IsDefaultOrEmpty)
+                {
+                    for (var i = 0; i < scale.CategoryOrder.Length; i++)
+                    {
+                        if (string.Equals(scale.CategoryOrder[i], key, StringComparison.OrdinalIgnoreCase))
+                        {
+                            slot = i;
+                            break;
+                        }
+                    }
+                }
+                if (slot >= 0)
+                    return scale.DiscreteRange[slot % scale.DiscreteRange.Length];
+            }
+        }
+        return ChartPalette.Resolve(spec.Theme.Tokens, key, index);
+    }
 
     private static IEnumerable<ChartValue> BindingValues(FieldBinding binding, IReadOnlyDictionary<string, ChartColumn> columns)
     {
@@ -2433,7 +2476,8 @@ public sealed class PlotPlanResolver
         decimal outerPadding,
         string? tickFormat,
         string? timeUnit,
-        ChartValueFormatter formatter)
+        ChartValueFormatter formatter,
+        string? title = null)
     {
         if (majorTickCount is < 2 or > 100)
             throw new InvalidOperationException($"MAJOR_TICK_COUNT for scale '{scaleId}' must be between 2 and 100.");
@@ -2712,7 +2756,7 @@ public sealed class PlotPlanResolver
             [ToChartValue(minTicks), ToChartValue(maxTicks)],
             [],
             ticks,
-            includeZero, reverse, minorTicks, labelRotation, labelSkip, outerPadding, tickFormat, timeUnit);
+            includeZero, reverse, minorTicks, labelRotation, labelSkip, outerPadding, tickFormat, timeUnit, title);
     }
 
     internal static string Display(ChartValue value) => value.Kind switch

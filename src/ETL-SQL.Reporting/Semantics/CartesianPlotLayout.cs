@@ -60,7 +60,7 @@ internal static class CartesianPlotLayout
                     return match?.Label ?? layer.SeriesKey ?? layer.Id;
                 })
                 .Where(label => !string.IsNullOrWhiteSpace(label))
-                .Select(label => Math.Max(30m, label!.Length * 5.6m + 14m))
+                .Select(label => Math.Max(30m, label!.Length * 6.0m + 14m))
                 .ToList();
             if (lineCandidates.Count > 0)
                 maxSeriesLabelWidth = lineCandidates.Max();

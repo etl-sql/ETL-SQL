@@ -594,7 +594,7 @@ public class ReportParser : ParserComponent
                 Advance();
                 scales.AddRange(ParseAdvancedChartScales());
             }
-            else if (IsCurrentValue("ENCODINGS"))
+            else if (IsCurrentValue("ENCODINGS") || IsCurrentValue("ENCODE"))
             {
                 Advance();
                 encodings.AddRange(ParseAdvancedChartEncodings());
@@ -769,9 +769,12 @@ public class ReportParser : ParserComponent
             var outerPadding = 0m;
             string? tickFormat = null;
             string? timeUnit = null;
+            string? scaleTitle = null;
             var order = AdvancedChartSortDirection.Source;
             var explicitOrder = new List<Expression>();
             AdvancedChartColorRange? colorRange = null;
+            var rangeValues = new List<Expression>();
+            var colorMap = new List<AdvancedChartDiscreteColorEntry>();
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
                 var option = ConsumeAdvancedWord("Expected scale option").ToUpperInvariant();
@@ -804,6 +807,10 @@ public class ReportParser : ParserComponent
                     case "TIME_UNIT":
                         timeUnit = ConsumeAdvancedWord("Expected AUTO, DAY, WEEK, MONTH, QUARTER, or YEAR for TIME_UNIT").ToUpperInvariant();
                         break;
+                    case "TITLE":
+                    case "LABEL":
+                        scaleTitle = Consume(TokenType.STRING_LITERAL, $"Expected string {option}").Value;
+                        break;
                     case "ORDER":
                         if (Match(TokenType.LPAREN))
                         {
@@ -816,7 +823,53 @@ public class ReportParser : ParserComponent
                         }
                         else order = ParseAdvancedSort(ConsumeAdvancedWord("Expected scale ORDER value"));
                         break;
-                    case "RANGE": colorRange = ParseAdvancedColorRange(); break;
+                    case "RANGE":
+                        if (Match(TokenType.LPAREN))
+                        {
+                            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                            {
+                                var itemStart = _parser.Current;
+                                var domainOrValue = _parser.ParseExpression();
+                                if (Match(TokenType.EQUALS))
+                                {
+                                    if (rangeValues.Count > 0)
+                                        throw new SyntaxException("Cannot mix keyed domain mappings and positional RANGE values.", itemStart.Line, itemStart.Column);
+                                    var targetColor = _parser.ParseExpression();
+                                    colorMap.Add(new AdvancedChartDiscreteColorEntry(domainOrValue, targetColor)
+                                    {
+                                        Line = itemStart.Line,
+                                        Column = itemStart.Column,
+                                        EndLine = _parser.Previous.EndLine,
+                                        EndColumn = _parser.Previous.EndColumn
+                                    });
+                                }
+                                else if (domainOrValue is BinaryExpression { Operator: TokenType.EQUALS } equalsExpr)
+                                {
+                                    if (rangeValues.Count > 0)
+                                        throw new SyntaxException("Cannot mix keyed domain mappings and positional RANGE values.", itemStart.Line, itemStart.Column);
+                                    colorMap.Add(new AdvancedChartDiscreteColorEntry(equalsExpr.Left, equalsExpr.Right)
+                                    {
+                                        Line = itemStart.Line,
+                                        Column = itemStart.Column,
+                                        EndLine = _parser.Previous.EndLine,
+                                        EndColumn = _parser.Previous.EndColumn
+                                    });
+                                }
+                                else
+                                {
+                                    if (colorMap.Count > 0)
+                                        throw new SyntaxException("Cannot mix keyed domain mappings and positional RANGE values.", itemStart.Line, itemStart.Column);
+                                    rangeValues.Add(domainOrValue);
+                                }
+                                Match(TokenType.COMMA);
+                            }
+                            Consume(TokenType.RPAREN, "Expected ')' after RANGE list");
+                        }
+                        else
+                        {
+                            colorRange = ParseAdvancedColorRange();
+                        }
+                        break;
                     default:
                         throw new SyntaxException($"Unknown scale option '{option}'.",
                         _parser.Previous.Line, _parser.Previous.Column);
@@ -844,9 +897,12 @@ public class ReportParser : ParserComponent
                 OuterPadding = outerPadding,
                 TickFormat = tickFormat,
                 TimeUnit = timeUnit,
+                Title = scaleTitle,
                 Order = order,
                 ExplicitOrder = explicitOrder.ToImmutableArray(),
                 ColorRange = colorRange,
+                RangeValues = rangeValues.ToImmutableArray(),
+                DiscreteColorMap = colorMap.ToImmutableArray(),
                 Line = start.Line,
                 Column = start.Column,
                 EndLine = scaleEnd.EndLine,
@@ -993,7 +1049,7 @@ public class ReportParser : ParserComponent
                     Consume(TokenType.EQUALS, "Expected '=' after HOVER_FOCUS");
                     hoverFocus = ConsumeAdvancedWord("Expected NONE, SELF, or SERIES after HOVER_FOCUS =").ToUpperInvariant();
                 }
-                else if (IsCurrentValue("ENCODINGS"))
+                else if (IsCurrentValue("ENCODINGS") || IsCurrentValue("ENCODE"))
                 {
                     Advance();
                     encodings.AddRange(ParseAdvancedChartEncodings());
@@ -1442,6 +1498,7 @@ public class ReportParser : ParserComponent
         "CONFIDENCE_LOW" => AdvancedChartChannel.ConfidenceLow,
         "CONFIDENCE_HIGH" => AdvancedChartChannel.ConfidenceHigh,
         "COLOR" => AdvancedChartChannel.Color,
+        "OPACITY" => AdvancedChartChannel.Opacity,
         "SIZE" => AdvancedChartChannel.Size,
         "SHAPE" => AdvancedChartChannel.Shape,
         "THETA" => AdvancedChartChannel.Theta,
