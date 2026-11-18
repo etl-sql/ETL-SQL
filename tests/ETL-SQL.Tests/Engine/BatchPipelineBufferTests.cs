@@ -121,7 +121,7 @@ namespace ETL_SQL.Tests.Engine
             Assert.Equal(0, enumerator.Current.Rows[0]["Id"]);
 
             await thirdGenerated.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await Task.Delay(80);
+            await Task.Delay(80); // flaky-delay-ok: negative check; a correct producer never passes 3, the delay only gives a broken one time to overrun
             Assert.True(Volatile.Read(ref produced) <= 3,
                 $"Producer should block under byte backpressure before queuing 4+ batches, but produced {Volatile.Read(ref produced)} batches.");
 

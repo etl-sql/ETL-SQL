@@ -1209,7 +1209,7 @@ public class PortalConnectionCatalogApiTests
         Assert.Equal(HttpStatusCode.Accepted, refreshRes.StatusCode);
         var jobId = (await refreshRes.Content.ReadFromJsonAsync<JsonObject>(Json))!["jobId"]!.GetValue<string>();
 
-        var deadline = DateTime.UtcNow.AddSeconds(30);
+        var deadline = DateTime.UtcNow.AddSeconds(30); // flaky-wait-budget-ok: hang guard; the loop exits on the observed terminal job status
         while (DateTime.UtcNow < deadline)
         {
             var jobRes = await SendAsync(client, HttpMethod.Get, adminToken, $"/api/jobs/{jobId}", null);

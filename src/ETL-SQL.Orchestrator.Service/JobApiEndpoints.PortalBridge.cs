@@ -410,7 +410,7 @@ public static partial class JobApiEndpoints
                         e.TenantId,
                         e.State.ToString(),
                         e.TenantWeight,
-                        e.LeaseOwner,
+                        canViewAllTenants ? e.LeaseOwner : OpaqueNodeLabel(e.LeaseOwner),
                         e.EnqueuedUtc,
                         e.LeaseExpiresUtc))
                     .ToList();
@@ -432,6 +432,16 @@ public static partial class JobApiEndpoints
                 pools));
         }).WithName("getFleetNodesAndSandboxes");
     }
+
+    /// <summary>
+    /// Node ids and lease owners are <c>machine:pid:guid</c>. Tenant-bound readers get a stable
+    /// opaque label instead, so rows stay distinguishable without naming the host or process.
+    /// </summary>
+    private static string? OpaqueNodeLabel(string? nodeId) =>
+        string.IsNullOrEmpty(nodeId)
+            ? nodeId
+            : "node-" + Convert.ToHexStringLower(
+                System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(nodeId)))[..12];
 
     private static FleetNodeHeartbeatApiResponse ParseNodeHeartbeat(
         NodeHeartbeat node,
@@ -481,7 +491,7 @@ public static partial class JobApiEndpoints
         }
 
         return new FleetNodeHeartbeatApiResponse(
-            node.NodeId,
+            includeHostDetails ? node.NodeId : OpaqueNodeLabel(node.NodeId)!,
             node.Role,
             node.ExpiresAtUtc > utcNow,
             node.FirstSeenUtc,

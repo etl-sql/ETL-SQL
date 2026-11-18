@@ -559,13 +559,15 @@ public sealed class OrchestratorRemoteBridgeTests
         var viewerName = $"fleet_viewer_{Guid.NewGuid():N}";
         await StudioPipelineRunFixture.CreateUserAsync(portal, viewerName, "OrchestratorViewer");
         var viewerToken = await StudioPipelineRunFixture.LoginAsync(client, viewerName, StudioPipelineRunFixture.Password);
+        // Production node ids and lease owners are machine:pid:guid, so the id itself names the host.
+        var nodeId = $"PRIVATE-HOST:4242:{Guid.NewGuid():N}";
 
         using (var orchScope = orchestrator.Services.CreateScope())
         {
             if (orchScope.ServiceProvider.GetService<INodeRegistryStore>() is { } nodeRegistry)
             {
                 await nodeRegistry.RegisterOrRenewNodeAsync(
-                    "orch-test-node:101",
+                    nodeId,
                     "Orchestrator",
                     TimeSpan.FromMinutes(2),
                     JsonSerializer.Serialize(new
@@ -599,7 +601,7 @@ public sealed class OrchestratorRemoteBridgeTests
             var portalQueued = $"portal-queued-{Guid.NewGuid():N}";
 
             Assert.True(await ledger.EnqueueAsync(foreignActive, TenantContext.FromVerifiedCredential("other-tenant"), poolPolicy));
-            Assert.NotNull(await ledger.TryActivateAsync(foreignActive, "worker-1", 10, TimeSpan.FromMinutes(2)));
+            Assert.NotNull(await ledger.TryActivateAsync(foreignActive, nodeId, 10, TimeSpan.FromMinutes(2)));
             Assert.True(await ledger.EnqueueAsync(foreignQueued, TenantContext.FromVerifiedCredential("other-tenant"), poolPolicy));
             Assert.True(await ledger.EnqueueAsync(portalQueued, TenantContext.FromVerifiedCredential("portal-host"), poolPolicy));
         }
@@ -608,11 +610,18 @@ public sealed class OrchestratorRemoteBridgeTests
         using (var viewerRes = await Send(client, HttpMethod.Get, "/api/orchestrator/fleet", viewerToken))
         {
             Assert.Equal(HttpStatusCode.OK, viewerRes.StatusCode);
-            var fleet = (await viewerRes.Content.ReadFromJsonAsync<JsonObject>(Json))!;
-            var node = Assert.Single(fleet["nodes"]!.AsArray(), item => item!["nodeId"]!.GetValue<string>() == "orch-test-node:101")!;
-            Assert.Null(node["machine"]);
-            Assert.Null(node["pid"]);
-            Assert.Null(node["capacity"]);
+            var body = await viewerRes.Content.ReadAsStringAsync();
+            Assert.DoesNotContain("PRIVATE-HOST", body, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("4242", body, StringComparison.Ordinal);
+            var fleet = JsonNode.Parse(body)!.AsObject();
+            Assert.NotEmpty(fleet["nodes"]!.AsArray());
+            foreach (var node in fleet["nodes"]!.AsArray())
+            {
+                Assert.StartsWith("node-", node!["nodeId"]!.GetValue<string>());
+                Assert.Null(node["machine"]);
+                Assert.Null(node["pid"]);
+                Assert.Null(node["capacity"]);
+            }
 
             var pool = Assert.Single(fleet["sandboxPools"]!.AsArray(), item => item!["poolId"]!.GetValue<string>() == "default")!;
             Assert.Equal(0, pool["activeCount"]!.GetValue<int>());
@@ -630,7 +639,7 @@ public sealed class OrchestratorRemoteBridgeTests
         {
             Assert.Equal(HttpStatusCode.OK, adminRes.StatusCode);
             var fleet = (await adminRes.Content.ReadFromJsonAsync<JsonObject>(Json))!;
-            var node = Assert.Single(fleet["nodes"]!.AsArray(), item => item!["nodeId"]!.GetValue<string>() == "orch-test-node:101")!;
+            var node = Assert.Single(fleet["nodes"]!.AsArray(), item => item!["nodeId"]!.GetValue<string>() == nodeId)!;
             Assert.Equal("PRIVATE-HOST", node["machine"]!.GetValue<string>());
             Assert.Equal(4242, node["pid"]!.GetValue<int>());
             Assert.NotNull(node["capacity"]);

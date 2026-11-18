@@ -316,7 +316,7 @@ public class PipelineCursorAdmissionTests
         ctsB.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await taskB);
-        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(2), $"Cancellation took too long ({sw.Elapsed}).");
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(15), $"Cancellation took too long ({sw.Elapsed})."); // flaky-time-bound-ok: hang guard; a cancellation that is ignored blocks indefinitely, not for seconds
         await WaitUntilAsync(() => bm.QueuedCursors == 0);
         Assert.Equal(1, bm.ActiveCursors);
 

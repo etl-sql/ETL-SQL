@@ -197,9 +197,10 @@ public class JobThrottleBackoffTests
             }, testCts.Token);
 
             // Wait until the heavy job enters the queue before queuing the short job.
-            var deadline = DateTime.UtcNow.AddSeconds(3);
+            var deadline = DateTime.UtcNow.AddSeconds(30); // flaky-wait-budget-ok: hang guard; the loop exits as soon as the heavy job is observed queued
             while (throttle.GetMetrics().QueuedJobs < 1 && DateTime.UtcNow < deadline)
                 await Task.Delay(10);
+            Assert.True(throttle.GetMetrics().QueuedJobs >= 1, "The heavy job never entered the queue.");
 
             var shortWaitTask = Task.Run(async () =>
             {
