@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
@@ -268,6 +269,7 @@ public class ExternalJoinEngine
         }
         finally
         {
+            hashTable?.Dispose();
             buildLease.Dispose();
         }
     }
@@ -316,57 +318,71 @@ public class ExternalJoinEngine
     private async Task<PackedBuildTable?> BuildJoinHashTable(string rightName, List<string> rightKeys, MemoryBudgetGuard guard, IMemoryGrantLease? lease)
     {
         var table = new PackedBuildTable();
-        var packer = new RowPacker();
+        using var packer = new RowPacker();
         bool columnsCaptured = false;
-        await using var rightReader = await _context.SpillStore.CreateReaderAsync(rightName);
-        if (rightReader is IColumnarSpillReader columnarReader)
+        try
         {
-            await foreach (var batch in columnarReader.AsColumnBatchesAsync())
+            await using var rightReader = await _context.SpillStore.CreateReaderAsync(rightName);
+            if (rightReader is IColumnarSpillReader columnarReader)
             {
-                using (batch)
+                await foreach (var batch in columnarReader.AsColumnBatchesAsync())
                 {
-                    if (!columnsCaptured)
+                    using (batch)
                     {
-                        table.Columns.AddRange(batch.Schema.Fields.Select(field => field.Name));
-                        columnsCaptured = true;
-                    }
-                    for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
-                    {
-                        var keyValues = new object?[rightKeys.Count];
-                        for (var keyIndex = 0; keyIndex < rightKeys.Count; keyIndex++)
+                        if (!columnsCaptured)
                         {
-                            var columnIndex = batch.Schema.GetOrdinal(rightKeys[keyIndex]);
-                            keyValues[keyIndex] = RowPacker.ReadBatchValue(batch, columnIndex, rowIndex);
+                            table.Columns.AddRange(batch.Schema.Fields.Select(field => field.Name));
+                            columnsCaptured = true;
                         }
-                        var key = CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, keyValues);
-                        var blob = packer.Pack(batch, rowIndex);
-                        AddBuildRow(table, key, blob, guard);
-                        ColumnarBuildRows++;
-                        if (guard.Exceeded() || (lease?.RegisterAndCheckSpill(guard.BytesAccumulated) == true))
-                            return null;
+                        for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                        {
+                            var keyValues = new object?[rightKeys.Count];
+                            for (var keyIndex = 0; keyIndex < rightKeys.Count; keyIndex++)
+                            {
+                                var columnIndex = batch.Schema.GetOrdinal(rightKeys[keyIndex]);
+                                keyValues[keyIndex] = RowPacker.ReadBatchValue(batch, columnIndex, rowIndex);
+                            }
+                            var key = CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, keyValues);
+                            var blob = packer.Pack(batch, rowIndex);
+                            AddBuildRow(table, key, blob, guard);
+                            ColumnarBuildRows++;
+                            if (guard.Exceeded() || (lease?.RegisterAndCheckSpill(guard.BytesAccumulated) == true))
+                            {
+                                table.Dispose();
+                                return null;
+                            }
+                        }
                     }
+                }
+                return table;
+            }
+
+            await foreach (var rightRow in rightReader.AsEnumerableAsync())
+            {
+                // The build side has a uniform schema; capture the column order once (matches how the
+                // Arrow spill writer infers its schema from the first row).
+                if (!columnsCaptured)
+                {
+                    table.Columns.AddRange(rightRow.GetColumnNames());
+                    columnsCaptured = true;
+                }
+
+                var key = GetHashKey(rightRow, rightKeys);
+                var blob = packer.Pack(rightRow, table.Columns);
+                AddBuildRow(table, key, blob, guard);
+                if (guard.Exceeded() || (lease?.RegisterAndCheckSpill(guard.BytesAccumulated) == true))
+                {
+                    table.Dispose();
+                    return null;
                 }
             }
             return table;
         }
-
-        await foreach (var rightRow in rightReader.AsEnumerableAsync())
+        catch
         {
-            // The build side has a uniform schema; capture the column order once (matches how the
-            // Arrow spill writer infers its schema from the first row).
-            if (!columnsCaptured)
-            {
-                table.Columns.AddRange(rightRow.GetColumnNames());
-                columnsCaptured = true;
-            }
-
-            var key = GetHashKey(rightRow, rightKeys);
-            var blob = packer.Pack(rightRow, table.Columns);
-            AddBuildRow(table, key, blob, guard);
-            if (guard.Exceeded() || (lease?.RegisterAndCheckSpill(guard.BytesAccumulated) == true))
-                return null;
+            table.Dispose();
+            throw;
         }
-        return table;
     }
 
     private static void AddBuildRow(
@@ -662,11 +678,23 @@ public class ExternalJoinEngine
     /// <see cref="Columns"/> is the shared column order captured from the first build row, used to
     /// decode a blob back into a <see cref="Row"/> on a probe match.
     /// </summary>
-    private sealed class PackedBuildTable
+    private sealed class PackedBuildTable : IDisposable
     {
         public readonly List<string> Columns = new();
         public readonly List<byte[]> Rows = new();
         public readonly Dictionary<CompoundKey, List<int>> Index = new();
+
+        public void Dispose()
+        {
+            for (var i = 0; i < Rows.Count; i++)
+            {
+                if (Rows[i] is { Length: > 0 } blob)
+                    CryptographicOperations.ZeroMemory(blob);
+            }
+            Rows.Clear();
+            Index.Clear();
+            Columns.Clear();
+        }
     }
 }
 

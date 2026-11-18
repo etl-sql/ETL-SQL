@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ETL_SQL.Core.Data;
@@ -20,7 +21,7 @@ namespace ETL_SQL.Engine.Engines;
 /// the same assumption the Arrow spill writer already makes when it infers a schema from the first row),
 /// so per-row column names are not stored. Values are written in column order; missing columns pack as null.
 /// </summary>
-internal sealed class RowPacker
+internal sealed class RowPacker : IDisposable
 {
     private const byte TNull = 0;
     private const byte TBool = 1;
@@ -31,34 +32,95 @@ internal sealed class RowPacker
     private const byte TJson = 6;
     private const byte TDateOnly = 7;
 
+    /// <summary>
+    /// Maximum scratch buffer capacity retained across <see cref="Pack"/> calls so an outlier wide row
+    /// does not pin multi-megabyte plaintext scratch memory for the rest of a build.
+    /// </summary>
+    internal const int MaxRetainedBufferBytes = 64 * 1024;
+
     // Reused across rows in a single (sequential) build so packing doesn't allocate a stream per row;
     // only the returned byte[] (the retained blob) is freshly allocated.
-    private readonly MemoryStream _ms = new();
-    private readonly BinaryWriter _writer;
+    private MemoryStream _ms = new();
+    private BinaryWriter _writer;
+    private bool _disposed;
 
     public RowPacker()
     {
         _writer = new BinaryWriter(_ms, Encoding.UTF8, leaveOpen: true);
     }
 
+    internal int RetainedCapacity => _disposed ? 0 : _ms.Capacity;
+
     /// <summary>Packs the named columns of <paramref name="row"/> into a fresh byte[] blob.</summary>
     public byte[] Pack(Row row, IReadOnlyList<string> columns)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         _ms.SetLength(0);
         for (int i = 0; i < columns.Count; i++)
             WriteValue(_writer, row[columns[i]]);
-        _writer.Flush();
-        return _ms.ToArray();
+        return CopyAndResetScratch();
     }
 
     /// <summary>Packs one native batch row without constructing a <see cref="Row"/> object.</summary>
     public byte[] Pack(ColumnBatch batch, int rowIndex)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         _ms.SetLength(0);
         for (var column = 0; column < batch.Schema.Count; column++)
             WriteValue(_writer, ReadBatchValue(batch, column, rowIndex));
+        return CopyAndResetScratch();
+    }
+
+    internal byte[] GetBackingBufferSnapshotForTests()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _ms.TryGetBuffer(out var seg) && seg.Array != null ? seg.Array : System.Array.Empty<byte>();
+    }
+
+    private byte[] CopyAndResetScratch()
+    {
         _writer.Flush();
-        return _ms.ToArray();
+        var written = (int)_ms.Length;
+        var result = _ms.ToArray();
+        ClearScratchBuffer(written);
+        if (_ms.Capacity > MaxRetainedBufferBytes)
+        {
+            ClearEntireScratchBuffer();
+            _writer.Dispose();
+            _ms.Dispose();
+            _ms = new MemoryStream();
+            _writer = new BinaryWriter(_ms, Encoding.UTF8, leaveOpen: true);
+        }
+        else
+        {
+            _ms.SetLength(0);
+        }
+        return result;
+    }
+
+    private void ClearScratchBuffer(int byteCount)
+    {
+        if (byteCount > 0 && _ms.TryGetBuffer(out var seg) && seg.Array != null)
+        {
+            CryptographicOperations.ZeroMemory(seg.Array.AsSpan(seg.Offset, Math.Min(byteCount, seg.Array.Length - seg.Offset)));
+        }
+    }
+
+    private void ClearEntireScratchBuffer()
+    {
+        if (_ms.TryGetBuffer(out var seg) && seg.Array != null)
+        {
+            CryptographicOperations.ZeroMemory(seg.Array.AsSpan(seg.Offset, seg.Array.Length - seg.Offset));
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        ClearEntireScratchBuffer();
+        _writer.Dispose();
+        _ms.Dispose();
     }
 
     internal static object? ReadBatchValue(ColumnBatch batch, int columnIndex, int rowIndex)

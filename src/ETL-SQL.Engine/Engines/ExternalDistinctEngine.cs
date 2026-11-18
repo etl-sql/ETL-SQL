@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
@@ -173,6 +174,7 @@ internal sealed class ExternalDistinctEngine
             }
             finally
             {
+                built.Dispose();
                 dedupLease.Dispose();
             }
             yield break;
@@ -287,54 +289,70 @@ internal sealed class ExternalDistinctEngine
     {
         var seen = new HashSet<CompoundKey>();
         var packed = new PackedRows();
-        var packer = new RowPacker();
+        using var packer = new RowPacker();
         bool columnsCaptured = false;
         var guard = new MemoryBudgetGuard(ceiling);
-        await using var reader = await _context.SpillStore.CreateReaderAsync(name);
-        if (reader is IColumnarSpillReader columnarReader)
+        try
         {
-            await foreach (var batch in columnarReader.AsColumnBatchesAsync())
+            await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+            if (reader is IColumnarSpillReader columnarReader)
             {
-                using (batch)
+                await foreach (var batch in columnarReader.AsColumnBatchesAsync())
                 {
+                    using (batch)
+                    {
+                        if (!columnsCaptured)
+                        {
+                            packed.Columns.AddRange(batch.Schema.Fields.Select(field => field.Name));
+                            columnsCaptured = true;
+                        }
+                        for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                        {
+                            ColumnarBuildRows++;
+                            var key = Key(batch, rowIndex);
+                            if (!seen.Add(key)) continue;
+                            var blob = packer.Pack(batch, rowIndex);
+                            packed.Blobs.Add(blob);
+                            guard.Add(blob.Length + 24 + RowMemory.EstimateKeyBytes(key));
+                            if (guard.Exceeded() || lease.RegisterAndCheckSpill(guard.BytesAccumulated))
+                            {
+                                packed.Dispose();
+                                return null;
+                            }
+                        }
+                    }
+                }
+                return packed;
+            }
+
+            await foreach (var row in reader.AsEnumerableAsync())
+            {
+                var key = Key(row);
+                if (seen.Add(key))
+                {
+                    // Uniform partition schema → capture the column order once (matches the join build).
                     if (!columnsCaptured)
                     {
-                        packed.Columns.AddRange(batch.Schema.Fields.Select(field => field.Name));
+                        packed.Columns.AddRange(row.GetColumnNames());
                         columnsCaptured = true;
                     }
-                    for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                    var blob = packer.Pack(row, packed.Columns);
+                    packed.Blobs.Add(blob);
+                    guard.Add(blob.Length + 24 + RowMemory.EstimateKeyBytes(key)); // blob + seen-set key
+                    if (guard.Exceeded() || lease.RegisterAndCheckSpill(guard.BytesAccumulated))
                     {
-                        ColumnarBuildRows++;
-                        var key = Key(batch, rowIndex);
-                        if (!seen.Add(key)) continue;
-                        var blob = packer.Pack(batch, rowIndex);
-                        packed.Blobs.Add(blob);
-                        guard.Add(blob.Length + 24 + RowMemory.EstimateKeyBytes(key));
-                        if (guard.Exceeded() || lease.RegisterAndCheckSpill(guard.BytesAccumulated)) return null;
+                        packed.Dispose();
+                        return null;
                     }
                 }
             }
             return packed;
         }
-
-        await foreach (var row in reader.AsEnumerableAsync())
+        catch
         {
-            var key = Key(row);
-            if (seen.Add(key))
-            {
-                // Uniform partition schema → capture the column order once (matches the join build).
-                if (!columnsCaptured)
-                {
-                    packed.Columns.AddRange(row.GetColumnNames());
-                    columnsCaptured = true;
-                }
-                var blob = packer.Pack(row, packed.Columns);
-                packed.Blobs.Add(blob);
-                guard.Add(blob.Length + 24 + RowMemory.EstimateKeyBytes(key)); // blob + seen-set key
-                if (guard.Exceeded() || lease.RegisterAndCheckSpill(guard.BytesAccumulated)) return null;
-            }
+            packed.Dispose();
+            throw;
         }
-        return packed;
     }
 
     private async IAsyncEnumerable<Row> DedupInMemory(string name)
@@ -457,9 +475,20 @@ internal sealed class ExternalDistinctEngine
 
     /// <summary>The distinct rows of a partition held as compact packed blobs plus the shared column
     /// order captured from the first retained row, used to decode each blob back to a <see cref="Row"/>.</summary>
-    private sealed class PackedRows
+    private sealed class PackedRows : IDisposable
     {
         public readonly List<string> Columns = new();
         public readonly List<byte[]> Blobs = new();
+
+        public void Dispose()
+        {
+            for (var i = 0; i < Blobs.Count; i++)
+            {
+                if (Blobs[i] is { Length: > 0 } blob)
+                    CryptographicOperations.ZeroMemory(blob);
+            }
+            Blobs.Clear();
+            Columns.Clear();
+        }
     }
 }

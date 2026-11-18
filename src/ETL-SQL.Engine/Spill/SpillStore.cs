@@ -554,7 +554,11 @@ public partial class SpillStore : ISpillStore
         _ownerClaim?.Dispose();
         _ownerClaim = null;
 
-        if (_cachedSessionKey != null) System.Array.Clear(_cachedSessionKey);
+        if (_cachedSessionKey != null)
+        {
+            CryptographicOperations.ZeroMemory(_cachedSessionKey);
+            _cachedSessionKey = null;
+        }
         _disposed = true;
         GC.SuppressFinalize(this);
     }
@@ -734,11 +738,11 @@ public partial class SpillStore : ISpillStore
             }
             catch
             {
-                if (_fileStream != null)
-                {
-                    await _fileStream.DisposeAsync();
-                    _fileStream = null;
-                }
+                _reader?.Dispose();
+                _reader = null;
+                if (_gzipStream != null) { await _gzipStream.DisposeAsync(); _gzipStream = null; }
+                if (_cryptoStream != null) { await _cryptoStream.DisposeAsync(); _cryptoStream = null; }
+                if (_fileStream != null) { await _fileStream.DisposeAsync(); _fileStream = null; }
                 throw;
             }
         }
@@ -1379,6 +1383,7 @@ public partial class SpillStore : ISpillStore
             }
             finally
             {
+                _buffer.Clear();
                 _arrowWriter?.Dispose();
                 try
                 {
@@ -1466,11 +1471,11 @@ public partial class SpillStore : ISpillStore
             }
             catch
             {
-                if (_fileStream != null)
-                {
-                    await _fileStream.DisposeAsync();
-                    _fileStream = null;
-                }
+                _arrowReader?.Dispose();
+                _arrowReader = null;
+                if (_gzipStream != null) { await _gzipStream.DisposeAsync(); _gzipStream = null; }
+                if (_cryptoStream != null) { await _cryptoStream.DisposeAsync(); _cryptoStream = null; }
+                if (_fileStream != null) { await _fileStream.DisposeAsync(); _fileStream = null; }
                 throw;
             }
         }
