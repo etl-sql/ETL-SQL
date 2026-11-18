@@ -115,3 +115,17 @@ CREATE VISUAL SmoothConditionsOnCategoricalX AS CUSTOM (
     )
   )
 );
+
+-- statement error semantic 0 <= min <= max
+CREATE VISUAL NegativeSizeRange AS CUSTOM (
+  SOURCE = #metrics,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (s = LINEAR (CHANNEL = SIZE, RANGE = (-1, 10))),
+    LAYERS (
+      pts = POINT (
+        ENCODE (X = Month (TYPE = NOMINAL), Y = Revenue (TYPE = QUANTITATIVE), SIZE = Revenue (TYPE = QUANTITATIVE, SCALE = s))
+      )
+    )
+  )
+);

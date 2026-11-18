@@ -284,6 +284,47 @@ public class SpillAuthenticationTests
     [InlineData("Json", true)]
     [InlineData("Arrow", false)]
     [InlineData("Arrow", true)]
+    public async Task FaultedWriter_DoesNotSealChunkWithFinalMarker_AndReaderFailsClosed(string format, bool compress)
+    {
+        using var store = CreateStore(format, compress);
+        if (format == "Arrow")
+        {
+            await Assert.ThrowsAsync<ExecutionException>(async () =>
+            {
+                await using var writer = await store.CreateWriterAsync("faulted.tmp", flushBatchRows: 1);
+                await writer.WriteRowAsync(new Row { ["amount"] = 1m });
+                await writer.WriteRowAsync(new Row { ["amount"] = "incompatible-type-after-numeric-schema" });
+            });
+        }
+        else
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            {
+                await using var writer = await store.CreateWriterAsync("faulted.tmp", flushBatchRows: 1);
+                await writer.WriteRowAsync(new Row { ["amount"] = 1m });
+                await writer.WriteRowsAsync(FaultingRows());
+            });
+        }
+
+        var error = await Assert.ThrowsAsync<ExecutionException>(async () =>
+        {
+            await using var reader = await store.CreateReaderAsync("faulted.tmp");
+            while (await reader.ReadRowAsync() != null) { }
+        });
+        Assert.Contains("authentication failed", error.Message);
+    }
+
+    private static IEnumerable<Row> FaultingRows()
+    {
+        yield return new Row { ["amount"] = 2m };
+        throw new InvalidOperationException("Simulated mid-stream enumeration failure.");
+    }
+
+    [Theory]
+    [InlineData("Json", false)]
+    [InlineData("Json", true)]
+    [InlineData("Arrow", false)]
+    [InlineData("Arrow", true)]
     public async Task PersistentChunksRequireTheOriginalSessionKey(string format, bool compress)
     {
         var root = Path.Combine(Path.GetTempPath(), "spill-auth-" + Guid.NewGuid().ToString("N"));

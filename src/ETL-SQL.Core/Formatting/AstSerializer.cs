@@ -1746,7 +1746,7 @@ public static class AstSerializer
             ? $"ORDER = {Upper(scale.Order)}"
             : "ORDER = (" + string.Join(", ", scale.ExplicitOrder.Select(Format)) + ")");
         if (!scale.DiscreteColorMap.IsDefaultOrEmpty)
-            options.Add("RANGE = ( " + string.Join(", ", scale.DiscreteColorMap.Select(entry => $"{entry.Domain.ToSql()} = {entry.Color.ToSql()}")) + " )");
+            options.Add("RANGE = ( " + string.Join(", ", scale.DiscreteColorMap.Select(entry => $"{Format(entry.Domain)} = {Format(entry.Color)}")) + " )");
         else if (!scale.RangeValues.IsDefaultOrEmpty)
             options.Add("RANGE = ( " + string.Join(", ", scale.RangeValues.Select(Format)) + " )");
         if (scale.ColorRange is { } range)

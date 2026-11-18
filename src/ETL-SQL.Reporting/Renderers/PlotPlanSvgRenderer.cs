@@ -391,7 +391,7 @@ internal sealed class PlotPlanSvgRenderer
                 case MarkKind.Text:
                     RenderText(layer, categories.Length, area, xScale,
                         layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale,
-                        color, smartLabels, transposedPointAxes, ColorScale(plan));
+                        color, smartLabels, transposedPointAxes, ColorScale(plan), plan.Scales.FirstOrDefault(s => s.Channel == FieldChannel.Opacity));
                     break;
                 case MarkKind.Tick:
                     RenderTicks(builder, plan, layer, categories.Length, area, xScale, yScale, color);
@@ -596,7 +596,7 @@ internal sealed class PlotPlanSvgRenderer
                 var y = bandScale is not null && Continuous(bandScale) && categories.IsDefaultOrEmpty && PositionNumber(Channel(datum, FieldChannel.X)) is { } bandPos
                     ? MapVertical(bandPos, bandScale, plotHeight) + datum.DisplayOffsetY
                     : Top + outerOffset + slot * (categoryIndex + .5m) + datum.DisplayOffsetY;
-                var datumColor = EncodingText(datum, ConditionalEncodingChannel.Color) is { } candidate ? SafePaint(candidate, color) : color;
+                var datumColor = ResolveDatumColor(ColorScale(plan), datum, color);
                 var datumOpacity = DatumOpacity(plan.Scales.FirstOrDefault(s => s.Channel == FieldChannel.Opacity), datum, layerOpacity);
                 if (layer.Mark == MarkKind.Rect)
                 {
@@ -4698,7 +4698,7 @@ internal sealed class PlotPlanSvgRenderer
 
     private static void RenderText(ResolvedMarkLayer layer, int categoryCount,
         in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? scale,
-        string color, ICollection<SmartLabel> smartLabels, bool transposedAspect = false, ResolvedScale? colorScale = null)
+        string color, ICollection<SmartLabel> smartLabels, bool transposedAspect = false, ResolvedScale? colorScale = null, ResolvedScale? opacityScale = null)
     {
         if (scale is null) return;
         for (var index = 0; index < layer.Data.Length; index++)
@@ -4718,7 +4718,9 @@ internal sealed class PlotPlanSvgRenderer
             var y = MapY(value.Value, scale, area.Height) + datum.DisplayOffsetY;
             var labelColor = transposedAspect ? ResolveDatumColor(colorScale, datum, color) : color;
             var fontSize = transposedAspect ? Math.Clamp(EncodingNumber(datum, ConditionalEncodingChannel.Size) ?? 10m, 1m, 100m) : 10m;
-            var opacity = transposedAspect ? EncodingNumber(datum, ConditionalEncodingChannel.Opacity) : null;
+            var opacity = Channel(datum, FieldChannel.Opacity) is not null
+                ? DatumOpacity(opacityScale, datum, 1m)
+                : transposedAspect ? EncodingNumber(datum, ConditionalEncodingChannel.Opacity) : null;
             smartLabels.Add(new SmartLabel(datum.RowIndex, x, y, text, labelColor, 200 + layer.ZIndex, fontSize, opacity));
         }
     }

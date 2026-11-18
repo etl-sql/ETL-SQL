@@ -262,14 +262,16 @@ public static class AdvancedChartSemanticValidator
                     {
                         var minExpr = scale.RangeValues[0];
                         var maxExpr = scale.RangeValues[1];
-                        if (!IsConstant(minExpr) || !IsConstant(maxExpr))
+                        var unwrappedMin = SignedNumericLiteral(minExpr) ?? minExpr;
+                        var unwrappedMax = SignedNumericLiteral(maxExpr) ?? maxExpr;
+                        if (!IsConstant(unwrappedMin) || !IsConstant(unwrappedMax))
                             Add(results, node, $"Scale '{scale.Name}' RANGE bounds must be literals or parameters.");
                         else
                         {
-                            var minOk = decimal.TryParse(LiteralNumberText(SignedNumericLiteral(minExpr) ?? minExpr), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var minVal);
-                            var maxOk = decimal.TryParse(LiteralNumberText(SignedNumericLiteral(maxExpr) ?? maxExpr), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var maxVal);
-                            if ((ConstantKind(SignedNumericLiteral(minExpr) ?? minExpr) is not (null or LiteralKind.Numeric)) ||
-                                (ConstantKind(SignedNumericLiteral(maxExpr) ?? maxExpr) is not (null or LiteralKind.Numeric)))
+                            var minOk = decimal.TryParse(LiteralNumberText(unwrappedMin), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var minVal);
+                            var maxOk = decimal.TryParse(LiteralNumberText(unwrappedMax), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var maxVal);
+                            if ((ConstantKind(unwrappedMin) is not (null or LiteralKind.Numeric)) ||
+                                (ConstantKind(unwrappedMax) is not (null or LiteralKind.Numeric)))
                                 Add(results, node, $"Scale '{scale.Name}' {scale.Channel} RANGE requires numeric bounds.");
                             else if (minOk && maxOk)
                             {

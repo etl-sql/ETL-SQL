@@ -490,6 +490,11 @@ public partial class SpillStore : ISpillStore
         }
     }
 
+    private interface IFaultableSpillWriter
+    {
+        void MarkFaulted();
+    }
+
     private class GatedSpillWriter : ISpillWriter
     {
         protected readonly ISpillWriter Inner;
@@ -508,36 +513,52 @@ public partial class SpillStore : ISpillStore
 
         public async Task WriteRowAsync(Row row)
         {
-            using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
-            // Timed whether or not adaptive execution is on: the profile reports spill write cost.
-            var before = Inner.BytesWritten;
-            var started = Stopwatch.GetTimestamp();
-            await Inner.WriteRowAsync(row);
-            var delta = Inner.BytesWritten - before;
-            Context.AdaptiveMetrics.ReportSpillWrite(
-                delta,
-                Stopwatch.GetElapsedTime(started));
-            Store.TrackBytesWrittenAndCheckReserve(delta);
+            try
+            {
+                using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
+                // Timed whether or not adaptive execution is on: the profile reports spill write cost.
+                var before = Inner.BytesWritten;
+                var started = Stopwatch.GetTimestamp();
+                await Inner.WriteRowAsync(row);
+                var delta = Inner.BytesWritten - before;
+                Context.AdaptiveMetrics.ReportSpillWrite(
+                    delta,
+                    Stopwatch.GetElapsedTime(started));
+                Store.TrackBytesWrittenAndCheckReserve(delta);
+            }
+            catch
+            {
+                (Inner as IFaultableSpillWriter)?.MarkFaulted();
+                throw;
+            }
         }
 
         public async Task WriteRowsAsync(IEnumerable<Row> rows)
         {
-            using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
-            // Timed whether or not adaptive execution is on: the profile reports spill write cost.
-            var before = Inner.BytesWritten;
-            var started = Stopwatch.GetTimestamp();
-            // Keep reserve checks inside enumeration: a caller may stream an entire external
-            // operator through this single call.
-            foreach (var row in rows)
+            try
             {
-                var rowBefore = Inner.BytesWritten;
-                await Inner.WriteRowAsync(row);
-                Store.TrackBytesWrittenAndCheckReserve(Inner.BytesWritten - rowBefore);
+                using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
+                // Timed whether or not adaptive execution is on: the profile reports spill write cost.
+                var before = Inner.BytesWritten;
+                var started = Stopwatch.GetTimestamp();
+                // Keep reserve checks inside enumeration: a caller may stream an entire external
+                // operator through this single call.
+                foreach (var row in rows)
+                {
+                    var rowBefore = Inner.BytesWritten;
+                    await Inner.WriteRowAsync(row);
+                    Store.TrackBytesWrittenAndCheckReserve(Inner.BytesWritten - rowBefore);
+                }
+                var delta = Inner.BytesWritten - before;
+                Context.AdaptiveMetrics.ReportSpillWrite(
+                    delta,
+                    Stopwatch.GetElapsedTime(started));
             }
-            var delta = Inner.BytesWritten - before;
-            Context.AdaptiveMetrics.ReportSpillWrite(
-                delta,
-                Stopwatch.GetElapsedTime(started));
+            catch
+            {
+                (Inner as IFaultableSpillWriter)?.MarkFaulted();
+                throw;
+            }
         }
 
         private int _releasedOpenWriter;
@@ -568,16 +589,24 @@ public partial class SpillStore : ISpillStore
             if (Inner is not IColumnarSpillWriter columnar)
                 throw new NotSupportedException("The underlying spill writer does not support columnar batches.");
 
-            using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
-            // Timed whether or not adaptive execution is on: the profile reports spill write cost.
-            var before = Inner.BytesWritten;
-            var started = Stopwatch.GetTimestamp();
-            await columnar.WriteBatchAsync(batch);
-            var delta = Inner.BytesWritten - before;
-            Context.AdaptiveMetrics.ReportSpillWrite(
-                delta,
-                Stopwatch.GetElapsedTime(started));
-            Store.TrackBytesWrittenAndCheckReserve(delta);
+            try
+            {
+                using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
+                // Timed whether or not adaptive execution is on: the profile reports spill write cost.
+                var before = Inner.BytesWritten;
+                var started = Stopwatch.GetTimestamp();
+                await columnar.WriteBatchAsync(batch);
+                var delta = Inner.BytesWritten - before;
+                Context.AdaptiveMetrics.ReportSpillWrite(
+                    delta,
+                    Stopwatch.GetElapsedTime(started));
+                Store.TrackBytesWrittenAndCheckReserve(delta);
+            }
+            catch
+            {
+                (Inner as IFaultableSpillWriter)?.MarkFaulted();
+                throw;
+            }
         }
     }
 
@@ -684,11 +713,13 @@ public partial class SpillStore : ISpillStore
 
     // ── Typed JSON ───────────────────────────────────────────────────────────
 
-    private class SecureSpillWriter : ISpillWriter
+    private class SecureSpillWriter : ISpillWriter, IFaultableSpillWriter
     {
         private readonly FileStream _fileStream;
         private readonly AuthenticatedSpillEncryption.FramedEncryptionWriter? _encryptionWriter;
         private bool _disposed;
+        private bool _faulted;
+        public void MarkFaulted() => _faulted = true;
         private readonly GZipStream? _gzipStream;
         private readonly StreamWriter _writer;
         private readonly IExecutionContext _context;
@@ -724,6 +755,8 @@ public partial class SpillStore : ISpillStore
             }
             catch
             {
+                _gzipStream?.Dispose();
+                _encryptionWriter?.Dispose();
                 _fileStream.Dispose();
                 throw;
             }
@@ -731,36 +764,52 @@ public partial class SpillStore : ISpillStore
 
         public async Task WriteRowAsync(Row row)
         {
-            await WriteHeaderAsync();
-            var dict = row.Columns;
-            // Expand schema aliases into real entries so qualified names survive JSON round-trip.
-            if (row.Schema != null)
+            try
             {
-                for (int i = 0; i < row.Schema.ColumnCount; i++)
+                await WriteHeaderAsync();
+                var dict = row.Columns;
+                // Expand schema aliases into real entries so qualified names survive JSON round-trip.
+                if (row.Schema != null)
                 {
-                    var canon = row.Schema.GetName(i);
-                    foreach (var alias in row.Schema.EnumerateAliasesOf(canon))
-                        dict.TryAdd(alias, row[i]);
+                    for (int i = 0; i < row.Schema.ColumnCount; i++)
+                    {
+                        var canon = row.Schema.GetName(i);
+                        foreach (var alias in row.Schema.EnumerateAliasesOf(canon))
+                            dict.TryAdd(alias, row[i]);
+                    }
                 }
+                var json = JsonRowCodec.Encode(dict);
+                // Spill accounting runs whatever SET TELEMETRY says: it backs the enterprise
+                // Security:MaxSpillBytesPerScript ceiling, which a script must not be able to switch off.
+                if (_context.Telemetry != null)
+                {
+                    // Fast approximation (+2 for newline)
+                    long inc = json.Length + 2;
+                    _context.Telemetry.TotalSpilledBytes += inc;
+                    BytesWritten += inc;
+                    ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
+                        _context, _context.Telemetry.TotalSpilledBytes);
+                }
+                await _writer.WriteLineAsync(json.AsMemory(), _context.CancellationToken);
             }
-            var json = JsonRowCodec.Encode(dict);
-            // Spill accounting runs whatever SET TELEMETRY says: it backs the enterprise
-            // Security:MaxSpillBytesPerScript ceiling, which a script must not be able to switch off.
-            if (_context.Telemetry != null)
+            catch
             {
-                // Fast approximation (+2 for newline)
-                long inc = json.Length + 2;
-                _context.Telemetry.TotalSpilledBytes += inc;
-                BytesWritten += inc;
-                ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
-                    _context, _context.Telemetry.TotalSpilledBytes);
+                _faulted = true;
+                throw;
             }
-            await _writer.WriteLineAsync(json.AsMemory(), _context.CancellationToken);
         }
 
         public async Task WriteRowsAsync(IEnumerable<Row> rows)
         {
-            foreach (var r in rows) await WriteRowAsync(r);
+            try
+            {
+                foreach (var r in rows) await WriteRowAsync(r);
+            }
+            catch
+            {
+                _faulted = true;
+                throw;
+            }
         }
 
         private async Task WriteHeaderAsync()
@@ -776,10 +825,13 @@ public partial class SpillStore : ISpillStore
             _disposed = true;
             try
             {
-                await WriteHeaderAsync();
-                await _writer.DisposeAsync();
-                if (_gzipStream != null) await _gzipStream.DisposeAsync();
-                if (_encryptionWriter != null) await _encryptionWriter.CompleteAsync();
+                if (!_faulted)
+                {
+                    await WriteHeaderAsync();
+                    await _writer.DisposeAsync();
+                    if (_gzipStream != null) await _gzipStream.DisposeAsync();
+                    if (_encryptionWriter != null) await _encryptionWriter.CompleteAsync();
+                }
             }
             finally
             {
@@ -901,7 +953,7 @@ public partial class SpillStore : ISpillStore
 
     // ── Arrow IPC ────────────────────────────────────────────────────────────
 
-    private class ArrowSpillWriter : ISpillWriter, IColumnarSpillWriter
+    private class ArrowSpillWriter : ISpillWriter, IColumnarSpillWriter, IFaultableSpillWriter
     {
         private const string SchemaVersionKey = "etlsql.spill.schema_version";
         private const string LogicalTypeKeyPrefix = "etlsql.spill.column.";
@@ -910,6 +962,8 @@ public partial class SpillStore : ISpillStore
         private readonly FileStream _fileStream;
         private readonly AuthenticatedSpillEncryption.FramedEncryptionWriter? _encryptionWriter;
         private bool _disposed;
+        private bool _faulted;
+        public void MarkFaulted() => _faulted = true;
         private readonly GZipStream? _gzipStream;
         private readonly Stream _payloadStream;
         private readonly IExecutionContext _context;
@@ -953,6 +1007,8 @@ public partial class SpillStore : ISpillStore
             }
             catch
             {
+                _gzipStream?.Dispose();
+                _encryptionWriter?.Dispose();
                 _fileStream.Dispose();
                 throw;
             }
@@ -960,33 +1016,41 @@ public partial class SpillStore : ISpillStore
 
         public async Task WriteRowAsync(Row row)
         {
-            // Snapshot columns immediately — callers may mutate the row after WriteRowAsync returns
-            // (e.g. PartitionStreamMultiSet stamps __SET_IDX on the same Row object across iterations).
-            var snapshot = SnapshotRow(row);
-
-            if (_schema == null)
+            try
             {
-                _schema = InferSchema(snapshot);
-                _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
-                await _arrowWriter.WriteStartAsync(CancellationToken.None);
+                // Snapshot columns immediately — callers may mutate the row after WriteRowAsync returns
+                // (e.g. PartitionStreamMultiSet stamps __SET_IDX on the same Row object across iterations).
+                var snapshot = SnapshotRow(row);
+
+                if (_schema == null)
+                {
+                    _schema = InferSchema(snapshot);
+                    _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
+                    await _arrowWriter.WriteStartAsync(CancellationToken.None);
+                }
+
+                _buffer.Add(snapshot);
+                _acceptedRowCount++;
+
+                if (_context.Telemetry != null)
+                {
+                    // Row.ColumnCount, not Row.Columns.Count — the Columns property materializes a
+                    // fresh dictionary per access, which on this per-row path was measurable churn.
+                    long inc = row.ColumnCount * 16L;
+                    _context.Telemetry.TotalSpilledBytes += inc;
+                    BytesWritten += inc;
+                    ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
+                        _context, _context.Telemetry.TotalSpilledBytes);
+                }
+
+                if (_buffer.Count >= _flushBatchSize)
+                    await FlushBatchAsync();
             }
-
-            _buffer.Add(snapshot);
-            _acceptedRowCount++;
-
-            if (_context.Telemetry != null)
+            catch
             {
-                // Row.ColumnCount, not Row.Columns.Count — the Columns property materializes a
-                // fresh dictionary per access, which on this per-row path was measurable churn.
-                long inc = row.ColumnCount * 16L;
-                _context.Telemetry.TotalSpilledBytes += inc;
-                BytesWritten += inc;
-                ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
-                    _context, _context.Telemetry.TotalSpilledBytes);
+                _faulted = true;
+                throw;
             }
-
-            if (_buffer.Count >= _flushBatchSize)
-                await FlushBatchAsync();
         }
 
         // Snapshot plan, rebuilt when the incoming schema or dynamic-column layout changes. The
@@ -1077,57 +1141,73 @@ public partial class SpillStore : ISpillStore
 
         public async Task WriteRowsAsync(IEnumerable<Row> rows)
         {
-            long telemetryBytes = 0;
-            foreach (var row in rows)
+            try
             {
-                var snapshot = SnapshotRow(row);
-                if (_schema == null)
+                long telemetryBytes = 0;
+                foreach (var row in rows)
                 {
-                    _schema = InferSchema(snapshot);
-                    _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
-                    await _arrowWriter.WriteStartAsync(CancellationToken.None);
+                    var snapshot = SnapshotRow(row);
+                    if (_schema == null)
+                    {
+                        _schema = InferSchema(snapshot);
+                        _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
+                        await _arrowWriter.WriteStartAsync(CancellationToken.None);
+                    }
+
+                    _buffer.Add(snapshot);
+                    _acceptedRowCount++;
+                    telemetryBytes += row.ColumnCount * 16L; // allocation-free; see WriteRowAsync
+                    if (_buffer.Count >= _flushBatchSize)
+                        await FlushBatchAsync();
                 }
 
-                _buffer.Add(snapshot);
-                _acceptedRowCount++;
-                telemetryBytes += row.ColumnCount * 16L; // allocation-free; see WriteRowAsync
-                if (_buffer.Count >= _flushBatchSize)
-                    await FlushBatchAsync();
+                if (_context.Telemetry != null && telemetryBytes > 0)
+                {
+                    _context.Telemetry.TotalSpilledBytes += telemetryBytes;
+                    BytesWritten += telemetryBytes;
+                    ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
+                        _context, _context.Telemetry.TotalSpilledBytes);
+                }
             }
-
-            if (_context.Telemetry != null && telemetryBytes > 0)
+            catch
             {
-                _context.Telemetry.TotalSpilledBytes += telemetryBytes;
-                BytesWritten += telemetryBytes;
-                ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
-                    _context, _context.Telemetry.TotalSpilledBytes);
+                _faulted = true;
+                throw;
             }
         }
 
         public async Task WriteBatchAsync(ColumnBatch batch)
         {
             ArgumentNullException.ThrowIfNull(batch);
-            await FlushBatchAsync();
-            if (_schema == null)
+            try
             {
-                _schema = InferSchema(batch);
-                _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
-                await _arrowWriter.WriteStartAsync(CancellationToken.None);
-            }
-            else
-            {
-                ValidateSchema(batch);
-            }
+                await FlushBatchAsync();
+                if (_schema == null)
+                {
+                    _schema = InferSchema(batch);
+                    _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
+                    await _arrowWriter.WriteStartAsync(CancellationToken.None);
+                }
+                else
+                {
+                    ValidateSchema(batch);
+                }
 
-            using var recordBatch = BuildBatch(batch);
-            await _arrowWriter!.WriteRecordBatchAsync(recordBatch);
-            if (_context.Telemetry != null)
+                using var recordBatch = BuildBatch(batch);
+                await _arrowWriter!.WriteRecordBatchAsync(recordBatch);
+                if (_context.Telemetry != null)
+                {
+                    var increment = batch.AllocatedBytes;
+                    _context.Telemetry.TotalSpilledBytes += increment;
+                    BytesWritten += increment;
+                    ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
+                        _context, _context.Telemetry.TotalSpilledBytes);
+                }
+            }
+            catch
             {
-                var increment = batch.AllocatedBytes;
-                _context.Telemetry.TotalSpilledBytes += increment;
-                BytesWritten += increment;
-                ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
-                    _context, _context.Telemetry.TotalSpilledBytes);
+                _faulted = true;
+                throw;
             }
         }
 
@@ -1528,19 +1608,22 @@ public partial class SpillStore : ISpillStore
             _disposed = true;
             try
             {
-                await FlushBatchAsync();
-                if (_arrowWriter == null)
+                if (!_faulted)
                 {
-                    _schema = new Schema.Builder().Build();
-                    _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
-                    await _arrowWriter.WriteStartAsync(_context.CancellationToken);
+                    await FlushBatchAsync();
+                    if (_arrowWriter == null)
+                    {
+                        _schema = new Schema.Builder().Build();
+                        _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
+                        await _arrowWriter.WriteStartAsync(_context.CancellationToken);
+                    }
+                    if (_arrowWriter != null)
+                        await _arrowWriter.WriteEndAsync(CancellationToken.None);
+                    _arrowWriter?.Dispose();
+                    _arrowWriter = null;
+                    if (_gzipStream != null) await _gzipStream.DisposeAsync();
+                    if (_encryptionWriter != null) await _encryptionWriter.CompleteAsync();
                 }
-                if (_arrowWriter != null)
-                    await _arrowWriter.WriteEndAsync(CancellationToken.None);
-                _arrowWriter?.Dispose();
-                _arrowWriter = null;
-                if (_gzipStream != null) await _gzipStream.DisposeAsync();
-                if (_encryptionWriter != null) await _encryptionWriter.CompleteAsync();
             }
             finally
             {
@@ -1704,15 +1787,36 @@ public partial class SpillStore : ISpillStore
                 try
                 {
                     columnBatch = ConvertBatch(batch);
-                    columnBatch.OnFinalRelease(() => batch.Dispose());
+                    columnBatch.OnFinalRelease(() => ClearAndDisposeRecordBatch(batch));
                 }
                 catch
                 {
                     columnBatch?.Dispose();
-                    batch.Dispose();
+                    ClearAndDisposeRecordBatch(batch);
                     throw;
                 }
                 yield return columnBatch;
+            }
+        }
+
+        private static void ClearAndDisposeRecordBatch(RecordBatch batch)
+        {
+            try
+            {
+                for (var i = 0; i < batch.ColumnCount; i++)
+                {
+                    var data = batch.Column(i).Data;
+                    if (data?.Buffers == null) continue;
+                    foreach (var buf in data.Buffers)
+                    {
+                        if (!buf.IsEmpty)
+                            CryptographicOperations.ZeroMemory(MemoryMarshal.AsMemory(buf.Memory).Span);
+                    }
+                }
+            }
+            finally
+            {
+                batch.Dispose();
             }
         }
 
