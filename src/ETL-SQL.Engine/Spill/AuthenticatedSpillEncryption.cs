@@ -7,42 +7,147 @@ namespace ETL_SQL.Engine.Spill;
 
 internal static class AuthenticatedSpillEncryption
 {
-    private static ReadOnlySpan<byte> Magic => "ETLSPL02"u8;
-    private const int HeaderSize = 58; // magic, codec, compression, salt (32), IV (16)
-    private const int TagSize = 32;
+    private static ReadOnlySpan<byte> MagicV2 => "ETLSPL02"u8;
+    private static ReadOnlySpan<byte> MagicV3 => "ETLSPL03"u8;
 
-    public static (CryptoStream Cipher, AuthenticationWriter Authentication) CreateWriter(
-        Stream file, byte[] sessionKey, string chunkName, byte codec, bool compressed, CancellationToken cancellationToken)
+    private const int HeaderSizeV2 = 58; // magic (8), codec (1), compression (1), salt (32), IV (16)
+    private const int TagSizeV2 = 32;
+
+    internal const int HeaderSizeV3 = 64; // magic (8), codec (1), compression (1), maxFrame (4), salt (32), chunkId (16), flags (2)
+    internal const int DefaultMaxFramePlaintextBytes = 131_072; // 128 KiB
+    internal const int MinAllowedFramePlaintextBytes = 4_096;
+    internal const int MaxAllowedFramePlaintextBytes = 1_048_576;
+    internal const int FrameHeaderSizeV3 = 13; // frameIndex (8), frameFlags (1), payloadLength (4)
+    internal const int TagSizeV3 = 16;
+    internal const byte FrameFlagFinal = 0x01;
+
+    private const string AuthenticationFailedMessage =
+        "Spill chunk authentication failed. Rerun the statement or recreate the saved session.";
+
+    public static FramedEncryptionWriter CreateWriter(
+        Stream file,
+        byte[] sessionKey,
+        string chunkName,
+        byte codec,
+        bool compressed,
+        CancellationToken cancellationToken,
+        int maxFramePlaintextBytes = DefaultMaxFramePlaintextBytes)
     {
-        var header = new byte[HeaderSize];
-        Magic.CopyTo(header);
+        if (maxFramePlaintextBytes < MinAllowedFramePlaintextBytes || maxFramePlaintextBytes > MaxAllowedFramePlaintextBytes)
+            throw new ArgumentOutOfRangeException(nameof(maxFramePlaintextBytes));
+
+        var header = new byte[HeaderSizeV3];
+        MagicV3.CopyTo(header);
         header[8] = codec;
         header[9] = compressed ? (byte)1 : (byte)0;
-        RandomNumberGenerator.Fill(header.AsSpan(10));
-        var keys = DeriveKeys(sessionKey, header);
+        BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(10, 4), (uint)maxFramePlaintextBytes);
+        RandomNumberGenerator.Fill(header.AsSpan(14, 48)); // salt (32) + chunkId (16)
+        BinaryPrimitives.WriteUInt16BigEndian(header.AsSpan(62, 2), 0);
+
+        var key = DeriveKeyV3(sessionKey, header);
         try
         {
-            var authentication = new AuthenticationWriter(file, header, keys.AsSpan(32), chunkName, cancellationToken);
-            return (new CryptoStream(authentication, CreateTransform(keys, header, encrypt: true),
-                CryptoStreamMode.Write, leaveOpen: true), authentication);
+            return new FramedEncryptionWriter(file, header, key, chunkName, maxFramePlaintextBytes, cancellationToken);
         }
-        finally { CryptographicOperations.ZeroMemory(keys); }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+        }
     }
 
-    public static async Task<CryptoStream> CreateReaderAsync(
-        Stream file, byte[] sessionKey, string chunkName, byte codec, bool compressed, CancellationToken cancellationToken)
+    public static async Task<Stream> CreateReaderAsync(
+        Stream file,
+        byte[] sessionKey,
+        string chunkName,
+        byte codec,
+        bool compressed,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var magic = new byte[8];
+            await file.ReadExactlyAsync(magic, cancellationToken);
+
+            if (magic.AsSpan().SequenceEqual(MagicV3))
+                return await CreateV3ReaderAsync(file, magic, sessionKey, chunkName, codec, compressed, cancellationToken);
+
+            if (magic.AsSpan().SequenceEqual(MagicV2))
+                return await CreateV2ReaderAsync(file, magic, sessionKey, chunkName, codec, compressed, cancellationToken);
+
+            throw new CryptographicException();
+        }
+        catch (ExecutionException)
+        {
+            throw;
+        }
+        catch (Exception error) when (error is CryptographicException or EndOfStreamException)
+        {
+            throw new ExecutionException(AuthenticationFailedMessage);
+        }
+    }
+
+    private static async Task<Stream> CreateV3ReaderAsync(
+        Stream file,
+        byte[] magic,
+        byte[] sessionKey,
+        string chunkName,
+        byte codec,
+        bool compressed,
+        CancellationToken cancellationToken)
+    {
+        var header = new byte[HeaderSizeV3];
+        magic.CopyTo(header, 0);
+        await file.ReadExactlyAsync(header.AsMemory(8, HeaderSizeV3 - 8), cancellationToken);
+
+        if (header[8] != codec || header[9] != (compressed ? 1 : 0))
+            throw new CryptographicException();
+
+        var maxFrameBytes = BinaryPrimitives.ReadUInt32BigEndian(header.AsSpan(10, 4));
+        var headerFlags = BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(62, 2));
+        if (headerFlags != 0 || maxFrameBytes < MinAllowedFramePlaintextBytes || maxFrameBytes > MaxAllowedFramePlaintextBytes)
+            throw new CryptographicException();
+
+        var key = DeriveKeyV3(sessionKey, header);
+        FramedEncryptionReader? reader = null;
+        try
+        {
+            reader = new FramedEncryptionReader(file, header, key, chunkName, (int)maxFrameBytes);
+            await reader.AuthenticateFirstFrameAsync(cancellationToken);
+            return reader;
+        }
+        catch
+        {
+            if (reader != null)
+                await reader.DisposeAsync();
+            throw;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+        }
+    }
+
+    private static async Task<CryptoStream> CreateV2ReaderAsync(
+        Stream file,
+        byte[] magic,
+        byte[] sessionKey,
+        string chunkName,
+        byte codec,
+        bool compressed,
+        CancellationToken cancellationToken)
     {
         byte[]? keys = null;
         try
         {
-            var header = new byte[HeaderSize];
-            await file.ReadExactlyAsync(header, cancellationToken);
-            // COMPAT_BREAK: 0.22 — encrypted spill files require the authenticated v2 envelope.
-            if (!header.AsSpan(0, 8).SequenceEqual(Magic) || header[8] != codec || header[9] != (compressed ? 1 : 0))
+            var header = new byte[HeaderSizeV2];
+            magic.CopyTo(header, 0);
+            await file.ReadExactlyAsync(header.AsMemory(8, HeaderSizeV2 - 8), cancellationToken);
+            // COMPAT_BREAK: 0.22 — encrypted spill files require an authenticated envelope.
+            if (header[8] != codec || header[9] != (compressed ? 1 : 0))
                 throw new CryptographicException();
-            var length = file.Length - HeaderSize - TagSize;
+            var length = file.Length - HeaderSizeV2 - TagSizeV2;
             if (length < 16 || length % 16 != 0) throw new CryptographicException();
-            keys = DeriveKeys(sessionKey, header);
+            keys = DeriveKeysV2(sessionKey, header);
             using var hmac = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA256, keys.AsSpan(32));
             AppendIdentity(hmac, header, chunkName);
             var buffer = new byte[81920];
@@ -53,23 +158,35 @@ internal static class AuthenticatedSpillEncryption
                 hmac.AppendData(buffer.AsSpan(0, read));
                 remaining -= read;
             }
-            var tag = new byte[TagSize];
+            var tag = new byte[TagSizeV2];
             await file.ReadExactlyAsync(tag, cancellationToken);
             if (!CryptographicOperations.FixedTimeEquals(hmac.GetHashAndReset(), tag)) throw new CryptographicException();
-            file.Position = HeaderSize;
-            return new CryptoStream(new CiphertextReader(file, length), CreateTransform(keys, header, encrypt: false), CryptoStreamMode.Read);
+            file.Position = HeaderSizeV2;
+            return new CryptoStream(new CiphertextReader(file, length), CreateTransformV2(keys, header, encrypt: false), CryptoStreamMode.Read);
         }
-        catch (Exception error) when (error is CryptographicException or EndOfStreamException)
+        finally
         {
-            throw new ExecutionException("Spill chunk authentication failed. Rerun the statement or recreate the saved session.");
+            if (keys != null) CryptographicOperations.ZeroMemory(keys);
         }
-        finally { if (keys != null) CryptographicOperations.ZeroMemory(keys); }
     }
 
-    private static byte[] DeriveKeys(byte[] sessionKey, byte[] header) =>
+    internal static byte[] BuildIdentityPrefix(byte[] header, string chunkName)
+    {
+        var nameBytes = Encoding.UTF8.GetBytes(chunkName);
+        var identity = new byte[header.Length + 4 + nameBytes.Length];
+        header.CopyTo(identity, 0);
+        BinaryPrimitives.WriteInt32BigEndian(identity.AsSpan(header.Length, 4), nameBytes.Length);
+        nameBytes.CopyTo(identity.AsSpan(header.Length + 4));
+        return identity;
+    }
+
+    internal static byte[] DeriveKeyV3(byte[] sessionKey, ReadOnlySpan<byte> header) =>
+        HKDF.DeriveKey(HashAlgorithmName.SHA256, sessionKey, 32, header.Slice(14, 32).ToArray(), "ETL-SQL spill v3"u8.ToArray());
+
+    private static byte[] DeriveKeysV2(byte[] sessionKey, byte[] header) =>
         HKDF.DeriveKey(HashAlgorithmName.SHA256, sessionKey, 64, header.AsSpan(10, 32).ToArray(), "ETL-SQL spill v2"u8.ToArray());
 
-    private static ICryptoTransform CreateTransform(byte[] keys, byte[] header, bool encrypt)
+    private static ICryptoTransform CreateTransformV2(byte[] keys, byte[] header, bool encrypt)
     {
         var key = keys[..32];
         try
@@ -90,27 +207,53 @@ internal static class AuthenticatedSpillEncryption
         hmac.AppendData(name);
     }
 
-    internal sealed class AuthenticationWriter : Stream
+    internal sealed class FramedEncryptionWriter : Stream
     {
         private readonly Stream _file;
         private readonly byte[] _header;
-        private readonly IncrementalHash _hmac;
+        private readonly AesGcm _aesGcm;
         private readonly CancellationToken _cancellationToken;
+        private readonly int _maxFramePlaintextBytes;
+        private readonly byte[] _plainBuf;
+        private readonly byte[] _frameBuf;
+        private readonly byte[] _aadBuf;
+        private readonly int _identityLength;
+        private readonly byte[] _nonce = new byte[12];
+        private int _plainOffset;
+        private ulong _frameIndex;
         private bool _started;
         private bool _completed;
+        private bool _disposed;
 
-        internal AuthenticationWriter(Stream file, byte[] header, ReadOnlySpan<byte> key, string chunkName, CancellationToken cancellationToken)
+        internal FramedEncryptionWriter(
+            Stream file,
+            byte[] header,
+            byte[] derivedKey,
+            string chunkName,
+            int maxFramePlaintextBytes,
+            CancellationToken cancellationToken)
         {
             _file = file;
             _header = header;
+            _aesGcm = new AesGcm(derivedKey, TagSizeV3);
+            _maxFramePlaintextBytes = maxFramePlaintextBytes;
             _cancellationToken = cancellationToken;
-            _hmac = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA256, key);
-            AppendIdentity(_hmac, header, chunkName);
+
+            _plainBuf = new byte[maxFramePlaintextBytes];
+            _frameBuf = new byte[FrameHeaderSizeV3 + TagSizeV3 + maxFramePlaintextBytes];
+
+            var identity = BuildIdentityPrefix(header, chunkName);
+            _identityLength = identity.Length;
+            _aadBuf = new byte[_identityLength + FrameHeaderSizeV3];
+            identity.CopyTo(_aadBuf, 0);
+
+            header.AsSpan(46, 4).CopyTo(_nonce);
         }
 
         private async ValueTask StartAsync(CancellationToken cancellationToken)
         {
             if (_completed) throw new InvalidOperationException("Spill encryption is already complete.");
+            if (_disposed) throw new ObjectDisposedException(nameof(FramedEncryptionWriter));
             _cancellationToken.ThrowIfCancellationRequested();
             if (!_started)
             {
@@ -119,28 +262,63 @@ internal static class AuthenticatedSpillEncryption
             }
         }
 
-        public async Task CompleteAsync()
-        {
-            await StartAsync(_cancellationToken);
-            await _file.WriteAsync(_hmac.GetHashAndReset(), _cancellationToken);
-            await _file.FlushAsync(_cancellationToken);
-            _completed = true;
-        }
-
         public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
             var token = cancellationToken.CanBeCanceled ? cancellationToken : _cancellationToken;
             await StartAsync(token);
-            await _file.WriteAsync(buffer, token);
-            _hmac.AppendData(buffer.Span);
+
+            var remaining = buffer;
+            while (!remaining.IsEmpty)
+            {
+                if (_plainOffset == _maxFramePlaintextBytes)
+                    await EmitFrameAsync(_plainOffset, isFinal: false, token);
+
+                var space = _maxFramePlaintextBytes - _plainOffset;
+                var toCopy = Math.Min(space, remaining.Length);
+                remaining.Span[..toCopy].CopyTo(_plainBuf.AsSpan(_plainOffset, toCopy));
+                _plainOffset += toCopy;
+                remaining = remaining[toCopy..];
+            }
         }
 
         public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
             WriteAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public async Task CompleteAsync()
+        {
+            if (_completed) return;
+            await StartAsync(_cancellationToken);
+            await EmitFrameAsync(_plainOffset, isFinal: true, _cancellationToken);
+            await _file.FlushAsync(_cancellationToken);
+            _completed = true;
+        }
+
+        private async ValueTask EmitFrameAsync(int payloadLength, bool isFinal, CancellationToken cancellationToken)
+        {
+            var frameHeader = _frameBuf.AsSpan(0, FrameHeaderSizeV3);
+            BinaryPrimitives.WriteUInt64BigEndian(frameHeader[..8], _frameIndex);
+            frameHeader[8] = isFinal ? FrameFlagFinal : (byte)0;
+            BinaryPrimitives.WriteUInt32BigEndian(frameHeader.Slice(9, 4), (uint)payloadLength);
+
+            frameHeader.CopyTo(_aadBuf.AsSpan(_identityLength, FrameHeaderSizeV3));
+            BinaryPrimitives.WriteUInt64BigEndian(_nonce.AsSpan(4, 8), _frameIndex);
+
+            var tagSpan = _frameBuf.AsSpan(FrameHeaderSizeV3, TagSizeV3);
+            var cipherSpan = _frameBuf.AsSpan(FrameHeaderSizeV3 + TagSizeV3, payloadLength);
+            var plainSpan = _plainBuf.AsSpan(0, payloadLength);
+
+            _aesGcm.Encrypt(_nonce, plainSpan, cipherSpan, tagSpan, _aadBuf);
+            CryptographicOperations.ZeroMemory(plainSpan);
+
+            await _file.WriteAsync(_frameBuf.AsMemory(0, FrameHeaderSizeV3 + TagSizeV3 + payloadLength), cancellationToken);
+            _plainOffset = 0;
+            _frameIndex++;
+        }
+
         public override Task FlushAsync(CancellationToken cancellationToken) => _file.FlushAsync(cancellationToken);
         public override bool CanRead => false;
         public override bool CanSeek => false;
-        public override bool CanWrite => !_completed;
+        public override bool CanWrite => !_completed && !_disposed;
         public override long Length => throw new NotSupportedException();
         public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
         public override void Flush() { }
@@ -148,7 +326,190 @@ internal static class AuthenticatedSpillEncryption
         public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
-        protected override void Dispose(bool disposing) { if (disposing) _hmac.Dispose(); base.Dispose(disposing); }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (!_disposed && disposing)
+            {
+                _disposed = true;
+                CryptographicOperations.ZeroMemory(_plainBuf);
+                CryptographicOperations.ZeroMemory(_frameBuf);
+                CryptographicOperations.ZeroMemory(_aadBuf);
+                CryptographicOperations.ZeroMemory(_nonce);
+                _aesGcm.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+    }
+
+    internal sealed class FramedEncryptionReader : Stream
+    {
+        private readonly Stream _file;
+        private readonly AesGcm _aesGcm;
+        private readonly int _maxFramePlaintextBytes;
+        private readonly byte[] _plainBuf;
+        private readonly byte[] _cipherBuf;
+        private readonly byte[] _aadBuf;
+        private readonly int _identityLength;
+        private readonly byte[] _nonce = new byte[12];
+        private readonly byte[] _frameHeader = new byte[FrameHeaderSizeV3];
+        private readonly byte[] _trailingProbe = new byte[1];
+        private int _plainOffset;
+        private int _plainLength;
+        private ulong _expectedFrameIndex;
+        private bool _seenFinal;
+        private bool _eof;
+        private bool _failed;
+        private bool _disposed;
+
+        internal FramedEncryptionReader(
+            Stream file,
+            byte[] header,
+            byte[] derivedKey,
+            string chunkName,
+            int maxFramePlaintextBytes)
+        {
+            _file = file;
+            _aesGcm = new AesGcm(derivedKey, TagSizeV3);
+            _maxFramePlaintextBytes = maxFramePlaintextBytes;
+
+            _plainBuf = new byte[maxFramePlaintextBytes];
+            _cipherBuf = new byte[TagSizeV3 + maxFramePlaintextBytes];
+
+            var identity = BuildIdentityPrefix(header, chunkName);
+            _identityLength = identity.Length;
+            _aadBuf = new byte[_identityLength + FrameHeaderSizeV3];
+            identity.CopyTo(_aadBuf, 0);
+
+            header.AsSpan(46, 4).CopyTo(_nonce);
+        }
+
+        internal async ValueTask AuthenticateFirstFrameAsync(CancellationToken cancellationToken)
+        {
+            await ReadAndAuthenticateNextFrameAsync(cancellationToken);
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (_failed) throw new ExecutionException(AuthenticationFailedMessage);
+            if (_disposed) throw new ObjectDisposedException(nameof(FramedEncryptionReader));
+            if (buffer.IsEmpty) return 0;
+
+            while (true)
+            {
+                if (_plainOffset < _plainLength)
+                {
+                    var available = _plainLength - _plainOffset;
+                    var toCopy = Math.Min(buffer.Length, available);
+                    _plainBuf.AsSpan(_plainOffset, toCopy).CopyTo(buffer.Span);
+                    CryptographicOperations.ZeroMemory(_plainBuf.AsSpan(_plainOffset, toCopy));
+                    _plainOffset += toCopy;
+                    return toCopy;
+                }
+
+                if (_eof)
+                    return 0;
+
+                await ReadAndAuthenticateNextFrameAsync(cancellationToken);
+            }
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        private async ValueTask ReadAndAuthenticateNextFrameAsync(CancellationToken cancellationToken)
+        {
+            if (_seenFinal)
+            {
+                _eof = true;
+                return;
+            }
+
+            try
+            {
+                await _file.ReadExactlyAsync(_frameHeader, cancellationToken);
+
+                var frameIndex = BinaryPrimitives.ReadUInt64BigEndian(_frameHeader.AsSpan(0, 8));
+                var frameFlags = _frameHeader[8];
+                var payloadLengthU = BinaryPrimitives.ReadUInt32BigEndian(_frameHeader.AsSpan(9, 4));
+
+                if (frameIndex != _expectedFrameIndex)
+                    throw new CryptographicException();
+
+                if ((frameFlags & ~FrameFlagFinal) != 0)
+                    throw new CryptographicException();
+
+                var isFinal = (frameFlags & FrameFlagFinal) != 0;
+                if (payloadLengthU > (uint)_maxFramePlaintextBytes || (!isFinal && payloadLengthU == 0))
+                    throw new CryptographicException();
+
+                var payloadLength = (int)payloadLengthU;
+                var totalBodyBytes = TagSizeV3 + payloadLength;
+                await _file.ReadExactlyAsync(_cipherBuf.AsMemory(0, totalBodyBytes), cancellationToken);
+
+                _frameHeader.CopyTo(_aadBuf.AsSpan(_identityLength, FrameHeaderSizeV3));
+                BinaryPrimitives.WriteUInt64BigEndian(_nonce.AsSpan(4, 8), frameIndex);
+
+                var tagSpan = _cipherBuf.AsSpan(0, TagSizeV3);
+                var cipherSpan = _cipherBuf.AsSpan(TagSizeV3, payloadLength);
+                var plainSpan = _plainBuf.AsSpan(0, payloadLength);
+
+                _aesGcm.Decrypt(_nonce, cipherSpan, tagSpan, plainSpan, _aadBuf);
+
+                _expectedFrameIndex++;
+                _plainOffset = 0;
+                _plainLength = payloadLength;
+
+                if (isFinal)
+                {
+                    _seenFinal = true;
+                    // Reject trailing bytes after the authenticated completion marker without seeking.
+                    var extra = await _file.ReadAsync(_trailingProbe.AsMemory(0, 1), cancellationToken);
+                    if (extra != 0)
+                        throw new CryptographicException();
+                    if (payloadLength == 0)
+                        _eof = true;
+                }
+            }
+            catch (ExecutionException)
+            {
+                _failed = true;
+                CryptographicOperations.ZeroMemory(_plainBuf);
+                throw;
+            }
+            catch (Exception error) when (error is CryptographicException or EndOfStreamException)
+            {
+                _failed = true;
+                CryptographicOperations.ZeroMemory(_plainBuf);
+                throw new ExecutionException(AuthenticationFailedMessage);
+            }
+        }
+
+        public override bool CanRead => !_disposed;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException("Spill reads must be asynchronous.");
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (!_disposed && disposing)
+            {
+                _disposed = true;
+                CryptographicOperations.ZeroMemory(_plainBuf);
+                CryptographicOperations.ZeroMemory(_cipherBuf);
+                CryptographicOperations.ZeroMemory(_aadBuf);
+                CryptographicOperations.ZeroMemory(_nonce);
+                CryptographicOperations.ZeroMemory(_frameHeader);
+                _aesGcm.Dispose();
+            }
+            base.Dispose(disposing);
+        }
     }
 
     private sealed class CiphertextReader(Stream file, long length) : Stream

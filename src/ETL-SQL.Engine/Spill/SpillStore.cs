@@ -574,8 +574,7 @@ public partial class SpillStore : ISpillStore
     private class SecureSpillWriter : ISpillWriter
     {
         private readonly FileStream _fileStream;
-        private readonly CryptoStream? _cryptoStream;
-        private readonly AuthenticatedSpillEncryption.AuthenticationWriter? _authentication;
+        private readonly AuthenticatedSpillEncryption.FramedEncryptionWriter? _encryptionWriter;
         private bool _disposed;
         private readonly GZipStream? _gzipStream;
         private readonly StreamWriter _writer;
@@ -598,8 +597,8 @@ public partial class SpillStore : ISpillStore
 
                 if (encrypt)
                 {
-                    (_cryptoStream, _authentication) = AuthenticatedSpillEncryption.CreateWriter(_fileStream, key, chunkName, 1, compress, context.CancellationToken);
-                    current = _cryptoStream;
+                    _encryptionWriter = AuthenticatedSpillEncryption.CreateWriter(_fileStream, key, chunkName, 1, compress, context.CancellationToken);
+                    current = _encryptionWriter;
                 }
 
                 if (compress)
@@ -667,8 +666,7 @@ public partial class SpillStore : ISpillStore
                 await WriteHeaderAsync();
                 await _writer.DisposeAsync();
                 if (_gzipStream != null) await _gzipStream.DisposeAsync();
-                if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
-                if (_authentication != null) await _authentication.CompleteAsync();
+                if (_encryptionWriter != null) await _encryptionWriter.CompleteAsync();
             }
             finally
             {
@@ -678,10 +676,9 @@ public partial class SpillStore : ISpillStore
                 }
                 finally
                 {
-                    try { if (_cryptoStream != null) await _cryptoStream.DisposeAsync(); }
+                    try { if (_encryptionWriter != null) await _encryptionWriter.DisposeAsync(); }
                     finally
                     {
-                        _authentication?.Dispose();
                         await _fileStream.DisposeAsync();
                     }
                 }
@@ -698,7 +695,7 @@ public partial class SpillStore : ISpillStore
         private readonly CancellationToken _cancellationToken;
         private readonly string _chunkName;
         private FileStream? _fileStream;
-        private CryptoStream? _cryptoStream;
+        private Stream? _cryptoStream;
         private GZipStream? _gzipStream;
         private StreamReader? _reader;
         private bool _headerRead;
@@ -798,8 +795,7 @@ public partial class SpillStore : ISpillStore
         private const string SchemaVersion = "1";
         private static readonly FixedSizeBinaryType BinaryDecimalType = new(16);
         private readonly FileStream _fileStream;
-        private readonly CryptoStream? _cryptoStream;
-        private readonly AuthenticatedSpillEncryption.AuthenticationWriter? _authentication;
+        private readonly AuthenticatedSpillEncryption.FramedEncryptionWriter? _encryptionWriter;
         private bool _disposed;
         private readonly GZipStream? _gzipStream;
         private readonly Stream _payloadStream;
@@ -830,8 +826,8 @@ public partial class SpillStore : ISpillStore
 
                 if (encrypt)
                 {
-                    (_cryptoStream, _authentication) = AuthenticatedSpillEncryption.CreateWriter(_fileStream, key, chunkName, 2, compress, context.CancellationToken);
-                    current = _cryptoStream;
+                    _encryptionWriter = AuthenticatedSpillEncryption.CreateWriter(_fileStream, key, chunkName, 2, compress, context.CancellationToken);
+                    current = _encryptionWriter;
                 }
 
                 if (compress)
@@ -1431,8 +1427,7 @@ public partial class SpillStore : ISpillStore
                 _arrowWriter?.Dispose();
                 _arrowWriter = null;
                 if (_gzipStream != null) await _gzipStream.DisposeAsync();
-                if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
-                if (_authentication != null) await _authentication.CompleteAsync();
+                if (_encryptionWriter != null) await _encryptionWriter.CompleteAsync();
             }
             finally
             {
@@ -1444,10 +1439,9 @@ public partial class SpillStore : ISpillStore
                 }
                 finally
                 {
-                    try { if (_cryptoStream != null) await _cryptoStream.DisposeAsync(); }
+                    try { if (_encryptionWriter != null) await _encryptionWriter.DisposeAsync(); }
                     finally
                     {
-                        _authentication?.Dispose();
                         await _fileStream.DisposeAsync();
                     }
                 }
@@ -1467,7 +1461,7 @@ public partial class SpillStore : ISpillStore
         private readonly CancellationToken _cancellationToken;
         private readonly string _chunkName;
         private FileStream? _fileStream;
-        private CryptoStream? _cryptoStream;
+        private Stream? _cryptoStream;
         private GZipStream? _gzipStream;
         private ArrowStreamReader? _arrowReader;
 
