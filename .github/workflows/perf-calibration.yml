@@ -1,0 +1,91 @@
+# W6 performance calibration (docs/releases/v0.23.0-w6-performance-gates-design.md).
+#
+# Runs the Smoke and Standard scale tiers and the spill allocation profile on hosted runners,
+# several independent replicas at one commit. Used to:
+#   - prove the deterministic metrics (work counters, allocations) agree across runs (slice 1), and
+#   - capture hosted baselines; a recalibration commits one replica's reports (slice 2).
+# Nothing here gates; it only produces evidence. Trigger: push a `perf-calibration/**` branch at the
+# commit to measure, or dispatch once the workflow is registered on the default branch.
+name: Performance Calibration
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ 'perf-calibration/**' ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perf-calibration-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+
+jobs:
+  calibrate:
+    name: Calibrate (replica ${{ matrix.replica }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: [ 1, 2, 3, 4, 5 ]
+    steps:
+      - name: Checkout
+        timeout-minutes: 15
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        timeout-minutes: 8
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        timeout-minutes: 8
+        run: node scripts/sync-assets.js
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore dependencies
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('restore', 'ETL-SQL.slnx') -EvidenceDirectory release-validation/perf-calibration/restore -TimeoutSeconds 660
+
+      - name: Build
+        shell: pwsh
+        timeout-minutes: 17
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'ETL-SQL.slnx', '--no-restore', '--configuration', 'Release') -EvidenceDirectory release-validation/perf-calibration/build -TimeoutSeconds 960
+
+      - name: Spill allocation profile (10M rows)
+        shell: pwsh
+        timeout-minutes: 8
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-SpillAllocProfile.ps1 -ScriptArguments @('-Rows', '10000000', '-SkipBuild', '-MachineMetricsReportOnly', '-OutDir', 'release-validation/perf-calibration/spill-allocation') -EvidenceDirectory release-validation/perf-calibration/spill-process -TimeoutSeconds 420
+
+      - name: Scale certification (smoke, 5 samples)
+        shell: pwsh
+        timeout-minutes: 25
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ScaleCertification.ps1 -ScriptArguments @('-Tier', 'Smoke', '-Samples', '5', '-SkipBuild', '-OutDir', 'release-validation/perf-calibration/scale-smoke') -EvidenceDirectory release-validation/perf-calibration/scale-smoke-process -TimeoutSeconds 1440
+
+      - name: Scale certification (standard, 5 samples)
+        shell: pwsh
+        timeout-minutes: 40
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ScaleCertification.ps1 -ScriptArguments @('-Tier', 'Standard', '-Samples', '5', '-SkipBuild', '-OutDir', 'release-validation/perf-calibration/scale-standard') -EvidenceDirectory release-validation/perf-calibration/scale-standard-process -TimeoutSeconds 2340
+
+      - name: Retain calibration evidence
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: perf-calibration-r${{ matrix.replica }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/perf-calibration/
+          if-no-files-found: error
+          retention-days: 90
