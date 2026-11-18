@@ -1,0 +1,44 @@
+-- Conformance Fixture: Multi-Color Conditional Line Transitions
+-- Validates per-segment conditional color transitions along a connected LINE mark.
+
+SET REPORT TITLE = 'Conformance: Multi-Color Conditional Line Transitions';
+
+SELECT 1.0 AS Checkpoint, -12.0 AS MarginPct INTO #margin_trajectory
+UNION ALL SELECT 2.0, 6.0
+UNION ALL SELECT 3.0, 24.0
+UNION ALL SELECT 4.0, 14.0
+UNION ALL SELECT 5.0, -8.0
+UNION ALL SELECT 6.0, 19.0;
+
+CREATE VISUAL ConditionalLineTransitions AS CUSTOM (
+    TITLE = 'Margin Regime Transitions',
+    SOURCE = #margin_trajectory,
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            x = LINEAR (CHANNEL = X),
+            y = LINEAR (CHANNEL = Y)
+        ),
+        LAYERS (
+            trajectory = LINE (
+                NULL_HANDLING = GAP,
+                ENCODINGS (
+                    X = Checkpoint (TYPE = QUANTITATIVE, SCALE = x),
+                    Y = MarginPct (TYPE = QUANTITATIVE, SCALE = y)
+                ),
+                STYLE (INTERPOLATION = 'LINEAR', COLOR = '#475569'),
+                CONDITIONS (
+                    COLOR WHEN MarginPct < 0 THEN '#dc2626',
+                    COLOR WHEN MarginPct >= 15 THEN '#16a34a' ELSE '#d97706'
+                )
+            )
+        )
+    )
+);
+
+CREATE PAGE ConditionalLineDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = ConditionalLineTransitions)
+    )
+);

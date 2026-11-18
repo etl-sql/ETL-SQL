@@ -1,0 +1,18 @@
+╭─Margin Regime Transitions────────────────────────────────────────────────────────────────────────╮
+│ Margin Regime Transitions: 6 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped │
+│ rows.                                                                                            │
+│ Row 1 to row 2; source-owned Color: #dc2626                                                      │
+│ Row 2 to row 3; source-owned Color: #d97706                                                      │
+│ Row 3 to row 4; source-owned Color: #16a34a                                                      │
+│ Row 4 to row 5; source-owned Color: #d97706                                                      │
+│ Row 5 to row 6; source-owned Color: #dc2626                                                      │
+│ ● MarginPct (Braille line; 0 gaps)                                                               │
+│     24 ┼                  ⡠⠒⠉⠒⠤⣀⡀                                                                │
+│        │               ⣀⠔⠉      ⠈⠑⠒⠤⣀                  ⡠⠊                                        │
+│        │            ⢀⠤⠊              ⠉⠢⡀             ⢀⠎                                          │
+│      6 ┼         ⢀⡠⠒⠁                  ⠈⠑⢄         ⢀⠔⠁                                           │
+│        │      ⢀⡠⠒⠁                        ⠑⢄     ⢀⠔⠁                                             │
+│        │    ⡠⠔⠁                             ⠑⠢⡀ ⡠⠊                                               │
+│    -12 ┼ ⡠⠔⠉                                  ⠈⠊                                                 │
+│ X: 1.0 … 6.0  │  Y: -12.0 … 24.0                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

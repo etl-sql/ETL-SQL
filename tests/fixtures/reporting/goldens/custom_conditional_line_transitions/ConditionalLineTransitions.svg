@@ -1,0 +1,47 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='ConditionalLineTransitions-title ConditionalLineTransitions-desc' font-family='sans-serif'>
+<title id='ConditionalLineTransitions-title'>Margin Regime Transitions</title>
+<desc id='ConditionalLineTransitions-desc'>Margin Regime Transitions: 6 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Margin Regime Transitions</text>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb' stroke-width='1'/>
+<defs><clipPath id='ConditionalLineTransitions-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
+<g clip-path='url(#ConditionalLineTransitions-plot-clip)'>
+<path class='plot-conditional-connection' data-source-index='0' data-destination-index='1' d='M 60 278.636 L 164 165' fill='none' stroke='#dc2626' stroke-width='2' opacity='1'><title>Row 1 to row 2; source-owned Color: #dc2626</title></path>
+<path class='plot-conditional-connection' data-source-index='1' data-destination-index='2' d='M 164 165 L 268 51.364' fill='none' stroke='#d97706' stroke-width='2' opacity='1'><title>Row 2 to row 3; source-owned Color: #d97706</title></path>
+<path class='plot-conditional-connection' data-source-index='2' data-destination-index='3' d='M 268 51.364 L 372 114.495' fill='none' stroke='#16a34a' stroke-width='2' opacity='1'><title>Row 3 to row 4; source-owned Color: #16a34a</title></path>
+<path class='plot-conditional-connection' data-source-index='3' data-destination-index='4' d='M 372 114.495 L 476 253.384' fill='none' stroke='#d97706' stroke-width='2' opacity='1'><title>Row 4 to row 5; source-owned Color: #d97706</title></path>
+<path class='plot-conditional-connection' data-source-index='4' data-destination-index='5' d='M 476 253.384 L 580 82.929' fill='none' stroke='#dc2626' stroke-width='2' opacity='1'><title>Row 5 to row 6; source-owned Color: #dc2626</title></path>
+<circle class='plot-line-symbol' fill='#dc2626' opacity='1' data-row-index='0' cx='60' cy='278.636' r='3'><title>-12</title></circle>
+<circle class='plot-line-symbol' fill='#d97706' opacity='1' data-row-index='1' cx='164' cy='165' r='3'><title>6</title></circle>
+<circle class='plot-line-symbol' fill='#16a34a' opacity='1' data-row-index='2' cx='268' cy='51.364' r='3'><title>24</title></circle>
+<circle class='plot-line-symbol' fill='#d97706' opacity='1' data-row-index='3' cx='372' cy='114.495' r='3'><title>14</title></circle>
+<circle class='plot-line-symbol' fill='#dc2626' opacity='1' data-row-index='4' cx='476' cy='253.384' r='3'><title>-8</title></circle>
+<circle class='plot-line-symbol' fill='#16a34a' opacity='1' data-row-index='5' cx='580' cy='82.929' r='3'><title>19</title></circle>
+</g>
+<line x1='60' y1='290' x2='60' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='0' x='60' y='306' text-anchor='middle' font-size='9' fill='#666'>1</text>
+<line x1='190' y1='290' x2='190' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='1' x='190' y='306' text-anchor='middle' font-size='9' fill='#666'>2.25</text>
+<line x1='320' y1='290' x2='320' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='2' x='320' y='306' text-anchor='middle' font-size='9' fill='#666'>3.5</text>
+<line x1='450' y1='290' x2='450' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='3' x='450' y='306' text-anchor='middle' font-size='9' fill='#666'>4.75</text>
+<line x1='580' y1='290' x2='580' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='4' x='580' y='306' text-anchor='middle' font-size='9' fill='#666'>6</text>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>-13.8</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>-3.9</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>6</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>15.9</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>25.8</text>
+</svg>

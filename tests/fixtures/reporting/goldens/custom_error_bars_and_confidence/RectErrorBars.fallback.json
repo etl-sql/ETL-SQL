@@ -1,0 +1,35 @@
+{
+  "kind": "rankedTable",
+  "heading": "Bar Estimates with Error Intervals",
+  "items": [
+    {
+      "label": "T1",
+      "value": "48.0",
+      "order": 0,
+      "detail": "error 41.0 to 55.0",
+      "group": "Estimate"
+    },
+    {
+      "label": "T2",
+      "value": "62.0",
+      "order": 1,
+      "detail": "error 56.0 to 68.0",
+      "group": "Estimate"
+    },
+    {
+      "label": "T3",
+      "value": "54.0",
+      "order": 2,
+      "detail": "error 46.0 to 62.0",
+      "group": "Estimate"
+    },
+    {
+      "label": "T4",
+      "value": "75.0",
+      "order": 3,
+      "detail": "error 69.0 to 81.0",
+      "group": "Estimate"
+    }
+  ],
+  "summary": "Bar Estimates with Error Intervals: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

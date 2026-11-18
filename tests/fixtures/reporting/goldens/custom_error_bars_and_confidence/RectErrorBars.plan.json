@@ -1,0 +1,392 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
+  "specId": "RectErrorBars",
+  "title": "Bar Estimates with Error Intervals",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "trials",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "T1"
+        },
+        {
+          "kind": "text",
+          "text": "T2"
+        },
+        {
+          "kind": "text",
+          "text": "T3"
+        },
+        {
+          "kind": "text",
+          "text": "T4"
+        }
+      ],
+      "categories": [
+        "T1",
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "T1"
+          },
+          "label": "T1"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "T2"
+          },
+          "label": "T2"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "T3"
+          },
+          "label": "T3"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "T4"
+          },
+          "label": "T4"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "score",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 81.0
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 20.25
+          },
+          "label": "20.25"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 40.5
+          },
+          "label": "40.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 60.75
+          },
+          "label": "60.75"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 81.0
+          },
+          "label": "81"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Estimate",
+      "label": "Estimate",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Estimate",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Estimate",
+      "label": "Estimate",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "bars",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "Estimate",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T1"
+              },
+              "displayValue": "T1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 48.0
+              },
+              "displayValue": "48.0"
+            },
+            {
+              "channel": "errorLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 41.0
+              },
+              "displayValue": "41.0"
+            },
+            {
+              "channel": "errorHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 55.0
+              },
+              "displayValue": "55.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T2"
+              },
+              "displayValue": "T2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 62.0
+              },
+              "displayValue": "62.0"
+            },
+            {
+              "channel": "errorLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 56.0
+              },
+              "displayValue": "56.0"
+            },
+            {
+              "channel": "errorHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 68.0
+              },
+              "displayValue": "68.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T3"
+              },
+              "displayValue": "T3"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 54.0
+              },
+              "displayValue": "54.0"
+            },
+            {
+              "channel": "errorLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 46.0
+              },
+              "displayValue": "46.0"
+            },
+            {
+              "channel": "errorHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 62.0
+              },
+              "displayValue": "62.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T4"
+              },
+              "displayValue": "T4"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 75.0
+              },
+              "displayValue": "75.0"
+            },
+            {
+              "channel": "errorLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 69.0
+              },
+              "displayValue": "69.0"
+            },
+            {
+              "channel": "errorHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 81.0
+              },
+              "displayValue": "81.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "ERROR_BAR_STYLE",
+          "value": "CAPS"
+        },
+        {
+          "name": "FILL",
+          "value": "#3b82f6"
+        }
+      ],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Bar Estimates with Error Intervals: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Bar Estimates with Error Intervals",
+    "items": [
+      {
+        "label": "T1",
+        "value": "48.0",
+        "order": 0,
+        "detail": "error 41.0 to 55.0",
+        "group": "Estimate"
+      },
+      {
+        "label": "T2",
+        "value": "62.0",
+        "order": 1,
+        "detail": "error 56.0 to 68.0",
+        "group": "Estimate"
+      },
+      {
+        "label": "T3",
+        "value": "54.0",
+        "order": 2,
+        "detail": "error 46.0 to 62.0",
+        "group": "Estimate"
+      },
+      {
+        "label": "T4",
+        "value": "75.0",
+        "order": 3,
+        "detail": "error 69.0 to 81.0",
+        "group": "Estimate"
+      }
+    ],
+    "summary": "Bar Estimates with Error Intervals: 4 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Bar Estimates with Error Intervals"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Trial",
+    "valueKey": "Estimate"
+  }
+}

@@ -1,0 +1,698 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
+  "specId": "ConfidenceAndErrorPoints",
+  "title": "Confidence Band \u0026 Point Error Bars",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "trials",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "T1"
+        },
+        {
+          "kind": "text",
+          "text": "T2"
+        },
+        {
+          "kind": "text",
+          "text": "T3"
+        },
+        {
+          "kind": "text",
+          "text": "T4"
+        }
+      ],
+      "categories": [
+        "T1",
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "T1"
+          },
+          "label": "T1"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "T2"
+          },
+          "label": "T2"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "T3"
+          },
+          "label": "T3"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "T4"
+          },
+          "label": "T4"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "score",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 33.450
+        },
+        {
+          "kind": "decimal",
+          "decimal": 89.550
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 33.450
+          },
+          "label": "33.45"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 47.475
+          },
+          "label": "47.48"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 61.500
+          },
+          "label": "61.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 75.525
+          },
+          "label": "75.53"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 89.550
+          },
+          "label": "89.55"
+        }
+      ],
+      "includesZero": false
+    }
+  ],
+  "series": [
+    {
+      "key": "Estimate",
+      "label": "Estimate",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Estimate",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Estimate",
+      "label": "Estimate",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "confidence",
+      "mark": "area",
+      "zIndex": 0,
+      "seriesKey": "Estimate",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T1"
+              },
+              "displayValue": "T1"
+            },
+            {
+              "channel": "confidenceLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 36.0
+              },
+              "displayValue": "36.0"
+            },
+            {
+              "channel": "confidenceHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 60.0
+              },
+              "displayValue": "60.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T2"
+              },
+              "displayValue": "T2"
+            },
+            {
+              "channel": "confidenceLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50.0
+              },
+              "displayValue": "50.0"
+            },
+            {
+              "channel": "confidenceHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 74.0
+              },
+              "displayValue": "74.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T3"
+              },
+              "displayValue": "T3"
+            },
+            {
+              "channel": "confidenceLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 42.0
+              },
+              "displayValue": "42.0"
+            },
+            {
+              "channel": "confidenceHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 68.0
+              },
+              "displayValue": "68.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T4"
+              },
+              "displayValue": "T4"
+            },
+            {
+              "channel": "confidenceLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 63.0
+              },
+              "displayValue": "63.0"
+            },
+            {
+              "channel": "confidenceHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 87.0
+              },
+              "displayValue": "87.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "COLOR",
+          "value": "#93c5fd"
+        },
+        {
+          "name": "OPACITY",
+          "value": "0.35"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "trend",
+      "mark": "line",
+      "zIndex": 1,
+      "seriesKey": "Estimate",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T1"
+              },
+              "displayValue": "T1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 48.0
+              },
+              "displayValue": "48.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T2"
+              },
+              "displayValue": "T2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 62.0
+              },
+              "displayValue": "62.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T3"
+              },
+              "displayValue": "T3"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 54.0
+              },
+              "displayValue": "54.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T4"
+              },
+              "displayValue": "T4"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 75.0
+              },
+              "displayValue": "75.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "COLOR",
+          "value": "#1d4ed8"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "points",
+      "mark": "point",
+      "zIndex": 2,
+      "seriesKey": "Estimate",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T1"
+              },
+              "displayValue": "T1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 48.0
+              },
+              "displayValue": "48.0"
+            },
+            {
+              "channel": "errorLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 41.0
+              },
+              "displayValue": "41.0"
+            },
+            {
+              "channel": "errorHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 55.0
+              },
+              "displayValue": "55.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T2"
+              },
+              "displayValue": "T2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 62.0
+              },
+              "displayValue": "62.0"
+            },
+            {
+              "channel": "errorLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 56.0
+              },
+              "displayValue": "56.0"
+            },
+            {
+              "channel": "errorHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 68.0
+              },
+              "displayValue": "68.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T3"
+              },
+              "displayValue": "T3"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 54.0
+              },
+              "displayValue": "54.0"
+            },
+            {
+              "channel": "errorLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 46.0
+              },
+              "displayValue": "46.0"
+            },
+            {
+              "channel": "errorHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 62.0
+              },
+              "displayValue": "62.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "T4"
+              },
+              "displayValue": "T4"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 75.0
+              },
+              "displayValue": "75.0"
+            },
+            {
+              "channel": "errorLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 69.0
+              },
+              "displayValue": "69.0"
+            },
+            {
+              "channel": "errorHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 81.0
+              },
+              "displayValue": "81.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "ERROR_BAR_STYLE",
+          "value": "CAPS"
+        },
+        {
+          "name": "COLOR",
+          "value": "#1e3a8a"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Confidence Band \u0026 Point Error Bars: 4 rows, 3 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Confidence Band \u0026 Point Error Bars",
+    "items": [
+      {
+        "label": "T1",
+        "value": "",
+        "order": 0,
+        "detail": "confidence 36.0 to 60.0",
+        "group": "Estimate"
+      },
+      {
+        "label": "T2",
+        "value": "",
+        "order": 1,
+        "detail": "confidence 50.0 to 74.0",
+        "group": "Estimate"
+      },
+      {
+        "label": "T3",
+        "value": "",
+        "order": 2,
+        "detail": "confidence 42.0 to 68.0",
+        "group": "Estimate"
+      },
+      {
+        "label": "T4",
+        "value": "",
+        "order": 3,
+        "detail": "confidence 63.0 to 87.0",
+        "group": "Estimate"
+      },
+      {
+        "label": "T1",
+        "value": "48.0",
+        "order": 100000,
+        "group": "Estimate"
+      },
+      {
+        "label": "T2",
+        "value": "62.0",
+        "order": 100001,
+        "group": "Estimate"
+      },
+      {
+        "label": "T3",
+        "value": "54.0",
+        "order": 100002,
+        "group": "Estimate"
+      },
+      {
+        "label": "T4",
+        "value": "75.0",
+        "order": 100003,
+        "group": "Estimate"
+      },
+      {
+        "label": "T1",
+        "value": "48.0",
+        "order": 200000,
+        "detail": "error 41.0 to 55.0",
+        "group": "Estimate"
+      },
+      {
+        "label": "T2",
+        "value": "62.0",
+        "order": 200001,
+        "detail": "error 56.0 to 68.0",
+        "group": "Estimate"
+      },
+      {
+        "label": "T3",
+        "value": "54.0",
+        "order": 200002,
+        "detail": "error 46.0 to 62.0",
+        "group": "Estimate"
+      },
+      {
+        "label": "T4",
+        "value": "75.0",
+        "order": 200003,
+        "detail": "error 69.0 to 81.0",
+        "group": "Estimate"
+      }
+    ],
+    "summary": "Confidence Band \u0026 Point Error Bars: 12 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Confidence Band \u0026 Point Error Bars"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Trial",
+    "valueKey": "Estimate"
+  }
+}

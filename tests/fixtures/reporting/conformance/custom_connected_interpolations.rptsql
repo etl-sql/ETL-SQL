@@ -1,0 +1,80 @@
+-- Conformance Fixture: Connected Line Interpolations (SMOOTH, STEP_BEFORE, STEP_AFTER)
+-- Validates INTERPOLATION = SMOOTH, STEP_BEFORE, and STEP_AFTER on Cartesian LINE marks.
+
+SET REPORT TITLE = 'Conformance: Connected Line Interpolations';
+
+SELECT 1.0 AS StepX, 20.0 AS Value INTO #interpolation_series
+UNION ALL SELECT 2.0, 55.0
+UNION ALL SELECT 3.0, 35.0
+UNION ALL SELECT 4.0, 80.0
+UNION ALL SELECT 5.0, 60.0;
+
+CREATE VISUAL SmoothInterpolationLine AS CUSTOM (
+    TITLE = 'Smooth Cubic Interpolation',
+    SOURCE = #interpolation_series,
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            x = LINEAR (CHANNEL = X),
+            y = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+        ),
+        LAYERS (
+            curve = LINE (
+                ENCODINGS (
+                    X = StepX (TYPE = QUANTITATIVE, SCALE = x),
+                    Y = Value (TYPE = QUANTITATIVE, SCALE = y)
+                ),
+                STYLE (INTERPOLATION = 'SMOOTH', COLOR = '#2563eb')
+            )
+        )
+    )
+);
+
+CREATE VISUAL StepBeforeInterpolationLine AS CUSTOM (
+    TITLE = 'Step-Before Interpolation',
+    SOURCE = #interpolation_series,
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            x = LINEAR (CHANNEL = X),
+            y = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+        ),
+        LAYERS (
+            stepBefore = LINE (
+                ENCODINGS (
+                    X = StepX (TYPE = QUANTITATIVE, SCALE = x),
+                    Y = Value (TYPE = QUANTITATIVE, SCALE = y)
+                ),
+                STYLE (INTERPOLATION = 'STEP_BEFORE', COLOR = '#059669')
+            )
+        )
+    )
+);
+
+CREATE VISUAL StepAfterInterpolationLine AS CUSTOM (
+    TITLE = 'Step-After Interpolation',
+    SOURCE = #interpolation_series,
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            x = LINEAR (CHANNEL = X),
+            y = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+        ),
+        LAYERS (
+            stepAfter = LINE (
+                ENCODINGS (
+                    X = StepX (TYPE = QUANTITATIVE, SCALE = x),
+                    Y = Value (TYPE = QUANTITATIVE, SCALE = y)
+                ),
+                STYLE (INTERPOLATION = 'STEP_AFTER', COLOR = '#7c3aed')
+            )
+        )
+    )
+);
+
+CREATE PAGE InterpolationDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B C',
+        MAP ('A' = SmoothInterpolationLine, 'B' = StepBeforeInterpolationLine, 'C' = StepAfterInterpolationLine)
+    )
+);

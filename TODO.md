@@ -159,7 +159,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| GG08 | **Add golden conformance fixtures for error bars, confidence bands, and connected interpolations.** Pin `.plan.json`, `.svg`, `.fallback.json`, and `terminal.txt` goldens for `ERROR_LOW`/`ERROR_HIGH`, `CONFIDENCE_LOW`/`CONFIDENCE_HIGH`, `INTERPOLATION = SMOOTH`/`STEP_BEFORE`/`STEP_AFTER`, and multi-color conditional line transitions. | — | M |
 | GG09 | **Add golden conformance fixtures for `LOG`/`IDENTITY` scales, 2D facets, `INDEPENDENT` resolution, `NULL_POLICY`, and `CUSTOM` polar arcs.** Add `.rptsql` golden fixtures covering `TYPE = LOG`, `TYPE = IDENTITY`, `FACET (ROW = ..., COLUMN = ...)`, `RESOLVE (Y = INDEPENDENT)`, `NULL_POLICY = ZERO`/`CONNECT`/`SKIP`, and a `CUSTOM` `COORDINATE POLAR` `ARC` chart. | — | M |
 | GG10 | **Declarative negative conformance corpus for reporting/GoG.** Add an SLT-style `statement error` script runner (or negative `.rptsql` fixture lane) that verifies expected parse, semantic-validator, and domain errors directly from `.rptsql` test scripts. | GG06 | M |
 

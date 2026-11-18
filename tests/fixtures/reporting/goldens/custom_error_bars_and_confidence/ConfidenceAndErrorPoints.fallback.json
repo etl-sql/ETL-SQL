@@ -1,0 +1,87 @@
+{
+  "kind": "rankedTable",
+  "heading": "Confidence Band \u0026 Point Error Bars",
+  "items": [
+    {
+      "label": "T1",
+      "value": "",
+      "order": 0,
+      "detail": "confidence 36.0 to 60.0",
+      "group": "Estimate"
+    },
+    {
+      "label": "T2",
+      "value": "",
+      "order": 1,
+      "detail": "confidence 50.0 to 74.0",
+      "group": "Estimate"
+    },
+    {
+      "label": "T3",
+      "value": "",
+      "order": 2,
+      "detail": "confidence 42.0 to 68.0",
+      "group": "Estimate"
+    },
+    {
+      "label": "T4",
+      "value": "",
+      "order": 3,
+      "detail": "confidence 63.0 to 87.0",
+      "group": "Estimate"
+    },
+    {
+      "label": "T1",
+      "value": "48.0",
+      "order": 100000,
+      "group": "Estimate"
+    },
+    {
+      "label": "T2",
+      "value": "62.0",
+      "order": 100001,
+      "group": "Estimate"
+    },
+    {
+      "label": "T3",
+      "value": "54.0",
+      "order": 100002,
+      "group": "Estimate"
+    },
+    {
+      "label": "T4",
+      "value": "75.0",
+      "order": 100003,
+      "group": "Estimate"
+    },
+    {
+      "label": "T1",
+      "value": "48.0",
+      "order": 200000,
+      "detail": "error 41.0 to 55.0",
+      "group": "Estimate"
+    },
+    {
+      "label": "T2",
+      "value": "62.0",
+      "order": 200001,
+      "detail": "error 56.0 to 68.0",
+      "group": "Estimate"
+    },
+    {
+      "label": "T3",
+      "value": "54.0",
+      "order": 200002,
+      "detail": "error 46.0 to 62.0",
+      "group": "Estimate"
+    },
+    {
+      "label": "T4",
+      "value": "75.0",
+      "order": 200003,
+      "detail": "error 69.0 to 81.0",
+      "group": "Estimate"
+    }
+  ],
+  "summary": "Confidence Band \u0026 Point Error Bars: 4 rows, 3 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}
