@@ -3,13 +3,14 @@
 # Builds the candidate and a baseline on one hosted runner and times the Standard scenarios that
 # run for at least 2 s in A,B,B,A blocks (scripts/Test-ScalePairedTiming.ps1). One job per
 # scenario keeps each job near 30 minutes. A scenario fails when the median block ratio is above
-# 1.15 and at least 4 of 5 blocks are slower.
+# 1.10 and at least 4 of 5 blocks are slower.
 #
 # Baseline: the previous release tag. A branch push picks it by name:
 #   perf-ab/null/**    baseline = the candidate itself (A-vs-A null run; must pass)
 #   perf-ab/parent/**  baseline = the candidate's parent (an injected slowdown must fail)
 #   perf-ab/**         baseline = the previous release tag
-# Release evidence uses it once calibrated (W6: null run passes, injected slowdown fails).
+# Release evidence calls it (job "Paired timing"); calibrated by the null run 44407598532 and the
+# injected-slowdown run 44407596225.
 name: Paired Timing
 
 on:

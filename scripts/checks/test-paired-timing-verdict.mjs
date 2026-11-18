@@ -1,5 +1,5 @@
 // W6 slice 3: the paired A/B timing verdict (Test-ScalePairedTiming.ps1 -AnalyzeRuns). A scenario
-// fails only when the median A,B,B,A block ratio exceeds 1.15 and at least 4 of 5 blocks are slower;
+// fails only when the median A,B,B,A block ratio exceeds 1.10 and at least 4 of 5 blocks are slower;
 // a single noisy block, a null run or a scenario whose results differ between arms does not fail.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -42,10 +42,11 @@ try {
   assert.equal(verdictOf(slower, 'ExternalSort'), 'FAIL');
   assert.match(readFileSync(path.join(root, `case-${counter}`, 'paired-timing.md'), 'utf8'), /\| FAIL \| ExternalSort \|/);
 
-  // Just under the threshold: median 1.12 is not a failure even with every block slower.
-  assert.equal(analyze(runsFor('ExternalSort', [1.12, 1.11, 1.13, 1.12, 1.1])).status, 0);
+  // The calibration slowdown (hosted: +12%, every block slower) fails; just under 10% does not.
+  assert.equal(analyze(runsFor('ExternalSort', [1.12, 1.15, 1.1, 1.11, 1.15])).status, 1);
+  assert.equal(analyze(runsFor('ExternalSort', [1.08, 1.07, 1.09, 1.08, 1.06])).status, 0);
 
-  // Median above 1.15 but only 3 of 5 blocks slower: warn, do not fail.
+  // Median above 1.10 but only 3 of 5 blocks slower: warn, do not fail.
   const mixed = analyze(runsFor('ExternalSort', [1.3, 1.2, 1.25, 0.9, 0.95]));
   assert.equal(mixed.status, 0, mixed.output);
   assert.equal(verdictOf(mixed, 'ExternalSort'), 'WARN');
@@ -66,7 +67,7 @@ try {
   assert.notEqual(incomplete.status, 0);
   assert.match(incomplete.output, /incomplete/);
 
-  console.log('Paired timing: consistent slowdowns above 1.15 fail; null runs, single noisy blocks and changed results do not.');
+  console.log('Paired timing: consistent slowdowns above 1.10 fail; null runs, single noisy blocks and changed results do not.');
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

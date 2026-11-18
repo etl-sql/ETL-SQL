@@ -241,6 +241,14 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  # W6 paired A/B timing: the candidate against the previous release tag on one runner, one job
+  # per Standard scenario of 2 s or more. The only gate on elapsed time (fails at a 10% median
+  # block ratio with 4 of 5 blocks slower). Calibrated by perf-ab runs 44407598532 and 44407596225.
+  paired-timing:
+    name: Paired timing
+    needs: candidate
+    uses: ./.github/workflows/perf-ab.yml
+
   # Huge runs one scenario per job: the whole set needs ~3 h on a hosted runner (the discarded
   # warm-up alone took ~85 min in run 43648440192), past the job budget. Each job keeps its own
   # discarded warm-up and own-path warm-up, so the numbers stay comparable with warmed baselines.

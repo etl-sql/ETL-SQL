@@ -892,6 +892,7 @@ Release Evidence job, sized to about a third of its job limit and gated on deter
 | :--- | :--- | :--- |
 | Stress and Provider scale | *Scale Stress*, *Scale Provider* | `Test-ScaleCertification.ps1 -Tier Stress` / `-Tier Provider` |
 | Huge scale | *Scale Huge &lt;scenario&gt;* (one job per scenario) | `Test-ScaleCertification.ps1 -Tier Huge -Scenario <name>` |
+| Paired A/B timing (the only elapsed-time gate) | *Paired timing / Paired timing &lt;scenario&gt;* (five Standard scenarios; candidate vs previous release tag, A,B,B,A blocks; fails at a 10% median block ratio with 4 of 5 blocks slower) | `Test-ScalePairedTiming.ps1` via `perf-ab.yml` |
 | Columnar storage/operator gates | *Columnar Storage gate*, *Columnar Operator gate* | `Test-ColumnarStorageGate.ps1`, `Test-ColumnarOperatorGate.ps1` |
 | Service capacity and full baseline | *Service capacity (reference)*, *Service capacity (full)* | `run-service-capacity-certification.mjs` |
 | Sustained HA soak | *HA soak (Compose topology)* | `etl-sql admin ha-soak validate --required-gate All` on the run root |

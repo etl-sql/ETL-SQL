@@ -23,6 +23,11 @@ const policy = { ...releaseEvidencePolicy, workflows: [{ ...releaseEvidencePolic
     ...list('profile').map(profile => `Service capacity (${profile})`)];
   const billion = [...workflow.matchAll(/^\s+scenario: \[([^\]]+)\]/gm)].at(-1)[1].split(',').map(item => item.trim());
   for (const scenario of billion) for (const count of rows) expected.push(`Billion-row ${scenario} (${count} rows)`);
+  // The reusable paired-timing workflow: caller job name, then the called matrix job names.
+  assert.match(workflow.replace(/\r\n/g, '\n'), /^ {2}paired-timing:\n {4}name: Paired timing\n {4}needs: candidate\n {4}uses: \.\/\.github\/workflows\/perf-ab\.yml$/m);
+  const pairedWorkflow = readFileSync(new URL('../../.github/workflows/perf-ab.yml', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  const paired = pairedWorkflow.match(/^\s+scenario: \[([^\]]+)\]/m)[1].split(',').map(item => item.trim());
+  for (const scenario of paired) expected.push(`Paired timing / Paired timing ${scenario}`);
   assert.deepEqual([...releaseEvidencePolicy.workflows[0].jobs].sort(), expected.sort(), 'release-evidence-policy.json drifted from release-evidence.yml');
 }
 assert.deepEqual(releaseEvidencePolicy.workflows[0].events, ['workflow_dispatch'], 'measurement pushes must never count');

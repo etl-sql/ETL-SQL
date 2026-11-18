@@ -39,7 +39,9 @@ param(
     [string]$Tier = 'Standard',
     [ValidateRange(3, 20)]
     [int]$Blocks = 5,
-    [double]$FailRatio = 1.15,
+    # 10%: the hosted null run (perf-ab run 44407598532) kept every median within 1.1% and every
+    # block within 4.2%; an injected sort slowdown measured +12% with all blocks slower (44407596225).
+    [double]$FailRatio = 1.10,
     # Default: 4 of 5 blocks (80%, rounded up).
     [int]$MinSlowBlocks = 0,
     [string]$OutDir = './release-validation/paired-timing',
