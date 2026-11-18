@@ -1,0 +1,67 @@
+{
+  "kind": "rankedTable",
+  "heading": "Quarterly Revenue with Cumulative \u0026 Share Overlays",
+  "items": [
+    {
+      "label": "Q1",
+      "value": "25.0",
+      "order": 0,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q2",
+      "value": "35.0",
+      "order": 1,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q3",
+      "value": "40.0",
+      "order": 2,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q1",
+      "value": "80",
+      "order": 100000,
+      "detail": "range 20 to 80"
+    },
+    {
+      "label": "Q1",
+      "value": "25.0",
+      "order": 200000,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q2",
+      "value": "60.0",
+      "order": 200001,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q3",
+      "value": "100.0",
+      "order": 200002,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q1",
+      "value": "25.0",
+      "order": 300000,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q2",
+      "value": "35.0",
+      "order": 300001,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q3",
+      "value": "40.0",
+      "order": 300002,
+      "group": "Revenue"
+    }
+  ],
+  "summary": "Quarterly Revenue with Cumulative \u0026 Share Overlays: 3 rows, 4 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

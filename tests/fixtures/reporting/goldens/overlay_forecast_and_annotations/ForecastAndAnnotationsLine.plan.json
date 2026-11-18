@@ -1,0 +1,1100 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
+  "specId": "ForecastAndAnnotationsLine",
+  "title": "Revenue Trajectory \u0026 Forecast Outlook",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Jan"
+        },
+        {
+          "kind": "text",
+          "text": "Feb"
+        },
+        {
+          "kind": "text",
+          "text": "Mar"
+        },
+        {
+          "kind": "text",
+          "text": "Apr"
+        },
+        {
+          "kind": "text",
+          "text": "May"
+        }
+      ],
+      "categories": [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Jan"
+          },
+          "label": "Jan"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Feb"
+          },
+          "label": "Feb"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Mar"
+          },
+          "label": "Mar"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Apr"
+          },
+          "label": "Apr"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "May"
+          },
+          "label": "May"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 178.500
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.000
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 44.625
+          },
+          "label": "44.63"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 89.250
+          },
+          "label": "89.25"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 133.875
+          },
+          "label": "133.88"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 178.500
+          },
+          "label": "178.5"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Revenue",
+      "label": "Revenue",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Revenue",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Revenue",
+      "label": "Revenue",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary",
+      "mark": "line",
+      "zIndex": 0,
+      "seriesKey": "Revenue",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Jan"
+              },
+              "displayValue": "Jan"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 100.0
+              },
+              "displayValue": "100.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Feb"
+              },
+              "displayValue": "Feb"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 145.0
+              },
+              "displayValue": "145.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Mar"
+              },
+              "displayValue": "Mar"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 90.0
+              },
+              "displayValue": "90.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Apr"
+              },
+              "displayValue": "Apr"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "May"
+              },
+              "displayValue": "May"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "forecast-confidence-00",
+      "mark": "area",
+      "zIndex": 98,
+      "seriesKey": "Revenue",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Jan"
+              },
+              "displayValue": "Jan"
+            },
+            {
+              "channel": "confidenceLow",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "confidenceHigh",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Feb"
+              },
+              "displayValue": "Feb"
+            },
+            {
+              "channel": "confidenceLow",
+              "value": {
+                "kind": "null"
+              }
+            },
+            {
+              "channel": "confidenceHigh",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Mar"
+              },
+              "displayValue": "Mar"
+            },
+            {
+              "channel": "confidenceLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 82.0
+              },
+              "displayValue": "82.0"
+            },
+            {
+              "channel": "confidenceHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 98.0
+              },
+              "displayValue": "98.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Apr"
+              },
+              "displayValue": "Apr"
+            },
+            {
+              "channel": "confidenceLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 105.0
+              },
+              "displayValue": "105.0"
+            },
+            {
+              "channel": "confidenceHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 132.0
+              },
+              "displayValue": "132.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "May"
+              },
+              "displayValue": "May"
+            },
+            {
+              "channel": "confidenceLow",
+              "value": {
+                "kind": "decimal",
+                "decimal": 134.0
+              },
+              "displayValue": "134.0"
+            },
+            {
+              "channel": "confidenceHigh",
+              "value": {
+                "kind": "decimal",
+                "decimal": 170.0
+              },
+              "displayValue": "170.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "overlayType",
+          "value": "ForecastConfidence"
+        },
+        {
+          "name": "color",
+          "value": "#2563eb"
+        },
+        {
+          "name": "label",
+          "value": "Forecast Confidence"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "forecast-line-00",
+      "mark": "line",
+      "zIndex": 100,
+      "seriesKey": "Revenue",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Jan"
+              },
+              "displayValue": "Jan"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Feb"
+              },
+              "displayValue": "Feb"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Mar"
+              },
+              "displayValue": "Mar"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 90.0
+              },
+              "displayValue": "90.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Apr"
+              },
+              "displayValue": "Apr"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 118.0
+              },
+              "displayValue": "118.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "May"
+              },
+              "displayValue": "May"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 152.0
+              },
+              "displayValue": "152.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "overlayType",
+          "value": "Forecast"
+        },
+        {
+          "name": "lineStyle",
+          "value": "dashed"
+        },
+        {
+          "name": "color",
+          "value": "#2563eb"
+        },
+        {
+          "name": "label",
+          "value": "Forecast"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "forecast-anomaly-00",
+      "mark": "point",
+      "zIndex": 102,
+      "seriesKey": "Revenue",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Jan"
+              },
+              "displayValue": "Jan"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Feb"
+              },
+              "displayValue": "Feb"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Mar"
+              },
+              "displayValue": "Mar"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Apr"
+              },
+              "displayValue": "Apr"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "null"
+              }
+            }
+          ],
+          "isGap": true,
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "May"
+              },
+              "displayValue": "May"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 152.0
+              },
+              "displayValue": "152.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "overlayType",
+          "value": "ForecastAnomaly"
+        },
+        {
+          "name": "color",
+          "value": "#2563eb"
+        },
+        {
+          "name": "label",
+          "value": "Forecast Anomalies"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "annotation-point-01",
+      "mark": "point",
+      "zIndex": 151,
+      "data": [],
+      "style": [
+        {
+          "name": "overlayType",
+          "value": "AnnotationPoint"
+        },
+        {
+          "name": "series",
+          "value": "Revenue"
+        },
+        {
+          "name": "annotationType",
+          "value": "MAX"
+        },
+        {
+          "name": "coordX",
+          "value": ""
+        },
+        {
+          "name": "coordY",
+          "value": ""
+        },
+        {
+          "name": "coordXString",
+          "value": ""
+        },
+        {
+          "name": "symbol",
+          "value": "pin"
+        },
+        {
+          "name": "color",
+          "value": "#dc2626"
+        },
+        {
+          "name": "label",
+          "value": "Peak Actual"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "annotation-point-02",
+      "mark": "point",
+      "zIndex": 152,
+      "data": [],
+      "style": [
+        {
+          "name": "overlayType",
+          "value": "AnnotationPoint"
+        },
+        {
+          "name": "series",
+          "value": "Revenue"
+        },
+        {
+          "name": "annotationType",
+          "value": "MIN"
+        },
+        {
+          "name": "coordX",
+          "value": ""
+        },
+        {
+          "name": "coordY",
+          "value": ""
+        },
+        {
+          "name": "coordXString",
+          "value": ""
+        },
+        {
+          "name": "symbol",
+          "value": "arrow"
+        },
+        {
+          "name": "color",
+          "value": "#0f766e"
+        },
+        {
+          "name": "label",
+          "value": "Q1 Low"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "annotation-point-03",
+      "mark": "point",
+      "zIndex": 153,
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Mar"
+              },
+              "displayValue": "Mar"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 120
+              },
+              "displayValue": "120"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "overlayType",
+          "value": "AnnotationPoint"
+        },
+        {
+          "name": "series",
+          "value": "Revenue"
+        },
+        {
+          "name": "annotationType",
+          "value": "COORD"
+        },
+        {
+          "name": "coordX",
+          "value": ""
+        },
+        {
+          "name": "coordY",
+          "value": "120"
+        },
+        {
+          "name": "coordXString",
+          "value": "Mar"
+        },
+        {
+          "name": "symbol",
+          "value": "circle"
+        },
+        {
+          "name": "color",
+          "value": "#7c3aed"
+        },
+        {
+          "name": "label",
+          "value": "Review Gate"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [
+      3,
+      4
+    ],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Revenue Trajectory \u0026 Forecast Outlook: 5 rows, 7 ordered layers, 1 series, 1 facet panels, 2 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Revenue Trajectory \u0026 Forecast Outlook",
+    "items": [
+      {
+        "label": "Jan",
+        "value": "100.0",
+        "order": 0,
+        "group": "Revenue"
+      },
+      {
+        "label": "Feb",
+        "value": "145.0",
+        "order": 1,
+        "group": "Revenue"
+      },
+      {
+        "label": "Mar",
+        "value": "90.0",
+        "order": 2,
+        "group": "Revenue"
+      },
+      {
+        "label": "Apr",
+        "value": "gap",
+        "order": 3,
+        "detail": "null gap",
+        "group": "Revenue"
+      },
+      {
+        "label": "May",
+        "value": "gap",
+        "order": 4,
+        "detail": "null gap",
+        "group": "Revenue"
+      },
+      {
+        "label": "Jan",
+        "value": "gap",
+        "order": 100000,
+        "detail": "null gap",
+        "group": "Revenue"
+      },
+      {
+        "label": "Feb",
+        "value": "gap",
+        "order": 100001,
+        "detail": "null gap",
+        "group": "Revenue"
+      },
+      {
+        "label": "Mar",
+        "value": "",
+        "order": 100002,
+        "detail": "confidence 82.0 to 98.0",
+        "group": "Revenue"
+      },
+      {
+        "label": "Apr",
+        "value": "",
+        "order": 100003,
+        "detail": "confidence 105.0 to 132.0",
+        "group": "Revenue"
+      },
+      {
+        "label": "May",
+        "value": "",
+        "order": 100004,
+        "detail": "confidence 134.0 to 170.0",
+        "group": "Revenue"
+      },
+      {
+        "label": "Jan",
+        "value": "gap",
+        "order": 200000,
+        "detail": "null gap",
+        "group": "Revenue"
+      },
+      {
+        "label": "Feb",
+        "value": "gap",
+        "order": 200001,
+        "detail": "null gap",
+        "group": "Revenue"
+      },
+      {
+        "label": "Mar",
+        "value": "90.0",
+        "order": 200002,
+        "detail": "forecast",
+        "group": "Revenue"
+      },
+      {
+        "label": "Apr",
+        "value": "118.0",
+        "order": 200003,
+        "detail": "forecast",
+        "group": "Revenue"
+      },
+      {
+        "label": "May",
+        "value": "152.0",
+        "order": 200004,
+        "detail": "forecast",
+        "group": "Revenue"
+      },
+      {
+        "label": "Jan",
+        "value": "gap",
+        "order": 300000,
+        "detail": "null gap",
+        "group": "Revenue"
+      },
+      {
+        "label": "Feb",
+        "value": "gap",
+        "order": 300001,
+        "detail": "null gap",
+        "group": "Revenue"
+      },
+      {
+        "label": "Mar",
+        "value": "gap",
+        "order": 300002,
+        "detail": "null gap",
+        "group": "Revenue"
+      },
+      {
+        "label": "Apr",
+        "value": "gap",
+        "order": 300003,
+        "detail": "null gap",
+        "group": "Revenue"
+      },
+      {
+        "label": "May",
+        "value": "152.0",
+        "order": 300004,
+        "detail": "anomaly",
+        "group": "Revenue"
+      },
+      {
+        "label": "Mar",
+        "value": "120",
+        "order": 600000
+      }
+    ],
+    "summary": "Revenue Trajectory \u0026 Forecast Outlook: 21 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "HEIGHT",
+      "value": "450px"
+    },
+    {
+      "name": "LEGEND",
+      "value": "TOP"
+    },
+    {
+      "name": "mapping:x",
+      "value": "Month"
+    },
+    {
+      "name": "mapping:y",
+      "value": "Revenue"
+    },
+    {
+      "name": "title",
+      "value": "Revenue Trajectory \u0026 Forecast Outlook"
+    },
+    {
+      "name": "WIDTH",
+      "value": "100%"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Month",
+    "valueKey": "Revenue"
+  }
+}

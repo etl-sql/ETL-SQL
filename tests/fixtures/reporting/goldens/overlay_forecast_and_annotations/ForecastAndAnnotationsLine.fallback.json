@@ -1,0 +1,149 @@
+{
+  "kind": "rankedTable",
+  "heading": "Revenue Trajectory \u0026 Forecast Outlook",
+  "items": [
+    {
+      "label": "Jan",
+      "value": "100.0",
+      "order": 0,
+      "group": "Revenue"
+    },
+    {
+      "label": "Feb",
+      "value": "145.0",
+      "order": 1,
+      "group": "Revenue"
+    },
+    {
+      "label": "Mar",
+      "value": "90.0",
+      "order": 2,
+      "group": "Revenue"
+    },
+    {
+      "label": "Apr",
+      "value": "gap",
+      "order": 3,
+      "detail": "null gap",
+      "group": "Revenue"
+    },
+    {
+      "label": "May",
+      "value": "gap",
+      "order": 4,
+      "detail": "null gap",
+      "group": "Revenue"
+    },
+    {
+      "label": "Jan",
+      "value": "gap",
+      "order": 100000,
+      "detail": "null gap",
+      "group": "Revenue"
+    },
+    {
+      "label": "Feb",
+      "value": "gap",
+      "order": 100001,
+      "detail": "null gap",
+      "group": "Revenue"
+    },
+    {
+      "label": "Mar",
+      "value": "",
+      "order": 100002,
+      "detail": "confidence 82.0 to 98.0",
+      "group": "Revenue"
+    },
+    {
+      "label": "Apr",
+      "value": "",
+      "order": 100003,
+      "detail": "confidence 105.0 to 132.0",
+      "group": "Revenue"
+    },
+    {
+      "label": "May",
+      "value": "",
+      "order": 100004,
+      "detail": "confidence 134.0 to 170.0",
+      "group": "Revenue"
+    },
+    {
+      "label": "Jan",
+      "value": "gap",
+      "order": 200000,
+      "detail": "null gap",
+      "group": "Revenue"
+    },
+    {
+      "label": "Feb",
+      "value": "gap",
+      "order": 200001,
+      "detail": "null gap",
+      "group": "Revenue"
+    },
+    {
+      "label": "Mar",
+      "value": "90.0",
+      "order": 200002,
+      "detail": "forecast",
+      "group": "Revenue"
+    },
+    {
+      "label": "Apr",
+      "value": "118.0",
+      "order": 200003,
+      "detail": "forecast",
+      "group": "Revenue"
+    },
+    {
+      "label": "May",
+      "value": "152.0",
+      "order": 200004,
+      "detail": "forecast",
+      "group": "Revenue"
+    },
+    {
+      "label": "Jan",
+      "value": "gap",
+      "order": 300000,
+      "detail": "null gap",
+      "group": "Revenue"
+    },
+    {
+      "label": "Feb",
+      "value": "gap",
+      "order": 300001,
+      "detail": "null gap",
+      "group": "Revenue"
+    },
+    {
+      "label": "Mar",
+      "value": "gap",
+      "order": 300002,
+      "detail": "null gap",
+      "group": "Revenue"
+    },
+    {
+      "label": "Apr",
+      "value": "gap",
+      "order": 300003,
+      "detail": "null gap",
+      "group": "Revenue"
+    },
+    {
+      "label": "May",
+      "value": "152.0",
+      "order": 300004,
+      "detail": "anomaly",
+      "group": "Revenue"
+    },
+    {
+      "label": "Mar",
+      "value": "120",
+      "order": 600000
+    }
+  ],
+  "summary": "Revenue Trajectory \u0026 Forecast Outlook: 5 rows, 7 ordered layers, 1 series, 1 facet panels, 2 gaps, 0 skipped rows."
+}

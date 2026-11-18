@@ -1,0 +1,15 @@
+╭─Revenue Trajectory & Forecast Outlook────────────────────────────────────────────────────────────╮
+│ Revenue Trajectory & Forecast Outlook: 5 rows, 7 ordered layers, 1 series, 1 facet panels, 2     │
+│ gaps, 0 skipped rows.                                                                            │
+│ ● Revenue  ● Forecast Confidence  ● Forecast  ● Forecast Anomalies  ● Review Gate (Braille area; │
+│ 10 gaps)                                                                                         │
+│    170 ┼                                             ⢀⡠⠔⢺                                        │
+│        │                                         ⢀⡠⠔⠊⠁ ⣀⢼                                        │
+│        │          ⡠⠔⠊⠒⢄                      ⢀⡠⠔⠊⠁⣀⡠⠔⠒⠉ ⢸                                        │
+│    126 ┼      ⢀⡠⠒⠉     ⠉⠢⢄               ⣀⠤⠒⢹⢁⡠⠤⠒⠉      ⠈                                        │
+│        │ ⠁ ⢀⠤⠒⠁           ⠉⠢⣀       ⢀⡠⠤⠒⣉⡠⠤⠒⢹⠁                                                   │
+│        │ ⠔⠊⠁                 ⠑⠢⡀⢀⡠⠔⣊⠥⠔⠒⠉    ⠈                                                    │
+│     82 ┼                       ⠈⢹⠊⠉                                                              │
+│ 82.0 … 170.0                                                                                     │
+│ Mar: confidence 82.0 to 98.0, Apr: confidence 105.0 to 132.0, May: confidence 134.0 to 170.0     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

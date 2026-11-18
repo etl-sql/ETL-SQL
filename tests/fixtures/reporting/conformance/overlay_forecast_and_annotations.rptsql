@@ -1,0 +1,44 @@
+-- Conformance Fixture: Forecast with Confidence Band, Anomalies & Point Annotations
+-- Validates FORECAST (CONFIDENCE_LOW, CONFIDENCE_HIGH, ANOMALY) and ANNOTATIONS (POINT ...) lowering and rendering.
+
+SET REPORT TITLE = 'Conformance: Forecast & Point Annotations';
+
+SELECT 'Jan' AS Month, 100.0 AS Revenue, CAST(NULL AS DECIMAL(10, 2)) AS ForecastRevenue, CAST(NULL AS DECIMAL(10, 2)) AS LowerBand, CAST(NULL AS DECIMAL(10, 2)) AS UpperBand, CAST(NULL AS DECIMAL(10, 2)) AS AnomalyPoint INTO #revenue_forecast
+UNION ALL SELECT 'Feb', 145.0, CAST(NULL AS DECIMAL(10, 2)), CAST(NULL AS DECIMAL(10, 2)), CAST(NULL AS DECIMAL(10, 2)), CAST(NULL AS DECIMAL(10, 2))
+UNION ALL SELECT 'Mar', 90.0, 90.0, 82.0, 98.0, CAST(NULL AS DECIMAL(10, 2))
+UNION ALL SELECT 'Apr', CAST(NULL AS DECIMAL(10, 2)), 118.0, 105.0, 132.0, CAST(NULL AS DECIMAL(10, 2))
+UNION ALL SELECT 'May', CAST(NULL AS DECIMAL(10, 2)), 152.0, 134.0, 170.0, 152.0;
+
+CREATE VISUAL ForecastAndAnnotationsLine AS LINE (
+    TITLE = 'Revenue Trajectory & Forecast Outlook',
+    SOURCE = #revenue_forecast,
+    MAPPINGS (
+        X = Month,
+        Y = Revenue
+    ),
+    OVERLAYS (
+        FORECAST(ForecastRevenue) AS DASHED WITH (
+            CONFIDENCE_LOW = LowerBand,
+            CONFIDENCE_HIGH = UpperBand,
+            ANOMALY = AnomalyPoint,
+            COLOR = '#2563eb',
+            LABEL = 'Forecast'
+        )
+    ),
+    ANNOTATIONS (
+        POINT (SERIES = 'Revenue', TYPE = MAX, LABEL = 'Peak Actual', SYMBOL = 'pin', COLOR = '#dc2626'),
+        POINT (SERIES = 'Revenue', TYPE = MIN, LABEL = 'Q1 Low', SYMBOL = 'arrow', COLOR = '#0f766e'),
+        POINT (SERIES = 'Revenue', TYPE = COORD('Mar', 120), LABEL = 'Review Gate', SYMBOL = 'circle', COLOR = '#7c3aed')
+    ),
+    OPTIONS (
+        LEGEND = 'TOP'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '450px')
+);
+
+CREATE PAGE ForecastDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = ForecastAndAnnotationsLine)
+    )
+);

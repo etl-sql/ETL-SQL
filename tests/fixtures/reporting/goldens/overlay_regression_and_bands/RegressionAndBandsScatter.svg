@@ -1,0 +1,68 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='RegressionAndBandsScatter-title RegressionAndBandsScatter-desc' font-family='sans-serif'>
+<title id='RegressionAndBandsScatter-title'>Regression Fits &amp; Reference Targets</title>
+<desc id='RegressionAndBandsScatter-desc'>Regression Fits &amp; Reference Targets: 6 rows, 5 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Regression Fits &amp; Reference Targets</text>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='290' x2='487.8' y2='290' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='290' x2='487.8' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='227.5' x2='487.8' y2='227.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='165' x2='487.8' y2='165' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='102.5' x2='487.8' y2='102.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='487.8' y2='40' stroke='#e5e7eb' stroke-width='1'/>
+<defs><clipPath id='RegressionAndBandsScatter-plot-clip'><rect x='60' y='40' width='427.8' height='250'/></clipPath></defs>
+<g clip-path='url(#RegressionAndBandsScatter-plot-clip)'>
+<g class='plot-overlay' data-overlay-type='ReferenceBand' data-z-index='90'>
+<rect class='plot-reference-band' x='60' y='122.89' width='427.8' height='97.535' fill='#cbd5e1' fill-opacity='.18'><title>25 to 55</title></rect>
+</g>
+<g class='plot-overlay' data-overlay-type='ReferenceLine' data-z-index='101'>
+<line class='plot-reference-line' x1='60' y1='165.155' x2='487.8' y2='165.155' stroke='#dc2626' stroke-width='2' stroke-dasharray='1 5'/>
+</g>
+<g class='plot-overlay' data-overlay-type='Linear' data-z-index='102'>
+<path d='M 79.445 278.636 L 157.227 236.278 L 235.009 193.92 L 312.791 151.562 L 390.573 109.204 L 468.355 66.845' fill='none' stroke='#2563eb' stroke-width='3' stroke-linejoin='round' stroke-linecap='round'/>
+</g>
+<g class='plot-overlay' data-overlay-type='Polynomial' data-z-index='103'>
+<path d='M 79.445 263.155 L 157.227 239.375 L 235.009 206.305 L 312.791 163.947 L 390.573 112.3 L 468.355 51.364' fill='none' stroke='#7c3aed' stroke-width='3' stroke-linejoin='round' stroke-linecap='round' stroke-dasharray='7 5'/>
+</g>
+<g class='plot-points' data-layer='primary'>
+<circle class='plot-point' fill='#5470c6' data-row-index='0' cx='79.445' cy='262.69' r='4'></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='1' cx='157.227' cy='239.932' r='4'></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='2' cx='235.009' cy='207.42' r='4'></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='3' cx='312.791' cy='161.904' r='4'></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='4' cx='390.573' cy='113.136' r='4'></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='5' cx='468.355' cy='51.364' r='4'></circle>
+</g>
+</g>
+<path class='plot-overlay-label-leader' d='M 471.355 51.364 L 475.355 47.864' fill='none' stroke='#7c3aed' stroke-width='1'/>
+<rect class='plot-overlay-label-bg' x='475.355' y='40.364' width='78.2' height='14' rx='2' fill='white' fill-opacity='.94'/>
+<text class='plot-overlay-label' title='Quadratic Fit' x='478.355' y='51.364' text-anchor='start' font-size='9' font-weight='600' fill='#7c3aed'>Quadratic Fit</text>
+<path class='plot-overlay-label-leader' d='M 471.355 66.845 L 475.355 65.864' fill='none' stroke='#2563eb' stroke-width='1'/>
+<rect class='plot-overlay-label-bg' x='475.355' y='58.364' width='62' height='14' rx='2' fill='white' fill-opacity='.94'/>
+<text class='plot-overlay-label' title='Linear Fit' x='478.355' y='69.364' text-anchor='start' font-size='9' font-weight='600' fill='#2563eb'>Linear Fit</text>
+<path class='plot-overlay-label-leader' d='M 490.8 165.155 L 494.8 161.655' fill='none' stroke='#dc2626' stroke-width='1'/>
+<rect class='plot-overlay-label-bg' x='494.8' y='154.155' width='56.6' height='14' rx='2' fill='white' fill-opacity='.94'/>
+<text class='plot-overlay-label' title='Threshold' x='497.8' y='165.155' text-anchor='start' font-size='9' font-weight='600' fill='#dc2626'>Threshold</text>
+<path class='plot-overlay-label-leader' d='M 490.8 171.657 L 494.8 179.655' fill='none' stroke='#cbd5e1' stroke-width='1'/>
+<rect class='plot-overlay-label-bg' x='494.8' y='172.155' width='67.4' height='14' rx='2' fill='white' fill-opacity='.94'/>
+<text class='plot-overlay-label' title='Target Band' x='497.8' y='183.155' text-anchor='start' font-size='9' font-weight='600' fill='#cbd5e1'>Target Band</text>
+<line x1='60' y1='290' x2='60' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='0' x='60' y='306' text-anchor='middle' font-size='9' fill='#666'>0.75</text>
+<line x1='166.95' y1='290' x2='166.95' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='1' x='166.95' y='306' text-anchor='middle' font-size='9' fill='#666'>2.13</text>
+<line x1='273.9' y1='290' x2='273.9' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='2' x='273.9' y='306' text-anchor='middle' font-size='9' fill='#666'>3.5</text>
+<line x1='380.85' y1='290' x2='380.85' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='3' x='380.85' y='306' text-anchor='middle' font-size='9' fill='#666'>4.88</text>
+<line x1='487.8' y1='290' x2='487.8' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='4' x='487.8' y='306' text-anchor='middle' font-size='9' fill='#666'>6.25</text>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>3.6</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>22.82</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>42.05</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>61.27</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>80.5</text>
+</svg>

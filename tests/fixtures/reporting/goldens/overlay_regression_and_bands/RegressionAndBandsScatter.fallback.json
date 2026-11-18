@@ -1,0 +1,116 @@
+{
+  "kind": "rankedTable",
+  "heading": "Regression Fits \u0026 Reference Targets",
+  "items": [
+    {
+      "label": "1",
+      "value": "12.0",
+      "order": 0,
+      "group": "Score"
+    },
+    {
+      "label": "2",
+      "value": "19.0",
+      "order": 1,
+      "group": "Score"
+    },
+    {
+      "label": "3",
+      "value": "29.0",
+      "order": 2,
+      "group": "Score"
+    },
+    {
+      "label": "4",
+      "value": "43.0",
+      "order": 3,
+      "group": "Score"
+    },
+    {
+      "label": "5",
+      "value": "58.0",
+      "order": 4,
+      "group": "Score"
+    },
+    {
+      "label": "6",
+      "value": "77.0",
+      "order": 5,
+      "group": "Score"
+    },
+    {
+      "label": "1",
+      "value": "55",
+      "order": 100000,
+      "detail": "range 25 to 55"
+    },
+    {
+      "label": "1",
+      "value": "7.09523809523809",
+      "order": 200000
+    },
+    {
+      "label": "2",
+      "value": "20.1238095238095",
+      "order": 200001
+    },
+    {
+      "label": "3",
+      "value": "33.152380952381",
+      "order": 200002
+    },
+    {
+      "label": "4",
+      "value": "46.1809523809524",
+      "order": 200003
+    },
+    {
+      "label": "5",
+      "value": "59.2095238095238",
+      "order": 200004
+    },
+    {
+      "label": "6",
+      "value": "72.2380952380952",
+      "order": 200005
+    },
+    {
+      "label": "1",
+      "value": "11.8571428571429",
+      "order": 300000
+    },
+    {
+      "label": "2",
+      "value": "19.1714285714286",
+      "order": 300001
+    },
+    {
+      "label": "3",
+      "value": "29.3428571428571",
+      "order": 300002
+    },
+    {
+      "label": "4",
+      "value": "42.3714285714286",
+      "order": 300003
+    },
+    {
+      "label": "5",
+      "value": "58.2571428571428",
+      "order": 300004
+    },
+    {
+      "label": "6",
+      "value": "77",
+      "order": 300005
+    },
+    {
+      "label": "Threshold",
+      "value": "42",
+      "order": 500000,
+      "detail": "author reference line",
+      "group": "Reference"
+    }
+  ],
+  "summary": "Regression Fits \u0026 Reference Targets: 6 rows, 5 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}
