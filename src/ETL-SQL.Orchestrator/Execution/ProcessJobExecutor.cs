@@ -47,9 +47,6 @@ namespace ETL_SQL.Orchestrator.Execution
         private static readonly object CleanupLock = new();
         private static DateTime _lastTempScriptCleanupUtc = DateTime.MinValue;
 
-        internal const string IdentityNotCarriedMessage =
-            "This Orchestrator runs jobs in a child process, which cannot carry the caller's execution identity, " +
-            "so the run was refused. Identity-bound runs need in-process execution (Jobs:UseProcessSpawning = false).";
         private static readonly ConcurrentDictionary<string, WarmRunnerPool> WarmRunnerPools = new(StringComparer.OrdinalIgnoreCase);
 
         public ProcessJobExecutor(
@@ -147,19 +144,12 @@ namespace ETL_SQL.Orchestrator.Execution
             IReadOnlyDictionary<string, string>? variableOverrides,
             bool resume)
         {
-            string? signingSecret = null;
-            if (executionIdentity is not null)
-            {
-                signingSecret = ResolveSigningSecret();
-                if (string.IsNullOrWhiteSpace(signingSecret))
-                {
-                    _logger.LogWarning(
-                        "Job {JobName}: refused because out-of-process execution cannot carry the caller's execution identity without Orchestrator:IdentitySigningSecret.",
-                        jobName ?? "(ad hoc)");
-                    return new ScriptExecutionResult(
-                        false, 0, IdentityNotCarriedMessage, SessionId: sessionId, RetryAllowed: false);
-                }
-            }
+            // R1: an identity-bound run gets a fresh single-run key. The child verifies its envelope
+            // with that key alone and never receives a long-lived signing secret, so no
+            // configuration is needed and a leaked key forges nothing outside this run.
+            string? identityKey = executionIdentity is null
+                ? null
+                : ProcessCallerIdentityEnvelope.CreateRunKey();
 
             var workerGrantBytes = ResolveWorkerMemoryGrantBytes();
             IDisposable? workerReservation = null;
@@ -205,7 +195,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
                     var scriptHash = ProcessCallerIdentityEnvelope.ComputeScriptHash(scriptBytes);
                     var signedEnvelope = ProcessCallerIdentityEnvelope.Create(
-                        executionIdentity, jobName, scriptHash, signingSecret!);
+                        executionIdentity, jobName, scriptHash, identityKey!);
                     var path = Path.Combine(runDir, "caller.tok");
                     await File.WriteAllTextAsync(path, signedEnvelope, Encoding.UTF8, cancellationToken);
                     protector.ProtectFile(
@@ -222,7 +212,7 @@ namespace ETL_SQL.Orchestrator.Execution
                     {
                         return await RunWarmProcessAsync(
                             tempFile, sessionId, cancellationToken, jobName, queueWaitMs,
-                            variableOverrides, resume, envelopeFile, signingSecret,
+                            variableOverrides, resume, envelopeFile, identityKey,
                             workerGrantBytes, backedByBufferManager);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
@@ -235,7 +225,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
                 return await RunProcessAsync(
                     tempFile, sessionId, cancellationToken, jobName, queueWaitMs,
-                    variableOverrides, resume, envelopeFile, signingSecret,
+                    variableOverrides, resume, envelopeFile, identityKey,
                     workerGrantBytes, backedByBufferManager);
             }
             finally
@@ -291,31 +281,14 @@ namespace ETL_SQL.Orchestrator.Execution
 
         internal long ResolveWorkerMemoryGrantBytes() => (long)ResolveWorkerMemoryGrantMB() * 1024L * 1024L;
 
-        private string? ResolveSigningSecret()
-        {
-            var candidate = !string.IsNullOrWhiteSpace(_options.IdentitySigningSecret)
-                ? _options.IdentitySigningSecret
-                : _configuration?["Orchestrator:IdentitySigningSecret"];
-            if (string.IsNullOrWhiteSpace(candidate))
-                return null;
-
-            try
-            {
-                OrchestratorIdentityAssertion.ValidateSecret(candidate);
-                return candidate;
-            }
-            catch (ArgumentException)
-            {
-                return null;
-            }
-        }
-
-        private Dictionary<string, string> BuildChildHostEnvironment(string? signingSecret)
+        // Internal for tests: proves no identity-signing secret is ever handed to a child.
+        internal Dictionary<string, string> BuildChildHostEnvironment()
         {
             var childEnv = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (!string.IsNullOrWhiteSpace(signingSecret))
-                childEnv["Orchestrator__IdentitySigningSecret"] = signingSecret;
 
+            // The child's own Orchestrator store binds the run's tenant (EngineRunner looks the job
+            // up by tenant and name), so it needs the parent's store location. It never needs a
+            // signing secret: identity arrives as a per-run envelope and key (R1).
             if (_configuration is not null)
             {
                 foreach (var (cfgKey, envKey) in new[]
@@ -354,10 +327,29 @@ namespace ETL_SQL.Orchestrator.Execution
             return childEnv;
         }
 
-        private void ApplyChildHostEnvironment(ProcessStartInfo psi, string? signingSecret)
+        private void ApplyChildHostEnvironment(ProcessStartInfo psi)
         {
-            foreach (var (key, value) in BuildChildHostEnvironment(signingSecret))
+            RemoveParentSigningSecrets(psi);
+            foreach (var (key, value) in BuildChildHostEnvironment())
                 psi.EnvironmentVariables[key] = value;
+        }
+
+        /// <summary>
+        /// A child inherits the parent's environment, and deployments commonly configure the
+        /// identity-signing secret as an environment variable. Strip it before spawning: the child
+        /// runs user script text and must not be able to forge Orchestrator identity assertions.
+        /// </summary>
+        internal static void RemoveParentSigningSecrets(ProcessStartInfo psi)
+        {
+            foreach (var name in ProcessCallerIdentityEnvelope.ParentSigningSecretEnvironmentNames)
+            {
+                // ProcessStartInfo's environment block is case-insensitive on Windows only; on Unix
+                // remove any case variant the parent happened to inherit.
+                foreach (var key in psi.Environment.Keys
+                             .Where(k => string.Equals(k, name, StringComparison.OrdinalIgnoreCase))
+                             .ToList())
+                    psi.Environment.Remove(key);
+            }
         }
 
         private void CleanupOldTempScripts(bool force)
@@ -418,7 +410,7 @@ namespace ETL_SQL.Orchestrator.Execution
             IReadOnlyDictionary<string, string>? variableOverrides = null,
             bool resume = false,
             string? envelopeFile = null,
-            string? signingSecret = null,
+            string? identityKey = null,
             long reservedMemoryBytes = 0,
             bool backedByBufferManager = false)
         {
@@ -456,8 +448,11 @@ namespace ETL_SQL.Orchestrator.Execution
                 psi.EnvironmentVariables[ProcessCallerIdentityEnvelope.EnvFile] = envelopeFile;
                 if (!string.IsNullOrWhiteSpace(jobName))
                     psi.EnvironmentVariables[ProcessCallerIdentityEnvelope.EnvJobId] = jobName;
+                // This one-shot child verifies its envelope with this run's key and nothing else.
+                if (!string.IsNullOrWhiteSpace(identityKey))
+                    psi.EnvironmentVariables[ProcessCallerIdentityEnvelope.EnvKey] = identityKey;
             }
-            ApplyChildHostEnvironment(psi, signingSecret);
+            ApplyChildHostEnvironment(psi);
             foreach (var arg in argList)
                 psi.ArgumentList.Add(arg);
 
@@ -530,12 +525,12 @@ namespace ETL_SQL.Orchestrator.Execution
             IReadOnlyDictionary<string, string>? variableOverrides,
             bool resume,
             string? envelopeFile = null,
-            string? signingSecret = null,
+            string? identityKey = null,
             long reservedMemoryBytes = 0,
             bool backedByBufferManager = false)
         {
             var exePath = ResolveExecutablePath();
-            var childEnv = BuildChildHostEnvironment(signingSecret);
+            var childEnv = BuildChildHostEnvironment();
 
             var envFingerprint = childEnv.Count == 0
                 ? string.Empty
@@ -566,7 +561,8 @@ namespace ETL_SQL.Orchestrator.Execution
                         _options.WarmRunnerBatchSize,
                         variableOverrides,
                         resume,
-                        envelopeFile),
+                        envelopeFile,
+                        identityKey),
                     cts.Token,
                     reservedMemoryBytes,
                     backedByBufferManager);
@@ -856,8 +852,6 @@ namespace ETL_SQL.Orchestrator.Execution
         public int WarmRunnerStartupTimeoutSeconds { get; set; } = 10;
         /// <summary>Batch size passed to warm runner execution sessions. Values less than 1 use the engine default.</summary>
         public int WarmRunnerBatchSize { get; set; } = 10000;
-        /// <summary>Optional HMAC secret used to sign single-use caller identity envelopes when spawning child processes (falls back to Orchestrator:IdentitySigningSecret).</summary>
-        public string? IdentitySigningSecret { get; set; }
         /// <summary>
         /// Maximum memory grant (MB) allocated to each spawned child worker process (and reserved in
         /// the host BufferManager while active). 0 = auto fair-share bounded by host ceiling and worker concurrency.
@@ -1023,6 +1017,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 CreateNoWindow = true,
                 WorkingDirectory = Path.GetDirectoryName(exePath) ?? Directory.GetCurrentDirectory()
             };
+            ProcessJobExecutor.RemoveParentSigningSecrets(psi);
             if (environmentOverrides != null)
             {
                 foreach (var (k, v) in environmentOverrides)
@@ -1165,7 +1160,10 @@ namespace ETL_SQL.Orchestrator.Execution
         int BatchSize,
         IReadOnlyDictionary<string, string>? VariableOverrides = null,
         bool Resume = false,
-        string? IdentityEnvelopeFile = null);
+        string? IdentityEnvelopeFile = null,
+        // Per-run envelope key, sent over the private stdin pipe so it never sits in the warm
+        // runner's long-lived environment.
+        string? IdentityKey = null);
 
     internal sealed record WarmRunnerResponse(
         string Type,

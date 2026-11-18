@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -28,6 +29,32 @@ public static class ProcessCallerIdentityEnvelope
     public const string EnvRequired = "ETLSQL_CALLER_IDENTITY_REQUIRED";
     public const string EnvFile = "ETLSQL_CALLER_IDENTITY_FILE";
     public const string EnvJobId = "ETLSQL_CALLER_JOB_ID";
+
+    /// <summary>
+    /// Carries the per-run envelope key to a one-shot child. A warm runner gets it in its stdin
+    /// request instead, so it never sits in a long-lived process environment.
+    /// </summary>
+    public const string EnvKey = "ETLSQL_CALLER_IDENTITY_KEY";
+
+    /// <summary>
+    /// Environment names of the Orchestrator/Portal identity-signing secrets. A spawned child runs
+    /// user script text and must never hold them: anyone who reads one can forge an Orchestrator
+    /// assertion for any user and tenant. Children inherit the parent environment, so spawners
+    /// remove these explicitly.
+    /// </summary>
+    public static readonly IReadOnlyList<string> ParentSigningSecretEnvironmentNames =
+    [
+        "Orchestrator__IdentitySigningSecret",
+        "Portal__Orchestrator__IdentitySigningSecret",
+    ];
+
+    /// <summary>
+    /// Creates a single-run HMAC key (256 random bits, base64url). The parent signs one envelope
+    /// with it and hands it to that child only, so the key forges nothing outside that run and no
+    /// long-lived secret ever crosses the process boundary.
+    /// </summary>
+    public static string CreateRunKey() =>
+        OrchestratorIdentityAssertion.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -91,7 +118,7 @@ public static class ProcessCallerIdentityEnvelope
         if (string.IsNullOrWhiteSpace(signedEnvelope))
             throw new UnauthorizedAccessException("Required caller identity envelope is missing or empty.");
         if (string.IsNullOrWhiteSpace(signingSecret))
-            throw new UnauthorizedAccessException("Orchestrator identity signing secret is not configured in the child process.");
+            throw new UnauthorizedAccessException("The caller identity envelope key was not supplied to the child process.");
 
         try
         {

@@ -88,7 +88,7 @@ namespace ETL_SQL.App
                 request.ScriptFile,
                 request.IdentityEnvelopeFile,
                 request.JobName,
-                configuration?["Orchestrator:IdentitySigningSecret"]);
+                request.IdentityKey);
 
             var scriptText = await File.ReadAllTextAsync(request.ScriptFile);
             var process = Process.GetCurrentProcess();
@@ -159,7 +159,8 @@ namespace ETL_SQL.App
         int BatchSize,
         IReadOnlyDictionary<string, string>? VariableOverrides = null,
         bool Resume = false,
-        string? IdentityEnvelopeFile = null);
+        string? IdentityEnvelopeFile = null,
+        string? IdentityKey = null);
 
     internal sealed record WarmRunnerResponse(
         string Type,

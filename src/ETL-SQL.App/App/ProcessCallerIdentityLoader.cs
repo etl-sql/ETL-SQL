@@ -9,15 +9,28 @@ namespace ETL_SQL.App;
 /// <summary>
 /// Child-side bootstrap for signed caller identity envelopes written by <c>ProcessJobExecutor</c>.
 /// Reads once, deletes the temp file before execution, and rejects missing, expired, altered,
-/// mismatched, or replayed envelopes.
+/// mismatched, or replayed envelopes. The envelope is verified with the per-run key the parent
+/// minted for this run only; the child never holds the Orchestrator's identity-signing secret.
 /// </summary>
 internal static class ProcessCallerIdentityLoader
 {
+    /// <summary>
+    /// Reads the one-shot per-run envelope key from the environment and removes it from this
+    /// process, so script text that runs afterwards cannot read it through <c>ENV()</c>.
+    /// </summary>
+    public static string? TakeKeyFromEnvironment()
+    {
+        var key = Environment.GetEnvironmentVariable(ProcessCallerIdentityEnvelope.EnvKey);
+        if (key is not null)
+            Environment.SetEnvironmentVariable(ProcessCallerIdentityEnvelope.EnvKey, null);
+        return key;
+    }
+
     public static async Task<ExecutionIdentity?> ReadAndConsumeAsync(
         string scriptPath,
         string? envelopeFileOverride,
         string? expectedJobId,
-        string? signingSecret,
+        string? identityKey,
         CancellationToken cancellationToken = default)
     {
         var required = Environment.GetEnvironmentVariable(ProcessCallerIdentityEnvelope.EnvRequired);
@@ -66,7 +79,7 @@ internal static class ProcessCallerIdentityLoader
             .ConfigureAwait(false);
         return ProcessCallerIdentityEnvelope.ValidateAndConsume(
             signedEnvelope,
-            signingSecret ?? string.Empty,
+            identityKey ?? string.Empty,
             scriptHash,
             expectedJobId);
     }

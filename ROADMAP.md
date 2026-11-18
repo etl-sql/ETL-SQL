@@ -1342,7 +1342,7 @@ bundle of the same name, on SQLite and Postgres.
 
 ### Security — Caller Identity for Process-Spawned Orchestrator Runs
 
-**Status:** Planned (v0.23.0, tasks in `TODO.md`)
+**Status:** Implemented (v0.23.0: `CI01`–`CI03`; per-run envelope key since R1)
 **Horizon:** Next (v0.23.0)
 
 **Problem and Intended Outcome:** With `Jobs:UseProcessSpawning`, the Orchestrator runs a job in a
@@ -1357,12 +1357,14 @@ the fix needs a tamper-evident hand-off, too much for v0.22.0.
 
 **Boundaries:** In-process runs are unchanged. Runs without an identity keep working in spawn mode.
 
-**Dependencies:** The Orchestrator identity secret (already used to sign the job channel).
+**Dependencies:** None. The envelope was first signed with the Orchestrator identity secret, which put
+that secret in the child's environment; the v0.23.0 review (R1) replaced it with a per-run key, so no
+long-lived secret crosses the process boundary.
 
 **Slices:**
 
-1. A signed identity envelope (identity, tenant, scopes, job id, expiry; HMAC with the Orchestrator
-   identity secret), written to a private temp file the child reads once and deletes.
+1. A signed identity envelope (identity, tenant, scopes, job id, expiry; HMAC with a key minted for
+   that run only), written to a private temp file the child reads once and deletes.
 2. The child App verifies the envelope, rejects expired or replayed ones, and binds the identity and
    tenant before the script runs.
 3. An authorizer in the child that applies the same per-object checks, or calls back to the

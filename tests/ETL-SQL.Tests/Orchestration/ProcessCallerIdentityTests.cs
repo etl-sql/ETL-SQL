@@ -164,7 +164,8 @@ public sealed class ProcessCallerIdentityTests : IDisposable
         var cfg = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Orchestrator:IdentitySigningSecret"] = TestSigningSecret,
+                // R1: no IdentitySigningSecret is configured. Identity crosses the process
+                // boundary on a per-run key, so process spawning needs no shared secret.
                 ["Orchestrator:DatabasePath"] = dbPath,
                 ["Orchestrator:Database:Provider"] = "Sqlite"
             })
@@ -234,7 +235,7 @@ public sealed class ProcessCallerIdentityTests : IDisposable
         psi.ArgumentList.Add("--json");
         psi.EnvironmentVariables[ProcessCallerIdentityEnvelope.EnvRequired] = "1";
         psi.EnvironmentVariables[ProcessCallerIdentityEnvelope.EnvFile] = tamperedEnvelope;
-        psi.EnvironmentVariables["Orchestrator__IdentitySigningSecret"] = TestSigningSecret;
+        psi.EnvironmentVariables[ProcessCallerIdentityEnvelope.EnvKey] = TestSigningSecret;
         psi.EnvironmentVariables["Orchestrator__DatabasePath"] = dbPath;
         psi.EnvironmentVariables["Orchestrator__Database__Provider"] = "Sqlite";
 
@@ -258,7 +259,6 @@ public sealed class ProcessCallerIdentityTests : IDisposable
 
         var sp = DependencyInjectionSetup.BuildServiceProvider(new Dictionary<string, string?>
         {
-            ["Orchestrator:IdentitySigningSecret"] = TestSigningSecret,
             ["Orchestrator:DatabasePath"] = dbPath,
             ["Orchestrator:Database:Provider"] = "Sqlite"
         });
@@ -282,7 +282,7 @@ public sealed class ProcessCallerIdentityTests : IDisposable
             ProcessCallerIdentityEnvelope.Create(AliceIdentity(), "WarmJob", scriptHash, TestSigningSecret));
 
         var ok = await WarmJobRunner.ExecuteRequestAsync(sp, new ETL_SQL.App.WarmRunnerRequest(
-            "req-1", scriptPath, "warm-sess-1", "WarmJob", 0, 10000, IdentityEnvelopeFile: envPath));
+            "req-1", scriptPath, "warm-sess-1", "WarmJob", 0, 10000, IdentityEnvelopeFile: envPath, IdentityKey: TestSigningSecret));
         Assert.True(ok.Success, ok.ErrorMessage);
         Assert.False((await store.GetJobAsync("tenant-a", "WarmAliceJob"))!.IsEnabled);
         Assert.False(File.Exists(envPath));
@@ -296,14 +296,14 @@ public sealed class ProcessCallerIdentityTests : IDisposable
                 lifetime: TimeSpan.FromSeconds(5), now: DateTimeOffset.UtcNow.AddMinutes(-5)));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             WarmJobRunner.ExecuteRequestAsync(sp, new ETL_SQL.App.WarmRunnerRequest(
-                "req-2", scriptPath, "warm-sess-2", "WarmJob", 0, 10000, IdentityEnvelopeFile: expiredPath)));
+                "req-2", scriptPath, "warm-sess-2", "WarmJob", 0, 10000, IdentityEnvelopeFile: expiredPath, IdentityKey: TestSigningSecret)));
 
         // Forged signature fails closed
         var forgedPath = Path.Combine(_tempDir, "warm-forged.tok");
         await File.WriteAllTextAsync(forgedPath, "invalid.payload");
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             WarmJobRunner.ExecuteRequestAsync(sp, new ETL_SQL.App.WarmRunnerRequest(
-                "req-3", scriptPath, "warm-sess-3", "WarmJob", 0, 10000, IdentityEnvelopeFile: forgedPath)));
+                "req-3", scriptPath, "warm-sess-3", "WarmJob", 0, 10000, IdentityEnvelopeFile: forgedPath, IdentityKey: TestSigningSecret)));
 
         // Per-object check denies Bob's job to Alice in WarmRunner too
         var denyScript = Path.Combine(_tempDir, "warm-deny.etlsql");
@@ -315,9 +315,101 @@ public sealed class ProcessCallerIdentityTests : IDisposable
             ProcessCallerIdentityEnvelope.Create(
                 AliceIdentity(), "WarmDeny", ProcessCallerIdentityEnvelope.ComputeScriptHash(denyBytes), TestSigningSecret));
         var denied = await WarmJobRunner.ExecuteRequestAsync(sp, new ETL_SQL.App.WarmRunnerRequest(
-            "req-4", denyScript, "warm-sess-4", "WarmDeny", 0, 10000, IdentityEnvelopeFile: denyEnv));
+            "req-4", denyScript, "warm-sess-4", "WarmDeny", 0, 10000, IdentityEnvelopeFile: denyEnv, IdentityKey: TestSigningSecret));
         Assert.False(denied.Success);
         Assert.Contains("lacks MANAGE authority", denied.ErrorMessage ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void R1_ChildEnvironmentNeverCarriesTheIdentitySigningSecret()
+    {
+        const string configuredSecret = "the-orchestrator-master-identity-signing-secret-32b";
+        var cfg = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Orchestrator:IdentitySigningSecret"] = configuredSecret,
+                ["Orchestrator:DatabasePath"] = Path.Combine(_tempDir, "orch.db"),
+            })
+            .Build();
+        var executor = new ProcessJobExecutor(
+            Options.Create(new ProcessJobExecutorOptions()),
+            new ChildProcessTracker(
+                new Mock<ILogger<ChildProcessTracker>>().Object,
+                Path.Combine(_tempDir, "child-pids.json")),
+            new Mock<ILogger<ProcessJobExecutor>>().Object,
+            cfg);
+
+        // What the executor adds for a one-shot child and seeds a warm-runner pool with.
+        var childEnv = executor.BuildChildHostEnvironment();
+        Assert.DoesNotContain(childEnv.Values, v => v.Contains(configuredSecret, StringComparison.Ordinal));
+        Assert.DoesNotContain(childEnv.Keys, k => k.Contains("IdentitySigningSecret", StringComparison.OrdinalIgnoreCase));
+
+        // What a child would otherwise inherit from a parent configured through the environment.
+        var psi = new System.Diagnostics.ProcessStartInfo("child");
+        psi.Environment["Orchestrator__IdentitySigningSecret"] = configuredSecret;
+        psi.Environment["Portal__Orchestrator__IdentitySigningSecret"] = configuredSecret;
+        psi.Environment["Unrelated__Setting"] = "kept";
+        ProcessJobExecutor.RemoveParentSigningSecrets(psi);
+        Assert.DoesNotContain(psi.Environment.Values, v => v == configuredSecret);
+        Assert.Equal("kept", psi.Environment["Unrelated__Setting"]);
+    }
+
+    [Fact]
+    public void R1_EnvelopeSignedWithOneRunKeyIsRejectedByAnother()
+    {
+        var runKeyA = ProcessCallerIdentityEnvelope.CreateRunKey();
+        var runKeyB = ProcessCallerIdentityEnvelope.CreateRunKey();
+        Assert.NotEqual(runKeyA, runKeyB);
+        Assert.True(Encoding.UTF8.GetByteCount(runKeyA) >= 32);
+
+        var scriptHash = ProcessCallerIdentityEnvelope.ComputeScriptHash("SELECT 1;"u8.ToArray());
+        var envelope = ProcessCallerIdentityEnvelope.Create(AliceIdentity(), "JobA", scriptHash, runKeyA);
+
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            ProcessCallerIdentityEnvelope.ValidateAndConsume(
+                envelope, runKeyB, scriptHash, expectedJobId: "JobA",
+                replayGuard: new ProcessCallerNonceReplayGuard()));
+        var identity = ProcessCallerIdentityEnvelope.ValidateAndConsume(
+            envelope, runKeyA, scriptHash, expectedJobId: "JobA",
+            replayGuard: new ProcessCallerNonceReplayGuard());
+        Assert.Equal("user:alice", identity.EffectiveUser);
+    }
+
+    [Fact]
+    public async Task R1_LoaderFailsClosedWhenTheRunKeyIsMissingOrWrong()
+    {
+        var scriptPath = Path.Combine(_tempDir, "nokey.etlsql");
+        var scriptBytes = "PRINT 'x';"u8.ToArray();
+        await File.WriteAllBytesAsync(scriptPath, scriptBytes);
+        var runKey = ProcessCallerIdentityEnvelope.CreateRunKey();
+        var signed = ProcessCallerIdentityEnvelope.Create(
+            AliceIdentity(), "NoKeyJob", ProcessCallerIdentityEnvelope.ComputeScriptHash(scriptBytes), runKey);
+
+        foreach (var suppliedKey in new[] { null, ProcessCallerIdentityEnvelope.CreateRunKey() })
+        {
+            var envelopePath = Path.Combine(_tempDir, $"nokey-{Guid.NewGuid():N}.tok");
+            await File.WriteAllTextAsync(envelopePath, signed);
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+                ProcessCallerIdentityLoader.ReadAndConsumeAsync(
+                    scriptPath, envelopePath, expectedJobId: "NoKeyJob", suppliedKey));
+            Assert.False(File.Exists(envelopePath));
+        }
+    }
+
+    [Fact]
+    public void R1_ChildTakesTheRunKeyOutOfItsEnvironmentBeforeScriptsRun()
+    {
+        var saved = Environment.GetEnvironmentVariable(ProcessCallerIdentityEnvelope.EnvKey);
+        try
+        {
+            Environment.SetEnvironmentVariable(ProcessCallerIdentityEnvelope.EnvKey, "per-run-key-value");
+            Assert.Equal("per-run-key-value", ProcessCallerIdentityLoader.TakeKeyFromEnvironment());
+            Assert.Null(Environment.GetEnvironmentVariable(ProcessCallerIdentityEnvelope.EnvKey));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(ProcessCallerIdentityEnvelope.EnvKey, saved);
+        }
     }
 
     private static string ResolveChildExecutablePath()

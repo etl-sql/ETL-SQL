@@ -193,10 +193,11 @@ public class ProcessJobExecutorChaosTests
     }
 
     [Fact]
-    public async Task IdentityBoundRun_IsRefusedRatherThanRunWithoutTheIdentity()
+    public async Task IdentityBoundRun_CarriesItsIdentityWithoutAnyConfiguredSigningSecret()
     {
-        // The child process cannot carry the identity, which is also the run's tenant binding and
-        // per-object authority. Running the text anyway ran it unbound and unchecked.
+        // R1: an identity-bound run gets a per-run envelope key, so process spawning needs no
+        // Orchestrator:IdentitySigningSecret and is no longer refused for lacking one. The ETL-SQL
+        // child fails closed when the envelope or key is missing or wrong (ProcessCallerIdentityTests).
         var tempDir = NewTempDir();
         var tracker = new ChildProcessTracker(
             new Mock<ILogger<ChildProcessTracker>>().Object, Path.Combine(tempDir, "child-pids.json"));
@@ -220,13 +221,11 @@ public class ProcessJobExecutorChaosTests
 
         try
         {
-            var refused = await executor.ExecuteTextAsync(
+            var identityRun = await executor.ExecuteTextAsync(
                 "SELECT 1 AS Val;", sessionId: "identity-run", executionIdentity: identity);
             var scheduled = await executor.ExecuteTextAsync("SELECT 1 AS Val;", sessionId: "scheduled-run");
 
-            Assert.False(refused.Success);
-            Assert.False(refused.RetryAllowed);
-            Assert.Contains("cannot carry the caller's execution identity", refused.ErrorMessage);
+            Assert.True(identityRun.Success, identityRun.ErrorMessage);
             Assert.True(scheduled.Success, scheduled.ErrorMessage);
         }
         finally

@@ -441,13 +441,16 @@ namespace ETL_SQL.App
                     evaluator.MasterPassword = ctx.Password;
                     evaluator.SessionId = ctx.SessionId;
                     evaluator.CurrentScriptPath = ctx.ScriptFile.FullName;
+                    // Take (and clear) the per-run envelope key before any script text runs, so
+                    // ENV() cannot read it even when Security:AllowedEnvVars is widened.
+                    var callerIdentityKey = ProcessCallerIdentityLoader.TakeKeyFromEnvironment();
                     evaluator.ExecutionIdentity = await SandboxWorkerIdentityLoader.ReadAsync(
                         ctx.ScriptFile.FullName, CancellationToken.None)
                         ?? await ProcessCallerIdentityLoader.ReadAndConsumeAsync(
                             ctx.ScriptFile.FullName,
                             envelopeFileOverride: null,
                             Environment.GetEnvironmentVariable(ETL_SQL.Core.Governance.ProcessCallerIdentityEnvelope.EnvJobId) ?? ctx.JobName,
-                            engineConfig["Orchestrator:IdentitySigningSecret"],
+                            callerIdentityKey,
                             CancellationToken.None);
 
                     if (evaluator.ExecutionIdentity is { } callerIdentity && !string.IsNullOrWhiteSpace(callerIdentity.TenantId))
