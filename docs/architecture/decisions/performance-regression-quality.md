@@ -1,6 +1,10 @@
 # Performance Regression Quality (v0.15.0 Phase 3) — Design
 
-**Status:** Implemented for v0.15.0 Phase 3.
+**Status:** Implemented for v0.15.0 Phase 3. **Superseded in part by W6 (v0.23.0)**: §4 and §6
+below describe the original timing bands. Since W6, the comparator gates correctness, exact work
+counters and allocations against hosted baselines; elapsed, throughput, peak working set and GC
+pause are report-only; and elapsed time is gated only by the paired A/B release job. See the
+[W6 design note](../../releases/v0.23.0-w6-performance-gates-design.md).
 **TODO items covered:** v0.15.0 Phase 3 (scenario-specific warning/failure bands;
 runtime/hardware/config/commit metadata; current-commit performance evidence before publishing).
 **Completion gate:** performance regressions are detected by scenario-specific, statistically

@@ -88,7 +88,8 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
 
 ### 1.9 Spill GC-pause gap
 
-- [ ] **Explain the spill GC-pause gap.** Reopened after review: the retained fixed-binary .NET 10.0.13/10.0.14 controls both reproduce elevated pauses, contradicting the proposed runtime-version root cause. The four Smoke spill metric gaps remain unresolved. **Left:** isolate the cause with controlled captures or accept a justified recalibration. See [the reviewed investigation](docs/benchmarks/spill-gc-pause-investigation-2026-11-16.md).
+- [x] **Explain the spill GC-pause gap.** Closed by policy 2026-11-18 (W6): GC pause is a machine metric
+  and gates nowhere; see the closing section of the investigation note. Original item: Reopened after review: the retained fixed-binary .NET 10.0.13/10.0.14 controls both reproduce elevated pauses, contradicting the proposed runtime-version root cause. The four Smoke spill metric gaps remain unresolved. **Left:** isolate the cause with controlled captures or accept a justified recalibration. See [the reviewed investigation](docs/benchmarks/spill-gc-pause-investigation-2026-11-16.md).
 
 ## Tier 2 — next
 
@@ -163,5 +164,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
   counts); time only by same-host interleaved A/B; no waivers. See the
   [Release Engineering entry](ROADMAP.md#release-engineering--routine-github-built-releases).
   Design approved 2026-11-18 ([design note](docs/releases/v0.23.0-w6-performance-gates-design.md)).
-  Slices 1 (measure) and 2 (comparator classes, hosted baselines) done; slice 3 (ABBA job) and
-  slice 4 (policy cleanup) and slice 5 (report-only trend tracking over CI history) open.
+  Slices 1–4 done (measure; comparator classes and hosted baselines; paired A/B *Paired timing*
+  job in Release Evidence at a 10% threshold; policy and docs). Slice 5 (report-only trend
+  tracking over CI history) open.

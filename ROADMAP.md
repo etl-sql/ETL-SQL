@@ -146,7 +146,10 @@ MSI, native and DEB packages, and dispatch-only workflows are registered on `mai
 W1 (five green nights) and W4 (native collectors, recorded replay) carry to v0.23.0 in `TODO.md`.
 Picked up only when selected:
 - W6 performance certification redesign: deterministic metrics gate; timing by same-host
-  interleaved A/B; no waivers.
+  interleaved A/B; no waivers. **In v0.23.0 (2026-11-18):** hosted baselines gate correctness,
+  exact work counters and allocations (+5%); the *Paired timing* Release Evidence job gates
+  elapsed time (10%); GC and peak memory are report-only. Trend tracking (slice 5) remains.
+  [Design note](docs/releases/v0.23.0-w6-performance-gates-design.md).
 - W7 fast pre-push hook and local gate hygiene (overlaps RG03's docs-only skip).
 - Parked from the earlier "release in four hours" goal: fail fast on candidate failures;
   impact-selected CI and targeted fix rounds; broad package PRs in about 30 minutes; longest CI job

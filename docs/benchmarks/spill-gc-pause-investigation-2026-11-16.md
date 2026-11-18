@@ -37,12 +37,22 @@ both the baseline and subsequent runtime controls used DATAS.
 Subtracting independently computed elapsed and GC medians is also not a measurement of median
 non-GC execution time. Compute the difference per sample first, then summarize those values.
 
-## Remaining work
+## Closed by policy (2026-11-18)
 
-Keep TODO §1.9 open until a controlled experiment explains the stored-reference gap or an
-explicitly justified baseline recalibration is accepted. Retain source/configuration hashes,
-per-sample elapsed time and GC pauses, runtime/GC settings, warm-up protocol and host readiness
-for any follow-up. Preserve the existing baseline and failed comparisons.
+TODO §1.9 is closed by the owner-approved W6 policy, not by a root cause
+([W6 design note](../releases/v0.23.0-w6-performance-gates-design.md)):
+
+- GC pause and GC counts are machine metrics. They are reported everywhere and gate nowhere.
+  Across five hosted replicas at one commit, GC-pause medians spread 19–83%, far more than the
+  5–30 ms Smoke spill gaps this note tracked.
+- Real regressions still surface: as elapsed time in the paired A/B release gate (same runner,
+  A,B,B,A blocks, fails at a 10% median ratio), as allocation growth (+5% fails against hosted
+  baselines), or as extra spill work (exact counters).
+- The workstation baselines that produced the gaps were replaced by hosted baselines in W6
+  slice 2. They stay in history with the failed comparisons, as this note asked.
+
+The open question (why the stored reference paused less than later runtime controls) is not
+pursued. Reopen only if a paired A/B run or allocation gate points at GC behaviour.
 
 References:
 
