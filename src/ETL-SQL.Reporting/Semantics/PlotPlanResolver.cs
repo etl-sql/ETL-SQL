@@ -584,10 +584,18 @@ public sealed class PlotPlanResolver
                 numbers.Count > 0 && numbers.All(n => n is >= 0m and <= 1m);
             var minimum = isNormalizedOpacity ? 0m : scale.DomainMinimum is not null ? Number(scale.DomainMinimum) ?? 0m : numbers.DefaultIfEmpty(0m).Min();
             var maximum = isNormalizedOpacity ? 1m : scale.DomainMaximum is not null ? Number(scale.DomainMaximum) ?? 1m : numbers.DefaultIfEmpty(1m).Max();
+            if (scale.DomainMinimum is not null && scale.DomainMaximum is not null &&
+                Number(scale.DomainMinimum) is { } explicitMin && Number(scale.DomainMaximum) is { } explicitMax &&
+                explicitMin > explicitMax)
+                throw new InvalidOperationException($"MIN bound for scale '{scale.Id}' cannot exceed MAX bound.");
             if (scale.Kind == ScaleKind.Logarithmic && (minimum <= 0m || maximum <= 0m || numbers.Any(number => number <= 0m)))
                 throw new InvalidOperationException($"Logarithmic scale '{scale.Id}' requires positive values and domain bounds.");
             if (scale.IncludeZero) { minimum = Math.Min(0m, minimum); maximum = Math.Max(0m, maximum); }
-            if (scale.ColorRange?.Midpoint is { } colorMidpoint) { minimum = Math.Min(colorMidpoint, minimum); maximum = Math.Max(colorMidpoint, maximum); }
+            if (scale.ColorRange?.Midpoint is { } colorMidpoint)
+            {
+                if (scale.DomainMinimum is null) minimum = Math.Min(colorMidpoint, minimum);
+                if (scale.DomainMaximum is null) maximum = Math.Max(colorMidpoint, maximum);
+            }
             if (minimum == maximum) maximum = minimum + 1m;
             var needsMarkHeadroom = !spec.Theme.Tokens.Any(token => token.Name.Equals("MICRO_CHART", StringComparison.OrdinalIgnoreCase)) &&
                 resolvedLayers.Any(layer => !layer.Style.Any(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase)) &&

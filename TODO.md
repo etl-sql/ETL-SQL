@@ -155,12 +155,6 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
   output schema, scalar fidelity, comparison semantics and cancellation. Compare allocation counts
   and outputs first; time with repeated same-host A/B runs.
 
-### 3.2 Reporting authoring parity and golden conformance fixtures
-
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| GG10 | **Declarative negative conformance corpus for reporting/GoG.** Add an SLT-style `statement error` script runner (or negative `.rptsql` fixture lane) that verifies expected parse, semantic-validator, and domain errors directly from `.rptsql` test scripts. | GG06 | M |
-
 ### 3.3 Operations console completion
 
 | ID | Chunk and finish line | Depends on | Size |

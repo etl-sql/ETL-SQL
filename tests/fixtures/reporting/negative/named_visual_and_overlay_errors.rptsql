@@ -1,0 +1,38 @@
+-- Negative Conformance Corpus: Named Visual & Overlay Errors
+
+-- statement ok
+SELECT 'Jan' AS Month, 0.0 AS Value, 10.0 AS ForecastCol INTO #overlay_neg
+UNION ALL SELECT 'Feb', 25.0, 30.0
+UNION ALL SELECT 'Mar', 40.0, 45.0;
+
+-- statement error any FORECAST overlay is supported only on LINE and COMBO visuals
+CREATE VISUAL ForecastOnBar AS BAR (
+  SOURCE = #overlay_neg,
+  MAPPINGS (X = Month, Y = Value),
+  OVERLAYS (FORECAST(ForecastCol) AS DASHED)
+);
+CREATE PAGE PForecast AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = ForecastOnBar));
+
+-- statement error any REFERENCE_BAND requires LOW to be less than HIGH
+CREATE VISUAL InvertedReferenceBand AS BAR (
+  SOURCE = #overlay_neg,
+  MAPPINGS (X = Month, Y = Value),
+  OVERLAYS (REFERENCE_BAND (LOW = 50, HIGH = 20, COLOR = '#cbd5e1'))
+);
+CREATE PAGE PBand AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = InvertedReferenceBand));
+
+-- statement error domain was not found in
+CREATE VISUAL MissingRunningTotalColumn AS BAR (
+  SOURCE = #overlay_neg,
+  MAPPINGS (X = Month, Y = Value),
+  OVERLAYS (RUNNING_TOTAL(NoSuchCumulative) AS SOLID)
+);
+CREATE PAGE PRunning AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = MissingRunningTotalColumn));
+
+-- statement error domain positive
+CREATE VISUAL ExponentialWithZero AS SCATTER (
+  SOURCE = #overlay_neg,
+  MAPPINGS (X = ForecastCol, Y = Value),
+  OVERLAYS (EXPONENTIAL AS SOLID)
+);
+CREATE PAGE PExp AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = ExponentialWithZero));

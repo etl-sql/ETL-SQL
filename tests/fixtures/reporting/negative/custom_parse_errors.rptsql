@@ -1,0 +1,68 @@
+-- Negative Conformance Corpus: Parser Errors in CUSTOM CHART
+
+-- statement ok
+SELECT 'Jan' AS Month, 100 AS Revenue INTO #sales;
+
+-- statement error parse Unknown advanced mark
+CREATE VISUAL BadMark AS CUSTOM (
+  SOURCE = #sales,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    LAYERS (
+      shapes = HEXAGON (
+        ENCODE (X = Month (TYPE = NOMINAL), Y = Revenue (TYPE = QUANTITATIVE))
+      )
+    )
+  )
+);
+
+-- statement error parse Unknown scale type
+CREATE VISUAL BadScaleKind AS CUSTOM (
+  SOURCE = #sales,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (x = RADIAL (CHANNEL = X)),
+    LAYERS (bars = RECT (ENCODE (X = Month (TYPE = NOMINAL, SCALE = x), Y = Revenue (TYPE = QUANTITATIVE))))
+  )
+);
+
+-- statement error parse Unknown encoding channel
+CREATE VISUAL BadChannel AS CUSTOM (
+  SOURCE = #sales,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    LAYERS (
+      bars = RECT (
+        ENCODE (X = Month (TYPE = NOMINAL), DEPTH = Revenue (TYPE = QUANTITATIVE))
+      )
+    )
+  )
+);
+
+-- statement error parse requires CHANNEL
+CREATE VISUAL MissingChannel AS CUSTOM (
+  SOURCE = #sales,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (y = LINEAR (MIN = 0, MAX = 100)),
+    LAYERS (bars = RECT (ENCODE (X = Month (TYPE = NOMINAL), Y = Revenue (TYPE = QUANTITATIVE))))
+  )
+);
+
+-- statement error parse Cannot mix keyed domain mappings and positional RANGE values
+CREATE VISUAL MixedRange AS CUSTOM (
+  SOURCE = #sales,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (c = ORDINAL (CHANNEL = COLOR, RANGE = ('Jan' = '#112233', '#445566'))),
+    LAYERS (
+      bars = RECT (
+        ENCODE (
+          X = Month (TYPE = NOMINAL),
+          Y = Revenue (TYPE = QUANTITATIVE),
+          COLOR = Month (TYPE = NOMINAL, SCALE = c)
+        )
+      )
+    )
+  )
+);
