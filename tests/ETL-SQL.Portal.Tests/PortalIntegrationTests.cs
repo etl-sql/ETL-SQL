@@ -3891,24 +3891,23 @@ CREATE VISUAL Answer AS TABLE (
 
         var responses = await Task.WhenAll(readTasks.Append(duplicateRefreshTask));
 
-        // Until the new snapshot is published, the old source hash cannot authorize its data.
-        foreach (var index in new[] { 0, 1, 5, 6, 7 })
-            Assert.Contains(responses[index].StatusCode, new[] { HttpStatusCode.OK, HttpStatusCode.Forbidden });
-        if (responses[0].StatusCode == HttpStatusCode.OK)
-        {
-            var duringRefreshSnapshot = await responses[0].Content.ReadFromJsonAsync<JsonObject>(_json);
-            Assert.NotNull(duringRefreshSnapshot!["manifest"]);
-            Assert.True(duringRefreshSnapshot["builtAt"]!.GetValue<DateTime>() >= baselineBuiltAt);
-        }
+        // The prior snapshot recorded its SHARED: connection dependencies when it ran, so it stays
+        // readable and exportable while the refresh is in flight, even though the script changed.
+        Assert.Equal(HttpStatusCode.OK, responses[0].StatusCode);
+        var duringRefreshSnapshot = await responses[0].Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.NotNull(duringRefreshSnapshot!["manifest"]);
+        Assert.True(duringRefreshSnapshot["builtAt"]!.GetValue<DateTime>() >= baselineBuiltAt);
+
+        Assert.Equal(HttpStatusCode.OK, responses[1].StatusCode);
         Assert.Equal(HttpStatusCode.OK, responses[2].StatusCode);
         Assert.Equal(HttpStatusCode.OK, responses[3].StatusCode);
         Assert.Equal(HttpStatusCode.OK, responses[4].StatusCode);
-        if (responses[5].StatusCode == HttpStatusCode.OK)
-            Assert.Equal("text/csv", responses[5].Content.Headers.ContentType?.MediaType);
-        if (responses[6].StatusCode == HttpStatusCode.OK)
-            Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", responses[6].Content.Headers.ContentType?.MediaType);
-        if (responses[7].StatusCode == HttpStatusCode.OK)
-            Assert.Equal("application/pdf", responses[7].Content.Headers.ContentType?.MediaType);
+        Assert.Equal(HttpStatusCode.OK, responses[5].StatusCode);
+        Assert.Equal("text/csv", responses[5].Content.Headers.ContentType?.MediaType);
+        Assert.Equal(HttpStatusCode.OK, responses[6].StatusCode);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", responses[6].Content.Headers.ContentType?.MediaType);
+        Assert.Equal(HttpStatusCode.OK, responses[7].StatusCode);
+        Assert.Equal("application/pdf", responses[7].Content.Headers.ContentType?.MediaType);
 
         Assert.Equal(HttpStatusCode.Accepted, responses[8].StatusCode);
         var duplicateRefresh = await responses[8].Content.ReadFromJsonAsync<JsonObject>(_json);

@@ -143,6 +143,28 @@ public class OrchestratorBundleTenantIsolationApiTests : IDisposable
             (await SendAsAsync(client, adminB, HttpMethod.Get, "/api/bundles/legacy-api-bundle/versions/1/files", null)).StatusCode);
     }
 
+    [Fact]
+    public async Task LegacyDefaultBundlesEndpoints_RefuseNonAdministratorAuthors()
+    {
+        var client = _factory.CreateClient();
+        var store = _factory.Services.GetRequiredService<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>();
+        await store.InitializeAsync();
+
+        // A job author can publish bundles in their own tenant, but legacy bundles belong to no
+        // tenant: listing or claiming them would let any tenant take every other tenant's history.
+        var authorTenantA = new OrchestratorCaller(
+            "user", "alice", "Alice", ["OrchestratorManager"], [], "tenant-a",
+            ["orchestrator.admin"], []);
+
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsAsync(client, authorTenantA, HttpMethod.Get, "/api/bundles/unassigned", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsAsync(client, authorTenantA, HttpMethod.Post, "/api/bundles/reassign", new
+            {
+                bundleName = "legacy-api-bundle"
+            })).StatusCode);
+    }
+
     private static object MakePublishBody(string name, string content, string hash) => new
     {
         bundle = new

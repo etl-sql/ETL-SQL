@@ -2210,7 +2210,7 @@ namespace ETL_SQL.Orchestrator.Service
             app.MapGet("/api/bundles/unassigned", async (HttpContext ctx, IBundleStore store, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                if (BundlePublishDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (LegacyBundleAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (!TryResolveBundleTenant(ctx, cfg, out _))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
@@ -2222,7 +2222,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IBundleStore store, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                if (BundlePublishDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (LegacyBundleAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (bundleTenant is null)
@@ -2784,6 +2784,12 @@ namespace ETL_SQL.Orchestrator.Service
         private static bool BundlePublishDenied(HttpContext ctx, IConfiguration cfg) =>
             !OrchestratorAuthorizationMode.IsLegacy(cfg)
             && !OrchestratorObjectAuthorizationService.CanCreate(RequestCaller(ctx));
+
+        // Legacy 'default'/unbound bundles predate tenant scoping and belong to no tenant, so
+        // listing or claiming them is an administrator action, not a job author's.
+        private static bool LegacyBundleAdministrationDenied(HttpContext ctx, IConfiguration cfg) =>
+            !OrchestratorAuthorizationMode.IsLegacy(cfg)
+            && !IsObjectAdministrator(RequestCaller(ctx));
 
         private static bool BundleReadDenied(HttpContext ctx, IConfiguration cfg)
         {
