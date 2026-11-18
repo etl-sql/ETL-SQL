@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'cert-baseline-classes-'));
 const baselinePath = fileURLToPath(new URL('../../certification-results/baseline-smoke.json', import.meta.url));
-const baseline = JSON.parse(readFileSync(baselinePath, 'utf8').replace(/^﻿/, ''));
+const baseline = JSON.parse(readFileSync(baselinePath, 'utf8').replace(/^\uFEFF/, ''));
 const script = fileURLToPath(new URL('../Compare-CertBaseline.ps1', import.meta.url));
 const spilling = baseline.scenarios.find(s => s.spillExtentCount > 0 && s.partitionPassCount > 0);
 assert.ok(spilling, 'the Smoke baseline has a scenario that spills and repartitions');

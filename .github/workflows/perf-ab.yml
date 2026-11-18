@@ -1,0 +1,123 @@
+# W6 paired A/B timing (docs/releases/v0.23.0-w6-performance-gates-design.md, slice 3).
+#
+# Builds the candidate and a baseline on one hosted runner and times the Standard scenarios that
+# run for at least 2 s in A,B,B,A blocks (scripts/Test-ScalePairedTiming.ps1). One job per
+# scenario keeps each job near 30 minutes. A scenario fails when the median block ratio is above
+# 1.15 and at least 4 of 5 blocks are slower.
+#
+# Baseline: the previous release tag. A branch push picks it by name:
+#   perf-ab/null/**    baseline = the candidate itself (A-vs-A null run; must pass)
+#   perf-ab/parent/**  baseline = the candidate's parent (an injected slowdown must fail)
+#   perf-ab/**         baseline = the previous release tag
+# Release evidence uses it once calibrated (W6: null run passes, injected slowdown fails).
+name: Paired Timing
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: Baseline ref; empty means the previous release tag
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      baseline_ref:
+        required: false
+        type: string
+  push:
+    branches: [ 'perf-ab/**' ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perf-ab-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+
+jobs:
+  paired-timing:
+    name: Paired timing ${{ matrix.scenario }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [ ExternalSort, ExternalJoin, WindowFunction, CubeGroupingSets, ScalarSubqueryCache ]
+    steps:
+      - name: Checkout candidate
+        timeout-minutes: 10
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          path: candidate
+          fetch-depth: 0
+
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Resolve baseline
+        id: baseline
+        timeout-minutes: 3
+        shell: pwsh
+        working-directory: candidate
+        env:
+          BASELINE_REF: ${{ inputs.baseline_ref }}
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          $ref = $env:BASELINE_REF
+          if (-not $ref) {
+            if ($env:GITHUB_REF -like 'refs/heads/perf-ab/null/*') { $ref = $head }
+            elseif ($env:GITHUB_REF -like 'refs/heads/perf-ab/parent/*') { $ref = "$head~1" }
+            else {
+              $ref = git tag --merged HEAD --sort=-v:refname |
+                Where-Object { $_ -cmatch '^v\d+\.\d+\.\d+$' -and (git rev-list -n 1 $_).Trim() -cne $head } |
+                Select-Object -First 1
+              if (-not $ref) { throw 'No earlier release tag is an ancestor of the candidate.' }
+            }
+          }
+          $sha = (git rev-parse --verify "$ref^{commit}").Trim()
+          if ($LASTEXITCODE -ne 0) { throw "Cannot resolve baseline ref '$ref'." }
+          git worktree add --detach ../baseline $sha
+          if ($LASTEXITCODE -ne 0) { throw 'Baseline worktree failed.' }
+          Write-Host "Baseline $ref ($sha); candidate $head"
+          "ref=$ref" >> $env:GITHUB_OUTPUT
+
+      - name: Prepare both checkouts
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          foreach ($dir in @('baseline', 'candidate')) {
+            Push-Location $dir
+            npm ci --prefix scripts/typecheck
+            if ($LASTEXITCODE -ne 0) { throw "${dir}: npm ci failed." }
+            node scripts/sync-assets.js
+            if ($LASTEXITCODE -ne 0) { throw "${dir}: asset preparation failed." }
+            Pop-Location
+          }
+
+      - name: Paired timing (${{ matrix.scenario }})
+        timeout-minutes: 50
+        shell: pwsh
+        working-directory: candidate
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ScalePairedTiming.ps1 -ScriptArguments @('-BaselineRoot', '../baseline', '-CandidateRoot', '.', '-Scenario', $env:SCENARIO, '-OutDir', "release-validation/paired-timing/$env:SCENARIO") -EvidenceDirectory "release-validation/paired-timing/$env:SCENARIO-process" -TimeoutSeconds 2880
+
+      - name: Retain paired timing evidence
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: paired-timing-${{ matrix.scenario }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate/release-validation/paired-timing/
+          if-no-files-found: error
+          retention-days: 90
