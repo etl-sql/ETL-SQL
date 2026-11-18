@@ -207,6 +207,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public long MaxSessionSize { get; set; } = LanguageMetadata.DefaultMaxSessionSize;
     public bool SpillEncryptionEnabled { get; set; } = true;
     public bool SpillCompressionEnabled { get; set; } = true;
+    public string SpillCompressionLevel { get; set; } = "Adaptive";
     public string SpillFormat { get; set; } = "Arrow";
     public ISpillStore SpillStore => null!;
     public string? DecryptValue(string? value) => value;

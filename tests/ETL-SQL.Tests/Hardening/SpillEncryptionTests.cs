@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
@@ -370,6 +371,76 @@ namespace ETL_SQL.Tests.Hardening
             {
                 try { if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true); } catch { }
             }
+        }
+
+        [Fact]
+        public async Task SpillStore_CompressionLevel_HonorsConfigAndAdaptsToCpuConcurrencyAndDiskHeadroom()
+        {
+            Assert.Equal("Adaptive", DefaultThresholds.SpillCompressionLevel(null));
+            var customConfig = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Security:SpillCompressionLevel"] = "Fastest"
+                })
+                .Build();
+            Assert.Equal("Fastest", DefaultThresholds.SpillCompressionLevel(customConfig));
+
+            var mode = "Adaptive";
+            var minFreeBytes = 256L * 1024 * 1024;
+            var ctx = new Mock<IExecutionContext>();
+            ctx.SetupGet(c => c.IsPersistentSession).Returns(false);
+            ctx.SetupGet(c => c.SessionId).Returns("sess_adaptive_compression");
+            ctx.SetupGet(c => c.SessionStateManager).Returns(new NullSessionStateManager());
+            ctx.SetupGet(c => c.SpillEncryptionEnabled).Returns(true);
+            ctx.SetupGet(c => c.SpillCompressionEnabled).Returns(true);
+            ctx.SetupGet(c => c.SpillCompressionLevel).Returns(() => mode);
+            ctx.SetupGet(c => c.SpillMinimumFreeBytes).Returns(() => minFreeBytes);
+            ctx.SetupGet(c => c.SpillFormat).Returns("Arrow");
+            ctx.SetupGet(c => c.EffectiveSpillWriteConcurrency).Returns(4);
+            ctx.SetupGet(c => c.AdaptiveMetrics).Returns(new ETL_SQL.Core.Adaptive.AdaptiveRuntimeMetrics());
+            ctx.SetupGet(c => c.Logger).Returns(new Mock<ILogger>().Object);
+            ctx.SetupGet(c => c.CancellationToken).Returns(System.Threading.CancellationToken.None);
+
+            using var store = new SpillStore(ctx.Object);
+            var simulatedCpu = 0.20;
+            var simulatedFreeBytes = 10L * 1024 * 1024 * 1024; // 10 GiB free
+            store.CpuUtilizationProvider = () => simulatedCpu;
+            store.AvailableBytesProvider = _ => simulatedFreeBytes;
+
+            // Low CPU + single writer + generous disk -> Optimal
+            await using (var w1 = await store.CreateWriterAsync("adaptive-low.arrow"))
+            {
+                Assert.Equal(CompressionLevel.Optimal, store.LastResolvedCompressionLevel);
+
+                // Concurrent open writer while disk is healthy -> Adaptive drops to Fastest
+                await using var w2 = await store.CreateWriterAsync("adaptive-concurrent.arrow");
+                Assert.Equal(CompressionLevel.Fastest, store.LastResolvedCompressionLevel);
+            }
+
+            // High CPU pressure -> Fastest default
+            simulatedCpu = 0.85;
+            await using (await store.CreateWriterAsync("adaptive-high-cpu.arrow"))
+                Assert.Equal(CompressionLevel.Fastest, store.LastResolvedCompressionLevel);
+
+            // Tight disk reserve (< 4x reserve) keeps Optimal even under high CPU pressure
+            simulatedFreeBytes = minFreeBytes * 2;
+            await using (await store.CreateWriterAsync("adaptive-tight-disk.arrow"))
+                Assert.Equal(CompressionLevel.Optimal, store.LastResolvedCompressionLevel);
+
+            // Explicit configuration overrides adaptive selection
+            simulatedCpu = 0.10;
+            mode = "Fastest";
+            await using (await store.CreateWriterAsync("explicit-fastest.arrow"))
+                Assert.Equal(CompressionLevel.Fastest, store.LastResolvedCompressionLevel);
+
+            simulatedCpu = 0.95;
+            mode = "Optimal";
+            await using (await store.CreateWriterAsync("explicit-optimal.arrow"))
+                Assert.Equal(CompressionLevel.Optimal, store.LastResolvedCompressionLevel);
+
+            mode = "SmallestSize";
+            await using (await store.CreateWriterAsync("explicit-smallest.arrow"))
+                Assert.Equal(CompressionLevel.SmallestSize, store.LastResolvedCompressionLevel);
         }
     }
 }

@@ -502,6 +502,8 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
 
     bool SpillEncryptionEnabled { get; set; }
     bool SpillCompressionEnabled { get; set; }
+    /// <summary>Spill compression mode: Adaptive (Fastest under high CPU pressure), Fastest, Optimal, or SmallestSize.</summary>
+    string SpillCompressionLevel { get => "Adaptive"; set { } }
     string SpillFormat { get; set; }
 
     /// <summary>

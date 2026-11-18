@@ -67,6 +67,7 @@ public class EvaluatorOptions
     public bool SkipError { get; set; } = false;
     public bool SpillEncryptionEnabled { get; set; } = true;
     public bool SpillCompressionEnabled { get; set; } = true;
+    public string SpillCompressionLevel { get; set; } = "Adaptive";
     public string SpillFormat { get; set; } = "Arrow";
     public bool AutoRollbackOnFinish { get; set; } = true;
     public bool ReuseLoopNodes { get; set; } = true;

@@ -55,18 +55,32 @@ public partial class SpillStore : ISpillStore
     private byte[]? _cachedSessionKey;
     private string? _cachedSessionId;
     private bool _usingTemporaryFallback;
+    private volatile bool _cacheInitialized;
     private readonly object _initLock = new();
     private readonly object _spillWriteGate = new();
     private readonly Queue<TaskCompletionSource<bool>> _spillWriteWaiters = new();
     private readonly IExecutionContext _context;
     private bool _disposed;
+    private const double HighCpuCompressionThreshold = 0.70;
+    private readonly object _cpuSampleLock = new();
+    private TimeSpan _lastSampledCpuTime;
+    private long _lastCpuSampleTimestamp;
+    private double _cachedCpuUtilization;
     private int _activeSpillWrites;
     private int _waitingSpillWrites;
+    private int _openSpillWriters;
+    private long _adaptiveFastestSelections;
+    private long _adaptiveOptimalSelections;
     private long _bytesSinceReserveCheck;
 
     public bool IsPersistent { get; set; }
 
     internal CompressionLevel? CompressionLevelOverride { get; set; }
+    internal Func<double>? CpuUtilizationProvider { get; set; }
+    internal Func<string, long?>? AvailableBytesProvider { get; set; }
+    internal CompressionLevel LastResolvedCompressionLevel { get; private set; } = CompressionLevel.Optimal;
+    internal long AdaptiveFastestSelections => Volatile.Read(ref _adaptiveFastestSelections);
+    internal long AdaptiveOptimalSelections => Volatile.Read(ref _adaptiveOptimalSelections);
 
     public string RootPath
     {
@@ -101,6 +115,8 @@ public partial class SpillStore : ISpillStore
                 return;
             }
 
+            // Invalidate fast-path readers while updating root directory and key state.
+            _cacheInitialized = false;
             IsPersistent = _context.IsPersistentSession;
             _cachedSessionId = _context.SessionId;
 
@@ -174,6 +190,8 @@ public partial class SpillStore : ISpillStore
                     _context.Logger.Warning("Could not record the owner of spill directory {Path}: {Message}", _cachedRootPath, ex.Message);
                 }
             }
+
+            _cacheInitialized = true;
         }
     }
 
@@ -184,7 +202,7 @@ public partial class SpillStore : ISpillStore
 
     private bool CacheMatchesContext()
     {
-        if (_cachedRootPath == null) return false;
+        if (!_cacheInitialized || _cachedRootPath == null) return false;
 
         if (_usingTemporaryFallback)
         {
@@ -225,13 +243,23 @@ public partial class SpillStore : ISpillStore
         var path = Path.Combine(_cachedRootPath!, chunkName);
         var encrypt = _context.SpillEncryptionEnabled;
         var compress = _context.SpillCompressionEnabled;
-        var compressionLevel = CompressionLevelOverride ?? CompressionLevel.Optimal;
-
+        var openWriters = Interlocked.Increment(ref _openSpillWriters);
         ISpillWriter writer;
-        if (_context.SpillFormat == "Json")
-            writer = new SecureSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress, compressionLevel);
-        else
-            writer = new ArrowSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress, flushBatchRows, compressionLevel);
+        try
+        {
+            var compressionLevel = ResolveCompressionLevel(openWriters);
+            LastResolvedCompressionLevel = compressionLevel;
+
+            if (_context.SpillFormat == "Json")
+                writer = new SecureSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress, compressionLevel);
+            else
+                writer = new ArrowSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress, flushBatchRows, compressionLevel);
+        }
+        catch
+        {
+            Interlocked.Decrement(ref _openSpillWriters);
+            throw;
+        }
 
         var telemetry = _context.Telemetry;
         if (telemetry != null)
@@ -244,6 +272,78 @@ public partial class SpillStore : ISpillStore
             : new GatedSpillWriter(writer, this, _context);
         return await Task.FromResult(writer);
     }
+
+    internal CompressionLevel ResolveCompressionLevel(int openWriters)
+    {
+        if (CompressionLevelOverride.HasValue)
+            return CompressionLevelOverride.Value;
+
+        var configured = _context.SpillCompressionLevel?.Trim();
+        if (string.Equals(configured, "Fastest", StringComparison.OrdinalIgnoreCase))
+            return CompressionLevel.Fastest;
+        if (string.Equals(configured, "Optimal", StringComparison.OrdinalIgnoreCase))
+            return CompressionLevel.Optimal;
+        if (string.Equals(configured, "SmallestSize", StringComparison.OrdinalIgnoreCase))
+            return CompressionLevel.SmallestSize;
+
+        // Adaptive mode: conserve disk reserve when tight; otherwise drop to Fastest under high CPU or concurrent writer pressure.
+        var reserve = _context.SpillMinimumFreeBytes;
+        if (reserve > 0 && _cachedRootPath != null)
+        {
+            var available = AvailableBytesProvider != null
+                ? AvailableBytesProvider(_cachedRootPath)
+                : TryGetAvailableBytes(_cachedRootPath);
+            if (available is long freeBytes && freeBytes < reserve * 4L)
+            {
+                Interlocked.Increment(ref _adaptiveOptimalSelections);
+                return CompressionLevel.Optimal;
+            }
+        }
+
+        var cpuUtilization = CpuUtilizationProvider != null
+            ? CpuUtilizationProvider()
+            : SampleProcessCpuUtilization();
+
+        if (cpuUtilization >= HighCpuCompressionThreshold || openWriters >= 2)
+        {
+            Interlocked.Increment(ref _adaptiveFastestSelections);
+            return CompressionLevel.Fastest;
+        }
+
+        Interlocked.Increment(ref _adaptiveOptimalSelections);
+        return CompressionLevel.Optimal;
+    }
+
+    private double SampleProcessCpuUtilization()
+    {
+        lock (_cpuSampleLock)
+        {
+            var nowTicks = Stopwatch.GetTimestamp();
+            if (_lastCpuSampleTimestamp == 0)
+            {
+                _lastSampledCpuTime = Process.GetCurrentProcess().TotalProcessorTime;
+                _lastCpuSampleTimestamp = nowTicks;
+                return _cachedCpuUtilization;
+            }
+
+            var elapsedTicks = nowTicks - _lastCpuSampleTimestamp;
+            var elapsedMs = elapsedTicks * 1000.0 / Stopwatch.Frequency;
+            if (elapsedMs < 250.0)
+                return _cachedCpuUtilization;
+
+            var currentCpu = Process.GetCurrentProcess().TotalProcessorTime;
+            var cpuSeconds = (currentCpu - _lastSampledCpuTime).TotalSeconds;
+            var elapsedSeconds = elapsedMs / 1000.0;
+            _cachedCpuUtilization = elapsedSeconds > 0
+                ? Math.Clamp(cpuSeconds / elapsedSeconds / Math.Max(1, Environment.ProcessorCount), 0.0, 1.0)
+                : 0.0;
+            _lastSampledCpuTime = currentCpu;
+            _lastCpuSampleTimestamp = nowTicks;
+            return _cachedCpuUtilization;
+        }
+    }
+
+    internal void ReleaseOpenWriter() => Interlocked.Decrement(ref _openSpillWriters);
 
     // Refuse a new extent while the spill volume is below its reserve, before any byte is written.
     // The message names the setting, not the path: it reaches script authors and job history.
@@ -440,7 +540,20 @@ public partial class SpillStore : ISpillStore
                 Stopwatch.GetElapsedTime(started));
         }
 
-        public ValueTask DisposeAsync() => Inner.DisposeAsync();
+        private int _releasedOpenWriter;
+
+        public async ValueTask DisposeAsync()
+        {
+            try
+            {
+                await Inner.DisposeAsync();
+            }
+            finally
+            {
+                if (Interlocked.Exchange(ref _releasedOpenWriter, 1) == 0)
+                    Store.ReleaseOpenWriter();
+            }
+        }
     }
 
     private sealed class GatedColumnarSpillWriter : GatedSpillWriter, IColumnarSpillWriter

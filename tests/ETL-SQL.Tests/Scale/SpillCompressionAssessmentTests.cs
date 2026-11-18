@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.App;
+using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,6 +53,41 @@ public sealed class SpillCompressionAssessmentTests(ITestOutputHelper output)
 
         AssertEncryptedComparison(compressible);
         AssertEncryptedComparison(highEntropy);
+    }
+
+    [Fact]
+    public async Task ArrowSpill_ConcurrentEncryptedPipeline_ComparesAdaptiveFastestAndOptimal()
+    {
+        const int writerCount = 4;
+        const int rowsPerWriter = 25_000;
+
+        var fastest = await MeasureConcurrentEncryptedAsync(
+            writerCount, rowsPerWriter, configuredLevel: "Fastest", overrideLevel: CompressionLevel.Fastest);
+        var optimal = await MeasureConcurrentEncryptedAsync(
+            writerCount, rowsPerWriter, configuredLevel: "Optimal", overrideLevel: CompressionLevel.Optimal);
+        var adaptive = await MeasureConcurrentEncryptedAsync(
+            writerCount, rowsPerWriter, configuredLevel: "Adaptive", overrideLevel: null);
+
+        output.WriteLine("SPILL_CONCURRENT_ENCRYPTED_METRIC:" + JsonSerializer.Serialize(new
+        {
+            writerCount,
+            rowsPerWriter,
+            totalRows = writerCount * rowsPerWriter,
+            fastest,
+            optimal,
+            adaptive,
+            fastestToOptimalWriteElapsedRatio = Math.Round((double)fastest.WriteElapsedMs / Math.Max(1, optimal.WriteElapsedMs), 4),
+            adaptiveToOptimalWriteElapsedRatio = Math.Round((double)adaptive.WriteElapsedMs / Math.Max(1, optimal.WriteElapsedMs), 4)
+        }));
+
+        var expectedTotalRows = (long)writerCount * rowsPerWriter;
+        Assert.Equal(expectedTotalRows, fastest.RowsRead);
+        Assert.Equal(expectedTotalRows, optimal.RowsRead);
+        Assert.Equal(expectedTotalRows, adaptive.RowsRead);
+        Assert.Equal(fastest.Checksum, optimal.Checksum);
+        Assert.Equal(fastest.Checksum, adaptive.Checksum);
+        Assert.True(adaptive.FastestSelections >= writerCount - 1,
+            $"Expected concurrent adaptive mode to select Fastest for concurrent writers, observed Fastest={adaptive.FastestSelections}, Optimal={adaptive.OptimalSelections}.");
     }
 
     private static async Task<Comparison> CompareAsync(bool highEntropy)
@@ -147,18 +184,115 @@ public sealed class SpillCompressionAssessmentTests(ITestOutputHelper output)
             checksum);
     }
 
-    private static IEnumerable<Row> GenerateRows(bool highEntropy)
+    private static async Task<ConcurrentMeasurement> MeasureConcurrentEncryptedAsync(
+        int writerCount,
+        int rowsPerWriter,
+        string configuredLevel,
+        CompressionLevel? overrideLevel)
     {
-        for (var i = 1; i <= RowCount; i++)
+        await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.SpillEncryptionEnabled = true;
+        evaluator.SpillCompressionEnabled = true;
+        evaluator.SpillCompressionLevel = configuredLevel;
+        evaluator.Telemetry.Clear();
+
+        if (evaluator.SpillStore is SpillStore spillStore && overrideLevel.HasValue)
+            spillStore.CompressionLevelOverride = overrideLevel.Value;
+
+        var chunkNames = Enumerable.Range(0, writerCount)
+            .Select(idx => $"concurrent-assessment-{configuredLevel}-{idx}-{Guid.NewGuid():N}.arrow")
+            .ToArray();
+
+        var process = Process.GetCurrentProcess();
+        var cpuBeforeWrite = process.TotalProcessorTime;
+        var writeWatch = Stopwatch.StartNew();
+
+        // Overlap all concurrent writers cleanly with an async barrier so adaptive admission sees all open writers.
+        var remainingWriters = writerCount;
+        var allOpen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await Task.WhenAll(chunkNames.Select((chunkName, idx) => Task.Run(async () =>
         {
+            ISpillWriter writer;
+            try
+            {
+                writer = await evaluator.SpillStore.CreateWriterAsync(chunkName);
+                if (Interlocked.Decrement(ref remainingWriters) == 0)
+                    allOpen.TrySetResult();
+                else
+                    await allOpen.Task;
+            }
+            catch (Exception ex)
+            {
+                allOpen.TrySetException(ex);
+                throw;
+            }
+
+            await using (writer)
+                await writer.WriteRowsAsync(GenerateRowsRange(idx * rowsPerWriter + 1, rowsPerWriter, highEntropy: false));
+        })));
+
+        writeWatch.Stop();
+        process.Refresh();
+        var writeCpu = process.TotalProcessorTime - cpuBeforeWrite;
+
+        var physicalBytes = chunkNames.Sum(name => new FileInfo(Path.Combine(evaluator.SpillStore.RootPath, name)).Length);
+
+        var cpuBeforeRead = process.TotalProcessorTime;
+        var readWatch = Stopwatch.StartNew();
+        var readResults = await Task.WhenAll(chunkNames.Select(async chunkName =>
+        {
+            long rows = 0;
+            long sum = 0;
+            await using var reader = await evaluator.SpillStore.CreateReaderAsync(chunkName);
+            await foreach (var row in reader.AsEnumerableAsync())
+            {
+                rows++;
+                sum += Convert.ToInt64(row["Id"]);
+            }
+            return (rows, sum);
+        }));
+        readWatch.Stop();
+        process.Refresh();
+        var readCpu = process.TotalProcessorTime - cpuBeforeRead;
+
+        foreach (var chunkName in chunkNames)
+            evaluator.SpillStore.DeleteChunk(chunkName);
+
+        var fastestSelections = evaluator.SpillStore is SpillStore store
+            ? store.AdaptiveFastestSelections
+            : 0;
+        var optimalSelections = evaluator.SpillStore is SpillStore store2
+            ? store2.AdaptiveOptimalSelections
+            : 0;
+
+        return new ConcurrentMeasurement(
+            physicalBytes,
+            writeWatch.ElapsedMilliseconds,
+            Math.Round(writeCpu.TotalMilliseconds, 1),
+            readWatch.ElapsedMilliseconds,
+            Math.Round(readCpu.TotalMilliseconds, 1),
+            readResults.Sum(r => r.rows),
+            readResults.Sum(r => r.sum),
+            fastestSelections,
+            optimalSelections);
+    }
+
+    private static IEnumerable<Row> GenerateRows(bool highEntropy) =>
+        GenerateRowsRange(1, RowCount, highEntropy);
+
+    private static IEnumerable<Row> GenerateRowsRange(int startId, int count, bool highEntropy)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            var id = startId + i;
             yield return new Row
             {
-                ["Id"] = i,
-                ["Group"] = i % 100,
-                ["Status"] = i % 5 == 0 ? "complete" : "pending",
+                ["Id"] = id,
+                ["Group"] = id % 100,
+                ["Status"] = id % 5 == 0 ? "complete" : "pending",
                 ["Payload"] = highEntropy
-                    ? HighEntropyPayload(i)
-                    : $"customer-{i % 10_000:D5}|region-{i % 20:D2}|repeatable-assessment-payload"
+                    ? HighEntropyPayload(id)
+                    : $"customer-{id % 10_000:D5}|region-{id % 20:D2}|repeatable-assessment-payload"
             };
         }
     }
@@ -205,4 +339,15 @@ public sealed class SpillCompressionAssessmentTests(ITestOutputHelper output)
         double OptimalByteRatio,
         double FastestToOptimalWriteElapsedRatio,
         double FastestToOptimalWriteCpuRatio);
+
+    private sealed record ConcurrentMeasurement(
+        long PhysicalBytes,
+        long WriteElapsedMs,
+        double WriteCpuMs,
+        long ReadElapsedMs,
+        double ReadCpuMs,
+        long RowsRead,
+        long Checksum,
+        long FastestSelections,
+        long OptimalSelections);
 }

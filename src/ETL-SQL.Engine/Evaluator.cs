@@ -427,6 +427,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public long SubquerySpillThresholdRows { get => _options.SubquerySpillThresholdRows; set => _options.SubquerySpillThresholdRows = value; }
     public bool SpillEncryptionEnabled { get => _options.SpillEncryptionEnabled; set => _options.SpillEncryptionEnabled = value; }
     public bool SpillCompressionEnabled { get => _options.SpillCompressionEnabled; set => _options.SpillCompressionEnabled = value; }
+    public string SpillCompressionLevel { get => _options.SpillCompressionLevel; set => _options.SpillCompressionLevel = value; }
     public string SpillFormat { get => _options.SpillFormat; set => _options.SpillFormat = value; }
     public long SpillMinimumFreeBytes { get; set; } = DefaultThresholds.SpillMinimumFreeDiskMB(null) * 1024L * 1024L;
 
@@ -736,6 +737,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             && bool.TryParse(reqSpillEnc, out var reqSpillBool) && reqSpillBool)
             || DefaultThresholds.SpillEncryptionEnabled(config);
         SpillCompressionEnabled = DefaultThresholds.SpillCompressionEnabled(config);
+        SpillCompressionLevel = DefaultThresholds.SpillCompressionLevel(config);
         SpillFormat = DefaultThresholds.SpillFormat(config);
         SpillMinimumFreeBytes = DefaultThresholds.SpillMinimumFreeDiskMB(config) * 1024L * 1024L;
         MaxLastResultRows = DefaultThresholds.MaxLastResultRows(config);

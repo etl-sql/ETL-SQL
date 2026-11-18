@@ -51,6 +51,7 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 | :--- | :--- | :--- | :--- | :--- |
 | `Security:SpillEncryptionEnabled` | boolean | `true` | `SET SPILL_ENCRYPTION ON\|OFF` | Encrypts buffers spilled to local disk during heavy queries. |
 | `Security:SpillCompressionEnabled` | boolean | `true` | `SET SPILL_COMPRESSION ON\|OFF` | Compresses spilled buffers to reduce disk usage. |
+| `Security:SpillCompressionLevel` | string | `Adaptive` | — | Compression trade-off (`Adaptive`, `Fastest`, `Optimal`, `SmallestSize`); `Adaptive` uses `Fastest` under high CPU or concurrent writer pressure and `Optimal` when disk reserve headroom tightens. |
 | `Security:SpillFormat` | string | `Arrow` | `SET SPILL_FORMAT = 'AUTO'\|'JSON'\|'PARQUET'` | Serialization format for data spills. |
 
 ### Memory Hygiene, Swap Encryption, and Crash-Dump Hardening

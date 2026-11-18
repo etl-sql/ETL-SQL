@@ -101,6 +101,9 @@ public static class DefaultThresholds
     public static bool SpillCompressionEnabled(IConfiguration? config)
         => config?.GetValue<bool>("Security:SpillCompressionEnabled") ?? true;
 
+    public static string SpillCompressionLevel(IConfiguration? config)
+        => config?.GetValue<string>("Security:SpillCompressionLevel") ?? "Adaptive";
+
     /// <summary>
     /// Free space, in MB, the spill volume keeps in reserve: a new extent is refused below it, so a
     /// filling disk fails one statement cleanly instead of every writer on the host. Zero disables it.
