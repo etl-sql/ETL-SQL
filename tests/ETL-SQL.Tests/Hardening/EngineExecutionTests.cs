@@ -294,33 +294,28 @@ namespace ETL_SQL.Tests.Hardening
             var e = NewEvaluator(externalPartitions: 4);
             e.JoinSpillThreshold = 10_000_000;
             e.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
-            var saved = MemoryGrantArbiter.Shared.TotalBudgetBytes;
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = 256;
-            try
-            {
-                var engine = new ExternalJoinEngine(e, NullLogger.Instance);
-                var schema = new TableSchema(new[] { "Id", "Val" });
+            // Since SP16 the evaluator binds to the host's unified memory coordinator when one is
+            // registered, so capping the process-wide MemoryGrantArbiter.Shared no longer reaches it.
+            // Give this evaluator its own 256-byte arbiter instead.
+            e.MemoryArbiter = new MemoryGrantArbiter(totalBudgetBytes: 256);
+            var engine = new ExternalJoinEngine(e, NullLogger.Instance);
+            var schema = new TableSchema(new[] { "Id", "Val" });
 
-                var result = await engine.ApplyHashJoinExternal(
-                    Stream(schema, 0, 32),
-                    Stream(schema, 0, 32),
-                    CreateJoin("INNER"),
-                    new List<string> { "Id" },
-                    new List<string> { "Id" }).ToListAsync();
+            var result = await engine.ApplyHashJoinExternal(
+                Stream(schema, 0, 32),
+                Stream(schema, 0, 32),
+                CreateJoin("INNER"),
+                new List<string> { "Id" },
+                new List<string> { "Id" }).ToListAsync();
 
-                Assert.Equal(32, result.Count);
-                Assert.True(
-                    e.Telemetry.PartitionsCount > e.ExternalHashPartitions * 2,
-                    "Expected byte-governed recursive partitioning beyond the initial left/right pass.");
-                Assert.Contains(e.Telemetry.PlanDecisions,
-                    d => d.CandidatePath == "ExternalJoin"
-                        && d.Outcome == PlanDecisionOutcome.Degraded
-                        && d.ReasonCode == PlanDecisionReasonCodes.MemoryAdmissionRejected);
-            }
-            finally
-            {
-                MemoryGrantArbiter.Shared.TotalBudgetBytes = saved;
-            }
+            Assert.Equal(32, result.Count);
+            Assert.True(
+                e.Telemetry.PartitionsCount > e.ExternalHashPartitions * 2,
+                "Expected byte-governed recursive partitioning beyond the initial left/right pass.");
+            Assert.Contains(e.Telemetry.PlanDecisions,
+                d => d.CandidatePath == "ExternalJoin"
+                    && d.Outcome == PlanDecisionOutcome.Degraded
+                    && d.ReasonCode == PlanDecisionReasonCodes.MemoryAdmissionRejected);
         }
 
         [Fact]
