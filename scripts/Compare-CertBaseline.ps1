@@ -578,7 +578,12 @@ foreach ($scenario in @($new.scenarios)) {
     foreach ($counter in $workCounters) {
         $baselineWork = Get-MetricValue $baselineScenario @($counter) @('median', 'value')
         $currentWork = Get-MetricValue $scenario @($counter) @('median', 'value')
-        if ($null -ne $baselineWork -and $null -ne $currentWork -and $baselineWork -ne $currentWork) {
+        # A counter on only one side (renamed or dropped field) must not pass silently.
+        if (($null -eq $baselineWork) -ne ($null -eq $currentWork)) {
+            $baselineText = if ($null -eq $baselineWork) { 'missing' } else { $baselineWork }
+            $currentText = if ($null -eq $currentWork) { 'missing' } else { $currentWork }
+            Add-Issue $deterministicLevel $name 'MISSING_WORK_COUNTER' $baselineText $currentText $null "Work counter '$counter' is recorded on only one side.$deterministicNote"
+        } elseif ($null -ne $baselineWork -and $baselineWork -ne $currentWork) {
             $delta = if ($baselineWork -ne 0) { (($currentWork - $baselineWork) / $baselineWork) * 100.0 } else { $null }
             Add-Issue $deterministicLevel $name "WORK_$($counter.ToUpperInvariant())" $baselineWork $currentWork $delta "The engine did different work.$deterministicNote"
         }

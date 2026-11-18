@@ -41,6 +41,7 @@ try {
   fails('an extra partition pass', compare((_, s) => { s.partitionPassCount += 1; }), 'WORK_PARTITIONPASSCOUNT');
   fails('more spilled bytes', compare((_, s) => { s.spillWriteBytes += 1; }), 'WORK_SPILLWRITEBYTES');
   fails('a plan fallback', compare((_, s) => { s.planFallbackCount += 1; }), 'WORK_PLANFALLBACKCOUNT');
+  fails('a dropped work counter', compare((_, s) => { delete s.partitionPassCount; }), 'MISSING_WORK_COUNTER');
   // spillReadBytes is file length at reader open, timing-dependent, so never compared.
   const readBytes = compare((_, s) => { s.spillReadBytes = (s.spillReadBytes ?? 0) * 2 + 12345; });
   passes('a different spillReadBytes', readBytes);
