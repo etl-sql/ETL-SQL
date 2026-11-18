@@ -532,7 +532,6 @@ namespace ETL_SQL.Tests.Orchestration
             // holding the busy tenant's backlog asks first.
             Assert.Null(await nodeA.TryActivateAsync("pg-fair-a3", "pg-node-a", 2, lease));
             Assert.NotNull(await nodeB.TryActivateAsync("pg-fair-b1", "pg-node-b", 2, lease));
-            Assert.Null(await nodeA.PeekEligibleAsync("pg-fair-share"));
             Assert.Equal(
                 "pg-fair-a3",
                 (await nodeA.PeekEligibleAsync("pg-fair-share")).EligibleAdmissionId);

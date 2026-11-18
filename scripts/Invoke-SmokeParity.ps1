@@ -100,6 +100,7 @@ try {
         $env:Portal__Studio__Mode = "SourceControlled"
         $env:Portal__Studio__RoleCapabilities__Admin__0 = "StudioAccess"
         $env:Portal__Studio__RoleCapabilities__Admin__1 = "ReportPublish"
+        $env:Portal__Studio__RoleCapabilities__Admin__2 = "ScriptIngress"
 
         $localProcess = Start-Process -FilePath "dotnet" `
             -ArgumentList @("run", "--project", "src/ETL-SQL.Portal", "-c", "Release", "--no-launch-profile") `
@@ -142,6 +143,7 @@ try {
             -e "Portal__Studio__Mode=SourceControlled" `
             -e "Portal__Studio__RoleCapabilities__Admin__0=StudioAccess" `
             -e "Portal__Studio__RoleCapabilities__Admin__1=ReportPublish" `
+            -e "Portal__Studio__RoleCapabilities__Admin__2=ScriptIngress" `
             -v "${mount}:/app/reports" `
             etlsql-portal:smoke-parity | Out-Null
 

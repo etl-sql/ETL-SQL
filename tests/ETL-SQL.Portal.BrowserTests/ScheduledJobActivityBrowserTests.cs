@@ -118,11 +118,13 @@ public sealed partial class ScheduledJobActivityBrowserTests : IAsyncLifetime
     {
         await AddJobAsync("triage-quality");
         await AddJobAsync("triage-running");
-        using var scope = browser.Factory.Services.CreateScope();
-        var evidenceStore = scope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
+        // Since OR04 the triage board reads run history from the Orchestrator, so the evidence is
+        // seeded into the Orchestrator's store rather than the Portal's.
+        IJobHistoryStore evidenceStore = Store;
         async Task<long> StartEvidenceAsync(string name)
         {
-            await evidenceStore.SaveJobAsync(new JobDefinition(name, "SELECT 1;", 0, "HOUR", null, null, null, false, TenantId: Tenant));
+            if (await evidenceStore.GetJobAsync(Tenant, name) is null)
+                await evidenceStore.SaveJobAsync(new JobDefinition(name, "SELECT 1;", 0, "HOUR", null, null, null, false, TenantId: Tenant));
             var job = (await evidenceStore.GetJobAsync(Tenant, name))!;
             return await evidenceStore.LogJobStartAsync(job.Id);
         }
@@ -155,21 +157,26 @@ public sealed partial class ScheduledJobActivityBrowserTests : IAsyncLifetime
         await Expect(root.Locator(".triage-evidence-row")).ToContainTextAsync("Data Steward");
         await Expect(root.Locator(".triage-evidence-row a")).ToHaveAttributeAsync("href",
             "/index.html?jobName=triage-quality&q=warehouse.Customers#governance/quarantine");
+        // Remove the job after its failure is on the board, so re-running it cannot be triggered.
+        await evidenceStore.DeleteJobAsync((await evidenceStore.GetJobAsync(Tenant, "triage-missing"))!.Id);
         await root.Locator(".triage-incident-check").Nth(0).CheckAsync();
         await root.Locator(".triage-incident-check").Nth(1).CheckAsync();
         await root.Locator(".triage-rerun-selected").ClickAsync();
         await page.GetByRole(AriaRole.Button, new() { Name = "Re-run jobs", Exact = true }).ClickAsync();
         await Expect(page.GetByText("1 of 2 jobs triggered. Not triggered: triage-missing.", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(qualityIncident.Locator(".triage-incident-check")).Not.ToBeCheckedAsync();
+        // The board refreshes after the re-run. The Orchestrator no longer lists runs of a deleted
+        // job, so the removed job's incident leaves the board instead of staying selected.
         var missingIncident = root.Locator(".triage-incident").Filter(new() { HasTextString = "job removed after failure" });
-        await Expect(missingIncident.Locator(".triage-incident-check")).ToBeCheckedAsync();
+        await Expect(missingIncident).ToHaveCountAsync(0);
 
         await evidenceStore.LogJobEndAsync(quality, "SUCCESS");
         await evidenceStore.LogJobEndAsync(missing, "SUCCESS");
         await page.Locator("#triageRefreshBtn").ClickAsync();
         await Expect(root).ToContainTextAsync("Nothing to triage");
         await Expect(root).ToContainTextAsync("triage-running");
-        await Expect(root).ToContainTextAsync("In flight (1)");
+        // The re-run reached the real Orchestrator, so triage-quality may still be in flight too.
+        await Expect(root).ToContainTextAsync(new System.Text.RegularExpressions.Regex(@"In flight \([12]\)"));
         await evidenceStore.LogJobEndAsync(running, "SUCCESS");
         AssertClean(session);
     }

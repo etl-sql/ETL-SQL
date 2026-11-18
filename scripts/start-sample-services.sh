@@ -62,6 +62,7 @@ Portal__FirstRun__MustChangePassword=false \
 Portal__Studio__Mode=SourceControlled \
 Portal__Studio__RoleCapabilities__Admin__0=StudioAccess \
 Portal__Studio__RoleCapabilities__Admin__1=ReportPublish \
+Portal__Studio__RoleCapabilities__Admin__2=ScriptIngress \
     nohup dotnet run --no-build --no-launch-profile --configuration "$CONFIGURATION" --project "$PORTAL_PROJECT" \
     > "$LOG_DIR/portal.log" 2>&1 &
 PORTAL_PID=$!

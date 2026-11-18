@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.23.0 — Runtime: publishing a report by script path requires ScriptIngress
+- **What changed**: `POST /api/reports` (the CLI `PUBLISH REPORT` statement and script-path publication in SourceControlled Studio mode) now requires the `ScriptIngress` Studio capability in addition to `ReportPublish` and folder Manage. Previously `ReportPublish` was enough.
+- **Who is affected**: SourceControlled Portals whose publishing roles or groups hold `ReportPublish` but not `ScriptIngress`, and scripts that run `PUBLISH REPORT` as those users.
+- **Migration**: Grant `ScriptIngress` to the roles or groups that publish by script path, e.g. `Portal__Studio__RoleCapabilities__Admin__2=ScriptIngress`, or as a group capability grant.
+- **Diagnostic**: The publish returns HTTP 403 (`Portal API error (403 Forbidden)` from `PUBLISH REPORT`).
+- **Earliest removal**: N/A
+
 ### v0.23.0 — Runtime: pipeline provisioning respects Studio content permissions
 - **What changed**: The Orchestrator pipeline catalog and provisioning endpoints require read access to the Studio document. An Orchestrator role alone no longer exposes private pipeline metadata or copies its script into a job.
 - **Who is affected**: Orchestrator managers and viewers accessing Studio pipelines.
