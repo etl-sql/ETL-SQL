@@ -63,3 +63,4 @@
 | [Studio Beginner Acceptance Assessment](studio-beginner-acceptance-assessment.md) | Assessment of the combined beginner report and ETL journeys in both hosts, with the remaining gaps and host limits. |
 | [New Chart Types Architectural Evaluation](new-chart-types-evaluation.md) | Architectural evaluation of candidate chart types: Polar coordinate bar/line, Calendar heatmap, Streamgraph, and Parallel coordinates. |
 | [Geographic Density Map Architectural Evaluation](geographic-density-map-evaluation.md) | Architectural evaluation of geographic density maps (MAP MODE = DENSITY) evaluating hexbin, 2D KDE contour, and raster approaches. |
+| [Framed Spill Encryption Format (`ETLSPL03`) and Compression Level Defaults](framed-spill-encryption-etlspl03.md) | Accepted wire specification for single-pass `AES-256-GCM` framed spill encryption (`ETLSPL03`) and `Fastest` vs `Optimal` encrypted compression benchmarks. |

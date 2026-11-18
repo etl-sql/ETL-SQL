@@ -66,6 +66,8 @@ public partial class SpillStore : ISpillStore
 
     public bool IsPersistent { get; set; }
 
+    internal CompressionLevel? CompressionLevelOverride { get; set; }
+
     public string RootPath
     {
         get
@@ -223,12 +225,13 @@ public partial class SpillStore : ISpillStore
         var path = Path.Combine(_cachedRootPath!, chunkName);
         var encrypt = _context.SpillEncryptionEnabled;
         var compress = _context.SpillCompressionEnabled;
+        var compressionLevel = CompressionLevelOverride ?? CompressionLevel.Optimal;
 
         ISpillWriter writer;
         if (_context.SpillFormat == "Json")
-            writer = new SecureSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress);
+            writer = new SecureSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress, compressionLevel);
         else
-            writer = new ArrowSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress, flushBatchRows);
+            writer = new ArrowSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress, flushBatchRows, compressionLevel);
 
         var telemetry = _context.Telemetry;
         if (telemetry != null)
@@ -583,7 +586,7 @@ public partial class SpillStore : ISpillStore
         public string ChunkName => _chunkName;
         public long BytesWritten { get; private set; }
 
-        public SecureSpillWriter(string path, string chunkName, byte[] key, IExecutionContext context, bool encrypt, bool compress)
+        public SecureSpillWriter(string path, string chunkName, byte[] key, IExecutionContext context, bool encrypt, bool compress, CompressionLevel compressionLevel = CompressionLevel.Optimal)
         {
             _chunkName = chunkName;
             _context = context;
@@ -601,7 +604,7 @@ public partial class SpillStore : ISpillStore
 
                 if (compress)
                 {
-                    _gzipStream = new GZipStream(current, CompressionLevel.Optimal, leaveOpen: true);
+                    _gzipStream = new GZipStream(current, compressionLevel, leaveOpen: true);
                     current = _gzipStream;
                 }
 
@@ -814,7 +817,7 @@ public partial class SpillStore : ISpillStore
         public string ChunkName => _chunkName;
         public long BytesWritten { get; private set; }
 
-        public ArrowSpillWriter(string path, string chunkName, byte[] key, IExecutionContext context, bool encrypt, bool compress, int flushBatchSize)
+        public ArrowSpillWriter(string path, string chunkName, byte[] key, IExecutionContext context, bool encrypt, bool compress, int flushBatchSize, CompressionLevel compressionLevel = CompressionLevel.Optimal)
         {
             _chunkName = chunkName;
             _context = context;
@@ -833,7 +836,7 @@ public partial class SpillStore : ISpillStore
 
                 if (compress)
                 {
-                    _gzipStream = new GZipStream(current, CompressionLevel.Optimal, leaveOpen: true);
+                    _gzipStream = new GZipStream(current, compressionLevel, leaveOpen: true);
                     current = _gzipStream;
                 }
 

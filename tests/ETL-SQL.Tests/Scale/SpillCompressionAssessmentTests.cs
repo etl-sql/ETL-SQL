@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
@@ -34,16 +36,48 @@ public sealed class SpillCompressionAssessmentTests(ITestOutputHelper output)
         AssertComparison(highEntropy);
     }
 
+    [Fact]
+    public async Task ArrowSpill_EncryptedCompressionLevelTradeoff_ReportsFastestVsOptimal()
+    {
+        var compressible = await CompareEncryptedLevelsAsync(highEntropy: false);
+        var highEntropy = await CompareEncryptedLevelsAsync(highEntropy: true);
+
+        output.WriteLine("SPILL_ENCRYPTED_COMPRESSION_LEVEL_METRIC:" + JsonSerializer.Serialize(new
+        {
+            rowCount = RowCount,
+            compressible,
+            highEntropy
+        }));
+
+        AssertEncryptedComparison(compressible);
+        AssertEncryptedComparison(highEntropy);
+    }
+
     private static async Task<Comparison> CompareAsync(bool highEntropy)
     {
-        var uncompressed = await MeasureAsync(compress: false, highEntropy);
-        var compressed = await MeasureAsync(compress: true, highEntropy);
+        var uncompressed = await MeasureAsync(compress: false, highEntropy, encrypt: false);
+        var compressed = await MeasureAsync(compress: true, highEntropy, encrypt: false);
         return new Comparison(
             uncompressed,
             compressed,
             Math.Round((double)compressed.PhysicalBytes / uncompressed.PhysicalBytes, 4),
             Math.Round((double)compressed.WriteElapsedMs / Math.Max(1, uncompressed.WriteElapsedMs), 4),
             Math.Round((double)compressed.ReadElapsedMs / Math.Max(1, uncompressed.ReadElapsedMs), 4));
+    }
+
+    private static async Task<EncryptedLevelComparison> CompareEncryptedLevelsAsync(bool highEntropy)
+    {
+        var uncompressed = await MeasureAsync(compress: false, highEntropy, encrypt: true);
+        var fastest = await MeasureAsync(compress: true, highEntropy, encrypt: true, CompressionLevel.Fastest);
+        var optimal = await MeasureAsync(compress: true, highEntropy, encrypt: true, CompressionLevel.Optimal);
+        return new EncryptedLevelComparison(
+            uncompressed,
+            fastest,
+            optimal,
+            Math.Round((double)fastest.PhysicalBytes / uncompressed.PhysicalBytes, 4),
+            Math.Round((double)optimal.PhysicalBytes / uncompressed.PhysicalBytes, 4),
+            Math.Round((double)fastest.WriteElapsedMs / Math.Max(1, optimal.WriteElapsedMs), 4),
+            Math.Round((double)fastest.WriteCpuMs / Math.Max(1.0, optimal.WriteCpuMs), 4));
     }
 
     private static void AssertComparison(Comparison comparison)
@@ -53,11 +87,26 @@ public sealed class SpillCompressionAssessmentTests(ITestOutputHelper output)
         Assert.Equal(comparison.Uncompressed.Checksum, comparison.Compressed.Checksum);
     }
 
-    private static async Task<Measurement> MeasureAsync(bool compress, bool highEntropy)
+    private static void AssertEncryptedComparison(EncryptedLevelComparison comparison)
+    {
+        Assert.Equal(RowCount, comparison.Uncompressed.RowsRead);
+        Assert.Equal(RowCount, comparison.Fastest.RowsRead);
+        Assert.Equal(RowCount, comparison.Optimal.RowsRead);
+        Assert.Equal(comparison.Uncompressed.Checksum, comparison.Fastest.Checksum);
+        Assert.Equal(comparison.Uncompressed.Checksum, comparison.Optimal.Checksum);
+    }
+
+    private static async Task<Measurement> MeasureAsync(
+        bool compress,
+        bool highEntropy,
+        bool encrypt,
+        CompressionLevel? compressionLevel = null)
     {
         await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-        evaluator.SpillEncryptionEnabled = false;
+        evaluator.SpillEncryptionEnabled = encrypt;
         evaluator.SpillCompressionEnabled = compress;
+        if (compressionLevel.HasValue && evaluator.SpillStore is SpillStore spillStore)
+            spillStore.CompressionLevelOverride = compressionLevel.Value;
         evaluator.Telemetry.Clear();
 
         var chunkName = $"compression-assessment-{compress}-{Guid.NewGuid():N}.arrow";
@@ -147,4 +196,13 @@ public sealed class SpillCompressionAssessmentTests(ITestOutputHelper output)
         double PhysicalByteRatio,
         double WriteElapsedRatio,
         double ReadElapsedRatio);
+
+    private sealed record EncryptedLevelComparison(
+        Measurement Uncompressed,
+        Measurement Fastest,
+        Measurement Optimal,
+        double FastestByteRatio,
+        double OptimalByteRatio,
+        double FastestToOptimalWriteElapsedRatio,
+        double FastestToOptimalWriteCpuRatio);
 }
