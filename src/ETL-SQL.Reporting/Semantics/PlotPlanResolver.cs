@@ -407,7 +407,8 @@ public sealed class PlotPlanResolver
             var bindings = spec.Bindings.Concat(spec.Layers.SelectMany(layer => layer.Bindings))
                 .Where(binding => string.Equals(binding.ScaleId, scale.Id, StringComparison.OrdinalIgnoreCase) &&
                     (binding.SourceKind != BindingSourceKind.Field || binding.Field is not null && columns.ContainsKey(binding.Field))).ToList();
-            if (scale.Kind is ScaleKind.Band or ScaleKind.Point or ScaleKind.Ordinal)
+            if (scale.Kind is ScaleKind.Band or ScaleKind.Point or ScaleKind.Ordinal ||
+                (scale.Kind == ScaleKind.Identity && scale.Channel == FieldChannel.Color && bindings.Any(b => b.SemanticKind is DataSemanticKind.Nominal or DataSemanticKind.Ordinal)))
             {
                 var inferred = bindings.SelectMany(binding => BindingValues(binding, columns))
                     .Select(ValueKey).Where(value => value is not null).Cast<string>()
@@ -476,7 +477,7 @@ public sealed class PlotPlanResolver
                 }
 
                 var discreteColors = scale.Channel == FieldChannel.Color &&
-                    (!scale.DiscreteColorMap.IsDefaultOrEmpty || !scale.DiscreteRange.IsDefaultOrEmpty)
+                    (!scale.DiscreteColorMap.IsDefaultOrEmpty || !scale.DiscreteRange.IsDefaultOrEmpty || scale.Kind == ScaleKind.Identity)
                         ? values.Select((v, idx) => new PaletteAssignment(v, ResolveColor(spec, v, idx))).ToImmutableArray()
                         : default;
                 yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
@@ -2338,6 +2339,10 @@ public sealed class PlotPlanResolver
                         return entry.Color;
                 }
             }
+            if (scale.Kind == ScaleKind.Identity && key.StartsWith('#') &&
+                (key.Length is 4 or 5 or 7 or 9) &&
+                key.Skip(1).All(Uri.IsHexDigit))
+                return key;
             if (!scale.DiscreteRange.IsDefaultOrEmpty)
             {
                 var slot = index;

@@ -1,0 +1,25 @@
+{
+  "kind": "rankedTable",
+  "heading": "Identity Color \u0026 Size Mapping",
+  "items": [
+    {
+      "label": "2.0",
+      "value": "48.0",
+      "order": 0,
+      "group": "#059669"
+    },
+    {
+      "label": "1.0",
+      "value": "24.0",
+      "order": 100000,
+      "group": "#2563eb"
+    },
+    {
+      "label": "3.0",
+      "value": "35.0",
+      "order": 200000,
+      "group": "#dc2626"
+    }
+  ],
+  "summary": "Identity Color \u0026 Size Mapping: 3 rows, 3 ordered layers, 3 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

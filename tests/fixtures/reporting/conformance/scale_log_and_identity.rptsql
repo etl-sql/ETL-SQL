@@ -1,0 +1,57 @@
+-- Conformance Fixture: LOG and IDENTITY Scales
+-- Validates logarithmic axis scaling (named visual SCALE = LOG and CUSTOM LOGARITHMIC) and IDENTITY COLOR/SIZE scales.
+
+SET REPORT TITLE = 'Conformance: LOG & IDENTITY Scales';
+
+SELECT 10.0 AS Users, 100.0 AS LatencyMs INTO #latency_log
+UNION ALL SELECT 100.0, 400.0
+UNION ALL SELECT 1000.0, 2500.0
+UNION ALL SELECT 10000.0, 10000.0;
+
+SELECT 1.0 AS StepX, 24.0 AS MetricY, 6.0 AS PointRadius, '#2563eb' AS DirectColor INTO #identity_points
+UNION ALL SELECT 2.0, 48.0, 11.0, '#059669'
+UNION ALL SELECT 3.0, 35.0, 16.0, '#dc2626';
+
+CREATE VISUAL LogScaleScatter AS SCATTER (
+    TITLE = 'Log-Log Response Scaling',
+    SOURCE = #latency_log,
+    MAPPINGS (
+        X = Users,
+        Y = LatencyMs
+    ),
+    OPTIONS (
+        X_AXIS (LABEL = 'Concurrent Users', SCALE = LOG, INCLUDE_ZERO = OFF),
+        Y_AXIS (LABEL = 'P95 Latency (ms)', SCALE = LOG, INCLUDE_ZERO = OFF)
+    )
+);
+
+CREATE VISUAL IdentityScaleCustom AS CUSTOM (
+    TITLE = 'Identity Color & Size Mapping',
+    SOURCE = #identity_points,
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            x = LINEAR (CHANNEL = X, TITLE = 'Trial'),
+            y = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON, TITLE = 'Score'),
+            c = IDENTITY (CHANNEL = COLOR),
+            s = IDENTITY (CHANNEL = SIZE)
+        ),
+        LAYERS (
+            pts = POINT (
+                ENCODE (
+                    X = StepX (TYPE = QUANTITATIVE, SCALE = x),
+                    Y = MetricY (TYPE = QUANTITATIVE, SCALE = y),
+                    COLOR = DirectColor (TYPE = NOMINAL, SCALE = c),
+                    SIZE = PointRadius (TYPE = QUANTITATIVE, SCALE = s)
+                )
+            )
+        )
+    )
+);
+
+CREATE PAGE ScalesDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B',
+        MAP ('A' = LogScaleScatter, 'B' = IdentityScaleCustom)
+    )
+);

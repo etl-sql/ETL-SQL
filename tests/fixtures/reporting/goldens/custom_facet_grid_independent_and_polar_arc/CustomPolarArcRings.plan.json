@@ -1,0 +1,418 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v4",
+  "version": 4,
+  "specId": "CustomPolarArcRings",
+  "title": "Stacked Polar Arc Breakdown",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "inferred-polar-primary-color",
+      "channel": "color",
+      "kind": "ordinal",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Core"
+        },
+        {
+          "kind": "text",
+          "text": "Burst"
+        }
+      ],
+      "categories": [
+        "Core",
+        "Burst"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Core"
+          },
+          "label": "Core"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Burst"
+          },
+          "label": "Burst"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "inferred-polar-primary-radius",
+      "channel": "radius",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 55.0
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.0
+          },
+          "label": "0.0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 13.75
+          },
+          "label": "13.75"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 27.5
+          },
+          "label": "27.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 41.25
+          },
+          "label": "41.25"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 55.0
+          },
+          "label": "55.0"
+        }
+      ],
+      "includesZero": true
+    },
+    {
+      "id": "inferred-polar-primary-theta",
+      "channel": "theta",
+      "kind": "ordinal",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Compute"
+        },
+        {
+          "kind": "text",
+          "text": "Storage"
+        }
+      ],
+      "categories": [
+        "Compute",
+        "Storage"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Compute"
+          },
+          "label": "Compute"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Storage"
+          },
+          "label": "Storage"
+        }
+      ],
+      "includesZero": false
+    }
+  ],
+  "series": [
+    {
+      "key": "Burst",
+      "label": "Burst",
+      "order": 0,
+      "color": "#5470c6"
+    },
+    {
+      "key": "Core",
+      "label": "Core",
+      "order": 1,
+      "color": "#91cc75"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Burst",
+      "color": "#5470c6"
+    },
+    {
+      "seriesKey": "Core",
+      "color": "#91cc75"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Burst",
+      "label": "Burst",
+      "order": 0,
+      "color": "#5470c6"
+    },
+    {
+      "seriesKey": "Core",
+      "label": "Core",
+      "order": 1,
+      "color": "#91cc75"
+    }
+  ],
+  "layers": [
+    {
+      "id": "rings-00",
+      "mark": "arc",
+      "zIndex": 0,
+      "seriesKey": "Burst",
+      "data": [
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Compute"
+              },
+              "displayValue": "Compute"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 20.0
+              },
+              "displayValue": "20.0"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Burst"
+              },
+              "displayValue": "Burst"
+            }
+          ],
+          "isGap": false,
+          "encodings": [],
+          "radialInterval": {
+            "startAngle": 0,
+            "endAngle": 180,
+            "start": 0,
+            "end": 20.0,
+            "maximum": 55.0
+          }
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Storage"
+              },
+              "displayValue": "Storage"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 15.0
+              },
+              "displayValue": "15.0"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Burst"
+              },
+              "displayValue": "Burst"
+            }
+          ],
+          "isGap": false,
+          "encodings": [],
+          "radialInterval": {
+            "startAngle": 180,
+            "endAngle": 360,
+            "start": 0,
+            "end": 15.0,
+            "maximum": 55.0
+          }
+        }
+      ],
+      "style": [],
+      "stack": "zero",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "rings-01",
+      "mark": "arc",
+      "zIndex": 1,
+      "seriesKey": "Core",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Compute"
+              },
+              "displayValue": "Compute"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 35.0
+              },
+              "displayValue": "35.0"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Core"
+              },
+              "displayValue": "Core"
+            }
+          ],
+          "isGap": false,
+          "encodings": [],
+          "radialInterval": {
+            "startAngle": 0,
+            "endAngle": 180,
+            "start": 20.0,
+            "end": 55.0,
+            "maximum": 55.0
+          }
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "theta",
+              "value": {
+                "kind": "text",
+                "text": "Storage"
+              },
+              "displayValue": "Storage"
+            },
+            {
+              "channel": "radius",
+              "value": {
+                "kind": "decimal",
+                "decimal": 30.0
+              },
+              "displayValue": "30.0"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "Core"
+              },
+              "displayValue": "Core"
+            }
+          ],
+          "isGap": false,
+          "encodings": [],
+          "radialInterval": {
+            "startAngle": 180,
+            "endAngle": 360,
+            "start": 15.0,
+            "end": 45.0,
+            "maximum": 55.0
+          }
+        }
+      ],
+      "style": [],
+      "stack": "zero",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Stacked Polar Arc Breakdown: 4 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "proportionalBreakdown",
+    "heading": "Stacked Polar Arc Breakdown",
+    "items": [
+      {
+        "label": "Compute",
+        "value": "Compute: 20.0; radius 0 to 20.0",
+        "order": 1,
+        "detail": "radial stack",
+        "group": "Burst"
+      },
+      {
+        "label": "Storage",
+        "value": "Storage: 15.0; radius 0 to 15.0",
+        "order": 3,
+        "detail": "radial stack",
+        "group": "Burst"
+      },
+      {
+        "label": "Compute",
+        "value": "Compute: 35.0; radius 20.0 to 55.0",
+        "order": 0,
+        "detail": "radial stack",
+        "group": "Core"
+      },
+      {
+        "label": "Storage",
+        "value": "Storage: 30.0; radius 15.0 to 45.0",
+        "order": 2,
+        "detail": "radial stack",
+        "group": "Core"
+      }
+    ]
+  },
+  "coordinate": {
+    "kind": "polar",
+    "innerRadius": 0.25
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Stacked Polar Arc Breakdown"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Category",
+    "valueKey": "Amount"
+  }
+}

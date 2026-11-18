@@ -1,0 +1,339 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
+  "specId": "LogScaleScatter",
+  "title": "Log-Log Response Scaling",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "logarithmic",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 10
+        },
+        {
+          "kind": "decimal",
+          "decimal": 10000
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 10
+          },
+          "label": "10"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 56.2341325190349
+          },
+          "label": "56.23"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 316.227766016838
+          },
+          "label": "316.23"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 1778.27941003892
+          },
+          "label": "1778.28"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 10000
+          },
+          "label": "10000"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "logarithmic",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 100
+        },
+        {
+          "kind": "decimal",
+          "decimal": 10000
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 100
+          },
+          "label": "100"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 316.227766016838
+          },
+          "label": "316.23"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 1000
+          },
+          "label": "1000"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 3162.27766016838
+          },
+          "label": "3162.28"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 10000
+          },
+          "label": "10000"
+        }
+      ],
+      "includesZero": false
+    }
+  ],
+  "series": [
+    {
+      "key": "LatencyMs",
+      "label": "LatencyMs",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "LatencyMs",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "LatencyMs",
+      "label": "LatencyMs",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "primary",
+      "mark": "point",
+      "zIndex": 0,
+      "seriesKey": "LatencyMs",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 10.0
+              },
+              "displayValue": "10.0"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 100.0
+              },
+              "displayValue": "100.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 100.0
+              },
+              "displayValue": "100.0"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 400.0
+              },
+              "displayValue": "400.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 1000.0
+              },
+              "displayValue": "1000.0"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 2500.0
+              },
+              "displayValue": "2500.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 10000.0
+              },
+              "displayValue": "10000.0"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 10000.0
+              },
+              "displayValue": "10000.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "skip",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Log-Log Response Scaling: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Log-Log Response Scaling",
+    "items": [
+      {
+        "label": "10.0",
+        "value": "100.0",
+        "order": 0,
+        "group": "LatencyMs"
+      },
+      {
+        "label": "100.0",
+        "value": "400.0",
+        "order": 1,
+        "group": "LatencyMs"
+      },
+      {
+        "label": "1000.0",
+        "value": "2500.0",
+        "order": 2,
+        "group": "LatencyMs"
+      },
+      {
+        "label": "10000.0",
+        "value": "10000.0",
+        "order": 3,
+        "group": "LatencyMs"
+      }
+    ],
+    "summary": "Log-Log Response Scaling: 4 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "axis:x:include_zero",
+      "value": "False"
+    },
+    {
+      "name": "axis:x:label",
+      "value": "Concurrent Users"
+    },
+    {
+      "name": "axis:x:scale",
+      "value": "LOG"
+    },
+    {
+      "name": "axis:y:include_zero",
+      "value": "False"
+    },
+    {
+      "name": "axis:y:label",
+      "value": "P95 Latency (ms)"
+    },
+    {
+      "name": "axis:y:scale",
+      "value": "LOG"
+    },
+    {
+      "name": "mapping:x",
+      "value": "Users"
+    },
+    {
+      "name": "mapping:y",
+      "value": "LatencyMs"
+    },
+    {
+      "name": "title",
+      "value": "Log-Log Response Scaling"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Users",
+    "valueKey": "LatencyMs"
+  }
+}

@@ -2282,7 +2282,10 @@ internal sealed class PlotPlanSvgRenderer
             var yValue = PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ?? ChartValue.Null());
             var xChannel = Channel(datum, FieldChannel.X) ?? ChartValue.Null();
             if (datum.IsGap || !yValue.HasValue) continue;
-            var radius = NormalizePointRadius(Numeric(datum, FieldChannel.Size), minimumSize, maximumSize, minRadius, maxRadius);
+            var rawSize = Numeric(datum, FieldChannel.Size);
+            var radius = sizeScale?.Kind == ScaleKind.Identity && rawSize.HasValue
+                ? Math.Clamp(rawSize.Value, 1m, 50m)
+                : NormalizePointRadius(rawSize, minimumSize, maximumSize, minRadius, maxRadius);
             var datumColor = ResolveDatumColor(colorScale, datum, color);
             var opacity = DatumOpacity(opacityScale, datum, layerOpacity);
             var label = Channel(datum, FieldChannel.Text) is { } labelValue ? PlotPlanResolver.Display(labelValue) : null;

@@ -1,0 +1,964 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
+  "specId": "FacetGridIndependentBars",
+  "title": "Regional Channel Revenue (2D Facet, Independent Y)",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "q",
+      "channel": "x",
+      "kind": "band",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "Q1"
+        },
+        {
+          "kind": "text",
+          "text": "Q2"
+        }
+      ],
+      "categories": [
+        "Q1",
+        "Q2"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "Q1"
+          },
+          "label": "Q1"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "Q2"
+          },
+          "label": "Q2"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "rev",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 590.0
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.0
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 147.5
+          },
+          "label": "147.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 295.0
+          },
+          "label": "295"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 442.5
+          },
+          "label": "442.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 590.0
+          },
+          "label": "590"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Revenue",
+      "label": "Revenue",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Revenue",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Revenue",
+      "label": "Revenue",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "bars",
+      "mark": "rect",
+      "zIndex": 0,
+      "seriesKey": "Revenue",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Q1"
+              },
+              "displayValue": "Q1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 120.0
+              },
+              "displayValue": "120.0"
+            },
+            {
+              "channel": "row",
+              "value": {
+                "kind": "text",
+                "text": "North"
+              },
+              "displayValue": "North"
+            },
+            {
+              "channel": "column",
+              "value": {
+                "kind": "text",
+                "text": "Direct"
+              },
+              "displayValue": "Direct"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Q2"
+              },
+              "displayValue": "Q2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 180.0
+              },
+              "displayValue": "180.0"
+            },
+            {
+              "channel": "row",
+              "value": {
+                "kind": "text",
+                "text": "North"
+              },
+              "displayValue": "North"
+            },
+            {
+              "channel": "column",
+              "value": {
+                "kind": "text",
+                "text": "Direct"
+              },
+              "displayValue": "Direct"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Q1"
+              },
+              "displayValue": "Q1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 25.0
+              },
+              "displayValue": "25.0"
+            },
+            {
+              "channel": "row",
+              "value": {
+                "kind": "text",
+                "text": "North"
+              },
+              "displayValue": "North"
+            },
+            {
+              "channel": "column",
+              "value": {
+                "kind": "text",
+                "text": "Partner"
+              },
+              "displayValue": "Partner"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Q2"
+              },
+              "displayValue": "Q2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 45.0
+              },
+              "displayValue": "45.0"
+            },
+            {
+              "channel": "row",
+              "value": {
+                "kind": "text",
+                "text": "North"
+              },
+              "displayValue": "North"
+            },
+            {
+              "channel": "column",
+              "value": {
+                "kind": "text",
+                "text": "Partner"
+              },
+              "displayValue": "Partner"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Q1"
+              },
+              "displayValue": "Q1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 420.0
+              },
+              "displayValue": "420.0"
+            },
+            {
+              "channel": "row",
+              "value": {
+                "kind": "text",
+                "text": "South"
+              },
+              "displayValue": "South"
+            },
+            {
+              "channel": "column",
+              "value": {
+                "kind": "text",
+                "text": "Direct"
+              },
+              "displayValue": "Direct"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 5,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Q2"
+              },
+              "displayValue": "Q2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 590.0
+              },
+              "displayValue": "590.0"
+            },
+            {
+              "channel": "row",
+              "value": {
+                "kind": "text",
+                "text": "South"
+              },
+              "displayValue": "South"
+            },
+            {
+              "channel": "column",
+              "value": {
+                "kind": "text",
+                "text": "Direct"
+              },
+              "displayValue": "Direct"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 6,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Q1"
+              },
+              "displayValue": "Q1"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 12.0
+              },
+              "displayValue": "12.0"
+            },
+            {
+              "channel": "row",
+              "value": {
+                "kind": "text",
+                "text": "South"
+              },
+              "displayValue": "South"
+            },
+            {
+              "channel": "column",
+              "value": {
+                "kind": "text",
+                "text": "Partner"
+              },
+              "displayValue": "Partner"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 7,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "text",
+                "text": "Q2"
+              },
+              "displayValue": "Q2"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 19.0
+              },
+              "displayValue": "19.0"
+            },
+            {
+              "channel": "row",
+              "value": {
+                "kind": "text",
+                "text": "South"
+              },
+              "displayValue": "South"
+            },
+            {
+              "channel": "column",
+              "value": {
+                "kind": "text",
+                "text": "Partner"
+              },
+              "displayValue": "Partner"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "extentAxis": "y",
+      "extentAnchor": "end",
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Regional Channel Revenue (2D Facet, Independent Y): 8 rows, 1 ordered layers, 1 series, 4 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Regional Channel Revenue (2D Facet, Independent Y)",
+    "items": [
+      {
+        "label": "Q1",
+        "value": "120.0",
+        "order": 0,
+        "group": "Revenue"
+      },
+      {
+        "label": "Q2",
+        "value": "180.0",
+        "order": 1,
+        "group": "Revenue"
+      },
+      {
+        "label": "Q1",
+        "value": "25.0",
+        "order": 2,
+        "group": "Revenue"
+      },
+      {
+        "label": "Q2",
+        "value": "45.0",
+        "order": 3,
+        "group": "Revenue"
+      },
+      {
+        "label": "Q1",
+        "value": "420.0",
+        "order": 4,
+        "group": "Revenue"
+      },
+      {
+        "label": "Q2",
+        "value": "590.0",
+        "order": 5,
+        "group": "Revenue"
+      },
+      {
+        "label": "Q1",
+        "value": "12.0",
+        "order": 6,
+        "group": "Revenue"
+      },
+      {
+        "label": "Q2",
+        "value": "19.0",
+        "order": 7,
+        "group": "Revenue"
+      }
+    ],
+    "summary": "Regional Channel Revenue (2D Facet, Independent Y): 8 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Regional Channel Revenue (2D Facet, Independent Y)"
+    }
+  ],
+  "facets": [
+    {
+      "id": "facet-00-00",
+      "rowLabel": "North",
+      "columnLabel": "Direct",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 300,
+        "height": 175
+      },
+      "rowIndices": [
+        0,
+        1
+      ],
+      "scales": [
+        {
+          "id": "q",
+          "channel": "x",
+          "kind": "band",
+          "domain": [
+            {
+              "kind": "text",
+              "text": "Q1"
+            },
+            {
+              "kind": "text",
+              "text": "Q2"
+            }
+          ],
+          "categories": [
+            "Q1",
+            "Q2"
+          ],
+          "ticks": [
+            {
+              "value": {
+                "kind": "text",
+                "text": "Q1"
+              },
+              "label": "Q1"
+            },
+            {
+              "value": {
+                "kind": "text",
+                "text": "Q2"
+              },
+              "label": "Q2"
+            }
+          ],
+          "includesZero": false
+        },
+        {
+          "id": "rev",
+          "channel": "y",
+          "kind": "linear",
+          "domain": [
+            {
+              "kind": "decimal",
+              "decimal": 0
+            },
+            {
+              "kind": "decimal",
+              "decimal": 180.0
+            }
+          ],
+          "categories": [],
+          "ticks": [
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 0.0
+              },
+              "label": "0"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 45.0
+              },
+              "label": "45"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 90.0
+              },
+              "label": "90"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 135.0
+              },
+              "label": "135"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 180.0
+              },
+              "label": "180"
+            }
+          ],
+          "includesZero": true
+        }
+      ]
+    },
+    {
+      "id": "facet-00-01",
+      "rowLabel": "North",
+      "columnLabel": "Partner",
+      "bounds": {
+        "x": 300,
+        "y": 0,
+        "width": 300,
+        "height": 175
+      },
+      "rowIndices": [
+        2,
+        3
+      ],
+      "scales": [
+        {
+          "id": "q",
+          "channel": "x",
+          "kind": "band",
+          "domain": [
+            {
+              "kind": "text",
+              "text": "Q1"
+            },
+            {
+              "kind": "text",
+              "text": "Q2"
+            }
+          ],
+          "categories": [
+            "Q1",
+            "Q2"
+          ],
+          "ticks": [
+            {
+              "value": {
+                "kind": "text",
+                "text": "Q1"
+              },
+              "label": "Q1"
+            },
+            {
+              "value": {
+                "kind": "text",
+                "text": "Q2"
+              },
+              "label": "Q2"
+            }
+          ],
+          "includesZero": false
+        },
+        {
+          "id": "rev",
+          "channel": "y",
+          "kind": "linear",
+          "domain": [
+            {
+              "kind": "decimal",
+              "decimal": 0
+            },
+            {
+              "kind": "decimal",
+              "decimal": 45.0
+            }
+          ],
+          "categories": [],
+          "ticks": [
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 0.0
+              },
+              "label": "0"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 11.25
+              },
+              "label": "11.25"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 22.5
+              },
+              "label": "22.5"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 33.75
+              },
+              "label": "33.75"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 45.0
+              },
+              "label": "45"
+            }
+          ],
+          "includesZero": true
+        }
+      ]
+    },
+    {
+      "id": "facet-01-00",
+      "rowLabel": "South",
+      "columnLabel": "Direct",
+      "bounds": {
+        "x": 0,
+        "y": 175,
+        "width": 300,
+        "height": 175
+      },
+      "rowIndices": [
+        4,
+        5
+      ],
+      "scales": [
+        {
+          "id": "q",
+          "channel": "x",
+          "kind": "band",
+          "domain": [
+            {
+              "kind": "text",
+              "text": "Q1"
+            },
+            {
+              "kind": "text",
+              "text": "Q2"
+            }
+          ],
+          "categories": [
+            "Q1",
+            "Q2"
+          ],
+          "ticks": [
+            {
+              "value": {
+                "kind": "text",
+                "text": "Q1"
+              },
+              "label": "Q1"
+            },
+            {
+              "value": {
+                "kind": "text",
+                "text": "Q2"
+              },
+              "label": "Q2"
+            }
+          ],
+          "includesZero": false
+        },
+        {
+          "id": "rev",
+          "channel": "y",
+          "kind": "linear",
+          "domain": [
+            {
+              "kind": "decimal",
+              "decimal": 0
+            },
+            {
+              "kind": "decimal",
+              "decimal": 590.0
+            }
+          ],
+          "categories": [],
+          "ticks": [
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 0.0
+              },
+              "label": "0"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 147.5
+              },
+              "label": "147.5"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 295.0
+              },
+              "label": "295"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 442.5
+              },
+              "label": "442.5"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 590.0
+              },
+              "label": "590"
+            }
+          ],
+          "includesZero": true
+        }
+      ]
+    },
+    {
+      "id": "facet-01-01",
+      "rowLabel": "South",
+      "columnLabel": "Partner",
+      "bounds": {
+        "x": 300,
+        "y": 175,
+        "width": 300,
+        "height": 175
+      },
+      "rowIndices": [
+        6,
+        7
+      ],
+      "scales": [
+        {
+          "id": "q",
+          "channel": "x",
+          "kind": "band",
+          "domain": [
+            {
+              "kind": "text",
+              "text": "Q1"
+            },
+            {
+              "kind": "text",
+              "text": "Q2"
+            }
+          ],
+          "categories": [
+            "Q1",
+            "Q2"
+          ],
+          "ticks": [
+            {
+              "value": {
+                "kind": "text",
+                "text": "Q1"
+              },
+              "label": "Q1"
+            },
+            {
+              "value": {
+                "kind": "text",
+                "text": "Q2"
+              },
+              "label": "Q2"
+            }
+          ],
+          "includesZero": false
+        },
+        {
+          "id": "rev",
+          "channel": "y",
+          "kind": "linear",
+          "domain": [
+            {
+              "kind": "decimal",
+              "decimal": 0
+            },
+            {
+              "kind": "decimal",
+              "decimal": 19.0
+            }
+          ],
+          "categories": [],
+          "ticks": [
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 0.0
+              },
+              "label": "0"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 4.75
+              },
+              "label": "4.75"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 9.5
+              },
+              "label": "9.5"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 14.25
+              },
+              "label": "14.25"
+            },
+            {
+              "value": {
+                "kind": "decimal",
+                "decimal": 19.0
+              },
+              "label": "19"
+            }
+          ],
+          "includesZero": true
+        }
+      ]
+    }
+  ],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "Quarter",
+    "valueKey": "Revenue"
+  }
+}
