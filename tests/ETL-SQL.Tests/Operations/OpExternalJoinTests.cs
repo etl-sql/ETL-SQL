@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
@@ -241,6 +243,157 @@ namespace ETL_SQL.Tests.Operations.Operations
                 Assert.Equal(20000, results.Count); // churn completes: 1 left × 20000 right matches
             }
             finally { MemoryGrantArbiter.Shared.TotalBudgetBytes = saved; }
+        }
+
+        [Fact]
+        public async Task EagerPartitionDeletion_ShrinksLiveSpillFilesWhileStreaming()
+        {
+            var (eval, logger) = BuildContext(partitions: 4);
+            eval.JoinSpillThreshold = 10_000_000;
+            eval.MemoryArbiter = new MemoryGrantArbiter(16 * 1024 * 1024);
+
+            var left = JoinRows(200, 64, "lval", padChars: 128);
+            var right = JoinRows(200, 64, "rval", padChars: 128);
+            var engine = new ExternalJoinEngine(eval, logger);
+
+            var observedFileCounts = new List<int>();
+            var observedLiveBytes = new List<long>();
+            int matchedCount = 0;
+
+            await foreach (var row in engine.ApplyHashJoinExternal(
+                left, right, InnerOnId, new List<string> { "id" }, new List<string> { "id" }))
+            {
+                matchedCount++;
+                if (matchedCount == 1 || matchedCount % 25 == 0)
+                {
+                    var files = Directory.GetFiles(eval.SpillStore.RootPath, "*.tmp");
+                    observedFileCounts.Add(files.Length);
+                    observedLiveBytes.Add(files.Sum(f => new FileInfo(f).Length));
+                }
+            }
+
+            Assert.True(matchedCount > 0);
+            Assert.True(observedFileCounts.Count >= 2);
+            // Total initial partitions across left + right is 2 * 4 = 8; eager deletion shrinks live chunks during streaming.
+            Assert.True(observedFileCounts[0] < 8, $"Expected build chunk deleted before first yield, observed {observedFileCounts[0]} files.");
+            Assert.True(observedFileCounts[^1] < observedFileCounts[0],
+                $"Expected live spill files to shrink across partitions ({observedFileCounts[0]} -> {observedFileCounts[^1]}).");
+            Assert.True(observedLiveBytes[^1] < observedLiveBytes[0],
+                $"Expected live spill bytes to shrink across partitions ({observedLiveBytes[0]} -> {observedLiveBytes[^1]}).");
+            Assert.Empty(Directory.GetFiles(eval.SpillStore.RootPath, "*.tmp"));
+        }
+
+        [Fact]
+        public async Task EagerPartitionDeletion_RecursiveRepartition_DeletesSupersededParentsBeforeSubPartitionProbe()
+        {
+            var (eval, logger) = BuildContext(partitions: 2);
+            eval.JoinSpillThreshold = 10_000_000;
+            eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
+            eval.MemoryArbiter = new MemoryGrantArbiter(64 * 1024);
+
+            var left = JoinRows(500, 20, "lval");
+            var right = JoinRows(5000, 20, "rval", padChars: 512);
+            var engine = new ExternalJoinEngine(eval, logger);
+
+            int matched = 0;
+            bool sawDepth1FileWithoutParentPair = false;
+            await foreach (var _ in engine.ApplyHashJoinExternal(
+                left, right, InnerOnId, new List<string> { "id" }, new List<string> { "id" }))
+            {
+                matched++;
+                if (matched % 5000 == 1)
+                {
+                    var files = Directory.GetFiles(eval.SpillStore.RootPath, "*.tmp")
+                        .Select(Path.GetFileName)
+                        .ToArray();
+                    // Whenever depth>=1 partitions exist, at least the superseded depth-0 parent pair must already be gone.
+                    if (files.Any(f => f!.Contains("_d", StringComparison.Ordinal)))
+                    {
+                        var depth0Count = files.Count(f => !f!.Contains("_d", StringComparison.Ordinal));
+                        Assert.True(depth0Count <= 2 * (engine.PartitionCount - 1),
+                            $"Expected superseded depth-0 parent chunks deleted before sub-partition probe (depth0Count={depth0Count}, partitions={engine.PartitionCount}).");
+                        sawDepth1FileWithoutParentPair = true;
+                    }
+                }
+            }
+
+            Assert.Equal(125000, matched);
+            Assert.True(engine.ColumnarRepartitionRows >= 5500, $"Expected recursive repartitioning, rewrote {engine.ColumnarRepartitionRows} rows.");
+            Assert.True(sawDepth1FileWithoutParentPair, "Superseded depth-0 parent chunks should be observed deleted before sub-partition probing.");
+            Assert.Empty(Directory.GetFiles(eval.SpillStore.RootPath, "*.tmp"));
+        }
+
+        [Fact]
+        public async Task EagerPartitionDeletion_UnsplittableFallback_DeletesUnusedChildPartitionsBeforeChurn()
+        {
+            var (eval, logger) = BuildContext(partitions: 2);
+            eval.JoinSpillThreshold = 10_000_000;
+            eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
+            eval.MemoryArbiter = new MemoryGrantArbiter(1);
+
+            var left = JoinRows(1, 1, "lval");
+            var right = JoinRows(2000, 1, "rval", padChars: 64);
+            var engine = new ExternalJoinEngine(eval, logger);
+
+            int count = 0;
+            bool anyChildFilesLeftDuringProbe = false;
+            await foreach (var _ in engine.ApplyHashJoinExternal(
+                left, right, InnerOnId, new List<string> { "id" }, new List<string> { "id" }))
+            {
+                count++;
+                if (count == 1)
+                {
+                    anyChildFilesLeftDuringProbe = Directory.GetFiles(eval.SpillStore.RootPath, "*_d1_*.tmp").Length > 0;
+                }
+            }
+
+            Assert.Equal(2000, count);
+            Assert.False(anyChildFilesLeftDuringProbe, "Unused failed-split child partitions should be deleted before SpillOnly churn.");
+            Assert.Empty(Directory.GetFiles(eval.SpillStore.RootPath, "*.tmp"));
+        }
+
+        [Fact]
+        public async Task EagerPartitionDeletion_CancellationAndFailure_CleansAllPartitions()
+        {
+            var (eval, logger) = BuildContext(partitions: 4);
+            eval.JoinSpillThreshold = 10_000_000;
+            eval.MemoryArbiter = new MemoryGrantArbiter(16 * 1024 * 1024);
+
+            // 1. Mid-stream cancellation cleans every remaining unconsumed partition.
+            using var cts = new CancellationTokenSource();
+            var engine = new ExternalJoinEngine(eval, logger);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            {
+                int seen = 0;
+                await foreach (var _ in engine.ApplyHashJoinExternal(
+                    JoinRows(40, 20, "lval"),
+                    JoinRows(40, 20, "rval"),
+                    InnerOnId,
+                    new List<string> { "id" },
+                    new List<string> { "id" },
+                    cancellationToken: cts.Token))
+                {
+                    if (++seen == 2) cts.Cancel();
+                }
+            });
+            Assert.Empty(Directory.GetFiles(eval.SpillStore.RootPath, "*.tmp"));
+
+            // 2. Failure mid-probe (expression evaluation error) cleans every remaining partition.
+            var failingCondition = new BinaryExpression(
+                new IdentifierExpression("id"),
+                TokenType.SLASH,
+                new LiteralExpression(0m, TokenType.NUMBER));
+            var failingJoin = new JoinClause("INNER", new TableReference("right"), failingCondition);
+            await Assert.ThrowsAnyAsync<Exception>(async () =>
+            {
+                await engine.ApplyHashJoinExternal(
+                    JoinRows(20, 10, "lval"),
+                    JoinRows(20, 10, "rval"),
+                    failingJoin,
+                    new List<string> { "id" },
+                    new List<string> { "id" }).ToListAsync();
+            });
+            Assert.Empty(Directory.GetFiles(eval.SpillStore.RootPath, "*.tmp"));
         }
     }
 }

@@ -120,17 +120,8 @@ public class ExternalJoinEngine
         }
         finally
         {
-            foreach (var path in tempFiles)
-            {
-                try
-                {
-                    _context.SpillStore.DeleteChunk(path);
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warning($"Error cleaning up external join chunk {path}: {ex.Message}");
-                }
-            }
+            while (tempFiles.Count > 0)
+                DeleteTempChunk(tempFiles[^1], tempFiles);
         }
     }
 
@@ -234,6 +225,9 @@ public class ExternalJoinEngine
                 var split = await TryRepartitionBothSides(leftName, rightName, leftKeys, rightKeys, rightRowCount, depth + 1, tempFiles);
                 if (split != null)
                 {
+                    // Readers for both parent chunks closed in RepartitionPartition; delete superseded files before recursing.
+                    DeleteTempChunk(leftName, tempFiles);
+                    DeleteTempChunk(rightName, tempFiles);
                     await foreach (var row in JoinSubPartitions(split.Value.Left, split.Value.Right, join, leftKeys, rightKeys, depth + 1, tempFiles, cancellationToken))
                         yield return row;
                     yield break;
@@ -262,6 +256,9 @@ public class ExternalJoinEngine
             hashTable = await BuildJoinHashTable(rightName, rightKeys, new MemoryBudgetGuard(0), lease: null);
         }
 
+        // Build side is materialized in PackedBuildTable and its reader has closed; delete build partition before probing.
+        DeleteTempChunk(rightName, tempFiles);
+
         try
         {
             await foreach (var row in ProbeJoin(leftName, hashTable!, join, leftKeys, cancellationToken))
@@ -271,6 +268,7 @@ public class ExternalJoinEngine
         {
             hashTable?.Dispose();
             buildLease.Dispose();
+            DeleteTempChunk(leftName, tempFiles);
         }
     }
 
@@ -304,7 +302,29 @@ public class ExternalJoinEngine
             _logger.Debug("Recursively repartitioned external join partition at depth {Depth}. largestRight={LargestRight}", nextDepth, largestRight);
             return (left, right);
         }
+
+        // Split did not reduce skew; discard unused child partitions so parent replay does not retain both generations.
+        foreach (var child in left.Names)
+            DeleteTempChunk(child, tempFiles);
+        foreach (var child in right.Names)
+            DeleteTempChunk(child, tempFiles);
         return null;
+    }
+
+    private void DeleteTempChunk(string chunkName, List<string> tempFiles)
+    {
+        try
+        {
+            _context.SpillStore.DeleteChunk(chunkName);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning($"Error cleaning up external join chunk {chunkName}: {ex.Message}");
+        }
+        finally
+        {
+            tempFiles.Remove(chunkName);
+        }
     }
 
     /// <summary>
