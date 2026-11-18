@@ -4,12 +4,15 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Apache.Arrow;
+using Apache.Arrow.Arrays;
 using Apache.Arrow.Ipc;
 using Apache.Arrow.Types;
 using ETL_SQL.Common;
@@ -790,6 +793,7 @@ public partial class SpillStore : ISpillStore
         private const string SchemaVersionKey = "etlsql.spill.schema_version";
         private const string LogicalTypeKeyPrefix = "etlsql.spill.column.";
         private const string SchemaVersion = "1";
+        private static readonly FixedSizeBinaryType BinaryDecimalType = new(16);
         private readonly FileStream _fileStream;
         private readonly CryptoStream? _cryptoStream;
         private readonly AuthenticatedSpillEncryption.AuthenticationWriter? _authentication;
@@ -1056,8 +1060,8 @@ public partial class SpillStore : ISpillStore
         {
             if (elementType == typeof(byte) || elementType == typeof(short)
                 || elementType == typeof(int) || elementType == typeof(long)) return Int64Type.Default;
-            // COMPAT_BREAK: 0.21.0 — preserve per-value decimal precision and scale.
-            if (elementType == typeof(decimal)) return StringType.Default;
+            // COMPAT_BREAK: 0.21.0 — preserve per-value decimal precision and scale cleanly via 16-byte binary CLR representation.
+            if (elementType == typeof(decimal)) return BinaryDecimalType;
             if (elementType == typeof(double) || elementType == typeof(float)) return DoubleType.Default;
             if (elementType == typeof(bool)) return BooleanType.Default;
             if (elementType == typeof(DateOnly)) return StringType.Default;
@@ -1108,7 +1112,7 @@ public partial class SpillStore : ISpillStore
         private static IArrowType GetArrowType(object? value) => value switch
         {
             int or long or short or byte or uint or ulong or ushort or sbyte => Int64Type.Default,
-            decimal => StringType.Default,
+            decimal => BinaryDecimalType,
             double or float => DoubleType.Default,
             bool => BooleanType.Default,
             DateOnly => StringType.Default,
@@ -1139,13 +1143,7 @@ public partial class SpillStore : ISpillStore
             if (column is ColumnBuffer<int> integers) return BuildInt64(integers);
             if (column is ColumnBuffer<long> longs) return BuildInt64(longs);
             if (column is ColumnBuffer<decimal> decimals)
-            {
-                var builder = new StringArray.Builder();
-                for (var i = 0; i < decimals.Count; i++)
-                    if (decimals.IsNull(i)) builder.AppendNull();
-                    else builder.Append(decimals.Values.Span[i].ToString(System.Globalization.CultureInfo.InvariantCulture));
-                return builder.Build();
-            }
+                return BuildBinaryDecimalArray(decimals);
             if (column is ColumnBuffer<double> doubles)
             {
                 var builder = new DoubleArray.Builder();
@@ -1222,6 +1220,41 @@ public partial class SpillStore : ISpillStore
             throw new NotSupportedException($"Native spill writing does not support '{column.ElementType.Name}' columns.");
         }
 
+        private static FixedSizeBinaryArray BuildBinaryDecimalArray(ColumnBuffer<decimal> decimals)
+        {
+            var count = decimals.Count;
+            if (count == 0)
+            {
+                return new FixedSizeBinaryArray(
+                    new ArrayData(BinaryDecimalType, 0, 0, 0, [ArrowBuffer.Empty, ArrowBuffer.Empty]));
+            }
+
+            var valueBuilder = new ArrowBuffer.Builder<byte>();
+            valueBuilder.Append(MemoryMarshal.AsBytes(decimals.Values.Span));
+            var valueBuffer = valueBuilder.Build();
+
+            var nullCount = 0;
+            ArrowBuffer validityBuffer;
+            if (decimals.NullBitmap.Span.IndexOfAnyExcept((byte)0) < 0)
+            {
+                validityBuffer = ArrowBuffer.Empty;
+            }
+            else
+            {
+                var bitmapBuilder = new ArrowBuffer.BitmapBuilder(count);
+                for (var i = 0; i < count; i++)
+                {
+                    var valid = !decimals.IsNull(i);
+                    bitmapBuilder.Append(valid);
+                    if (!valid) nullCount++;
+                }
+                validityBuffer = bitmapBuilder.Build();
+            }
+
+            return new FixedSizeBinaryArray(
+                new ArrayData(BinaryDecimalType, count, nullCount, 0, [validityBuffer, valueBuffer]));
+        }
+
         private static Int64Array BuildInt64<T>(ColumnBuffer<T> column) where T : unmanaged
         {
             var builder = new Int64Array.Builder();
@@ -1234,15 +1267,32 @@ public partial class SpillStore : ISpillStore
         {
             if (IsDecimalLogicalType(logicalType))
             {
-                var builder = new StringArray.Builder();
-                for (var i = 0; i < rows.Count; i++)
+                var count = rows.Count;
+                var valueBuilder = new ArrowBuffer.Builder<byte>();
+                valueBuilder.Reserve(checked(count * 16));
+                var bitmapBuilder = new ArrowBuffer.BitmapBuilder(count);
+                var nullCount = 0;
+                Span<byte> zeroDecimal = stackalloc byte[16];
+                zeroDecimal.Clear();
+                for (var i = 0; i < count; i++)
                 {
                     var value = rows[i].TryGetValue(field.Name, out var found) ? found : null;
-                    if (value is null) builder.AppendNull();
-                    else builder.Append(ConvertSpillValue(field, value, firstRowNumber + i, Convert.ToDecimal)
-                        .ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    if (value is null)
+                    {
+                        valueBuilder.Append(zeroDecimal);
+                        bitmapBuilder.Append(false);
+                        nullCount++;
+                    }
+                    else
+                    {
+                        var dec = ConvertSpillValue(field, value, firstRowNumber + i, Convert.ToDecimal);
+                        valueBuilder.Append(MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref dec, 1)));
+                        bitmapBuilder.Append(true);
+                    }
                 }
-                return builder.Build();
+                var validityBuffer = nullCount == 0 ? ArrowBuffer.Empty : bitmapBuilder.Build();
+                return new FixedSizeBinaryArray(
+                    new ArrayData(BinaryDecimalType, count, nullCount, 0, [validityBuffer, valueBuilder.Build()]));
             }
             switch (field.DataType)
             {
@@ -1540,8 +1590,19 @@ public partial class SpillStore : ISpillStore
 
             while (await _arrowReader.ReadNextRecordBatchAsync() is { } batch)
             {
-                using (batch)
-                    yield return ConvertBatch(batch);
+                ColumnBatch? columnBatch = null;
+                try
+                {
+                    columnBatch = ConvertBatch(batch);
+                    columnBatch.OnFinalRelease(() => batch.Dispose());
+                }
+                catch
+                {
+                    columnBatch?.Dispose();
+                    batch.Dispose();
+                    throw;
+                }
+                yield return columnBatch;
             }
         }
 
@@ -1577,9 +1638,11 @@ public partial class SpillStore : ISpillStore
 
         private static IColumnBuffer ConvertArray(IArrowArray array, int count, string logicalType) => array switch
         {
-            Int64Array values => CopyFixed<long>(count, values.IsNull, i => values.GetValue(i) ?? default),
+            Int64Array values => WrapFixed<long>(values.ValueBuffer.Memory, values.Offset, count, values.NullBitmapBuffer.Memory, values.NullCount),
+            FixedSizeBinaryArray values when values.Data.DataType is FixedSizeBinaryType { ByteWidth: 16 } && IsDecimalLogicalType(logicalType)
+                => WrapFixed<decimal>(values.ValueBuffer.Memory, values.Offset, count, values.NullBitmapBuffer.Memory, values.NullCount),
             Decimal128Array values => CopyFixed<decimal>(count, values.IsNull, i => values.GetValue(i) ?? default),
-            DoubleArray values => CopyFixed<double>(count, values.IsNull, i => values.GetValue(i) ?? default),
+            DoubleArray values => WrapFixed<double>(values.ValueBuffer.Memory, values.Offset, count, values.NullBitmapBuffer.Memory, values.NullCount),
             BooleanArray values => CopyFixed<bool>(count, values.IsNull, i => values.GetValue(i) ?? default),
             TimestampArray values => CopyFixed<DateTime>(count, values.IsNull,
                 i => values.GetTimestamp(i)?.UtcDateTime ?? default),
@@ -1595,6 +1658,19 @@ public partial class SpillStore : ISpillStore
             StringArray values when IsGuidLogicalType(logicalType)
                 => CopyFixed<Guid>(count, values.IsNull,
                     i => Guid.Parse(values.GetString(i)!)),
+            StringArray values when values.Offset == 0
+                && count > 0
+                && values.ValueOffsets[0] == 0
+                && values.ValueOffsetsBuffer.Memory.Length >= (count + 1) * sizeof(int)
+                && values.ValueOffsets[count] <= values.Values.Length
+                => Utf8ColumnBuffer.WrapExternal(
+                    values.ValueOffsetsBuffer.Memory,
+                    values.ValueBuffer.Memory,
+                    count,
+                    values.ValueOffsets[count],
+                    values.NullBitmapBuffer.Memory,
+                    values.Offset,
+                    values.NullCount),
             StringArray values => Utf8ColumnBuffer.CopyEncoded(
                 values.ValueOffsets,
                 values.Values,
@@ -1602,6 +1678,24 @@ public partial class SpillStore : ISpillStore
                 values.Offset),
             _ => throw new NotSupportedException($"Arrow spill column type '{array.Data.DataType.Name}' is not supported by native batches.")
         };
+
+        private static ColumnBuffer<T> WrapFixed<T>(
+            ReadOnlyMemory<byte> rawBuffer,
+            int offset,
+            int count,
+            ReadOnlyMemory<byte> validityBitmap,
+            int nullCount) where T : unmanaged
+        {
+            if (count == 0) return ColumnBuffer<T>.Rent(0);
+            var byteOffset = checked(offset * Unsafe.SizeOf<T>());
+            var byteCount = checked(count * Unsafe.SizeOf<T>());
+            return ColumnBuffer<T>.WrapExternal(
+                rawBuffer.Slice(byteOffset, byteCount),
+                count,
+                validityBitmap,
+                offset,
+                nullCount);
+        }
 
         private static ColumnBuffer<T> CopyFixed<T>(
             int count,
@@ -1645,6 +1739,8 @@ public partial class SpillStore : ISpillStore
             return array switch
             {
                 Int64Array a => (object?)(decimal?)a.GetValue(index),
+                FixedSizeBinaryArray a when a.Data.DataType is FixedSizeBinaryType { ByteWidth: 16 } && IsDecimalLogicalType(logicalType)
+                    => (object?)MemoryMarshal.Read<decimal>(a.GetBytes(index)),
                 Decimal128Array a => (object?)a.GetValue(index),
                 DoubleArray a => ToDecimalOrDouble(a.GetValue(index)),
                 BooleanArray a => (object?)a.GetValue(index),

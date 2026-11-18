@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
@@ -54,16 +55,109 @@ public interface IColumnBuffer : IDisposable
 }
 
 /// <summary>
+/// Projects a contiguous <see cref="ReadOnlyMemory{Byte}"/> buffer as <see cref="Memory{T}"/> without copying elements.
+/// Lifetime is pinned by the owner of the underlying external buffer (for example, an Arrow <c>RecordBatch</c>).
+/// </summary>
+internal sealed class ByteCastMemoryManager<T> : MemoryManager<T> where T : unmanaged
+{
+    private readonly ReadOnlyMemory<byte> _bytes;
+    private readonly int _count;
+
+    public ByteCastMemoryManager(ReadOnlyMemory<byte> bytes, int count)
+    {
+        if (count < 0 || (long)count * Unsafe.SizeOf<T>() > bytes.Length)
+            throw new ArgumentOutOfRangeException(nameof(count));
+        _bytes = bytes;
+        _count = count;
+    }
+
+    public override Span<T> GetSpan() =>
+        MemoryMarshal.Cast<byte, T>(MemoryMarshal.AsMemory(_bytes).Span).Slice(0, _count);
+
+    public override MemoryHandle Pin(int elementIndex = 0)
+    {
+        if ((uint)elementIndex > (uint)_count)
+            throw new ArgumentOutOfRangeException(nameof(elementIndex));
+        return _bytes.Slice(elementIndex * Unsafe.SizeOf<T>()).Pin();
+    }
+
+    public override void Unpin() { }
+
+    protected override void Dispose(bool disposing) { }
+}
+
+internal static class ColumnBufferBitmapHelper
+{
+    private static readonly byte[] SharedZeros = new byte[4096];
+
+    internal static (byte[]? OwnedBitmap, ReadOnlyMemory<byte> ReadOnlyBitmap, bool Pooled) BuildNullBitmap(
+        int count,
+        ReadOnlySpan<byte> validityBitmap,
+        int validityBitOffset,
+        int nullCount)
+    {
+        var nullBytes = checked((count + 7) / 8);
+        if (nullCount == 0 || validityBitmap.IsEmpty)
+        {
+            if (nullBytes <= SharedZeros.Length)
+                return (null, SharedZeros.AsMemory(0, nullBytes), false);
+
+            var zeroed = ArrayPool<byte>.Shared.Rent(nullBytes);
+            zeroed.AsSpan(0, nullBytes).Clear();
+            return (zeroed, zeroed.AsMemory(0, nullBytes), true);
+        }
+
+        var nullBitmap = ArrayPool<byte>.Shared.Rent(Math.Max(1, nullBytes));
+        try
+        {
+            nullBitmap.AsSpan(0, nullBytes).Clear();
+            if ((validityBitOffset & 7) == 0 && (validityBitOffset >> 3) + nullBytes <= validityBitmap.Length)
+            {
+                var byteOffset = validityBitOffset >> 3;
+                for (var i = 0; i < nullBytes; i++)
+                    nullBitmap[i] = (byte)~validityBitmap[byteOffset + i];
+
+                var remainderBits = count & 7;
+                if (remainderBits != 0)
+                    nullBitmap[nullBytes - 1] &= (byte)((1 << remainderBits) - 1);
+            }
+            else
+            {
+                for (var i = 0; i < count; i++)
+                {
+                    var sourceBit = checked(validityBitOffset + i);
+                    if ((sourceBit >> 3) >= validityBitmap.Length)
+                        throw new ArgumentException("Validity bitmap is too small for the encoded values.", nameof(validityBitmap));
+                    var valid = (validityBitmap[sourceBit >> 3] & (1 << (sourceBit & 7))) != 0;
+                    if (!valid) nullBitmap[i >> 3] |= (byte)(1 << (i & 7));
+                }
+            }
+            return (nullBitmap, nullBitmap.AsMemory(0, nullBytes), true);
+        }
+        catch
+        {
+            ArrayPool<byte>.Shared.Return(nullBitmap, clearArray: true);
+            throw;
+        }
+    }
+}
+
+/// <summary>
 /// Fixed-width native column storage. Rented buffers own their pool leases until disposal; wrapped
 /// arrays remain caller-owned. Operators use <see cref="Values"/> and synchronous spans directly.
 /// </summary>
 public sealed class ColumnBuffer<T> : IColumnBuffer where T : unmanaged
 {
     private T[]? _values;
+    private Memory<T> _externalValues;
+    private bool _hasExternalValues;
     private byte[]? _nullBitmap;
+    private ReadOnlyMemory<byte> _readOnlyNullBitmap;
     private readonly bool _pooled;
+    private readonly bool _bitmapPooled;
     private readonly int _count;
     private readonly int _nullByteCount;
+    private bool _disposed;
 
     public ColumnBuffer(T[] values, int count, byte[]? nullBitmap = null)
         : this(values, count, nullBitmap ?? new byte[GetNullByteCount(count)], pooled: false)
@@ -83,8 +177,27 @@ public sealed class ColumnBuffer<T> : IColumnBuffer where T : unmanaged
 
         _values = values;
         _nullBitmap = nullBitmap;
+        _readOnlyNullBitmap = nullBitmap.AsMemory(0, _nullByteCount);
         _pooled = pooled;
+        _bitmapPooled = pooled;
         _count = count;
+    }
+
+    private ColumnBuffer(
+        Memory<T> externalValues,
+        int count,
+        byte[]? ownedNullBitmap,
+        ReadOnlyMemory<byte> readOnlyNullBitmap,
+        bool bitmapPooled)
+    {
+        _externalValues = externalValues;
+        _hasExternalValues = true;
+        _nullBitmap = ownedNullBitmap;
+        _readOnlyNullBitmap = readOnlyNullBitmap;
+        _pooled = false;
+        _bitmapPooled = bitmapPooled;
+        _count = count;
+        _nullByteCount = GetNullByteCount(count);
     }
 
     public static ColumnBuffer<T> Rent(int count)
@@ -97,54 +210,106 @@ public sealed class ColumnBuffer<T> : IColumnBuffer where T : unmanaged
         return new ColumnBuffer<T>(values, count, bitmap, pooled: true);
     }
 
+    /// <summary>
+    /// Wraps an external byte-backed typed array (such as an Arrow <c>RecordBatch</c> column buffer)
+    /// without copying element values. Caller retains ownership and disposal of <paramref name="rawBytes"/>
+    /// via batch reference counting.
+    /// </summary>
+    public static ColumnBuffer<T> WrapExternal(
+        ReadOnlyMemory<byte> rawBytes,
+        int count,
+        ReadOnlyMemory<byte> validityBitmap = default,
+        int validityBitOffset = 0,
+        int nullCount = -1)
+    {
+        if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+        if (count == 0) return Rent(0);
+        var externalValues = new ByteCastMemoryManager<T>(rawBytes, count).Memory;
+        var (ownedBitmap, readOnlyBitmap, bitmapPooled) =
+            ColumnBufferBitmapHelper.BuildNullBitmap(count, validityBitmap.Span, validityBitOffset, nullCount);
+        return new ColumnBuffer<T>(externalValues, count, ownedBitmap, readOnlyBitmap, bitmapPooled);
+    }
+
     public Type ElementType => typeof(T);
     public int Count => _count;
-    public Memory<T> Values => GetValues().AsMemory(0, _count);
-    public ReadOnlyMemory<byte> NullBitmap => GetNullBitmap().AsMemory(0, _nullByteCount);
+    public Memory<T> Values
+    {
+        get
+        {
+            EnsureNotDisposed();
+            return _hasExternalValues ? _externalValues.Slice(0, _count) : _values!.AsMemory(0, _count);
+        }
+    }
+    public ReadOnlyMemory<byte> NullBitmap
+    {
+        get
+        {
+            EnsureNotDisposed();
+            return _readOnlyNullBitmap;
+        }
+    }
 
     public long AllocatedBytes
     {
         get
         {
-            var values = GetValues();
+            EnsureNotDisposed();
             var elementBytes = Unsafe.SizeOf<T>();
-            return (long)values.Length * elementBytes + GetNullBitmap().LongLength;
+            long valueBytes = _hasExternalValues
+                ? (long)_count * elementBytes
+                : (long)_values!.Length * elementBytes;
+            return valueBytes + (_nullBitmap != null ? _nullBitmap.LongLength : _nullByteCount);
         }
     }
 
     public bool IsNull(int index)
     {
         ValidateIndex(index);
-        return (GetNullBitmap()[index >> 3] & (1 << (index & 7))) != 0;
+        EnsureNotDisposed();
+        var span = _readOnlyNullBitmap.Span;
+        return (span[index >> 3] & (1 << (index & 7))) != 0;
     }
 
     public void SetNull(int index, bool isNull = true)
     {
         ValidateIndex(index);
-        ref var slot = ref GetNullBitmap()[index >> 3];
+        var bitmap = GetWritableNullBitmap();
+        ref var slot = ref bitmap[index >> 3];
         var mask = (byte)(1 << (index & 7));
         if (isNull) slot |= mask;
         else slot &= (byte)~mask;
     }
 
-    public object? GetBoxedValue(int index) => IsNull(index) ? null : GetValues()[index];
+    public object? GetBoxedValue(int index) => IsNull(index) ? null : Values.Span[index];
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         var values = _values;
         var bitmap = _nullBitmap;
         _values = null;
+        _externalValues = default;
+        _hasExternalValues = false;
         _nullBitmap = null;
+        _readOnlyNullBitmap = default;
 
-        if (!_pooled) return;
-        if (values != null)
+        if (_pooled && values != null)
             ArrayPool<T>.Shared.Return(values, clearArray: true);
-        if (bitmap != null)
+        if (_bitmapPooled && bitmap != null)
             ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
     }
 
-    private T[] GetValues() => _values ?? throw new ObjectDisposedException(nameof(ColumnBuffer<T>));
-    private byte[] GetNullBitmap() => _nullBitmap ?? throw new ObjectDisposedException(nameof(ColumnBuffer<T>));
+    private void EnsureNotDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(ColumnBuffer<T>));
+    }
+
+    private byte[] GetWritableNullBitmap()
+    {
+        EnsureNotDisposed();
+        return _nullBitmap ?? throw new InvalidOperationException("Cannot mutate a read-only external column null bitmap.");
+    }
 
     private void ValidateIndex(int index)
     {
@@ -161,18 +326,75 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
     private int[]? _offsets;
     private byte[]? _data;
     private byte[]? _nullBitmap;
+    private ReadOnlyMemory<int> _externalOffsets;
+    private ReadOnlyMemory<byte> _externalData;
+    private ReadOnlyMemory<byte> _readOnlyNullBitmap;
+    private readonly bool _hasExternalData;
+    private readonly bool _bitmapPooled;
     private readonly int _count;
     private readonly int _dataLength;
     private readonly int _nullByteCount;
+    private bool _disposed;
 
     private Utf8ColumnBuffer(int[] offsets, byte[] data, byte[] nullBitmap, int count, int dataLength)
     {
         _offsets = offsets;
         _data = data;
         _nullBitmap = nullBitmap;
+        _readOnlyNullBitmap = nullBitmap.AsMemory(0, (count + 7) / 8);
+        _hasExternalData = false;
+        _bitmapPooled = true;
         _count = count;
         _dataLength = dataLength;
         _nullByteCount = (count + 7) / 8;
+    }
+
+    private Utf8ColumnBuffer(
+        ReadOnlyMemory<int> externalOffsets,
+        ReadOnlyMemory<byte> externalData,
+        byte[]? ownedNullBitmap,
+        ReadOnlyMemory<byte> readOnlyNullBitmap,
+        bool bitmapPooled,
+        int count,
+        int dataLength)
+    {
+        _externalOffsets = externalOffsets;
+        _externalData = externalData;
+        _nullBitmap = ownedNullBitmap;
+        _readOnlyNullBitmap = readOnlyNullBitmap;
+        _hasExternalData = true;
+        _bitmapPooled = bitmapPooled;
+        _count = count;
+        _dataLength = dataLength;
+        _nullByteCount = (count + 7) / 8;
+    }
+
+    /// <summary>
+    /// Wraps external UTF-8 offsets and byte buffers (such as an Arrow <c>StringArray</c>) without
+    /// copying string payloads. Caller retains ownership via batch reference counting.
+    /// </summary>
+    public static Utf8ColumnBuffer WrapExternal(
+        ReadOnlyMemory<byte> rawOffsets,
+        ReadOnlyMemory<byte> rawData,
+        int count,
+        int dataLength,
+        ReadOnlyMemory<byte> validityBitmap = default,
+        int validityBitOffset = 0,
+        int nullCount = -1)
+    {
+        if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+        if (dataLength < 0 || dataLength > rawData.Length) throw new ArgumentOutOfRangeException(nameof(dataLength));
+        var externalOffsets = new ByteCastMemoryManager<int>(rawOffsets, checked(count + 1)).Memory;
+        var (ownedBitmap, readOnlyBitmap, bitmapPooled) =
+            ColumnBufferBitmapHelper.BuildNullBitmap(count, validityBitmap.Span, validityBitOffset, nullCount);
+        return new Utf8ColumnBuffer(
+            externalOffsets,
+            rawData.Slice(0, dataLength),
+            ownedBitmap,
+            readOnlyBitmap,
+            bitmapPooled,
+            count,
+            dataLength);
     }
 
     public static Utf8ColumnBuffer FromStrings(IReadOnlyList<string?> values)
@@ -271,22 +493,54 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
 
     public Type ElementType => typeof(string);
     public int Count => _count;
-    public ReadOnlyMemory<int> Offsets => GetOffsets().AsMemory(0, _count + 1);
-    public ReadOnlyMemory<byte> Utf8Data => GetData().AsMemory(0, _dataLength);
-    public ReadOnlyMemory<byte> NullBitmap => GetNullBitmap().AsMemory(0, _nullByteCount);
-    public long AllocatedBytes => (long)GetOffsets().Length * sizeof(int) + GetData().LongLength + GetNullBitmap().LongLength;
+    public ReadOnlyMemory<int> Offsets
+    {
+        get
+        {
+            EnsureNotDisposed();
+            return _hasExternalData ? _externalOffsets.Slice(0, _count + 1) : _offsets!.AsMemory(0, _count + 1);
+        }
+    }
+    public ReadOnlyMemory<byte> Utf8Data
+    {
+        get
+        {
+            EnsureNotDisposed();
+            return _hasExternalData ? _externalData.Slice(0, _dataLength) : _data!.AsMemory(0, _dataLength);
+        }
+    }
+    public ReadOnlyMemory<byte> NullBitmap
+    {
+        get
+        {
+            EnsureNotDisposed();
+            return _readOnlyNullBitmap;
+        }
+    }
+    public long AllocatedBytes
+    {
+        get
+        {
+            EnsureNotDisposed();
+            long offsetsBytes = _hasExternalData ? (long)(_count + 1) * sizeof(int) : (long)_offsets!.Length * sizeof(int);
+            long dataBytes = _hasExternalData ? _dataLength : _data!.LongLength;
+            long bitmapBytes = _nullBitmap != null ? _nullBitmap.LongLength : _nullByteCount;
+            return offsetsBytes + dataBytes + bitmapBytes;
+        }
+    }
 
     public bool IsNull(int index)
     {
         ValidateIndex(index);
-        return (GetNullBitmap()[index >> 3] & (1 << (index & 7))) != 0;
+        EnsureNotDisposed();
+        return (_readOnlyNullBitmap.Span[index >> 3] & (1 << (index & 7))) != 0;
     }
 
     public ReadOnlySpan<byte> GetUtf8Bytes(int index)
     {
         ValidateIndex(index);
-        var offsets = GetOffsets();
-        return GetData().AsSpan(offsets[index], offsets[index + 1] - offsets[index]);
+        var offsets = GetOffsetsSpan();
+        return GetDataSpan().Slice(offsets[index], offsets[index + 1] - offsets[index]);
     }
 
     public object? GetBoxedValue(int index) => IsNull(index) ? null : Encoding.UTF8.GetString(GetUtf8Bytes(index));
@@ -299,8 +553,8 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
     {
         if (sourceRowCount != _count)
             throw new ArgumentException("Source row count does not match the UTF-8 buffer.", nameof(sourceRowCount));
-        var sourceOffsets = GetOffsets();
-        var sourceData = GetData();
+        var sourceOffsets = GetOffsetsSpan();
+        var sourceData = GetDataSpan();
         var dataLength = 0;
         for (var output = 0; output < selectedRows.Length; output++)
         {
@@ -325,7 +579,7 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
                 cancellationToken.ThrowIfCancellationRequested();
                 var input = selectedRows[output];
                 var length = sourceOffsets[input + 1] - sourceOffsets[input];
-                sourceData.AsSpan(sourceOffsets[input], length).CopyTo(data.AsSpan(position));
+                sourceData.Slice(sourceOffsets[input], length).CopyTo(data.AsSpan(position));
                 position += length;
                 offsets[output + 1] = position;
                 if (IsNull(input)) bitmap[output >> 3] |= (byte)(1 << (output & 7));
@@ -349,8 +603,8 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
     {
         if (sourceRowCount != _count)
             throw new ArgumentException("Source row count does not match the UTF-8 buffer.", nameof(sourceRowCount));
-        var sourceOffsets = GetOffsets();
-        var sourceData = GetData();
+        var sourceOffsets = GetOffsetsSpan();
+        var sourceData = GetDataSpan();
         var dataLength = 0;
         for (var output = 0; output < rows.Length; output++)
         {
@@ -382,7 +636,7 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
                 else
                 {
                     var length = sourceOffsets[input + 1] - sourceOffsets[input];
-                    sourceData.AsSpan(sourceOffsets[input], length).CopyTo(data.AsSpan(position));
+                    sourceData.Slice(sourceOffsets[input], length).CopyTo(data.AsSpan(position));
                     position += length;
                     if (IsNull(input)) bitmap[output >> 3] |= (byte)(1 << (output & 7));
                 }
@@ -403,14 +657,15 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
     internal Utf8ColumnBuffer Clone(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        EnsureNotDisposed();
         var offsets = ArrayPool<int>.Shared.Rent(Math.Max(1, _count + 1));
         var data = ArrayPool<byte>.Shared.Rent(Math.Max(1, _dataLength));
         var bitmap = ArrayPool<byte>.Shared.Rent(Math.Max(1, _nullByteCount));
         try
         {
-            GetOffsets().AsSpan(0, _count + 1).CopyTo(offsets);
-            GetData().AsSpan(0, _dataLength).CopyTo(data);
-            GetNullBitmap().AsSpan(0, _nullByteCount).CopyTo(bitmap);
+            GetOffsetsSpan().Slice(0, _count + 1).CopyTo(offsets);
+            GetDataSpan().Slice(0, _dataLength).CopyTo(data);
+            _readOnlyNullBitmap.Span.Slice(0, _nullByteCount).CopyTo(bitmap);
             return new Utf8ColumnBuffer(offsets, data, bitmap, _count, _dataLength);
         }
         catch
@@ -424,20 +679,38 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         var offsets = _offsets;
         var data = _data;
         var bitmap = _nullBitmap;
         _offsets = null;
         _data = null;
         _nullBitmap = null;
+        _externalOffsets = default;
+        _externalData = default;
+        _readOnlyNullBitmap = default;
         if (offsets != null) ArrayPool<int>.Shared.Return(offsets, clearArray: true);
         if (data != null) ArrayPool<byte>.Shared.Return(data, clearArray: true);
-        if (bitmap != null) ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
+        if (_bitmapPooled && bitmap != null) ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
     }
 
-    private int[] GetOffsets() => _offsets ?? throw new ObjectDisposedException(nameof(Utf8ColumnBuffer));
-    private byte[] GetData() => _data ?? throw new ObjectDisposedException(nameof(Utf8ColumnBuffer));
-    private byte[] GetNullBitmap() => _nullBitmap ?? throw new ObjectDisposedException(nameof(Utf8ColumnBuffer));
+    private void EnsureNotDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(Utf8ColumnBuffer));
+    }
+
+    private ReadOnlySpan<int> GetOffsetsSpan()
+    {
+        EnsureNotDisposed();
+        return _hasExternalData ? _externalOffsets.Span.Slice(0, _count + 1) : _offsets!.AsSpan(0, _count + 1);
+    }
+
+    private ReadOnlySpan<byte> GetDataSpan()
+    {
+        EnsureNotDisposed();
+        return _hasExternalData ? _externalData.Span.Slice(0, _dataLength) : _data!.AsSpan(0, _dataLength);
+    }
 
     private void ValidateIndex(int index)
     {
@@ -514,7 +787,7 @@ public sealed class ColumnBatch : IDisposable
     }
 
     /// <summary>Registers cleanup that runs exactly once when the final ownership reference is released.</summary>
-    internal void OnFinalRelease(Action callback)
+    public void OnFinalRelease(Action callback)
     {
         ArgumentNullException.ThrowIfNull(callback);
         lock (_releaseGate)
