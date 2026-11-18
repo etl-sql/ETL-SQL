@@ -360,6 +360,11 @@ public static partial class JobApiEndpoints
                 return Results.StatusCode(StatusCodes.Status403Forbidden);
 
             var utcNow = DateTime.UtcNow;
+            var caller = RequestCaller(ctx);
+            var canViewAllTenants = string.IsNullOrWhiteSpace(requestTenant)
+                || IsPortalSystemOrAdmin(caller)
+                || caller.IsInRole("FleetReader");
+
             var nodeStore = services.GetService<INodeRegistryStore>();
             var rawNodes = nodeStore is not null
                 ? await nodeStore.GetAllNodesAsync()
@@ -369,7 +374,7 @@ public static partial class JobApiEndpoints
                 .OrderByDescending(n => n.ExpiresAtUtc > utcNow)
                 .ThenBy(n => n.Role, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(n => n.NodeId, StringComparer.OrdinalIgnoreCase)
-                .Select(n => ParseNodeHeartbeat(n, utcNow))
+                .Select(n => ParseNodeHeartbeat(n, utcNow, includeHostDetails: canViewAllTenants))
                 .ToList();
 
             var registeredOptions = services.GetService<SandboxAdmissionHostOptions>();
@@ -381,10 +386,6 @@ public static partial class JobApiEndpoints
                     child => int.TryParse(child.Value, out var capacity) ? capacity : 0,
                     StringComparer.Ordinal);
             var ledger = services.GetService<ISandboxAdmissionLedger>();
-            var caller = RequestCaller(ctx);
-            var canViewAllTenants = string.IsNullOrWhiteSpace(requestTenant)
-                || IsPortalSystemOrAdmin(caller)
-                || caller.IsInRole("FleetReader");
 
             var pools = new List<SandboxPoolStateApiResponse>();
             foreach (var (poolId, capacity) in poolCapacities.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase))
@@ -392,11 +393,16 @@ public static partial class JobApiEndpoints
                 var open = ledger is not null
                     ? await ledger.ListOpenAsync(poolId, ct)
                     : [];
-                var active = open.Count(e => e.State == SandboxAdmissionState.Active);
-                var retained = open.Count(e => e.State == SandboxAdmissionState.Retained);
-                var queued = open.Count(e => e.State == SandboxAdmissionState.Queued);
-                var visibleEntries = open
-                    .Where(e => canViewAllTenants || string.Equals(e.TenantId, requestTenant, StringComparison.Ordinal))
+                // Free slots are pool-wide: a tenant viewer needs the true figure to know whether a
+                // queued run can start, and it names no other tenant. Counts and entries are scoped.
+                var occupied = open.Count(e => e.State is SandboxAdmissionState.Active or SandboxAdmissionState.Retained);
+                var scopedOpen = canViewAllTenants
+                    ? open
+                    : open.Where(e => string.Equals(e.TenantId, requestTenant, StringComparison.Ordinal)).ToList();
+                var active = scopedOpen.Count(e => e.State == SandboxAdmissionState.Active);
+                var retained = scopedOpen.Count(e => e.State == SandboxAdmissionState.Retained);
+                var queued = scopedOpen.Count(e => e.State == SandboxAdmissionState.Queued);
+                var visibleEntries = scopedOpen
                     .Take(50)
                     .Select(e => new SandboxPoolAdmissionApiResponse(
                         e.AdmissionId,
@@ -415,7 +421,7 @@ public static partial class JobApiEndpoints
                     queued,
                     active,
                     retained,
-                    Math.Max(0, capacity - active - retained),
+                    Math.Max(0, capacity - occupied),
                     visibleEntries));
             }
 
@@ -427,7 +433,10 @@ public static partial class JobApiEndpoints
         }).WithName("getFleetNodesAndSandboxes");
     }
 
-    private static FleetNodeHeartbeatApiResponse ParseNodeHeartbeat(NodeHeartbeat node, DateTime utcNow)
+    private static FleetNodeHeartbeatApiResponse ParseNodeHeartbeat(
+        NodeHeartbeat node,
+        DateTime utcNow,
+        bool includeHostDetails)
     {
         string? machine = null;
         int? pid = null;
@@ -442,14 +451,14 @@ public static partial class JobApiEndpoints
                 var root = doc.RootElement;
                 if (root.ValueKind == JsonValueKind.Object)
                 {
-                    if (TryGetCaseInsensitive(root, "machine", out var m) && m.ValueKind == JsonValueKind.String)
+                    if (includeHostDetails && TryGetCaseInsensitive(root, "machine", out var m) && m.ValueKind == JsonValueKind.String)
                         machine = m.GetString();
-                    if (TryGetCaseInsensitive(root, "pid", out var p) && p.ValueKind == JsonValueKind.Number && p.TryGetInt32(out var pidVal))
+                    if (includeHostDetails && TryGetCaseInsensitive(root, "pid", out var p) && p.ValueKind == JsonValueKind.Number && p.TryGetInt32(out var pidVal))
                         pid = pidVal;
                     if (TryGetCaseInsensitive(root, "startedUtc", out var s) && s.ValueKind == JsonValueKind.String
                         && DateTimeOffset.TryParse(s.GetString(), out var parsedStarted))
                         startedUtc = parsedStarted;
-                    if (TryGetCaseInsensitive(root, "capacity", out var cap) && cap.ValueKind == JsonValueKind.Object)
+                    if (includeHostDetails && TryGetCaseInsensitive(root, "capacity", out var cap) && cap.ValueKind == JsonValueKind.Object)
                     {
                         capacity = new FleetNodeCapacityApiResponse(
                             TryGetInt64(cap, "WorkingSetBytes"),

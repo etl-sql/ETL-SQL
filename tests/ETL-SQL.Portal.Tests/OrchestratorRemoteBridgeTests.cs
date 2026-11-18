@@ -5,12 +5,16 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Core.Profiling;
 using ETL_SQL.Core.Quality;
+using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -544,11 +548,116 @@ public sealed class OrchestratorRemoteBridgeTests
         }
     }
 
-    private sealed class RemoteOrchestratorFactory() : OrchestratorWebFactory(requireFederatedIdentity: true)
+    [Fact]
+    public async Task RemoteFleet_TenantBoundViewer_OmitsNodeHostDetailsAndCrossTenantPoolCounts()
+    {
+        using var orchestrator = new RemoteOrchestratorFactory(configureSandboxPool: true);
+        using var portal = new SeparateHostPortalFactory(orchestrator);
+        using var client = portal.CreateClient();
+        var adminToken = await LoginAdminAsync(client);
+
+        var viewerName = $"fleet_viewer_{Guid.NewGuid():N}";
+        await StudioPipelineRunFixture.CreateUserAsync(portal, viewerName, "OrchestratorViewer");
+        var viewerToken = await StudioPipelineRunFixture.LoginAsync(client, viewerName, StudioPipelineRunFixture.Password);
+
+        using (var orchScope = orchestrator.Services.CreateScope())
+        {
+            if (orchScope.ServiceProvider.GetService<INodeRegistryStore>() is { } nodeRegistry)
+            {
+                await nodeRegistry.RegisterOrRenewNodeAsync(
+                    "orch-test-node:101",
+                    "Orchestrator",
+                    TimeSpan.FromMinutes(2),
+                    JsonSerializer.Serialize(new
+                    {
+                        machine = "PRIVATE-HOST",
+                        pid = 4242,
+                        capacity = new
+                        {
+                            WorkingSetBytes = 100_000_000L,
+                            GcHeapBytes = 50_000_000L,
+                            TotalAvailableMemoryBytes = 8_000_000_000L,
+                            MemoryLoadPercent = 35.5,
+                            ProcessCpuPercent = 12.0,
+                            HostCpuPercent = 24.0,
+                            ProcessorCount = 4,
+                            IsOverloaded = false
+                        }
+                    }));
+            }
+
+            var ledger = orchScope.ServiceProvider.GetRequiredService<ISandboxAdmissionLedger>();
+            var poolPolicy = new ResolvedSandboxAdmissionPolicy
+            {
+                PoolId = "default",
+                TenantWeight = 1,
+                MaxConcurrentAttempts = 10,
+                MaxQueuedAttempts = 10
+            };
+            var foreignActive = $"foreign-active-{Guid.NewGuid():N}";
+            var foreignQueued = $"foreign-queued-{Guid.NewGuid():N}";
+            var portalQueued = $"portal-queued-{Guid.NewGuid():N}";
+
+            Assert.True(await ledger.EnqueueAsync(foreignActive, TenantContext.FromVerifiedCredential("other-tenant"), poolPolicy));
+            Assert.NotNull(await ledger.TryActivateAsync(foreignActive, "worker-1", 10, TimeSpan.FromMinutes(2)));
+            Assert.True(await ledger.EnqueueAsync(foreignQueued, TenantContext.FromVerifiedCredential("other-tenant"), poolPolicy));
+            Assert.True(await ledger.EnqueueAsync(portalQueued, TenantContext.FromVerifiedCredential("portal-host"), poolPolicy));
+        }
+
+        // Tenant-bound non-admin OrchestratorViewer sees tenant pool counts only and no node host details.
+        using (var viewerRes = await Send(client, HttpMethod.Get, "/api/orchestrator/fleet", viewerToken))
+        {
+            Assert.Equal(HttpStatusCode.OK, viewerRes.StatusCode);
+            var fleet = (await viewerRes.Content.ReadFromJsonAsync<JsonObject>(Json))!;
+            var node = Assert.Single(fleet["nodes"]!.AsArray(), item => item!["nodeId"]!.GetValue<string>() == "orch-test-node:101")!;
+            Assert.Null(node["machine"]);
+            Assert.Null(node["pid"]);
+            Assert.Null(node["capacity"]);
+
+            var pool = Assert.Single(fleet["sandboxPools"]!.AsArray(), item => item!["poolId"]!.GetValue<string>() == "default")!;
+            Assert.Equal(0, pool["activeCount"]!.GetValue<int>());
+            Assert.Equal(1, pool["queuedCount"]!.GetValue<int>());
+            Assert.Equal(0, pool["retainedCount"]!.GetValue<int>());
+            // Free slots stay pool-wide so the viewer is not told a busy slot is free.
+            Assert.Equal(9, pool["availableSlots"]!.GetValue<int>());
+            var entries = pool["openAdmissions"]!.AsArray();
+            var ownEntry = Assert.Single(entries)!;
+            Assert.Equal("portal-host", ownEntry["tenantId"]!.GetValue<string>());
+        }
+
+        // Admin retains full node details and cluster-wide pool counts.
+        using (var adminRes = await Send(client, HttpMethod.Get, "/api/orchestrator/fleet", adminToken))
+        {
+            Assert.Equal(HttpStatusCode.OK, adminRes.StatusCode);
+            var fleet = (await adminRes.Content.ReadFromJsonAsync<JsonObject>(Json))!;
+            var node = Assert.Single(fleet["nodes"]!.AsArray(), item => item!["nodeId"]!.GetValue<string>() == "orch-test-node:101")!;
+            Assert.Equal("PRIVATE-HOST", node["machine"]!.GetValue<string>());
+            Assert.Equal(4242, node["pid"]!.GetValue<int>());
+            Assert.NotNull(node["capacity"]);
+
+            var pool = Assert.Single(fleet["sandboxPools"]!.AsArray(), item => item!["poolId"]!.GetValue<string>() == "default")!;
+            Assert.Equal(1, pool["activeCount"]!.GetValue<int>());
+            Assert.Equal(2, pool["queuedCount"]!.GetValue<int>());
+            Assert.Equal(9, pool["availableSlots"]!.GetValue<int>());
+        }
+    }
+
+    private sealed class RemoteOrchestratorFactory(bool configureSandboxPool = false) : OrchestratorWebFactory(requireFederatedIdentity: true)
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             base.ConfigureWebHost(builder);
+            if (configureSandboxPool)
+            {
+                builder.ConfigureAppConfiguration((_, cfg) =>
+                {
+                    cfg.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["Orchestration:SandboxAdmission:Enabled"] = "true",
+                        ["Orchestration:SandboxAdmission:PoolCapacities:default"] = "10"
+                    });
+                });
+            }
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<ISecretProvider>();
