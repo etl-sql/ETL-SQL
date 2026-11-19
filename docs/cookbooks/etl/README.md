@@ -16,13 +16,13 @@ into a `.etlsql` file and press **F5**. The rest show production patterns agains
 | [Dead-Letter Queue (Error Row Routing)](dead-letter-queue.md) | **▶ Runs as-is.** Route bad rows to a dead-letter table with a reason for later reprocessing, while good rows keep loading. |
 | [Dynamic SQL with EXEC](dynamic-sql-with-exec.md) | Build and execute SQL statements at runtime — essential for parameterized table names, dynamic column lists, and multi-tenant pipelines where the s... |
 | [End-to-End Lineage Across Two Scripts (Flat File → EDW → Report)](end-to-end-lineage.md) | A column in a report is worth little if nobody can say where its number came from. This recipe |
-| [Financial Reporting (PIVOT)](financial-reporting-pivot.md) | Rotate vertical transaction logs into a horizontal quarterly summary for executive reporting. |
-| [Full Refresh (Truncate & Reload)](full-refresh.md) | The simplest load strategy — wipe the target and reload completely from source. Appropriate for small reference/dimension tables where CDC is overk... |
+| [Financial Reporting (PIVOT)](financial-reporting-pivot.md) | **▶ Runs as-is.** Rotate a vertical transaction log into a horizontal summary with `PIVOT` for executive reporting. |
+| [Full Refresh (Truncate & Reload)](full-refresh.md) | **▶ Runs as-is.** Wipe the target and reload it from source, with a guard that refuses to truncate when the source comes back empty. For small reference tables. |
 | [Fuzzy Entity Resolution (Customer De-duplication)](fuzzy-entity-resolution.md) | **▶ Runs as-is.** `FUZZY JOIN` resolves messy third-party names to a canonical list by similarity score and isolates the rest for manual review. |
 | [Graph Ingestion & Querying (Neo4j)](graph-ingestion-neo4j.md) | This recipe demonstrates how to ingest relational nodes and edges into Neo4j, and query them back using native Cypher pushdown block syntax. |
 | [Immutable Published Script Bundles (CI/CD Deployment)](immutable-published-bundles.md) | This pattern compiles and packages a multi-file script folder into an immutable versioned bundle inside the Orchestrator lockbox. It then registers... |
 | [Importing Curated Lineage & Tags (Non-Standard Sources)](importing-curated-lineage.md) | When column documentation, ownership, or lineage already lives in your own catalog — a spreadsheet, a governance tool, or a previous run's OpenLine... |
-| [Incremental Load with High-Water Mark](incremental-load-with-high-water-mark.md) | The most fundamental production ETL pattern. Store a watermark (the last successfully loaded timestamp or ID), extract only rows newer than it on e... |
+| [Incremental Load with High-Water Mark](incremental-load-with-high-water-mark.md) | **▶ Runs as-is.** Store a watermark, extract only rows newer than it on each run, then advance it on success — the basis of almost every scheduled ETL job. |
 | [IoT Ingestion with Regex Filtering](iot-regex-filtering.md) | Filter and clean high-frequency sensor data using regular expressions before batch loading. |
 | [Master-Detail Cross-Report Drill-through](master-detail-drill-through.md) | The most powerful interactive pattern. It allows navigating from a high-level summary report to a completely separate, detailed report file while p... |
 | [Multi-Context Join](multi-context-join.md) | Join data from three different platforms (SQL, Postgres, and CSV) in a single engine statement. |
@@ -35,7 +35,7 @@ into a `.etlsql` file and press **F5**. The rest show production patterns agains
 | [SCD Type 2 (History Tracking)](scd-type-2.md) | Tracks changes in a dimension table by expiring old records and inserting new ones with effective dating. |
 | [The Secure Vendor Handshake (Export & Transmit)](secure-vendor-handshake.md) | A robust pattern for exporting sensitive internal data, securing it, and transmitting it to a vendor SFTP. |
 | [Specification-Driven Vendor Feed Build](spec-driven-vendor-feed.md) | Use this pattern when a vendor gives you a PDF, Excel workbook, or data dictionary and you want a strong ETL-SQL starting point without hand-transc... |
-| [The Staged Ingestion (Classical ETL)](staged-ingestion.md) | This pattern extracts data from a remote source, stages it in the Engine workspace for validation, and performs an atomic `MERGE` into the producti... |
+| [The Staged Ingestion (Classical ETL)](staged-ingestion.md) | **▶ Runs as-is.** Extract from a remote source, stage and validate in the engine workspace, then `MERGE` atomically into the production table. |
 | [Time Series Gap Filling (FILL_DATES)](time-series-gap-filling.md) | **▶ Runs as-is.** `TRANSFORM ... USING FILL_DATES` materializes missing dates per group with a default value, so chart axes never skip a day. |
 
 ---

@@ -20,6 +20,10 @@ These recipes run as-is in VS Code — paste into a file and press **F5** (`.etl
 | [Dead-Letter Queue](etl/dead-letter-queue.md) | Bad rows routed aside with a reason while good rows load |
 | [Fuzzy Entity Resolution](etl/fuzzy-entity-resolution.md) | Messy vendor names matched to canonical customers |
 | [Time Series Gap Filling](etl/time-series-gap-filling.md) | Missing days filled with zero, per region |
+| [Incremental Load with High-Water Mark](etl/incremental-load-with-high-water-mark.md) | Only rows newer than the watermark are loaded, then the watermark advances |
+| [Staged Ingestion](etl/staged-ingestion.md) | Stage, cleanse, and `MERGE` — updates and inserts in one statement |
+| [Full Refresh](etl/full-refresh.md) | Truncate-and-reload guarded against an empty source |
+| [Financial Reporting (PIVOT)](etl/financial-reporting-pivot.md) | Revenue rotated into one column per region |
 
 Every [report recipe](report/README.md) uses inline sample data, so all of them preview as-is.
 

@@ -133,16 +133,19 @@ fuzzy matching recipes run on MOCKDB; multi-context-join and SCD Type 2 bugs fix
 - [x] **DOC02 Review `docs/guides/onboarding/getting-started.md`.** Done 2026-11-19: walkthrough block
   runs; the run step said `dotnet run --project ...` (source checkout only), now F5 / `ETL-SQL run`;
   sample count 55+ -> 270+; Quickstart CLI name matched to the CLI reference (`ETL-SQL`).
-- [ ] **DOC07 Binary values print as `System.Byte[]`.** `SELECT HASHBYTES('SHA256','a')` shows
-  `System.Byte[]` in CLI results, so the PII masking recipe's hash column is unreadable. Render
-  binary as hex (`0x...`) in the results table. S
+- [ ] **DOC07 Binary values in `#temp` tables.** `SELECT HASHBYTES('SHA256', Email) ... INTO #t`
+  prints `System.Byte[]` in CLI results, and the run then ends with `Fatal Error: CLR type 'Byte[]'
+  does not yet have a native column buffer` (session save). Render binary as hex (`0x...`) and give
+  `byte[]` a column buffer. Blocks the PII masking "Try It Now" block. M
 - [x] **DOC03 Run-test the cookbooks in CI.** Done 2026-11-19: `RunnableDocSampleTests` lints and runs
   25 blocks (Quickstart MOCKDB blocks, every report recipe block, ETL recipes marked "Runs as-is")
   and fails a report with any failed visual. Proven by reintroducing the `Amount` and missing
   `MODE = POINTS` bugs. Docs-only changes select full CI, so it runs on every doc edit. A new
   runnable ETL recipe only needs "Runs as-is" in its curated description.
-- [ ] **DOC04 More "Try It Now" blocks.** 26 ETL recipes still need real servers. Next candidates:
-  incremental load with high-water mark, staged ingestion, PIVOT, PII masking, full refresh. M
+- [ ] **DOC04 More "Try It Now" blocks.** 2026-11-19: added for incremental load, staged ingestion,
+  full refresh and PIVOT (8 ETL recipes now run as-is, all covered by `RunnableDocSampleTests`).
+  **Left:** PII masking (blocked on DOC07; draft uses `MASK_EMAIL` + `HASHBYTES` on `demo.Users`),
+  then candidates such as batch directory ingester and IoT regex filtering. M
 - [ ] **DOC05 VS Code Get Started walkthrough (optional).** The extension has no `walkthroughs`
   contribution; the README's 60-second steps would fit one. M
 - [ ] **DOC06 README screenshots.** A small gallery from the runnable report recipes (maps, Sankey,

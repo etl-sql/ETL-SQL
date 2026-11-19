@@ -1,5 +1,50 @@
 # Incremental Load with High-Water Mark
+<!-- description: **▶ Runs as-is.** Store a watermark, extract only rows newer than it on each run, then advance it on success — the basis of almost every scheduled ETL job. -->
 The most fundamental production ETL pattern. Store a watermark (the last successfully loaded timestamp or ID), extract only rows newer than it on each run, then advance the watermark on success. This is the basis of virtually every scheduled ETL job.
+
+## Try It Now (No Database Needed)
+
+Paste into a `.etlsql` file and press **F5**. A `#watermarks` control table and the built-in `MOCKDB()` orders stand in for your control database and source:
+
+```sql
+CREATE CONNECTION demo AS MOCKDB();
+
+-- Control table: the last successful load ran 7 days ago
+SELECT 'OrderSync' AS JobName, DATEADD(DAY, -7, GETDATE()) AS LastSuccessfulRun
+INTO #watermarks;
+
+-- Target table, as it stood after the previous run
+CREATE TABLE #warehouse_orders (SaleID BIGINT, Region VARCHAR(50), Total DECIMAL(18,2), OrderDate DATETIME);
+
+-- 1. Read the watermark
+DECLARE @LastRun DATETIME = (SELECT LastSuccessfulRun FROM #watermarks WHERE JobName = 'OrderSync');
+
+-- 2. Extract only rows newer than the watermark
+SELECT SaleID, Region, Total, OrderDate
+INTO #delta
+FROM demo.Orders
+WHERE OrderDate > @LastRun;
+
+PRINT 'Delta rows since last run: ' + CAST((SELECT COUNT(*) FROM #delta) AS STRING);
+
+-- 3. Merge the delta into the target
+MERGE INTO #warehouse_orders AS T
+USING #delta AS S ON T.SaleID = S.SaleID
+WHEN MATCHED THEN UPDATE SET T.Total = S.Total
+WHEN NOT MATCHED THEN INSERT (SaleID, Region, Total, OrderDate)
+                      VALUES (S.SaleID, S.Region, S.Total, S.OrderDate);
+
+-- 4. Advance the watermark only after the load succeeded
+UPDATE #watermarks
+SET LastSuccessfulRun = (SELECT MAX(OrderDate) FROM #delta)
+WHERE JobName = 'OrderSync';
+
+SELECT JobName, LastSuccessfulRun FROM #watermarks;
+```
+
+Only orders newer than the watermark are extracted and merged, then the watermark moves to the newest loaded row. Run it again against a real control table and the second run picks up only what changed since. The production version keeps the watermark in a control database and never advances it on failure:
+
+## Production Version
 
 **Pattern Scenario:** Incremental customer sync from a source database.
 
