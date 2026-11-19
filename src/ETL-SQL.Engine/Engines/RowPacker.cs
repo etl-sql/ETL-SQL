@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -200,12 +201,60 @@ internal sealed class RowPacker : IDisposable
         return text;
     }
 
+    /// <summary>
+    /// A row layout for a list of column names, with the semantics of setting each name on an
+    /// empty row in order: distinct names (case-insensitive) in first-seen order, and a repeated
+    /// name writes to its first slot so the last value wins. Rows built over it hold their values
+    /// positionally instead of in a per-row name dictionary.
+    /// </summary>
+    internal sealed class NameLayout
+    {
+        public NameLayout(IReadOnlyList<string> names)
+        {
+            var distinct = new List<string>(names.Count);
+            var slotByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            Slots = new int[names.Count];
+            for (var i = 0; i < names.Count; i++)
+            {
+                if (!slotByName.TryGetValue(names[i], out var slot))
+                {
+                    slot = distinct.Count;
+                    slotByName[names[i]] = slot;
+                    distinct.Add(names[i]);
+                }
+                Slots[i] = slot;
+            }
+            Schema = new TableSchema(distinct);
+            SourceCount = names.Count;
+        }
+
+        public TableSchema Schema { get; }
+        public int[] Slots { get; }
+        public int SourceCount { get; }
+    }
+
+    // Keyed by the Arrow schema or column-list instance that rows of one stream share; weak, so a
+    // finished operator's layouts go with it.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, NameLayout> s_layouts = new();
+
+    internal static NameLayout LayoutFor(object key, IReadOnlyList<string> names)
+    {
+        if (s_layouts.TryGetValue(key, out var layout) && layout.SourceCount == names.Count) return layout;
+        layout = new NameLayout(names);
+        s_layouts.AddOrUpdate(key, layout);
+        return layout;
+    }
+
     internal static Row MaterializeBatchRow(ColumnBatch batch, int rowIndex)
     {
-        var row = new Row();
-        for (var column = 0; column < batch.Schema.Count; column++)
-            row[batch.Schema.Fields[column].Name] = ReadBatchValue(batch, column, rowIndex);
-        return row;
+        var fields = batch.Schema.Fields;
+        var layout = s_layouts.TryGetValue(batch.Schema, out var cached) && cached.SourceCount == fields.Count
+            ? cached
+            : LayoutFor(batch.Schema, fields.Select(field => field.Name).ToList());
+        var values = new object?[layout.Schema.ColumnCount];
+        for (var column = 0; column < fields.Count; column++)
+            values[layout.Slots[column]] = ReadBatchValue(batch, column, rowIndex);
+        return new Row(layout.Schema, values);
     }
 
     /// <summary>Reconstructs a <see cref="Row"/> from a blob produced by <see cref="Pack"/>.</summary>
@@ -215,12 +264,13 @@ internal sealed class RowPacker : IDisposable
     /// <summary>Reconstructs a <see cref="Row"/> from a pooled slab slice produced by <see cref="PackInto"/>.</summary>
     public static Row Unpack(byte[] data, int offset, int count, IReadOnlyList<string> columns)
     {
-        var row = new Row();
+        var layout = LayoutFor(columns, columns);
+        var values = new object?[layout.Schema.ColumnCount];
         using var ms = new MemoryStream(data, offset, count, writable: false);
         using var reader = new BinaryReader(ms, Encoding.UTF8);
         for (int i = 0; i < columns.Count; i++)
-            row[columns[i]] = ReadValue(reader);
-        return row;
+            values[layout.Slots[i]] = ReadValue(reader);
+        return new Row(layout.Schema, values);
     }
 
     private static void WriteValue(BinaryWriter w, object? value)

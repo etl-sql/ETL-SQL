@@ -669,8 +669,71 @@ public class ExternalJoinEngine
         return CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, values, depth);
     }
 
+    // One join step sees one left and one right layout, so a single cached entry covers it.
+    private CombinedLayout? _combinedLayout;
+
+    /// <summary>
+    /// The combined row layout for one pair of input schemas: the distinct column names in
+    /// first-seen order (left, then right) and, per input column, its slot. A right column whose
+    /// name the left already has maps to the same slot and overwrites it, exactly as the
+    /// name-keyed fallback below does.
+    /// </summary>
+    private sealed class CombinedLayout(TableSchema? left, TableSchema right, TableSchema schema, int[] leftSlots, int[] rightSlots)
+    {
+        public TableSchema? Left { get; } = left;
+        public TableSchema Right { get; } = right;
+        public TableSchema Schema { get; } = schema;
+        public int[] LeftSlots { get; } = leftSlots;
+        public int[] RightSlots { get; } = rightSlots;
+
+        public static CombinedLayout Create(TableSchema? left, TableSchema right)
+        {
+            var names = new List<string>();
+            var slots = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            int[] Map(TableSchema side)
+            {
+                var map = new int[side.ColumnCount];
+                for (var i = 0; i < map.Length; i++)
+                {
+                    var name = side.GetName(i);
+                    if (!slots.TryGetValue(name, out var slot))
+                    {
+                        slot = names.Count;
+                        slots[name] = slot;
+                        names.Add(name);
+                    }
+                    map[i] = slot;
+                }
+                return map;
+            }
+            var leftSlots = left == null ? Array.Empty<int>() : Map(left);
+            var rightSlots = Map(right);
+            return new CombinedLayout(left, right, new TableSchema(names), leftSlots, rightSlots);
+        }
+    }
+
     private Row CombineRows(Row? left, Row right)
     {
+        // Rows held positionally by their schemas combine into a cached layout: one values array
+        // per output row instead of a per-row name dictionary (about a third of the external
+        // join's allocation before this path existed).
+        var rightSchema = right.Schema;
+        var leftSchema = left?.Schema;
+        if (rightSchema != null && !right.HasDynamicColumns && (left == null || (leftSchema != null && !left.HasDynamicColumns)))
+        {
+            var layout = _combinedLayout;
+            if (layout == null || !ReferenceEquals(layout.Left, leftSchema) || !ReferenceEquals(layout.Right, rightSchema))
+                _combinedLayout = layout = CombinedLayout.Create(leftSchema, rightSchema);
+            var values = new object?[layout.Schema.ColumnCount];
+            for (var i = 0; i < layout.LeftSlots.Length; i++) values[layout.LeftSlots[i]] = left![i];
+            for (var i = 0; i < layout.RightSlots.Length; i++) values[layout.RightSlots[i]] = right[i];
+            return new Row(layout.Schema, values)
+            {
+                MayLackColumns = (left?.MayLackColumns ?? false) || right.MayLackColumns,
+                DataQualityReplayProvenance = left?.DataQualityReplayProvenance,
+            };
+        }
+
         var combined = new Row();
         combined.MayLackColumns = (left?.MayLackColumns ?? false) || right.MayLackColumns;
         combined.DataQualityReplayProvenance = left?.DataQualityReplayProvenance;

@@ -137,6 +137,11 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
   columnar batch reads for sort/window, bounded buffer reuse, and packed join storage. Preserve
   output schema, scalar fidelity, comparison semantics and cancellation. Compare allocation counts
   and outputs first; time with repeated same-host A/B runs.
+  **Progress 2026-11-18:** per-row name dictionaries removed (rows built over cached schema
+  layouts in the join combine, `RowPacker`, `from.col` qualification, window results and sort-key
+  stamping; window function keys computed once). Local 500k-row profile: join 5,156 → 3,482 B/row,
+  window 6,257 → 3,242, sort 2,697 → 2,401. Still open: boxed `decimal`/`object[]` in the sort,
+  `Task<Row>` per async read, and a hosted recalibration of the allocation baselines.
 
 ### 3.3 Operations console completion
 

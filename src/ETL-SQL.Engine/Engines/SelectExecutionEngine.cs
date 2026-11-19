@@ -95,8 +95,27 @@ public class SelectExecutionEngine
 
         _logger.Debug("[PIPELINE] Initializing Multi-Pass Engine Pipeline for {TableName}", fromName);
 
+        var qualifier = new QualifiedRowLayout(fromName);
         var inputStream = sourceBatches.SelectMany(b => b.Rows.Select(r =>
         {
+            // Rows held by their schema qualify into one cached layout; others keep the per-column
+            // path. Either way the result is a new row the pipeline owns, as Clone() gave before.
+            var qualified = qualifier.TryQualify(r);
+            if (qualified != null)
+            {
+                qualified.MayLackColumns = r.MayLackColumns;
+                qualified.DataQualityReplayProvenance = r.DataQualityReplayProvenance is { } provenance
+                    ? provenance with { SourceRow = provenance.SourceRow.CloneWithoutReplayProvenance() }
+                    : null;
+                if (seedReplayProvenance)
+                {
+                    qualified.DataQualityReplayProvenance ??= new DataQualityReplayProvenance(
+                        replaySourceTable!,
+                        r.CloneWithoutReplayProvenance());
+                }
+                return qualified;
+            }
+
             var cloned = r.Clone();
             if (seedReplayProvenance)
             {

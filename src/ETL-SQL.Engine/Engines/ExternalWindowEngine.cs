@@ -1012,6 +1012,15 @@ public class ExternalWindowEngine
         var lagHistory = new Queue<Row>(Math.Max(1, maxLagOffset));
         Row? firstPartitionRow = null;
         var nthRows = new Dictionary<string, Row>(StringComparer.OrdinalIgnoreCase);
+        // Per-column names computed once, not per row (ToSql + upper-casing per row per column was
+        // the largest string allocation of a spilled window).
+        var columnFuncs = group.Columns.Select(c => (FunctionCallExpression)c.Expression).ToArray();
+        var upperNames = columnFuncs.Select(c => c.FunctionName.ToUpperInvariant()).ToArray();
+        var sqlKeys = columnFuncs.Select(c => c.ToSql().ToUpperInvariant()).ToArray();
+        var resultKeys = sqlKeys.Select(k => $"WINDOW_{k}").ToArray();
+        var results = new object?[columnFuncs.Length];
+        TableSchema? resultSource = null;
+        TableSchema? resultSchema = null;
 
         await foreach (var row in bucketRows)
         {
@@ -1086,14 +1095,14 @@ public class ExternalWindowEngine
                 }
             }
 
-            foreach (var col in group.Columns)
+            for (int ci = 0; ci < columnFuncs.Length; ci++)
             {
-                var f = (FunctionCallExpression)col.Expression;
-                var name_func = f.FunctionName.ToUpperInvariant();
+                var f = columnFuncs[ci];
+                var name_func = upperNames[ci];
                 object? winVal;
                 if (IsRunningAggregateCompatible(f))
                 {
-                    var key = f.ToSql().ToUpperInvariant();
+                    var key = sqlKeys[ci];
                     if (!runningAggregates.TryGetValue(key, out var accumulator))
                     {
                         accumulator = new StreamingWindowAggregate();
@@ -1112,7 +1121,7 @@ public class ExternalWindowEngine
                 }
                 else if (IsSlidingAggregateCompatible(f))
                 {
-                    var key = f.ToSql().ToUpperInvariant();
+                    var key = sqlKeys[ci];
                     if (!slidingAggregates.TryGetValue(key, out var accumulator))
                     {
                         accumulator = new SlidingWindowAggregate();
@@ -1161,7 +1170,7 @@ public class ExternalWindowEngine
                 else if (name_func == "NTH_VALUE")
                 {
                     TryGetPositiveLiteral(f.Arguments[1], out var nth);
-                    var key = f.ToSql().ToUpperInvariant();
+                    var key = sqlKeys[ci];
                     if (rowNumber == nth)
                         nthRows[key] = row;
                     winVal = nthRows.TryGetValue(key, out var nthRow)
@@ -1178,25 +1187,27 @@ public class ExternalWindowEngine
                         _ => null
                     };
                 }
-                row[$"WINDOW_{f.ToSql().ToUpperInvariant()}"] = winVal;
+                results[ci] = winVal;
             }
+
+            var outRow = WithWindowResults(row, resultKeys, results, ref resultSource, ref resultSchema);
 
             if (peerBuffer != null)
             {
-                await peerBuffer.AddAsync(row);
-                lastPeerRow = row;
+                await peerBuffer.AddAsync(outRow);
+                lastPeerRow = outRow;
             }
             else
             {
-                yield return row;
+                yield return outRow;
             }
             if (maxLagOffset > 0)
             {
-                lagHistory.Enqueue(row);
+                lagHistory.Enqueue(outRow);
                 while (lagHistory.Count > maxLagOffset)
                     lagHistory.Dequeue();
             }
-            prevRow = row;
+            prevRow = outRow;
             prevPartitionKeys = currentPartitionKeys;
             prevSortKeys = currentSortKeys;
         }
@@ -1207,6 +1218,59 @@ public class ExternalWindowEngine
                 peerBuffer, rangeRunningFuncs, rangeLastValueFuncs, runningAggregates, lastPeerRow!))
                 yield return buffered;
         }
+    }
+
+    /// <summary>
+    /// Returns the row with the window results appended. A row held by its schema gets a copy over
+    /// that schema plus the result columns, built once per input schema; any other row has the
+    /// results set by name, as before.
+    /// </summary>
+    private static Row WithWindowResults(
+        Row row,
+        string[] resultKeys,
+        object?[] results,
+        ref TableSchema? source,
+        ref TableSchema? extended)
+    {
+        var schema = row.Schema;
+        if (schema != null && !row.HasDynamicColumns)
+        {
+            if (!ReferenceEquals(schema, source))
+            {
+                extended = null;
+                var names = new List<string>(schema.ColumnCount + resultKeys.Length);
+                for (int i = 0; i < schema.ColumnCount; i++) names.Add(schema.GetName(i));
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var clash = false;
+                foreach (var key in resultKeys)
+                {
+                    if (schema.GetIndex(key) >= 0 || !seen.Add(key)) { clash = true; break; }
+                    names.Add(key);
+                }
+                if (!clash)
+                {
+                    extended = new TableSchema(names);
+                    schema.CopyAliasesTo(extended);
+                }
+                source = schema;
+            }
+
+            if (extended != null)
+            {
+                int canonical = schema.ColumnCount;
+                var values = new object?[canonical + results.Length];
+                for (int i = 0; i < canonical; i++) values[i] = row[i];
+                Array.Copy(results, 0, values, canonical, results.Length);
+                return new Row(extended, values)
+                {
+                    MayLackColumns = row.MayLackColumns,
+                    DataQualityReplayProvenance = row.DataQualityReplayProvenance,
+                };
+            }
+        }
+
+        for (int i = 0; i < resultKeys.Length; i++) row[resultKeys[i]] = results[i];
+        return row;
     }
 
     private async IAsyncEnumerable<Row> FlushDeepSpillPeerBufferAsync(
@@ -1223,14 +1287,13 @@ public class ExternalWindowEngine
             lastValues[i] = ($"WINDOW_{lf.ToSql().ToUpperInvariant()}", await _context.EvaluateValue(lf.Arguments[0], lastPeerRow));
         }
 
+        var runningKeys = rangeRunningFuncs.Select(rf => rf.ToSql().ToUpperInvariant()).ToArray();
+        var runningResultKeys = runningKeys.Select(k => $"WINDOW_{k}").ToArray();
         await foreach (var buffered in peerBuffer.ReadAsync())
         {
             _context.CancellationToken.ThrowIfCancellationRequested();
-            foreach (var rf in rangeRunningFuncs)
-            {
-                var key = rf.ToSql().ToUpperInvariant();
-                buffered[$"WINDOW_{key}"] = runningAggregates[key].GetValue(rf.FunctionName);
-            }
+            for (int i = 0; i < rangeRunningFuncs.Count; i++)
+                buffered[runningResultKeys[i]] = runningAggregates[runningKeys[i]].GetValue(rangeRunningFuncs[i].FunctionName);
             foreach (var (key, value) in lastValues)
                 buffered[key] = value;
             yield return buffered;
@@ -1812,6 +1875,18 @@ public class ExternalWindowEngine
         await using var reader = await _context.SpillStore.CreateReaderAsync(name);
         await foreach (var row in reader.AsEnumerableAsync())
         {
+            // Spilled rows come back over a schema: copy positionally into a fresh values array
+            // over the same schema rather than rebuilding a per-row name dictionary.
+            var schema = row.Schema;
+            if (schema != null && !row.HasDynamicColumns)
+            {
+                var values = new object?[schema.ColumnCount];
+                for (var i = 0; i < values.Length; i++)
+                    values[i] = row[i] is JsonElement element ? SpillSerializationHelper.UnwrapJsonElement(element) : row[i];
+                yield return new Row(schema, values);
+                continue;
+            }
+
             var unwrapped = new Row();
             row.ForEachColumn((k, v) => unwrapped[k] = v is JsonElement je ? SpillSerializationHelper.UnwrapJsonElement(je) : v);
             yield return unwrapped;

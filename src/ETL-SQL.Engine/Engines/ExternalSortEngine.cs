@@ -516,8 +516,46 @@ public class ExternalSortEngine
         IEnumerable<SortEntry> rows,
         string[] keyColumnNames)
     {
+        // Rows held by a schema are stamped into a copy over that schema plus the key columns,
+        // built once per input schema: one values array per row instead of adding (and then
+        // removing) dynamic dictionary columns on the caller's row.
+        TableSchema? stampSource = null;
+        TableSchema? stamped = null;
         foreach (var entry in rows)
         {
+            var schema = entry.Row.Schema;
+            if (schema != null && !entry.Row.HasDynamicColumns)
+            {
+                if (!ReferenceEquals(schema, stampSource))
+                {
+                    stamped = null;
+                    var names = new List<string>(schema.ColumnCount + keyColumnNames.Length);
+                    for (int i = 0; i < schema.ColumnCount; i++) names.Add(schema.GetName(i));
+                    var clash = false;
+                    foreach (var key in keyColumnNames)
+                    {
+                        if (schema.GetIndex(key) >= 0) { clash = true; break; }
+                        names.Add(key);
+                    }
+                    if (!clash)
+                    {
+                        stamped = new TableSchema(names);
+                        schema.CopyAliasesTo(stamped);
+                    }
+                    stampSource = schema;
+                }
+
+                if (stamped != null)
+                {
+                    int canonical = schema.ColumnCount;
+                    var values = new object?[canonical + keyColumnNames.Length];
+                    for (int i = 0; i < canonical; i++) values[i] = entry.Row[i];
+                    for (int k = 0; k < keyColumnNames.Length; k++) values[canonical + k] = entry.Keys[k];
+                    yield return new Row(stamped, values) { MayLackColumns = entry.Row.MayLackColumns };
+                    continue;
+                }
+            }
+
             // Stamp each key into its own dedicated column before writing the row.
             // These sentinel columns stay intact through intermediate passes and are
             // stripped only on the final merge pass.
