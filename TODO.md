@@ -126,9 +126,10 @@ as a response file (also broke Orchestrator variable overrides); `us-states.geoj
 render; README leads with a 60-second start; data quality gate, dead-letter queue, gap filling and
 fuzzy matching recipes run on MOCKDB; multi-context-join and SCD Type 2 bugs fixed.
 
-- [ ] **DOC01 Report build exits 0 when a visual fails.** `etl-sql-report build` on the old
-  `choropleth-point-map` recipe returned 0 while the JSON held "One or more visuals failed to build".
-  Return non-zero (or add a strict flag CI uses) so broken recipes and samples fail their gates. S
+- [x] **DOC01 Report build exits 0 when a visual fails.** Done 2026-11-19: `build --strict` exits 3
+  and lists each failed visual; the report is still written. Default stays 0 because the VS Code
+  preview rejects any non-zero exit and would blank a report with one bad visual. Use `--strict`
+  in DOC03.
 - [ ] **DOC02 Review `docs/guides/onboarding/getting-started.md`.** Second link in the README docs
   table; not yet reviewed. Run every block the same way as the Quickstart. S
 - [ ] **DOC03 Run-test the cookbooks in CI.** `CookbookVerificationTests` only parses recipes, which
