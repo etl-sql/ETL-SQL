@@ -58,8 +58,8 @@ $currentPath = (Resolve-Path -LiteralPath $CurrentMsi).Path
 if ($upgrade) {
     $previousPath = (Resolve-Path -LiteralPath $PreviousMsi).Path
     $contract = Test-MsiUpgradeContract -PreviousMsi $previousPath -CurrentMsi $currentPath
-    $previousVersion = $previousVersion
-    $currentVersion = $currentVersion
+    $previousVersion = $contract.PreviousVersion
+    $currentVersion = $contract.CurrentVersion
 } else {
     $previousVersion = $null
     $currentVersion = Get-MsiProperty $currentPath 'ProductVersion'
