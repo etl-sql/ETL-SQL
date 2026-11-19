@@ -151,9 +151,10 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
   Slice 3 (external join): unboxed `JoinKey` in `PackedBuildTable`, pooled `RowPacker` buffer,
   bool-compiled join predicates, `ValueTask` join spill reads. Same-host 500k-row profile: join
   3,250 → 1,790 B/row, sort 1,645 → 1,500, window 2,412 → 2,164.
-  Baselines recalibrated at 5279fd30e (run 44530148693). Smoke join/aggregate allocations are
-  now bimodal by about 2–3 MB per run (fixed cost, gone at Standard scale; likely pooled
-  `RowPacker` buffers rented and returned on different threads); find and remove it.
+  Baselines recalibrated at 5279fd30e (run 44530148693). Smoke join/aggregate allocations jump
+  between two values about 2–3 MB apart from run to run (also present before slice 3; now ~3% of
+  the smaller totals, so it can trip the 2% warning, never the 5% failure). Same work counters;
+  not the sampler's imprecise counter (`precise: true` changes nothing). Cause not yet found.
   Still open: columnar batch reads for sort/window.
 
 ### 3.3 Operations console completion
