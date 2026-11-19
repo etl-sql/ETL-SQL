@@ -2,7 +2,7 @@
 
 **Pattern**: Two coordinated named `MAP` visuals over the same staged data — one shading regions by density, one plotting site coordinates as sized bubbles — placed side by side on a page so regional context and facility detail read together.
 
-**Demonstrates**: `MAP` with `MAPPINGS (REGION, VALUE)` for choropleth shading, `MAP` with `MAPPINGS (LATITUDE, LONGITUDE, SIZE, COLOR)` for coordinate points, and page layout that reads the two together.
+**Demonstrates**: `MAP` with `MAPPINGS (REGION, VALUE)` for choropleth shading, `MAP` with `MODE = POINTS` and `MAPPINGS (LAT, LON, VALUE, LABEL)` for sized coordinate points, and page layout that reads the two together.
 
 > This recipe shows the concise named-`MAP` alternative: two independent visuals sharing a page and
 > staged source. When regions, routes, points, and labels must share one projected canvas, use
@@ -13,14 +13,15 @@ SET REPORT TITLE = 'US Regional Revenue & Fulfillment Hub Logistics';
 SET REPORT DESCRIPTION = 'Choropleth state-level sales density combined with fulfillment center hub coordinate overlays.';
 
 -- ── 1. Regional State-Level Sales Density (Choropleth Base) ───────────────────
-SELECT 'CA' AS StateCode, 420000 AS Revenue, 'Western' AS Region INTO #state_sales
-UNION ALL SELECT 'TX', 380000, 'South'
-UNION ALL SELECT 'NY', 310000, 'East'
-UNION ALL SELECT 'FL', 270000, 'South'
-UNION ALL SELECT 'IL', 210000, 'Midwest'
-UNION ALL SELECT 'WA', 190000, 'Western'
-UNION ALL SELECT 'CO', 140000, 'Western'
-UNION ALL SELECT 'OH', 160000, 'Midwest';
+-- US_STATES matches full state names (case-insensitive), not postal codes.
+SELECT 'California' AS StateName, 420000 AS Revenue, 'Western' AS Region INTO #state_sales
+UNION ALL SELECT 'Texas',      380000, 'South'
+UNION ALL SELECT 'New York',   310000, 'East'
+UNION ALL SELECT 'Florida',    270000, 'South'
+UNION ALL SELECT 'Illinois',   210000, 'Midwest'
+UNION ALL SELECT 'Washington', 190000, 'Western'
+UNION ALL SELECT 'Colorado',   140000, 'Western'
+UNION ALL SELECT 'Ohio',       160000, 'Midwest';
 
 -- ── 2. Fulfillment Hub Coordinate Point Overlays ──────────────────────────────
 SELECT 'Los Angeles Hub' AS HubName, 34.0522 AS Lat, -118.2437 AS Lon, 85000 AS Volume, 'Active' AS Status INTO #hub_points
@@ -34,15 +35,13 @@ CREATE VISUAL StateRevenueMap AS MAP (
   SOURCE   = #state_sales,
   TITLE    = 'State Revenue Performance (Choropleth Density)',
   MAPPINGS (
-    REGION = StateCode,
+    REGION = StateName,
     VALUE  = Revenue
   ),
   OPTIONS (
-    MAP_TYPE = US_STATES,
-    COLORS (
-      'min' = '#e3f2fd',
-      'max' = '#0d47a1'
-    )
+    MAP_NAME   = US_STATES,
+    COLOR_LOW  = '#e3f2fd',
+    COLOR_HIGH = '#0d47a1'
   )
 );
 
@@ -51,17 +50,14 @@ CREATE VISUAL HubLocationsMap AS MAP (
   SOURCE   = #hub_points,
   TITLE    = 'Fulfillment Logistics Hubs (Geo-Coordinates & Throughput)',
   MAPPINGS (
-    LATITUDE  = Lat,
-    LONGITUDE = Lon,
-    LABEL     = HubName,
-    SIZE      = Volume
+    LAT   = Lat,
+    LON   = Lon,
+    LABEL = HubName,
+    VALUE = Volume        -- dot size
   ),
   OPTIONS (
-    MAP_TYPE = US_STATES,
-    COLORS (
-      'Active'      = '#2e7d32',
-      'Maintenance' = '#f57c00'
-    )
+    MAP_NAME = US_STATES, -- base map for context
+    MODE     = POINTS
   )
 );
 

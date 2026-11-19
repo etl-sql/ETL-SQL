@@ -47,7 +47,7 @@ namespace ETL_SQL
                 if (isHelpOnly && args.Length > 1)
                 {
                     var helpCommand = CliOrchestrator.BuildRootCommand(_ => Task.FromResult(0));
-                    var parseResult = helpCommand.Parse(args, null);
+                    var parseResult = helpCommand.Parse(args, CliOrchestrator.CreateParserConfiguration());
                     return await parseResult.InvokeAsync(new InvocationConfiguration(), default);
                 }
 
@@ -118,7 +118,7 @@ namespace ETL_SQL
                     return await EngineRunner.Run(ctx);
                 });
 
-                var rootParseResult = rootCommand.Parse(args, null);
+                var rootParseResult = rootCommand.Parse(args, CliOrchestrator.CreateParserConfiguration());
                 return await rootParseResult.InvokeAsync(new InvocationConfiguration(), default);
             }
             catch (Exception ex)

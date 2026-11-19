@@ -32,6 +32,30 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("evidence/run.json", capturedContext.OutputJsonPath);
         }
 
+        /// <summary>
+        /// `--var @Name=Value` is the documented form and the one the Orchestrator emits. A
+        /// leading `@` must not be read as a response file path.
+        /// </summary>
+        [Fact]
+        public async Task CliOrchestrator_VarWithAtPrefix_IsNotTreatedAsResponseFile()
+        {
+            CliContext? captured = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                captured = ctx;
+                return Task.FromResult(0);
+            });
+
+            var exit = await root.Parse(
+                ["run", "s.etlsql", "--var", "@minAmount=250", "--var", "region=EMEA"],
+                CliOrchestrator.CreateParserConfiguration()).InvokeAsync();
+
+            Assert.Equal(0, exit);
+            Assert.NotNull(captured);
+            Assert.Equal(250m, Convert.ToDecimal(captured!.Variables["@minAmount"]));
+            Assert.Equal("EMEA", captured.Variables["@region"]);
+        }
+
         [Fact]
         public async Task CliOrchestrator_RecordFlagOverridesConfiguration()
         {

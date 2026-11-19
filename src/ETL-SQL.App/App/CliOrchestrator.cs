@@ -978,6 +978,15 @@ namespace ETL_SQL.App
         private static readonly Option<string?> GatewayViewerClaimsOption = new("--viewer-claims") { Description = "Allowlist: viewer_groups, viewer_roles, viewer_scopes, is_admin." };
         private static readonly Option<int?> GatewayViewerLifetimeOption = new("--viewer-context-ttl-seconds") { Description = "Signed viewer context lifetime from 1 to 300 seconds (default 60)." };
 
+        /// <summary>
+        /// Parser settings for every CLI entry point. Response files are off because
+        /// <c>--var @Name=Value</c> is the documented variable form (and the form the
+        /// Orchestrator emits); with response files on, a leading <c>@</c> is read as a
+        /// file path and the run fails with "Response file not found".
+        /// </summary>
+        public static ParserConfiguration CreateParserConfiguration() =>
+            new() { ResponseFileTokenReplacer = null };
+
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
             var rootCommand = new RootCommand("ETL-SQL Engine - Modern Data Integration Tool");
