@@ -155,6 +155,10 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
   between two values about 2–3 MB apart from run to run (also present before slice 3; now ~3% of
   the smaller totals, so it can trip the 2% warning, never the 5% failure). Same work counters;
   not the sampler's imprecise counter (`precise: true` changes nothing). Cause not yet found.
+  Slice 4 (sort/window): plain-column ORDER BY keys are no longer stamped into spill rows; the
+  merge rebuilds them from the row (expressions still stamp). Local 500k-row profile: sort
+  1,487 → 1,257 B/row, window 2,148 → 1,912. Hosted: sort spill bytes −20%, window −11.1%,
+  Standard sort allocated MB −16%; baselines recalibrated (run 44551213314, r1).
   Still open: columnar batch reads for sort/window.
 
 ### 3.3 Operations console completion
