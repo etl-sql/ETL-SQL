@@ -144,19 +144,8 @@ internal readonly struct JoinKey
             return FromStringValue(text);
         }
 
-        if (logicalType == "String")
-            return FromUtf8StringBytes(bytes);
-
-        if (logicalType == "Dynamic")
-        {
-            var text = Encoding.UTF8.GetString(bytes);
-            if (decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var number))
-                return FromDecimal(number);
-            if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var date))
-                return FromDateTime(date);
-            return FromStringValue(text);
-        }
-
+        // "String" and "Dynamic" (first spilled row NULL) hold unprefixed text; key it exactly as
+        // CompoundKey.NormalizeValue keys the original string.
         return FromUtf8StringBytes(bytes);
     }
 

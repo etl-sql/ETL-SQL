@@ -349,14 +349,8 @@ internal sealed class RowPacker : IDisposable
         {
             return dateOnly;
         }
-        if (logicalType == "String") return text;
-        if (logicalType == "Dynamic")
-        {
-            if (decimal.TryParse(text, System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out var number)) return number;
-            if (DateTime.TryParse(text, System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.RoundtripKind, out var date)) return date;
-        }
+        // "String" and "Dynamic" (first spilled row NULL) both hold text unprefixed: the row
+        // writer prefixes every non-string value, so plain text stays text.
         return text;
     }
 

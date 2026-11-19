@@ -2368,6 +2368,10 @@ public partial class SpillStore : ISpillStore
             // A column the writer knew to be text is text. Parsing it turned '00123' into 123 and
             // '2026-01-05' into a date when a temp table spilled.
             if (IsTextLogicalType(logicalType)) return s;
+            // "Dynamic" is a column whose first spilled row was NULL. The row writer stores every
+            // non-string value there with a prefix (handled above), so unprefixed text was text:
+            // parsing it turned '1,234' into 1234 and '2026-01-05' into a date.
+            if (logicalType == "Dynamic") return s;
             // Match JSON reader: try numeric then date parse on plain strings
             if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d)) return d;
             if (DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt)) return dt;

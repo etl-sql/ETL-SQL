@@ -415,5 +415,27 @@ namespace ETL_SQL.Tests.Operations.Operations
                 .SortExternal(sensitiveRows, [clause]);
             Assert.Equal(["Alpha", "Beta", "alpha", "beta"], sortedSensitive.Select(r => (string)r["s"]!).ToArray());
         }
+
+        [Fact]
+        public async Task SortExternal_TextColumnWhoseChunkStartsWithNull_KeepsTextValues()
+        {
+            // A spill chunk whose first row is NULL stores that column untyped ("Dynamic"). Text
+            // written there is text: '1,234', '0042' and '2026-01-05' must not come back as numbers or dates.
+            string?[] codes = ["ZZZ", null, "00123", "ABC", null, "1,234", "500", "00999", "apple", null, "0042", "7", "2026-01-05", null];
+            async Task<List<Row>> Sort(int chunkSize)
+            {
+                var (eval, logger) = BuildContext(chunkSize);
+                var rows = codes.Select((c, i) => new Row { ["id"] = (decimal)i, ["code"] = c }).ToList();
+                return await new ExternalSortEngine(eval, logger)
+                    .SortExternal(rows, [new OrderByClause(new IdentifierExpression("code"), false)]);
+            }
+
+            static string Show(Row r) => r["code"] is null ? "NULL" : $"{r["code"]}:{r["code"]!.GetType().Name}";
+            var inMemory = (await Sort(100000)).Select(Show).ToList();
+            var spilled = (await Sort(2)).Select(Show).ToList();
+
+            Assert.Equal(inMemory, spilled);
+            Assert.All(spilled.Where(s => s != "NULL"), s => Assert.EndsWith(":String", s));
+        }
     }
 }
