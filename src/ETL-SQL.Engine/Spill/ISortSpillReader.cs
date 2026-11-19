@@ -19,6 +19,7 @@ internal interface ISortSpillReader : ISpillReader
 
     bool TryReadBufferedSortRow(
         string[] keyColumnNames,
+        string[]? sentinelColumnNames,
         bool stripSentinelColumns,
         [NotNullWhen(true)] out Row? row,
         out SortKey key0,

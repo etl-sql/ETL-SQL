@@ -372,7 +372,7 @@ internal static class RowExpressionCompiler
         throw EvaluationUtils.UnknownName(name, row);
     }
 
-    private readonly struct MatchResult
+    internal readonly struct MatchResult
     {
         public string? ResolvedKey { get; init; }
         public bool IsAmbiguous { get; init; }
@@ -385,7 +385,7 @@ internal static class RowExpressionCompiler
             => new() { ResolvedKey = key, Candidates = Array.Empty<string>() };
     }
 
-    private static MatchResult FindMatch(string name, IReadOnlyList<string> allNames)
+    internal static MatchResult FindMatch(string name, IReadOnlyList<string> allNames)
     {
         if (string.IsNullOrEmpty(name)) return MatchResult.NoMatch;
 

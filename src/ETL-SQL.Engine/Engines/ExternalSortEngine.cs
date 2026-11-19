@@ -31,15 +31,18 @@ public class ExternalSortEngine
     public int IntermediateMergeRunCount { get; private set; }
     internal long IntermediateKeyStripCount { get; private set; }
     internal long PrefixResolvedComparisons { get; private set; }
+    internal int LastSpilledSentinelColumnCount { get; private set; }
+    internal long StampedSpillRowCount { get; private set; }
 
     internal readonly record struct SortEntry(Row Row, SortKey Key0, int ExtraKeyOffset, ulong KeyPrefix);
 
-    // Column-name prefix for individual sort-key columns written to spill chunks.
-    // Using one column per key avoids JSON array serialization and lets Arrow store
+    // Column-name prefix for individual sort-key columns written to spill chunks when a key
+    // cannot be read directly from an existing column (expressions, variables, outer refs, etc.).
+    // Using one column per stamped key avoids JSON array serialization and lets Arrow store
     // each value in its native typed column (Int64, Decimal128, Double, Boolean,
     // Timestamp, or String), which eliminates millions of JsonElement allocations
     // and string deserialization cycles on medium/large sort workloads.
-    private const string SortKeyPrefix = "_SYS_SK_";
+    internal const string SortKeyPrefix = "_SYS_SK_";
 
     // Maximum number of spill chunks merged simultaneously in a single pass. Caps the
     // number of concurrently open spill readers / file handles regardless of total chunk
@@ -128,9 +131,6 @@ public class ExternalSortEngine
         // outer finally can guarantee cleanup even across multi-pass merges.
         var cleanup = new HashSet<string>();
 
-        // Pre-build the column name array once — avoids per-row string allocation.
-        var keyColumnNames = BuildKeyColumnNames(orderBy.Count);
-
         try
         {
             bool caseSensitive = _context.CaseSensitiveComparison;
@@ -140,6 +140,107 @@ public class ExternalSortEngine
             var inputComparer = new SortEntryComparer(this, orderBy, caseSensitive, inputExtraKeys);
             var keySlots = extractKeysAsync == null && keyCount > 0 ? BuildKeySlotEvaluators(orderBy) : null;
             bool allKeysSync = keySlots != null && Array.TrueForAll(keySlots, static s => s.CanEvaluateSynchronously);
+
+            bool canConsiderUnstamping = extractKeysAsync == null && keyCount > 0;
+            var candidateUnstamp = new bool[keyCount];
+            for (int i = 0; i < keyCount; i++)
+                candidateUnstamp[i] = canConsiderUnstamping && IsCandidatePlainColumn(orderBy[i].Expression, _context);
+
+            bool spillPlanInitialized = false;
+            string[]? readKeyColumnNames = null;
+            bool[]? unstampedKey = null;
+            TableSchema?[]? verifiedSchemas = null;
+            bool[]? anyChunkStamped = null;
+            bool[]? chunkStampedBuffer = keyCount > 0 ? new bool[keyCount] : null;
+
+            async Task SpillChunkWithPlanAsync(string chunkName, List<SortEntry> chunk, List<SortKey>? extraKeys)
+            {
+                if (keyCount == 0)
+                {
+                    readKeyColumnNames ??= Array.Empty<string>();
+                    anyChunkStamped ??= Array.Empty<bool>();
+                    LastSpilledSentinelColumnCount = 0;
+                    await SpillChunkAsync(chunkName, chunk, Array.Empty<int>(), Array.Empty<string>(), extraKeys);
+                    return;
+                }
+
+                bool isFirstChunk = !spillPlanInitialized;
+                if (isFirstChunk)
+                {
+                    readKeyColumnNames = new string[keyCount];
+                    unstampedKey = new bool[keyCount];
+                    verifiedSchemas = new TableSchema?[keyCount];
+                    anyChunkStamped = new bool[keyCount];
+
+                    var firstRow = chunk[0].Row;
+                    for (int k = 0; k < keyCount; k++)
+                    {
+                        if (candidateUnstamp[k])
+                        {
+                            var keyName = ((IdentifierExpression)orderBy[k].Expression).Name;
+                            var resolved = ResolveRowColumnName(keyName, firstRow, out var vSchema);
+                            if (resolved != null)
+                            {
+                                readKeyColumnNames[k] = resolved;
+                                unstampedKey[k] = true;
+                                verifiedSchemas[k] = vSchema;
+                                chunkStampedBuffer![k] = false;
+                                continue;
+                            }
+                        }
+
+                        readKeyColumnNames[k] = SortKeyPrefix + k;
+                        unstampedKey[k] = false;
+                        anyChunkStamped[k] = true;
+                        chunkStampedBuffer![k] = true;
+                    }
+                    spillPlanInitialized = true;
+                }
+                else
+                {
+                    for (int k = 0; k < keyCount; k++)
+                        chunkStampedBuffer![k] = !unstampedKey![k];
+                }
+
+                VerifyChunkUnstampedKeys(
+                    chunk,
+                    startIndex: isFirstChunk ? 1 : 0,
+                    isFirstChunk,
+                    orderBy,
+                    unstampedKey!,
+                    readKeyColumnNames!,
+                    verifiedSchemas!,
+                    chunkStampedBuffer!,
+                    anyChunkStamped!);
+
+                int stampedCount = 0;
+                for (int k = 0; k < keyCount; k++)
+                {
+                    if (chunkStampedBuffer![k]) stampedCount++;
+                }
+
+                if (stampedCount == 0)
+                {
+                    LastSpilledSentinelColumnCount = 0;
+                    await SpillChunkAsync(chunkName, chunk, Array.Empty<int>(), Array.Empty<string>(), extraKeys);
+                    return;
+                }
+
+                var stampedKeyIndices = new int[stampedCount];
+                var stampedColumnNames = new string[stampedCount];
+                int writeIdx = 0;
+                for (int k = 0; k < keyCount; k++)
+                {
+                    if (!chunkStampedBuffer![k]) continue;
+                    stampedKeyIndices[writeIdx] = k;
+                    stampedColumnNames[writeIdx] = SortKeyPrefix + k;
+                    writeIdx++;
+                }
+
+                LastSpilledSentinelColumnCount = stampedCount;
+                StampedSpillRowCount += chunk.Count;
+                await SpillChunkAsync(chunkName, chunk, stampedKeyIndices, stampedColumnNames, extraKeys);
+            }
 
             // 2. Consume stream and spill chunks. The memory guard flushes the current chunk early
             // when the accumulated chunk footprint (precise byte accounting) crosses the governor
@@ -155,7 +256,7 @@ public class ExternalSortEngine
                 var chunkName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
                 chunkPaths.Add(chunkName);
                 cleanup.Add(chunkName);
-                await SpillChunkAsync(chunkName, currentChunk, keyColumnNames, inputExtraKeys);
+                await SpillChunkWithPlanAsync(chunkName, currentChunk, inputExtraKeys);
                 _context.Telemetry.SortSpillCount++;
                 _context.Telemetry.PartitionsCount++;
                 currentChunk.Clear();
@@ -272,7 +373,7 @@ public class ExternalSortEngine
                 var chunkName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
                 chunkPaths.Add(chunkName);
                 cleanup.Add(chunkName);
-                await SpillChunkAsync(chunkName, currentChunk, keyColumnNames, inputExtraKeys);
+                await SpillChunkWithPlanAsync(chunkName, currentChunk, inputExtraKeys);
                 _context.Telemetry.SortSpillCount++;
                 _context.Telemetry.PartitionsCount++;
                 currentChunk.Clear();
@@ -283,6 +384,8 @@ public class ExternalSortEngine
 
             // 3. Bounded multi-pass k-way merge.
             if (chunkPaths.Count == 0) yield break;
+
+            var sentinelColumnNames = BuildSentinelColumnNames(anyChunkStamped);
 
             // Reduction passes: while more chunks remain than we are willing to open at once,
             // merge groups of MaxMergeFanIn into intermediate runs. Consumed inputs are deleted
@@ -304,7 +407,7 @@ public class ExternalSortEngine
 
                     var merged = $"sort_merge_p{passNo}_{Guid.NewGuid():N}_{nextLevel.Count}.tmp";
                     cleanup.Add(merged);
-                    await MergeChunksToFileAsync(merged, group, keyColumnNames, orderBy);
+                    await MergeChunksToFileAsync(merged, group, readKeyColumnNames!, sentinelColumnNames, orderBy);
                     nextLevel.Add(merged);
                     _context.Telemetry.SortSpillCount++;
                     IntermediateMergeRunCount++;
@@ -319,10 +422,14 @@ public class ExternalSortEngine
                 passNo++;
             }
 
-            // Final pass: merge the remaining (<= MaxMergeFanIn) chunks and strip sentinel keys.
+            // Final pass: merge the remaining (<= MaxMergeFanIn) chunks and strip sentinel keys if any were stamped.
             MergePassCount++;
-            await foreach (var entry in MergeChunksAsync(chunkPaths, keyColumnNames, orderBy, stripKeys: true).WithCancellation(effectiveCancellationToken))
+            bool stripSentinels = sentinelColumnNames is { Length: > 0 };
+            await foreach (var entry in MergeChunksAsync(chunkPaths, readKeyColumnNames!, sentinelColumnNames, orderBy, stripKeys: stripSentinels).WithCancellation(effectiveCancellationToken))
+            {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 yield return entry.Row;
+            }
         }
         finally
         {
@@ -350,6 +457,7 @@ public class ExternalSortEngine
     private async IAsyncEnumerable<SortEntry> MergeChunksAsync(
         List<string> inputChunks,
         string[] keyColumnNames,
+        string[]? sentinelColumnNames,
         List<OrderByClause> orderBy,
         bool stripKeys = true)
     {
@@ -359,7 +467,8 @@ public class ExternalSortEngine
         int extraCount = Math.Max(0, keyCount - 1);
         var mergeExtraKeys = extraCount > 0 ? new SortKey[inputChunks.Count * extraCount] : null;
         var mergeComparer = new SortEntryComparer(this, orderBy, caseSensitive, mergeExtraKeys);
-        Dictionary<TableSchema, (TableSchema? Stripped, int[] KeptIndices)>? strippedSchemas = stripKeys ? new() : null;
+        Dictionary<TableSchema, (TableSchema? Stripped, int[] KeptIndices)>? strippedSchemas =
+            stripKeys && sentinelColumnNames is { Length: > 0 } ? new() : null;
         try
         {
             foreach (var path in inputChunks)
@@ -371,7 +480,7 @@ public class ExternalSortEngine
             for (int i = 0; i < readers.Count; i++)
             {
                 var entry = await ReadNextSortEntryAsync(
-                    readers[i], i, keyColumnNames, orderBy, caseSensitive, stripKeys, strippedSchemas, mergeExtraKeys, extraCount);
+                    readers[i], i, keyColumnNames, sentinelColumnNames, orderBy, caseSensitive, stripKeys, strippedSchemas, mergeExtraKeys, extraCount);
                 if (entry.HasValue)
                     heap.Enqueue(i, entry.Value);
             }
@@ -388,6 +497,7 @@ public class ExternalSortEngine
                     {
                         if (fastReader.TryReadBufferedSortRow(
                                 keyColumnNames,
+                                sentinelColumnNames,
                                 stripKeys,
                                 out var nextRow,
                                 out var key0,
@@ -399,7 +509,7 @@ public class ExternalSortEngine
                         else
                         {
                             var next = await ReadSlowFastReaderAsync(
-                                fastReader, extraOffset, keyColumnNames, orderBy, caseSensitive, stripKeys, mergeExtraKeys, extraCount);
+                                fastReader, extraOffset, keyColumnNames, sentinelColumnNames, orderBy, caseSensitive, stripKeys, mergeExtraKeys, extraCount);
                             if (next.HasValue)
                                 heap.Enqueue(chunkIdx, next.Value);
                         }
@@ -407,7 +517,7 @@ public class ExternalSortEngine
                     else
                     {
                         var next = await ReadNextSortEntryAsync(
-                            reader, chunkIdx, keyColumnNames, orderBy, caseSensitive, stripKeys, strippedSchemas, mergeExtraKeys, extraCount);
+                            reader, chunkIdx, keyColumnNames, sentinelColumnNames, orderBy, caseSensitive, stripKeys, strippedSchemas, mergeExtraKeys, extraCount);
                         if (next.HasValue)
                             heap.Enqueue(chunkIdx, next.Value);
                     }
@@ -424,6 +534,7 @@ public class ExternalSortEngine
         ISortSpillReader fastReader,
         int extraOffset,
         string[] keyColumnNames,
+        string[]? sentinelColumnNames,
         List<OrderByClause> orderBy,
         bool caseSensitive,
         bool stripKeys,
@@ -435,6 +546,7 @@ public class ExternalSortEngine
 
         if (!fastReader.TryReadBufferedSortRow(
                 keyColumnNames,
+                sentinelColumnNames,
                 stripKeys,
                 out var row,
                 out var key0,
@@ -451,6 +563,7 @@ public class ExternalSortEngine
         ISpillReader reader,
         int chunkIdx,
         string[] keyColumnNames,
+        string[]? sentinelColumnNames,
         List<OrderByClause> orderBy,
         bool caseSensitive,
         bool stripKeys,
@@ -463,6 +576,7 @@ public class ExternalSortEngine
         {
             if (fastReader.TryReadBufferedSortRow(
                     keyColumnNames,
+                    sentinelColumnNames,
                     stripKeys,
                     out var fastRow,
                     out var key0,
@@ -473,7 +587,7 @@ public class ExternalSortEngine
             }
 
             return await ReadSlowFastReaderAsync(
-                fastReader, extraOffset, keyColumnNames, orderBy, caseSensitive, stripKeys, mergeExtraKeys, extraCount);
+                fastReader, extraOffset, keyColumnNames, sentinelColumnNames, orderBy, caseSensitive, stripKeys, mergeExtraKeys, extraCount);
         }
 
         var row = reader is ISortSpillReader vtReader
@@ -481,25 +595,26 @@ public class ExternalSortEngine
             : await reader.ReadRowAsync();
         if (row == null) return null;
 
-        var fallbackKey0 = ExtractKeysFromRow(row, keyColumnNames, mergeExtraKeys, extraOffset);
+        var fallbackKey0 = ExtractKeysFromRow(row, keyColumnNames, sentinelColumnNames, mergeExtraKeys, extraOffset);
         if (strippedSchemas != null)
-            row = StripFinalSentinelColumns(row, keyColumnNames, strippedSchemas);
+            row = StripFinalSentinelColumns(row, sentinelColumnNames!, strippedSchemas);
         ulong fallbackPrefix = keyColumnNames.Length > 0 ? ComputeKeyPrefix(fallbackKey0, orderBy[0], caseSensitive) : 0UL;
         return new SortEntry(row, fallbackKey0, extraOffset, fallbackPrefix);
     }
 
     /// <summary>
     /// Merges a bounded group of spilled chunks into a single new intermediate run while leaving
-    /// the <c>_SYS_SK_*</c> sentinel columns attached so the final pass can read and strip them once.
+    /// any <c>_SYS_SK_*</c> sentinel columns attached so the final pass can read and strip them once.
     /// </summary>
     private async Task MergeChunksToFileAsync(
         string outName,
         List<string> inputChunks,
         string[] keyColumnNames,
+        string[]? sentinelColumnNames,
         List<OrderByClause> orderBy)
     {
         await using var writer = await _context.SpillStore.CreateWriterAsync(outName);
-        await foreach (var entry in MergeChunksAsync(inputChunks, keyColumnNames, orderBy, stripKeys: false))
+        await foreach (var entry in MergeChunksAsync(inputChunks, keyColumnNames, sentinelColumnNames, orderBy, stripKeys: false))
         {
             await writer.WriteRowAsync(entry.Row);
         }
@@ -763,38 +878,187 @@ public class ExternalSortEngine
         return false;
     }
 
-    /// <summary>
-    /// Builds the stable array of sort-key column names once per sort operation.
-    /// </summary>
-    private static string[] BuildKeyColumnNames(int count)
+    private static bool IsCandidatePlainColumn(Expression expression, IExecutionContext context)
     {
+        if (expression is not IdentifierExpression id || string.IsNullOrEmpty(id.Name))
+            return false;
+        return !id.Name.StartsWith("@", StringComparison.Ordinal)
+            && !id.Name.Equals("*", StringComparison.OrdinalIgnoreCase)
+            && !id.Name.Contains(".CONNECTION_STRING", StringComparison.OrdinalIgnoreCase)
+            && !context.Connections.ContainsKey(id.Name)
+            && !context.FunctionRegistry.IsRegistered(id.Name)
+            && context.OuterRowStack.Count == 0;
+    }
+
+    private static string? ResolveRowColumnName(string name, Row row, out TableSchema? verifiedSchema)
+    {
+        var schema = row.Schema;
+        if (schema != null && !row.HasDynamicColumns)
+        {
+            int idx = schema.GetIndex(name);
+            if (idx >= 0)
+            {
+                string canonical = schema.GetName(idx);
+                if (schema.GetIndex(canonical) == idx)
+                {
+                    verifiedSchema = schema;
+                    return canonical;
+                }
+                // Duplicate canonical column names with an alias pointing to a non-first slot:
+                // stamp so slot disambiguation stays exact.
+                verifiedSchema = null;
+                return null;
+            }
+
+            var match = RowExpressionCompiler.FindMatch(name, schema.ColumnNames);
+            if (!match.IsAmbiguous && match.ResolvedKey != null)
+            {
+                int resolvedIdx = schema.GetIndex(match.ResolvedKey);
+                if (resolvedIdx >= 0 && schema.GetIndex(schema.GetName(resolvedIdx)) == resolvedIdx)
+                {
+                    verifiedSchema = schema;
+                    return schema.GetName(resolvedIdx);
+                }
+            }
+
+            verifiedSchema = null;
+            return null;
+        }
+
+        // Dynamic / schema-less row (or schema-backed row with dynamic columns).
+        verifiedSchema = null;
+        if (schema != null)
+        {
+            int schemaIdx = schema.GetIndex(name);
+            if (schemaIdx >= 0)
+            {
+                string canonical = schema.GetName(schemaIdx);
+                return schema.GetIndex(canonical) == schemaIdx ? canonical : null;
+            }
+        }
+
+        foreach (var existing in row.GetColumnNames())
+        {
+            if (string.Equals(existing, name, StringComparison.OrdinalIgnoreCase))
+                return existing;
+        }
+
+        var names = row.GetColumnNames();
+        var nameList = names as IReadOnlyList<string> ?? new List<string>(names);
+        var dynamicMatch = RowExpressionCompiler.FindMatch(name, nameList);
+        if (!dynamicMatch.IsAmbiguous && dynamicMatch.ResolvedKey != null)
+        {
+            if (schema != null)
+            {
+                int resolvedIdx = schema.GetIndex(dynamicMatch.ResolvedKey);
+                if (resolvedIdx >= 0 && schema.GetIndex(schema.GetName(resolvedIdx)) != resolvedIdx)
+                    return null;
+            }
+            return dynamicMatch.ResolvedKey;
+        }
+
+        return null;
+    }
+
+    private static void VerifyChunkUnstampedKeys(
+        List<SortEntry> chunk,
+        int startIndex,
+        bool isFirstChunk,
+        List<OrderByClause> orderBy,
+        bool[] unstampedKey,
+        string[] readKeyColumnNames,
+        TableSchema?[] verifiedSchemas,
+        bool[] chunkStamped,
+        bool[] anyChunkStamped)
+    {
+        bool anyUnstamped = false;
+        for (int k = 0; k < unstampedKey.Length; k++)
+        {
+            if (unstampedKey[k]) { anyUnstamped = true; break; }
+        }
+        if (!anyUnstamped) return;
+
+        for (int r = startIndex; r < chunk.Count; r++)
+        {
+            var row = chunk[r].Row;
+            for (int k = 0; k < unstampedKey.Length; k++)
+            {
+                if (!unstampedKey[k]) continue;
+                var vs = verifiedSchemas[k];
+                if (vs != null && ReferenceEquals(row.Schema, vs) && !row.HasDynamicColumns)
+                    continue;
+
+                var keyName = ((IdentifierExpression)orderBy[k].Expression).Name;
+                var resolved = ResolveRowColumnName(keyName, row, out _);
+                if (!string.Equals(resolved, readKeyColumnNames[k], StringComparison.OrdinalIgnoreCase))
+                {
+                    unstampedKey[k] = false;
+                    chunkStamped[k] = true;
+                    anyChunkStamped[k] = true;
+                    if (isFirstChunk)
+                        readKeyColumnNames[k] = SortKeyPrefix + k;
+                }
+            }
+        }
+    }
+
+    private static string[]? BuildSentinelColumnNames(bool[]? anyChunkStamped)
+    {
+        if (anyChunkStamped == null || anyChunkStamped.Length == 0) return null;
+        int count = 0;
+        for (int i = 0; i < anyChunkStamped.Length; i++)
+        {
+            if (anyChunkStamped[i]) count++;
+        }
+        if (count == 0) return null;
+
         var names = new string[count];
-        for (int i = 0; i < count; i++)
-            names[i] = SortKeyPrefix + i;
+        int idx = 0;
+        for (int i = 0; i < anyChunkStamped.Length; i++)
+        {
+            if (anyChunkStamped[i])
+                names[idx++] = SortKeyPrefix + i;
+        }
         return names;
     }
 
     /// <summary>
-    /// Writes a sorted chunk to a spill file. Each sort key is written as a separate
-    /// named column (<c>_SYS_SK_0</c>, <c>_SYS_SK_1</c>, ...) so Arrow stores the value
-    /// in its native typed column rather than encoding it inside a JSON string.
+    /// Writes a sorted chunk to a spill file. Plain-column keys resolved to an existing column
+    /// are written directly via the original rows without copying or stamping; remaining keys
+    /// are stamped as separate named columns (<c>_SYS_SK_*</c>) so Arrow stores native typed values.
     /// </summary>
     private async Task SpillChunkAsync(
         string chunkName,
         List<SortEntry> chunk,
-        string[] keyColumnNames,
+        int[] stampedKeyIndices,
+        string[] stampedColumnNames,
         List<SortKey>? extraKeys)
     {
         await using var writer = await _context.SpillStore.CreateWriterAsync(chunkName);
-        await writer.WriteRowsAsync(StampSortKeys(chunk, keyColumnNames, extraKeys));
+        var rows = stampedKeyIndices.Length == 0
+            ? UnstampedRows(chunk)
+            : StampSortKeys(chunk, stampedKeyIndices, stampedColumnNames, extraKeys);
+        await writer.WriteRowsAsync(rows);
     }
+
+    private static IEnumerable<Row> UnstampedRows(List<SortEntry> rows)
+    {
+        foreach (var entry in rows)
+            yield return entry.Row;
+    }
+
+    private static object? GetKeyObject(in SortEntry entry, int keyIndex, List<SortKey>? extraKeys) =>
+        keyIndex == 0
+            ? entry.Key0.ToObject()
+            : extraKeys![entry.ExtraKeyOffset + (keyIndex - 1)].ToObject();
 
     private static IEnumerable<Row> StampSortKeys(
         IEnumerable<SortEntry> rows,
-        string[] keyColumnNames,
+        int[] stampedKeyIndices,
+        string[] stampedColumnNames,
         List<SortKey>? extraKeys)
     {
-        // Rows held by a schema are stamped into a copy over that schema plus the key columns,
+        // Rows held by a schema are stamped into a copy over that schema plus the stamped key columns,
         // built once per input schema: one values array per row instead of adding (and then
         // removing) dynamic dictionary columns on the caller's row.
         TableSchema? stampSource = null;
@@ -807,10 +1071,10 @@ public class ExternalSortEngine
                 if (!ReferenceEquals(schema, stampSource))
                 {
                     stamped = null;
-                    var names = new List<string>(schema.ColumnCount + keyColumnNames.Length);
+                    var names = new List<string>(schema.ColumnCount + stampedColumnNames.Length);
                     for (int i = 0; i < schema.ColumnCount; i++) names.Add(schema.GetName(i));
                     var clash = false;
-                    foreach (var key in keyColumnNames)
+                    foreach (var key in stampedColumnNames)
                     {
                         if (schema.GetIndex(key) >= 0) { clash = true; break; }
                         names.Add(key);
@@ -826,28 +1090,20 @@ public class ExternalSortEngine
                 if (stamped != null)
                 {
                     int canonical = schema.ColumnCount;
-                    var values = new object?[canonical + keyColumnNames.Length];
+                    var values = new object?[canonical + stampedColumnNames.Length];
                     for (int i = 0; i < canonical; i++) values[i] = entry.Row[i];
-                    if (keyColumnNames.Length > 0)
-                    {
-                        values[canonical] = entry.Key0.ToObject();
-                        for (int k = 1; k < keyColumnNames.Length; k++)
-                            values[canonical + k] = extraKeys![entry.ExtraKeyOffset + (k - 1)].ToObject();
-                    }
+                    for (int s = 0; s < stampedKeyIndices.Length; s++)
+                        values[canonical + s] = GetKeyObject(entry, stampedKeyIndices[s], extraKeys);
                     yield return new Row(stamped, values) { MayLackColumns = entry.Row.MayLackColumns };
                     continue;
                 }
             }
 
-            // Stamp each key into its own dedicated column before writing the row.
+            // Stamp each non-column key into its own dedicated column before writing the row.
             // These sentinel columns stay intact through intermediate passes and are
             // stripped only on the final merge pass.
-            if (keyColumnNames.Length > 0)
-            {
-                entry.Row[keyColumnNames[0]] = entry.Key0.ToObject();
-                for (int k = 1; k < keyColumnNames.Length; k++)
-                    entry.Row[keyColumnNames[k]] = extraKeys![entry.ExtraKeyOffset + (k - 1)].ToObject();
-            }
+            for (int s = 0; s < stampedColumnNames.Length; s++)
+                entry.Row[stampedColumnNames[s]] = GetKeyObject(entry, stampedKeyIndices[s], extraKeys);
 
             try
             {
@@ -857,8 +1113,8 @@ public class ExternalSortEngine
             {
                 // The spill writer snapshots each yielded row before advancing the iterator.
                 // Remove sentinels as soon as it advances, including when a write fails.
-                for (int k = 0; k < keyColumnNames.Length; k++)
-                    entry.Row.RemoveColumn(keyColumnNames[k]);
+                for (int s = 0; s < stampedColumnNames.Length; s++)
+                    entry.Row.RemoveColumn(stampedColumnNames[s]);
             }
         }
     }
@@ -869,22 +1125,36 @@ public class ExternalSortEngine
     private static SortKey ExtractKeysFromRow(
         Row row,
         string[] keyColumnNames,
+        string[]? sentinelColumnNames,
         SortKey[]? mergeExtraKeys,
         int extraOffset)
     {
         if (keyColumnNames.Length == 0) return SortKey.Null;
 
-        SortKey key0 = row.TryGetValue(keyColumnNames[0], out var raw0)
-            ? SortKey.FromValue(SpillSerializationHelper.UnwrapValue(raw0))
-            : SortKey.Null;
-
+        SortKey key0 = ReadRowKey(row, 0, keyColumnNames[0], sentinelColumnNames);
         for (int i = 1; i < keyColumnNames.Length; i++)
-        {
-            mergeExtraKeys![extraOffset + (i - 1)] = row.TryGetValue(keyColumnNames[i], out var raw)
-                ? SortKey.FromValue(SpillSerializationHelper.UnwrapValue(raw))
-                : SortKey.Null;
-        }
+            mergeExtraKeys![extraOffset + (i - 1)] = ReadRowKey(row, i, keyColumnNames[i], sentinelColumnNames);
         return key0;
+    }
+
+    private static SortKey ReadRowKey(Row row, int keyIndex, string keyColumnName, string[]? sentinelColumnNames)
+    {
+        if (sentinelColumnNames is { Length: > 0 })
+        {
+            string sentinelName = $"{SortKeyPrefix}{keyIndex}";
+            for (int s = 0; s < sentinelColumnNames.Length; s++)
+            {
+                if (string.Equals(sentinelColumnNames[s], sentinelName, StringComparison.OrdinalIgnoreCase)
+                    && row.TryGetValue(sentinelName, out var sentinelRaw))
+                {
+                    return SortKey.FromValue(SpillSerializationHelper.UnwrapValue(sentinelRaw));
+                }
+            }
+        }
+
+        return row.TryGetValue(keyColumnName, out var raw)
+            ? SortKey.FromValue(SpillSerializationHelper.UnwrapValue(raw))
+            : SortKey.Null;
     }
 
     /// <summary>

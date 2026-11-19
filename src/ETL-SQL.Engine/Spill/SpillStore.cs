@@ -942,6 +942,7 @@ public partial class SpillStore : ISpillStore
 
         public bool TryReadBufferedSortRow(
             string[] keyColumnNames,
+            string[]? sentinelColumnNames,
             bool stripSentinelColumns,
             [NotNullWhen(true)] out Row? row,
             out SortKey key0,
@@ -1386,7 +1387,7 @@ public partial class SpillStore : ISpillStore
 
         private static string GetLogicalType(object? value) => value switch
         {
-            null => "Dynamic",
+            null or DBNull => "Dynamic",
             string => "String",
             int or long or short or byte or uint or ulong or ushort or sbyte => "Integer",
             decimal => "Decimal",
@@ -1631,7 +1632,7 @@ public partial class SpillStore : ISpillStore
                 for (var i = 0; i < count; i++)
                 {
                     var value = rows[i][columnIndex];
-                    if (value is null)
+                    if (value is null or DBNull)
                     {
                         valueBuilder.Append(zeroDecimal);
                         bitmapBuilder.Append(false);
@@ -1657,7 +1658,7 @@ public partial class SpillStore : ISpillStore
                         for (var i = 0; i < rows.Count; i++)
                         {
                             var v = rows[i][columnIndex];
-                            if (v == null) b.AppendNull();
+                            if (v is null or DBNull) b.AppendNull();
                             else b.Append(ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToInt64));
                         }
                         return b.Build();
@@ -1669,7 +1670,7 @@ public partial class SpillStore : ISpillStore
                         for (var i = 0; i < rows.Count; i++)
                         {
                             var v = rows[i][columnIndex];
-                            if (v == null) b.AppendNull();
+                            if (v is null or DBNull) b.AppendNull();
                             else b.Append(Math.Round(
                                 ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToDecimal), dt.Scale));
                         }
@@ -1682,7 +1683,7 @@ public partial class SpillStore : ISpillStore
                         for (var i = 0; i < rows.Count; i++)
                         {
                             var v = rows[i][columnIndex];
-                            if (v == null) b.AppendNull();
+                            if (v is null or DBNull) b.AppendNull();
                             else b.Append(ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToDouble));
                         }
                         return b.Build();
@@ -1694,7 +1695,7 @@ public partial class SpillStore : ISpillStore
                         for (var i = 0; i < rows.Count; i++)
                         {
                             var v = rows[i][columnIndex];
-                            if (v == null) b.AppendNull();
+                            if (v is null or DBNull) b.AppendNull();
                             else b.Append(ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToBoolean));
                         }
                         return b.Build();
@@ -1706,7 +1707,7 @@ public partial class SpillStore : ISpillStore
                         for (var i = 0; i < rows.Count; i++)
                         {
                             var v = rows[i][columnIndex];
-                            if (v == null) b.AppendNull();
+                            if (v is null or DBNull) b.AppendNull();
                             else
                             {
                                 var dt = ConvertSpillValue(field, v, firstRowNumber + i, CoerceSpillDateTime);
@@ -1725,7 +1726,7 @@ public partial class SpillStore : ISpillStore
                         for (var i = 0; i < rows.Count; i++)
                         {
                             var v = rows[i][columnIndex];
-                            if (v == null) b.AppendNull();
+                            if (v is null or DBNull) b.AppendNull();
                             else if (v is DateOnly dateOnly) b.Append(DateOnlyPrefix + dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
                             else if (v is string s) b.Append(s);
                             else b.Append(JsonPrefix + JsonSerializer.Serialize(v));
@@ -1922,6 +1923,7 @@ public partial class SpillStore : ISpillStore
 
         public bool TryReadBufferedSortRow(
             string[] keyColumnNames,
+            string[]? sentinelColumnNames,
             bool stripSentinelColumns,
             [NotNullWhen(true)] out Row? row,
             out SortKey key0,
@@ -1937,7 +1939,7 @@ public partial class SpillStore : ISpillStore
 
             var batch = _currentBatch;
             int rowIndex = _currentBatchRow++;
-            EnsureSortPlan(batch, keyColumnNames, stripSentinelColumns);
+            EnsureSortPlan(batch, keyColumnNames, sentinelColumnNames, stripSentinelColumns);
 
             var keyIndices = _sortKeyColumnIndices!;
             var logicalTypes = _logicalTypes!;
@@ -2031,7 +2033,11 @@ public partial class SpillStore : ISpillStore
             _rowSchema = new ETL_SQL.Data.TableSchema(names);
         }
 
-        private void EnsureSortPlan(RecordBatch batch, string[] keyColumnNames, bool stripSentinelColumns)
+        private void EnsureSortPlan(
+            RecordBatch batch,
+            string[] keyColumnNames,
+            string[]? sentinelColumnNames,
+            bool stripSentinelColumns)
         {
             EnsureRowSchema(batch);
             if (_sortPlanInitialized) return;
@@ -2039,10 +2045,27 @@ public partial class SpillStore : ISpillStore
             var schema = _rowSchema!;
             var keyIndices = new int[keyColumnNames.Length];
             for (int k = 0; k < keyColumnNames.Length; k++)
-                keyIndices[k] = schema.GetIndex(keyColumnNames[k]);
+            {
+                int idx = -1;
+                if (sentinelColumnNames is { Length: > 0 })
+                {
+                    string sentinelName = $"{ExternalSortEngine.SortKeyPrefix}{k}";
+                    for (int s = 0; s < sentinelColumnNames.Length; s++)
+                    {
+                        if (string.Equals(sentinelColumnNames[s], sentinelName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            idx = schema.GetIndex(sentinelName);
+                            break;
+                        }
+                    }
+                }
+                if (idx < 0)
+                    idx = schema.GetIndex(keyColumnNames[k]);
+                keyIndices[k] = idx;
+            }
             _sortKeyColumnIndices = keyIndices;
 
-            if (stripSentinelColumns && keyColumnNames.Length > 0)
+            if (stripSentinelColumns && sentinelColumnNames is { Length: > 0 })
             {
                 var kept = new List<int>(schema.ColumnCount);
                 var keptNames = new List<string>(schema.ColumnCount);
@@ -2050,9 +2073,9 @@ public partial class SpillStore : ISpillStore
                 {
                     string name = schema.GetName(i);
                     bool isSentinel = false;
-                    for (int k = 0; k < keyColumnNames.Length; k++)
+                    for (int k = 0; k < sentinelColumnNames.Length; k++)
                     {
-                        if (string.Equals(name, keyColumnNames[k], StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(name, sentinelColumnNames[k], StringComparison.OrdinalIgnoreCase))
                         {
                             isSentinel = true;
                             break;
