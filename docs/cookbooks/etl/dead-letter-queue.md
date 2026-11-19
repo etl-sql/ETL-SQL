@@ -1,5 +1,39 @@
 # Dead-Letter Queue (Error Row Routing)
+<!-- description: **▶ Runs as-is.** Route bad rows to a dead-letter table with a reason for later reprocessing, while good rows keep loading. -->
 Instead of failing an entire load when individual rows are bad, route problem rows to a dead-letter table for later inspection and reprocessing. Good rows continue loading unaffected.
+
+## Try It Now (No Database Needed)
+
+Paste into a `.etlsql` file and press **F5**. The built-in `MOCKDB()` connector supplies orders and a product dimension:
+
+```sql
+CREATE CONNECTION demo AS MOCKDB();
+
+-- 1. Stage the inbound feed and the product dimension
+SELECT SaleID, ProductID, Quantity, UnitPrice, OrderDate INTO #inbound FROM demo.Orders;
+-- Discontinued products are not in the active dimension, so their orders are rejected
+SELECT ProductID INTO #dim_product FROM demo.Products WHERE Discontinued = 0;
+
+-- 2. Split: rows with a known product load; the rest go to the dead-letter table
+SELECT o.SaleID, o.ProductID, o.Quantity, o.UnitPrice, o.OrderDate
+INTO #good_rows
+FROM #inbound AS o
+WHERE EXISTS (SELECT 1 FROM #dim_product AS p WHERE p.ProductID = o.ProductID);
+
+SELECT GETDATE() AS ReceivedAt, 'UNKNOWN_OR_DISCONTINUED_PRODUCT' AS ErrorReason,
+       o.SaleID, o.ProductID, o.Quantity, o.UnitPrice
+INTO #dead_letter
+FROM #inbound AS o
+WHERE NOT EXISTS (SELECT 1 FROM #dim_product AS p WHERE p.ProductID = o.ProductID);
+
+PRINT 'Loaded: ' + CAST((SELECT COUNT(*) FROM #good_rows) AS STRING) + ' rows. Dead-lettered: '
+    + CAST((SELECT COUNT(*) FROM #dead_letter) AS STRING) + ' rows.';
+SELECT ReceivedAt, ErrorReason, SaleID, ProductID, Quantity FROM #dead_letter;
+```
+
+Orders for discontinued products fail the lookup and are routed to `#dead_letter` with a reason, while the rest continue. In production, write the dead-letter rows to a durable table so they can be fixed and reprocessed:
+
+## Production Version
 
 **Pattern Scenario:** Process an order feed where some rows have invalid product codes.
 

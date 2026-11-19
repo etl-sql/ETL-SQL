@@ -2,6 +2,9 @@
 
 [« Back to parent](../README.md)
 
+Recipes marked **▶ Runs as-is** include a block that runs on the built-in `MOCKDB()` connector — paste
+into a `.etlsql` file and press **F5**. The rest show production patterns against your own servers.
+
 | Page | Description |
 | :--- | :--- |
 | [Automated Email Alerting](automated-email-alerting.md) | Centralized error reporting pattern using an `SMTP` connection and `SEND EMAIL`. |
@@ -9,13 +12,13 @@
 | [Automated Slack/Teams Alerting](automated-slack-teams-alerting.md) | Pipeline and error alerting to Slack and Microsoft Teams using `SLACK` and `TEAMS` webhook connections. |
 | [The Batch Directory Ingester (Automation)](batch-directory-ingester.md) | Processes all new files in a directory, loads them into a central store, and moves them to an archive folder. |
 | [Cross-Platform Reconciliation](cross-platform-reconciliation.md) | Compare local flat files against a remote production database to identify missing sync records. |
-| [Data Quality Gate](data-quality-gate.md) | Assert data quality before loading. This pattern catches bad data (nulls, orphaned keys, out-of-range values) and either fails the job or routes ba... |
-| [Dead-Letter Queue (Error Row Routing)](dead-letter-queue.md) | Instead of failing an entire load when individual rows are bad, route problem rows to a dead-letter table for later inspection and reprocessing. Go... |
+| [Data Quality Gate](data-quality-gate.md) | **▶ Runs as-is.** Assert data quality before loading: in-stream EXPECT rules quarantine bad rows (nulls, orphaned keys, out-of-range values) or fail the job. |
+| [Dead-Letter Queue (Error Row Routing)](dead-letter-queue.md) | **▶ Runs as-is.** Route bad rows to a dead-letter table with a reason for later reprocessing, while good rows keep loading. |
 | [Dynamic SQL with EXEC](dynamic-sql-with-exec.md) | Build and execute SQL statements at runtime — essential for parameterized table names, dynamic column lists, and multi-tenant pipelines where the s... |
 | [End-to-End Lineage Across Two Scripts (Flat File → EDW → Report)](end-to-end-lineage.md) | A column in a report is worth little if nobody can say where its number came from. This recipe |
 | [Financial Reporting (PIVOT)](financial-reporting-pivot.md) | Rotate vertical transaction logs into a horizontal quarterly summary for executive reporting. |
 | [Full Refresh (Truncate & Reload)](full-refresh.md) | The simplest load strategy — wipe the target and reload completely from source. Appropriate for small reference/dimension tables where CDC is overk... |
-| [Fuzzy Entity Resolution (Customer De-duplication)](fuzzy-entity-resolution.md) | Inbound names from third-party feeds rarely match your canonical list exactly. `FUZZY JOIN` matches on a similarity score instead of equality and i... |
+| [Fuzzy Entity Resolution (Customer De-duplication)](fuzzy-entity-resolution.md) | **▶ Runs as-is.** `FUZZY JOIN` resolves messy third-party names to a canonical list by similarity score and isolates the rest for manual review. |
 | [Graph Ingestion & Querying (Neo4j)](graph-ingestion-neo4j.md) | This recipe demonstrates how to ingest relational nodes and edges into Neo4j, and query them back using native Cypher pushdown block syntax. |
 | [Immutable Published Script Bundles (CI/CD Deployment)](immutable-published-bundles.md) | This pattern compiles and packages a multi-file script folder into an immutable versioned bundle inside the Orchestrator lockbox. It then registers... |
 | [Importing Curated Lineage & Tags (Non-Standard Sources)](importing-curated-lineage.md) | When column documentation, ownership, or lineage already lives in your own catalog — a spreadsheet, a governance tool, or a previous run's OpenLine... |
@@ -33,7 +36,7 @@
 | [The Secure Vendor Handshake (Export & Transmit)](secure-vendor-handshake.md) | A robust pattern for exporting sensitive internal data, securing it, and transmitting it to a vendor SFTP. |
 | [Specification-Driven Vendor Feed Build](spec-driven-vendor-feed.md) | Use this pattern when a vendor gives you a PDF, Excel workbook, or data dictionary and you want a strong ETL-SQL starting point without hand-transc... |
 | [The Staged Ingestion (Classical ETL)](staged-ingestion.md) | This pattern extracts data from a remote source, stages it in the Engine workspace for validation, and performs an atomic `MERGE` into the producti... |
-| [Time Series Gap Filling (FILL_DATES)](time-series-gap-filling.md) | When building reporting dashboards (e.g. daily sales charts), missing dates in the raw transaction log will cause dates to be skipped on the chart ... |
+| [Time Series Gap Filling (FILL_DATES)](time-series-gap-filling.md) | **▶ Runs as-is.** `TRANSFORM ... USING FILL_DATES` materializes missing dates per group with a default value, so chart axes never skip a day. |
 
 ---
 
