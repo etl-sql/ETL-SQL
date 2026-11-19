@@ -136,9 +136,11 @@ fuzzy matching recipes run on MOCKDB; multi-context-join and SCD Type 2 bugs fix
 - [ ] **DOC07 Binary values print as `System.Byte[]`.** `SELECT HASHBYTES('SHA256','a')` shows
   `System.Byte[]` in CLI results, so the PII masking recipe's hash column is unreadable. Render
   binary as hex (`0x...`) in the results table. S
-- [ ] **DOC03 Run-test the cookbooks in CI.** `CookbookVerificationTests` only parses recipes, which
-  is how the Quickstart and map recipes shipped broken. Execute the MOCKDB/inline-data recipes and
-  build every report recipe in a docs lane. M
+- [x] **DOC03 Run-test the cookbooks in CI.** Done 2026-11-19: `RunnableDocSampleTests` lints and runs
+  25 blocks (Quickstart MOCKDB blocks, every report recipe block, ETL recipes marked "Runs as-is")
+  and fails a report with any failed visual. Proven by reintroducing the `Amount` and missing
+  `MODE = POINTS` bugs. Docs-only changes select full CI, so it runs on every doc edit. A new
+  runnable ETL recipe only needs "Runs as-is" in its curated description.
 - [ ] **DOC04 More "Try It Now" blocks.** 26 ETL recipes still need real servers. Next candidates:
   incremental load with high-water mark, staged ingestion, PIVOT, PII masking, full refresh. M
 - [ ] **DOC05 VS Code Get Started walkthrough (optional).** The extension has no `walkthroughs`
