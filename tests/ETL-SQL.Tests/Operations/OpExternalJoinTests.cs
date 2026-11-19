@@ -428,7 +428,7 @@ namespace ETL_SQL.Tests.Operations.Operations
             Assert.True(table.SlabCount >= 1 && table.SlabCount < table.RowCount,
                 $"Expected multiple rows packed per slab, saw {table.SlabCount} slabs for {table.RowCount} rows.");
 
-            var chain = table.Index[dupKey];
+            Assert.True(table.TryGetChain(dupKey, out var chain));
             var observedDupSecrets = new List<string?>();
             for (int idx = chain.Head; idx >= 0; idx = table.GetNextInBucket(idx))
                 observedDupSecrets.Add(table.UnpackRow(idx)["SecretPayload"]?.ToString());
@@ -446,6 +446,227 @@ namespace ETL_SQL.Tests.Operations.Operations
                 for (int i = 0; i < slab.Used; i++)
                     Assert.Equal((byte)0, slab.Buffer[i]);
             }
+        }
+
+        [Fact]
+        public void JoinKey_PreservesCompoundKeyNormalizationAndEqualityRules()
+        {
+            Assert.True(JoinKey.FromValue(null).IsNull);
+            Assert.True(JoinKey.FromValue(DBNull.Value).IsNull);
+
+            var dec1 = JoinKey.FromValue(1m);
+            var dec10 = JoinKey.FromValue(1.0m);
+            var dec100 = JoinKey.FromValue(1.00m);
+            var str1 = JoinKey.FromValue("1");
+            var str100 = JoinKey.FromValue(" 1.00 ");
+            var int1 = JoinKey.FromValue(1);
+            var short1 = JoinKey.FromValue((short)1);
+
+            Assert.True(JoinKey.Equals(dec1, dec10, caseSensitive: false));
+            Assert.True(JoinKey.Equals(dec1, dec100, caseSensitive: false));
+            Assert.True(JoinKey.Equals(dec1, str1, caseSensitive: false));
+            Assert.True(JoinKey.Equals(dec1, str100, caseSensitive: false));
+            Assert.True(JoinKey.Equals(dec1, int1, caseSensitive: false));
+            Assert.True(JoinKey.Equals(dec1, short1, caseSensitive: false));
+
+            int hDec = JoinKey.ComputeHashCode(0, dec1, ReadOnlySpan<JoinKey>.Empty, caseSensitive: false);
+            Assert.Equal(hDec, JoinKey.ComputeHashCode(0, dec10, ReadOnlySpan<JoinKey>.Empty, caseSensitive: false));
+            Assert.Equal(hDec, JoinKey.ComputeHashCode(0, str1, ReadOnlySpan<JoinKey>.Empty, caseSensitive: false));
+            Assert.Equal(hDec, JoinKey.ComputeHashCode(0, short1, ReadOnlySpan<JoinKey>.Empty, caseSensitive: false));
+
+            // Leading-zero codes stay strings and do not collapse into numbers.
+            var code001 = JoinKey.FromValue("001");
+            Assert.False(JoinKey.Equals(code001, dec1, caseSensitive: false));
+            Assert.True(JoinKey.Equals(code001, JoinKey.FromValue("001"), caseSensitive: false));
+
+            var upper = JoinKey.FromValue("Alpha");
+            var lower = JoinKey.FromValue("alpha");
+            Assert.True(JoinKey.Equals(upper, lower, caseSensitive: false));
+            Assert.Equal(
+                JoinKey.ComputeHashCode(0, upper, ReadOnlySpan<JoinKey>.Empty, caseSensitive: false),
+                JoinKey.ComputeHashCode(0, lower, ReadOnlySpan<JoinKey>.Empty, caseSensitive: false));
+            Assert.False(JoinKey.Equals(upper, lower, caseSensitive: true));
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(4)]
+        public async Task ApplyHashJoinExternal_DecimalScale_NumericStrings_AndDuplicateFanOut(int partitions)
+        {
+            var (eval, logger) = BuildContext(partitions: partitions);
+            var engine = new ExternalJoinEngine(eval, logger);
+
+            var leftRows = new List<Row>
+            {
+                new() { ["id"] = "003", ["lval"] = "L003" },
+                new() { ["id"] = 1m, ["lval"] = "L1" },
+                new() { ["id"] = "2", ["lval"] = "L2" },
+                new() { ["id"] = 4m, ["lval"] = "L4a" },
+                new() { ["id"] = 4.0m, ["lval"] = "L4b" },
+                new() { ["id"] = 5m, ["lval"] = "L5" },
+            };
+
+            var rightRows = new List<Row>
+            {
+                new() { ["id"] = "009", ["rval"] = "R009" },
+                new() { ["id"] = 1.0m, ["rval"] = "R1" },
+                new() { ["id"] = 2m, ["rval"] = "R2a" },
+                new() { ["id"] = 2.00m, ["rval"] = "R2b" },
+                new() { ["id"] = 3m, ["rval"] = "R3" },
+                new() { ["id"] = 4.00m, ["rval"] = "R4a" },
+                new() { ["id"] = 4m, ["rval"] = "R4b" },
+                new() { ["id"] = (short)5, ["rval"] = "R5" },
+            };
+
+            var results = await engine.ApplyHashJoinExternal(
+                leftRows.ToAsyncEnumerable(),
+                rightRows.ToAsyncEnumerable(),
+                InnerOnId,
+                new List<string> { "id" },
+                new List<string> { "id" }).ToListAsync();
+
+            var pairs = results.Select(r => $"{r["lval"]}:{r["rval"]}").OrderBy(x => x, StringComparer.Ordinal).ToList();
+            Assert.Equal(
+                new[] { "L1:R1", "L2:R2a", "L2:R2b", "L4a:R4a", "L4a:R4b", "L4b:R4a", "L4b:R4b", "L5:R5" },
+                pairs);
+        }
+
+        [Fact]
+        public async Task ApplyHashJoinExternal_NullKeysAndOuterPartitions_PreserveUnmatchedAndExcludeNullMatches()
+        {
+            var leftRows = new List<Row>
+            {
+                new() { ["id"] = null, ["lval"] = "L_null" },
+                new() { ["id"] = 1, ["lval"] = "L1" },
+                new() { ["id"] = 2, ["lval"] = "L2_only" },
+                new() { ["id"] = 3, ["lval"] = "L3_only" },
+            };
+
+            var rightRows = new List<Row>
+            {
+                new() { ["id"] = null, ["rval"] = "R_null" },
+                new() { ["id"] = 1, ["rval"] = "R1" },
+                new() { ["id"] = 4, ["rval"] = "R4_only" },
+                new() { ["id"] = 5, ["rval"] = "R5_only" },
+            };
+
+            // INNER: NULL keys never match.
+            {
+                var (eval, logger) = BuildContext(partitions: 4);
+                var engine = new ExternalJoinEngine(eval, logger);
+                var inner = await engine.ApplyHashJoinExternal(
+                    leftRows.ToAsyncEnumerable(),
+                    rightRows.ToAsyncEnumerable(),
+                    InnerOnId,
+                    new List<string> { "id" },
+                    new List<string> { "id" }).ToListAsync();
+
+                Assert.Single(inner);
+                Assert.Equal("L1", inner[0]["lval"]);
+                Assert.Equal("R1", inner[0]["rval"]);
+            }
+
+            // FULL OUTER: preserves unmatched rows (including NULL keys) across spill partitions.
+            {
+                var (eval, logger) = BuildContext(partitions: 4);
+                var engine = new ExternalJoinEngine(eval, logger);
+                var fullJoin = new JoinClause(
+                    "FULL OUTER",
+                    new TableReference("right"),
+                    new BinaryExpression(new IdentifierExpression("id"), TokenType.EQUALS, new IdentifierExpression("id")));
+
+                var full = await engine.ApplyHashJoinExternal(
+                    leftRows.ToAsyncEnumerable(),
+                    rightRows.ToAsyncEnumerable(),
+                    fullJoin,
+                    new List<string> { "id" },
+                    new List<string> { "id" }).ToListAsync();
+
+                Assert.Equal(7, full.Count);
+                Assert.Contains(full, r => r["lval"]?.ToString() == "L_null" && r["rval"] == null);
+                Assert.Contains(full, r => r["rval"]?.ToString() == "R_null" && r["lval"] == null);
+                Assert.Contains(full, r => r["lval"]?.ToString() == "L2_only" && r["rval"] == null);
+                Assert.Contains(full, r => r["lval"]?.ToString() == "L3_only" && r["rval"] == null);
+                Assert.Contains(full, r => r["rval"]?.ToString() == "R4_only" && r["lval"] == null);
+                Assert.Contains(full, r => r["rval"]?.ToString() == "R5_only" && r["lval"] == null);
+                Assert.Contains(full, r => r["lval"]?.ToString() == "L1" && r["rval"]?.ToString() == "R1");
+            }
+
+            // LEFT SEMI and LEFT ANTI: NULL keys never match.
+            {
+                var (eval, logger) = BuildContext(partitions: 4);
+                var engine = new ExternalJoinEngine(eval, logger);
+                var semiJoin = new JoinClause(
+                    "LEFT SEMI",
+                    new TableReference("right"),
+                    new BinaryExpression(new IdentifierExpression("id"), TokenType.EQUALS, new IdentifierExpression("id")));
+
+                var semi = await engine.ApplyHashJoinExternal(
+                    leftRows.ToAsyncEnumerable(),
+                    rightRows.ToAsyncEnumerable(),
+                    semiJoin,
+                    new List<string> { "id" },
+                    new List<string> { "id" }).ToListAsync();
+
+                Assert.Single(semi);
+                Assert.Equal("L1", semi[0]["lval"]);
+            }
+
+            {
+                var (eval, logger) = BuildContext(partitions: 4);
+                var engine = new ExternalJoinEngine(eval, logger);
+                var antiJoin = new JoinClause(
+                    "LEFT ANTI",
+                    new TableReference("right"),
+                    new BinaryExpression(new IdentifierExpression("id"), TokenType.EQUALS, new IdentifierExpression("id")));
+
+                var anti = await engine.ApplyHashJoinExternal(
+                    leftRows.ToAsyncEnumerable(),
+                    rightRows.ToAsyncEnumerable(),
+                    antiJoin,
+                    new List<string> { "id" },
+                    new List<string> { "id" }).ToListAsync();
+
+                var antiVals = anti.Select(r => r["lval"]?.ToString()).OrderBy(x => x, StringComparer.Ordinal).ToList();
+                Assert.Equal(new[] { "L2_only", "L3_only", "L_null" }, antiVals);
+            }
+        }
+
+        [Fact]
+        public async Task ApplyHashJoinExternal_CompositeKeys_HandleExtraKeysAndPartialNulls()
+        {
+            var (eval, logger) = BuildContext(partitions: 4);
+            var engine = new ExternalJoinEngine(eval, logger);
+
+            var leftRows = new List<Row>
+            {
+                new() { ["k1"] = 1m, ["k2"] = "1.0", ["lval"] = "L_match" },
+                new() { ["k1"] = 1m, ["k2"] = null, ["lval"] = "L_null2" },
+                new() { ["k1"] = 2m, ["k2"] = "alpha", ["lval"] = "L_case" },
+            };
+
+            var rightRows = new List<Row>
+            {
+                new() { ["k1"] = 1.0m, ["k2"] = "1", ["rval"] = "R_match" }, // one runtime type per column: spill rejects mixed columns
+                new() { ["k1"] = 1m, ["k2"] = null, ["rval"] = "R_null2" },
+                new() { ["k1"] = 2m, ["k2"] = "ALPHA", ["rval"] = "R_case" },
+            };
+
+            var cond = new BinaryExpression(
+                new BinaryExpression(new IdentifierExpression("k1"), TokenType.EQUALS, new IdentifierExpression("k1")),
+                TokenType.AND,
+                new BinaryExpression(new IdentifierExpression("k2"), TokenType.EQUALS, new IdentifierExpression("k2")));
+            var join = new JoinClause("INNER", new TableReference("right"), cond);
+
+            var results = await engine.ApplyHashJoinExternal(
+                leftRows.ToAsyncEnumerable(),
+                rightRows.ToAsyncEnumerable(),
+                join,
+                new List<string> { "k1", "k2" },
+                new List<string> { "k1", "k2" }).ToListAsync();
+
+            var pairs = results.Select(r => $"{r["lval"]}:{r["rval"]}").OrderBy(x => x, StringComparer.Ordinal).ToList();
+            Assert.Equal(new[] { "L_case:R_case", "L_match:R_match" }, pairs);
         }
     }
 }

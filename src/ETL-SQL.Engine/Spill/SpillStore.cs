@@ -996,8 +996,10 @@ public partial class SpillStore : ISpillStore
         private const string JsonPrefix = "\x1Ejson:";
 
         private Schema? _schema;
+        private string[]? _schemaLogicalTypes;
         private ArrowStreamWriter? _arrowWriter;
-        private readonly List<Row> _buffer = new();
+        private readonly List<object?[]> _buffer = new();
+        private readonly Stack<object?[]> _slotPool = new();
         private long _bufferedBytes;
         private long _acceptedRowCount;
 
@@ -1055,19 +1057,19 @@ public partial class SpillStore : ISpillStore
         {
             try
             {
-                // Snapshot columns immediately — callers may mutate the row after WriteRowAsync returns
-                // (e.g. PartitionStreamMultiSet stamps __SET_IDX on the same Row object across iterations).
-                var snapshot = SnapshotRow(row);
-
+                // Snapshot values immediately into a pooled slot — callers may mutate the row after
+                // WriteRowAsync returns (e.g. PartitionStreamMultiSet stamps __SET_IDX across iterations).
                 if (_schema == null)
                 {
-                    _schema = InferSchema(snapshot);
+                    var firstSnapshot = SnapshotRow(row);
+                    _schema = InferSchema(firstSnapshot);
+                    _schemaLogicalTypes = CacheLogicalTypes(_schema);
                     _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
                     await _arrowWriter.WriteStartAsync(CancellationToken.None);
                 }
 
-                _buffer.Add(snapshot);
-                _bufferedBytes += snapshot.EstimateHeapBytes();
+                _buffer.Add(CaptureRowSlot(row));
+                _bufferedBytes += row.EstimateHeapBytes();
                 _acceptedRowCount++;
 
                 if (_context.Telemetry != null)
@@ -1089,6 +1091,38 @@ public partial class SpillStore : ISpillStore
                 _faulted = true;
                 throw;
             }
+        }
+
+        private object?[] CaptureRowSlot(Row row)
+        {
+            int width = _schema!.FieldsList.Count;
+            var slot = _slotPool.Count > 0 ? _slotPool.Pop() : new object?[width];
+            var schema = row.Schema;
+            if (schema != null
+                && ReferenceEquals(schema, _snapshotSourceSchema)
+                && !row.HasDynamicColumns
+                && _snapshotDynamicNames.Length == 0
+                && schema.ColumnCount + _snapshotAliasSources.Length == width)
+            {
+                int canonical = schema.ColumnCount;
+                for (int i = 0; i < canonical; i++) slot[i] = row[i];
+                for (int i = 0; i < _snapshotAliasSources.Length; i++)
+                    slot[canonical + i] = row[_snapshotAliasSources[i]];
+                return slot;
+            }
+
+            var fields = _schema.FieldsList;
+            for (int c = 0; c < width; c++)
+                slot[c] = row.TryGetValue(fields[c].Name, out var v) ? v : null;
+            return slot;
+        }
+
+        private static string[] CacheLogicalTypes(Schema schema)
+        {
+            var types = new string[schema.FieldsList.Count];
+            for (int i = 0; i < types.Length; i++)
+                types[i] = schema.Metadata[$"{LogicalTypeKeyPrefix}{i}.logical_type"];
+            return types;
         }
 
         // Snapshot plan, rebuilt when the incoming schema or dynamic-column layout changes. The
@@ -1184,16 +1218,17 @@ public partial class SpillStore : ISpillStore
                 long telemetryBytes = 0;
                 foreach (var row in rows)
                 {
-                    var snapshot = SnapshotRow(row);
                     if (_schema == null)
                     {
-                        _schema = InferSchema(snapshot);
+                        var firstSnapshot = SnapshotRow(row);
+                        _schema = InferSchema(firstSnapshot);
+                        _schemaLogicalTypes = CacheLogicalTypes(_schema);
                         _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
                         await _arrowWriter.WriteStartAsync(CancellationToken.None);
                     }
 
-                    _buffer.Add(snapshot);
-                    _bufferedBytes += snapshot.EstimateHeapBytes();
+                    _buffer.Add(CaptureRowSlot(row));
+                    _bufferedBytes += row.EstimateHeapBytes();
                     _acceptedRowCount++;
                     telemetryBytes += row.ColumnCount * 16L; // allocation-free; see WriteRowAsync
                     if (_buffer.Count >= _flushBatchSize || (_flushBatchBytes > 0 && _bufferedBytes >= _flushBatchBytes))
@@ -1224,6 +1259,7 @@ public partial class SpillStore : ISpillStore
                 if (_schema == null)
                 {
                     _schema = InferSchema(batch);
+                    _schemaLogicalTypes = CacheLogicalTypes(_schema);
                     _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
                     await _arrowWriter.WriteStartAsync(CancellationToken.None);
                 }
@@ -1271,6 +1307,13 @@ public partial class SpillStore : ISpillStore
             if (_buffer.Count == 0 || _arrowWriter == null) return;
             using var batch = BuildBatch(_buffer);
             await _arrowWriter.WriteRecordBatchAsync(batch);
+            for (int i = 0; i < _buffer.Count; i++)
+            {
+                var slot = _buffer[i];
+                System.Array.Clear(slot);
+                if (_slotPool.Count < _flushBatchSize)
+                    _slotPool.Push(slot);
+            }
             _buffer.Clear();
             _bufferedBytes = 0;
         }
@@ -1368,13 +1411,14 @@ public partial class SpillStore : ISpillStore
             _ => StringType.Default
         };
 
-        private RecordBatch BuildBatch(List<Row> rows)
+        private RecordBatch BuildBatch(List<object?[]> rows)
         {
             var firstRowNumber = _acceptedRowCount - rows.Count + 1;
-            var arrays = _schema!.FieldsList
-                .Select((f, i) => BuildArray(f, rows, firstRowNumber,
-                    _schema.Metadata[$"{LogicalTypeKeyPrefix}{i}.logical_type"]))
-                .ToList();
+            var fields = _schema!.FieldsList;
+            var logicalTypes = _schemaLogicalTypes ??= CacheLogicalTypes(_schema);
+            var arrays = new List<IArrowArray>(fields.Count);
+            for (int i = 0; i < fields.Count; i++)
+                arrays.Add(BuildArray(fields[i], i, rows, firstRowNumber, logicalTypes[i]));
             return new RecordBatch(_schema, arrays, rows.Count);
         }
 
@@ -1573,7 +1617,7 @@ public partial class SpillStore : ISpillStore
             return builder.Build();
         }
 
-        private IArrowArray BuildArray(Field field, List<Row> rows, long firstRowNumber, string logicalType)
+        private IArrowArray BuildArray(Field field, int columnIndex, List<object?[]> rows, long firstRowNumber, string logicalType)
         {
             if (IsDecimalLogicalType(logicalType))
             {
@@ -1586,7 +1630,7 @@ public partial class SpillStore : ISpillStore
                 zeroDecimal.Clear();
                 for (var i = 0; i < count; i++)
                 {
-                    var value = rows[i].TryGetValue(field.Name, out var found) ? found : null;
+                    var value = rows[i][columnIndex];
                     if (value is null)
                     {
                         valueBuilder.Append(zeroDecimal);
@@ -1612,8 +1656,7 @@ public partial class SpillStore : ISpillStore
                         b.Reserve(rows.Count);
                         for (var i = 0; i < rows.Count; i++)
                         {
-                            var row = rows[i];
-                            var v = row.TryGetValue(field.Name, out var val) ? val : null;
+                            var v = rows[i][columnIndex];
                             if (v == null) b.AppendNull();
                             else b.Append(ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToInt64));
                         }
@@ -1625,8 +1668,7 @@ public partial class SpillStore : ISpillStore
                         b.Reserve(rows.Count);
                         for (var i = 0; i < rows.Count; i++)
                         {
-                            var row = rows[i];
-                            var v = row.TryGetValue(field.Name, out var val) ? val : null;
+                            var v = rows[i][columnIndex];
                             if (v == null) b.AppendNull();
                             else b.Append(Math.Round(
                                 ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToDecimal), dt.Scale));
@@ -1639,8 +1681,7 @@ public partial class SpillStore : ISpillStore
                         b.Reserve(rows.Count);
                         for (var i = 0; i < rows.Count; i++)
                         {
-                            var row = rows[i];
-                            var v = row.TryGetValue(field.Name, out var val) ? val : null;
+                            var v = rows[i][columnIndex];
                             if (v == null) b.AppendNull();
                             else b.Append(ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToDouble));
                         }
@@ -1652,8 +1693,7 @@ public partial class SpillStore : ISpillStore
                         b.Reserve(rows.Count);
                         for (var i = 0; i < rows.Count; i++)
                         {
-                            var row = rows[i];
-                            var v = row.TryGetValue(field.Name, out var val) ? val : null;
+                            var v = rows[i][columnIndex];
                             if (v == null) b.AppendNull();
                             else b.Append(ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToBoolean));
                         }
@@ -1665,8 +1705,7 @@ public partial class SpillStore : ISpillStore
                         b.Reserve(rows.Count);
                         for (var i = 0; i < rows.Count; i++)
                         {
-                            var row = rows[i];
-                            var v = row.TryGetValue(field.Name, out var val) ? val : null;
+                            var v = rows[i][columnIndex];
                             if (v == null) b.AppendNull();
                             else
                             {
@@ -1683,9 +1722,9 @@ public partial class SpillStore : ISpillStore
                     {
                         var b = new StringArray.Builder();
                         b.Reserve(rows.Count);
-                        foreach (var row in rows)
+                        for (var i = 0; i < rows.Count; i++)
                         {
-                            var v = row.TryGetValue(field.Name, out var val) ? val : null;
+                            var v = rows[i][columnIndex];
                             if (v == null) b.AppendNull();
                             else if (v is DateOnly dateOnly) b.Append(DateOnlyPrefix + dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
                             else if (v is string s) b.Append(s);
@@ -1745,7 +1784,11 @@ public partial class SpillStore : ISpillStore
             }
             finally
             {
+                for (int i = 0; i < _buffer.Count; i++)
+                    System.Array.Clear(_buffer[i]);
                 _buffer.Clear();
+                while (_slotPool.TryPop(out var pooledSlot))
+                    System.Array.Clear(pooledSlot);
                 _bufferedBytes = 0;
                 _arrowWriter?.Dispose();
                 try

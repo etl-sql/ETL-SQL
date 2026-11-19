@@ -148,7 +148,10 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
   500k-row profile: sort 2,167 → 1,645 B/row, window 3,007 → 2,412 B/row (`Task<Row>` 139/217 → 0).
   Hosted baselines recalibrated at 98499f0cd (calibration run 44496149410, replica r1; Standard
   allocated MB: window −64%, join −34%, sort −34%, cube −34%, aggregate −17%).
-  Still open: columnar batch reads for sort/window and packed join storage.
+  Slice 3 (external join): unboxed `JoinKey` in `PackedBuildTable`, pooled `RowPacker` buffer,
+  bool-compiled join predicates, `ValueTask` join spill reads. Same-host 500k-row profile: join
+  3,250 → 1,790 B/row, sort 1,645 → 1,500, window 2,412 → 2,164.
+  Still open: columnar batch reads for sort/window, and a hosted recalibration after slice 3.
 
 ### 3.3 Operations console completion
 

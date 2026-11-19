@@ -14,6 +14,7 @@ using ETL_SQL.Core.Planning;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Planning;
+using ETL_SQL.Engine.Services;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -135,11 +136,12 @@ public class ExternalJoinEngine
         if (sample.Count == 0) return;
         long inputBytes = 0;
         long keyBytes = 0;
+        var keyList = keys as List<string> ?? keys.ToList();
         var frequencies = new Dictionary<CompoundKey, int>();
         foreach (var row in sample)
         {
             inputBytes = checked(inputBytes + row.EstimateHeapBytes());
-            var key = GetHashKey(row, keys.ToList());
+            var key = GetHashKey(row, keyList);
             keyBytes = checked(keyBytes + RowMemory.EstimateKeyBytes(key));
             frequencies[key] = frequencies.TryGetValue(key, out var count) ? count + 1 : 1;
         }
@@ -201,7 +203,7 @@ public class ExternalJoinEngine
         PackedBuildTable? hashTable = null;
         try
         {
-            hashTable = await BuildJoinHashTable(rightName, rightKeys, ceiling, buildLease);
+            hashTable = await BuildJoinHashTable(rightName, rightKeys, ceiling, buildLease, rightRowCount);
         }
         catch
         {
@@ -254,7 +256,7 @@ public class ExternalJoinEngine
                 "Engine:MemoryGovernorPolicy = SpillOnly to churn to completion.");
 
             // SpillOnly churn: rebuild unguarded and continue.
-            hashTable = await BuildJoinHashTable(rightName, rightKeys, 0, lease: null);
+            hashTable = await BuildJoinHashTable(rightName, rightKeys, 0, lease: null, rightRowCount);
         }
 
         // Build side is materialized in PackedBuildTable and its reader has closed; delete build partition before probing.
@@ -335,17 +337,27 @@ public class ExternalJoinEngine
     /// accumulated build footprint crosses the governor ceiling mid-build, so the caller can
     /// repartition or apply policy before any probe row has been emitted.
     /// </summary>
-    private async Task<PackedBuildTable?> BuildJoinHashTable(string rightName, List<string> rightKeys, long budgetBytes, IMemoryGrantLease? lease)
+    private async Task<PackedBuildTable?> BuildJoinHashTable(string rightName, List<string> rightKeys, long budgetBytes, IMemoryGrantLease? lease, long expectedRows = 0)
     {
         var guard = new MemoryBudgetGuard(budgetBytes);
-        var table = new PackedBuildTable(budgetBytes);
+        bool caseSensitive = _context.CaseSensitiveComparison;
+        long cappedExpected = budgetBytes > 0
+            ? Math.Min(expectedRows, Math.Max(64L, budgetBytes / 64))
+            : expectedRows;
+        int initialCapacity = cappedExpected > 0 ? (int)Math.Min(1 << 20, cappedExpected) : 0;
+        var table = new PackedBuildTable(budgetBytes, caseSensitive, rightKeys.Count, initialCapacity);
         using var packer = new RowPacker();
         bool columnsCaptured = false;
+        int keyCount = rightKeys.Count;
+        int extraCount = Math.Max(0, keyCount - 1);
+        JoinKey[] extraKeyBuffer = extraCount > 0 ? new JoinKey[extraCount] : Array.Empty<JoinKey>();
         try
         {
             await using var rightReader = await _context.SpillStore.CreateReaderAsync(rightName);
             if (rightReader is IColumnarSpillReader columnarReader)
             {
+                ColumnBatchSchema? cachedBatchSchema = null;
+                int[] keyOrdinals = keyCount > 0 ? new int[keyCount] : Array.Empty<int>();
                 await foreach (var batch in columnarReader.AsColumnBatchesAsync())
                 {
                     using (batch)
@@ -355,17 +367,31 @@ public class ExternalJoinEngine
                             table.Columns.AddRange(batch.Schema.Fields.Select(field => field.Name));
                             columnsCaptured = true;
                         }
+                        if (batch.RowCount == 0) continue;
+
+                        if (!ReferenceEquals(cachedBatchSchema, batch.Schema))
+                        {
+                            cachedBatchSchema = batch.Schema;
+                            for (int k = 0; k < keyCount; k++)
+                                keyOrdinals[k] = cachedBatchSchema.GetOrdinal(rightKeys[k]);
+                        }
+                        var packPlan = RowPacker.BatchColumnPlan.For(batch);
+
                         for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
                         {
-                            var keyValues = new object?[rightKeys.Count];
-                            for (var keyIndex = 0; keyIndex < rightKeys.Count; keyIndex++)
+                            JoinKey key0 = keyCount > 0
+                                ? JoinKey.FromBatchColumn(batch, keyOrdinals[0], rowIndex)
+                                : JoinKey.Null;
+                            bool hasNullKey = keyCount > 0 && key0.IsNull;
+                            for (var k = 1; k < keyCount; k++)
                             {
-                                var columnIndex = batch.Schema.GetOrdinal(rightKeys[keyIndex]);
-                                keyValues[keyIndex] = RowPacker.ReadBatchValue(batch, columnIndex, rowIndex);
+                                var extra = JoinKey.FromBatchColumn(batch, keyOrdinals[k], rowIndex);
+                                extraKeyBuffer[k - 1] = extra;
+                                if (extra.IsNull) hasNullKey = true;
                             }
-                            var key = CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, keyValues);
-                            var (slotIdx, byteLength) = packer.PackInto(batch, rowIndex, table);
-                            table.IndexRow(key, slotIdx, byteLength, guard);
+
+                            var (slotIdx, byteLength) = packer.PackInto(batch, rowIndex, packPlan, table);
+                            table.IndexRow(key0, extraKeyBuffer, hasNullKey, slotIdx, byteLength, guard);
                             ColumnarBuildRows++;
                             if (guard.Exceeded() || (lease?.RegisterAndCheckSpill(guard.BytesAccumulated) == true))
                             {
@@ -378,8 +404,16 @@ public class ExternalJoinEngine
                 return table;
             }
 
-            await foreach (var rightRow in rightReader.AsEnumerableAsync())
+            TableSchema? cachedRowSchema = null;
+            int[] rowKeySlots = keyCount > 0 ? new int[keyCount] : Array.Empty<int>();
+            var vtReader = rightReader as ISortSpillReader;
+            while (true)
             {
+                var rightRow = vtReader != null
+                    ? await vtReader.ReadRowValueTaskAsync()
+                    : await rightReader.ReadRowAsync();
+                if (rightRow == null) break;
+
                 // The build side has a uniform schema; capture the column order once (matches how the
                 // Arrow spill writer infers its schema from the first row).
                 if (!columnsCaptured)
@@ -388,9 +422,15 @@ public class ExternalJoinEngine
                     columnsCaptured = true;
                 }
 
-                var key = GetHashKey(rightRow, rightKeys);
+                JoinKey key0 = JoinKey.Null;
+                bool hasNullKey = false;
+                if (keyCount > 0)
+                {
+                    ExtractRowJoinKeys(rightRow, rightKeys, rowKeySlots, ref cachedRowSchema, out key0, extraKeyBuffer, out hasNullKey);
+                }
+
                 var (slotIdx, byteLength) = packer.PackInto(rightRow, table.Columns, table);
-                table.IndexRow(key, slotIdx, byteLength, guard);
+                table.IndexRow(key0, extraKeyBuffer, hasNullKey, slotIdx, byteLength, guard);
                 if (guard.Exceeded() || (lease?.RegisterAndCheckSpill(guard.BytesAccumulated) == true))
                 {
                     table.Dispose();
@@ -419,63 +459,156 @@ public class ExternalJoinEngine
         bool isRightJoin = !leftOnly && (join.JoinType.Contains("RIGHT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase));
         // Track matched build rows by physical index (one bit per packed slot) for RIGHT/FULL outer.
         var matched = isRightJoin ? new bool[table.RowCount] : null;
+        var compiledCondition = RowExpressionCompiler.TryCompilePredicate(_context, join.Condition, out var predicate)
+            ? predicate
+            : null;
+        int keyCount = leftKeys.Count;
+        int extraCount = Math.Max(0, keyCount - 1);
+        JoinKey[] extraKeyBuffer = extraCount > 0 ? new JoinKey[extraCount] : Array.Empty<JoinKey>();
 
         await using var leftReader = await _context.SpillStore.CreateReaderAsync(leftName);
         if (leftReader is IColumnarSpillReader columnarReader)
         {
+            ColumnBatchSchema? cachedBatchSchema = null;
+            int[] keyOrdinals = keyCount > 0 ? new int[keyCount] : Array.Empty<int>();
+            RowPacker.NameLayout? leftRowLayout = null;
+            BatchCombinedLayout? batchCombinedLayout = null;
+            object?[]? scratchCombinedValues = null;
+            Row? scratchCombinedRow = null;
+
             await foreach (var batch in columnarReader.AsColumnBatchesAsync())
             {
                 using (batch)
                 {
+                    if (batch.RowCount == 0) continue;
+
+                    if (!ReferenceEquals(cachedBatchSchema, batch.Schema))
+                    {
+                        cachedBatchSchema = batch.Schema;
+                        for (int k = 0; k < keyCount; k++)
+                            keyOrdinals[k] = cachedBatchSchema.GetOrdinal(leftKeys[k]);
+                        leftRowLayout = RowPacker.LayoutFor(cachedBatchSchema, cachedBatchSchema.Fields.Select(f => f.Name).ToList());
+                        if (table.RowCount > 0)
+                        {
+                            batchCombinedLayout = BatchCombinedLayout.Create(cachedBatchSchema, table.Columns);
+                            if (leftOnly && compiledCondition != null)
+                            {
+                                scratchCombinedValues = new object?[batchCombinedLayout.Schema.ColumnCount];
+                                scratchCombinedRow = new Row(batchCombinedLayout.Schema, scratchCombinedValues);
+                            }
+                        }
+                    }
+                    var packPlan = RowPacker.BatchColumnPlan.For(batch);
+
                     for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         ColumnarProbeRows++;
-                        var key = GetHashKey(batch, rowIndex, leftKeys);
-                        bool producedMatch = false;
-                        Row? left = null;
-                        if (table.Index.TryGetValue(key, out var chain))
+
+                        JoinKey key0 = keyCount > 0
+                            ? JoinKey.FromBatchColumn(batch, keyOrdinals[0], rowIndex)
+                            : JoinKey.Null;
+                        bool hasNullKey = keyCount > 0 && key0.IsNull;
+                        for (var k = 1; k < keyCount; k++)
                         {
-                            left = RowPacker.MaterializeBatchRow(batch, rowIndex);
-                            for (var idx = chain.Head; idx >= 0; idx = table.GetNextInBucket(idx))
+                            var extra = JoinKey.FromBatchColumn(batch, keyOrdinals[k], rowIndex);
+                            extraKeyBuffer[k - 1] = extra;
+                            if (extra.IsNull) hasNullKey = true;
+                        }
+
+                        bool producedMatch = false;
+                        if (!hasNullKey && table.TryGetChain(key0, extraKeyBuffer, out var chain))
+                        {
+                            var layout = batchCombinedLayout!;
+                            if (leftOnly && scratchCombinedRow != null && scratchCombinedValues != null)
                             {
-                                var right = table.UnpackRow(idx);
-                                var combined = CombineRows(left, right);
-                                if (await _context.EvaluateCondition(join.Condition, combined))
+                                FillLeftValuesFromBatch(batch, packPlan, rowIndex, layout, scratchCombinedValues);
+                                for (var idx = chain.Head; idx >= 0; idx = table.GetNextInBucket(idx))
                                 {
-                                    producedMatch = true;
-                                    if (leftOnly) break;
-                                    yield return combined;
-                                    if (matched != null) matched[idx] = true;
+                                    table.UnpackRowInto(idx, scratchCombinedValues, layout.RightSlots);
+                                    if (compiledCondition!(scratchCombinedRow))
+                                    {
+                                        producedMatch = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                object?[]? firstLeftValues = null;
+                                for (var idx = chain.Head; idx >= 0; idx = table.GetNextInBucket(idx))
+                                {
+                                    var values = new object?[layout.Schema.ColumnCount];
+                                    if (firstLeftValues == null)
+                                    {
+                                        FillLeftValuesFromBatch(batch, packPlan, rowIndex, layout, values);
+                                        firstLeftValues = values;
+                                    }
+                                    else
+                                    {
+                                        CopyNonOverwrittenLeftValues(firstLeftValues, values, layout);
+                                    }
+
+                                    table.UnpackRowInto(idx, values, layout.RightSlots);
+                                    var combined = new Row(layout.Schema, values);
+                                    bool isMatch = compiledCondition != null
+                                        ? compiledCondition(combined)
+                                        : await _context.EvaluateCondition(join.Condition, combined);
+                                    if (isMatch)
+                                    {
+                                        producedMatch = true;
+                                        if (leftOnly) break;
+                                        yield return combined;
+                                        if (matched != null) matched[idx] = true;
+                                    }
                                 }
                             }
                         }
+
                         if (leftOnly)
                         {
                             if (producedMatch == isSemi)
-                                yield return left ?? RowPacker.MaterializeBatchRow(batch, rowIndex);
+                                yield return RowPacker.MaterializeBatchScalarRow(batch, packPlan, leftRowLayout!, rowIndex);
                         }
                         else if (!producedMatch && isLeftJoin)
-                            yield return Shape.Unmatched(left ?? RowPacker.MaterializeBatchRow(batch, rowIndex));
+                        {
+                            yield return Shape.Unmatched(RowPacker.MaterializeBatchScalarRow(batch, packPlan, leftRowLayout!, rowIndex));
+                        }
                     }
                 }
             }
         }
         else
         {
-            await foreach (var left in leftReader.AsEnumerableAsync())
+            TableSchema? cachedRowSchema = null;
+            int[] rowKeySlots = keyCount > 0 ? new int[keyCount] : Array.Empty<int>();
+            var vtReader = leftReader as ISortSpillReader;
+            while (true)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var key = GetHashKey(left, leftKeys);
-                bool producedMatch = false;
+                var left = vtReader != null
+                    ? await vtReader.ReadRowValueTaskAsync()
+                    : await leftReader.ReadRowAsync();
+                if (left == null) break;
 
-                if (table.Index.TryGetValue(key, out var chain))
+                cancellationToken.ThrowIfCancellationRequested();
+                JoinKey key0 = JoinKey.Null;
+                bool hasNullKey = false;
+                if (keyCount > 0)
+                {
+                    ExtractRowJoinKeys(left, leftKeys, rowKeySlots, ref cachedRowSchema, out key0, extraKeyBuffer, out hasNullKey);
+                }
+
+                bool producedMatch = false;
+                if (!hasNullKey && table.TryGetChain(key0, extraKeyBuffer, out var chain))
                 {
                     for (var idx = chain.Head; idx >= 0; idx = table.GetNextInBucket(idx))
                     {
                         var right = table.UnpackRow(idx);
                         var combined = CombineRows(left, right);
-                        if (await _context.EvaluateCondition(join.Condition, combined))
+                        bool isMatch = compiledCondition != null
+                            ? compiledCondition(combined)
+                            : await _context.EvaluateCondition(join.Condition, combined);
+                        if (isMatch)
                         {
                             producedMatch = true;
                             if (leftOnly) break;
@@ -505,6 +638,37 @@ public class ExternalJoinEngine
                     yield return unmatched;
                 }
             }
+        }
+    }
+
+    private static void FillLeftValuesFromBatch(
+        ColumnBatch batch,
+        RowPacker.BatchColumnPlan packPlan,
+        int rowIndex,
+        BatchCombinedLayout layout,
+        object?[] destination)
+    {
+        var leftSlots = layout.LeftSlots;
+        var overwritten = layout.LeftOverwritten;
+        for (int i = 0; i < leftSlots.Length; i++)
+        {
+            if (overwritten[i]) continue;
+            destination[leftSlots[i]] = RowPacker.ReadBatchScalar(batch, packPlan, i, rowIndex);
+        }
+    }
+
+    private static void CopyNonOverwrittenLeftValues(
+        object?[] source,
+        object?[] destination,
+        BatchCombinedLayout layout)
+    {
+        var leftSlots = layout.LeftSlots;
+        var overwritten = layout.LeftOverwritten;
+        for (int i = 0; i < leftSlots.Length; i++)
+        {
+            if (overwritten[i]) continue;
+            int slot = leftSlots[i];
+            destination[slot] = source[slot];
         }
     }
 
@@ -585,7 +749,7 @@ public class ExternalJoinEngine
     {
         var names = new string[PartitionCount];
         var counts = new long[PartitionCount];
-        var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
+        var writers = new ISpillWriter[PartitionCount];
 
         var uniquePrefix = Guid.NewGuid().ToString("N");
         for (int i = 0; i < PartitionCount; i++)
@@ -601,10 +765,17 @@ public class ExternalJoinEngine
         try
         {
             bool isLeftInput = depth == 0 && prefix == "left";
+            bool caseSensitive = _context.CaseSensitiveComparison;
+            TableSchema? cachedSchema = null;
+            int keyCount = keys.Count;
+            int[] keySlots = keyCount > 0 ? new int[keyCount] : Array.Empty<int>();
+            int extraCount = Math.Max(0, keyCount - 1);
+            JoinKey[] extraKeyBuffer = extraCount > 0 ? new JoinKey[extraCount] : Array.Empty<JoinKey>();
+
             await foreach (var row in stream)
             {
                 if (isLeftInput) Shape.SeeLeft(row);
-                int pIdx = GetPartitionIndex(row, keys, depth);
+                int pIdx = GetPartitionIndex(row, keys, keySlots, ref cachedSchema, extraKeyBuffer, depth, caseSensitive);
                 counts[pIdx]++;
                 await writers[pIdx].WriteRowAsync(row);
             }
@@ -632,14 +803,65 @@ public class ExternalJoinEngine
     private async IAsyncEnumerable<Row> ReadPartitionStream(string name)
     {
         await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+        if (reader is ISortSpillReader vtReader)
+        {
+            while (true)
+            {
+                var row = await vtReader.ReadRowValueTaskAsync();
+                if (row == null) yield break;
+                yield return row;
+            }
+        }
         await foreach (var row in reader.AsEnumerableAsync())
             yield return row;
     }
 
-    private int GetPartitionIndex(Row row, List<string> keys, int depth)
+    private int GetPartitionIndex(
+        Row row,
+        List<string> keys,
+        int[] keySlots,
+        ref TableSchema? cachedSchema,
+        JoinKey[] extraKeyBuffer,
+        int depth,
+        bool caseSensitive)
     {
-        var key = depth == 0 ? GetHashKey(row, keys) : GetPartitionHashKey(row, keys, depth);
-        return (key.GetHashCode() & 0x7FFFFFFF) % PartitionCount;
+        int keyCount = keys.Count;
+        if (keyCount == 0)
+            return (JoinKey.ComputeEmptyHashCode(depth) & 0x7FFFFFFF) % PartitionCount;
+
+        ExtractRowJoinKeys(row, keys, keySlots, ref cachedSchema, out var key0, extraKeyBuffer, out _);
+        int hash = JoinKey.ComputeHashCode(depth, key0, extraKeyBuffer, caseSensitive);
+        return (hash & 0x7FFFFFFF) % PartitionCount;
+    }
+
+    private static void ExtractRowJoinKeys(
+        Row row,
+        List<string> keys,
+        int[] keySlots,
+        ref TableSchema? cachedSchema,
+        out JoinKey key0,
+        Span<JoinKey> extraKeys,
+        out bool hasNullKey)
+    {
+        var schema = row.Schema;
+        if (schema != null && !ReferenceEquals(schema, cachedSchema))
+        {
+            cachedSchema = schema;
+            for (int i = 0; i < keys.Count; i++)
+                keySlots[i] = schema.GetIndex(keys[i]);
+        }
+
+        object? v0 = schema != null && keySlots[0] >= 0 ? row[keySlots[0]] : row[keys[0]];
+        key0 = JoinKey.FromValue(v0);
+        hasNullKey = key0.IsNull;
+
+        for (int i = 1; i < keys.Count; i++)
+        {
+            object? vi = schema != null && keySlots[i] >= 0 ? row[keySlots[i]] : row[keys[i]];
+            var extra = JoinKey.FromValue(vi);
+            extraKeys[i - 1] = extra;
+            if (extra.IsNull) hasNullKey = true;
+        }
     }
 
     private CompoundKey GetHashKey(Row row, List<string> keys)
@@ -650,27 +872,69 @@ public class ExternalJoinEngine
         return CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, values);
     }
 
-    private CompoundKey GetHashKey(ColumnBatch batch, int rowIndex, List<string> keys)
-    {
-        var values = new object?[keys.Count];
-        for (var i = 0; i < keys.Count; i++)
-        {
-            var column = batch.Schema.GetOrdinal(keys[i]);
-            values[i] = RowPacker.ReadBatchValue(batch, column, rowIndex);
-        }
-        return CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, values);
-    }
-
-    private CompoundKey GetPartitionHashKey(Row row, List<string> keys, int depth)
-    {
-        var values = new object?[keys.Count];
-        for (int i = 0; i < keys.Count; i++)
-            values[i] = SpillSerializationHelper.UnwrapValue(row[keys[i]]);
-        return CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, values, depth);
-    }
-
     // One join step sees one left and one right layout, so a single cached entry covers it.
     private CombinedLayout? _combinedLayout;
+
+    /// <summary>
+    /// Combined row layout mapping a columnar probe <see cref="ColumnBatchSchema"/> and packed
+    /// build column list into one output <see cref="TableSchema"/>. Tracks which left columns are
+    /// overwritten by the right side so probe matching skips reading overwritten left cells.
+    /// </summary>
+    private sealed class BatchCombinedLayout
+    {
+        public TableSchema Schema { get; }
+        public int[] LeftSlots { get; }
+        public bool[] LeftOverwritten { get; }
+        public int[] RightSlots { get; }
+
+        private BatchCombinedLayout(TableSchema schema, int[] leftSlots, bool[] leftOverwritten, int[] rightSlots)
+        {
+            Schema = schema;
+            LeftSlots = leftSlots;
+            LeftOverwritten = leftOverwritten;
+            RightSlots = rightSlots;
+        }
+
+        public static BatchCombinedLayout Create(ColumnBatchSchema leftSchema, IReadOnlyList<string> rightColumns)
+        {
+            var names = new List<string>(leftSchema.Count + rightColumns.Count);
+            var slots = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            var leftSlots = new int[leftSchema.Count];
+            for (int i = 0; i < leftSchema.Count; i++)
+            {
+                var name = leftSchema.Fields[i].Name;
+                if (!slots.TryGetValue(name, out var slot))
+                {
+                    slot = names.Count;
+                    slots[name] = slot;
+                    names.Add(name);
+                }
+                leftSlots[i] = slot;
+            }
+
+            var rightSlots = new int[rightColumns.Count];
+            var rightWrittenSlots = new HashSet<int>();
+            for (int i = 0; i < rightColumns.Count; i++)
+            {
+                var name = rightColumns[i];
+                if (!slots.TryGetValue(name, out var slot))
+                {
+                    slot = names.Count;
+                    slots[name] = slot;
+                    names.Add(name);
+                }
+                rightSlots[i] = slot;
+                rightWrittenSlots.Add(slot);
+            }
+
+            var leftOverwritten = new bool[leftSlots.Length];
+            for (int i = 0; i < leftSlots.Length; i++)
+                leftOverwritten[i] = rightWrittenSlots.Contains(leftSlots[i]);
+
+            return new BatchCombinedLayout(new TableSchema(names), leftSlots, leftOverwritten, rightSlots);
+        }
+    }
 
     /// <summary>
     /// The combined row layout for one pair of input schemas: the distinct column names in
@@ -746,7 +1010,8 @@ public class ExternalJoinEngine
 
     /// <summary>
     /// The probe-side hash table: build rows held in budget-capped pooled <c>byte[]</c> slabs with
-    /// a pooled flat <see cref="RowSlot"/> index chaining duplicate keys in insertion order.
+    /// a pooled flat <see cref="RowSlot"/> index chaining duplicate keys in insertion order, indexed
+    /// by a pooled unboxed <see cref="JoinKey"/> hash table.
     /// <see cref="Columns"/> is the shared column order captured from the first build row, used to
     /// decode a slab slice back into a <see cref="Row"/> on a probe match.
     /// </summary>
@@ -755,6 +1020,7 @@ public class ExternalJoinEngine
         internal const int MinSlabBytes = 4 * 1024;
         internal const int MaxDefaultSlabBytes = 64 * 1024;
         private const int InitialSlotCapacity = 64;
+        private const int InitialBucketCapacity = 128;
 
         private sealed class Slab
         {
@@ -771,23 +1037,55 @@ public class ExternalJoinEngine
             public int NextInBucket;
         }
 
+        private struct KeyEntry
+        {
+            public int HashCode;
+            public JoinKey Key0;
+            public int ExtraKeyOffset;
+            public int Head;
+            public int Tail;
+            public int NextInHash;
+        }
+
         internal readonly record struct BucketChain(int Head, int Tail);
 
+        private readonly bool _caseSensitive;
+        private readonly int _keyCount;
+        private readonly int _extraKeyCount;
         private readonly List<Slab> _slabs = new();
         private RowSlot[] _rows;
         private int _rowCount;
+        private int[] _buckets;
+        private KeyEntry[] _entries;
+        private int _entryCount;
+        private JoinKey[]? _extraKeys;
+        private int _extraKeyCountUsed;
         private bool _disposed;
 
         public readonly List<string> Columns = new();
-        public readonly Dictionary<CompoundKey, BucketChain> Index = new();
         public int TargetSlabBytes { get; }
 
-        public PackedBuildTable(long budgetBytes = 0)
+        public PackedBuildTable(long budgetBytes = 0, bool caseSensitive = false, int keyCount = 1, int expectedRows = 0)
         {
+            _caseSensitive = caseSensitive;
+            _keyCount = Math.Max(0, keyCount);
+            _extraKeyCount = Math.Max(0, _keyCount - 1);
             TargetSlabBytes = budgetBytes > 0
                 ? (int)Math.Clamp(budgetBytes / 4, MinSlabBytes, MaxDefaultSlabBytes)
                 : MaxDefaultSlabBytes;
-            _rows = ArrayPool<RowSlot>.Shared.Rent(InitialSlotCapacity);
+            int slotCap = expectedRows > 0
+                ? Math.Clamp(expectedRows, InitialSlotCapacity, 1 << 20)
+                : InitialSlotCapacity;
+            int bucketTarget = expectedRows > 0
+                ? Math.Clamp((int)Math.Min(1 << 20, expectedRows * 2L), InitialBucketCapacity, 1 << 20)
+                : InitialBucketCapacity;
+            int bucketCap = (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)bucketTarget);
+            _rows = ArrayPool<RowSlot>.Shared.Rent(slotCap);
+            _buckets = ArrayPool<int>.Shared.Rent(bucketCap);
+            Array.Fill(_buckets, -1);
+            _entries = ArrayPool<KeyEntry>.Shared.Rent(slotCap);
+            if (_extraKeyCount > 0)
+                _extraKeys = ArrayPool<JoinKey>.Shared.Rent(slotCap * _extraKeyCount);
         }
 
         public int RowCount => _rowCount;
@@ -835,17 +1133,208 @@ public class ExternalJoinEngine
         public void IndexRow(CompoundKey key, int rowIndex, int blobLength, MemoryBudgetGuard guard)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (!Index.TryGetValue(key, out var chain))
+            int keyLen = key.Length;
+            if (keyLen == 0)
             {
-                Index[key] = new BucketChain(rowIndex, rowIndex);
-                guard.Add(RowMemory.EstimateKeyBytes(key) + 32);
+                IndexRow(JoinKey.Null, ReadOnlySpan<JoinKey>.Empty, hasNullKey: false, rowIndex, blobLength, guard);
+                return;
             }
-            else
+
+            var key0 = JoinKey.FromValue(key[0]);
+            bool hasNullKey = key0.IsNull;
+            int extraLen = keyLen - 1;
+            var extraKeys = extraLen == 0 ? Array.Empty<JoinKey>() : new JoinKey[extraLen];
+            for (int i = 1; i < keyLen; i++)
             {
-                _rows[chain.Tail].NextInBucket = rowIndex;
-                Index[key] = chain with { Tail = rowIndex };
+                var extra = JoinKey.FromValue(key[i]);
+                extraKeys[i - 1] = extra;
+                if (extra.IsNull) hasNullKey = true;
             }
+            IndexRow(key0, extraKeys, hasNullKey, rowIndex, blobLength, guard);
+        }
+
+        public void IndexRow(
+            in JoinKey key0,
+            ReadOnlySpan<JoinKey> extraKeys,
+            bool hasNullKey,
+            int rowIndex,
+            int blobLength,
+            MemoryBudgetGuard guard)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             guard.Add(blobLength + 16);
+            if (hasNullKey) return;
+
+            int hash = _keyCount == 0
+                ? JoinKey.ComputeEmptyHashCode(0)
+                : JoinKey.ComputeHashCode(0, key0, extraKeys, _caseSensitive);
+            int bucket = (hash & 0x7FFFFFFF) & (_buckets.Length - 1);
+
+            for (int entryIdx = _buckets[bucket]; entryIdx >= 0; entryIdx = _entries[entryIdx].NextInHash)
+            {
+                ref var existing = ref _entries[entryIdx];
+                if (existing.HashCode == hash && KeysMatch(in existing, in key0, extraKeys))
+                {
+                    _rows[existing.Tail].NextInBucket = rowIndex;
+                    existing.Tail = rowIndex;
+                    return;
+                }
+            }
+
+            if (_entryCount == _entries.Length)
+                GrowEntries();
+            if (_entryCount >= (_buckets.Length * 3) / 4)
+            {
+                GrowBuckets();
+                bucket = (hash & 0x7FFFFFFF) & (_buckets.Length - 1);
+            }
+
+            int extraOffset = -1;
+            if (_extraKeyCount > 0)
+            {
+                extraOffset = _extraKeyCountUsed;
+                EnsureExtraKeyCapacity(_extraKeyCountUsed + _extraKeyCount);
+                extraKeys.CopyTo(_extraKeys.AsSpan(extraOffset, _extraKeyCount));
+                _extraKeyCountUsed += _extraKeyCount;
+            }
+
+            int newEntryIdx = _entryCount++;
+            _entries[newEntryIdx] = new KeyEntry
+            {
+                HashCode = hash,
+                Key0 = key0,
+                ExtraKeyOffset = extraOffset,
+                Head = rowIndex,
+                Tail = rowIndex,
+                NextInHash = _buckets[bucket],
+            };
+            _buckets[bucket] = newEntryIdx;
+
+            guard.Add(EstimateJoinKeyBytes(in key0, extraKeys) + 32);
+        }
+
+        public bool TryGetChain(in JoinKey key0, ReadOnlySpan<JoinKey> extraKeys, out BucketChain chain)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_entryCount == 0)
+            {
+                chain = default;
+                return false;
+            }
+
+            int hash = _keyCount == 0
+                ? JoinKey.ComputeEmptyHashCode(0)
+                : JoinKey.ComputeHashCode(0, key0, extraKeys, _caseSensitive);
+            int bucket = (hash & 0x7FFFFFFF) & (_buckets.Length - 1);
+
+            for (int entryIdx = _buckets[bucket]; entryIdx >= 0; entryIdx = _entries[entryIdx].NextInHash)
+            {
+                ref readonly var entry = ref _entries[entryIdx];
+                if (entry.HashCode == hash && KeysMatch(in entry, in key0, extraKeys))
+                {
+                    chain = new BucketChain(entry.Head, entry.Tail);
+                    return true;
+                }
+            }
+
+            chain = default;
+            return false;
+        }
+
+        public bool TryGetChain(CompoundKey key, out BucketChain chain)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_entryCount == 0)
+            {
+                chain = default;
+                return false;
+            }
+
+            int keyLen = key.Length;
+            if (keyLen == 0)
+                return TryGetChain(JoinKey.Null, ReadOnlySpan<JoinKey>.Empty, out chain);
+
+            var key0 = JoinKey.FromValue(key[0]);
+            if (key0.IsNull)
+            {
+                chain = default;
+                return false;
+            }
+
+            int extraLen = keyLen - 1;
+            var extraKeys = extraLen == 0 ? Array.Empty<JoinKey>() : new JoinKey[extraLen];
+            for (int i = 1; i < keyLen; i++)
+            {
+                var extra = JoinKey.FromValue(key[i]);
+                if (extra.IsNull)
+                {
+                    chain = default;
+                    return false;
+                }
+                extraKeys[i - 1] = extra;
+            }
+            return TryGetChain(key0, extraKeys, out chain);
+        }
+
+        private bool KeysMatch(in KeyEntry entry, in JoinKey key0, ReadOnlySpan<JoinKey> extraKeys)
+        {
+            if (_keyCount == 0) return true;
+            if (!JoinKey.Equals(in entry.Key0, in key0, _caseSensitive)) return false;
+            if (_extraKeyCount == 0) return true;
+
+            var stored = _extraKeys.AsSpan(entry.ExtraKeyOffset, _extraKeyCount);
+            for (int i = 0; i < _extraKeyCount; i++)
+            {
+                if (!JoinKey.Equals(in stored[i], in extraKeys[i], _caseSensitive))
+                    return false;
+            }
+            return true;
+        }
+
+        private static long EstimateJoinKeyBytes(in JoinKey key0, ReadOnlySpan<JoinKey> extraKeys)
+        {
+            long bytes = 32 + 8 + key0.EstimateHeapBytes();
+            for (int i = 0; i < extraKeys.Length; i++)
+                bytes += 8 + extraKeys[i].EstimateHeapBytes();
+            return bytes;
+        }
+
+        private void GrowEntries()
+        {
+            var grown = ArrayPool<KeyEntry>.Shared.Rent(_entries.Length * 2);
+            Array.Copy(_entries, 0, grown, 0, _entryCount);
+            ArrayPool<KeyEntry>.Shared.Return(_entries, clearArray: true);
+            _entries = grown;
+        }
+
+        private void GrowBuckets()
+        {
+            int newSize = _buckets.Length * 2;
+            var grown = ArrayPool<int>.Shared.Rent(newSize);
+            Array.Fill(grown, -1);
+            int mask = grown.Length - 1;
+            for (int i = 0; i < _entryCount; i++)
+            {
+                int bucket = (_entries[i].HashCode & 0x7FFFFFFF) & mask;
+                _entries[i].NextInHash = grown[bucket];
+                grown[bucket] = i;
+            }
+            ArrayPool<int>.Shared.Return(_buckets, clearArray: false);
+            _buckets = grown;
+        }
+
+        private void EnsureExtraKeyCapacity(int required)
+        {
+            if (_extraKeys != null && required <= _extraKeys.Length) return;
+            int nextSize = _extraKeys == null ? InitialSlotCapacity * _extraKeyCount : Math.Max(_extraKeys.Length * 2, required);
+            var grown = ArrayPool<JoinKey>.Shared.Rent(nextSize);
+            if (_extraKeys != null)
+            {
+                if (_extraKeyCountUsed > 0)
+                    Array.Copy(_extraKeys, 0, grown, 0, _extraKeyCountUsed);
+                ArrayPool<JoinKey>.Shared.Return(_extraKeys, clearArray: true);
+            }
+            _extraKeys = grown;
         }
 
         public Row UnpackRow(int rowIndex)
@@ -853,6 +1342,13 @@ public class ExternalJoinEngine
             ObjectDisposedException.ThrowIf(_disposed, this);
             var slot = _rows[rowIndex];
             return RowPacker.Unpack(_slabs[slot.SlabIndex].Buffer, slot.Offset, slot.Length, Columns);
+        }
+
+        public void UnpackRowInto(int rowIndex, object?[] destination, int[] targetSlots)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var slot = _rows[rowIndex];
+            RowPacker.UnpackInto(_slabs[slot.SlabIndex].Buffer.AsSpan(slot.Offset, slot.Length), Columns.Count, destination, targetSlots);
         }
 
         public int GetNextInBucket(int rowIndex)
@@ -881,10 +1377,25 @@ public class ExternalJoinEngine
                 ArrayPool<RowSlot>.Shared.Return(_rows, clearArray: true);
                 _rows = null!;
             }
+            if (_buckets != null)
+            {
+                ArrayPool<int>.Shared.Return(_buckets, clearArray: false);
+                _buckets = null!;
+            }
+            if (_entries != null)
+            {
+                ArrayPool<KeyEntry>.Shared.Return(_entries, clearArray: true);
+                _entries = null!;
+            }
+            if (_extraKeys != null)
+            {
+                ArrayPool<JoinKey>.Shared.Return(_extraKeys, clearArray: true);
+                _extraKeys = null;
+            }
             _rowCount = 0;
-            Index.Clear();
+            _entryCount = 0;
+            _extraKeyCountUsed = 0;
             Columns.Clear();
         }
     }
 }
-
