@@ -44,4 +44,8 @@ for (const name of ['WriteJwt', 'ReadSettings', 'RestoreSettings']) {
   assert.ok(element?.includes('Return="check"'), `${name} must propagate failure to MSI`);
   if (name !== 'ReadSettings') assert.ok(element.includes('Impersonate="no"'), `${name} must run in the installer service context`);
 }
+for (const retired of ['PromptCleanData', 'SetCleanDataDir', 'CleanData', 'CLEANDATA']) {
+  assert.ok(!manifest.includes(retired), `Installer.wxs must not author ${retired}`);
+  assert.ok(!source.includes(retired), `installer-actions.js must not contain ${retired}`);
+}
 console.log('Installer actions: successful configuration/preservation and COM/process failures propagate through checked MSI actions.');

@@ -553,7 +553,7 @@ namespace ETL_SQL.Tests.Orchestration
                 new[]
                 {
                     "admin", "restore", "--from", "data.zip", "--keys", "keys.zip",
-                    "--to", "out", "--validate", "--expected-tenant", "tenant-alpha"
+                    "--to", "out", "--in-place", "--validate", "--expected-tenant", "tenant-alpha"
                 },
                 null).InvokeAsync(new InvocationConfiguration(), default);
 
@@ -562,8 +562,33 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("data.zip", capturedContext.RestoreFrom);
             Assert.Equal("keys.zip", capturedContext.RestoreKeys);
             Assert.Equal("out", capturedContext.RestoreTo);
+            Assert.True(capturedContext.RestoreInPlace);
             Assert.Equal("tenant-alpha", capturedContext.RestoreExpectedTenant);
             Assert.True(capturedContext.RestoreValidateOnly);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_AdminPurgeDataParsesConfirmDryRunAndInstallDir()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(
+                new[]
+                {
+                    "admin", "purge-data", "--confirm", "--dry-run", "--install-dir", "C:/ETL-SQL"
+                },
+                null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("admin-purge-data", capturedContext!.Command);
+            Assert.True(capturedContext.AdminPurgeConfirm);
+            Assert.True(capturedContext.AdminPurgeDryRun);
+            Assert.Equal("C:/ETL-SQL", capturedContext.AdminPurgeInstallDir);
         }
 
         [Fact]

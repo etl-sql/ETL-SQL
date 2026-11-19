@@ -66,6 +66,10 @@ failure and retry. Keep `appsettings.secrets.json`: the retry reuses its bootstr
 service keys. If a bootstrap password was configured already, a fresh install also records it in
 the protected sign-in file when that file is absent. Normal upgrades do not create a sign-in file.
 
+Uninstalling the MSI preserves runtime data (databases, reports, snapshots, logs, and secrets) so
+upgrades and reinstalls never lose state. To remove an installation's runtime data permanently,
+stop the services and run `etl-sql admin purge-data --confirm` (use `--dry-run` to preview first).
+
 ### Linux
 
 Install the package for your distribution, then enable the services you intend to run:

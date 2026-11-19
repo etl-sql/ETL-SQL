@@ -315,11 +315,8 @@
             </Component>
         </DirectoryRef>
 
-        <!-- Opt-in: delete runtime data (reports/db/logs) on uninstall. Default off (data preserved). -->
-        <Property Id="CLEANDATA" Value="0" Secure="yes" />
-
         <!-- Custom actions (JScript). Deferred actions only see CustomActionData, so the install
-             folder path is marshaled in via the matching type-51 SetWriteJwtData/SetCleanDataDir.
+             folder path is marshaled in via the matching type-51 SetWriteJwtData/SetRestoreSettingsData.
 
              PORTAL_SURFACE is forwarded so configure-portal-jwt.ps1 can write the correct
              Portal:Surface value in appsettings.json. -->
@@ -331,9 +328,6 @@
         <CustomAction Id="ReadSettings" BinaryKey="InstallerActionsJs" JScriptCall="ReadSettings" Execute="immediate" Return="check" HideTarget="yes" />
         <CustomAction Id="SetRestoreSettingsData" Property="RestoreSettings" Value="[INSTALLFOLDER]|[PREVIOUS_SETTINGS]" Execute="immediate" HideTarget="yes" />
         <CustomAction Id="RestoreSettings" BinaryKey="InstallerActionsJs" JScriptCall="RestoreSettings" Execute="deferred" Impersonate="no" Return="check" HideTarget="yes" />
-        <CustomAction Id="PromptCleanData" BinaryKey="InstallerActionsJs" JScriptCall="PromptCleanData" Execute="immediate" Return="ignore" />
-        <CustomAction Id="SetCleanDataDir" Property="CleanData" Value="[INSTALLFOLDER]" Execute="immediate" />
-        <CustomAction Id="CleanData" BinaryKey="InstallerActionsJs" JScriptCall="CleanData" Execute="deferred" Impersonate="no" Return="ignore" />
 
         <!-- Apply Solo preset defaults: Workstation only -->
         <CustomAction Id="ApplySoloPreset" Property="INSTALL_WORKSTATION"   Value="1"  Execute="immediate" />
@@ -384,12 +378,8 @@
             <!-- On install: generate the JWT secret + approve the install folder as a safe zone. -->
             <Custom Action="SetWriteJwtData" After="CostFinalize"><![CDATA[&Feature_AdminPortal=3 OR &Feature_ReportPortal=3 OR &Feature_Orchestrator=3]]></Custom>
             <Custom Action="WriteJwt" After="RestoreSettings"><![CDATA[&Feature_AdminPortal=3 OR &Feature_ReportPortal=3 OR &Feature_Orchestrator=3]]></Custom>
-            <!-- On a real (non-upgrade), interactive uninstall: prompt, then remove data if the user
-                 said yes. The OS-level Yes/No box works even when Settings > Apps runs basic UI;
-                 UILevel >= 3 skips fully-silent (/qn) uninstalls so automation never hangs. -->
-            <Custom Action="PromptCleanData" After="CostFinalize"><![CDATA[REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE AND UILevel >= 3]]></Custom>
-            <Custom Action="SetCleanDataDir" After="PromptCleanData"><![CDATA[REMOVE="ALL" AND CLEANDATA="1" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
-            <Custom Action="CleanData" After="RemoveFiles"><![CDATA[REMOVE="ALL" AND CLEANDATA="1" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
+            <!-- Uninstalls and major upgrades (UPGRADINGPRODUCTCODE) always preserve runtime data;
+                 operators remove runtime data explicitly via `etl-sql admin purge-data`. -->
         </InstallExecuteSequence>
 
         <!-- Connection hint shown on the final installer page -->
@@ -511,9 +501,6 @@
             <!-- Route: License → DeployProfileDlg → ChooseFeaturesDlg → VerifyReady -->
             <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="DeployProfileDlg" Order="10">LicenseAccepted = "1"</Publish>
             <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="ChooseFeaturesDlg" Order="10">NOT Installed</Publish>
-            <!-- The "delete all data on uninstall" choice is handled by the PromptCleanData custom
-                 action (Yes/No message box) rather than an authored dialog, so it also works when
-                 Settings > Apps runs the uninstall in basic UI with no wizard. -->
         </UI>
         <!-- Apache License 2.0; overrides WiX's placeholder License.rtf -->
         <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />

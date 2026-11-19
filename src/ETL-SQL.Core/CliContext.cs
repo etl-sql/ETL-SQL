@@ -188,6 +188,12 @@ public class CliContext
     public string? RestoreReport { get; set; }
     public string? RestoreExpectedTenant { get; set; }
     public bool RestoreValidateOnly { get; set; }
+    public bool RestoreInPlace { get; set; }
+
+    // admin purge-data command
+    public bool AdminPurgeConfirm { get; set; }
+    public bool AdminPurgeDryRun { get; set; }
+    public string? AdminPurgeInstallDir { get; set; }
 
     // admin migrate-database command
     public string? MigrateFrom { get; set; }

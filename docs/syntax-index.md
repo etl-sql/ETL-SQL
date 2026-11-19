@@ -1463,6 +1463,7 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql admin promotion saas-upgrade` | Drain and upgrade one Managed Dedicated tenant boundary | [admin promotion saas upgrade](reference/cli/admin-promotion-saas-upgrade.md) |
 | `etl-sql admin promotion validate` | Validate mappings and collisions without changing the target | [admin promotion validate](reference/cli/admin-promotion-validate.md) |
 | `etl-sql admin promotion` | Inspect and prepare deployment-profile promotions | [admin promotion](reference/cli/admin-promotion.md) |
+| `etl-sql admin purge-data` | Delete all installed ETL-SQL runtime data (reports, snapshots, databases, logs, sessions, secrets) | [admin purge data](reference/cli/admin-purge-data.md) |
 | `etl-sql admin restore` | Validate and restore a backup (data + keys archives) | [admin restore](reference/cli/admin-restore.md) |
 | `etl-sql admin service-account create` | Create a Portal service account | [admin service account create](reference/cli/admin-service-account-create.md) |
 | `etl-sql admin service-account list` | List Portal service accounts | [admin service account list](reference/cli/admin-service-account-list.md) |

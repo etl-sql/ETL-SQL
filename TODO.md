@@ -146,11 +146,15 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
 
 ### 3.4 MSI installer: restore, cleanup and isolated certification
 
-- [ ] **MI03 `ETL-SQL admin restore`.** The counterpart of `admin backup`; the certification's
-  rollback uses it instead of copying files.
-- [ ] **MI04 Uninstall data cleanup without a script custom action.** Replace
+- [x] **MI03 `ETL-SQL admin restore`.** The counterpart of `admin backup`; the certification's
+  rollback uses it instead of copying files. (`--in-place` added with tests in
+  `BackupRestoreServiceTests` / `DedicatedTenantBackupRestoreTests`; `Test-MsiPortalUpgrade.ps1`
+  updated to use `admin backup` and `admin restore --in-place`.)
+- [x] **MI04 Uninstall data cleanup without a script custom action.** Replace
   `PromptCleanData`/`CleanData`, or make it an explicit `admin` command the uninstall guidance points
-  to.
+  to. (`etl-sql admin purge-data --confirm` added with tests in `DataPurgeServiceTests`;
+  `PromptCleanData`/`SetCleanDataDir`/`CleanData` removed from `Installer.wxs` and
+  `installer-actions.js`; uninstall guidance updated.)
 - [ ] **MI05 MSI certification in a Hyper-V-isolated Windows Server Core container.** Proven on
   `windows-2022` (branch `diag/nested-virt-probe`, run 42418358058, 7 of 7); `windows-latest`
   (Server 2025) runs no Docker engine. **Finish line (MI01–MI05):** no script custom actions and no

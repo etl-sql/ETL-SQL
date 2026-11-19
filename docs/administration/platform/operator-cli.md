@@ -104,6 +104,9 @@ etl-sql admin restore --from data.zip --keys keys.zip --validate --report recove
 # Restore into a clean directory once validation passes
 etl-sql admin restore --from data.zip --keys keys.zip --to D:\restore-target --report recovery-report.json
 
+# Restore an installed host in place (stop services first; uses configured DB and content paths)
+etl-sql admin restore --from data.zip --keys keys.zip --in-place --to "C:\Program Files\ETL-SQL" --report recovery-report.json
+
 # Managed Dedicated: the recovery environment must assert the same tenant as both archives
 etl-sql admin restore --from data.zip --keys keys.zip --expected-tenant tenant-alpha --to D:\restore-target --report recovery-report.json
 ```

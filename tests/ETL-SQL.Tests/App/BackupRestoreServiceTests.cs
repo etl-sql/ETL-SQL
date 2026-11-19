@@ -33,6 +33,7 @@ namespace ETL_SQL.Tests.CliCommands
 
         public void Dispose()
         {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             try { if (Directory.Exists(_root)) Directory.Delete(_root, true); } catch { }
         }
 
@@ -403,7 +404,296 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.DoesNotContain(JwtSecret, stripped);
             Assert.True(secrets.ContainsKey("Portal.Dataset.AtRestKey"));
             Assert.True(secrets.ContainsKey("Portal.Jwt.Secret"));
-            Assert.Equal(AtRestKey, (string?)(JsonNode?)secrets["Portal.Dataset.AtRestKey"]);
+            Assert.Equal("ATREST-KEY-VALUE", (string?)(JsonNode?)secrets["Portal.Dataset.AtRestKey"]);
+        }
+
+        [Fact]
+        public async Task InPlaceRestore_RestoresInstalledLayoutSystemDbAndSecretsWithoutDeletingBinaries()
+        {
+            var installDir = Path.Combine(_root, "installed");
+            var systemDataDir = Path.Combine(_root, "systemdata");
+            Directory.CreateDirectory(installDir);
+            Directory.CreateDirectory(systemDataDir);
+
+            // Simulate an installed MSI layout: binaries + appsettings.json + appsettings.secrets.json +
+            // portal.db in installDir, and etlsql.db in a separate system data directory.
+            var binaryPath = Path.Combine(installDir, "ETL-SQL.exe");
+            File.WriteAllText(binaryPath, "CANDIDATE-BINARY");
+            var systemOrchDb = Path.Combine(systemDataDir, "etlsql.db");
+            File.WriteAllText(Path.Combine(installDir, "appsettings.json"), $$"""
+            {
+              "Portal": {
+                "DatabasePath": "./portal.db",
+                "SnapshotDirectory": "./Snapshots",
+                "ScriptRootPath": "./Reports",
+                "DatasetRootPath": "./data/datasets",
+                "MapRootPath": "./data/maps",
+                "Jwt": { "Secret": "", "ExpiryMinutes": 60 },
+                "Dataset": { "AtRestKey": "", "AtRestKeyVersion": "v1", "PreviousAtRestKeys": {} },
+                "Orchestrator": { "DatabasePath": "{{systemOrchDb.Replace("\\", "\\\\")}}" }
+              },
+              "Orchestrator": { "ApiKey": "" }
+            }
+            """);
+            File.WriteAllText(Path.Combine(installDir, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName), $$"""
+            {
+              "Portal": {
+                "Jwt": { "Secret": "{{JwtSecret}}" },
+                "Dataset": { "AtRestKey": "{{AtRestKey}}" }
+              },
+              "Orchestrator": { "ApiKey": "PREVIOUS-API-KEY" }
+            }
+            """);
+            File.WriteAllText(Path.Combine(installDir, "portal.db"), "V1-PORTAL-DB");
+            var orchStoreV1 = new ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore(systemOrchDb);
+            await orchStoreV1.InitializeAsync();
+            await orchStoreV1.SaveJobAsync(new ETL_SQL.Core.Data.JobDefinition(
+                "v1-job", "SELECT 1;", 1, "DAY", null, null, DateTime.UtcNow));
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            Directory.CreateDirectory(Path.Combine(installDir, "Snapshots"));
+            File.WriteAllText(Path.Combine(installDir, "Snapshots", "v1.json"), "{\"v\":1}");
+            Directory.CreateDirectory(Path.Combine(installDir, "Reports"));
+            File.WriteAllText(Path.Combine(installDir, "Reports", "v1.rptsql"), "SELECT 1;");
+            Directory.CreateDirectory(Path.Combine(installDir, ".portal-keys"));
+            File.WriteAllText(Path.Combine(installDir, ".portal-keys", "key-v1.xml"), "<v1/>");
+
+            var config = new ConfigurationBuilder()
+                .AddJsonFile(Path.Combine(installDir, "appsettings.json"))
+                .AddInstalledSecrets(installDir)
+                .Build();
+            var backupDir = Path.Combine(_root, "in-place-backup");
+            Assert.Equal(0, await BackupRestoreService.BackupCoreAsync(config, installDir, backupDir, NullLogger.Instance));
+            var (dataZip, keysZip) = FindArchives(backupDir);
+
+            // Simulate an upgrade/mutation: overwrite databases, leave stale WAL sidecars, add extra
+            // post-backup content files, and change secrets.
+            File.WriteAllText(Path.Combine(installDir, "portal.db"), "V2-PORTAL-DB");
+            File.WriteAllText(Path.Combine(installDir, "portal.db-wal"), "STALE-PORTAL-WAL");
+            await orchStoreV1.SaveJobAsync(new ETL_SQL.Core.Data.JobDefinition(
+                "v2-only-job", "SELECT 2;", 1, "DAY", null, null, DateTime.UtcNow));
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            File.WriteAllText(systemOrchDb + "-wal", "STALE-ORCH-WAL");
+            File.WriteAllText(Path.Combine(installDir, "Reports", "v2-only.rptsql"), "SELECT 2;");
+            File.WriteAllText(Path.Combine(installDir, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName), """
+            {
+              "Portal": { "Jwt": { "Secret": "ROTATED-JWT" }, "Dataset": { "AtRestKey": "ROTATED-ATREST" } },
+              "Orchestrator": { "ApiKey": "ROTATED-API" }
+            }
+            """);
+
+            Assert.Equal(0, await BackupRestoreService.RestoreAsync(new CliContext
+            {
+                Command = "admin-restore",
+                RestoreFrom = dataZip,
+                RestoreKeys = keysZip,
+                RestoreTo = installDir,
+                RestoreInPlace = true
+            }, NullLogger.Instance));
+
+            Assert.Equal("CANDIDATE-BINARY", File.ReadAllText(binaryPath));
+            Assert.Equal("V1-PORTAL-DB", File.ReadAllText(Path.Combine(installDir, "portal.db")));
+            Assert.False(File.Exists(Path.Combine(installDir, "portal.db-wal")));
+            Assert.False(File.Exists(systemOrchDb + "-wal"));
+            var restoredOrch = new ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore(systemOrchDb);
+            Assert.NotNull(await restoredOrch.GetJobAsync("v1-job"));
+            Assert.Null(await restoredOrch.GetJobAsync("v2-only-job"));
+            Assert.Equal("success", await restoredOrch.GetHostStateAsync("restore", "last_restore_status"));
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            Assert.True(File.Exists(Path.Combine(installDir, "Reports", "v1.rptsql")));
+            Assert.False(File.Exists(Path.Combine(installDir, "Reports", "v2-only.rptsql")));
+            Assert.True(File.Exists(Path.Combine(installDir, ".portal-keys", "key-v1.xml")));
+
+            var restored = new ConfigurationBuilder()
+                .AddJsonFile(Path.Combine(installDir, "appsettings.json"))
+                .AddInstalledSecrets(installDir)
+                .Build();
+            Assert.Equal(JwtSecret, restored["Portal:Jwt:Secret"]);
+            Assert.Equal(AtRestKey, restored["Portal:Dataset:AtRestKey"]);
+            Assert.Equal("PREVIOUS-API-KEY", restored["Orchestrator:ApiKey"]);
+        }
+
+        [Fact]
+        public async Task InPlaceRestore_RefusesContentDirOutsideInstallDir_WhenHostConfigDoesNotNameIt()
+        {
+            var installDir = Path.Combine(_root, "installed-guard");
+            var backupSource = Path.Combine(_root, "backup-src-guard");
+            var outsideSnaps = Path.Combine(_root, "outside-snapshots");
+            Directory.CreateDirectory(installDir);
+            Directory.CreateDirectory(backupSource);
+            Directory.CreateDirectory(outsideSnaps);
+
+            // Create a valid archive whose config points Portal:SnapshotDirectory outside installDir.
+            File.WriteAllText(Path.Combine(outsideSnaps, "snap-v1.json"), "{\"v\":1}");
+            WriteWorkspaceTree(backupSource, outsideSnaps, "./portal.db", "BACKUP-V1");
+            var backupConfig = new ConfigurationBuilder()
+                .AddJsonFile(Path.Combine(backupSource, "appsettings.json"))
+                .Build();
+            var backupDir = Path.Combine(_root, "guard-backup");
+            Assert.Equal(0, await BackupRestoreService.BackupCoreAsync(backupConfig, backupSource, backupDir, NullLogger.Instance));
+            var (dataZip, keysZip) = FindArchives(backupDir);
+
+            // Seed the outside directory with files that must survive, and the install dir with
+            // default host configuration (relative ./Snapshots) and distinct V2 state.
+            File.WriteAllText(Path.Combine(outsideSnaps, "snap-v1.json"), "{\"v\":2-host}");
+            File.WriteAllText(Path.Combine(outsideSnaps, "host-keep.txt"), "DO-NOT-DELETE");
+
+            var hostSnapshots = Path.Combine(installDir, "Snapshots");
+            Directory.CreateDirectory(hostSnapshots);
+            File.WriteAllText(Path.Combine(hostSnapshots, "existing.json"), "{\"host\":2}");
+            WriteWorkspaceTree(installDir, "./Snapshots", "./portal.db", "HOST-V2");
+            File.WriteAllText(Path.Combine(installDir, "ETL-SQL.exe"), "HOST-BINARY");
+            var hostConfigBefore = File.ReadAllText(Path.Combine(installDir, "appsettings.json"));
+
+            var logger = new CapturingLogger();
+            var exit = await BackupRestoreService.RestoreAsync(new CliContext
+            {
+                Command = "admin-restore",
+                RestoreFrom = dataZip,
+                RestoreKeys = keysZip,
+                RestoreTo = installDir,
+                RestoreInPlace = true
+            }, logger);
+
+            Assert.Equal(1, exit);
+            var logText = logger.ToString();
+            Assert.Contains("Portal:SnapshotDirectory", logText);
+            Assert.Contains(Path.GetFullPath(outsideSnaps), logText);
+            Assert.Contains("--to", logText);
+
+            // Outside directory and its files remain untouched.
+            Assert.Equal("{\"v\":2-host}", File.ReadAllText(Path.Combine(outsideSnaps, "snap-v1.json")));
+            Assert.Equal("DO-NOT-DELETE", File.ReadAllText(Path.Combine(outsideSnaps, "host-keep.txt")));
+
+            // Nothing in the install directory changed.
+            Assert.Equal("HOST-BINARY", File.ReadAllText(Path.Combine(installDir, "ETL-SQL.exe")));
+            Assert.Equal("HOST-V2-PORTAL", File.ReadAllText(Path.Combine(installDir, "portal.db")));
+            Assert.Equal("HOST-V2-ORCH", File.ReadAllText(Path.Combine(installDir, "etlsql.db")));
+            Assert.Equal("{\"host\":2}", File.ReadAllText(Path.Combine(hostSnapshots, "existing.json")));
+            Assert.Equal("HOST-V2-REPORT", File.ReadAllText(Path.Combine(installDir, "Reports", "app.rptsql")));
+            Assert.Equal("HOST-V2-KEY", File.ReadAllText(Path.Combine(installDir, ".portal-keys", "key.xml")));
+            Assert.Equal(hostConfigBefore, File.ReadAllText(Path.Combine(installDir, "appsettings.json")));
+        }
+
+        [Fact]
+        public async Task InPlaceRestore_AllowsContentDirOutsideInstallDir_WhenHostConfigNamesItToo()
+        {
+            var installDir = Path.Combine(_root, "installed-allowed");
+            var backupSource = Path.Combine(_root, "backup-src-allowed");
+            var sharedSnaps = Path.Combine(_root, "shared-outside-snapshots");
+            Directory.CreateDirectory(installDir);
+            Directory.CreateDirectory(backupSource);
+            Directory.CreateDirectory(sharedSnaps);
+
+            File.WriteAllText(Path.Combine(sharedSnaps, "v1.json"), "{\"v\":1}");
+            WriteWorkspaceTree(backupSource, sharedSnaps, "./portal.db", "V1");
+            var backupConfig = new ConfigurationBuilder()
+                .AddJsonFile(Path.Combine(backupSource, "appsettings.json"))
+                .Build();
+            var backupDir = Path.Combine(_root, "allowed-backup");
+            Assert.Equal(0, await BackupRestoreService.BackupCoreAsync(backupConfig, backupSource, backupDir, NullLogger.Instance));
+            var (dataZip, keysZip) = FindArchives(backupDir);
+
+            // Host also configures the exact same outside path for Portal:SnapshotDirectory.
+            File.WriteAllText(Path.Combine(sharedSnaps, "v1.json"), "{\"v\":2}");
+            File.WriteAllText(Path.Combine(sharedSnaps, "v2-only.json"), "{\"extra\":true}");
+            WriteWorkspaceTree(installDir, sharedSnaps, "./portal.db", "V2");
+
+            var exit = await BackupRestoreService.RestoreAsync(new CliContext
+            {
+                Command = "admin-restore",
+                RestoreFrom = dataZip,
+                RestoreKeys = keysZip,
+                RestoreTo = installDir,
+                RestoreInPlace = true
+            }, NullLogger.Instance);
+
+            Assert.Equal(0, exit);
+            Assert.Equal("{\"v\":1}", File.ReadAllText(Path.Combine(sharedSnaps, "v1.json")));
+            Assert.False(File.Exists(Path.Combine(sharedSnaps, "v2-only.json")));
+            Assert.Equal("V1-PORTAL", File.ReadAllText(Path.Combine(installDir, "portal.db")));
+            Assert.Equal("V1-REPORT", File.ReadAllText(Path.Combine(installDir, "Reports", "app.rptsql")));
+        }
+
+        [Fact]
+        public async Task InPlaceRestore_RefusesPortalDbOutsideInstallDir_WhenHostConfigDoesNotNameIt()
+        {
+            var installDir = Path.Combine(_root, "installed-db-guard");
+            var backupSource = Path.Combine(_root, "backup-src-db-guard");
+            var outsideDbDir = Path.Combine(_root, "outside-db-dir");
+            Directory.CreateDirectory(installDir);
+            Directory.CreateDirectory(backupSource);
+            Directory.CreateDirectory(outsideDbDir);
+
+            var outsidePortalDb = Path.Combine(outsideDbDir, "portal.db");
+            File.WriteAllText(outsidePortalDb, "BACKUP-OUTSIDE-PORTAL");
+            WriteWorkspaceTree(backupSource, "./Snapshots", outsidePortalDb, "V1");
+            var backupConfig = new ConfigurationBuilder()
+                .AddJsonFile(Path.Combine(backupSource, "appsettings.json"))
+                .Build();
+            var backupDir = Path.Combine(_root, "db-guard-backup");
+            Assert.Equal(0, await BackupRestoreService.BackupCoreAsync(backupConfig, backupSource, backupDir, NullLogger.Instance));
+            var (dataZip, keysZip) = FindArchives(backupDir);
+
+            // Mutate outside portal DB and WAL so we can prove neither is deleted or overwritten.
+            File.WriteAllText(outsidePortalDb, "HOST-OUTSIDE-PORTAL-UNTOUCHED");
+            File.WriteAllText(outsidePortalDb + "-wal", "HOST-OUTSIDE-WAL-UNTOUCHED");
+
+            WriteWorkspaceTree(installDir, "./Snapshots", "./portal.db", "HOST-V2");
+            var hostConfigBefore = File.ReadAllText(Path.Combine(installDir, "appsettings.json"));
+
+            var logger = new CapturingLogger();
+            var exit = await BackupRestoreService.RestoreAsync(new CliContext
+            {
+                Command = "admin-restore",
+                RestoreFrom = dataZip,
+                RestoreKeys = keysZip,
+                RestoreTo = installDir,
+                RestoreInPlace = true
+            }, logger);
+
+            Assert.Equal(1, exit);
+            var logText = logger.ToString();
+            Assert.Contains("Portal:DatabasePath", logText);
+            Assert.Contains(Path.GetFullPath(outsidePortalDb), logText);
+            Assert.Contains("--to", logText);
+
+            Assert.Equal("HOST-OUTSIDE-PORTAL-UNTOUCHED", File.ReadAllText(outsidePortalDb));
+            Assert.Equal("HOST-OUTSIDE-WAL-UNTOUCHED", File.ReadAllText(outsidePortalDb + "-wal"));
+            Assert.Equal("HOST-V2-PORTAL", File.ReadAllText(Path.Combine(installDir, "portal.db")));
+            Assert.Equal("HOST-V2-ORCH", File.ReadAllText(Path.Combine(installDir, "etlsql.db")));
+            Assert.Equal(hostConfigBefore, File.ReadAllText(Path.Combine(installDir, "appsettings.json")));
+        }
+
+        private static void WriteWorkspaceTree(string dir, string snapshotDirSetting, string portalDbSetting, string tag)
+        {
+            var portalDbTarget = Path.IsPathRooted(portalDbSetting)
+                ? portalDbSetting
+                : Path.GetFullPath(Path.Combine(dir, portalDbSetting));
+            Directory.CreateDirectory(Path.GetDirectoryName(portalDbTarget)!);
+            File.WriteAllText(portalDbTarget, $"{tag}-PORTAL");
+            File.WriteAllText(Path.Combine(dir, "etlsql.db"), $"{tag}-ORCH");
+
+            Directory.CreateDirectory(Path.Combine(dir, "Snapshots"));
+            Directory.CreateDirectory(Path.Combine(dir, "Reports"));
+            File.WriteAllText(Path.Combine(dir, "Reports", "app.rptsql"), $"{tag}-REPORT");
+            Directory.CreateDirectory(Path.Combine(dir, "data", "datasets"));
+            Directory.CreateDirectory(Path.Combine(dir, "data", "maps"));
+            Directory.CreateDirectory(Path.Combine(dir, ".portal-keys"));
+            File.WriteAllText(Path.Combine(dir, ".portal-keys", "key.xml"), $"{tag}-KEY");
+
+            File.WriteAllText(Path.Combine(dir, "appsettings.json"), $$"""
+            {
+              "Portal": {
+                "DatabasePath": "{{portalDbSetting.Replace("\\", "\\\\")}}",
+                "SnapshotDirectory": "{{snapshotDirSetting.Replace("\\", "\\\\")}}",
+                "ScriptRootPath": "./Reports",
+                "DatasetRootPath": "./data/datasets",
+                "MapRootPath": "./data/maps",
+                "Storage": { "KeyRingPath": "./.portal-keys" }
+              },
+              "Orchestrator": { "HistoryDbPath": "./etlsql.db" }
+            }
+            """);
         }
     }
 }

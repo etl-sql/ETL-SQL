@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Certifies the MSI's Portal profile: a fresh install, an in-place upgrade from the previous
     release, and rollback to it. The first public release has no previous release, so without
@@ -267,9 +267,22 @@ function Uninstall-All([string]$Log) {
     }
 }
 
-function Get-DatabaseFiles {
-    @($installDir, $systemData) | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object {
-        Get-ChildItem -LiteralPath $_ -File | Where-Object Name -match '\.db(-wal|-shm)?$'
+function Invoke-EtlSqlAdmin([string]$ExePath, [string[]]$Arguments, [string]$LogPrefix, [string]$TimeoutMessage) {
+    $stdoutLog = Join-Path $out "$LogPrefix.log"
+    $stderrLog = Join-Path $out "$LogPrefix.err.log"
+    $noInput = Join-Path $out 'empty-stdin.txt'
+    Set-Content -LiteralPath $noInput -Value $null
+    $proc = Start-Process -FilePath $ExePath -ArgumentList $Arguments `
+        -WorkingDirectory $out -PassThru -NoNewWindow -RedirectStandardInput $noInput `
+        -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
+    if (-not $proc.WaitForExit(300000)) {
+        Write-HungInstallDiagnostics -LogPath $stdoutLog -OutPath (Join-Path $out "$LogPrefix.hung.txt")
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        throw [TimeoutException]::new($TimeoutMessage)
+    }
+    if ($proc.ExitCode -ne 0) {
+        $detail = if (Test-Path -LiteralPath $stderrLog) { (Get-Content -LiteralPath $stderrLog -Raw).Trim() } else { '' }
+        throw "$($Arguments[0..1] -join ' ') exited $($proc.ExitCode). $detail".Trim()
     }
 }
 
@@ -303,18 +316,10 @@ try {
             New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
             # Bounded like msiexec: run 39131831623 lost its runner at the step timeout once this call was
             # reached. No console input exists here, so stdin is empty rather than inherited.
-            $backupLog = Join-Path $out 'fresh-backup.log'
-            $noInput = Join-Path $out 'empty-stdin.txt'
-            Set-Content -LiteralPath $noInput -Value $null
-            $backup = Start-Process -FilePath (Join-Path $installDir 'ETL-SQL.exe') -ArgumentList @('admin', 'backup', '--output-dir', "`"$backupDir`"") `
-                -WorkingDirectory $out -PassThru -NoNewWindow -RedirectStandardInput $noInput `
-                -RedirectStandardOutput $backupLog -RedirectStandardError (Join-Path $out 'fresh-backup.err.log')
-            if (-not $backup.WaitForExit(300000)) {
-                Write-HungInstallDiagnostics -LogPath $backupLog -OutPath (Join-Path $out 'fresh-backup.hung.txt')
-                Stop-Process -Id $backup.Id -Force -ErrorAction SilentlyContinue
-                throw [TimeoutException]::new('admin backup did not finish within 5 minutes; see fresh-backup.hung.txt.')
-            }
-            if ($backup.ExitCode -ne 0) { throw "admin backup exited $($backup.ExitCode)." }
+            Invoke-EtlSqlAdmin -ExePath (Join-Path $installDir 'ETL-SQL.exe') `
+                -Arguments @('admin', 'backup', '--output-dir', "`"$backupDir`"") `
+                -LogPrefix 'fresh-backup' `
+                -TimeoutMessage 'admin backup did not finish within 5 minutes; see fresh-backup.hung.txt.'
             $archive = Get-ChildItem -LiteralPath $backupDir -Filter 'etl-sql-backup-*.zip' | Select-Object -First 1
             if ($null -eq $archive) { throw 'admin backup wrote no data archive.' }
             Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -359,11 +364,15 @@ try {
         $backup = Join-Path $privateBackupRoot 'pre-upgrade-backup'
         Set-ServicesState Stopped
         New-Item -ItemType Directory -Force -Path $backup | Out-Null
-        $saved = @(Get-DatabaseFiles | ForEach-Object {
-            $target = Join-Path $backup ("{0}__{1}" -f ($_.DirectoryName -eq $installDir ? 'install' : 'system'), $_.Name)
-            Copy-Item -LiteralPath $_.FullName -Destination $target; $target })
-        Copy-Item -LiteralPath $cfgPath -Destination (Join-Path $backup 'appsettings.json')
-        Write-Line "NOTE previous: backed up $($saved.Count) database file(s) and the configuration"
+        Test-Step 'previous: admin backup packages databases, configuration, and keys' {
+            Invoke-EtlSqlAdmin -ExePath (Join-Path $installDir 'ETL-SQL.exe') `
+                -Arguments @('admin', 'backup', '--output-dir', "`"$backup`"") `
+                -LogPrefix 'previous-backup' `
+                -TimeoutMessage 'previous admin backup did not finish within 5 minutes; see previous-backup.hung.txt.'
+            $dataArchive = Get-ChildItem -LiteralPath $backup -Filter 'etl-sql-backup-*.zip' | Select-Object -First 1
+            $keysArchive = Get-ChildItem -LiteralPath $backup -Filter 'etl-sql-keys-*.zip' | Select-Object -First 1
+            if ($null -eq $dataArchive -or $null -eq $keysArchive) { throw 'admin backup did not write both data and keys archives.' }
+        }
         Set-ServicesState Running
 
         # 2. Upgrade in place.
@@ -387,20 +396,33 @@ try {
             Invoke-Assets @('--inventory-root', $repoRoot, '--revalidate', $cachePrevious, '--record', $cacheCurrent, '--out', (Join-Path $out 'upgrade-assets.json'))
         }
 
+        # Rollback uninstalls the candidate and installs the previous release (v0.22.0), whose CLI does
+        # not yet support `admin restore --in-place`. Stage the candidate's self-contained single-file
+        # CLI under private scratch before uninstalling it so rollback restores with the candidate's
+        # `admin restore` instead of copying files by hand.
+        $candidateCliDir = Join-Path $privateBackupRoot 'candidate-cli'
+        New-Item -ItemType Directory -Force -Path $candidateCliDir | Out-Null
+        $candidateCli = Join-Path $candidateCliDir 'ETL-SQL.exe'
+        Copy-Item -LiteralPath (Join-Path $installDir 'ETL-SQL.exe') -Destination $candidateCli -Force
+
         # 3. Roll back: the MSI refuses a downgrade, so uninstall the candidate (its data is kept),
-        #    install the previous release, and restore the pre-upgrade backup.
+        #    install the previous release, and restore the pre-upgrade backup via `admin restore`.
         Write-Line "== roll back to $($previousVersion)"
         Test-Step 'rollback: uninstall the candidate' { Uninstall-All '03-rollback-uninstall.log' }
         Test-Step 'rollback: msiexec install previous' { Install-Msi $previousPath '03-rollback-install.log' }
         Set-ServicesState Stopped
-        Get-DatabaseFiles | Remove-Item -Force
-        foreach ($file in Get-ChildItem -LiteralPath $backup -File -Filter '*__*') {
-            $scope, $name = $file.Name -split '__', 2
-            $dir = $scope -eq 'install' ? $installDir : $systemData
-            New-Item -ItemType Directory -Force -Path $dir | Out-Null
-            Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $dir $name)
+        Test-Step 'rollback: admin restore puts previous state back in place' {
+            $dataArchive = Get-ChildItem -LiteralPath $backup -Filter 'etl-sql-backup-*.zip' | Select-Object -First 1
+            $keysArchive = Get-ChildItem -LiteralPath $backup -Filter 'etl-sql-keys-*.zip' | Select-Object -First 1
+            if ($null -eq $dataArchive -or $null -eq $keysArchive) { throw 'Pre-upgrade backup archives are missing.' }
+            Invoke-EtlSqlAdmin -ExePath $candidateCli -Arguments @(
+                'admin', 'restore',
+                '--from', "`"$($dataArchive.FullName)`"",
+                '--keys', "`"$($keysArchive.FullName)`"",
+                '--in-place',
+                '--to', "`"$installDir`""
+            ) -LogPrefix 'rollback-restore' -TimeoutMessage 'admin restore did not finish within 5 minutes; see rollback-restore.hung.txt.'
         }
-        Copy-Item -LiteralPath (Join-Path $backup 'appsettings.json') -Destination $cfgPath -Force
         Set-ServicesState Running
         Test-Step 'rollback: Portal healthy on the restored database' { Wait-Portal 'rollback' }
         Test-Step 'rollback: ETL-SQL-Portal runs the previous executable' { Assert-ServiceRunsVersion 'ETL-SQL-Portal' $previousVersion }

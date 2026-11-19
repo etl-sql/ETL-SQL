@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Extensions.Configuration;
 
@@ -72,6 +74,7 @@ namespace ETL_SQL.App
             // Databases
             AddDb(config["Portal:DatabasePath"] ?? "./portal.db", "Portal database");
             AddDb(config["Portal:Orchestrator:DatabasePath"]
+                  ?? config["Orchestrator:DatabasePath"]
                   ?? config["Orchestrator:HistoryDbPath"]
                   ?? SQLiteJobHistoryStore.DefaultDbPath(),
                   "Orchestrator job history database");
@@ -84,6 +87,42 @@ namespace ETL_SQL.App
                     "ETL-SQL", "Sessions");
             AddDir(sessionRoot, "Persistent sessions and spill data");
 
+            return Deduplicate(targets);
+        }
+
+        /// <summary>
+        /// Resolves the runtime data targets for an installed instance (logs, snapshots, reports,
+        /// datasets, maps, databases, sessions, Data Protection key ring, and generated secrets/bootstrap files).
+        /// </summary>
+        public static IReadOnlyList<PurgeTarget> ResolveInstalledDataTargets(IConfiguration config, string installDir)
+        {
+            if (string.IsNullOrWhiteSpace(installDir)) installDir = AppContext.BaseDirectory;
+            string Resolve(string p) =>
+                Path.GetFullPath(Path.IsPathRooted(p) ? p : Path.Combine(installDir, p));
+
+            var targets = ResolveTargets(config, installDir).ToList();
+            var portalDb = Resolve(config["Portal:DatabasePath"] ?? "./portal.db");
+            var keyRing = Resolve(
+                config["Portal:Storage:KeyRingPath"]
+                ?? Path.Combine(Path.GetDirectoryName(portalDb) ?? installDir, ".portal-keys"));
+
+            targets.Add(new PurgeTarget(Resolve("logs"), true, "Application and service logs"));
+            targets.Add(new PurgeTarget(Resolve("data"), true, "Portal data directory"));
+            targets.Add(new PurgeTarget(keyRing, true, "Data Protection key ring"));
+            targets.Add(new PurgeTarget(
+                Resolve(ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName),
+                false,
+                "Installed service secrets"));
+            targets.Add(new PurgeTarget(
+                Resolve("first-run-password.txt"),
+                false,
+                "First-run bootstrap password"));
+
+            return Deduplicate(targets);
+        }
+
+        private static IReadOnlyList<PurgeTarget> Deduplicate(IEnumerable<PurgeTarget> targets)
+        {
             // Dedup by normalized path; case-insensitive on Windows/macOS file systems.
             var comparer = OperatingSystem.IsLinux()
                 ? StringComparer.Ordinal
@@ -96,7 +135,7 @@ namespace ETL_SQL.App
         /// Conservative guard against deleting a filesystem root, a user-profile root, or a well-known
         /// system directory even if configuration is misconfigured to point at one.
         /// </summary>
-        public static bool IsUnsafeTarget(string fullPath)
+        public static bool IsUnsafeTarget(string fullPath, string? protectedInstallDir = null)
         {
             if (string.IsNullOrWhiteSpace(fullPath)) return true;
 
@@ -137,6 +176,13 @@ namespace ETL_SQL.App
             var appDir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(AppContext.BaseDirectory));
             if (string.Equals(appDir, normalized, PathComparison) || IsAncestor(normalized, appDir))
                 return true;
+
+            if (!string.IsNullOrWhiteSpace(protectedInstallDir))
+            {
+                var installRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(protectedInstallDir));
+                if (string.Equals(installRoot, normalized, PathComparison) || IsAncestor(normalized, installRoot))
+                    return true;
+            }
 
             // A git working tree, or a folder inside one. Studio's source-controlled mode keeps
             // reports in a repository; purging runtime data must not delete the team's source.
@@ -196,12 +242,15 @@ namespace ETL_SQL.App
         /// Never throws for per-target failures — locked/missing files are reported, not fatal, so an
         /// uninstall is never blocked by leftover data.
         /// </summary>
-        public static IReadOnlyList<PurgeResult> Execute(IEnumerable<PurgeTarget> targets, bool dryRun)
+        public static IReadOnlyList<PurgeResult> Execute(
+            IEnumerable<PurgeTarget> targets,
+            bool dryRun,
+            string? protectedInstallDir = null)
         {
             var results = new List<PurgeResult>();
             foreach (var target in targets)
             {
-                if (IsUnsafeTarget(target.Path))
+                if (IsUnsafeTarget(target.Path, protectedInstallDir))
                 {
                     results.Add(new PurgeResult(target, false, 0, false, "Refused: unsafe path"));
                     continue;
@@ -235,6 +284,66 @@ namespace ETL_SQL.App
             }
 
             return results;
+        }
+
+        /// <summary>
+        /// Executes <c>etl-sql admin purge-data</c>. Requires <c>--confirm</c> (unless <c>--dry-run</c>
+        /// is set) and removes only the resolved installed runtime-data locations.
+        /// </summary>
+        public static int RunAdminPurgeData(CliContext ctx, ILogger logger, IConfiguration? fallbackConfig = null)
+        {
+            if (!ctx.AdminPurgeDryRun && !ctx.AdminPurgeConfirm)
+            {
+                logger.WriteLine(
+                    "Refusing to delete installed runtime data without --confirm. Pass --dry-run to preview or --confirm to delete.",
+                    ConsoleColor.Red);
+                return 1;
+            }
+
+            var installDir = string.IsNullOrWhiteSpace(ctx.AdminPurgeInstallDir)
+                ? Path.GetFullPath(AppContext.BaseDirectory)
+                : Path.GetFullPath(ctx.AdminPurgeInstallDir.Trim('"', '\'', ' '));
+
+            IConfiguration config;
+            if (!string.IsNullOrWhiteSpace(ctx.AdminPurgeInstallDir) || fallbackConfig is null)
+            {
+                var cfgPath = Path.Combine(installDir, "appsettings.json");
+                config = File.Exists(cfgPath)
+                    ? new ConfigurationBuilder().AddJsonFile(cfgPath, optional: true).Build()
+                    : new ConfigurationBuilder().Build();
+            }
+            else
+            {
+                config = fallbackConfig;
+            }
+
+            var targets = ResolveInstalledDataTargets(config, installDir);
+            var existing = targets
+                .Where(t => t.IsDirectory ? Directory.Exists(t.Path) : File.Exists(t.Path))
+                .ToList();
+
+            if (existing.Count == 0)
+            {
+                logger.WriteLine("No ETL-SQL runtime data found. Nothing to purge.", ConsoleColor.Green);
+                return 0;
+            }
+
+            if (ctx.AdminPurgeDryRun)
+            {
+                logger.WriteLine($"Dry run: {existing.Count} runtime data item(s) would be deleted:", ConsoleColor.Yellow);
+                foreach (var target in existing)
+                    logger.WriteLine($"  - {target.Description}: {target.Path} ({MeasureBytes(target)} bytes)", ConsoleColor.Gray);
+                return 0;
+            }
+
+            var results = Execute(existing, dryRun: false, protectedInstallDir: installDir);
+            var deleted = results.Count(r => r.Deleted);
+            var failed = results.Where(r => r.Error != null).ToList();
+            logger.WriteLine($"Deleted {deleted} installed runtime data item(s).", ConsoleColor.Green);
+            foreach (var failure in failed)
+                logger.WriteLine($"Could not delete {failure.Target.Path}: {failure.Error}", ConsoleColor.Yellow);
+
+            return failed.Count > 0 ? 1 : 0;
         }
     }
 }

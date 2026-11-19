@@ -4,10 +4,12 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Multitenancy;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
@@ -109,6 +111,10 @@ namespace ETL_SQL.App
             {
                 logger.WriteLine($"Note: the backup outcome could not be recorded for the backup-report service: {ex.Message}", ConsoleColor.Yellow);
             }
+            finally
+            {
+                SqliteConnection.ClearAllPools();
+            }
         }
 
         /// <summary>
@@ -121,11 +127,29 @@ namespace ETL_SQL.App
         /// a drill happened travels. Best-effort: recording never changes the command's exit code.
         /// </summary>
         private static async Task RecordRestoreOutcomeAsync(
-            int exitCode, bool validateOnly, int problemCount, ILogger logger)
+            int exitCode,
+            bool validateOnly,
+            int problemCount,
+            ILogger logger,
+            string? inPlaceTarget = null)
         {
             try
             {
-                var store = OutcomeStore(Program.ServiceProvider?.GetService<IConfiguration>(), AppContext.BaseDirectory);
+                IConfiguration? config = Program.ServiceProvider?.GetService<IConfiguration>();
+                string baseDir = AppContext.BaseDirectory;
+                if (!string.IsNullOrWhiteSpace(inPlaceTarget))
+                {
+                    baseDir = inPlaceTarget;
+                    var targetCfg = Path.Combine(inPlaceTarget, "appsettings.json");
+                    if (File.Exists(targetCfg))
+                    {
+                        config = new ConfigurationBuilder()
+                            .AddJsonFile(targetCfg, optional: true)
+                            .AddInstalledSecrets(inPlaceTarget)
+                            .Build();
+                    }
+                }
+                var store = OutcomeStore(config, baseDir);
                 if (store == null) return;
                 await store.InitializeAsync();
                 await store.SetHostStateAsync("restore", "last_restore_mode", validateOnly ? "validate" : "restore");
@@ -137,6 +161,10 @@ namespace ETL_SQL.App
             catch (Exception ex)
             {
                 logger.WriteLine($"Note: the restore outcome could not be recorded: {ex.Message}", ConsoleColor.Yellow);
+            }
+            finally
+            {
+                SqliteConnection.ClearAllPools();
             }
         }
 
@@ -357,9 +385,15 @@ namespace ETL_SQL.App
         internal static async Task<int> RestoreAsync(CliContext ctx, ILogger logger)
         {
             var (exitCode, problemCount) = await RestoreCoreAsync(ctx, logger);
-            await RecordRestoreOutcomeAsync(exitCode, ctx.RestoreValidateOnly, problemCount, logger);
+            var outcomeBase = ctx.RestoreInPlace ? ResolveInPlaceTarget(ctx) : null;
+            await RecordRestoreOutcomeAsync(exitCode, ctx.RestoreValidateOnly, problemCount, logger, outcomeBase);
             return exitCode;
         }
+
+        private static string ResolveInPlaceTarget(CliContext ctx) =>
+            string.IsNullOrWhiteSpace(ctx.RestoreTo)
+                ? Path.GetFullPath(AppContext.BaseDirectory)
+                : Path.GetFullPath(ctx.RestoreTo.Trim('"', '\'', ' '));
 
         /// <summary>Restore/validate proper. Returns the exit code and how many validation problems
         /// were found, so <see cref="RestoreAsync"/> can record drill evidence around it.</summary>
@@ -382,6 +416,10 @@ namespace ETL_SQL.App
             var work = Path.Combine(await SecureTempRootAsync(), $"etl-sql-restore-{Guid.NewGuid():N}");
             var dataExtract = Path.Combine(work, "data");
             var keysExtract = Path.Combine(work, "keys");
+            var inPlaceTarget = ctx.RestoreInPlace ? ResolveInPlaceTarget(ctx) : null;
+            var reportTarget = ctx.RestoreValidateOnly
+                ? null
+                : (ctx.RestoreInPlace ? inPlaceTarget : ctx.RestoreTo);
 
             try
             {
@@ -391,13 +429,13 @@ namespace ETL_SQL.App
                 await ExtractZipToDirectoryAsync(keysZip, keysExtract);
 
                 problems = await ValidateAsync(
-                    dataExtract, keysExtract, logger, ctx.RestoreExpectedTenant);
+                    dataExtract, keysExtract, logger, ctx.RestoreExpectedTenant, ctx.RestoreInPlace, inPlaceTarget);
                 await WriteRecoveryReportIfRequestedAsync(
                     ctx,
                     dataExtract,
                     keysExtract,
                     problems,
-                    targetDirectory: ctx.RestoreValidateOnly ? null : ctx.RestoreTo,
+                    targetDirectory: reportTarget,
                     restored: false,
                     logger);
                 if (problems.Count > 0)
@@ -415,46 +453,65 @@ namespace ETL_SQL.App
                     return (0, 0);
                 }
 
-                if (string.IsNullOrWhiteSpace(ctx.RestoreTo))
+                string target;
+                if (ctx.RestoreInPlace)
                 {
-                    logger.WriteLine("--to <dir> is required to perform a restore (omit it only with --validate).", ConsoleColor.Red);
-                    return (1, 0);
+                    target = inPlaceTarget!;
+                    var resolvedTargets = ResolveInPlaceTargets(target, dataExtract);
+                    var disallowed = FindDisallowedInPlaceTargets(resolvedTargets, target);
+                    if (disallowed.Count > 0)
+                    {
+                        foreach (var spec in disallowed)
+                            logger.WriteLine(FormatDisallowedInPlaceMessage(spec, target), ConsoleColor.Red);
+                        return (1, disallowed.Count);
+                    }
+                    await CreateDirectoryAsync(target);
+                    await RestoreInPlaceAsync(target, dataExtract, keysExtract, resolvedTargets);
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(ctx.RestoreTo))
+                    {
+                        logger.WriteLine("--to <dir> is required to perform a restore (omit it only with --validate or --in-place).", ConsoleColor.Red);
+                        return (1, 0);
+                    }
+
+                    target = Path.GetFullPath(ctx.RestoreTo.Trim('"', '\'', ' '));
+                    if (Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any())
+                    {
+                        logger.WriteLine(
+                            "Restore target must be empty; recovery never merges an archive with existing state.",
+                            ConsoleColor.Red);
+                        return (1, 0);
+                    }
+                    await CreateDirectoryAsync(target);
+
+                    // Materialize the restored layout: databases at the root, content under their dirs,
+                    // the DP key ring beside the database, and secrets merged back into appsettings.json.
+                    // The yielded manifest entries are not needed on restore (archiveRoot is irrelevant).
+                    await CopyTreeAsync(Path.Combine(dataExtract, "db"), target, target);
+                    await CopyTreeAsync(Path.Combine(dataExtract, "content", "snapshots"), Path.Combine(target, "Snapshots"), target);
+                    await CopyTreeAsync(Path.Combine(dataExtract, "content", "reports"), Path.Combine(target, "Reports"), target);
+                    await CopyTreeAsync(Path.Combine(dataExtract, "content", "datasets"), Path.Combine(target, "data", "datasets"), target);
+                    await CopyTreeAsync(Path.Combine(dataExtract, "content", "maps"), Path.Combine(target, "data", "maps"), target);
+                    await CopyTreeAsync(Path.Combine(keysExtract, DpKeyRingDirName), Path.Combine(target, DpKeyRingDirName), target);
+
+                    var restoredConfig = Path.Combine(target, "appsettings.json");
+                    var restoredSecrets = Path.Combine(target, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName);
+                    await MergeConfigAsync(
+                        Path.Combine(dataExtract, "appsettings.json"),
+                        Path.Combine(keysExtract, SecretsName),
+                        restoredConfig,
+                        restoredSecrets);
+                    // Both files can hold plaintext secrets — restrict them to the owner.
+                    RestrictToOwner(restoredConfig, isDirectory: false);
+                    if (File.Exists(restoredSecrets)) RestrictToOwner(restoredSecrets, isDirectory: false);
+                    // Likewise the restored Data Protection key ring.
+                    RestrictToOwner(Path.Combine(target, DpKeyRingDirName), isDirectory: true);
+                    if (!string.IsNullOrWhiteSpace(ctx.RestoreExpectedTenant))
+                        await FenceRestoredTenantWorkAsync(target);
                 }
 
-                var target = Path.GetFullPath(ctx.RestoreTo.Trim('"', '\'', ' '));
-                if (Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any())
-                {
-                    logger.WriteLine(
-                        "Restore target must be empty; recovery never merges an archive with existing state.",
-                        ConsoleColor.Red);
-                    return (1, 0);
-                }
-                await CreateDirectoryAsync(target);
-
-                // Materialize the restored layout: databases at the root, content under their dirs,
-                // the DP key ring beside the database, and secrets merged back into appsettings.json.
-                // The yielded manifest entries are not needed on restore (archiveRoot is irrelevant).
-                await CopyTreeAsync(Path.Combine(dataExtract, "db"), target, target);
-                await CopyTreeAsync(Path.Combine(dataExtract, "content", "snapshots"), Path.Combine(target, "Snapshots"), target);
-                await CopyTreeAsync(Path.Combine(dataExtract, "content", "reports"), Path.Combine(target, "Reports"), target);
-                await CopyTreeAsync(Path.Combine(dataExtract, "content", "datasets"), Path.Combine(target, "data", "datasets"), target);
-                await CopyTreeAsync(Path.Combine(dataExtract, "content", "maps"), Path.Combine(target, "data", "maps"), target);
-                await CopyTreeAsync(Path.Combine(keysExtract, DpKeyRingDirName), Path.Combine(target, DpKeyRingDirName), target);
-
-                var restoredConfig = Path.Combine(target, "appsettings.json");
-                var restoredSecrets = Path.Combine(target, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName);
-                await MergeConfigAsync(
-                    Path.Combine(dataExtract, "appsettings.json"),
-                    Path.Combine(keysExtract, SecretsName),
-                    restoredConfig,
-                    restoredSecrets);
-                // Both files can hold plaintext secrets — restrict them to the owner.
-                RestrictToOwner(restoredConfig, isDirectory: false);
-                if (File.Exists(restoredSecrets)) RestrictToOwner(restoredSecrets, isDirectory: false);
-                // Likewise the restored Data Protection key ring.
-                RestrictToOwner(Path.Combine(target, DpKeyRingDirName), isDirectory: true);
-                if (!string.IsNullOrWhiteSpace(ctx.RestoreExpectedTenant))
-                    await FenceRestoredTenantWorkAsync(target);
                 await WriteRecoveryReportIfRequestedAsync(
                     ctx,
                     dataExtract,
@@ -466,11 +523,18 @@ namespace ETL_SQL.App
 
                 logger.WriteLine($"Restore complete into: {target}", ConsoleColor.Green);
                 logger.WriteLine("Next steps:", ConsoleColor.Cyan);
-                logger.WriteLine("  1. Point the portal/orchestrator at this directory (or copy it into place).", ConsoleColor.Gray);
-                logger.WriteLine($"     Copy {ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName} too: an installed one overrides appsettings.json.", ConsoleColor.Gray);
-                logger.WriteLine("  2. Start the portal — pending migrations apply automatically on startup.", ConsoleColor.Gray);
-                logger.WriteLine("  3. Dataset caches referenced by ABSOLUTE path in the catalog must be restored to", ConsoleColor.Gray);
-                logger.WriteLine("     their original DatasetRootPath, or re-materialized (see admin guide §6.5).", ConsoleColor.Gray);
+                logger.WriteLine(
+                    ctx.RestoreInPlace
+                        ? "  1. Start the Portal and Orchestrator services — pending migrations apply automatically if needed."
+                        : "  1. Point the portal/orchestrator at this directory (or copy it into place).",
+                    ConsoleColor.Gray);
+                if (!ctx.RestoreInPlace)
+                {
+                    logger.WriteLine($"     Copy {ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName} too: an installed one overrides appsettings.json.", ConsoleColor.Gray);
+                    logger.WriteLine("  2. Start the portal — pending migrations apply automatically on startup.", ConsoleColor.Gray);
+                    logger.WriteLine("  3. Dataset caches referenced by ABSOLUTE path in the catalog must be restored to", ConsoleColor.Gray);
+                    logger.WriteLine("     their original DatasetRootPath, or re-materialized (see admin guide §6.5).", ConsoleColor.Gray);
+                }
                 return (0, 0);
             }
             catch (Exception ex)
@@ -481,6 +545,274 @@ namespace ETL_SQL.App
             finally
             {
                 TryDeleteDir(work);
+            }
+        }
+
+        private sealed record InPlaceTargetSpec(
+            string ConfigKey,
+            string ResolvedPath,
+            string HostResolvedPath);
+
+        private sealed record InPlaceTargets(
+            string PortalDb,
+            string OrchestratorDb,
+            string Snapshots,
+            string Reports,
+            string Datasets,
+            string Maps,
+            string KeyRing,
+            IReadOnlyList<InPlaceTargetSpec> All);
+
+        private static StringComparison InPlacePathComparison =>
+            OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+        private static string NormalizeFullPath(string path) =>
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+
+        private static bool PathsEqual(string left, string right) =>
+            string.Equals(NormalizeFullPath(left), NormalizeFullPath(right), InPlacePathComparison);
+
+        private static bool IsStrictDescendant(string candidatePath, string installRoot)
+        {
+            var normalizedCandidate = NormalizeFullPath(candidatePath);
+            var normalizedRoot = NormalizeFullPath(installRoot);
+            if (string.Equals(normalizedCandidate, normalizedRoot, InPlacePathComparison))
+                return false;
+
+            var prefix = normalizedRoot.EndsWith(Path.DirectorySeparatorChar)
+                ? normalizedRoot
+                : normalizedRoot + Path.DirectorySeparatorChar;
+            return normalizedCandidate.StartsWith(prefix, InPlacePathComparison);
+        }
+
+        private static bool IsAllowedInPlaceTarget(InPlaceTargetSpec spec, string installRoot) =>
+            IsStrictDescendant(spec.ResolvedPath, installRoot)
+            || PathsEqual(spec.ResolvedPath, spec.HostResolvedPath);
+
+        private static IReadOnlyList<InPlaceTargetSpec> FindDisallowedInPlaceTargets(
+            InPlaceTargets targets,
+            string installRoot) =>
+            targets.All.Where(spec => !IsAllowedInPlaceTarget(spec, installRoot)).ToList();
+
+        private static string FormatDisallowedInPlaceMessage(InPlaceTargetSpec spec, string installRoot) =>
+            $"In-place restore refused for '{spec.ConfigKey}': resolved path '{spec.ResolvedPath}' is outside " +
+            $"install directory '{NormalizeFullPath(installRoot)}' and does not match the host appsettings.json. " +
+            "Run a normal (non-in-place) restore with '--to <staging dir>' instead.";
+
+        private static InPlaceTargets ResolveInPlaceTargets(string target, string dataExtract)
+        {
+            var normalizedTarget = NormalizeFullPath(target);
+            var backupSettingsPath = Path.Combine(dataExtract, "appsettings.json");
+            var hostSettingsPath = Path.Combine(normalizedTarget, "appsettings.json");
+            var backupConfig = File.Exists(backupSettingsPath)
+                ? new ConfigurationBuilder().AddJsonFile(backupSettingsPath, optional: true).Build()
+                : new ConfigurationBuilder().Build();
+            var hostConfig = File.Exists(hostSettingsPath)
+                ? new ConfigurationBuilder().AddJsonFile(hostSettingsPath, optional: true).Build()
+                : new ConfigurationBuilder().Build();
+
+            static (string Key, string? Value) ConfiguredEntry(
+                IConfiguration primary,
+                IConfiguration fallback,
+                params string[] keys)
+            {
+                foreach (var key in keys)
+                {
+                    var val = primary[key];
+                    if (!string.IsNullOrWhiteSpace(val)) return (key, val);
+                }
+                foreach (var key in keys)
+                {
+                    var val = fallback[key];
+                    if (!string.IsNullOrWhiteSpace(val)) return (key, val);
+                }
+                return (keys[0], null);
+            }
+
+            static string? HostEntry(IConfiguration host, params string[] keys)
+            {
+                foreach (var key in keys)
+                {
+                    var val = host[key];
+                    if (!string.IsNullOrWhiteSpace(val)) return val;
+                }
+                return null;
+            }
+
+            var (portalDbKey, portalDbVal) = ConfiguredEntry(backupConfig, hostConfig, "Portal:DatabasePath");
+            var portalDbTarget = NormalizeFullPath(Resolve(portalDbVal ?? "./portal.db", normalizedTarget));
+            var hostPortalDbTarget = NormalizeFullPath(
+                Resolve(HostEntry(hostConfig, "Portal:DatabasePath") ?? "./portal.db", normalizedTarget));
+
+            var (orchDbKey, orchDbVal) = ConfiguredEntry(
+                backupConfig,
+                hostConfig,
+                "Portal:Orchestrator:DatabasePath",
+                "Orchestrator:DatabasePath",
+                "Orchestrator:HistoryDbPath");
+            var orchDbTarget = NormalizeFullPath(Resolve(orchDbVal ?? "./etlsql.db", normalizedTarget));
+            var hostOrchDbTarget = NormalizeFullPath(
+                Resolve(
+                    HostEntry(
+                        hostConfig,
+                        "Portal:Orchestrator:DatabasePath",
+                        "Orchestrator:DatabasePath",
+                        "Orchestrator:HistoryDbPath") ?? "./etlsql.db",
+                    normalizedTarget));
+
+            var (snapshotsKey, snapshotsVal) = ConfiguredEntry(backupConfig, hostConfig, "Portal:SnapshotDirectory");
+            var snapshotsTarget = NormalizeFullPath(Resolve(snapshotsVal ?? "./Snapshots", normalizedTarget));
+            var hostSnapshotsTarget = NormalizeFullPath(
+                Resolve(HostEntry(hostConfig, "Portal:SnapshotDirectory") ?? "./Snapshots", normalizedTarget));
+
+            var (reportsKey, reportsVal) = ConfiguredEntry(backupConfig, hostConfig, "Portal:ScriptRootPath");
+            var reportsTarget = NormalizeFullPath(Resolve(reportsVal ?? "./Reports", normalizedTarget));
+            var hostReportsTarget = NormalizeFullPath(
+                Resolve(HostEntry(hostConfig, "Portal:ScriptRootPath") ?? "./Reports", normalizedTarget));
+
+            var (datasetsKey, datasetsVal) = ConfiguredEntry(backupConfig, hostConfig, "Portal:DatasetRootPath");
+            var datasetsTarget = NormalizeFullPath(Resolve(datasetsVal ?? "./data/datasets", normalizedTarget));
+            var hostDatasetsTarget = NormalizeFullPath(
+                Resolve(HostEntry(hostConfig, "Portal:DatasetRootPath") ?? "./data/datasets", normalizedTarget));
+
+            var (mapsKey, mapsVal) = ConfiguredEntry(backupConfig, hostConfig, "Portal:MapRootPath");
+            var mapsTarget = NormalizeFullPath(Resolve(mapsVal ?? "./data/maps", normalizedTarget));
+            var hostMapsTarget = NormalizeFullPath(
+                Resolve(HostEntry(hostConfig, "Portal:MapRootPath") ?? "./data/maps", normalizedTarget));
+
+            var (dpRingKey, dpRingVal) = ConfiguredEntry(backupConfig, hostConfig, "Portal:Storage:KeyRingPath");
+            var dpRingTarget = NormalizeFullPath(Resolve(
+                dpRingVal ?? Path.Combine(Path.GetDirectoryName(portalDbTarget) ?? normalizedTarget, DpKeyRingDirName),
+                normalizedTarget));
+            var hostDpRingTarget = NormalizeFullPath(Resolve(
+                HostEntry(hostConfig, "Portal:Storage:KeyRingPath")
+                ?? Path.Combine(Path.GetDirectoryName(hostPortalDbTarget) ?? normalizedTarget, DpKeyRingDirName),
+                normalizedTarget));
+
+            var all = new[]
+            {
+                new InPlaceTargetSpec(portalDbKey, portalDbTarget, hostPortalDbTarget),
+                new InPlaceTargetSpec(orchDbKey, orchDbTarget, hostOrchDbTarget),
+                new InPlaceTargetSpec(snapshotsKey, snapshotsTarget, hostSnapshotsTarget),
+                new InPlaceTargetSpec(reportsKey, reportsTarget, hostReportsTarget),
+                new InPlaceTargetSpec(datasetsKey, datasetsTarget, hostDatasetsTarget),
+                new InPlaceTargetSpec(mapsKey, mapsTarget, hostMapsTarget),
+                new InPlaceTargetSpec(dpRingKey, dpRingTarget, hostDpRingTarget),
+            };
+
+            return new InPlaceTargets(
+                portalDbTarget,
+                orchDbTarget,
+                snapshotsTarget,
+                reportsTarget,
+                datasetsTarget,
+                mapsTarget,
+                dpRingTarget,
+                all);
+        }
+
+        private static async Task RestoreInPlaceAsync(
+            string target,
+            string dataExtract,
+            string keysExtract,
+            InPlaceTargets? preResolvedTargets = null)
+        {
+            var targets = preResolvedTargets ?? ResolveInPlaceTargets(target, dataExtract);
+            var disallowed = FindDisallowedInPlaceTargets(targets, target);
+            if (disallowed.Count > 0)
+                throw new InvalidOperationException(FormatDisallowedInPlaceMessage(disallowed[0], target));
+
+            var backupSettingsPath = Path.Combine(dataExtract, "appsettings.json");
+
+            SqliteConnection.ClearAllPools();
+            await RestoreSqliteSetAsync(Path.Combine(dataExtract, "db", "portal.db"), targets.PortalDb);
+            await RestoreSqliteSetAsync(Path.Combine(dataExtract, "db", "etlsql.db"), targets.OrchestratorDb);
+
+            await ReplaceDirectoryTreeAsync(Path.Combine(dataExtract, "content", "snapshots"), targets.Snapshots, target);
+            await ReplaceDirectoryTreeAsync(Path.Combine(dataExtract, "content", "reports"), targets.Reports, target);
+            await ReplaceDirectoryTreeAsync(Path.Combine(dataExtract, "content", "datasets"), targets.Datasets, target);
+            await ReplaceDirectoryTreeAsync(Path.Combine(dataExtract, "content", "maps"), targets.Maps, target);
+            await ReplaceDirectoryTreeAsync(Path.Combine(keysExtract, DpKeyRingDirName), targets.KeyRing, target);
+
+            var restoredConfig = Path.Combine(target, "appsettings.json");
+            var restoredSecrets = Path.Combine(target, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName);
+            var hadSecretsFile = File.Exists(restoredSecrets);
+            await MergeConfigAsync(
+                backupSettingsPath,
+                Path.Combine(keysExtract, SecretsName),
+                restoredConfig,
+                restoredSecrets,
+                clearInstalledSecretsIfEmpty: true);
+
+            if (OperatingSystem.IsWindows() && !hadSecretsFile && File.Exists(restoredSecrets) && IsElevatedWindowsPrincipal())
+            {
+                new OsLocalStoreProtector().ProtectFile(
+                    restoredSecrets, LocalVaultProtectionScope.LocalMachine, serviceIdentity: null);
+            }
+
+            RestrictToOwner(restoredConfig, isDirectory: false);
+            if (File.Exists(restoredSecrets)) RestrictToOwner(restoredSecrets, isDirectory: false);
+            if (Directory.Exists(targets.KeyRing)) RestrictToOwner(targets.KeyRing, isDirectory: true);
+        }
+
+        private static async Task RestoreSqliteSetAsync(string sourceBase, string destBase)
+        {
+            foreach (var suffix in new[] { "", "-wal", "-shm" })
+                await DeleteFileIfExistsAsync(destBase + suffix);
+
+            var destDir = Path.GetDirectoryName(destBase);
+            if (!string.IsNullOrWhiteSpace(destDir))
+                await CreateDirectoryAsync(destDir);
+
+            foreach (var suffix in new[] { "", "-wal", "-shm" })
+            {
+                var src = sourceBase + suffix;
+                if (File.Exists(src))
+                    await CopyFileAsync(src, destBase + suffix);
+            }
+        }
+
+        private static async Task ReplaceDirectoryTreeAsync(string sourceDir, string destDir, string installRoot)
+        {
+            if (Directory.Exists(destDir) && IsSafeSubdirectoryForReplace(destDir, installRoot))
+                Directory.Delete(destDir, recursive: true);
+
+            if (Directory.Exists(sourceDir))
+                await CopyTreeAsync(sourceDir, destDir, installRoot);
+        }
+
+        private static bool IsSafeSubdirectoryForReplace(string dir, string installRoot)
+        {
+            var normalizedDir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dir));
+            var normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(installRoot));
+            var fsRoot = Path.GetPathRoot(normalizedDir);
+            if (!string.IsNullOrEmpty(fsRoot)
+                && string.Equals(Path.TrimEndingDirectorySeparator(fsRoot), normalizedDir, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+            if (string.Equals(normalizedDir, normalizedRoot, comparison))
+                return false;
+
+            var prefix = normalizedDir + Path.DirectorySeparatorChar;
+            return !normalizedRoot.StartsWith(prefix, comparison);
+        }
+
+        private static bool IsElevatedWindowsPrincipal()
+        {
+            if (!OperatingSystem.IsWindows())
+                return false;
+            try
+            {
+                using var identity = WindowsIdentity.GetCurrent();
+                var principal = new WindowsPrincipal(identity);
+                return principal.IsInRole(WindowsBuiltInRole.Administrator) || identity.IsSystem;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -579,7 +911,9 @@ namespace ETL_SQL.App
             string dataExtract,
             string keysExtract,
             ILogger logger,
-            string? expectedTenant = null)
+            string? expectedTenant = null,
+            bool inPlace = false,
+            string? inPlaceTarget = null)
         {
             var problems = new List<string>();
 
@@ -607,6 +941,11 @@ namespace ETL_SQL.App
                     $"tenant mismatch: data='{dataTenant}' keys='{keysTenant}' (archives are not a matching tenant pair).");
             if (!string.IsNullOrWhiteSpace(dataTenant))
             {
+                if (inPlace)
+                {
+                    problems.Add(
+                        "Managed Dedicated archive requires an empty target directory; --in-place is not supported.");
+                }
                 if (string.IsNullOrWhiteSpace(expectedTenant))
                 {
                     problems.Add(
@@ -695,6 +1034,20 @@ namespace ETL_SQL.App
             if (keyRingFiles != expectedKeyFiles)
                 problems.Add(
                     $"keys archive holds {keyRingFiles} Data Protection key file(s); its manifest lists {expectedKeyFiles}.");
+
+            if (inPlace && !string.IsNullOrWhiteSpace(inPlaceTarget))
+            {
+                try
+                {
+                    var targets = ResolveInPlaceTargets(inPlaceTarget, dataExtract);
+                    foreach (var spec in FindDisallowedInPlaceTargets(targets, inPlaceTarget))
+                        problems.Add(FormatDisallowedInPlaceMessage(spec, inPlaceTarget));
+                }
+                catch (Exception ex)
+                {
+                    problems.Add($"In-place target configuration invalid: {ex.Message}");
+                }
+            }
 
             logger.WriteLine(
                 $"Backup id {dataId}; created {(string?)manifest["createdUtc"]}; app version {backupVersion}; " +
@@ -901,7 +1254,11 @@ namespace ETL_SQL.App
         /// appsettings.json would be shadowed by whatever secrets file is already in place.
         /// </summary>
         private static async Task MergeConfigAsync(
-            string strippedConfigPath, string secretsPath, string outPath, string installedSecretsOutPath)
+            string strippedConfigPath,
+            string secretsPath,
+            string outPath,
+            string installedSecretsOutPath,
+            bool clearInstalledSecretsIfEmpty = false)
         {
             var root = File.Exists(strippedConfigPath)
                 ? JsonNode.Parse(await File.ReadAllTextAsync(strippedConfigPath))
@@ -920,6 +1277,8 @@ namespace ETL_SQL.App
             await File.WriteAllTextAsync(outPath, root.ToJsonString(JsonOpts));
             if (installed.Count > 0)
                 await File.WriteAllTextAsync(installedSecretsOutPath, installed.ToJsonString(JsonOpts));
+            else if (clearInstalledSecretsIfEmpty && File.Exists(installedSecretsOutPath))
+                await File.WriteAllTextAsync(installedSecretsOutPath, "{}");
 
             static void SetByPath(JsonObject root, string dottedPath, JsonNode? value)
             {

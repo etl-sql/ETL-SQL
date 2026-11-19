@@ -79,6 +79,7 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin promotion saas-onboard`](admin-promotion-saas-onboard.md) | Create and populate one physically isolated SaaS tenant boundary |
 | [`etl-sql admin promotion saas-upgrade`](admin-promotion-saas-upgrade.md) | Drain and upgrade one Managed Dedicated tenant boundary |
 | [`etl-sql admin promotion validate`](admin-promotion-validate.md) | Validate mappings and collisions without changing the target |
+| [`etl-sql admin purge-data`](admin-purge-data.md) | Delete all installed ETL-SQL runtime data (reports, snapshots, databases, logs, sessions, secrets) |
 | [`etl-sql admin restore`](admin-restore.md) | Validate and restore a backup (data + keys archives) |
 | [`etl-sql admin service-account`](admin-service-account.md) | Manage Portal service accounts |
 | [`etl-sql admin service-account create`](admin-service-account-create.md) | Create a Portal service account |

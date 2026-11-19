@@ -143,6 +143,12 @@ namespace ETL_SQL.App
                 return await BackupRestoreService.RestoreAsync(ctx, logger);
             }
 
+            if (ctx.Command == "admin-purge-data")
+            {
+                var cfg = Program.ServiceProvider.GetService<IConfiguration>();
+                return DataPurgeService.RunAdminPurgeData(ctx, logger, cfg);
+            }
+
             if (ctx.Command == "admin-migrate-database")
             {
                 return await DatabaseMigrationService.RunAsync(ctx, logger);

@@ -55,6 +55,14 @@ public sealed class DedicatedTenantBackupRestoreTests : IDisposable
             RestoreExpectedTenant = "tenant-beta",
             RestoreValidateOnly = true
         }, NullLogger.Instance));
+        Assert.Equal(1, await BackupRestoreService.RestoreAsync(new CliContext
+        {
+            RestoreFrom = dataArchive,
+            RestoreKeys = keysArchive,
+            RestoreExpectedTenant = "tenant-alpha",
+            RestoreTo = Path.Combine(_root, "dedicated-in-place"),
+            RestoreInPlace = true
+        }, NullLogger.Instance));
 
         var restoreRoot = Path.Combine(_root, "restored-alpha");
         var reportPath = Path.Combine(_root, "restore-report.json");
