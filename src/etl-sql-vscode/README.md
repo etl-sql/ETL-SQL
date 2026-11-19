@@ -12,10 +12,6 @@
 
 ---
 
-> **IMPORTANT — Restart VS Code after installing**
->
-> You may need to **restart VS Code** (close and reopen VS Code) after installing or updating this extension before language features, commands, and the bundled engine take effect.
-
 > **Build cross-source data pipelines, in-stream data quality, governance, and dashboards without stitching together separate tools.**
 >
 > ETL-SQL is a single, deterministic SQL dialect that connects to 30+ sources, enforces data quality rules, and delivers interactive dashboards in source-control friendly scripts backed by 10,000+ tests.
@@ -29,6 +25,17 @@
 <p align="center">
   <em>Schema autocomplete · inline diagnostics · live results console · report preview · notebook execution · data lineage</em>
 </p>
+
+---
+
+## Getting Started in 60 Seconds
+
+1. **Install** ETL-SQL Tools. The engine, language server, and report renderer are bundled for your platform — no SDK, runtime, or database required. *(If commands don't appear right away, restart VS Code once.)*
+2. **Create** a `.etlsql` file in any folder and paste the [pipeline below](#try-it-right-now--no-database-required).
+3. **Press F5.** Results open in the **ETL-SQL Results** panel.
+4. **Make it a dashboard:** save the [dashboard example](#interactive-dashboard-sales_reportrptsql) as `sales_report.rptsql` and run **`F1` → `ETL-SQL: Preview Report`**.
+
+Then follow the [5-Minute Quickstart](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/QUICKSTART.md) or open a ready-made dashboard from the [Report Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/report/README.md).
 
 ---
 
@@ -209,7 +216,7 @@ CREATE PAGE SalesDashboard AS DASHBOARD (
 
 ### 📊 Live Dashboard & Visual Reporting (`.rptsql`)
 - **Side-by-Side Preview** — open a `.rptsql` file and watch the interactive dashboard render alongside your code on every save.
-- **Crisp SVG Visualizations** — charts render as crisp SVG with bars, lines, areas, points, and cards.
+- **25+ Chart Types** — bar, line, combo, scatter, KPI cards, gauges, waterfalls, funnels, heatmaps, treemaps, Sankey, sunburst, Gantt, and choropleth/point maps, plus a `CUSTOM` grammar-of-graphics visual for anything else. All rendered as crisp SVG.
 - **Interactive Controls** — test slicers, cascading filters, date pickers, sliders, and cross-highlighting right in the preview pane.
 - **One-Click Export** — export rendered reports to SVG, PDF, or Markdown directly from VS Code.
 
@@ -243,7 +250,7 @@ Mix and match any of these freely within a single script.
 | **Messaging** | Kafka |
 | **Graph & Document** | MongoDB · Neo4j |
 | **Directory Services** | Active Directory / LDAP |
-| **Notifications** | SMTP (email) |
+| **Notifications** | SMTP (email) · Slack · Microsoft Teams |
 | **ETL-SQL Platform** | Portal · Orchestrator |
 | **Development & Testing** | `MOCKDB()` — zero-config in-memory mock, no setup required |
 
@@ -259,37 +266,21 @@ Supported operating systems:
 
 The extension bundles the native language server and engine binaries for supported platforms; no external runtime or SDK installation is required.
 
----
-
-## Getting Started
-
-**1. Install This Extension**
-
-Install **ETL-SQL Tools** from the VS Code Marketplace. The VSIX bundles everything you need to start immediately — the engine, language server, and report CLI are included for your platform (Windows x64, Linux x64, macOS Intel or Apple Silicon). No separate SDK download required.
-
 **Want the full platform?** Download the optional extras from [github.com/etl-sql/ETL-SQL](https://github.com/etl-sql/ETL-SQL):
 - **Terminal IDE** (`ETL-SQL-TUI`) — full-featured TUI editor with autocomplete and results grid for headless environments
 - **Orchestrator** — always-on job runner with scheduling, history, and dependency management
 - **Portal** — multi-report hosting, permissions, subscriptions, alerts, and usage metrics
 
-**2. Open a Folder and Create a Script**
-
-Create a `.etlsql` file in any workspace folder. IntelliSense and linting activate automatically.
-
-**3. Run It**
-
-Press **F5** to execute and open the **ETL-SQL Results** console.
-
 ---
 
 ## Keyboard Shortcuts
 
-| Shortcut | Action |
-| :--- | :--- |
-| `F5` | Execute the active script |
-| `F5` *(with selection)* | Execute only the highlighted lines |
-| `Shift + Alt + F` | Format the active script |
-| `Ctrl+Shift+P` → `ETL-SQL:` | All ETL-SQL commands — preview, portal upload, stop execution |
+| Windows / Linux | macOS | Action |
+| :--- | :--- | :--- |
+| `F5` | `F5` | Execute the active script |
+| `F5` *(with selection)* | `F5` *(with selection)* | Execute only the highlighted lines |
+| `Shift+Alt+F` | `Shift+Option+F` | Format the active script |
+| `Ctrl+Shift+P` → `ETL-SQL:` | `Cmd+Shift+P` → `ETL-SQL:` | All ETL-SQL commands — preview, export, publish, stop execution |
 
 ---
 
@@ -322,12 +313,13 @@ Formatting options (`etlsql.format.*`: keyword casing, indent size, comma placem
 
 | Resource | Description |
 | :--- | :--- |
-| [5-Minute Quickstart](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/QUICKSTART.md) | Zero-dependency starter pipeline and environment verification |
+| [5-Minute Quickstart](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/QUICKSTART.md) | Pipeline, data quality gate, and live dashboard — no database needed |
 | [Getting Started](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/getting-started.md) | Core paradigms, connections, variables, control flow, and debugging |
 | [Report-SQL & Dashboards](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/reporting/README.md) | Dashboards, cascading slicers, parameters, RLS, and custom theming |
 | [Data Quality & Governance](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/data-quality/README.md) | Value rules (`EXPECT`), quarantine remediation, cross-table checks, and impact analysis |
 | [ETL Pipelines & Orchestration](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/pipelines/README.md) | Staged vs. streaming ingestion, modular scripts, parallel runs, and unit testing |
-| [Pattern Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/etl/README.md) | Production-grade, copy-pasteable ETL recipes |
+| [Report Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/report/README.md) | Complete dashboards you can preview immediately — maps, Sankey, waterfall, forecasting, themes |
+| [ETL Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/etl/README.md) | Production-grade pipeline patterns — incremental loads, SCD Type 2, dead-letter queues, fuzzy matching |
 | [Task Index](https://github.com/etl-sql/ETL-SQL/blob/main/docs/task-index.md) | Goal-oriented "How do I..." locator for common tasks |
 | [Syntax Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/syntax-index.md) | Complete language syntax reference and function signatures |
 | [Data Connectors](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/connectors/README.md) | Every connector, its options, and authentication patterns |
