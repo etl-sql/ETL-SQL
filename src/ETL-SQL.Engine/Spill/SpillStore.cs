@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -21,6 +22,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Engines;
 
 namespace ETL_SQL.Engine.Spill;
 
@@ -854,7 +856,7 @@ public partial class SpillStore : ISpillStore
         }
     }
 
-    private class SecureSpillReader : ISpillReader
+    private class SecureSpillReader : ISortSpillReader
     {
         private readonly string _path;
         private readonly byte[] _key;
@@ -869,6 +871,7 @@ public partial class SpillStore : ISpillStore
         private bool _headerRead;
 
         public string ChunkName => _chunkName;
+        public bool SupportsSortFastPath => false;
 
         public SecureSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress, CancellationToken cancellationToken)
         {
@@ -934,6 +937,22 @@ public partial class SpillStore : ISpillStore
             foreach (var kvp in JsonRowCodec.Decode(line)) row[kvp.Key] = kvp.Value;
             return row;
         }
+
+        public ValueTask<Row?> ReadRowValueTaskAsync() => new(ReadRowAsync());
+
+        public bool TryReadBufferedSortRow(
+            string[] keyColumnNames,
+            bool stripSentinelColumns,
+            [NotNullWhen(true)] out Row? row,
+            out SortKey key0,
+            Span<SortKey> extraKeys)
+        {
+            row = null;
+            key0 = default;
+            return false;
+        }
+
+        public ValueTask<bool> MoveToNextBatchAsync() => ValueTask.FromResult(false);
 
         public async IAsyncEnumerable<Row> AsEnumerableAsync()
         {
@@ -1746,7 +1765,7 @@ public partial class SpillStore : ISpillStore
         }
     }
 
-    private class ArrowSpillReader : ISpillReader, IColumnarSpillReader
+    private class ArrowSpillReader : ISortSpillReader, IColumnarSpillReader
     {
         private const string SchemaVersionKey = "etlsql.spill.schema_version";
         private const string LogicalTypeKeyPrefix = "etlsql.spill.column.";
@@ -1771,7 +1790,15 @@ public partial class SpillStore : ISpillStore
         private ETL_SQL.Data.TableSchema? _rowSchema;
         private string?[]? _logicalTypes;
 
+        // Sort-merge extraction plan, built once per stream to read _SYS_SK_* keys directly into
+        // unboxed SortKey slots and optionally omit sentinel columns from rehydrated Row instances.
+        private bool _sortPlanInitialized;
+        private int[]? _sortKeyColumnIndices;
+        private int[]? _strippedKeptIndices;
+        private ETL_SQL.Data.TableSchema? _strippedRowSchema;
+
         public string ChunkName => _chunkName;
+        public bool SupportsSortFastPath => true;
         private readonly ILogger? _logger;
 
         public ArrowSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress, ILogger? logger = null, CancellationToken cancellationToken = default)
@@ -1823,31 +1850,186 @@ public partial class SpillStore : ISpillStore
             }
         }
 
-        public async Task<Row?> ReadRowAsync()
+        public Task<Row?> ReadRowAsync() => ReadRowValueTaskAsync().AsTask();
+
+        public ValueTask<Row?> ReadRowValueTaskAsync()
         {
             EnterReadMode(SpillReadMode.Rows);
-            if (_arrowReader == null) return null;
+            if (_arrowReader == null) return ValueTask.FromResult<Row?>(null);
 
+            if (_currentBatch != null && _currentBatchRow < _currentBatch.Length)
+                return new ValueTask<Row?>(ExtractRow(_currentBatch, _currentBatchRow++));
+
+            return ReadRowSlowAsync();
+        }
+
+        private async ValueTask<Row?> ReadRowSlowAsync()
+        {
             while (true)
             {
                 if (_currentBatch != null && _currentBatchRow < _currentBatch.Length)
                     return ExtractRow(_currentBatch, _currentBatchRow++);
 
                 _currentBatch?.Dispose();
-                _currentBatch = await _arrowReader.ReadNextRecordBatchAsync();
+                _currentBatch = await _arrowReader!.ReadNextRecordBatchAsync();
                 if (_currentBatch == null) return null;
+                _currentBatchRow = 0;
+            }
+        }
+
+        public bool TryReadBufferedSortRow(
+            string[] keyColumnNames,
+            bool stripSentinelColumns,
+            [NotNullWhen(true)] out Row? row,
+            out SortKey key0,
+            Span<SortKey> extraKeys)
+        {
+            EnterReadMode(SpillReadMode.Rows);
+            if (_currentBatch == null || _currentBatchRow >= _currentBatch.Length)
+            {
+                row = null;
+                key0 = default;
+                return false;
+            }
+
+            var batch = _currentBatch;
+            int rowIndex = _currentBatchRow++;
+            EnsureSortPlan(batch, keyColumnNames, stripSentinelColumns);
+
+            var keyIndices = _sortKeyColumnIndices!;
+            var logicalTypes = _logicalTypes!;
+            if (keyIndices.Length > 0)
+            {
+                int k0 = keyIndices[0];
+                key0 = k0 >= 0 ? ExtractSortKey(batch.Column(k0), rowIndex, logicalTypes[k0]) : SortKey.Null;
+                for (int k = 1; k < keyIndices.Length; k++)
+                {
+                    int ki = keyIndices[k];
+                    extraKeys[k - 1] = ki >= 0 ? ExtractSortKey(batch.Column(ki), rowIndex, logicalTypes[ki]) : SortKey.Null;
+                }
+            }
+            else
+            {
+                key0 = default;
+            }
+
+            if (stripSentinelColumns && _strippedRowSchema != null)
+            {
+                var kept = _strippedKeptIndices!;
+                var values = new object?[kept.Length];
+                for (int i = 0; i < kept.Length; i++)
+                {
+                    int colIdx = kept[i];
+                    values[i] = ExtractValue(batch.Column(colIdx), rowIndex, logicalTypes[colIdx]);
+                }
+                row = new Row(_strippedRowSchema, values);
+            }
+            else
+            {
+                var values = new object?[logicalTypes.Length];
+                for (int i = 0; i < logicalTypes.Length; i++)
+                    values[i] = ExtractValue(batch.Column(i), rowIndex, logicalTypes[i]);
+                row = new Row(_rowSchema!, values);
+            }
+
+            return true;
+        }
+
+        public async ValueTask<bool> MoveToNextBatchAsync()
+        {
+            EnterReadMode(SpillReadMode.Rows);
+            if (_arrowReader == null) return false;
+
+            while (true)
+            {
+                if (_currentBatch != null && _currentBatchRow < _currentBatch.Length)
+                    return true;
+
+                _currentBatch?.Dispose();
+                _currentBatch = await _arrowReader.ReadNextRecordBatchAsync();
+                if (_currentBatch == null) return false;
                 _currentBatchRow = 0;
             }
         }
 
         public async IAsyncEnumerable<Row> AsEnumerableAsync()
         {
+            EnterReadMode(SpillReadMode.Rows);
+            if (_arrowReader == null) yield break;
+
             while (true)
             {
-                var row = await ReadRowAsync();
-                if (row == null) break;
-                yield return row;
+                if (_currentBatch != null)
+                {
+                    while (_currentBatchRow < _currentBatch.Length)
+                        yield return ExtractRow(_currentBatch, _currentBatchRow++);
+                    _currentBatch.Dispose();
+                    _currentBatch = null;
+                }
+
+                _currentBatch = await _arrowReader.ReadNextRecordBatchAsync();
+                if (_currentBatch == null) yield break;
+                _currentBatchRow = 0;
             }
+        }
+
+        private void EnsureRowSchema(RecordBatch batch)
+        {
+            if (_rowSchema != null && _logicalTypes != null) return;
+
+            var fields = batch.Schema.FieldsList;
+            var names = new string[fields.Count];
+            _logicalTypes = new string?[fields.Count];
+            for (int i = 0; i < fields.Count; i++)
+            {
+                names[i] = fields[i].Name;
+                _logicalTypes[i] = GetLogicalType(batch.Schema, i);
+            }
+            _rowSchema = new ETL_SQL.Data.TableSchema(names);
+        }
+
+        private void EnsureSortPlan(RecordBatch batch, string[] keyColumnNames, bool stripSentinelColumns)
+        {
+            EnsureRowSchema(batch);
+            if (_sortPlanInitialized) return;
+
+            var schema = _rowSchema!;
+            var keyIndices = new int[keyColumnNames.Length];
+            for (int k = 0; k < keyColumnNames.Length; k++)
+                keyIndices[k] = schema.GetIndex(keyColumnNames[k]);
+            _sortKeyColumnIndices = keyIndices;
+
+            if (stripSentinelColumns && keyColumnNames.Length > 0)
+            {
+                var kept = new List<int>(schema.ColumnCount);
+                var keptNames = new List<string>(schema.ColumnCount);
+                for (int i = 0; i < schema.ColumnCount; i++)
+                {
+                    string name = schema.GetName(i);
+                    bool isSentinel = false;
+                    for (int k = 0; k < keyColumnNames.Length; k++)
+                    {
+                        if (string.Equals(name, keyColumnNames[k], StringComparison.OrdinalIgnoreCase))
+                        {
+                            isSentinel = true;
+                            break;
+                        }
+                    }
+                    if (!isSentinel)
+                    {
+                        kept.Add(i);
+                        keptNames.Add(name);
+                    }
+                }
+
+                if (kept.Count < schema.ColumnCount)
+                {
+                    _strippedRowSchema = new ETL_SQL.Data.TableSchema(keptNames);
+                    _strippedKeptIndices = kept.ToArray();
+                }
+            }
+
+            _sortPlanInitialized = true;
         }
 
         private Row ExtractRow(RecordBatch batch, int rowIndex)
@@ -1857,21 +2039,10 @@ public partial class SpillStore : ISpillStore
             // Array-backed rows here removed ~20% of the Gate F round-trip's total allocation
             // (a Dictionary<string,object> + entry array per rehydrated row) plus the per-row
             // metadata-key string interpolation — see certification-results/spill-alloc-profile.
-            if (_rowSchema == null || _logicalTypes == null)
-            {
-                var fields = batch.Schema.FieldsList;
-                var names = new string[fields.Count];
-                _logicalTypes = new string?[fields.Count];
-                for (int i = 0; i < fields.Count; i++)
-                {
-                    names[i] = fields[i].Name;
-                    _logicalTypes[i] = GetLogicalType(batch.Schema, i);
-                }
-                _rowSchema = new ETL_SQL.Data.TableSchema(names);
-            }
+            EnsureRowSchema(batch);
 
-            var row = new Row(_rowSchema);
-            for (int i = 0; i < _logicalTypes.Length; i++)
+            var row = new Row(_rowSchema!);
+            for (int i = 0; i < _logicalTypes!.Length; i++)
                 row[i] = ExtractValue(batch.Column(i), rowIndex, _logicalTypes[i]);
             return row;
         }
@@ -2067,6 +2238,30 @@ public partial class SpillStore : ISpillStore
                     => Guid.Parse(a.GetString(index)!),
                 StringArray a => (object?)DecodeArrowString(a.GetString(index), logicalType, _logger),
                 _ => null
+            };
+        }
+
+        private SortKey ExtractSortKey(IArrowArray array, int index, string? logicalType)
+        {
+            if (array.IsNull(index)) return SortKey.Null;
+
+            return array switch
+            {
+                Int64Array a => SortKey.FromDecimal(a.GetValue(index)!.Value),
+                FixedSizeBinaryArray a when a.Data.DataType is FixedSizeBinaryType { ByteWidth: 16 } && IsDecimalLogicalType(logicalType)
+                    => SortKey.FromDecimal(MemoryMarshal.Read<decimal>(a.GetBytes(index))),
+                Decimal128Array a => SortKey.FromDecimal(a.GetValue(index)!.Value),
+                DoubleArray a => SortKey.FromValue(ToDecimalOrDouble(a.GetValue(index))),
+                BooleanArray a => SortKey.FromBoolean(a.GetValue(index)!.Value),
+                TimestampArray a => SortKey.FromDateTime(a.GetTimestamp(index)!.Value.UtcDateTime),
+                StringArray a when IsDateOnlyLogicalType(logicalType)
+                    => SortKey.FromDateTime(ParseDateOnlyString(a.GetString(index)!).ToDateTime(TimeOnly.MinValue)),
+                StringArray a when IsDateTimeOffsetLogicalType(logicalType)
+                    => SortKey.FromDateTime(ParseDateTimeOffsetString(a.GetString(index)!).DateTime),
+                StringArray a when IsGuidLogicalType(logicalType)
+                    => SortKey.FromOther(Guid.Parse(a.GetString(index)!)),
+                StringArray a => SortKey.FromValue(DecodeArrowString(a.GetString(index), logicalType, _logger)),
+                _ => SortKey.Null
             };
         }
 

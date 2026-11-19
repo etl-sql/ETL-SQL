@@ -1476,14 +1476,31 @@ public class SelectExecutionEngine
             _resolvers = resolvers;
         }
 
-        public async Task<object?[]> ExtractAsync(Row row)
+        public ValueTask<object?[]> ExtractAsync(Row row)
         {
             var keys = new object?[_resolvers.Length];
             for (int i = 0; i < _resolvers.Length; i++)
             {
                 var r = _resolvers[i];
-                if (r.DirectColName != null && row.HasColumn(r.DirectColName))
-                    keys[i] = row[r.DirectColName];
+                if (r.DirectColName != null && row.TryGetValue(r.DirectColName, out var directVal))
+                    keys[i] = directVal;
+                else if (r.Compiled != null)
+                    keys[i] = r.Compiled(row);
+                else if (r.FallbackExpr != null)
+                    return ExtractFallbackAsync(row, keys, i);
+                else
+                    keys[i] = null;
+            }
+            return new ValueTask<object?[]>(keys);
+        }
+
+        private async ValueTask<object?[]> ExtractFallbackAsync(Row row, object?[] keys, int startIndex)
+        {
+            for (int i = startIndex; i < _resolvers.Length; i++)
+            {
+                var r = _resolvers[i];
+                if (r.DirectColName != null && row.TryGetValue(r.DirectColName, out var directVal))
+                    keys[i] = directVal;
                 else if (r.Compiled != null)
                     keys[i] = r.Compiled(row);
                 else if (r.FallbackExpr != null)

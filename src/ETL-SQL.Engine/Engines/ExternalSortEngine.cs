@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,10 +10,12 @@ using ETL_SQL.Core.Planning;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Planning;
+using ETL_SQL.Engine.Services;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Engines;
+
 /// <summary>
 /// High-scale sort engine that spills sorted chunks to disk when row count exceeds the in-memory threshold.
 /// Uses an external k-way merge sort: divide into sorted runs, then merge with a min-heap.
@@ -32,7 +32,7 @@ public class ExternalSortEngine
     internal long IntermediateKeyStripCount { get; private set; }
     internal long PrefixResolvedComparisons { get; private set; }
 
-    internal readonly record struct SortEntry(Row Row, object?[] Keys, ulong KeyPrefix);
+    internal readonly record struct SortEntry(Row Row, SortKey Key0, int ExtraKeyOffset, ulong KeyPrefix);
 
     // Column-name prefix for individual sort-key columns written to spill chunks.
     // Using one column per key avoids JSON array serialization and lets Arrow store
@@ -82,12 +82,18 @@ public class ExternalSortEngine
         List<OrderByClause> orderBy,
         Func<Row, Task<object?[]>>? extractKeysAsync = null,
         CancellationToken cancellationToken = default) =>
-        SortStreamCoreAsync(inputStream, orderBy, extractKeysAsync, null, null, cancellationToken);
+        SortStreamCoreAsync(
+            inputStream,
+            orderBy,
+            extractKeysAsync != null ? row => new ValueTask<object?[]>(extractKeysAsync(row)) : null,
+            null,
+            null,
+            cancellationToken);
 
     internal IAsyncEnumerable<Row> SortStreamWithPrefixAsync(
         IAsyncEnumerable<Row> inputStream,
         List<OrderByClause> orderBy,
-        Func<Row, Task<object?[]>> extractKeysAsync,
+        Func<Row, ValueTask<object?[]>> extractKeysAsync,
         List<(Row Row, object?[] Keys)> prefix,
         IMemoryGrantLease prefixLease,
         CancellationToken cancellationToken = default) =>
@@ -96,7 +102,7 @@ public class ExternalSortEngine
     private async IAsyncEnumerable<Row> SortStreamCoreAsync(
         IAsyncEnumerable<Row> inputStream,
         List<OrderByClause> orderBy,
-        Func<Row, Task<object?[]>>? extractKeysAsync,
+        Func<Row, ValueTask<object?[]>>? extractKeysAsync,
         List<(Row Row, object?[] Keys)>? prefix,
         IMemoryGrantLease? prefixLease,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -127,43 +133,33 @@ public class ExternalSortEngine
 
         try
         {
-            // 1. Comparison function: resolve distinct primary keys in O(1) via their normalized
-            //    64-bit prefix before falling back to full CompareConstants / tie-breaker columns.
-            int Compare(SortEntry a, SortEntry b)
-            {
-                if (a.KeyPrefix != b.KeyPrefix)
-                {
-                    PrefixResolvedComparisons++;
-                    return a.KeyPrefix < b.KeyPrefix ? -1 : 1;
-                }
-
-                for (int i = 0; i < orderBy.Count; i++)
-                {
-                    var res = orderBy[i].OutputOrder(_context.CompareConstants(a.Keys[i], b.Keys[i]), a.Keys[i], b.Keys[i]);
-                    if (res != 0) return res;
-                }
-                return 0;
-            }
+            bool caseSensitive = _context.CaseSensitiveComparison;
+            int keyCount = orderBy.Count;
+            int extraCount = Math.Max(0, keyCount - 1);
+            var inputExtraKeys = extraCount > 0 ? new List<SortKey>() : null;
+            var inputComparer = new SortEntryComparer(this, orderBy, caseSensitive, inputExtraKeys);
+            var keySlots = extractKeysAsync == null && keyCount > 0 ? BuildKeySlotEvaluators(orderBy) : null;
+            bool allKeysSync = keySlots != null && Array.TrueForAll(keySlots, static s => s.CanEvaluateSynchronously);
 
             // 2. Consume stream and spill chunks. The memory guard flushes the current chunk early
             // when the accumulated chunk footprint (precise byte accounting) crosses the governor
             // ceiling, so a chunk of very wide rows can't exceed the budget even if its row count is
             // under ChunkSize.
-            bool caseSensitive = _context.CaseSensitiveComparison;
             var currentChunk = new List<SortEntry>(prefix?.Count ?? 0);
             int chunkCounter = 0;
             var memGuard = new MemoryBudgetGuard(MemoryGovernor.Ceiling(_context));
 
             async Task SpillCurrentChunkAsync()
             {
-                currentChunk.Sort(Compare);
+                currentChunk.Sort(inputComparer);
                 var chunkName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
                 chunkPaths.Add(chunkName);
                 cleanup.Add(chunkName);
-                await SpillChunkAsync(chunkName, currentChunk, keyColumnNames);
+                await SpillChunkAsync(chunkName, currentChunk, keyColumnNames, inputExtraKeys);
                 _context.Telemetry.SortSpillCount++;
                 _context.Telemetry.PartitionsCount++;
                 currentChunk.Clear();
+                inputExtraKeys?.Clear();
                 memGuard.Reset();
                 chunkLease.Dispose();
                 chunkLease = arbiter.AcquireLease();
@@ -176,26 +172,81 @@ public class ExternalSortEngine
                 effectiveCancellationToken.ThrowIfCancellationRequested();
                 foreach (var entry in prefix)
                 {
-                    for (int i = 0; i < entry.Keys.Length; i++)
-                        entry.Keys[i] = CompoundKey.NormalizeValue(entry.Keys[i]);
-                    currentChunk.Add(new SortEntry(entry.Row, entry.Keys, ComputeKeyPrefix(entry.Keys, orderBy, caseSensitive)));
+                    var key0 = keyCount > 0 ? SortKey.FromValue(entry.Keys[0]) : SortKey.Null;
+                    int extraOffset = -1;
+                    if (extraCount > 0)
+                    {
+                        extraOffset = inputExtraKeys!.Count;
+                        for (int i = 1; i < keyCount; i++)
+                            inputExtraKeys.Add(SortKey.FromValue(entry.Keys[i]));
+                    }
+                    ulong keyPrefix = keyCount > 0 ? ComputeKeyPrefix(key0, orderBy[0], caseSensitive) : 0UL;
+                    currentChunk.Add(new SortEntry(entry.Row, key0, extraOffset, keyPrefix));
                 }
                 await SpillCurrentChunkAsync();
                 retainedLease?.Dispose();
             }
+
             await foreach (var row in inputStream.WithCancellation(effectiveCancellationToken))
             {
                 effectiveCancellationToken.ThrowIfCancellationRequested();
-                var keys = new object?[orderBy.Count];
-                var extracted = extractKeysAsync != null ? await extractKeysAsync(row) : null;
-                for (int i = 0; i < orderBy.Count; i++)
+                SortKey key0 = SortKey.Null;
+                int extraOffset = -1;
+                long keyHeapBytes = 0;
+
+                if (keyCount > 0)
                 {
-                    var val = extracted != null ? extracted[i] : await _context.EvaluateValue(orderBy[i].Expression, row);
-                    keys[i] = CompoundKey.NormalizeValue(val);
+                    if (extractKeysAsync != null)
+                    {
+                        var extracted = await extractKeysAsync(row);
+                        key0 = SortKey.FromValue(extracted[0]);
+                        keyHeapBytes = key0.EstimateHeapBytes();
+                        if (extraCount > 0)
+                        {
+                            extraOffset = inputExtraKeys!.Count;
+                            for (int i = 1; i < keyCount; i++)
+                            {
+                                var k = SortKey.FromValue(extracted[i]);
+                                inputExtraKeys.Add(k);
+                                keyHeapBytes += k.EstimateHeapBytes();
+                            }
+                        }
+                    }
+                    else if (allKeysSync)
+                    {
+                        key0 = SortKey.FromValue(keySlots![0].EvaluateSync(row));
+                        keyHeapBytes = key0.EstimateHeapBytes();
+                        if (extraCount > 0)
+                        {
+                            extraOffset = inputExtraKeys!.Count;
+                            for (int i = 1; i < keyCount; i++)
+                            {
+                                var k = SortKey.FromValue(keySlots[i].EvaluateSync(row));
+                                inputExtraKeys.Add(k);
+                                keyHeapBytes += k.EstimateHeapBytes();
+                            }
+                        }
+                    }
+                    else
+                    {
+                        key0 = SortKey.FromValue(await keySlots![0].EvaluateAsync(_context, row));
+                        keyHeapBytes = key0.EstimateHeapBytes();
+                        if (extraCount > 0)
+                        {
+                            extraOffset = inputExtraKeys!.Count;
+                            for (int i = 1; i < keyCount; i++)
+                            {
+                                var k = SortKey.FromValue(await keySlots[i].EvaluateAsync(_context, row));
+                                inputExtraKeys.Add(k);
+                                keyHeapBytes += k.EstimateHeapBytes();
+                            }
+                        }
+                    }
                 }
 
-                currentChunk.Add(new SortEntry(row, keys, ComputeKeyPrefix(keys, orderBy, caseSensitive)));
-                memGuard.Add(row.EstimateHeapBytes() + RowMemory.EstimateValuesBytes(keys));
+                ulong keyPrefix = keyCount > 0 ? ComputeKeyPrefix(key0, orderBy[0], caseSensitive) : 0UL;
+                currentChunk.Add(new SortEntry(row, key0, extraOffset, keyPrefix));
+                memGuard.Add(row.EstimateHeapBytes() + 64L + (extraCount * 40L) + keyHeapBytes);
                 bool spillForArbiter = currentChunk.Count > 0 && chunkLease.RegisterAndCheckSpill(memGuard.BytesAccumulated);
 
                 if (currentChunk.Count >= ChunkSize || (currentChunk.Count > 0 && (memGuard.Exceeded() || spillForArbiter)))
@@ -206,7 +257,7 @@ public class ExternalSortEngine
 
             if (currentChunk.Count > 0)
             {
-                currentChunk.Sort(Compare);
+                currentChunk.Sort(inputComparer);
                 if (chunkPaths.Count == 0)
                 {
                     foreach (var entry in currentChunk)
@@ -221,10 +272,11 @@ public class ExternalSortEngine
                 var chunkName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
                 chunkPaths.Add(chunkName);
                 cleanup.Add(chunkName);
-                await SpillChunkAsync(chunkName, currentChunk, keyColumnNames);
+                await SpillChunkAsync(chunkName, currentChunk, keyColumnNames, inputExtraKeys);
                 _context.Telemetry.SortSpillCount++;
                 _context.Telemetry.PartitionsCount++;
                 currentChunk.Clear();
+                inputExtraKeys?.Clear();
             }
 
             chunkLease.Dispose();
@@ -252,7 +304,7 @@ public class ExternalSortEngine
 
                     var merged = $"sort_merge_p{passNo}_{Guid.NewGuid():N}_{nextLevel.Count}.tmp";
                     cleanup.Add(merged);
-                    await MergeChunksToFileAsync(merged, group, keyColumnNames, orderBy, Compare);
+                    await MergeChunksToFileAsync(merged, group, keyColumnNames, orderBy);
                     nextLevel.Add(merged);
                     _context.Telemetry.SortSpillCount++;
                     IntermediateMergeRunCount++;
@@ -269,7 +321,7 @@ public class ExternalSortEngine
 
             // Final pass: merge the remaining (<= MaxMergeFanIn) chunks and strip sentinel keys.
             MergePassCount++;
-            await foreach (var entry in MergeChunksAsync(chunkPaths, keyColumnNames, orderBy, Compare, stripKeys: true).WithCancellation(effectiveCancellationToken))
+            await foreach (var entry in MergeChunksAsync(chunkPaths, keyColumnNames, orderBy, stripKeys: true).WithCancellation(effectiveCancellationToken))
                 yield return entry.Row;
         }
         finally
@@ -299,11 +351,14 @@ public class ExternalSortEngine
         List<string> inputChunks,
         string[] keyColumnNames,
         List<OrderByClause> orderBy,
-        Comparison<SortEntry> compare,
         bool stripKeys = true)
     {
-        var readers = new List<ISpillReader>();
+        var readers = new List<ISpillReader>(inputChunks.Count);
         bool caseSensitive = _context.CaseSensitiveComparison;
+        int keyCount = keyColumnNames.Length;
+        int extraCount = Math.Max(0, keyCount - 1);
+        var mergeExtraKeys = extraCount > 0 ? new SortKey[inputChunks.Count * extraCount] : null;
+        var mergeComparer = new SortEntryComparer(this, orderBy, caseSensitive, mergeExtraKeys);
         Dictionary<TableSchema, (TableSchema? Stripped, int[] KeptIndices)>? strippedSchemas = stripKeys ? new() : null;
         try
         {
@@ -311,18 +366,14 @@ public class ExternalSortEngine
                 readers.Add(await _context.SpillStore.CreateReaderAsync(path));
             MaxConcurrentMergeReaders = Math.Max(MaxConcurrentMergeReaders, readers.Count);
 
-            var heap = new PriorityQueue<int, SortEntry>(Comparer<SortEntry>.Create(compare));
+            var heap = new PriorityQueue<int, SortEntry>(mergeComparer);
 
             for (int i = 0; i < readers.Count; i++)
             {
-                var row = await readers[i].ReadRowAsync();
-                if (row != null)
-                {
-                    var keys = ExtractKeys(row, keyColumnNames);
-                    if (strippedSchemas != null)
-                        row = StripFinalSentinelColumns(row, keyColumnNames, strippedSchemas);
-                    heap.Enqueue(i, new SortEntry(row, keys, ComputeKeyPrefix(keys, orderBy, caseSensitive)));
-                }
+                var entry = await ReadNextSortEntryAsync(
+                    readers[i], i, keyColumnNames, orderBy, caseSensitive, stripKeys, strippedSchemas, mergeExtraKeys, extraCount);
+                if (entry.HasValue)
+                    heap.Enqueue(i, entry.Value);
             }
 
             while (heap.Count > 0)
@@ -331,13 +382,34 @@ public class ExternalSortEngine
                 {
                     yield return first;
 
-                    var nextRow = await readers[chunkIdx].ReadRowAsync();
-                    if (nextRow != null)
+                    var reader = readers[chunkIdx];
+                    int extraOffset = extraCount > 0 ? chunkIdx * extraCount : -1;
+                    if (reader is ISortSpillReader { SupportsSortFastPath: true } fastReader)
                     {
-                        var keys = ExtractKeys(nextRow, keyColumnNames);
-                        if (strippedSchemas != null)
-                            nextRow = StripFinalSentinelColumns(nextRow, keyColumnNames, strippedSchemas);
-                        heap.Enqueue(chunkIdx, new SortEntry(nextRow, keys, ComputeKeyPrefix(keys, orderBy, caseSensitive)));
+                        if (fastReader.TryReadBufferedSortRow(
+                                keyColumnNames,
+                                stripKeys,
+                                out var nextRow,
+                                out var key0,
+                                extraCount > 0 ? mergeExtraKeys.AsSpan(extraOffset, extraCount) : Span<SortKey>.Empty))
+                        {
+                            ulong prefix = keyCount > 0 ? ComputeKeyPrefix(key0, orderBy[0], caseSensitive) : 0UL;
+                            heap.Enqueue(chunkIdx, new SortEntry(nextRow, key0, extraOffset, prefix));
+                        }
+                        else
+                        {
+                            var next = await ReadSlowFastReaderAsync(
+                                fastReader, extraOffset, keyColumnNames, orderBy, caseSensitive, stripKeys, mergeExtraKeys, extraCount);
+                            if (next.HasValue)
+                                heap.Enqueue(chunkIdx, next.Value);
+                        }
+                    }
+                    else
+                    {
+                        var next = await ReadNextSortEntryAsync(
+                            reader, chunkIdx, keyColumnNames, orderBy, caseSensitive, stripKeys, strippedSchemas, mergeExtraKeys, extraCount);
+                        if (next.HasValue)
+                            heap.Enqueue(chunkIdx, next.Value);
                     }
                 }
             }
@@ -348,6 +420,74 @@ public class ExternalSortEngine
         }
     }
 
+    private static async ValueTask<SortEntry?> ReadSlowFastReaderAsync(
+        ISortSpillReader fastReader,
+        int extraOffset,
+        string[] keyColumnNames,
+        List<OrderByClause> orderBy,
+        bool caseSensitive,
+        bool stripKeys,
+        SortKey[]? mergeExtraKeys,
+        int extraCount)
+    {
+        if (!await fastReader.MoveToNextBatchAsync())
+            return null;
+
+        if (!fastReader.TryReadBufferedSortRow(
+                keyColumnNames,
+                stripKeys,
+                out var row,
+                out var key0,
+                extraCount > 0 ? mergeExtraKeys.AsSpan(extraOffset, extraCount) : Span<SortKey>.Empty))
+        {
+            return null;
+        }
+
+        ulong prefix = keyColumnNames.Length > 0 ? ComputeKeyPrefix(key0, orderBy[0], caseSensitive) : 0UL;
+        return new SortEntry(row, key0, extraOffset, prefix);
+    }
+
+    private static async ValueTask<SortEntry?> ReadNextSortEntryAsync(
+        ISpillReader reader,
+        int chunkIdx,
+        string[] keyColumnNames,
+        List<OrderByClause> orderBy,
+        bool caseSensitive,
+        bool stripKeys,
+        Dictionary<TableSchema, (TableSchema? Stripped, int[] KeptIndices)>? strippedSchemas,
+        SortKey[]? mergeExtraKeys,
+        int extraCount)
+    {
+        int extraOffset = extraCount > 0 ? chunkIdx * extraCount : -1;
+        if (reader is ISortSpillReader { SupportsSortFastPath: true } fastReader)
+        {
+            if (fastReader.TryReadBufferedSortRow(
+                    keyColumnNames,
+                    stripKeys,
+                    out var fastRow,
+                    out var key0,
+                    extraCount > 0 ? mergeExtraKeys.AsSpan(extraOffset, extraCount) : Span<SortKey>.Empty))
+            {
+                ulong prefix = keyColumnNames.Length > 0 ? ComputeKeyPrefix(key0, orderBy[0], caseSensitive) : 0UL;
+                return new SortEntry(fastRow, key0, extraOffset, prefix);
+            }
+
+            return await ReadSlowFastReaderAsync(
+                fastReader, extraOffset, keyColumnNames, orderBy, caseSensitive, stripKeys, mergeExtraKeys, extraCount);
+        }
+
+        var row = reader is ISortSpillReader vtReader
+            ? await vtReader.ReadRowValueTaskAsync()
+            : await reader.ReadRowAsync();
+        if (row == null) return null;
+
+        var fallbackKey0 = ExtractKeysFromRow(row, keyColumnNames, mergeExtraKeys, extraOffset);
+        if (strippedSchemas != null)
+            row = StripFinalSentinelColumns(row, keyColumnNames, strippedSchemas);
+        ulong fallbackPrefix = keyColumnNames.Length > 0 ? ComputeKeyPrefix(fallbackKey0, orderBy[0], caseSensitive) : 0UL;
+        return new SortEntry(row, fallbackKey0, extraOffset, fallbackPrefix);
+    }
+
     /// <summary>
     /// Merges a bounded group of spilled chunks into a single new intermediate run while leaving
     /// the <c>_SYS_SK_*</c> sentinel columns attached so the final pass can read and strip them once.
@@ -356,17 +496,123 @@ public class ExternalSortEngine
         string outName,
         List<string> inputChunks,
         string[] keyColumnNames,
-        List<OrderByClause> orderBy,
-        Comparison<SortEntry> compare)
+        List<OrderByClause> orderBy)
     {
         await using var writer = await _context.SpillStore.CreateWriterAsync(outName);
-        await foreach (var entry in MergeChunksAsync(inputChunks, keyColumnNames, orderBy, compare, stripKeys: false))
+        await foreach (var entry in MergeChunksAsync(inputChunks, keyColumnNames, orderBy, stripKeys: false))
         {
             await writer.WriteRowAsync(entry.Row);
         }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private KeySlotEvaluator[] BuildKeySlotEvaluators(List<OrderByClause> orderBy)
+    {
+        var slots = new KeySlotEvaluator[orderBy.Count];
+        for (int i = 0; i < orderBy.Count; i++)
+            slots[i] = new KeySlotEvaluator(_context, orderBy[i].Expression);
+        return slots;
+    }
+
+    private sealed class KeySlotEvaluator
+    {
+        private readonly string? _directName;
+        private readonly RowExpressionCompiler.RowValue? _compiled;
+        private readonly Expression _expression;
+        private TableSchema? _cachedSchema;
+        private int _cachedIndex = -1;
+
+        public KeySlotEvaluator(IExecutionContext context, Expression expression)
+        {
+            _expression = expression;
+            if (expression is IdentifierExpression id
+                && !id.Name.StartsWith("@", StringComparison.Ordinal)
+                && !id.Name.Equals("*", StringComparison.OrdinalIgnoreCase)
+                && !id.Name.EndsWith(".CONNECTION_STRING", StringComparison.OrdinalIgnoreCase)
+                && !context.Connections.ContainsKey(id.Name)
+                && !context.FunctionRegistry.IsRegistered(id.Name)
+                && context.OuterRowStack.Count == 0)
+            {
+                _directName = id.Name;
+            }
+            if (RowExpressionCompiler.TryCompileValue(context, expression, out var compiled))
+                _compiled = compiled;
+        }
+
+        public bool CanEvaluateSynchronously => _compiled != null;
+
+        public object? EvaluateSync(Row row)
+        {
+            if (_directName != null)
+            {
+                var schema = row.Schema;
+                if (schema != null)
+                {
+                    if (!ReferenceEquals(schema, _cachedSchema))
+                    {
+                        _cachedSchema = schema;
+                        _cachedIndex = schema.GetIndex(_directName);
+                    }
+                    if (_cachedIndex >= 0)
+                        return row[_cachedIndex];
+                }
+                if (row.TryGetValue(_directName, out var val))
+                    return val;
+            }
+            return _compiled!(row);
+        }
+
+        public ValueTask<object?> EvaluateAsync(IExecutionContext context, Row row)
+        {
+            if (_compiled != null)
+                return new ValueTask<object?>(EvaluateSync(row));
+            return context.EvaluateValue(_expression, row);
+        }
+    }
+
+    private sealed class SortEntryComparer : IComparer<SortEntry>
+    {
+        private readonly ExternalSortEngine _engine;
+        private readonly List<OrderByClause> _orderBy;
+        private readonly bool _caseSensitive;
+        private readonly IReadOnlyList<SortKey>? _extraKeys;
+
+        public SortEntryComparer(
+            ExternalSortEngine engine,
+            List<OrderByClause> orderBy,
+            bool caseSensitive,
+            IReadOnlyList<SortKey>? extraKeys)
+        {
+            _engine = engine;
+            _orderBy = orderBy;
+            _caseSensitive = caseSensitive;
+            _extraKeys = extraKeys;
+        }
+
+        public int Compare(SortEntry a, SortEntry b)
+        {
+            if (a.KeyPrefix != b.KeyPrefix)
+            {
+                _engine.PrefixResolvedComparisons++;
+                return a.KeyPrefix < b.KeyPrefix ? -1 : 1;
+            }
+
+            if (_orderBy.Count == 0) return 0;
+
+            int res = SortKey.Compare(a.Key0, b.Key0, _orderBy[0], _caseSensitive);
+            if (res != 0) return res;
+
+            for (int i = 1; i < _orderBy.Count; i++)
+            {
+                var ka = _extraKeys![a.ExtraKeyOffset + (i - 1)];
+                var kb = _extraKeys[b.ExtraKeyOffset + (i - 1)];
+                res = SortKey.Compare(ka, kb, _orderBy[i], _caseSensitive);
+                if (res != 0) return res;
+            }
+            return 0;
+        }
+    }
 
     /// <summary>
     /// Computes an order-preserving 64-bit sort prefix for the primary <c>ORDER BY</c> key so
@@ -382,78 +628,108 @@ public class ExternalSortEngine
         if (key0 is null or DBNull)
             return clause.PlacesNullsFirst ? 0UL : ulong.MaxValue;
 
+        ulong ascRank = ComputeAscRankFromObject(key0, caseSensitive);
+        return clause.Descending ? (ulong.MaxValue - 1UL - ascRank) : ascRank;
+    }
+
+    internal static ulong ComputeKeyPrefix(in SortKey key0, OrderByClause clause, bool caseSensitive)
+    {
+        if (key0.IsNull)
+            return clause.PlacesNullsFirst ? 0UL : ulong.MaxValue;
+
+        ulong ascRank = key0.Kind switch
+        {
+            SortKeyKind.Bytes => PrefixFromBytes(key0.BytesValue!),
+            SortKeyKind.Decimal => PrefixFromDecimal(key0.DecimalValue),
+            SortKeyKind.DateTime => PrefixFromDateTime(key0.DateTimeValue),
+            SortKeyKind.String when !SortKey.HasDigit(key0.StringValue!) => PrefixFromText(key0.StringValue!, caseSensitive),
+            SortKeyKind.Boolean => PrefixFromText(key0.BooleanValue ? bool.TrueString : bool.FalseString, caseSensitive),
+            _ => ComputeAscRankFromObject(key0.ToObject()!, caseSensitive),
+        };
+
+        return clause.Descending ? (ulong.MaxValue - 1UL - ascRank) : ascRank;
+    }
+
+    private static ulong ComputeAscRankFromObject(object key0, bool caseSensitive)
+    {
+        if (key0 is byte[] bytes)
+            return PrefixFromBytes(bytes);
+        if (TryOrderAsNumber(key0, out decimal dec))
+            return PrefixFromDecimal(dec);
+        if (TryOrderAsDate(key0, out DateTime dt))
+            return PrefixFromDateTime(dt);
+        return PrefixFromText(key0.ToString() ?? string.Empty, caseSensitive);
+    }
+
+    private static ulong PrefixFromBytes(byte[] bytes)
+    {
+        ulong payload = 0UL;
+        int count = Math.Min(bytes.Length, 6);
+        for (int k = 0; k < count; k++)
+            payload |= ((ulong)bytes[k] + 1UL) << ((5 - k) * 9);
+        return (4UL << 60) | payload;
+    }
+
+    private static ulong PrefixFromDecimal(decimal dec)
+    {
         const long minIntBucket = -(1L << 57);
         const long maxIntBucket = (1L << 57) - 1L;
-        ulong ascRank;
-
-        if (key0 is byte[] bytes)
+        decimal floored = decimal.Floor(dec);
+        ulong payload;
+        if (floored < minIntBucket)
         {
-            ulong payload = 0UL;
-            int count = Math.Min(bytes.Length, 6);
-            for (int k = 0; k < count; k++)
-                payload |= ((ulong)bytes[k] + 1UL) << ((5 - k) * 9);
-            ascRank = (4UL << 60) | payload;
+            payload = 0UL;
         }
-        else if (TryOrderAsNumber(key0, out decimal dec))
+        else if (floored > maxIntBucket)
         {
-            decimal floored = decimal.Floor(dec);
-            ulong payload;
-            if (floored < minIntBucket)
-            {
-                payload = 0UL;
-            }
-            else if (floored > maxIntBucket)
-            {
-                payload = ((1UL << 58) + 1UL) << 1;
-            }
-            else
-            {
-                long f = (long)floored;
-                ulong biased = (ulong)(f - minIntBucket) + 1UL;
-                ulong fracBit = dec > floored ? 1UL : 0UL;
-                payload = (biased << 1) | fracBit;
-            }
-            ascRank = (1UL << 60) | payload;
-        }
-        else if (TryOrderAsDate(key0, out DateTime dt))
-        {
-            ulong ticksPrefix = (ulong)Math.Max(0L, dt.Ticks) >> 3;
-            ascRank = (2UL << 60) | ticksPrefix;
+            payload = ((1UL << 58) + 1UL) << 1;
         }
         else
         {
-            string text = key0.ToString() ?? string.Empty;
-            ulong payload = 0UL;
-            int count = Math.Min(text.Length, 3);
-            for (int k = 0; k < count; k++)
-            {
-                char ch = text[k];
-                int shift = (2 - k) * 17;
-                if (caseSensitive)
-                {
-                    payload |= ((ulong)ch + 1UL) << shift;
-                }
-                else
-                {
-                    // Surrogates and above-surrogate BMP code units tie on prefix so OrdinalIgnoreCase tie-breaks.
-                    if (ch >= 0xD800)
-                    {
-                        payload |= (0xD800UL + 1UL) << shift;
-                        break;
-                    }
-                    char upper = char.ToUpperInvariant(ch);
-                    if (upper >= 0xD800)
-                    {
-                        payload |= (0xD800UL + 1UL) << shift;
-                        break;
-                    }
-                    payload |= ((ulong)upper + 1UL) << shift;
-                }
-            }
-            ascRank = (3UL << 60) | payload;
+            long f = (long)floored;
+            ulong biased = (ulong)(f - minIntBucket) + 1UL;
+            ulong fracBit = dec > floored ? 1UL : 0UL;
+            payload = (biased << 1) | fracBit;
         }
+        return (1UL << 60) | payload;
+    }
 
-        return clause.Descending ? (ulong.MaxValue - 1UL - ascRank) : ascRank;
+    private static ulong PrefixFromDateTime(DateTime dt)
+    {
+        ulong ticksPrefix = (ulong)Math.Max(0L, dt.Ticks) >> 3;
+        return (2UL << 60) | ticksPrefix;
+    }
+
+    private static ulong PrefixFromText(string text, bool caseSensitive)
+    {
+        ulong payload = 0UL;
+        int count = Math.Min(text.Length, 3);
+        for (int k = 0; k < count; k++)
+        {
+            char ch = text[k];
+            int shift = (2 - k) * 17;
+            if (caseSensitive)
+            {
+                payload |= ((ulong)ch + 1UL) << shift;
+            }
+            else
+            {
+                // Surrogates and above-surrogate BMP code units tie on prefix so OrdinalIgnoreCase tie-breaks.
+                if (ch >= 0xD800)
+                {
+                    payload |= (0xD800UL + 1UL) << shift;
+                    break;
+                }
+                char upper = char.ToUpperInvariant(ch);
+                if (upper >= 0xD800)
+                {
+                    payload |= (0xD800UL + 1UL) << shift;
+                    break;
+                }
+                payload |= ((ulong)upper + 1UL) << shift;
+            }
+        }
+        return (3UL << 60) | payload;
     }
 
     private static bool TryOrderAsNumber(object value, out decimal number)
@@ -506,15 +782,17 @@ public class ExternalSortEngine
     private async Task SpillChunkAsync(
         string chunkName,
         List<SortEntry> chunk,
-        string[] keyColumnNames)
+        string[] keyColumnNames,
+        List<SortKey>? extraKeys)
     {
         await using var writer = await _context.SpillStore.CreateWriterAsync(chunkName);
-        await writer.WriteRowsAsync(StampSortKeys(chunk, keyColumnNames));
+        await writer.WriteRowsAsync(StampSortKeys(chunk, keyColumnNames, extraKeys));
     }
 
     private static IEnumerable<Row> StampSortKeys(
         IEnumerable<SortEntry> rows,
-        string[] keyColumnNames)
+        string[] keyColumnNames,
+        List<SortKey>? extraKeys)
     {
         // Rows held by a schema are stamped into a copy over that schema plus the key columns,
         // built once per input schema: one values array per row instead of adding (and then
@@ -550,7 +828,12 @@ public class ExternalSortEngine
                     int canonical = schema.ColumnCount;
                     var values = new object?[canonical + keyColumnNames.Length];
                     for (int i = 0; i < canonical; i++) values[i] = entry.Row[i];
-                    for (int k = 0; k < keyColumnNames.Length; k++) values[canonical + k] = entry.Keys[k];
+                    if (keyColumnNames.Length > 0)
+                    {
+                        values[canonical] = entry.Key0.ToObject();
+                        for (int k = 1; k < keyColumnNames.Length; k++)
+                            values[canonical + k] = extraKeys![entry.ExtraKeyOffset + (k - 1)].ToObject();
+                    }
                     yield return new Row(stamped, values) { MayLackColumns = entry.Row.MayLackColumns };
                     continue;
                 }
@@ -559,8 +842,12 @@ public class ExternalSortEngine
             // Stamp each key into its own dedicated column before writing the row.
             // These sentinel columns stay intact through intermediate passes and are
             // stripped only on the final merge pass.
-            for (int k = 0; k < keyColumnNames.Length; k++)
-                entry.Row[keyColumnNames[k]] = entry.Keys[k];
+            if (keyColumnNames.Length > 0)
+            {
+                entry.Row[keyColumnNames[0]] = entry.Key0.ToObject();
+                for (int k = 1; k < keyColumnNames.Length; k++)
+                    entry.Row[keyColumnNames[k]] = extraKeys![entry.ExtraKeyOffset + (k - 1)].ToObject();
+            }
 
             try
             {
@@ -579,15 +866,25 @@ public class ExternalSortEngine
     /// <summary>
     /// Reads the per-column sort keys back from a spilled row without removing columns during intermediate passes.
     /// </summary>
-    private static object?[] ExtractKeys(Row row, string[] keyColumnNames)
+    private static SortKey ExtractKeysFromRow(
+        Row row,
+        string[] keyColumnNames,
+        SortKey[]? mergeExtraKeys,
+        int extraOffset)
     {
-        var keys = new object?[keyColumnNames.Length];
-        for (int i = 0; i < keyColumnNames.Length; i++)
+        if (keyColumnNames.Length == 0) return SortKey.Null;
+
+        SortKey key0 = row.TryGetValue(keyColumnNames[0], out var raw0)
+            ? SortKey.FromValue(SpillSerializationHelper.UnwrapValue(raw0))
+            : SortKey.Null;
+
+        for (int i = 1; i < keyColumnNames.Length; i++)
         {
-            if (row.TryGetValue(keyColumnNames[i], out var raw))
-                keys[i] = CompoundKey.NormalizeValue(SpillSerializationHelper.UnwrapValue(raw));
+            mergeExtraKeys![extraOffset + (i - 1)] = row.TryGetValue(keyColumnNames[i], out var raw)
+                ? SortKey.FromValue(SpillSerializationHelper.UnwrapValue(raw))
+                : SortKey.Null;
         }
-        return keys;
+        return key0;
     }
 
     /// <summary>

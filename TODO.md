@@ -140,8 +140,14 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
   **Progress 2026-11-18:** per-row name dictionaries removed (rows built over cached schema
   layouts in the join combine, `RowPacker`, `from.col` qualification, window results and sort-key
   stamping; window function keys computed once). Local 500k-row profile: join 5,156 → 3,482 B/row,
-  window 6,257 → 3,242, sort 2,697 → 2,401. Still open: boxed `decimal`/`object[]` in the sort,
-  `Task<Row>` per async read, and a hosted recalibration of the allocation baselines.
+  window 6,257 → 3,242, sort 2,697 → 2,401. Slice 2 (external sort): replaced boxed
+  `object?[]`/`decimal` sort keys with unboxed `SortKey` + inline `Key0` / slab-backed multi-key
+  storage in `ExternalSortEngine`, added compiled synchronous key evaluation fast path and
+  `ValueTask` extraction in `SortKeyExtractor`, and added `ValueTask`/batch-buffered Arrow sort-row
+  reads in `ArrowSpillReader` (plus synchronous batch iteration in `AsEnumerableAsync`). Same-host
+  500k-row profile: sort 2,167 → 1,645 B/row, window 3,007 → 2,412 B/row (`Task<Row>` 139/217 → 0).
+  Still open: columnar batch reads for sort/window, packed join storage, and a hosted
+  recalibration of the allocation baselines.
 
 ### 3.3 Operations console completion
 

@@ -266,5 +266,154 @@ namespace ETL_SQL.Tests.Operations.Operations
             Assert.Equal("B", sorted[2]["cat"]); Assert.Equal(2m, Convert.ToDecimal(sorted[2]["val"]));
             Assert.Equal("B", sorted[3]["cat"]); Assert.Equal(1m, Convert.ToDecimal(sorted[3]["val"]));
         }
+
+        [Fact]
+        public async Task SortKey_DecimalPrecisionAndScale_PreservesExactOrderAndValue()
+        {
+            decimal a = 1.0000000000000000000000000001m;
+            decimal b = 1.0000000000000000000000000002m;
+            decimal c = 1.000m;
+            decimal d = 1m;
+            decimal negTiny = -0.0000000000000000000000000001m;
+
+            var asc = new OrderByClause(new IdentifierExpression("k"), descending: false);
+            Assert.True(SortKey.Compare(SortKey.FromValue(negTiny), SortKey.FromValue(0m), asc, caseSensitive: false) < 0);
+            Assert.True(SortKey.Compare(SortKey.FromValue(a), SortKey.FromValue(b), asc, caseSensitive: false) < 0);
+            Assert.Equal(0, SortKey.Compare(SortKey.FromValue(c), SortKey.FromValue(d), asc, caseSensitive: false));
+            Assert.Equal(
+                ExternalSortEngine.ComputeKeyPrefix(SortKey.FromValue(c), asc, caseSensitive: false),
+                ExternalSortEngine.ComputeKeyPrefix(SortKey.FromValue(d), asc, caseSensitive: false));
+            Assert.Equal(a, SortKey.FromValue(a).DecimalValue);
+            Assert.Equal(decimal.MaxValue, SortKey.FromValue(decimal.MaxValue).DecimalValue);
+            Assert.Equal(decimal.MinValue, SortKey.FromValue(decimal.MinValue).DecimalValue);
+
+            // Round-trip through Arrow spill (chunkSize: 2) preserves exact precision and scale on output rows.
+            var (eval, logger) = BuildContext(chunkSize: 2);
+            var engine = new ExternalSortEngine(eval, logger);
+            var rows = new List<Row>
+            {
+                new Row { ["k"] = b, ["tag"] = "b" },
+                new Row { ["k"] = decimal.MaxValue, ["tag"] = "max" },
+                new Row { ["k"] = a, ["tag"] = "a" },
+                new Row { ["k"] = decimal.MinValue, ["tag"] = "min" },
+                new Row { ["k"] = negTiny, ["tag"] = "neg" },
+                new Row { ["k"] = 1.2500m, ["tag"] = "scale4" },
+            };
+            var sorted = await engine.SortExternal(rows, [asc]);
+
+            Assert.Equal(["min", "neg", "a", "b", "scale4", "max"], sorted.Select(r => (string)r["tag"]!).ToArray());
+            Assert.Equal(decimal.MinValue, sorted[0]["k"]);
+            Assert.Equal(negTiny, sorted[1]["k"]);
+            Assert.Equal(a, sorted[2]["k"]);
+            Assert.Equal(b, sorted[3]["k"]);
+            Assert.Equal("1.2500", ((decimal)sorted[4]["k"]!).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Assert.Equal(decimal.MaxValue, sorted[5]["k"]);
+        }
+
+        [Theory]
+        [InlineData(false, null, -1)]
+        [InlineData(false, true, -1)]
+        [InlineData(false, false, 1)]
+        [InlineData(true, null, 1)]
+        [InlineData(true, true, -1)]
+        [InlineData(true, false, 1)]
+        public void SortKey_NullOrdering_RespectsAscDescAndNullsFirstLast(
+            bool descending, bool? nullsFirst, int expectedNullVsValueSign)
+        {
+            var clause = new OrderByClause(new IdentifierExpression("k"), descending, nullsFirst);
+            var nullKey = SortKey.FromValue(null);
+            var dbNullKey = SortKey.FromValue(DBNull.Value);
+            var numKey = SortKey.FromValue(42m);
+
+            Assert.Equal(0, SortKey.Compare(nullKey, dbNullKey, clause, caseSensitive: false));
+            Assert.Equal(expectedNullVsValueSign, Math.Sign(SortKey.Compare(nullKey, numKey, clause, caseSensitive: false)));
+            Assert.Equal(-expectedNullVsValueSign, Math.Sign(SortKey.Compare(numKey, nullKey, clause, caseSensitive: false)));
+
+            ulong expectedNullPrefix = (nullsFirst ?? !descending) ? 0UL : ulong.MaxValue;
+            Assert.Equal(expectedNullPrefix, ExternalSortEngine.ComputeKeyPrefix(nullKey, clause, caseSensitive: false));
+            Assert.Equal(expectedNullPrefix, ExternalSortEngine.ComputeKeyPrefix(dbNullKey, clause, caseSensitive: false));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void SortKey_MixedTypes_MatchesCompareConstantsAndPrefixOrder(bool caseSensitive)
+        {
+            var rawSamples = new object?[]
+            {
+                null,
+                -10,
+                -2.5m,
+                "-2.25",
+                "00123",
+                123L,
+                456.75m,
+                new DateOnly(2026, 1, 15),
+                new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc),
+                "2026-04-01",
+                false,
+                true,
+                "Alpha",
+                "alpha",
+                "zebra",
+                new byte[] { 1, 2 },
+                new byte[] { 2, 0 },
+            };
+
+            var asc = new OrderByClause(new IdentifierExpression("k"), descending: false);
+            var desc = new OrderByClause(new IdentifierExpression("k"), descending: true);
+
+            foreach (var a in rawSamples)
+            {
+                var ka = SortKey.FromValue(a);
+                var na = CompoundKey.NormalizeValue(a);
+                Assert.Equal(
+                    ExternalSortEngine.ComputeKeyPrefix(new object?[] { na }, [asc], caseSensitive),
+                    ExternalSortEngine.ComputeKeyPrefix(ka, asc, caseSensitive));
+                Assert.Equal(
+                    ExternalSortEngine.ComputeKeyPrefix(new object?[] { na }, [desc], caseSensitive),
+                    ExternalSortEngine.ComputeKeyPrefix(ka, desc, caseSensitive));
+
+                foreach (var b in rawSamples)
+                {
+                    var kb = SortKey.FromValue(b);
+                    var nb = CompoundKey.NormalizeValue(b);
+                    int oracleAsc = asc.OutputOrder(ETL_SQL.Core.Data.EvaluationUtils.CompareConstants(na, nb, caseSensitive), na, nb);
+                    int actualAsc = SortKey.Compare(ka, kb, asc, caseSensitive);
+                    Assert.Equal(Math.Sign(oracleAsc), Math.Sign(actualAsc));
+
+                    int oracleDesc = desc.OutputOrder(ETL_SQL.Core.Data.EvaluationUtils.CompareConstants(na, nb, caseSensitive), na, nb);
+                    int actualDesc = SortKey.Compare(ka, kb, desc, caseSensitive);
+                    Assert.Equal(Math.Sign(oracleDesc), Math.Sign(actualDesc));
+                }
+            }
+        }
+
+        [Fact]
+        public async Task SortKey_CaseSensitivity_RespectsCaseSensitiveFlag()
+        {
+            var clause = new OrderByClause(new IdentifierExpression("s"), descending: false);
+            var upper = SortKey.FromValue("Alpha");
+            var lower = SortKey.FromValue("alpha");
+            var beta = SortKey.FromValue("beta");
+
+            Assert.Equal(0, SortKey.Compare(upper, lower, clause, caseSensitive: false));
+            Assert.True(SortKey.Compare(upper, lower, clause, caseSensitive: true) < 0);
+            Assert.True(SortKey.Compare(lower, beta, clause, caseSensitive: false) < 0);
+            Assert.True(SortKey.Compare(lower, beta, clause, caseSensitive: true) < 0);
+
+            var (evalSensitive, loggerSensitive) = BuildContext(chunkSize: 2);
+            evalSensitive.CaseSensitiveComparison = true;
+            var sensitiveRows = new List<Row>
+            {
+                new Row { ["s"] = "beta", ["seq"] = 1 },
+                new Row { ["s"] = "alpha", ["seq"] = 2 },
+                new Row { ["s"] = "Alpha", ["seq"] = 3 },
+                new Row { ["s"] = "Beta", ["seq"] = 4 },
+            };
+            var sortedSensitive = await new ExternalSortEngine(evalSensitive, loggerSensitive)
+                .SortExternal(sensitiveRows, [clause]);
+            Assert.Equal(["Alpha", "Beta", "alpha", "beta"], sortedSensitive.Select(r => (string)r["s"]!).ToArray());
+        }
     }
 }
