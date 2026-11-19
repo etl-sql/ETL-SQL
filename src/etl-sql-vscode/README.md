@@ -12,6 +12,10 @@
 
 ---
 
+> **IMPORTANT — Restart VS Code after installing**
+>
+> You may need to **restart VS Code** (close and reopen VS Code) after installing or updating this extension before language features, commands, and the bundled engine take effect.
+
 > **Build cross-source data pipelines, in-stream data quality, governance, and dashboards without stitching together separate tools.**
 >
 > ETL-SQL is a single, deterministic SQL dialect that connects to 30+ sources, enforces data quality rules, and delivers interactive dashboards in source-control friendly scripts backed by 10,000+ tests.
