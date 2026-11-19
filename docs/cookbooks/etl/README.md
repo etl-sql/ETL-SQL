@@ -4,8 +4,9 @@
 
 | Page | Description |
 | :--- | :--- |
+| [Automated Email Alerting](automated-email-alerting.md) | Centralized error reporting pattern using an `SMTP` connection and `SEND EMAIL`. |
 | [Automated SFTP Bursting](automated-sftp-bursting.md) | Split a single large production table into multiple encrypted country-specific CSV files and SFTP them to separate vendor folders. |
-| [Automated Slack/Teams Alerting](automated-slack-teams-alerting.md) | Centralized error reporting pattern using `SEND EMAIL` configured for webhook-style SMTP. |
+| [Automated Slack/Teams Alerting](automated-slack-teams-alerting.md) | Pipeline and error alerting to Slack and Microsoft Teams using `SLACK` and `TEAMS` webhook connections. |
 | [The Batch Directory Ingester (Automation)](batch-directory-ingester.md) | Processes all new files in a directory, loads them into a central store, and moves them to an archive folder. |
 | [Cross-Platform Reconciliation](cross-platform-reconciliation.md) | Compare local flat files against a remote production database to identify missing sync records. |
 | [Data Quality Gate](data-quality-gate.md) | Assert data quality before loading. This pattern catches bad data (nulls, orphaned keys, out-of-range values) and either fails the job or routes ba... |

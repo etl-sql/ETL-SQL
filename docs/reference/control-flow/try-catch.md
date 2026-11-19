@@ -134,5 +134,6 @@ END CATCH;
 - [THROW Statement](throw.md)
 - [Transactions](../statements/session-control/transaction.md)
 - [ETL Cookbook: Dead-Letter Queue (DLQ)](../../cookbooks/etl/dead-letter-queue.md)
+- [ETL Cookbook: Automated Email Alerting](../../cookbooks/etl/automated-email-alerting.md)
 - [ETL Cookbook: Automated Slack/Teams Alerting](../../cookbooks/etl/automated-slack-teams-alerting.md)
 - [Syntax Index](../../syntax-index.md)

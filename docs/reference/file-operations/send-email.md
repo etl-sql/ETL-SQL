@@ -122,5 +122,5 @@ DELETE FILE @attachment_path;
 - [File Operations Reference](README.md)
 - [SMTP Connector](../connectors/services/smtp.md)
 - [SEND FILE](send-file.md)
-- [ETL Cookbook: Automated Slack/Teams Alerting](../../cookbooks/etl/automated-slack-teams-alerting.md)
+- [ETL Cookbook: Automated Email Alerting](../../cookbooks/etl/automated-email-alerting.md)
 - [Syntax Index](../../syntax-index.md)
