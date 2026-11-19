@@ -146,8 +146,9 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
   `ValueTask` extraction in `SortKeyExtractor`, and added `ValueTask`/batch-buffered Arrow sort-row
   reads in `ArrowSpillReader` (plus synchronous batch iteration in `AsEnumerableAsync`). Same-host
   500k-row profile: sort 2,167 → 1,645 B/row, window 3,007 → 2,412 B/row (`Task<Row>` 139/217 → 0).
-  Still open: columnar batch reads for sort/window, packed join storage, and a hosted
-  recalibration of the allocation baselines.
+  Hosted baselines recalibrated at 98499f0cd (calibration run 44496149410, replica r1; Standard
+  allocated MB: window −64%, join −34%, sort −34%, cube −34%, aggregate −17%).
+  Still open: columnar batch reads for sort/window and packed join storage.
 
 ### 3.3 Operations console completion
 
