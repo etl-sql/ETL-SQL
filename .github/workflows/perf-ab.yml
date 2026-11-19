@@ -9,22 +9,42 @@
 #   perf-ab/null/**    baseline = the candidate itself (A-vs-A null run; must pass)
 #   perf-ab/parent/**  baseline = the candidate's parent (an injected slowdown must fail)
 #   perf-ab/**         baseline = the previous release tag
-# Release evidence calls it (job "Paired timing"); calibrated by the null run 44407598532 and the
-# injected-slowdown run 44407596225.
+# Release evidence calls it twice: "Paired timing" against the previous release (1.10), and
+# "Paired timing two releases back" against the release before it (1.15), which catches
+# slowdowns just under 10% that add up across releases (W6 slice 5). Calibrated by the null run
+# 44407598532 and the injected-slowdown run 44407596225.
 name: Paired Timing
 
 on:
   workflow_dispatch:
     inputs:
       baseline_ref:
-        description: Baseline ref; empty means the previous release tag
+        description: Baseline ref; empty means a release tag chosen by release_back
         required: false
         type: string
+      release_back:
+        description: Which earlier release tag to compare with (1 = previous release)
+        required: false
+        type: number
+        default: 1
+      fail_ratio:
+        description: Median block ratio above which a scenario fails
+        required: false
+        type: string
+        default: '1.10'
   workflow_call:
     inputs:
       baseline_ref:
         required: false
         type: string
+      release_back:
+        required: false
+        type: number
+        default: 1
+      fail_ratio:
+        required: false
+        type: string
+        default: '1.10'
   push:
     branches: [ 'perf-ab/**' ]
 
@@ -72,6 +92,7 @@ jobs:
         working-directory: candidate
         env:
           BASELINE_REF: ${{ inputs.baseline_ref }}
+          RELEASE_BACK: ${{ inputs.release_back || 1 }}
         run: |
           $head = (git rev-parse HEAD).Trim()
           $ref = $env:BASELINE_REF
@@ -81,8 +102,8 @@ jobs:
             else {
               $ref = git tag --merged HEAD --sort=-v:refname |
                 Where-Object { $_ -cmatch '^v\d+\.\d+\.\d+$' -and (git rev-list -n 1 $_).Trim() -cne $head } |
-                Select-Object -First 1
-              if (-not $ref) { throw 'No earlier release tag is an ancestor of the candidate.' }
+                Select-Object -Skip ([int]$env:RELEASE_BACK - 1) -First 1
+              if (-not $ref) { throw "No release tag $($env:RELEASE_BACK) back is an ancestor of the candidate." }
             }
           }
           $sha = (git rev-parse --verify "$ref^{commit}").Trim()
@@ -111,14 +132,15 @@ jobs:
         working-directory: candidate
         env:
           SCENARIO: ${{ matrix.scenario }}
-        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ScalePairedTiming.ps1 -ScriptArguments @('-BaselineRoot', '../baseline', '-CandidateRoot', '.', '-Scenario', $env:SCENARIO, '-OutDir', "release-validation/paired-timing/$env:SCENARIO") -EvidenceDirectory "release-validation/paired-timing/$env:SCENARIO-process" -TimeoutSeconds 2880
+          FAIL_RATIO: ${{ inputs.fail_ratio || '1.10' }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ScalePairedTiming.ps1 -ScriptArguments @('-BaselineRoot', '../baseline', '-CandidateRoot', '.', '-Scenario', $env:SCENARIO, '-FailRatio', $env:FAIL_RATIO, '-OutDir', "release-validation/paired-timing/$env:SCENARIO") -EvidenceDirectory "release-validation/paired-timing/$env:SCENARIO-process" -TimeoutSeconds 2880
 
       - name: Retain paired timing evidence
         if: always()
         timeout-minutes: 5
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: paired-timing-${{ matrix.scenario }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: paired-timing-back${{ inputs.release_back || 1 }}-${{ matrix.scenario }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: candidate/release-validation/paired-timing/
           if-no-files-found: error
           retention-days: 90

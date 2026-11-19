@@ -148,7 +148,8 @@ Picked up only when selected:
 - W6 performance certification redesign: deterministic metrics gate; timing by same-host
   interleaved A/B; no waivers. **In v0.23.0 (2026-11-18):** hosted baselines gate correctness,
   exact work counters and allocations (+5%); the *Paired timing* Release Evidence job gates
-  elapsed time (10%); GC and peak memory are report-only. Trend tracking (slice 5) remains.
+  elapsed time (10% against the previous release, 15% against the release before last); GC and
+  peak memory are report-only.
   [Design note](docs/releases/v0.23.0-w6-performance-gates-design.md).
 - W7 fast pre-push hook and local gate hygiene (overlaps RG03's docs-only skip).
 - Parked from the earlier "release in four hours" goal: fail fast on candidate failures;

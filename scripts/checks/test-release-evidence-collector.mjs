@@ -27,7 +27,9 @@ const policy = { ...releaseEvidencePolicy, workflows: [{ ...releaseEvidencePolic
   assert.match(workflow.replace(/\r\n/g, '\n'), /^ {2}paired-timing:\n {4}name: Paired timing\n {4}needs: candidate\n {4}uses: \.\/\.github\/workflows\/perf-ab\.yml$/m);
   const pairedWorkflow = readFileSync(new URL('../../.github/workflows/perf-ab.yml', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const paired = pairedWorkflow.match(/^\s+scenario: \[([^\]]+)\]/m)[1].split(',').map(item => item.trim());
-  for (const scenario of paired) expected.push(`Paired timing / Paired timing ${scenario}`);
+  assert.match(workflow.replace(/\r\n/g, '\n'), /^ {2}paired-timing-two-back:\n {4}name: Paired timing two releases back\n {4}needs: candidate\n {4}uses: \.\/\.github\/workflows\/perf-ab\.yml\n {4}with:\n {6}release_back: 2\n {6}fail_ratio: '1\.15'$/m);
+  for (const caller of ['Paired timing', 'Paired timing two releases back'])
+    for (const scenario of paired) expected.push(`${caller} / Paired timing ${scenario}`);
   assert.deepEqual([...releaseEvidencePolicy.workflows[0].jobs].sort(), expected.sort(), 'release-evidence-policy.json drifted from release-evidence.yml');
 }
 assert.deepEqual(releaseEvidencePolicy.workflows[0].events, ['workflow_dispatch'], 'measurement pushes must never count');

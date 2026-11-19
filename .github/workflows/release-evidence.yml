@@ -249,6 +249,16 @@ jobs:
     needs: candidate
     uses: ./.github/workflows/perf-ab.yml
 
+  # Slowdowns just under 10% per release add up; the release before last bounds two releases of
+  # drift at 15% (W6 slice 5, owner decision 2026-11-18).
+  paired-timing-two-back:
+    name: Paired timing two releases back
+    needs: candidate
+    uses: ./.github/workflows/perf-ab.yml
+    with:
+      release_back: 2
+      fail_ratio: '1.15'
+
   # Huge runs one scenario per job: the whole set needs ~3 h on a hosted runner (the discarded
   # warm-up alone took ~85 min in run 43648440192), past the job budget. Each job keeps its own
   # discarded warm-up and own-path warm-up, so the numbers stay comparable with warmed baselines.

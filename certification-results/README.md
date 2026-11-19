@@ -38,7 +38,8 @@ The scale baselines and the 10M-row spill budget come from hosted runners, not a
 - Correctness (failed scenario, rows, checksum) and work counters (spill bytes, extents, partition
   passes, plan counts) must match exactly; allocated MB may grow by at most 5%.
 - Elapsed time, throughput, GC pause and peak working set are reported only. Elapsed time is gated
-  by the paired A/B *Paired timing* job in Release Evidence, which needs no baseline file.
+  by the paired A/B *Paired timing* jobs in Release Evidence (10% against the previous release,
+  15% against the release before last), which need no baseline file.
 - Local runs (`Test-PreRelease.ps1`) pass `-DeterministicReportOnly`: only correctness fails.
 
 To recalibrate after an intended work or allocation change, push the commit to a
