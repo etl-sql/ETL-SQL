@@ -60,10 +60,10 @@ SELECT * FROM eng.profile;
 SET PROFILING OFF;
 ```
 
-Run it from the project checkout:
+Press **F5** in VS Code, or run it from a terminal with the CLI:
 
 ```powershell
-dotnet run --project src\ETL-SQL.App -- run first_hour.etlsql
+ETL-SQL run first_hour.etlsql
 ```
 
 This one script shows the core workflow used throughout the rest of the manual:
@@ -261,7 +261,7 @@ You now have the fundamentals: the engine mental model, connections, variables, 
 **Data movement and pipelines**
 - [ETL Recipes](../../cookbooks/etl/README.md) — staging, incremental load, quality gates, dead-letter queues, parallel loads.
 - [File Operations](../../reference/file-operations/README.md) — copy, transfer, compress, encrypt, email.
-- [Pipelines and DAGs](../feature-guides/pipelines-and-dags.md) · [Sample Guide](../patterns/sample-guide.md) — 55+ sample scripts.
+- [Pipelines and DAGs](../feature-guides/pipelines-and-dags.md) · [Sample Guide](../patterns/sample-guide.md) — 270+ sample scripts.
 
 **Operate and schedule**
 - [Orchestration](../../administration/orchestration/README.md) — `CREATE JOB`, DAGs, sessions, CI/CD.

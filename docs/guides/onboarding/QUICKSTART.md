@@ -18,7 +18,7 @@ nothing else to install. If commands do not appear after installing, restart VS 
 [GitHub releases page](https://github.com/etl-sql/ETL-SQL/releases) and check your environment:
 
 ```bash
-etl-sql doctor
+ETL-SQL doctor
 ```
 
 ---
@@ -150,7 +150,7 @@ ORDER BY Total DESC;
 From the command line:
 
 ```bash
-etl-sql run hello_pipeline.etlsql --var @minTotal=250.00
+ETL-SQL run hello_pipeline.etlsql --var @minTotal=250.00
 ```
 
 In a report, the same `INPUT` variable can be bound to a slicer or date picker so viewers change it

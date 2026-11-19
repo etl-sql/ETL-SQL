@@ -130,8 +130,12 @@ fuzzy matching recipes run on MOCKDB; multi-context-join and SCD Type 2 bugs fix
   and lists each failed visual; the report is still written. Default stays 0 because the VS Code
   preview rejects any non-zero exit and would blank a report with one bad visual. Use `--strict`
   in DOC03.
-- [ ] **DOC02 Review `docs/guides/onboarding/getting-started.md`.** Second link in the README docs
-  table; not yet reviewed. Run every block the same way as the Quickstart. S
+- [x] **DOC02 Review `docs/guides/onboarding/getting-started.md`.** Done 2026-11-19: walkthrough block
+  runs; the run step said `dotnet run --project ...` (source checkout only), now F5 / `ETL-SQL run`;
+  sample count 55+ -> 270+; Quickstart CLI name matched to the CLI reference (`ETL-SQL`).
+- [ ] **DOC07 Binary values print as `System.Byte[]`.** `SELECT HASHBYTES('SHA256','a')` shows
+  `System.Byte[]` in CLI results, so the PII masking recipe's hash column is unreadable. Render
+  binary as hex (`0x...`) in the results table. S
 - [ ] **DOC03 Run-test the cookbooks in CI.** `CookbookVerificationTests` only parses recipes, which
   is how the Quickstart and map recipes shipped broken. Execute the MOCKDB/inline-data recipes and
   build every report recipe in a docs lane. M
