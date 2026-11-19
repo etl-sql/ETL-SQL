@@ -116,6 +116,31 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
   reverted for v0.22.0 (owner, 2026-11-03). Re-apply it in the change that recalibrates
   `certification-results/baseline-*.json`.
 
+### 2.9 First-run docs and showcase (VS Code users)
+
+Review of the Quickstart, cookbooks, and VS Code README on 2026-11-19. Every sample was run with the
+CLI / report builder, not just parsed. **Done** (commits `a9dd328e4`, `64fb9b7b5`, `90c38bf8d`):
+Quickstart rewritten VS Code-first and fixed (`Amount` → `Total`); `--var @Name=Value` no longer read
+as a response file (also broke Orchestrator variable overrides); `us-states.geojson` Aleutian ring at
+-187° removed (broke every `US_STATES` map) with a bundled-map coordinate test; both map recipes
+render; README leads with a 60-second start; data quality gate, dead-letter queue, gap filling and
+fuzzy matching recipes run on MOCKDB; multi-context-join and SCD Type 2 bugs fixed.
+
+- [ ] **DOC01 Report build exits 0 when a visual fails.** `etl-sql-report build` on the old
+  `choropleth-point-map` recipe returned 0 while the JSON held "One or more visuals failed to build".
+  Return non-zero (or add a strict flag CI uses) so broken recipes and samples fail their gates. S
+- [ ] **DOC02 Review `docs/guides/onboarding/getting-started.md`.** Second link in the README docs
+  table; not yet reviewed. Run every block the same way as the Quickstart. S
+- [ ] **DOC03 Run-test the cookbooks in CI.** `CookbookVerificationTests` only parses recipes, which
+  is how the Quickstart and map recipes shipped broken. Execute the MOCKDB/inline-data recipes and
+  build every report recipe in a docs lane. M
+- [ ] **DOC04 More "Try It Now" blocks.** 26 ETL recipes still need real servers. Next candidates:
+  incremental load with high-water mark, staged ingestion, PIVOT, PII masking, full refresh. M
+- [ ] **DOC05 VS Code Get Started walkthrough (optional).** The extension has no `walkthroughs`
+  contribution; the README's 60-second steps would fit one. M
+- [ ] **DOC06 README screenshots.** A small gallery from the runnable report recipes (maps, Sankey,
+  waterfall) would show the 25+ chart types better than the list. S
+
 ## Tier 3 — if time allows
 
 ### 3.1 Spill format, memory hygiene and allocation churn
