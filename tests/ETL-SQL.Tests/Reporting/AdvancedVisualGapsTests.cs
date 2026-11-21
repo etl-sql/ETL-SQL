@@ -102,6 +102,52 @@ CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = WorldChoropleth))
     }
 
     [Fact]
+    public async Task Map_WithoutZoomOrCenter_FitsUsStatesToThePlot()
+    {
+        // The projection mapped the whole world onto the plot, so a US_STATES choropleth was
+        // drawn at world scale: about a third of the width, left of centre (2026-11-21).
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"map_fit_{Guid.NewGuid()}.rptsql");
+        File.WriteAllText(scriptPath, @"
+SELECT 'California' AS State, 1250000 AS Revenue INTO #state_rev
+UNION ALL SELECT 'Texas', 980000;
+
+CREATE VISUAL RevenueMap AS MAP (
+  SOURCE = #state_rev,
+  MAPPINGS (REGION = State, VALUE = Revenue),
+  OPTIONS (MAP_NAME = US_STATES, TITLE = 'Revenue by State')
+);
+
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = RevenueMap));
+");
+        try
+        {
+            var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+            var manifest = await service.GetManifestAsync();
+            var visual = manifest.Visuals.Single(v => v.Name == "RevenueMap");
+            Assert.Null(visual.Error);
+            var svg = new SvgChartRenderer().Render(visual)!;
+
+            static double Num(string s) => double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+            var box = System.Text.RegularExpressions.Regex.Match(svg, "viewBox='0 0 (?<w>[0-9.]+) (?<h>[0-9.]+)'");
+            var width = Num(box.Groups["w"].Value);
+            var height = Num(box.Groups["h"].Value);
+            var points = System.Text.RegularExpressions.Regex.Matches(svg, "class='plot-geographic-region'[^>]* d='(?<d>[^']+)'")
+                .SelectMany(m => System.Text.RegularExpressions.Regex.Matches(m.Groups["d"].Value, "[ML] (?<x>[-0-9.]+) (?<y>[-0-9.]+)"))
+                .Select(m => (X: Num(m.Groups["x"].Value), Y: Num(m.Groups["y"].Value))).ToList();
+            Assert.NotEmpty(points);
+            double minX = points.Min(p => p.X), maxX = points.Max(p => p.X), minY = points.Min(p => p.Y), maxY = points.Max(p => p.Y);
+
+            Assert.True(minX >= 0 && maxX <= width && minY >= 0 && maxY <= height, $"map leaves the chart: x {minX}..{maxX}, y {minY}..{maxY} in {width}x{height}");
+            Assert.True((maxX - minX) / width > .75 || (maxY - minY) / height > .75, $"map spans x {minX}..{maxX}, y {minY}..{maxY} in {width}x{height}");
+            Assert.InRange((minX + maxX) / 2 / width, .4, .6);
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
     public async Task Map_ZoomAndCenter_PointsModeWithColorAndTooltip_RendersCorrectly()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"map_pts_{Guid.NewGuid()}.rptsql");

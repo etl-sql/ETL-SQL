@@ -154,8 +154,14 @@ fuzzy matching recipes run on MOCKDB; multi-context-join and SCD Type 2 bugs fix
   commands (`walkthrough.ts`). The samples ship in `media/walkthrough/`; a vitest test keeps them
   equal to the README's "Try It Right Now" blocks and checks every step's commands and media, and
   `RunnableDocSampleTests` runs both. M
-- [ ] **DOC06 README screenshots.** A small gallery from the runnable report recipes (maps, Sankey,
-  waterfall) would show the 25+ chart types better than the list. S
+- [x] **DOC06 README screenshots.** Done 2026-11-21: a 2x2 gallery under "Reporting & Portal" in
+  the README (choropleth map, Sankey, waterfall/funnel/gauge, trend with forecast), each linked to
+  its recipe. `scripts/update-readme-gallery.mjs` renders them from the recipes with `refresh` +
+  `offline` and headless Chromium. Shooting them found and fixed two renderer bugs: maps without
+  `ZOOM`/`CENTER` drew at world scale (a US map in a third of the card), and last-column Sankey
+  labels ran off the chart. Left out: the combo chart (recipe sorts months alphabetically) and the
+  KPI dashboard (offline export shows a slicer placeholder). US maps have no Alaska/Hawaii insets,
+  so Alaska takes much of the card. S
 
 ## Tier 3 — if time allows
 

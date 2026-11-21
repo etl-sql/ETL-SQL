@@ -4467,6 +4467,21 @@ internal sealed class PlotPlanSvgRenderer
 
         TryParseMapCenter(Style(plan, "CENTER"), out var centerLat, out var centerLon);
 
+        // ZOOM or CENTER keeps the whole-world view they are relative to; otherwise the view is
+        // fitted to the geometry (a US_STATES map used to be drawn at world scale).
+        if (string.IsNullOrWhiteSpace(Style(plan, "ZOOM")) && string.IsNullOrWhiteSpace(Style(plan, "CENTER")))
+        {
+            var extent = geography.Features.SelectMany(feature => feature.Rings).SelectMany(ring => ring)
+                .Select(point => (point.Longitude, point.Latitude));
+            if (geography.Features.IsEmpty)
+                extent = plan.Layers.SelectMany(layer => layer.Data).Where(datum => !datum.IsGap)
+                    .Select(datum => (Lon: Number(Channel(datum, FieldChannel.Longitude)), Lat: Number(Channel(datum, FieldChannel.Latitude))))
+                    .Where(point => point.Lon is >= -180m and <= 180m && point.Lat is >= -90m and <= 90m)
+                    .Select(point => (point.Lon!.Value, point.Lat!.Value));
+            if (FitGeographicView(extent, geography.Projection) is { } fit)
+                (zoom, centerLat, centerLon) = fit;
+        }
+
         var regionRows = plan.Layers.Where(layer => layer.Mark == MarkKind.Rect)
             .SelectMany(layer => layer.Data.Select(datum => (Layer: layer, Datum: datum)))
             .Where(item => !item.Datum.IsGap && !string.IsNullOrWhiteSpace(DisplayChannel(item.Datum, FieldChannel.Region)))
@@ -4602,6 +4617,49 @@ internal sealed class PlotPlanSvgRenderer
         var latitude = Number(Channel(datum, FieldChannel.Latitude));
         if (!longitude.HasValue || !latitude.HasValue || longitude is < -180m or > 180m || latitude is < -90m or > 90m) return null;
         return ProjectGeographic(longitude.Value, latitude.Value, projection, width, height, zoom, centerLat, centerLon);
+    }
+
+    /// <summary>
+    /// The ZOOM and CENTER that fit an extent into the plot under <see cref="ProjectGeographic"/>,
+    /// which at zoom 1 spreads 360° of longitude over the width and the whole world's latitude over
+    /// the height. Null when there is nothing to fit.
+    /// </summary>
+    private static (decimal Zoom, decimal CenterLat, decimal CenterLon)? FitGeographicView(
+        IEnumerable<(decimal Longitude, decimal Latitude)> points, GeographicProjectionKind projection)
+    {
+        decimal minLon = decimal.MaxValue, maxLon = decimal.MinValue, minLat = decimal.MaxValue, maxLat = decimal.MinValue;
+        foreach (var (lon, lat) in points)
+        {
+            minLon = Math.Min(minLon, lon); maxLon = Math.Max(maxLon, lon);
+            minLat = Math.Min(minLat, lat); maxLat = Math.Max(maxLat, lat);
+        }
+        if (minLon > maxLon) return null;
+
+        // A lone point or a tight cluster still gets some surroundings.
+        const double minimumSpan = 10d;
+        var lonSpan = Math.Max((double)(maxLon - minLon), minimumSpan);
+        double centerLat, latFraction;
+        if (projection == GeographicProjectionKind.Mercator)
+        {
+            static double MercatorY(double latitude)
+            {
+                var radians = Math.Clamp(latitude, -85.05112878d, 85.05112878d) * Math.PI / 180d;
+                return .5d - Math.Log(Math.Tan(Math.PI / 4d + radians / 2d)) / (2d * Math.PI);
+            }
+            var top = MercatorY((double)maxLat);
+            var bottom = MercatorY((double)minLat);
+            latFraction = Math.Max(bottom - top, minimumSpan / 360d);
+            var middle = (top + bottom) / 2d;
+            centerLat = (2d * Math.Atan(Math.Exp((.5d - middle) * 2d * Math.PI)) - Math.PI / 2d) * 180d / Math.PI;
+        }
+        else
+        {
+            latFraction = Math.Max((double)(maxLat - minLat), minimumSpan) / 180d;
+            centerLat = (double)(minLat + maxLat) / 2d;
+        }
+
+        var zoom = Math.Max(1d, Math.Min(360d / lonSpan, 1d / latFraction) * .94d);
+        return ((decimal)zoom, (decimal)centerLat, (minLon + maxLon) / 2m);
     }
 
     private static (decimal X, decimal Y) ProjectGeographic(decimal longitude, decimal latitude, GeographicProjectionKind projection, decimal width, decimal height, decimal zoom = 1m, decimal centerLat = 0m, decimal centerLon = 0m)

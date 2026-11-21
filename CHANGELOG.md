@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Fixed report maps without `ZOOM` or `CENTER` drawing at world scale: a `US_STATES` choropleth filled about a third of its card, left of centre. The view now fits the map's geometry (or the points, when there is no geometry); `ZOOM` and `CENTER` keep their whole-world meaning. Fixed Sankey labels in the last column running off the chart; they now sit left of their nodes.
+
+- Added a report gallery to the README, rendered from the runnable recipes by `scripts/update-readme-gallery.mjs` (`DOC06`).
+
 - Fixed `DECLARE @x LIST = (SELECT col FROM ...)`: it kept only the first row, with no error, so a `FOREACH` over the list handled one item. The list now holds every row of the query, and a query with more than one column fails with a message pointing to `FOREACH @row IN (SELECT ...)`. Fixed the same pattern in the dynamic SQL and SFTP bursting recipes, which also ran local dynamic SQL as `EXEC @sql` (a procedure call) instead of `EXEC (@sql)`.
 
 - Fixed `Collection was modified` when a `PARALLEL` branch or report visual that had logged a message (for example a spill notice) was merged back: a fork shares its parent's session, so replaying its messages appended to the list being read.

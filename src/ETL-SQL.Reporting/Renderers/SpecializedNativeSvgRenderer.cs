@@ -491,7 +491,13 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
                 ? c
                 : inputs.Color(nodeName, i);
 
-            sb.Append($"<rect x='{F(p.X - 8)}' y='{F(p.Y - 10)}' width='16' height='20' rx='2' fill='{nodeColor}' data-node='{Xml(nodeName)}'/><text x='{F(p.X + 12)}' y='{F(p.Y + 4)}' font-size='10' fill='{inputs.OnSurface}'>{Xml(Trim(nodeName, 18))}</text>");
+            // Labels sit right of the node, except in the last column, where they would run off
+            // the chart: there they end just left of the node.
+            var lastColumn = ranks[nodeName] == maxRank;
+            var label = lastColumn
+                ? $"<text x='{F(p.X - 12)}' y='{F(p.Y + 4)}' font-size='10' text-anchor='end' fill='{inputs.OnSurface}'>"
+                : $"<text x='{F(p.X + 12)}' y='{F(p.Y + 4)}' font-size='10' fill='{inputs.OnSurface}'>";
+            sb.Append($"<rect x='{F(p.X - 8)}' y='{F(p.Y - 10)}' width='16' height='20' rx='2' fill='{nodeColor}' data-node='{Xml(nodeName)}'/>{label}{Xml(Trim(nodeName, 18))}</text>");
         }
 
         sb.Append("</g>");
@@ -910,11 +916,21 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
             }
         }
 
+        // ZOOM or CENTER keeps the whole-world view they are relative to; otherwise the map is
+        // fitted to its geometry (a US_STATES map used to be drawn at world scale).
+        var explicitView = v.Options.ContainsKey("ZOOM") || v.Options.ContainsKey("CENTER");
+
         if (mode.Equals("POINTS", StringComparison.OrdinalIgnoreCase))
         {
-            DrawMapOutline(sb, v, inputs, zoom, centerLat, centerLon);
             var lon = Index(v, "lon", fallback: 0);
             var lat = Index(v, "lat", fallback: 1);
+            using var outline = LoadGeoJson(v);
+            var pointView = explicitView
+                ? WorldView(inputs, zoom, centerLat, centerLon)
+                : FitView(inputs, outline is null
+                    ? v.Rows.Select(r => (Number(r, lon), Number(r, lat)))
+                    : GeometryPoints(outline));
+            DrawMapOutline(sb, outline, inputs, pointView);
             var val = Index(v, "value", fallback: 2);
             var label = Index(v, "label", fallback: 3);
             var colorCol = Index(v, "color");
@@ -925,8 +941,8 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
             foreach (var (row, i) in v.Rows.Select((r, i) => (r, i)))
             {
-                var x = ProjectX(inputs, Number(row, lon), zoom, centerLon);
-                var y = ProjectY(inputs, Number(row, lat), zoom, centerLat);
+                var x = pointView.X(Number(row, lon));
+                var y = pointView.Y(Number(row, lat));
                 var fill = accent;
                 if (colorCol >= 0)
                 {
@@ -944,9 +960,10 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
             return End(sb);
         }
 
-        var geo = LoadGeoJson(v);
+        using var geo = LoadGeoJson(v);
         if (geo is null) { sb.Append($"<text x='{F(inputs.Width / 2)}' y='{F(inputs.Height / 2)}' text-anchor='middle' fill='{inputs.OnSurface}'>Map geometry unavailable</text>"); return End(sb); }
 
+        var view = explicitView ? WorldView(inputs, zoom, centerLat, centerLon) : FitView(inputs, GeometryPoints(geo));
         var regionIndex = Index(v, "region", fallback: 0);
         var valueIndex = Index(v, "value", fallback: 1);
         var tooltipIndex = Index(v, "tooltip");
@@ -1019,10 +1036,9 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
             foreach (var polygon in Polygons(feature.GetProperty("geometry")))
             {
-                sb.Append($"<path{(hasMatch ? $" data-row-index='{match.Row}'" : "")} d='{PolygonPath(inputs, polygon, zoom, centerLat, centerLon)}' fill='{fill}' stroke='{inputs.Divider}' stroke-width='.35'><title>{Xml(tip)}</title></path>");
+                sb.Append($"<path{(hasMatch ? $" data-row-index='{match.Row}'" : "")} d='{PolygonPath(polygon, view)}' fill='{fill}' stroke='{inputs.Divider}' stroke-width='.35'><title>{Xml(tip)}</title></path>");
             }
         }
-        geo.Dispose();
         return End(sb);
     }
 
@@ -1163,10 +1179,64 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         catch { return null; }
     }
 
-    private static void DrawMapOutline(StringBuilder sb, VisualManifest v, FocusedLayoutInputs inputs, double zoom = 1.0, double centerLat = 0.0, double centerLon = 0.0)
+    private static void DrawMapOutline(StringBuilder sb, JsonDocument? geo, FocusedLayoutInputs inputs, MapView view)
     {
-        using var geo = LoadGeoJson(v); if (geo is null) return;
-        foreach (var feature in geo.RootElement.GetProperty("features").EnumerateArray()) foreach (var polygon in Polygons(feature.GetProperty("geometry"))) sb.Append($"<path d='{PolygonPath(inputs, polygon, zoom, centerLat, centerLon)}' fill='{(inputs.IsDark ? "#2b3242" : "#f1f5f9")}' stroke='{inputs.Muted}' stroke-width='.35'/>");
+        if (geo is null) return;
+        foreach (var feature in geo.RootElement.GetProperty("features").EnumerateArray()) foreach (var polygon in Polygons(feature.GetProperty("geometry"))) sb.Append($"<path d='{PolygonPath(polygon, view)}' fill='{(inputs.IsDark ? "#2b3242" : "#f1f5f9")}' stroke='{inputs.Muted}' stroke-width='.35'/>");
+    }
+
+    private static IEnumerable<(double Lon, double Lat)> GeometryPoints(JsonDocument geo)
+    {
+        foreach (var feature in geo.RootElement.GetProperty("features").EnumerateArray())
+            foreach (var ring in Polygons(feature.GetProperty("geometry")))
+                foreach (var point in ring.EnumerateArray())
+                    yield return (point[0].GetDouble(), point[1].GetDouble());
+    }
+
+    /// <summary>Degrees to chart pixels: x = OriginX + (lon - CenterLon) * ScaleX, y likewise with latitude flipped.</summary>
+    private readonly record struct MapView(double OriginX, double OriginY, double ScaleX, double ScaleY, double CenterLon, double CenterLat)
+    {
+        public double X(double lon) => OriginX + (lon - CenterLon) * ScaleX;
+        public double Y(double lat) => OriginY + (CenterLat - lat) * ScaleY;
+    }
+
+    /// <summary>The whole world stretched over the plot area; ZOOM and CENTER are relative to it.</summary>
+    private static MapView WorldView(FocusedLayoutInputs inputs, double zoom, double centerLat, double centerLon)
+    {
+        var plotWidth = inputs.Width - 20;
+        var plotHeight = inputs.Height - TitleBand - 8;
+        return new MapView(10 + plotWidth / 2.0, TitleBand + plotHeight / 2.0,
+            plotWidth / 360.0 * zoom, plotHeight / 180.0 * zoom, centerLon, centerLat);
+    }
+
+    /// <summary>
+    /// Fits the points' extent into the plot area with one scale for both axes. Longitude is
+    /// narrowed by the cosine of the middle latitude so shapes away from the equator keep their
+    /// proportions.
+    /// </summary>
+    private static MapView FitView(FocusedLayoutInputs inputs, IEnumerable<(double Lon, double Lat)> points)
+    {
+        double minLon = double.MaxValue, maxLon = double.MinValue, minLat = double.MaxValue, maxLat = double.MinValue;
+        foreach (var (lon, lat) in points)
+        {
+            if (!double.IsFinite(lon) || !double.IsFinite(lat)) continue;
+            minLon = Math.Min(minLon, lon); maxLon = Math.Max(maxLon, lon);
+            minLat = Math.Min(minLat, lat); maxLat = Math.Max(maxLat, lat);
+        }
+        if (minLon > maxLon) return WorldView(inputs, 1.0, 0.0, 0.0);
+
+        // A lone point or a tight cluster still gets some surroundings.
+        const double minimumSpan = 10.0;
+        var centerLon = (minLon + maxLon) / 2.0;
+        var centerLat = (minLat + maxLat) / 2.0;
+        var lonSpan = Math.Max(maxLon - minLon, minimumSpan);
+        var latSpan = Math.Max(maxLat - minLat, minimumSpan);
+        var narrowing = Math.Max(0.2, Math.Cos(centerLat * Math.PI / 180.0));
+
+        var plotWidth = inputs.Width - 20;
+        var plotHeight = inputs.Height - TitleBand - 8;
+        var scale = Math.Min(plotWidth / (lonSpan * narrowing), plotHeight / latSpan) * 0.96;
+        return new MapView(10 + plotWidth / 2.0, TitleBand + plotHeight / 2.0, scale * narrowing, scale, centerLon, centerLat);
     }
 
     private static IEnumerable<JsonElement> Polygons(JsonElement geometry)
@@ -1176,17 +1246,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         else if (type == "MultiPolygon") foreach (var polygon in coordinates.EnumerateArray()) foreach (var ring in polygon.EnumerateArray().Take(1)) yield return ring;
     }
 
-    private static string PolygonPath(FocusedLayoutInputs inputs, JsonElement ring, double zoom = 1.0, double centerLat = 0.0, double centerLon = 0.0) => string.Join(" ", ring.EnumerateArray().Select((point, i) => $"{(i == 0 ? "M" : "L")} {F(ProjectX(inputs, point[0].GetDouble(), zoom, centerLon))} {F(ProjectY(inputs, point[1].GetDouble(), zoom, centerLat))}")) + " Z";
-    private static double ProjectX(FocusedLayoutInputs inputs, double lon, double zoom = 1.0, double centerLon = 0.0)
-    {
-        var cx = 10 + (inputs.Width - 20) / 2.0;
-        return cx + ((lon - centerLon) / 360.0) * (inputs.Width - 20) * zoom;
-    }
-    private static double ProjectY(FocusedLayoutInputs inputs, double lat, double zoom = 1.0, double centerLat = 0.0)
-    {
-        var cy = TitleBand + (inputs.Height - TitleBand - 8) / 2.0;
-        return cy + ((centerLat - lat) / 180.0) * (inputs.Height - TitleBand - 8) * zoom;
-    }
+    private static string PolygonPath(JsonElement ring, MapView view) => string.Join(" ", ring.EnumerateArray().Select((point, i) => $"{(i == 0 ? "M" : "L")} {F(view.X(point[0].GetDouble()))} {F(view.Y(point[1].GetDouble()))}")) + " Z";
     private static string InterpolateColorDouble(string low, string high, double ratio)
     {
         ratio = Math.Clamp(ratio, 0.0, 1.0);
