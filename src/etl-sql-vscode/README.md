@@ -244,7 +244,7 @@ VS Code is where you author, test, and preview. When you're ready to share dashb
 | :--- | :--- |
 | **ETL-SQL Portal** *(Reporting & Dashboards)* | Self-hosted web hub for interactive dashboards and paginated reports. Publish directly from VS Code (`ETL-SQL: Publish to Portal`) with multi-page navigation, live slicers and drill-through, PDF/SVG/Markdown export, scheduled email/Slack/Teams subscriptions, data-driven alerts, row-level security (RLS), role-based access control, and usage analytics. |
 | **ETL-SQL Orchestrator** *(Job Scheduling & Operations)* | Always-on pipeline runner with cron schedules, retries, timeouts, incremental watermarks (`GET_JOB_STATE` / `SET_JOB_STATE`), quality-gate assertions (`ASSERT JOB`), quarantine replay, live per-statement run waterfalls, parameter overrides, and fleet health monitoring — managed from the Portal operations console or SQL (`CREATE JOB`, `TRIGGER JOB`). |
-| **ETL-SQL Studio** *(Web Authoring)* | Browser-based workbench in the Portal for authoring, previewing, and approving reports and pipelines without leaving the web app. |
+| **ETL-SQL Studio** *(Web Authoring, alpha)* | Alpha: may change between releases. Browser-based workbench in the Portal for authoring, previewing, and approving reports and pipelines without leaving the web app. |
 | **CLI & Terminal IDE** (`ETL-SQL`, `ETL-SQL-TUI`) | Single-binary execution for CI/CD, servers, and containers, plus a keyboard-driven terminal IDE with autocomplete, live results grid, and compare mode for headless or SSH environments. |
 
 **One workflow end to end:** write and preview in VS Code → review plain-text scripts in Git → publish dashboards to the Portal and schedule pipelines in the Orchestrator.

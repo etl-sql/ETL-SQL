@@ -437,5 +437,24 @@ namespace ETL_SQL.Tests.Operations.Operations
             Assert.Equal(inMemory, spilled);
             Assert.All(spilled.Where(s => s != "NULL"), s => Assert.EndsWith(":String", s));
         }
+
+        [Fact]
+        public async Task SortExternal_ChunkStartingWithNull_KeepsLaterBatchesWithOtherTypes()
+        {
+            // The chunk's first row is NULL, so the column is untyped ("Dynamic"). Its first Arrow
+            // batch holds only decimals, but later batches in the same chunk hold text and a long:
+            // no value may change type or be rounded when the chunk round-trips.
+            object?[] values = [null, 1.5m, "007", "N/A", 42m, 2.25m];
+            var (eval, logger) = BuildContext(chunkSize: values.Length);
+            eval.AdaptiveExecutionEnabled = false;
+            eval.BatchSize = 2;
+            var rows = values.Select((v, i) => new Row { ["id"] = (decimal)(values.Length - i), ["v"] = v }).ToList();
+
+            var sorted = await new ExternalSortEngine(eval, logger)
+                .SortExternal(rows, [new OrderByClause(new IdentifierExpression("id"), true)]);
+
+            static string Show(object? v) => v is null ? "NULL" : $"{v}:{v.GetType().Name}";
+            Assert.Equal(values.Select(Show), sorted.Select(r => Show(r["v"])));
+        }
     }
 }

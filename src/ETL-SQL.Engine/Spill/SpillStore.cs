@@ -1299,7 +1299,7 @@ public partial class SpillStore : ISpillStore
                 // first batch and does not write replacement/delta dictionaries for later batches.
                 // Enable bounded DictionaryType only on single-batch chunks (isFinalFlush) where all
                 // values are known; multi-batch streams fall back to plain StringArray for lossless fidelity.
-                _schema = UpgradeSchemaWithBoundedDictionaries(_schema, _schemaLogicalTypes!, _buffer, allowDictionaryEncoding: isFinalFlush);
+                _schema = UpgradeSchemaWithBoundedDictionaries(_schema, _schemaLogicalTypes!, _buffer, allRowsKnown: isFinalFlush);
                 _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
                 await _arrowWriter.WriteStartAsync(CancellationToken.None);
             }
@@ -1329,7 +1329,7 @@ public partial class SpillStore : ISpillStore
             Schema schema,
             string[] logicalTypes,
             List<object?[]> rows,
-            bool allowDictionaryEncoding)
+            bool allRowsKnown)
         {
             List<Field>? updatedFields = null;
             Dictionary<string, string>? updatedMetadata = null;
@@ -1339,8 +1339,10 @@ public partial class SpillStore : ISpillStore
                 var field = schema.FieldsList[col];
 
                 // When row 0 was NULL ("Dynamic"), infer the concrete Arrow type if all non-null
-                // values in the first batch share one homogeneous logical type.
-                if (logicalTypes[col] == "Dynamic" && field.DataType is StringType)
+                // values share one homogeneous logical type. Only a single-batch chunk has every
+                // value in hand; a later batch of a multi-batch chunk may hold other types, which
+                // a typed column would reject or coerce, so those stay "Dynamic".
+                if (allRowsKnown && logicalTypes[col] == "Dynamic" && field.DataType is StringType)
                 {
                     if (TryInferHomogeneousNonNullType(rows, col, out var inferredArrowType, out var inferredLogicalType))
                     {
@@ -1353,7 +1355,7 @@ public partial class SpillStore : ISpillStore
                     }
                 }
 
-                if (allowDictionaryEncoding
+                if (allRowsKnown
                     && rows.Count >= DictionaryMinNonNullRows
                     && field.DataType is StringType
                     && IsDictionaryEligibleLogicalType(logicalTypes[col])
