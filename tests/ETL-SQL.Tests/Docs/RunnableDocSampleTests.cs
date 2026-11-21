@@ -20,7 +20,7 @@ namespace ETL_SQL.Tests.Docs
     /// let the Quickstart ship reading a column MOCKDB does not have and let both map recipes ship
     /// with visuals that failed to build.
     ///
-    /// Covered: Quickstart blocks that use MOCKDB, every report recipe block (inline data) except
+    /// Covered: Quickstart blocks that use MOCKDB, the VS Code walkthrough samples, every report recipe block (inline data) except
     /// ones that need the reader's own file or connection, and the first block of each ETL recipe
     /// whose curated description says "Runs as-is". Each block is linted like the CLI does (lint
     /// errors block a run) and evaluated; report blocks must also build with no failed visual.
@@ -40,6 +40,12 @@ namespace ETL_SQL.Tests.Docs
                 if (code.Contains("MOCKDB()", StringComparison.OrdinalIgnoreCase))
                     yield return new object[] { id, IsReport(code), code };
             }
+
+            // The VS Code Get Started walkthrough samples; a vitest test keeps them equal to the
+            // extension README's "Try It Right Now" blocks.
+            var walkthrough = Path.Combine(RepoRoot, "src", "etl-sql-vscode", "media", "walkthrough");
+            foreach (var path in Directory.GetFiles(walkthrough).Where(p => p.EndsWith(".etlsql") || p.EndsWith(".rptsql")).OrderBy(p => p))
+                yield return new object[] { "walkthrough/" + Path.GetFileName(path), path.EndsWith(".rptsql"), File.ReadAllText(path) };
 
             foreach (var path in RecipeFiles("report"))
             {

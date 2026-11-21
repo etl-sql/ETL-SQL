@@ -32,6 +32,7 @@ import { generateScriptFromSpec } from './generateScriptFromSpec';
 import { consumePolicySave } from './saveGuard';
 import { replaceDocumentWithoutUndoHistory } from './documentWriter';
 import { analyzeSavePolicy, getSealPasswordRequirement, requiresRunPasswordPrompt } from './savePolicy';
+import { registerWalkthroughCommands } from './walkthrough';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -116,6 +117,9 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         })
     );
+
+    // Get Started walkthrough sample commands (contributes.walkthroughs)
+    registerWalkthroughCommands(context);
 
     // Welcome Page registration
     context.subscriptions.push(

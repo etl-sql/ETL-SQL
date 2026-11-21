@@ -1,0 +1,32 @@
+SET REPORT TITLE       = 'Mock Sales Performance';
+SET REPORT DESCRIPTION = 'Live dashboard powered by in-memory MOCKDB data';
+
+CREATE CONNECTION demo AS MOCKDB();
+
+SELECT Region, COUNT(*) AS OrderCount, SUM(Total) AS Revenue
+INTO #sales_summary
+FROM demo.Orders
+GROUP BY Region;
+
+CREATE VISUAL RegionalSalesChart AS BAR (
+    SOURCE   = #sales_summary,
+    MAPPINGS (X = Region, Y = Revenue),
+    STYLE    (HEIGHT = '350px', THEME = dark)
+);
+
+CREATE VISUAL OrdersKpi AS CARD (
+    SOURCE   = (SELECT SUM(OrderCount) AS TotalOrders FROM #sales_summary),
+    MAPPINGS (VALUE = TotalOrders, LABEL = 'Total Orders')
+);
+
+CREATE VISUAL RevenueKpi AS CARD (
+    SOURCE   = (SELECT SUM(Revenue) AS TotalRevenue FROM #sales_summary),
+    MAPPINGS (VALUE = TotalRevenue, LABEL = 'Total Revenue'),
+    OPTIONS  (FORMAT = 'C0')
+);
+
+CREATE PAGE SalesDashboard AS DASHBOARD (
+    TITLE     = 'Executive Overview',
+    STRUCTURE = 'A A / B C',
+    MAP ('A' = RegionalSalesChart, 'B' = OrdersKpi, 'C' = RevenueKpi)
+);

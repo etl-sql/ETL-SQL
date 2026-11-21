@@ -1,0 +1,37 @@
+CREATE CONNECTION demo AS MOCKDB();
+
+BEGIN TRY
+    -- 1. Extract and enforce in-stream Data Quality with first-class metadata tags
+    SELECT
+        Region      /* @d: Sales territory; @owner: rev_ops */
+            EXPECT NOT NULL ON FAILURE THROW,
+        Total       /* @d: Order total amount; @unit: USD */
+            EXPECT >= 0     ON FAILURE THROW
+    INTO #orders
+    FROM demo.Orders;
+
+    -- 2. Transform in engine memory
+    SELECT
+        Region,
+        COUNT(*)               AS TotalOrders,
+        SUM(Total)             AS Revenue,
+        ROUND(AVG(Total), 2)   AS AvgOrder
+    INTO #summary
+    FROM #orders
+    GROUP BY Region;
+
+    -- 3. Output results
+    SELECT Region, TotalOrders, Revenue, AvgOrder
+    FROM #summary
+    ORDER BY Revenue DESC;
+
+    -- 4. Inspect column-level lineage automatically captured by the engine
+    SELECT target_column, source_tables, source_columns
+    FROM eng.lineage
+    WHERE target_table = '#summary';
+
+END TRY
+BEGIN CATCH
+    PRINT 'Pipeline failed: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH;

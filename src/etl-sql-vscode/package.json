@@ -64,7 +64,10 @@
     "onCommand:etlsql.exportNotebook",
     "onCommand:etlsql.generateScriptFromSpec",
     "onCommand:etlsql.reportIssue",
-    "onCommand:etlsql.openConnectionWizard"
+    "onCommand:etlsql.openConnectionWizard",
+    "onCommand:etlsql.walkthrough.openPipeline",
+    "onCommand:etlsql.walkthrough.runPipeline",
+    "onCommand:etlsql.walkthrough.previewReport"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -375,6 +378,59 @@
         "command": "etlsql.format",
         "title": "ETL-SQL: Format",
         "icon": "$(paintcan)"
+      },
+      {
+        "command": "etlsql.walkthrough.openPipeline",
+        "title": "ETL-SQL: Open Sample Pipeline"
+      },
+      {
+        "command": "etlsql.walkthrough.runPipeline",
+        "title": "ETL-SQL: Run Sample Pipeline"
+      },
+      {
+        "command": "etlsql.walkthrough.previewReport",
+        "title": "ETL-SQL: Preview Sample Dashboard"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "etlsql.getStarted",
+        "title": "Get Started with ETL-SQL",
+        "description": "Run a pipeline and preview a dashboard in under a minute, on built-in sample data. No database needed.",
+        "steps": [
+          {
+            "id": "openPipeline",
+            "title": "Open a sample pipeline",
+            "description": "An extract, transform and load script with data quality rules, on the built-in MOCKDB() sample data.\n[Open Sample Pipeline](command:etlsql.walkthrough.openPipeline)",
+            "media": { "markdown": "media/walkthrough/1-open-pipeline.md" },
+            "completionEvents": [ "onCommand:etlsql.walkthrough.openPipeline" ]
+          },
+          {
+            "id": "runPipeline",
+            "title": "Run it with F5",
+            "description": "Press F5 in the pipeline, or use the button. Results open in the ETL-SQL Results panel.\n[Run Sample Pipeline](command:etlsql.walkthrough.runPipeline)",
+            "media": { "markdown": "media/walkthrough/2-run-pipeline.md" },
+            "completionEvents": [ "onCommand:etlsql.runScript", "onCommand:etlsql.runSelection" ]
+          },
+          {
+            "id": "previewDashboard",
+            "title": "Make it a dashboard",
+            "description": "Add CREATE VISUAL and CREATE PAGE to a .rptsql file and preview it next to the code.\n[Preview Sample Dashboard](command:etlsql.walkthrough.previewReport)",
+            "media": { "markdown": "media/walkthrough/3-dashboard.md" },
+            "completionEvents": [ "onCommand:etlsql.previewReport" ]
+          },
+          {
+            "id": "next",
+            "title": "Keep going",
+            "description": "Connect your own data, or start from a recipe.\n[5-Minute Quickstart](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/QUICKSTART.md)\n[Report Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/report/README.md) · [ETL Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/etl/README.md)",
+            "media": { "markdown": "media/walkthrough/4-next.md" },
+            "completionEvents": [
+              "onLink:https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/QUICKSTART.md",
+              "onLink:https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/report/README.md",
+              "onLink:https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/etl/README.md"
+            ]
+          }
+        ]
       }
     ],
     "keybindings": [

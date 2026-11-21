@@ -35,6 +35,8 @@
 3. **Press F5.** Results open in the **ETL-SQL Results** panel.
 4. **Make it a dashboard:** save the [dashboard example](#interactive-dashboard-sales_reportrptsql) as `sales_report.rptsql` and run **`F1` → `ETL-SQL: Preview Report`**.
 
+Prefer a guided tour? Open **Help → Welcome → Walkthroughs → Get Started with ETL-SQL**: it opens these samples, runs them, and previews the dashboard for you.
+
 Then follow the [5-Minute Quickstart](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/QUICKSTART.md) or open a ready-made dashboard from the [Report Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/report/README.md).
 
 ---

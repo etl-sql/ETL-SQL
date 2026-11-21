@@ -149,8 +149,11 @@ fuzzy matching recipes run on MOCKDB; multi-context-join and SCD Type 2 bugs fix
   It and SFTP bursting built their loop list with `DECLARE @x LIST = (SELECT ...)`, which keeps only
   the first row; both now use `FOREACH @row IN (SELECT ...)`. The remaining 18 recipes need a real
   SMTP, SFTP, webhook, REST, Neo4j, Portal or Orchestrator endpoint, or the reader's files. M
-- [ ] **DOC05 VS Code Get Started walkthrough (optional).** The extension has no `walkthroughs`
-  contribution; the README's 60-second steps would fit one. M
+- [x] **DOC05 VS Code Get Started walkthrough (optional).** Done 2026-11-21: `etlsql.getStarted`
+  walkthrough (open sample pipeline → run → preview dashboard → cookbooks) with three sample
+  commands (`walkthrough.ts`). The samples ship in `media/walkthrough/`; a vitest test keeps them
+  equal to the README's "Try It Right Now" blocks and checks every step's commands and media, and
+  `RunnableDocSampleTests` runs both. M
 - [ ] **DOC06 README screenshots.** A small gallery from the runnable report recipes (maps, Sankey,
   waterfall) would show the 25+ chart types better than the list. S
 
