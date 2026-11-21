@@ -823,7 +823,8 @@ public class SelectExecutionEngine
                 var sortInput = canPrunePostWhere
                     ? ProjectRequiredStream(externalEngineStream, postWhereRequired!)
                     : externalEngineStream;
-                externalEngineStream = externalSort.SortStreamAsync(sortInput, stmt.OrderBy);
+                externalEngineStream = externalSort.SortStreamAsync(sortInput, stmt.OrderBy,
+                    ProjectedSortKeys(stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns));
             }
             else
             {
@@ -837,7 +838,8 @@ public class SelectExecutionEngine
                     var sortInput = canPrunePostWhere
                         ? ProjectRequiredStream(allRows.ToAsyncEnumerable(), postWhereRequired!)
                         : allRows.ToAsyncEnumerable();
-                    externalEngineStream = externalSort.SortStreamAsync(sortInput, stmt.OrderBy);
+                    externalEngineStream = externalSort.SortStreamAsync(sortInput, stmt.OrderBy,
+                    ProjectedSortKeys(stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns));
                     allRows = [];
                     ResetProbeMemoryLease();
                 }
@@ -1242,6 +1244,22 @@ public class SelectExecutionEngine
         }
     }
 
+    /// <summary>
+    /// The sort keys a spilled ORDER BY reads from rows that are already projected (after an
+    /// aggregate, DISTINCT or window step), resolved the way <see cref="SortInMemory"/> and the
+    /// TopN heap resolve them: positions, aliases and repeated SELECT expressions read the output
+    /// column. Null for source rows, where the external sort evaluates ORDER BY itself and keeps
+    /// its stamped-key fast path. Without this, ORDER BY AVG(amount) over a spilled GROUP BY read
+    /// a column the aggregate no longer has.
+    /// </summary>
+    private Func<Row, Task<object?[]>>? ProjectedSortKeys(
+        List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns, bool hasPreEvaluatedColumns)
+    {
+        if (!hasPreEvaluatedColumns) return null;
+        var extractor = BuildSortKeyExtractor(orderBy, colNames, finalColumns, hasPreEvaluatedColumns);
+        return row => extractor.ExtractAsync(row).AsTask();
+    }
+
     private async Task<List<Row>> SortInMemory(List<Row> rows, List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns, bool hasPreEvaluatedColumns)
     {
         var rowSortKeys = new List<(Row Row, object?[] Keys)>(rows.Count);
@@ -1472,6 +1490,16 @@ public class SelectExecutionEngine
                 var colIdx = finalColumns.IndexOf(col);
                 resolvers[i] = new SortKeyExtractor.Resolver(
                     null, colIdx >= 0 ? compiledFinal[colIdx] : null, col.Expression);
+            }
+            else if (hasPreEvaluatedColumns
+                && finalColumns.FindIndex(c => c.Expression.ToSql().Equals(expr.ToSql(), StringComparison.OrdinalIgnoreCase)) is var sameIdx
+                && sameIdx >= 0 && sameIdx < colNames.Count)
+            {
+                // ORDER BY repeats a SELECT expression (ORDER BY AVG(amount) with an unaliased
+                // AVG(amount) column): the projected row holds its value under the output name
+                // ("column2"), and the expression's own inputs are gone after aggregation.
+                resolvers[i] = new SortKeyExtractor.Resolver(
+                    colNames[sameIdx], compiledFinal[sameIdx], finalColumns[sameIdx].Expression);
             }
             else
             {

@@ -337,10 +337,19 @@ public class PivotEngine
                 yield return enumerator.Current;
         }
 
+        // Expose only the declared output columns, as ApplyPivot does: the aggregate engine's rows
+        // also carry its AGG_* intermediate columns, which SELECT * returned on a spilled PIVOT.
+        var pivotOutNames = colNames.Skip(groupingCols.Count).ToList();
+        static string CleanName(string c) => c.Contains('.') ? c.Split('.').Last() : c;
         var externalAggregate = new ExternalAggregateEngine(_context, _logger);
         await foreach (var row in externalAggregate.ApplyAggregationExternal(
             ReplayRows(), groupBy, finalColumns, colNames))
-            yield return row;
+        {
+            var projected = new Row();
+            foreach (var g in groupingCols) projected[CleanName(g)] = row[g];
+            foreach (var pn in pivotOutNames) projected[pn] = row[pn];
+            yield return projected;
+        }
     }
 
     public async IAsyncEnumerable<Row> ApplyUnpivotStream(IAsyncEnumerable<Row> rows, UnpivotClause unpivot)

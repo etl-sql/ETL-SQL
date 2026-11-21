@@ -23,18 +23,26 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
     private readonly string _keyColumn;
     private readonly string[] _valueColumns;
     private readonly Slot[] _slots;
+    // HAVING as written. It is rewritten onto the output columns in FinalizeResultAsync, once the
+    // caller's output names are known: an unaliased aggregate is named by the caller ("column2"),
+    // not by its SQL text, so a rewrite made here pointed HAVING COUNT(*) at a missing column.
     private readonly Expression? _havingClause;
+    private readonly string?[] _slotAggregateSql;
+    private readonly string[] _keyReferenceNames;
     private readonly long _memoryCeilingBytes;
     private readonly List<IState> _states = new();
 
     private ColumnarGroupedAggregatePlan(
-        IExecutionContext context, string keyColumn, string[] valueColumns, Slot[] slots, Expression? havingClause)
+        IExecutionContext context, string keyColumn, string[] valueColumns, Slot[] slots, Expression? havingClause,
+        string?[] slotAggregateSql, string[] keyReferenceNames)
     {
         _context = context;
         _keyColumn = keyColumn;
         _valueColumns = valueColumns;
         _slots = slots;
         _havingClause = havingClause;
+        _slotAggregateSql = slotAggregateSql;
+        _keyReferenceNames = keyReferenceNames;
         _memoryCeilingBytes = MemoryGovernor.Ceiling(context);
     }
 
@@ -57,13 +65,17 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
         var slots = new List<Slot>(statement.Columns.Count);
         var projectedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var aggregateAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var slotAggregateSql = new List<string?>(statement.Columns.Count);
+        var keyReferenceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var column in statement.Columns)
         {
             if (column.Expression is IdentifierExpression identifier
                 && identifier.Name.Split('.').Last().Equals(keyColumn, StringComparison.OrdinalIgnoreCase))
             {
                 slots.Add(new Slot(SlotKind.Key, null, false));
+                slotAggregateSql.Add(null);
                 projectedNames.Add(column.Alias ?? identifier.Name.Split('.').Last());
+                keyReferenceNames.Add(column.Alias ?? identifier.Name.Split('.').Last());
                 continue;
             }
             if (column.Expression is not FunctionCallExpression function
@@ -91,15 +103,18 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
                 valueColumns.Add(argument);
             }
             slots.Add(new Slot(kind, argument, countStar));
+            slotAggregateSql.Add(column.Expression.ToSql());
             var outputName = column.Alias ?? column.Expression.ToSql();
             projectedNames.Add(outputName);
             aggregateAliases[column.Expression.ToSql()] = outputName;
         }
         if (valueColumns.Count > 1 && !slots.Any(slot => slot.Kind == SlotKind.Key)) return false;
-        if (!TryRewriteHaving(statement.HavingClause, aggregateAliases, projectedNames, out var havingClause))
+        // Eligibility only: the rewrite that runs is made in FinalizeResultAsync over the real names.
+        if (!TryRewriteHaving(statement.HavingClause, aggregateAliases, projectedNames, out _))
             return false;
         plan = new ColumnarGroupedAggregatePlan(
-            context, keyColumn, valueColumns.ToArray(), slots.ToArray(), havingClause);
+            context, keyColumn, valueColumns.ToArray(), slots.ToArray(), statement.HavingClause,
+            slotAggregateSql.ToArray(), keyReferenceNames.ToArray());
         return true;
     }
 
@@ -173,8 +188,9 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
         _states.Clear();
         if (_havingClause != null)
         {
+            var having = RewriteHavingOntoOutput(outputNames);
             for (var index = table.Rows.Count - 1; index >= 0; index--)
-                if (!await _context.EvaluateCondition(_havingClause, table.Rows[index]))
+                if (!await _context.EvaluateCondition(having, table.Rows[index]))
                     table.Rows.RemoveAt(index);
         }
         return table;
@@ -224,6 +240,20 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
         => IsNumeric(type) || type == typeof(DateOnly) || type == typeof(DateTime)
             || type == typeof(DateTimeOffset) || type == typeof(TimeSpan)
             || type == typeof(Guid) || type == typeof(string);
+
+    private Expression RewriteHavingOntoOutput(IReadOnlyList<string> outputNames)
+    {
+        var aggregateAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var projectedNames = new HashSet<string>(outputNames, StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < _slotAggregateSql.Length && i < outputNames.Count; i++)
+        {
+            if (_slotAggregateSql[i] is { } sql) aggregateAliases.TryAdd(sql, outputNames[i]);
+        }
+        foreach (var keyName in _keyReferenceNames) projectedNames.Add(keyName);
+        if (!TryRewriteHaving(_havingClause, aggregateAliases, projectedNames, out var rewritten) || rewritten == null)
+            throw new ExecutionException("HAVING could not be mapped onto the grouped output columns.");
+        return rewritten;
+    }
 
     private static bool TryRewriteHaving(
         Expression? expression,

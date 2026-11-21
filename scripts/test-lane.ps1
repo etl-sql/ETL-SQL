@@ -599,17 +599,36 @@ switch ($Lane) {
                 $previousRunSlt = $env:ETL_SQL_RUN_SLT
                 $previousMinSpill = $env:ETL_SQL_SLT_MIN_SPILL_PERCENT
                 $previousSltEvidence = $env:ETL_SQL_SLT_EVIDENCE_DIR
+                # Corpus tables hold 2-30 rows, below the engine-suite thresholds above: at those
+                # only 24.7% of result-checked queries spilled. At one or two rows 41% do, and
+                # that found seven spill defects the corpus had never reached (2026-11-21).
+                # Engine__BatchSize stays odd so batch boundaries cut through logical groups.
+                $sltOverrides = @{
+                    "Engine__BatchSize"                   = "3"
+                    "Engine__JoinSpillThreshold"          = "1"
+                    "Engine__ExternalSortChunkSize"       = "2"
+                    "Engine__WindowSpillThreshold"        = "1"
+                    "Engine__TempTableSpillThresholdRows" = "2"
+                    "Engine__MaxInMemoryBatches"          = "1"
+                }
+                $sltPrevious = @{}
                 try {
                     $env:ETL_SQL_RUN_SLT = "1"
-                    # Measured 24.7% of result-checked corpus queries spill at these thresholds
-                    # (2026-11-21); most corpus tables are smaller than them. The floor catches an
-                    # override that stops reaching the engine, which would leave the lane green
-                    # with nothing spilled. The count is written to slt-spill-coverage.json.
-                    $env:ETL_SQL_SLT_MIN_SPILL_PERCENT = "20"
+                    foreach ($key in $sltOverrides.Keys) {
+                        $sltPrevious[$key] = [Environment]::GetEnvironmentVariable($key)
+                        [Environment]::SetEnvironmentVariable($key, $sltOverrides[$key])
+                    }
+                    # The floor catches an override that stops reaching the engine, which would
+                    # leave the lane green with nothing spilled (measured 41.0%). The count is
+                    # written to slt-spill-coverage.json in the lane evidence.
+                    $env:ETL_SQL_SLT_MIN_SPILL_PERCENT = "35"
                     $env:ETL_SQL_SLT_EVIDENCE_DIR = $spillEvidence
                     Invoke-DotNetTest "tests\ETL-SQL.SqlLogicTests\ETL-SQL.SqlLogicTests.csproj" "Category=SLT"
                 }
                 finally {
+                    foreach ($key in $sltPrevious.Keys) {
+                        [Environment]::SetEnvironmentVariable($key, $sltPrevious[$key])
+                    }
                     $env:ETL_SQL_RUN_SLT = $previousRunSlt
                     $env:ETL_SQL_SLT_MIN_SPILL_PERCENT = $previousMinSpill
                     $env:ETL_SQL_SLT_EVIDENCE_DIR = $previousSltEvidence

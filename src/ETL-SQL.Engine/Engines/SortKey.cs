@@ -174,11 +174,12 @@ internal readonly struct SortKey
 
             if (EvaluationUtils.SafeTryParseDate(trimmed, out var parsedDt))
                 return FromDateTime(parsedDt);
-
-            return FromString(trimmed);
         }
 
-        return FromString(span.Length == s.Length ? s : span.ToString());
+        // Text keeps its spaces: the in-memory sort compares the original string, so a spilled
+        // sort keyed on the trimmed text put 'hello' before '  WORLD  '. Trimming is only for
+        // recognizing a number or a date above.
+        return FromString(s);
     }
 
     private static SortKey FromNormalizedObject(object? normalized) => normalized switch

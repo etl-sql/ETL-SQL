@@ -1047,12 +1047,93 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
     public async Task WriteOwnedBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         => await WriteBatchesCore(batches, append, takeOwnership: true, ExecutionContext?.CancellationToken ?? CancellationToken.None);
 
+    /// <summary>The column sets a row must not repeat: unique and primary key columns, then table keys.</summary>
+    private List<List<string>> UniqueKeyColumnSets()
+    {
+        var uniqueKeys = new List<List<string>>();
+        foreach (var kv in Schema)
+        {
+            if (kv.Value.IsUnique || kv.Value.IsPrimaryKey)
+                uniqueKeys.Add(new List<string> { kv.Key });
+        }
+        foreach (var tc in TableConstraints)
+        {
+            if (tc is TablePrimaryKeyConstraint pk) uniqueKeys.Add(pk.Columns);
+            else if (tc is TableUniqueConstraint uk) uniqueKeys.Add(uk.Columns);
+        }
+        return uniqueKeys;
+    }
+
+    private bool KeyConflicts(Row existingRow, Row newRow, List<string> keyCols)
+    {
+        foreach (var col in keyCols)
+        {
+            var existVal = existingRow[col];
+            var newVal = newRow[col];
+            if (existVal == null || existVal == DBNull.Value || newVal == null || newVal == DBNull.Value)
+                return false;
+            if (!IsSoftEqual(existVal, newVal))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// INSERT OR REPLACE on a table with rows spilled to disk. The resident replace step only sees
+    /// rows in memory, while the unique index still holds the spilled keys, so a replaced key that
+    /// had spilled failed as a unique constraint violation. The table is rewritten without the
+    /// rows the incoming batches replace, the way UPDATE rewrites a table, and the incoming rows
+    /// are then appended as usual.
+    /// </summary>
+    private async Task RemoveConflictsFromSpilledTableAsync(List<DataTable> incoming, CancellationToken cancellationToken)
+    {
+        var uniqueKeys = UniqueKeyColumnSets();
+        if (uniqueKeys.Count == 0) return;
+        var incomingRows = incoming.SelectMany(batch => batch.Rows).ToList();
+        if (incomingRows.Count == 0) return;
+
+        var kept = new List<DataTable>();
+        var removed = false;
+        await foreach (var batch in ReadBatches().WithCancellation(cancellationToken))
+        {
+            var keptBatch = new DataTable();
+            keptBatch.SetColumns(batch.ColumnNames);
+            foreach (var row in batch.Rows)
+            {
+                if (uniqueKeys.Any(keys => incomingRows.Any(newRow => KeyConflicts(row, newRow, keys))))
+                    removed = true;
+                else
+                    keptBatch.Rows.Add(row.Clone());
+            }
+            if (keptBatch.Rows.Count > 0) kept.Add(keptBatch);
+        }
+        if (!removed) return;
+
+        var replace = ReplaceOnConflict;
+        ReplaceOnConflict = false;
+        try
+        {
+            await WriteBatchesCore(kept.ToAsyncEnumerable(), append: false, takeOwnership: true, cancellationToken);
+        }
+        finally
+        {
+            ReplaceOnConflict = replace;
+        }
+    }
+
     private async Task WriteBatchesCore(
         IAsyncEnumerable<DataTable> batches,
         bool append,
         bool takeOwnership,
         CancellationToken cancellationToken)
     {
+        if (append && ReplaceOnConflict && !_spillChunkNames.IsEmpty)
+        {
+            var incoming = new List<DataTable>();
+            await foreach (var batch in batches.WithCancellation(cancellationToken)) incoming.Add(batch);
+            await RemoveConflictsFromSpilledTableAsync(incoming, cancellationToken);
+            batches = incoming.ToAsyncEnumerable();
+        }
         if (!append) await TruncateAsync();
         ISpillWriter? extentWriter = null;
         string? extentName = null;
@@ -1085,25 +1166,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                 {
                     if (ReplaceOnConflict)
                     {
-                        var uniqueKeys = new List<List<string>>();
-                        foreach (var kv in Schema)
-                        {
-                            if (kv.Value.IsUnique || kv.Value.IsPrimaryKey)
-                            {
-                                uniqueKeys.Add(new List<string> { kv.Key });
-                            }
-                        }
-                        foreach (var tc in TableConstraints)
-                        {
-                            if (tc is TablePrimaryKeyConstraint pk)
-                            {
-                                uniqueKeys.Add(pk.Columns);
-                            }
-                            else if (tc is TableUniqueConstraint uk)
-                            {
-                                uniqueKeys.Add(uk.Columns);
-                            }
-                        }
+                        var uniqueKeys = UniqueKeyColumnSets();
 
                         var rowsToDelete = new List<Row>();
                         foreach (var newRow in b.Rows)
@@ -1114,23 +1177,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                                 {
                                     foreach (var existingRow in batch.Rows)
                                     {
-                                        bool allMatch = true;
-                                        foreach (var col in keyCols)
-                                        {
-                                            var existVal = existingRow[col];
-                                            var newVal = newRow[col];
-                                            if (existVal == null || existVal == DBNull.Value || newVal == null || newVal == DBNull.Value)
-                                            {
-                                                allMatch = false;
-                                                break;
-                                            }
-                                            if (!IsSoftEqual(existVal, newVal))
-                                            {
-                                                allMatch = false;
-                                                break;
-                                            }
-                                        }
-                                        if (allMatch && !rowsToDelete.Contains(existingRow))
+                                        if (KeyConflicts(existingRow, newRow, keyCols) && !rowsToDelete.Contains(existingRow))
                                         {
                                             rowsToDelete.Add(existingRow);
                                         }
