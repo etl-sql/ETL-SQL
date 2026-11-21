@@ -139,11 +139,16 @@ fuzzy matching recipes run on MOCKDB; multi-context-join and SCD Type 2 bugs fix
   and fails a report with any failed visual. Proven by reintroducing the `Amount` and missing
   `MODE = POINTS` bugs. Docs-only changes select full CI, so it runs on every doc edit. A new
   runnable ETL recipe only needs "Runs as-is" in its curated description.
-- [ ] **DOC04 More "Try It Now" blocks.** 2026-11-19: added for incremental load, staged ingestion,
+- [x] **DOC04 More "Try It Now" blocks.** 2026-11-19: added for incremental load, staged ingestion,
   full refresh and PIVOT. 2026-11-21: added for PII masking (`MASK_EMAIL` + `HASHBYTES` on
   `demo.Users`, unblocked by DOC07) and IoT regex filtering (also fixed lookbehind patterns so
   `REGEXP_SUBSTR` returns numeric text); 10 ETL recipes now run as-is, all covered by
-  `RunnableDocSampleTests`. **Left:** candidates such as batch directory ingester or SCD Type 2. M
+  `RunnableDocSampleTests`. 2026-11-21: added for SCD Type 2, dynamic SQL with `EXEC` and the
+  parallel dimension loader; 13 ETL recipes now run as-is. The dynamic SQL recipe called local
+  dynamic SQL as `EXEC @sql` (a procedure call; it is `EXEC (@sql)`) and said `ON` for `AT`.
+  It and SFTP bursting built their loop list with `DECLARE @x LIST = (SELECT ...)`, which keeps only
+  the first row; both now use `FOREACH @row IN (SELECT ...)`. The remaining 18 recipes need a real
+  SMTP, SFTP, webhook, REST, Neo4j, Portal or Orchestrator endpoint, or the reader's files. M
 - [ ] **DOC05 VS Code Get Started walkthrough (optional).** The extension has no `walkthroughs`
   contribution; the README's 60-second steps would fit one. M
 - [ ] **DOC06 README screenshots.** A small gallery from the runnable report recipes (maps, Sankey,
