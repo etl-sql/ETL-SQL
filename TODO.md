@@ -202,7 +202,13 @@ fuzzy matching recipes run on MOCKDB; multi-context-join and SCD Type 2 bugs fix
   refinement on `ArrowSpillWriter`'s first batch flush. Same-host 500k-row profile: sort
   1,244 → 1,117 B/row (overhead above control 782: 335 B/row), window 1,254 → 1,131 B/row
   (overhead above control 742: 389 B/row).
-  Still open: hosted baseline recalibration for Slices 5–6.
+  Hosted: Slices 5–6 plus the spill fixes recalibrated at acb6a33a6 (run 44941117546, r2). Spill
+  bytes: window −87.5%, join and sort −50% (Standard sort −44%), cube −42.9%, aggregate −40%.
+  Allocated MB: Smoke window −44%, join −16%, cube −13%; Standard cube −14%, window −46%, sort
+  −31%, join −17%. Spill profile 578 B/row (budget 594.7, unchanged).
+  Watch: Standard cube allocation is bimodal per sample (~1,150 or ~2,010 MB; r1's median took the
+  low mode, so r2 was used). A low-mode run warns, never fails. Smoke join is 74.8–78.2 MB across
+  replicas (warns at +3%).
 
 ### 3.3 Operations console completion
 
