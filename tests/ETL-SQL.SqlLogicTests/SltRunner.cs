@@ -38,6 +38,25 @@ namespace ETL_SQL.SqlLogicTests
         private readonly int _instanceId = System.Threading.Interlocked.Increment(ref _instanceCounter);
         private int _queryCount;
 
+        private static long _queriesRun;
+        private static long _queriesSpilled;
+
+        /// <summary>Result-checked queries run by every runner in this process.</summary>
+        public static long QueriesRun => System.Threading.Interlocked.Read(ref _queriesRun);
+
+        /// <summary>
+        /// Result-checked queries whose execution wrote spill bytes. The spill lane lowers the
+        /// thresholds to a few rows, but a query over a table smaller than the threshold still runs
+        /// in memory; this count is what the lane actually covered, not what it hoped to.
+        /// </summary>
+        public static long QueriesSpilled => System.Threading.Interlocked.Read(ref _queriesSpilled);
+
+        public static void ResetSpillCoverage()
+        {
+            System.Threading.Interlocked.Exchange(ref _queriesRun, 0);
+            System.Threading.Interlocked.Exchange(ref _queriesSpilled, 0);
+        }
+
         public SltRunner(ILogger? logger = null)
         {
             _logger = logger ?? new ConsoleLogger();
@@ -117,10 +136,14 @@ SET TELEMETRY = OFF;";
                 // Inside the try: a statement that does not parse is a failed statement too.
                 var tokens = new Lexer(record.Sql).Tokenize();
                 var script = new Parser(tokens, record.Sql).Parse();
+                var spilledBefore = _evaluator.Telemetry?.TotalSpilledBytes ?? 0;
                 await _evaluator.Evaluate(script, cts.Token);
 
                 if (isQueryLike)
                 {
+                    System.Threading.Interlocked.Increment(ref _queriesRun);
+                    if ((_evaluator.Telemetry?.TotalSpilledBytes ?? 0) > spilledBefore)
+                        System.Threading.Interlocked.Increment(ref _queriesSpilled);
                     VerifyResults(record, _evaluator.LastResult);
                 }
 

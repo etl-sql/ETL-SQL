@@ -91,12 +91,7 @@ public class JoinEngine
             bool conditionIsTrue = join.Condition is LiteralExpression lit && true.Equals(lit.Value);
             await foreach (var left in leftStream)
             {
-                var qualifiedLeft = left;
-                if (!string.IsNullOrEmpty(leftAlias))
-                {
-                    qualifiedLeft = left.Clone();
-                    left.ForEachColumn((k, v) => { if (!k.Contains('.')) qualifiedLeft[$"{leftAlias}.{k}"] = v; });
-                }
+                var qualifiedLeft = QualifyForApply(left, leftAlias);
 
                 shape.SeeLeft(qualifiedLeft);
                 _context.OuterRowStack.Push(qualifiedLeft);
@@ -108,12 +103,7 @@ public class JoinEngine
                     {
                         foreach (var rr in rb.Rows)
                         {
-                            var qualifiedRight = rr;
-                            if (!string.IsNullOrEmpty(rightAlias))
-                            {
-                                qualifiedRight = rr.Clone();
-                                rr.ForEachColumn((k, v) => { if (!k.Contains('.')) qualifiedRight[$"{rightAlias}.{k}"] = v; });
-                            }
+                            var qualifiedRight = QualifyForApply(rr, rightAlias);
                             shape.SeeRight(qualifiedRight);
                             var combined = CombineRows(qualifiedLeft, qualifiedRight);
                             if (!conditionIsTrue && !await _context.EvaluateCondition(join.Condition, combined))
@@ -695,6 +685,36 @@ public class JoinEngine
     /// canonical slot for the right's qualified alias, the value is written to that slot so the
     /// left's value is not overwritten.
     /// </summary>
+    /// <summary>
+    /// One side of an APPLY / LATERAL step with every name it answers to held as a real column:
+    /// its canonical columns, its schema aliases (<c>d.name</c> from an earlier qualification)
+    /// and each bare column qualified by <paramref name="alias"/>. The step combines rows by name
+    /// without a combined schema, and a by-name copy carries canonical names only, so a qualified
+    /// name kept as a schema alias (SP07) was dropped and the other side's bare column of the same
+    /// name took its place (<c>d.name</c> was unknown after <c>CROSS JOIN LATERAL (...) e</c>).
+    /// </summary>
+    private static Row QualifyForApply(Row row, string? alias)
+    {
+        var qualified = new Row
+        {
+            MayLackColumns = row.MayLackColumns,
+            DataQualityReplayProvenance = row.DataQualityReplayProvenance,
+        };
+        row.ForEachColumn((k, v) => qualified[k] = v);
+        var schema = row.Schema;
+        if (schema != null)
+        {
+            for (var i = 0; i < schema.ColumnCount; i++)
+            {
+                foreach (var name in schema.EnumerateAliasesOf(schema.GetName(i)))
+                    if (!qualified.HasColumn(name)) qualified[name] = row[i];
+            }
+        }
+        if (!string.IsNullOrEmpty(alias))
+            row.ForEachColumn((k, v) => { if (!k.Contains('.')) qualified[$"{alias}.{k}"] = v; });
+        return qualified;
+    }
+
     private static Row CombineRows(Row left, Row right, TableSchema? schema = null)
     {
         var combined = schema != null ? new Row(schema) : new Row();

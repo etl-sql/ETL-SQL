@@ -597,12 +597,22 @@ switch ($Lane) {
             # runs once, in the first group.
             if ($EngineShardGroup -eq 1) {
                 $previousRunSlt = $env:ETL_SQL_RUN_SLT
+                $previousMinSpill = $env:ETL_SQL_SLT_MIN_SPILL_PERCENT
+                $previousSltEvidence = $env:ETL_SQL_SLT_EVIDENCE_DIR
                 try {
                     $env:ETL_SQL_RUN_SLT = "1"
+                    # Measured 24.7% of result-checked corpus queries spill at these thresholds
+                    # (2026-11-21); most corpus tables are smaller than them. The floor catches an
+                    # override that stops reaching the engine, which would leave the lane green
+                    # with nothing spilled. The count is written to slt-spill-coverage.json.
+                    $env:ETL_SQL_SLT_MIN_SPILL_PERCENT = "20"
+                    $env:ETL_SQL_SLT_EVIDENCE_DIR = $spillEvidence
                     Invoke-DotNetTest "tests\ETL-SQL.SqlLogicTests\ETL-SQL.SqlLogicTests.csproj" "Category=SLT"
                 }
                 finally {
                     $env:ETL_SQL_RUN_SLT = $previousRunSlt
+                    $env:ETL_SQL_SLT_MIN_SPILL_PERCENT = $previousMinSpill
+                    $env:ETL_SQL_SLT_EVIDENCE_DIR = $previousSltEvidence
                 }
             }
         }
