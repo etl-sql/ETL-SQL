@@ -194,6 +194,24 @@ public sealed class UnknownIdentifierTests
         Assert.True(rows[^1]["v"] is null or DBNull, "Row 600 has no match.");
     }
 
+    [Fact]
+    public async Task SpilledOuterJoinKeepsEachSideInItsColumnsWhenMatchedAndUnmatchedRowsMix()
+    {
+        // Only even n match, so every spilled sort chunk holds matched and unmatched rows. Both must
+        // share one layout: with mixed layouts the spill writer mapped a.g into b.g by bare name.
+        var rows = await RunSpilled(
+            "SELECT a.n AS n, a.g AS ag, b.g AS v FROM (SELECT n, g FROM #t) a LEFT JOIN (SELECT n, g FROM #t WHERE n % 2 = 0) b ON a.n = b.n ORDER BY a.n;");
+
+        Assert.Equal(Enumerable.Range(1, 600).Select(n => (decimal)n), rows.Select(r => Convert.ToDecimal(r["n"])));
+        foreach (var row in rows)
+        {
+            var n = Convert.ToInt32(row["n"]);
+            Assert.Equal((decimal)(n % 4), Convert.ToDecimal(row["ag"]));
+            if (n % 2 == 0) Assert.Equal((decimal)(n % 4), Convert.ToDecimal(row["v"]));
+            else Assert.True(row["v"] is null or DBNull, $"Row {n} has no match.");
+        }
+    }
+
     [Theory]
     [InlineData("region", true)]
     [InlineData("c.region", true)]

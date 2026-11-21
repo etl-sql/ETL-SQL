@@ -581,7 +581,9 @@ public class ExternalJoinEngine
                         }
                         else if (!producedMatch && isLeftJoin)
                         {
-                            yield return Shape.Unmatched(RowPacker.MaterializeBatchScalarRow(batch, packPlan, leftRowLayout!, rowIndex));
+                            yield return batchCombinedLayout != null
+                                ? UnmatchedLeftFromBatch(batch, packPlan, rowIndex, batchCombinedLayout)
+                                : Shape.Unmatched(RowPacker.MaterializeBatchScalarRow(batch, packPlan, leftRowLayout!, rowIndex));
                         }
                     }
                 }
@@ -590,6 +592,7 @@ public class ExternalJoinEngine
         else
         {
             TableSchema? cachedRowSchema = null;
+            TableSchema? unmatchedRightSchema = null;
             int[] rowKeySlots = keyCount > 0 ? new int[keyCount] : Array.Empty<int>();
             var vtReader = leftReader as ISortSpillReader;
             while (true)
@@ -632,7 +635,10 @@ public class ExternalJoinEngine
                     if (producedMatch == isSemi) yield return left;
                 }
                 else if (!producedMatch && isLeftJoin)
-                    yield return Shape.Unmatched(left);
+                {
+                    if (table.RowCount > 0) unmatchedRightSchema ??= table.UnpackRow(0).Schema;
+                    yield return UnmatchedLeft(left, unmatchedRightSchema);
+                }
             }
         }
 
@@ -1065,6 +1071,55 @@ public class ExternalJoinEngine
                 schema.AddAlias(aliasMap[i].Alias, aliasMap[i].Slot);
             return new CombinedLayout(left, right, schema, leftSlots, rightSlots);
         }
+    }
+
+    /// <summary>
+    /// The row a left outer join returns for a left row with no match, laid out like a matched
+    /// row with every right column NULL. Matched and unmatched rows must share one layout: in the
+    /// combined layout a bare name that both sides define is the right side's column and the left
+    /// side's is held under its qualified name, while a bare left row uses the bare name for the
+    /// left value. A spill writer maps later rows onto the first row's schema by name, so mixing
+    /// the two shapes put left values into right columns (<c>b.g</c> read <c>a.g</c>).
+    /// Without a right schema (no right rows) the shape pads the row by name, as before.
+    /// </summary>
+    private Row UnmatchedLeft(Row left, TableSchema? rightSchema)
+    {
+        var leftSchema = left.Schema;
+        if (rightSchema == null || leftSchema == null || left.HasDynamicColumns)
+            return Shape.Unmatched(left);
+
+        var layout = _combinedLayout;
+        if (layout == null || !ReferenceEquals(layout.Left, leftSchema) || !ReferenceEquals(layout.Right, rightSchema))
+            _combinedLayout = layout = CombinedLayout.Create(leftSchema, rightSchema);
+        var values = new object?[layout.Schema.ColumnCount];
+        for (var i = 0; i < layout.LeftSlots.Length; i++) values[layout.LeftSlots[i]] = left[i];
+        var row = new Row(layout.Schema, values)
+        {
+            MayLackColumns = left.MayLackColumns,
+            DataQualityReplayProvenance = left.DataQualityReplayProvenance,
+        };
+        Shape.Complete(row);
+        return row;
+    }
+
+    /// <summary>
+    /// <see cref="UnmatchedLeft"/> for a probe batch row. Left values fill every left slot,
+    /// including a bare name the right side would overwrite in a matched row, which keeps the
+    /// left value there as the by-name padding did.
+    /// </summary>
+    private Row UnmatchedLeftFromBatch(
+        ColumnBatch batch,
+        RowPacker.BatchColumnPlan packPlan,
+        int rowIndex,
+        BatchCombinedLayout layout)
+    {
+        var values = new object?[layout.Schema.ColumnCount];
+        var leftSlots = layout.LeftSlots;
+        for (int i = 0; i < leftSlots.Length; i++)
+            values[leftSlots[i]] = RowPacker.ReadBatchScalar(batch, packPlan, i, rowIndex);
+        var row = new Row(layout.Schema, values);
+        Shape.Complete(row);
+        return row;
     }
 
     private Row CombineRows(Row? left, Row right)
