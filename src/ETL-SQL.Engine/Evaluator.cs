@@ -1985,7 +1985,15 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             LastResultSets.AddRange(spawned.LastResultSets);
             if (spawned.LastResult != null) LastResult = spawned.LastResult;
         }
-        lock (_messagesLock) foreach (var entry in spawned.Messages) Log(entry.Message, entry.Color);
+        // Copy first: a fork shares this session's id, so its message handler is still subscribed
+        // and each Log below also appends to spawned.Messages. Enumerating that list directly
+        // threw "Collection was modified" whenever the fork had logged (e.g. a spill notice).
+        LogEntry[] spawnedMessages;
+        if (spawned is Evaluator spawnedEval)
+            lock (spawnedEval._messagesLock) spawnedMessages = spawnedEval.Messages.ToArray();
+        else
+            spawnedMessages = spawned.Messages.ToArray();
+        lock (_messagesLock) foreach (var entry in spawnedMessages) Log(entry.Message, entry.Color);
 
         Telemetry.RowsProcessed += spawned.Telemetry.RowsProcessed;
         Telemetry.TotalSpilledBytes += spawned.Telemetry.TotalSpilledBytes;

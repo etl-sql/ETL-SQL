@@ -39,6 +39,28 @@ public sealed class EngineAuditRegressionTests
     }
 
     [Fact]
+    public void Merge_ReplaysForkMessagesWhileTheForkStillCapturesOutput()
+    {
+        // A fork shares the parent's session id, so with redirected output its message handler
+        // still captures what the parent logs while replaying. Merge enumerated the fork's live
+        // list and threw "Collection was modified" (report visuals that spilled, 2026-11-21).
+        var parent = NewEvaluator();
+        parent.RedirectOutput = true;
+        var fork = (Evaluator)parent.Fork();
+        fork.RedirectOutput = true;
+        fork.Log("first fork message");
+        fork.Log("second fork message");
+        Assert.NotEmpty(fork.Messages);
+
+        parent.Merge(fork);
+
+        // The logger prefixes the session id, so match on the text.
+        var parentMessages = parent.Messages.Select(m => m.Message).ToList();
+        Assert.Contains(parentMessages, m => m.EndsWith("first fork message", StringComparison.Ordinal));
+        Assert.Contains(parentMessages, m => m.EndsWith("second fork message", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Fork_StartsAtParentRecursionDepthAndPaths()
     {
         var parent = NewEvaluator();
