@@ -157,7 +157,9 @@ public class TopNPaginationMemoryTests
             Enumerable.Range(0, 200).Select(i => new Row
             {
                 ["id"] = (decimal)i,
-                ["note"] = new string('n', 256)
+                // 15 retained rows must exceed the 16 KB headroom. Rows no longer carry duplicate
+                // qualified columns (SP07), so 256 chars fit and the sort rightly kept them in memory.
+                ["note"] = new string('n', 1024)
             }));
 
         await evaluator.Evaluate(Parse("""
