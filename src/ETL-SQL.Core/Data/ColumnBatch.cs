@@ -10,7 +10,12 @@ using System.Threading;
 namespace ETL_SQL.Core.Data;
 
 /// <summary>Describes one physical column in a native column batch.</summary>
-public sealed record ColumnBatchField(string Name, Type ElementType, string LogicalType, bool IsNullable = true);
+public sealed record ColumnBatchField(
+    string Name,
+    Type ElementType,
+    string LogicalType,
+    bool IsNullable = true,
+    IReadOnlyList<string>? Aliases = null);
 
 /// <summary>Immutable ordered schema shared by compatible column batches.</summary>
 public sealed class ColumnBatchSchema
@@ -33,6 +38,17 @@ public sealed class ColumnBatchSchema
             if (!_ordinals.TryAdd(field.Name, i))
                 throw new ArgumentException($"Duplicate column batch field '{field.Name}'.", nameof(fields));
         }
+
+        for (var i = 0; i < Fields.Count; i++)
+        {
+            var aliases = Fields[i].Aliases;
+            if (aliases == null) continue;
+            for (var a = 0; a < aliases.Count; a++)
+            {
+                if (!string.IsNullOrWhiteSpace(aliases[a]))
+                    _ordinals.TryAdd(aliases[a], i);
+            }
+        }
     }
 
     public IReadOnlyList<ColumnBatchField> Fields { get; }
@@ -41,6 +57,8 @@ public sealed class ColumnBatchSchema
     public int GetOrdinal(string name) => _ordinals.TryGetValue(name, out var ordinal)
         ? ordinal
         : throw new KeyNotFoundException($"Column '{name}' was not found in the batch schema.");
+
+    public bool TryGetOrdinal(string name, out int ordinal) => _ordinals.TryGetValue(name, out ordinal);
 }
 
 /// <summary>Non-generic view used by operators that dispatch on the physical element type.</summary>

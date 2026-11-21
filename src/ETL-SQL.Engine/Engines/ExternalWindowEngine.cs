@@ -15,6 +15,7 @@ using ETL_SQL.Core.Planning;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Planning;
+using ETL_SQL.Engine.Services;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -172,6 +173,20 @@ public class ExternalWindowEngine
         long? knownInputBytes)
     {
         _logger.WriteLine($"[blue]   - Group: {group.Columns.Count} cols, PARTITION BY ({(group.Signature.PartitionBy?.Count ?? 0)} expressions)[/]");
+
+        // Unpartitioned deep-spill windows (e.g. ROW_NUMBER() OVER (ORDER BY val)) stream
+        // directly into the single-pass sort/window pipeline without first spilling the whole
+        // input to a single partition file only to read it straight back into ExternalSortEngine.
+        if ((group.Signature.PartitionBy == null || group.Signature.PartitionBy.Count == 0)
+            && !IsOrderedPartitionValueReplayCompatible(group)
+            && !IsDistributionReplayCompatible(group)
+            && !IsLeadSpillCompatible(group)
+            && IsDeepSpillCompatible(group))
+        {
+            await foreach (var row in ProcessBucketDeepSpillStream(stream, group, stmt))
+                yield return row;
+            yield break;
+        }
 
         var partitionInfos = await PartitionStream(
             stream, group.Signature.PartitionBy, knownRowCount, knownInputBytes);
@@ -959,10 +974,17 @@ public class ExternalWindowEngine
         }
     }
 
-    private async IAsyncEnumerable<Row> ProcessBucketDeepSpill(string name, WindowGroup group, SelectStatement stmt)
+    private IAsyncEnumerable<Row> ProcessBucketDeepSpill(string name, WindowGroup group, SelectStatement stmt)
     {
-        var bucketRows = ReadPartitionStream(name);
+        var sortCriteria = BuildSortCriteria(group);
+        var sorted = sortCriteria.Count > 0
+            ? _sortEngine.SortSpillChunkAsync(name, sortCriteria)
+            : ReadPartitionStream(name);
+        return ProcessBucketDeepSpillStream(sorted, group, stmt, alreadySorted: sortCriteria.Count > 0);
+    }
 
+    private static List<OrderByClause> BuildSortCriteria(WindowGroup group)
+    {
         var sortCriteria = new List<OrderByClause>();
         if (group.Signature.PartitionBy != null)
         {
@@ -973,18 +995,28 @@ public class ExternalWindowEngine
         {
             sortCriteria.AddRange(group.Signature.OrderBy);
         }
+        return sortCriteria;
+    }
 
-        if (sortCriteria.Count > 0)
+    private async IAsyncEnumerable<Row> ProcessBucketDeepSpillStream(
+        IAsyncEnumerable<Row> bucketRows,
+        WindowGroup group,
+        SelectStatement stmt,
+        bool alreadySorted = false)
+    {
+        if (!alreadySorted)
         {
-            bucketRows = _sortEngine.SortStreamAsync(bucketRows, sortCriteria);
+            var sortCriteria = BuildSortCriteria(group);
+            if (sortCriteria.Count > 0)
+            {
+                bucketRows = _sortEngine.SortStreamAsync(bucketRows, sortCriteria);
+            }
         }
 
         int rowNumber = 0;
         int currentRank = 1;
         int currentDenseRank = 1;
         Row? prevRow = null;
-        object?[]? prevPartitionKeys = null;
-        object?[]? prevSortKeys = null;
         var runningAggregates = new Dictionary<string, StreamingWindowAggregate>(StringComparer.OrdinalIgnoreCase);
         var slidingAggregates = new Dictionary<string, SlidingWindowAggregate>(StringComparer.OrdinalIgnoreCase);
         var rangeRunningFuncs = group.Columns
@@ -1022,27 +1054,46 @@ public class ExternalWindowEngine
         TableSchema? resultSource = null;
         TableSchema? resultSchema = null;
 
+        int partKeyCount = group.Signature.PartitionBy?.Count ?? 0;
+        bool needsPeerTracking = peerBuffer != null
+            || Array.Exists(upperNames, static n => n is "RANK" or "DENSE_RANK");
+        int orderKeyCount = needsPeerTracking ? (group.Signature.OrderBy?.Count ?? 0) : 0;
+
+        var partCompiled = partKeyCount > 0 ? new RowExpressionCompiler.RowValue?[partKeyCount] : null;
+        for (int k = 0; k < partKeyCount; k++)
+            partCompiled![k] = RowExpressionCompiler.TryCompileValue(_context, group.Signature.PartitionBy![k], out var fn) ? fn : null;
+
+        var orderCompiled = orderKeyCount > 0 ? new RowExpressionCompiler.RowValue?[orderKeyCount] : null;
+        for (int k = 0; k < orderKeyCount; k++)
+            orderCompiled![k] = RowExpressionCompiler.TryCompileValue(_context, group.Signature.OrderBy![k].Expression, out var fn) ? fn : null;
+
+        // Reuse two small key buffers by swapping each row instead of allocating per-row object?[] arrays.
+        var currentPartitionKeys = partKeyCount > 0 ? new object?[partKeyCount] : Array.Empty<object?>();
+        var prevPartitionKeys = partKeyCount > 0 ? new object?[partKeyCount] : Array.Empty<object?>();
+        var currentSortKeys = orderKeyCount > 0 ? new object?[orderKeyCount] : Array.Empty<object?>();
+        var prevSortKeys = orderKeyCount > 0 ? new object?[orderKeyCount] : Array.Empty<object?>();
+
         await foreach (var row in bucketRows)
         {
             _context.CancellationToken.ThrowIfCancellationRequested();
-            object?[] currentPartitionKeys = new object?[group.Signature.PartitionBy?.Count ?? 0];
-            if (group.Signature.PartitionBy != null)
+            for (int k = 0; k < partKeyCount; k++)
             {
-                for (int k = 0; k < group.Signature.PartitionBy.Count; k++)
-                    currentPartitionKeys[k] = await _context.EvaluateValue(group.Signature.PartitionBy[k], row);
+                currentPartitionKeys[k] = partCompiled![k] != null
+                    ? partCompiled[k]!(row)
+                    : await _context.EvaluateValue(group.Signature.PartitionBy![k], row);
             }
 
-            object?[] currentSortKeys = new object?[group.Signature.OrderBy?.Count ?? 0];
-            if (group.Signature.OrderBy != null)
+            for (int k = 0; k < orderKeyCount; k++)
             {
-                for (int k = 0; k < group.Signature.OrderBy.Count; k++)
-                    currentSortKeys[k] = await _context.EvaluateValue(group.Signature.OrderBy[k].Expression, row);
+                currentSortKeys[k] = orderCompiled![k] != null
+                    ? orderCompiled[k]!(row)
+                    : await _context.EvaluateValue(group.Signature.OrderBy![k].Expression, row);
             }
 
             bool partitionChanged = false;
-            if (prevRow != null && group.Signature.PartitionBy != null && prevPartitionKeys != null)
+            if (prevRow != null && partKeyCount > 0)
             {
-                for (int k = 0; k < group.Signature.PartitionBy.Count; k++)
+                for (int k = 0; k < partKeyCount; k++)
                 {
                     if (_context.CompareConstants(currentPartitionKeys[k], prevPartitionKeys[k]) != 0)
                     {
@@ -1053,11 +1104,11 @@ public class ExternalWindowEngine
             }
 
             bool samePeer = true;
-            if (prevRow != null && !partitionChanged && group.Signature.OrderBy != null && group.Signature.OrderBy.Count > 0)
+            if (prevRow != null && !partitionChanged && orderKeyCount > 0)
             {
-                for (int k = 0; k < group.Signature.OrderBy.Count; k++)
+                for (int k = 0; k < orderKeyCount; k++)
                 {
-                    if (prevSortKeys != null && _context.CompareConstants(currentSortKeys[k], prevSortKeys[k]) != 0)
+                    if (_context.CompareConstants(currentSortKeys[k], prevSortKeys[k]) != 0)
                     {
                         samePeer = false;
                         break;
@@ -1208,8 +1259,10 @@ public class ExternalWindowEngine
                     lagHistory.Dequeue();
             }
             prevRow = outRow;
-            prevPartitionKeys = currentPartitionKeys;
-            prevSortKeys = currentSortKeys;
+            if (partKeyCount > 0)
+                (prevPartitionKeys, currentPartitionKeys) = (currentPartitionKeys, prevPartitionKeys);
+            if (orderKeyCount > 0)
+                (prevSortKeys, currentSortKeys) = (currentSortKeys, prevSortKeys);
         }
 
         if (peerBuffer is { Count: > 0 })
@@ -1403,7 +1456,7 @@ public class ExternalWindowEngine
         }
         sortCriteria.AddRange(group.Signature.OrderBy!);
 
-        var rows = _sortEngine.SortStreamAsync(ReadPartitionStream(name), sortCriteria);
+        var rows = _sortEngine.SortSpillChunkAsync(name, sortCriteria);
         var maxOffset = group.Columns
             .Select(c => (FunctionCallExpression)c.Expression)
             .Select(f => TryGetOffset(f, out var offset) ? offset : 0)
@@ -1450,7 +1503,7 @@ public class ExternalWindowEngine
         {
             await using (var writer = await _context.SpillStore.CreateWriterAsync(sortedName))
             {
-                await foreach (var row in _sortEngine.SortStreamAsync(ReadPartitionStream(name), sortCriteria))
+                await foreach (var row in _sortEngine.SortSpillChunkAsync(name, sortCriteria))
                 {
                     var keys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
                     if (previousPartitionKeys == null || !PartitionKeysEqual(previousPartitionKeys, keys))
@@ -1479,7 +1532,7 @@ public class ExternalWindowEngine
                 object?[]? previousReverseSortKeys = null;
                 await using (var writer = await _context.SpillStore.CreateWriterAsync(annotatedName))
                 {
-                    await foreach (var row in _sortEngine.SortStreamAsync(ReadPartitionStream(sortedName), reverseCriteria))
+                    await foreach (var row in _sortEngine.SortSpillChunkAsync(sortedName, reverseCriteria))
                     {
                         var partitionKeys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
                         var sortKeys = await EvaluateOrderKeys(group.Signature.OrderBy!, row);
@@ -1509,7 +1562,7 @@ public class ExternalWindowEngine
                         previousReverseSortKeys = sortKeys;
                     }
                 }
-                replayRows = _sortEngine.SortStreamAsync(ReadPartitionStream(annotatedName), sortCriteria);
+                replayRows = _sortEngine.SortSpillChunkAsync(annotatedName, sortCriteria);
             }
 
             var partitionIndex = -1;
@@ -1639,7 +1692,7 @@ public class ExternalWindowEngine
             }
         }
 
-        await foreach (var row in _sortEngine.SortStreamAsync(ReadPartitionStream(name), sortCriteria))
+        await foreach (var row in _sortEngine.SortSpillChunkAsync(name, sortCriteria))
         {
             _context.CancellationToken.ThrowIfCancellationRequested();
             var keys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
@@ -1875,11 +1928,22 @@ public class ExternalWindowEngine
         await using var reader = await _context.SpillStore.CreateReaderAsync(name);
         await foreach (var row in reader.AsEnumerableAsync())
         {
-            // Spilled rows come back over a schema: copy positionally into a fresh values array
-            // over the same schema rather than rebuilding a per-row name dictionary.
+            // Most Arrow-spilled rows have no JsonElement cells; return them directly without
+            // allocating a fresh Row + object?[] copy per row.
             var schema = row.Schema;
             if (schema != null && !row.HasDynamicColumns)
             {
+                bool hasJson = false;
+                for (var i = 0; i < schema.ColumnCount; i++)
+                {
+                    if (row[i] is JsonElement) { hasJson = true; break; }
+                }
+                if (!hasJson)
+                {
+                    yield return row;
+                    continue;
+                }
+
                 var values = new object?[schema.ColumnCount];
                 for (var i = 0; i < values.Length; i++)
                     values[i] = row[i] is JsonElement element ? SpillSerializationHelper.UnwrapJsonElement(element) : row[i];

@@ -33,8 +33,12 @@ public class ExternalSortEngine
     internal long PrefixResolvedComparisons { get; private set; }
     internal int LastSpilledSentinelColumnCount { get; private set; }
     internal long StampedSpillRowCount { get; private set; }
+    internal long ColumnarIntermediateMergeRows { get; private set; }
+    internal long ColumnarSortInputRows { get; private set; }
 
     internal readonly record struct SortEntry(Row Row, SortKey Key0, int ExtraKeyOffset, ulong KeyPrefix);
+    private readonly record struct ColumnarKeyEntry(SortKey Key0, int ExtraKeyOffset, ulong KeyPrefix);
+    private readonly record struct ColumnarChunkEntry(int BatchIndex, int RowIndex, SortKey Key0, int ExtraKeyOffset, ulong KeyPrefix);
 
     // Column-name prefix for individual sort-key columns written to spill chunks when a key
     // cannot be read directly from an existing column (expressions, variables, outer refs, etc.).
@@ -92,6 +96,355 @@ public class ExternalSortEngine
             null,
             null,
             cancellationToken);
+
+    /// <summary>
+    /// Sorts a spilled chunk directly using columnar batch reads when all <c>ORDER BY</c> keys
+    /// are plain columns in an Arrow spill file, avoiding per-row <see cref="Row"/> materialization
+    /// and scalar boxing during chunk sorting and intermediate merges. Falls back transparently to
+    /// <see cref="SortStreamAsync"/> for JSON spills or expression sort keys.
+    /// </summary>
+    internal async IAsyncEnumerable<Row> SortSpillChunkAsync(
+        string chunkName,
+        List<OrderByClause> orderBy,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        using var linkedCts = PipelineCursorScope.LinkCancellationTokens(_context.CancellationToken, cancellationToken, out var effectiveCancellationToken);
+        bool allPlainCandidates = orderBy.Count > 0;
+        for (int i = 0; i < orderBy.Count; i++)
+        {
+            if (!IsCandidatePlainColumn(orderBy[i].Expression, _context))
+            {
+                allPlainCandidates = false;
+                break;
+            }
+        }
+
+        if (!allPlainCandidates || _context.SpillFormat.Equals("Json", StringComparison.OrdinalIgnoreCase))
+        {
+            await foreach (var row in SortStreamAsync(ReadSpillRowsForFallback(chunkName), orderBy, null, effectiveCancellationToken))
+                yield return row;
+            yield break;
+        }
+
+        await using var reader = await _context.SpillStore.CreateReaderAsync(chunkName);
+        if (reader is not IColumnarSpillReader columnarReader)
+        {
+            await foreach (var row in SortStreamAsync(reader.AsEnumerableAsync(), orderBy, null, effectiveCancellationToken))
+                yield return row;
+            yield break;
+        }
+
+        await using var batchEnumerator = columnarReader.AsColumnBatchesAsync().GetAsyncEnumerator(effectiveCancellationToken);
+        ColumnBatch? firstBatch = null;
+        while (await batchEnumerator.MoveNextAsync())
+        {
+            if (batchEnumerator.Current.RowCount > 0)
+            {
+                firstBatch = batchEnumerator.Current;
+                break;
+            }
+            batchEnumerator.Current.Dispose();
+        }
+
+        if (firstBatch == null)
+            yield break;
+
+        var schema = firstBatch.Schema;
+        var keyOrdinals = TryResolveBatchOrderOrdinals(schema, orderBy);
+        if (keyOrdinals == null || !ColumnBatchRowBuilder.CanBuild(schema))
+        {
+            await foreach (var row in SortStreamAsync(
+                MaterializeRemainingBatches(firstBatch, batchEnumerator),
+                orderBy,
+                null,
+                effectiveCancellationToken))
+            {
+                yield return row;
+            }
+            yield break;
+        }
+
+        using var cursor = await PipelineCursorScope.AcquireCursorAsync(
+            _bufferManager,
+            _context.SessionId ?? "DEFAULT",
+            effectiveCancellationToken,
+            owner: this);
+        var arbiter = _context.MemoryArbiter ?? MemoryGrantArbiter.Shared;
+        var chunkLease = arbiter.AcquireLease();
+        var chunkPaths = new List<string>();
+        var cleanup = new HashSet<string>();
+        var chunkBatches = new List<ColumnBatch>();
+
+        try
+        {
+            bool caseSensitive = _context.CaseSensitiveComparison;
+            int keyCount = orderBy.Count;
+            int extraCount = Math.Max(0, keyCount - 1);
+            var extraKeys = extraCount > 0 ? new List<SortKey>() : null;
+            var chunkComparer = new ColumnarChunkEntryComparer(this, orderBy, caseSensitive, extraKeys);
+            var currentChunk = new List<ColumnarChunkEntry>();
+            var memGuard = new MemoryBudgetGuard(MemoryGovernor.Ceiling(_context));
+            int chunkCounter = 0;
+
+            var readKeyColumnNames = new string[keyCount];
+            for (int k = 0; k < keyCount; k++)
+                readKeyColumnNames[k] = schema.Fields[keyOrdinals[k]].Name;
+
+            async Task SpillColumnarChunkAsync(ColumnBatch? retainBatch = null)
+            {
+                currentChunk.Sort(chunkComparer);
+                var outName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
+                chunkPaths.Add(outName);
+                cleanup.Add(outName);
+                await WriteSortedColumnarChunkAsync(outName, schema, chunkBatches, currentChunk);
+                _context.Telemetry.SortSpillCount++;
+                _context.Telemetry.PartitionsCount++;
+                foreach (var b in chunkBatches)
+                {
+                    if (!ReferenceEquals(b, retainBatch))
+                        b.Dispose();
+                }
+                chunkBatches.Clear();
+                currentChunk.Clear();
+                extraKeys?.Clear();
+                memGuard.Reset();
+                chunkLease.Dispose();
+                chunkLease = arbiter.AcquireLease();
+                if (retainBatch != null)
+                {
+                    chunkBatches.Add(retainBatch);
+                    memGuard.Add(retainBatch.AllocatedBytes);
+                }
+            }
+
+            ColumnBatch? batch = firstBatch;
+            firstBatch = null;
+            while (batch != null)
+            {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
+                if (batch.RowCount == 0)
+                {
+                    batch.Dispose();
+                }
+                else
+                {
+                    int batchIdx = chunkBatches.Count;
+                    chunkBatches.Add(batch);
+                    memGuard.Add(batch.AllocatedBytes);
+
+                    for (int rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                    {
+                        var key0 = SortKey.FromBatchColumn(batch, keyOrdinals[0], rowIndex);
+                        int extraOffset = -1;
+                        long keyHeapBytes = key0.EstimateHeapBytes();
+                        if (extraCount > 0)
+                        {
+                            extraOffset = extraKeys!.Count;
+                            for (int k = 1; k < keyCount; k++)
+                            {
+                                var extra = SortKey.FromBatchColumn(batch, keyOrdinals[k], rowIndex);
+                                extraKeys.Add(extra);
+                                keyHeapBytes += extra.EstimateHeapBytes();
+                            }
+                        }
+
+                        ulong keyPrefix = ComputeKeyPrefix(key0, orderBy[0], caseSensitive);
+                        currentChunk.Add(new ColumnarChunkEntry(batchIdx, rowIndex, key0, extraOffset, keyPrefix));
+                        memGuard.Add(48L + (extraCount * 40L) + keyHeapBytes);
+                        ColumnarSortInputRows++;
+
+                        bool spillForArbiter = currentChunk.Count > 0 && chunkLease.RegisterAndCheckSpill(memGuard.BytesAccumulated);
+                        if (currentChunk.Count >= ChunkSize || (currentChunk.Count > 0 && (memGuard.Exceeded() || spillForArbiter)))
+                        {
+                            bool hasMoreRowsInBatch = rowIndex + 1 < batch.RowCount;
+                            await SpillColumnarChunkAsync(hasMoreRowsInBatch ? batch : null);
+                            batchIdx = hasMoreRowsInBatch ? 0 : -1;
+                        }
+                    }
+                }
+
+                batch = await batchEnumerator.MoveNextAsync() ? batchEnumerator.Current : null;
+            }
+
+            if (currentChunk.Count > 0)
+            {
+                currentChunk.Sort(chunkComparer);
+                if (chunkPaths.Count == 0)
+                {
+                    var layout = RowPacker.LayoutFor(schema);
+                    var plans = new RowPacker.BatchColumnPlan[chunkBatches.Count];
+                    for (int b = 0; b < chunkBatches.Count; b++)
+                        plans[b] = RowPacker.BatchColumnPlan.For(chunkBatches[b]);
+
+                    foreach (var entry in currentChunk)
+                    {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
+                        yield return RowPacker.MaterializeBatchScalarRow(
+                            chunkBatches[entry.BatchIndex], plans[entry.BatchIndex], layout, entry.RowIndex);
+                    }
+                    yield break;
+                }
+
+                var finalChunkName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
+                chunkPaths.Add(finalChunkName);
+                cleanup.Add(finalChunkName);
+                await WriteSortedColumnarChunkAsync(finalChunkName, schema, chunkBatches, currentChunk);
+                _context.Telemetry.SortSpillCount++;
+                _context.Telemetry.PartitionsCount++;
+                foreach (var b in chunkBatches) b.Dispose();
+                chunkBatches.Clear();
+                currentChunk.Clear();
+                extraKeys?.Clear();
+            }
+
+            chunkLease.Dispose();
+            if (chunkPaths.Count == 0) yield break;
+
+            int passNo = 0;
+            while (chunkPaths.Count > MaxMergeFanIn)
+            {
+                MergePassCount++;
+                var nextLevel = new List<string>();
+                for (int i = 0; i < chunkPaths.Count; i += MaxMergeFanIn)
+                {
+                    var group = chunkPaths.GetRange(i, Math.Min(MaxMergeFanIn, chunkPaths.Count - i));
+                    if (group.Count == 1)
+                    {
+                        nextLevel.Add(group[0]);
+                        continue;
+                    }
+
+                    var merged = $"sort_merge_p{passNo}_{Guid.NewGuid():N}_{nextLevel.Count}.tmp";
+                    cleanup.Add(merged);
+                    await MergeChunksToFileAsync(merged, group, readKeyColumnNames, null, orderBy);
+                    nextLevel.Add(merged);
+                    _context.Telemetry.SortSpillCount++;
+                    IntermediateMergeRunCount++;
+
+                    foreach (var consumed in group)
+                    {
+                        try { _context.SpillStore.DeleteChunk(consumed); cleanup.Remove(consumed); }
+                        catch (Exception ex) { _logger.Warning($"Error cleaning up external sort run {consumed}: {ex.Message}"); }
+                    }
+                }
+                chunkPaths = nextLevel;
+                passNo++;
+            }
+
+            MergePassCount++;
+            await foreach (var entry in MergeChunksAsync(chunkPaths, readKeyColumnNames, null, orderBy, stripKeys: false).WithCancellation(effectiveCancellationToken))
+            {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
+                yield return entry.Row;
+            }
+        }
+        finally
+        {
+            firstBatch?.Dispose();
+            foreach (var b in chunkBatches) b.Dispose();
+            chunkBatches.Clear();
+            chunkLease.Dispose();
+            foreach (var path in cleanup)
+            {
+                try { _context.SpillStore.DeleteChunk(path); }
+                catch (Exception ex) { _logger.Warning($"Error cleaning up external sort chunk {path}: {ex.Message}"); }
+            }
+        }
+    }
+
+    private async IAsyncEnumerable<Row> ReadSpillRowsForFallback(string chunkName)
+    {
+        await using var reader = await _context.SpillStore.CreateReaderAsync(chunkName);
+        await foreach (var row in reader.AsEnumerableAsync())
+            yield return row;
+    }
+
+    private static async IAsyncEnumerable<Row> MaterializeRemainingBatches(
+        ColumnBatch firstBatch,
+        IAsyncEnumerator<ColumnBatch> enumerator)
+    {
+        ColumnBatch? current = firstBatch;
+        try
+        {
+            while (current != null)
+            {
+                var layout = RowPacker.LayoutFor(current.Schema);
+                var plan = RowPacker.BatchColumnPlan.For(current);
+                for (int r = 0; r < current.RowCount; r++)
+                    yield return RowPacker.MaterializeBatchScalarRow(current, plan, layout, r);
+                current.Dispose();
+                current = null;
+                if (await enumerator.MoveNextAsync())
+                    current = enumerator.Current;
+            }
+        }
+        finally
+        {
+            current?.Dispose();
+        }
+    }
+
+    private static int[]? TryResolveBatchOrderOrdinals(ColumnBatchSchema schema, List<OrderByClause> orderBy)
+    {
+        var ordinals = new int[orderBy.Count];
+        for (int k = 0; k < orderBy.Count; k++)
+        {
+            var keyName = ((IdentifierExpression)orderBy[k].Expression).Name;
+            if (schema.TryGetOrdinal(keyName, out var ord))
+            {
+                ordinals[k] = ord;
+                continue;
+            }
+
+            var dot = keyName.LastIndexOf('.');
+            if (dot >= 0 && schema.TryGetOrdinal(keyName[(dot + 1)..], out var bareOrd))
+            {
+                ordinals[k] = bareOrd;
+                continue;
+            }
+
+            return null;
+        }
+        return ordinals;
+    }
+
+    private async Task WriteSortedColumnarChunkAsync(
+        string chunkName,
+        ColumnBatchSchema schema,
+        List<ColumnBatch> batches,
+        List<ColumnarChunkEntry> sortedEntries)
+    {
+        await using var writer = await _context.SpillStore.CreateWriterAsync(chunkName);
+        if (writer is IColumnarSpillWriter columnarWriter)
+        {
+            int flushRows = Math.Max(1, _context.EffectiveBatchSize);
+            long flushBytes = _context.EffectiveBatchTargetBytes;
+            using var builder = new ColumnBatchRowBuilder(schema, Math.Min(flushRows, Math.Max(1, sortedEntries.Count)));
+            for (int i = 0; i < sortedEntries.Count; i++)
+            {
+                var entry = sortedEntries[i];
+                builder.AppendFrom(batches[entry.BatchIndex], entry.RowIndex);
+                if (builder.Count >= builder.Capacity || (flushBytes > 0 && builder.EstimatedBytes >= flushBytes))
+                {
+                    using var outBatch = builder.Flush();
+                    await columnarWriter.WriteBatchAsync(outBatch);
+                }
+            }
+            if (builder.Count > 0)
+            {
+                using var outBatch = builder.Flush();
+                await columnarWriter.WriteBatchAsync(outBatch);
+            }
+            return;
+        }
+
+        var layout = RowPacker.LayoutFor(schema);
+        var plans = new RowPacker.BatchColumnPlan[batches.Count];
+        for (int b = 0; b < batches.Count; b++)
+            plans[b] = RowPacker.BatchColumnPlan.For(batches[b]);
+        foreach (var entry in sortedEntries)
+            await writer.WriteRowAsync(RowPacker.MaterializeBatchScalarRow(batches[entry.BatchIndex], plans[entry.BatchIndex], layout, entry.RowIndex));
+    }
 
     internal IAsyncEnumerable<Row> SortStreamWithPrefixAsync(
         IAsyncEnumerable<Row> inputStream,
@@ -605,6 +958,7 @@ public class ExternalSortEngine
     /// <summary>
     /// Merges a bounded group of spilled chunks into a single new intermediate run while leaving
     /// any <c>_SYS_SK_*</c> sentinel columns attached so the final pass can read and strip them once.
+    /// Uses zero-boxing columnar batch reads/writes when all input chunks are compatible Arrow spills.
     /// </summary>
     private async Task MergeChunksToFileAsync(
         string outName,
@@ -613,11 +967,239 @@ public class ExternalSortEngine
         string[]? sentinelColumnNames,
         List<OrderByClause> orderBy)
     {
+        if (!_context.SpillFormat.Equals("Json", StringComparison.OrdinalIgnoreCase)
+            && await TryMergeChunksToFileColumnarAsync(outName, inputChunks, keyColumnNames, sentinelColumnNames, orderBy))
+        {
+            return;
+        }
+
         await using var writer = await _context.SpillStore.CreateWriterAsync(outName);
         await foreach (var entry in MergeChunksAsync(inputChunks, keyColumnNames, sentinelColumnNames, orderBy, stripKeys: false))
         {
             await writer.WriteRowAsync(entry.Row);
         }
+    }
+
+    private sealed class ColumnarMergeCursor(ISpillReader reader, IAsyncEnumerator<ColumnBatch> enumerator, ColumnBatch firstBatch)
+        : IAsyncDisposable
+    {
+        public ISpillReader Reader { get; } = reader;
+        public IAsyncEnumerator<ColumnBatch> Enumerator { get; } = enumerator;
+        public ColumnBatch? CurrentBatch { get; set; } = firstBatch;
+        public int RowIndex { get; set; }
+
+        public async ValueTask<bool> AdvanceAsync()
+        {
+            if (CurrentBatch == null) return false;
+            RowIndex++;
+            if (RowIndex < CurrentBatch.RowCount)
+                return true;
+
+            CurrentBatch.Dispose();
+            CurrentBatch = null;
+            RowIndex = 0;
+
+            while (await Enumerator.MoveNextAsync())
+            {
+                if (Enumerator.Current.RowCount > 0)
+                {
+                    CurrentBatch = Enumerator.Current;
+                    return true;
+                }
+                Enumerator.Current.Dispose();
+            }
+            return false;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            CurrentBatch?.Dispose();
+            CurrentBatch = null;
+            await Enumerator.DisposeAsync();
+            await Reader.DisposeAsync();
+        }
+    }
+
+    private async Task<bool> TryMergeChunksToFileColumnarAsync(
+        string outName,
+        List<string> inputChunks,
+        string[] keyColumnNames,
+        string[]? sentinelColumnNames,
+        List<OrderByClause> orderBy)
+    {
+        var cursors = new List<ColumnarMergeCursor>(inputChunks.Count);
+        var emptyReaders = new List<ISpillReader>();
+        try
+        {
+            ColumnBatchSchema? sharedSchema = null;
+            foreach (var path in inputChunks)
+            {
+                var reader = await _context.SpillStore.CreateReaderAsync(path);
+                if (reader is not IColumnarSpillReader columnarReader)
+                {
+                    await reader.DisposeAsync();
+                    return false;
+                }
+
+                var enumerator = columnarReader.AsColumnBatchesAsync().GetAsyncEnumerator(_context.CancellationToken);
+                ColumnBatch? firstBatch = null;
+                while (await enumerator.MoveNextAsync())
+                {
+                    if (enumerator.Current.RowCount > 0)
+                    {
+                        firstBatch = enumerator.Current;
+                        break;
+                    }
+                    enumerator.Current.Dispose();
+                }
+
+                if (firstBatch == null)
+                {
+                    await enumerator.DisposeAsync();
+                    emptyReaders.Add(reader);
+                    continue;
+                }
+
+                if (sharedSchema == null)
+                {
+                    if (!ColumnBatchRowBuilder.CanBuild(firstBatch.Schema))
+                    {
+                        firstBatch.Dispose();
+                        await enumerator.DisposeAsync();
+                        await reader.DisposeAsync();
+                        return false;
+                    }
+                    sharedSchema = firstBatch.Schema;
+                }
+                else if (!ColumnBatchRowBuilder.HasCompatibleSchema(sharedSchema, firstBatch.Schema))
+                {
+                    firstBatch.Dispose();
+                    await enumerator.DisposeAsync();
+                    await reader.DisposeAsync();
+                    return false;
+                }
+
+                cursors.Add(new ColumnarMergeCursor(reader, enumerator, firstBatch));
+            }
+
+            if (sharedSchema == null || cursors.Count == 0)
+            {
+                await using var emptyWriter = await _context.SpillStore.CreateWriterAsync(outName);
+                return true;
+            }
+
+            var keyOrdinals = ResolveMergeKeyOrdinals(sharedSchema, keyColumnNames, sentinelColumnNames);
+            if (keyOrdinals == null)
+                return false;
+
+            MaxConcurrentMergeReaders = Math.Max(MaxConcurrentMergeReaders, cursors.Count);
+
+            await using var writer = await _context.SpillStore.CreateWriterAsync(outName);
+            if (writer is not IColumnarSpillWriter columnarWriter)
+                return false;
+
+            bool caseSensitive = _context.CaseSensitiveComparison;
+            int keyCount = keyOrdinals.Length;
+            int extraCount = Math.Max(0, keyCount - 1);
+            var mergeExtraKeys = extraCount > 0 ? new SortKey[cursors.Count * extraCount] : null;
+            var mergeComparer = new ColumnarKeyEntryComparer(this, orderBy, caseSensitive, mergeExtraKeys);
+            var heap = new PriorityQueue<int, ColumnarKeyEntry>(mergeComparer);
+
+            for (int i = 0; i < cursors.Count; i++)
+            {
+                var entry = ReadColumnarMergeKey(cursors[i].CurrentBatch!, cursors[i].RowIndex, i, keyOrdinals, orderBy, caseSensitive, mergeExtraKeys, extraCount);
+                heap.Enqueue(i, entry);
+            }
+
+            int flushRows = Math.Max(1, _context.EffectiveBatchSize);
+            long flushBytes = _context.EffectiveBatchTargetBytes;
+            using var builder = new ColumnBatchRowBuilder(sharedSchema, flushRows);
+
+            while (heap.TryDequeue(out int cursorIdx, out _))
+            {
+                _context.CancellationToken.ThrowIfCancellationRequested();
+                var cursor = cursors[cursorIdx];
+                builder.AppendFrom(cursor.CurrentBatch!, cursor.RowIndex);
+                ColumnarIntermediateMergeRows++;
+
+                if (builder.Count >= builder.Capacity || (flushBytes > 0 && builder.EstimatedBytes >= flushBytes))
+                {
+                    using var outBatch = builder.Flush();
+                    await columnarWriter.WriteBatchAsync(outBatch);
+                }
+
+                if (await cursor.AdvanceAsync())
+                {
+                    var nextEntry = ReadColumnarMergeKey(cursor.CurrentBatch!, cursor.RowIndex, cursorIdx, keyOrdinals, orderBy, caseSensitive, mergeExtraKeys, extraCount);
+                    heap.Enqueue(cursorIdx, nextEntry);
+                }
+            }
+
+            if (builder.Count > 0)
+            {
+                using var outBatch = builder.Flush();
+                await columnarWriter.WriteBatchAsync(outBatch);
+            }
+
+            return true;
+        }
+        finally
+        {
+            foreach (var c in cursors) await c.DisposeAsync();
+            foreach (var r in emptyReaders) await r.DisposeAsync();
+        }
+    }
+
+    private static int[]? ResolveMergeKeyOrdinals(
+        ColumnBatchSchema schema,
+        string[] keyColumnNames,
+        string[]? sentinelColumnNames)
+    {
+        var ordinals = new int[keyColumnNames.Length];
+        for (int k = 0; k < keyColumnNames.Length; k++)
+        {
+            int idx = -1;
+            if (sentinelColumnNames is { Length: > 0 })
+            {
+                string sentinelName = $"{SortKeyPrefix}{k}";
+                for (int s = 0; s < sentinelColumnNames.Length; s++)
+                {
+                    if (string.Equals(sentinelColumnNames[s], sentinelName, StringComparison.OrdinalIgnoreCase)
+                        && schema.TryGetOrdinal(sentinelName, out var sentinelOrd))
+                    {
+                        idx = sentinelOrd;
+                        break;
+                    }
+                }
+            }
+            if (idx < 0 && schema.TryGetOrdinal(keyColumnNames[k], out var colOrd))
+                idx = colOrd;
+            if (idx < 0)
+                return null;
+            ordinals[k] = idx;
+        }
+        return ordinals;
+    }
+
+    private static ColumnarKeyEntry ReadColumnarMergeKey(
+        ColumnBatch batch,
+        int rowIndex,
+        int cursorIdx,
+        int[] keyOrdinals,
+        List<OrderByClause> orderBy,
+        bool caseSensitive,
+        SortKey[]? mergeExtraKeys,
+        int extraCount)
+    {
+        if (keyOrdinals.Length == 0)
+            return new ColumnarKeyEntry(SortKey.Null, -1, 0UL);
+
+        var key0 = SortKey.FromBatchColumn(batch, keyOrdinals[0], rowIndex);
+        int extraOffset = extraCount > 0 ? cursorIdx * extraCount : -1;
+        for (int k = 1; k < keyOrdinals.Length; k++)
+            mergeExtraKeys![extraOffset + (k - 1)] = SortKey.FromBatchColumn(batch, keyOrdinals[k], rowIndex);
+        ulong prefix = ComputeKeyPrefix(key0, orderBy[0], caseSensitive);
+        return new ColumnarKeyEntry(key0, extraOffset, prefix);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -723,6 +1305,66 @@ public class ExternalSortEngine
                 var ka = _extraKeys![a.ExtraKeyOffset + (i - 1)];
                 var kb = _extraKeys[b.ExtraKeyOffset + (i - 1)];
                 res = SortKey.Compare(ka, kb, _orderBy[i], _caseSensitive);
+                if (res != 0) return res;
+            }
+            return 0;
+        }
+    }
+
+    private sealed class ColumnarKeyEntryComparer(
+        ExternalSortEngine engine,
+        List<OrderByClause> orderBy,
+        bool caseSensitive,
+        IReadOnlyList<SortKey>? extraKeys) : IComparer<ColumnarKeyEntry>
+    {
+        public int Compare(ColumnarKeyEntry a, ColumnarKeyEntry b)
+        {
+            if (a.KeyPrefix != b.KeyPrefix)
+            {
+                engine.PrefixResolvedComparisons++;
+                return a.KeyPrefix < b.KeyPrefix ? -1 : 1;
+            }
+
+            if (orderBy.Count == 0) return 0;
+
+            int res = SortKey.Compare(a.Key0, b.Key0, orderBy[0], caseSensitive);
+            if (res != 0) return res;
+
+            for (int i = 1; i < orderBy.Count; i++)
+            {
+                var ka = extraKeys![a.ExtraKeyOffset + (i - 1)];
+                var kb = extraKeys[b.ExtraKeyOffset + (i - 1)];
+                res = SortKey.Compare(ka, kb, orderBy[i], caseSensitive);
+                if (res != 0) return res;
+            }
+            return 0;
+        }
+    }
+
+    private sealed class ColumnarChunkEntryComparer(
+        ExternalSortEngine engine,
+        List<OrderByClause> orderBy,
+        bool caseSensitive,
+        IReadOnlyList<SortKey>? extraKeys) : IComparer<ColumnarChunkEntry>
+    {
+        public int Compare(ColumnarChunkEntry a, ColumnarChunkEntry b)
+        {
+            if (a.KeyPrefix != b.KeyPrefix)
+            {
+                engine.PrefixResolvedComparisons++;
+                return a.KeyPrefix < b.KeyPrefix ? -1 : 1;
+            }
+
+            if (orderBy.Count == 0) return 0;
+
+            int res = SortKey.Compare(a.Key0, b.Key0, orderBy[0], caseSensitive);
+            if (res != 0) return res;
+
+            for (int i = 1; i < orderBy.Count; i++)
+            {
+                var ka = extraKeys![a.ExtraKeyOffset + (i - 1)];
+                var kb = extraKeys[b.ExtraKeyOffset + (i - 1)];
+                res = SortKey.Compare(ka, kb, orderBy[i], caseSensitive);
                 if (res != 0) return res;
             }
             return 0;
@@ -910,7 +1552,7 @@ public class ExternalSortEngine
                 return null;
             }
 
-            var match = RowExpressionCompiler.FindMatch(name, schema.ColumnNames);
+            var match = RowExpressionCompiler.FindMatch(name, schema.GetNamesWithAliases());
             if (!match.IsAmbiguous && match.ResolvedKey != null)
             {
                 int resolvedIdx = schema.GetIndex(match.ResolvedKey);

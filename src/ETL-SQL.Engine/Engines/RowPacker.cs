@@ -452,7 +452,7 @@ internal sealed class RowPacker : IDisposable
     /// </summary>
     internal sealed class NameLayout
     {
-        public NameLayout(IReadOnlyList<string> names)
+        public NameLayout(IReadOnlyList<string> names, IReadOnlyList<IReadOnlyList<string>?>? aliases = null)
         {
             var distinct = new List<string>(names.Count);
             var slotByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -468,6 +468,17 @@ internal sealed class RowPacker : IDisposable
                 Slots[i] = slot;
             }
             Schema = new TableSchema(distinct);
+            if (aliases != null)
+            {
+                for (var i = 0; i < Math.Min(names.Count, aliases.Count); i++)
+                {
+                    var colAliases = aliases[i];
+                    if (colAliases == null) continue;
+                    var slot = Slots[i];
+                    for (var a = 0; a < colAliases.Count; a++)
+                        Schema.AddAlias(colAliases[a], slot);
+                }
+            }
             SourceCount = names.Count;
         }
 
@@ -480,20 +491,41 @@ internal sealed class RowPacker : IDisposable
     // finished operator's layouts go with it.
     private static readonly ConditionalWeakTable<object, NameLayout> s_layouts = new();
 
-    internal static NameLayout LayoutFor(object key, IReadOnlyList<string> names)
+    internal static NameLayout LayoutFor(
+        object key,
+        IReadOnlyList<string> names,
+        IReadOnlyList<IReadOnlyList<string>?>? aliases = null)
     {
         if (s_layouts.TryGetValue(key, out var layout) && layout.SourceCount == names.Count) return layout;
-        layout = new NameLayout(names);
+        layout = new NameLayout(names, aliases);
         s_layouts.AddOrUpdate(key, layout);
+        return layout;
+    }
+
+    internal static NameLayout LayoutFor(ColumnBatchSchema schema)
+    {
+        if (s_layouts.TryGetValue(schema, out var layout) && layout.SourceCount == schema.Count) return layout;
+        var names = new string[schema.Count];
+        IReadOnlyList<string>?[]? aliases = null;
+        for (var i = 0; i < schema.Count; i++)
+        {
+            var field = schema.Fields[i];
+            names[i] = field.Name;
+            if (field.Aliases is { Count: > 0 })
+            {
+                aliases ??= new IReadOnlyList<string>?[schema.Count];
+                aliases[i] = field.Aliases;
+            }
+        }
+        layout = new NameLayout(names, aliases);
+        s_layouts.AddOrUpdate(schema, layout);
         return layout;
     }
 
     internal static Row MaterializeBatchRow(ColumnBatch batch, int rowIndex)
     {
         var fields = batch.Schema.Fields;
-        var layout = s_layouts.TryGetValue(batch.Schema, out var cached) && cached.SourceCount == fields.Count
-            ? cached
-            : LayoutFor(batch.Schema, fields.Select(field => field.Name).ToList());
+        var layout = LayoutFor(batch.Schema);
         var values = new object?[layout.Schema.ColumnCount];
         for (var column = 0; column < fields.Count; column++)
             values[layout.Slots[column]] = ReadBatchValue(batch, column, rowIndex);
@@ -514,9 +546,14 @@ internal sealed class RowPacker : IDisposable
         Unpack(data, 0, data.Length, columns);
 
     /// <summary>Reconstructs a <see cref="Row"/> from a pooled slab slice produced by <see cref="PackInto"/>.</summary>
-    public static Row Unpack(byte[] data, int offset, int count, IReadOnlyList<string> columns)
+    public static Row Unpack(
+        byte[] data,
+        int offset,
+        int count,
+        IReadOnlyList<string> columns,
+        IReadOnlyList<IReadOnlyList<string>?>? aliases = null)
     {
-        var layout = LayoutFor(columns, columns);
+        var layout = LayoutFor(columns, columns, aliases);
         var values = new object?[layout.Schema.ColumnCount];
         var span = data.AsSpan(offset, count);
         int pos = 0;

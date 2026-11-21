@@ -359,8 +359,19 @@ internal static class RowExpressionCompiler
     {
         if (row.TryGetValue(name, out var value)) return value;
 
-        var names = row.GetColumnNames();
-        var nameList = names as IReadOnlyList<string> ?? new List<string>(names);
+        var schema = row.Schema;
+        IReadOnlyList<string> nameList;
+        if (schema != null)
+        {
+            nameList = !row.HasDynamicColumns
+                ? schema.GetNamesWithAliases()
+                : schema.GetNamesWithAliases().Concat(row.GetColumnNames().Skip(schema.ColumnCount)).ToList();
+        }
+        else
+        {
+            var names = row.GetColumnNames();
+            nameList = names as IReadOnlyList<string> ?? new List<string>(names);
+        }
         var match = FindMatch(name, nameList);
         if (match.IsAmbiguous)
             throw new ExecutionException($"Ambiguous identifier '{name}'. Matches: {string.Join(", ", match.Candidates)}");

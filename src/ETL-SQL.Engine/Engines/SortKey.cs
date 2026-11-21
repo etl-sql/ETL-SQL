@@ -1,5 +1,7 @@
 using System;
+using System.Buffers.Text;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
@@ -84,6 +86,74 @@ internal readonly struct SortKey
 
         var normalized = CompoundKey.NormalizeValue(val);
         return FromNormalizedObject(normalized);
+    }
+
+    /// <summary>
+    /// Extracts an unboxed <see cref="SortKey"/> directly from a <see cref="ColumnBatch"/> cell,
+    /// avoiding boxing for numeric, date, and boolean columns.
+    /// </summary>
+    public static SortKey FromBatchColumn(ColumnBatch batch, int columnIndex, int rowIndex)
+    {
+        var column = batch.Columns[columnIndex];
+        if (column.IsNull(rowIndex)) return Null;
+
+        return column switch
+        {
+            ColumnBuffer<long> longs => FromDecimal(longs.Values.Span[rowIndex]),
+            ColumnBuffer<int> ints => FromDecimal(ints.Values.Span[rowIndex]),
+            ColumnBuffer<short> shorts => FromDecimal(shorts.Values.Span[rowIndex]),
+            ColumnBuffer<byte> bytes => FromDecimal(bytes.Values.Span[rowIndex]),
+            ColumnBuffer<decimal> decimals => FromDecimal(decimals.Values.Span[rowIndex]),
+            ColumnBuffer<double> doubles => FromDoubleValue(doubles.Values.Span[rowIndex]),
+            ColumnBuffer<bool> booleans => FromBoolean(booleans.Values.Span[rowIndex]),
+            ColumnBuffer<DateTime> dates => FromDateTime(dates.Values.Span[rowIndex]),
+            ColumnBuffer<DateOnly> dateOnlies => FromDateTime(dateOnlies.Values.Span[rowIndex].ToDateTime(TimeOnly.MinValue)),
+            ColumnBuffer<DateTimeOffset> offsets => FromDateTime(offsets.Values.Span[rowIndex].DateTime),
+            Utf8ColumnBuffer utf8 => FromUtf8Column(utf8, rowIndex),
+            _ => FromValue(RowPacker.ReadBatchValue(batch, columnIndex, rowIndex)),
+        };
+    }
+
+    private static SortKey FromDoubleValue(double value)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return FromOther(value);
+        try
+        {
+            return FromDecimal((decimal)value);
+        }
+        catch (OverflowException)
+        {
+            return FromOther(value);
+        }
+    }
+
+    private static SortKey FromUtf8Column(Utf8ColumnBuffer utf8, int rowIndex)
+    {
+        var bytes = utf8.GetUtf8Bytes(rowIndex);
+        if (bytes.StartsWith("\x1Ejson:"u8))
+        {
+            var text = Encoding.UTF8.GetString(bytes);
+            try
+            {
+                var element = JsonSerializer.Deserialize<JsonElement>(text.AsSpan("\x1Ejson:".Length));
+                return FromValue(ETL_SQL.Engine.Spill.SpillSerializationHelper.UnwrapJsonElement(element));
+            }
+            catch
+            {
+                return FromStringValue(text);
+            }
+        }
+
+        if (bytes.StartsWith("\x1Edateonly:"u8))
+        {
+            var text = Encoding.UTF8.GetString(bytes.Slice("\x1Edateonly:".Length));
+            if (DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateOnly))
+                return FromDateTime(dateOnly.ToDateTime(TimeOnly.MinValue));
+            return FromStringValue(text);
+        }
+
+        return FromStringValue(Encoding.UTF8.GetString(bytes));
     }
 
     private static SortKey FromStringValue(string s)

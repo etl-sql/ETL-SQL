@@ -365,6 +365,7 @@ public class ExternalJoinEngine
                         if (!columnsCaptured)
                         {
                             table.Columns.AddRange(batch.Schema.Fields.Select(field => field.Name));
+                            table.ColumnAliases.AddRange(batch.Schema.Fields.Select(field => field.Aliases));
                             columnsCaptured = true;
                         }
                         if (batch.RowCount == 0) continue;
@@ -418,7 +419,15 @@ public class ExternalJoinEngine
                 // Arrow spill writer infers its schema from the first row).
                 if (!columnsCaptured)
                 {
-                    table.Columns.AddRange(rightRow.GetColumnNames());
+                    var rightSchema = rightRow.Schema;
+                    foreach (var colName in rightRow.GetColumnNames())
+                    {
+                        table.Columns.Add(colName);
+                        IReadOnlyList<string>? aliases = rightSchema != null
+                            ? rightSchema.EnumerateAliasesOf(colName).ToArray()
+                            : null;
+                        table.ColumnAliases.Add(aliases is { Count: > 0 } ? aliases : null);
+                    }
                     columnsCaptured = true;
                 }
 
@@ -487,10 +496,10 @@ public class ExternalJoinEngine
                         cachedBatchSchema = batch.Schema;
                         for (int k = 0; k < keyCount; k++)
                             keyOrdinals[k] = cachedBatchSchema.GetOrdinal(leftKeys[k]);
-                        leftRowLayout = RowPacker.LayoutFor(cachedBatchSchema, cachedBatchSchema.Fields.Select(f => f.Name).ToList());
+                        leftRowLayout = RowPacker.LayoutFor(cachedBatchSchema);
                         if (table.RowCount > 0)
                         {
-                            batchCombinedLayout = BatchCombinedLayout.Create(cachedBatchSchema, table.Columns);
+                            batchCombinedLayout = BatchCombinedLayout.Create(cachedBatchSchema, table.Columns, table.ColumnAliases);
                             if (leftOnly && compiledCondition != null)
                             {
                                 scratchCombinedValues = new object?[batchCombinedLayout.Schema.ColumnCount];
@@ -895,15 +904,21 @@ public class ExternalJoinEngine
             RightSlots = rightSlots;
         }
 
-        public static BatchCombinedLayout Create(ColumnBatchSchema leftSchema, IReadOnlyList<string> rightColumns)
+        public static BatchCombinedLayout Create(
+            ColumnBatchSchema leftSchema,
+            IReadOnlyList<string> rightColumns,
+            IReadOnlyList<IReadOnlyList<string>?>? rightAliases = null)
         {
             var names = new List<string>(leftSchema.Count + rightColumns.Count);
             var slots = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var aliasMap = new List<(string Alias, int Slot)>();
 
             var leftSlots = new int[leftSchema.Count];
+            var leftHasAliases = new bool[leftSchema.Count];
             for (int i = 0; i < leftSchema.Count; i++)
             {
-                var name = leftSchema.Fields[i].Name;
+                var field = leftSchema.Fields[i];
+                var name = field.Name;
                 if (!slots.TryGetValue(name, out var slot))
                 {
                     slot = names.Count;
@@ -911,6 +926,12 @@ public class ExternalJoinEngine
                     names.Add(name);
                 }
                 leftSlots[i] = slot;
+                if (field.Aliases is { Count: > 0 })
+                {
+                    leftHasAliases[i] = true;
+                    for (int a = 0; a < field.Aliases.Count; a++)
+                        aliasMap.Add((field.Aliases[a], slot));
+                }
             }
 
             var rightSlots = new int[rightColumns.Count];
@@ -918,21 +939,48 @@ public class ExternalJoinEngine
             for (int i = 0; i < rightColumns.Count; i++)
             {
                 var name = rightColumns[i];
+                var rAliases = rightAliases != null && i < rightAliases.Count ? rightAliases[i] : null;
                 if (!slots.TryGetValue(name, out var slot))
                 {
                     slot = names.Count;
                     slots[name] = slot;
                     names.Add(name);
                 }
+                else
+                {
+                    // Bare-name collision with left. If left's slot carries qualified aliases (e.g. l.id),
+                    // preserve left's slot for its aliases and give right its own slot so l.id and r.id
+                    // remain independently addressable, while bare name resolves to right (matching prior behavior).
+                    bool leftNeedsOwnSlot = slot < leftHasAliases.Length && leftHasAliases[slot];
+                    if (leftNeedsOwnSlot || rAliases is { Count: > 0 })
+                    {
+                        var leftFieldAliases = slot < leftSchema.Count ? leftSchema.Fields[slot].Aliases : null;
+                        if (leftFieldAliases is { Count: > 0 })
+                            names[slot] = leftFieldAliases[0];
+                        var newSlot = names.Count;
+                        names.Add(name);
+                        slots[name] = newSlot;
+                        slot = newSlot;
+                    }
+                }
                 rightSlots[i] = slot;
                 rightWrittenSlots.Add(slot);
+                if (rAliases is { Count: > 0 })
+                {
+                    for (int a = 0; a < rAliases.Count; a++)
+                        aliasMap.Add((rAliases[a], slot));
+                }
             }
 
             var leftOverwritten = new bool[leftSlots.Length];
             for (int i = 0; i < leftSlots.Length; i++)
                 leftOverwritten[i] = rightWrittenSlots.Contains(leftSlots[i]);
 
-            return new BatchCombinedLayout(new TableSchema(names), leftSlots, leftOverwritten, rightSlots);
+            var schema = new TableSchema(names);
+            for (int i = 0; i < aliasMap.Count; i++)
+                schema.AddAlias(aliasMap[i].Alias, aliasMap[i].Slot);
+
+            return new BatchCombinedLayout(schema, leftSlots, leftOverwritten, rightSlots);
         }
     }
 
@@ -954,25 +1002,68 @@ public class ExternalJoinEngine
         {
             var names = new List<string>();
             var slots = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            int[] Map(TableSchema side)
+            var aliasMap = new List<(string Alias, int Slot)>();
+
+            var leftSlots = left == null ? Array.Empty<int>() : new int[left.ColumnCount];
+            var leftAliasesBySlot = left == null ? null : new List<string>?[left.ColumnCount];
+            if (left != null)
             {
-                var map = new int[side.ColumnCount];
-                for (var i = 0; i < map.Length; i++)
+                for (var i = 0; i < left.ColumnCount; i++)
                 {
-                    var name = side.GetName(i);
+                    var name = left.GetName(i);
                     if (!slots.TryGetValue(name, out var slot))
                     {
                         slot = names.Count;
                         slots[name] = slot;
                         names.Add(name);
                     }
-                    map[i] = slot;
+                    leftSlots[i] = slot;
+                    var aliases = left.EnumerateAliasesOf(name).ToList();
+                    if (aliases.Count > 0)
+                    {
+                        if (slot < leftAliasesBySlot!.Length)
+                            leftAliasesBySlot[slot] = aliases;
+                        for (int a = 0; a < aliases.Count; a++)
+                            aliasMap.Add((aliases[a], slot));
+                    }
                 }
-                return map;
             }
-            var leftSlots = left == null ? Array.Empty<int>() : Map(left);
-            var rightSlots = Map(right);
-            return new CombinedLayout(left, right, new TableSchema(names), leftSlots, rightSlots);
+
+            var rightSlots = new int[right.ColumnCount];
+            for (var i = 0; i < right.ColumnCount; i++)
+            {
+                var name = right.GetName(i);
+                var rAliases = right.EnumerateAliasesOf(name).ToList();
+                if (!slots.TryGetValue(name, out var slot))
+                {
+                    slot = names.Count;
+                    slots[name] = slot;
+                    names.Add(name);
+                }
+                else
+                {
+                    var lAliases = leftAliasesBySlot != null && slot < leftAliasesBySlot.Length
+                        ? leftAliasesBySlot[slot]
+                        : null;
+                    if (lAliases is { Count: > 0 } || rAliases.Count > 0)
+                    {
+                        if (lAliases is { Count: > 0 })
+                            names[slot] = lAliases[0];
+                        var newSlot = names.Count;
+                        names.Add(name);
+                        slots[name] = newSlot;
+                        slot = newSlot;
+                    }
+                }
+                rightSlots[i] = slot;
+                for (int a = 0; a < rAliases.Count; a++)
+                    aliasMap.Add((rAliases[a], slot));
+            }
+
+            var schema = new TableSchema(names);
+            for (int i = 0; i < aliasMap.Count; i++)
+                schema.AddAlias(aliasMap[i].Alias, aliasMap[i].Slot);
+            return new CombinedLayout(left, right, schema, leftSlots, rightSlots);
         }
     }
 
@@ -1063,6 +1154,7 @@ public class ExternalJoinEngine
         private bool _disposed;
 
         public readonly List<string> Columns = new();
+        public readonly List<IReadOnlyList<string>?> ColumnAliases = new();
         public int TargetSlabBytes { get; }
 
         public PackedBuildTable(long budgetBytes = 0, bool caseSensitive = false, int keyCount = 1, int expectedRows = 0)
@@ -1341,7 +1433,12 @@ public class ExternalJoinEngine
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             var slot = _rows[rowIndex];
-            return RowPacker.Unpack(_slabs[slot.SlabIndex].Buffer, slot.Offset, slot.Length, Columns);
+            return RowPacker.Unpack(
+                _slabs[slot.SlabIndex].Buffer,
+                slot.Offset,
+                slot.Length,
+                Columns,
+                ColumnAliases.Count == Columns.Count ? ColumnAliases : null);
         }
 
         public void UnpackRowInto(int rowIndex, object?[] destination, int[] targetSlots)
@@ -1396,6 +1493,7 @@ public class ExternalJoinEngine
             _entryCount = 0;
             _extraKeyCountUsed = 0;
             Columns.Clear();
+            ColumnAliases.Clear();
         }
     }
 }

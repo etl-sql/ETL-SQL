@@ -980,8 +980,14 @@ public partial class SpillStore : ISpillStore
     {
         private const string SchemaVersionKey = "etlsql.spill.schema_version";
         private const string LogicalTypeKeyPrefix = "etlsql.spill.column.";
+        private const string AliasesKeySuffix = ".aliases";
+        private const char AliasSeparator = '\x1F';
         private const string SchemaVersion = "1";
         private static readonly FixedSizeBinaryType BinaryDecimalType = new(16);
+        private static readonly DictionaryType StringDictionaryType = new(Int32Type.Default, StringType.Default, ordered: false);
+        private const int DictionaryMinNonNullRows = 64;
+        private const int DictionaryMaxCardinality = 1024;
+        private const double DictionaryMaxDistinctRatio = 0.25;
         private readonly FileStream _fileStream;
         private readonly AuthenticatedSpillEncryption.FramedEncryptionWriter? _encryptionWriter;
         private bool _disposed;
@@ -1065,8 +1071,6 @@ public partial class SpillStore : ISpillStore
                     var firstSnapshot = SnapshotRow(row);
                     _schema = InferSchema(firstSnapshot);
                     _schemaLogicalTypes = CacheLogicalTypes(_schema);
-                    _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
-                    await _arrowWriter.WriteStartAsync(CancellationToken.None);
                 }
 
                 _buffer.Add(CaptureRowSlot(row));
@@ -1103,12 +1107,9 @@ public partial class SpillStore : ISpillStore
                 && ReferenceEquals(schema, _snapshotSourceSchema)
                 && !row.HasDynamicColumns
                 && _snapshotDynamicNames.Length == 0
-                && schema.ColumnCount + _snapshotAliasSources.Length == width)
+                && schema.ColumnCount == width)
             {
-                int canonical = schema.ColumnCount;
-                for (int i = 0; i < canonical; i++) slot[i] = row[i];
-                for (int i = 0; i < _snapshotAliasSources.Length; i++)
-                    slot[canonical + i] = row[_snapshotAliasSources[i]];
+                for (int i = 0; i < width; i++) slot[i] = row[i];
                 return slot;
             }
 
@@ -1126,12 +1127,12 @@ public partial class SpillStore : ISpillStore
             return types;
         }
 
-        // Snapshot plan, rebuilt when the incoming schema or dynamic-column layout changes. The
-        // expanded schema carries canonical columns, aliases, and stable operator marker columns so
-        // qualified names survive Arrow without falling back to a dictionary copy per row.
+        // Snapshot plan, rebuilt when the incoming schema or dynamic-column layout changes.
+        // Canonical columns and stable dynamic marker columns are written physically; schema
+        // aliases (e.g. "l.id" → slot 0) travel in Arrow schema metadata rather than duplicating
+        // column payloads on disk.
         private ETL_SQL.Data.TableSchema? _snapshotSourceSchema;
         private ETL_SQL.Data.TableSchema? _snapshotExpandedSchema;
-        private int[] _snapshotAliasSources = System.Array.Empty<int>();
         private string[] _snapshotDynamicNames = System.Array.Empty<string>();
 
         private Row SnapshotRow(Row row)
@@ -1142,7 +1143,6 @@ public partial class SpillStore : ISpillStore
             if (!ReferenceEquals(schema, _snapshotSourceSchema) || !HasSameDynamicLayout(row, schema))
             {
                 var names = new List<string>(row.ColumnCount);
-                var aliasSources = new List<int>();
                 var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 for (int i = 0; i < schema.ColumnCount; i++)
                 {
@@ -1150,23 +1150,15 @@ public partial class SpillStore : ISpillStore
                     names.Add(name);
                     seenNames.Add(name);
                 }
-                for (int i = 0; i < schema.ColumnCount; i++)
-                {
-                    foreach (var alias in schema.EnumerateAliasesOf(schema.GetName(i)))
-                    {
-                        if (!seenNames.Add(alias)) continue; // duplicate canonical names re-enumerate aliases
-                        names.Add(alias);
-                        aliasSources.Add(i);
-                    }
-                }
 
                 var dynamicNames = row.GetColumnNames()
                     .Skip(schema.ColumnCount)
                     .Where(seenNames.Add)
                     .ToArray();
                 names.AddRange(dynamicNames);
-                _snapshotExpandedSchema = new ETL_SQL.Data.TableSchema(names);
-                _snapshotAliasSources = aliasSources.ToArray();
+                var expanded = new ETL_SQL.Data.TableSchema(names);
+                schema.CopyAliasesTo(expanded);
+                _snapshotExpandedSchema = expanded;
                 _snapshotDynamicNames = dynamicNames;
                 _snapshotSourceSchema = schema;
             }
@@ -1175,15 +1167,12 @@ public partial class SpillStore : ISpillStore
             // per-row dictionaries — this was ~20% of the Gate F round-trip's total allocation
             // (a dynamic-dictionary copy per spilled row; see certification-results/spill-alloc-profile).
             int canonical = schema.ColumnCount;
-            var values = new object?[canonical + _snapshotAliasSources.Length + _snapshotDynamicNames.Length];
+            var values = new object?[canonical + _snapshotDynamicNames.Length];
             for (int i = 0; i < canonical; i++) values[i] = row[i];
-            for (int i = 0; i < _snapshotAliasSources.Length; i++)
-                values[canonical + i] = row[_snapshotAliasSources[i]];
-            int dynamicOffset = canonical + _snapshotAliasSources.Length;
             for (int i = 0; i < _snapshotDynamicNames.Length; i++)
             {
                 row.TryGetValue(_snapshotDynamicNames[i], out var value);
-                values[dynamicOffset + i] = value;
+                values[canonical + i] = value;
             }
             return new Row(_snapshotExpandedSchema!, values);
         }
@@ -1224,8 +1213,6 @@ public partial class SpillStore : ISpillStore
                         var firstSnapshot = SnapshotRow(row);
                         _schema = InferSchema(firstSnapshot);
                         _schemaLogicalTypes = CacheLogicalTypes(_schema);
-                        _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
-                        await _arrowWriter.WriteStartAsync(CancellationToken.None);
                     }
 
                     _buffer.Add(CaptureRowSlot(row));
@@ -1303,9 +1290,19 @@ public partial class SpillStore : ISpillStore
             }
         }
 
-        private async Task FlushBatchAsync()
+        private async Task FlushBatchAsync(bool isFinalFlush = false)
         {
-            if (_buffer.Count == 0 || _arrowWriter == null) return;
+            if (_buffer.Count == 0 || _schema == null) return;
+            if (_arrowWriter == null)
+            {
+                // Apache.Arrow 23.0.0 ArrowStreamWriter emits a column's dictionary only once on the
+                // first batch and does not write replacement/delta dictionaries for later batches.
+                // Enable bounded DictionaryType only on single-batch chunks (isFinalFlush) where all
+                // values are known; multi-batch streams fall back to plain StringArray for lossless fidelity.
+                _schema = UpgradeSchemaWithBoundedDictionaries(_schema, _schemaLogicalTypes!, _buffer, allowDictionaryEncoding: isFinalFlush);
+                _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
+                await _arrowWriter.WriteStartAsync(CancellationToken.None);
+            }
             using var batch = BuildBatch(_buffer);
             await _arrowWriter.WriteRecordBatchAsync(batch);
             for (int i = 0; i < _buffer.Count; i++)
@@ -1319,6 +1316,114 @@ public partial class SpillStore : ISpillStore
             _bufferedBytes = 0;
         }
 
+        private static bool IsDictionaryEligibleLogicalType(string? logicalType)
+        {
+            if (string.IsNullOrEmpty(logicalType)) return false;
+            if (logicalType == "String") return true;
+            var paren = logicalType.IndexOf('(');
+            var baseType = (paren < 0 ? logicalType : logicalType[..paren]).Trim().ToUpperInvariant();
+            return baseType is "VARCHAR" or "NVARCHAR" or "CHAR" or "NCHAR" or "TEXT" or "NTEXT" or "VARCHAR2" or "STRING";
+        }
+
+        private static Schema UpgradeSchemaWithBoundedDictionaries(
+            Schema schema,
+            string[] logicalTypes,
+            List<object?[]> rows,
+            bool allowDictionaryEncoding)
+        {
+            List<Field>? updatedFields = null;
+            Dictionary<string, string>? updatedMetadata = null;
+
+            for (int col = 0; col < schema.FieldsList.Count; col++)
+            {
+                var field = schema.FieldsList[col];
+
+                // When row 0 was NULL ("Dynamic"), infer the concrete Arrow type if all non-null
+                // values in the first batch share one homogeneous logical type.
+                if (logicalTypes[col] == "Dynamic" && field.DataType is StringType)
+                {
+                    if (TryInferHomogeneousNonNullType(rows, col, out var inferredArrowType, out var inferredLogicalType))
+                    {
+                        updatedFields ??= new List<Field>(schema.FieldsList);
+                        updatedMetadata ??= new Dictionary<string, string>(schema.Metadata);
+                        field = new Field(field.Name, inferredArrowType, field.IsNullable, field.Metadata);
+                        updatedFields[col] = field;
+                        logicalTypes[col] = inferredLogicalType;
+                        updatedMetadata[$"{LogicalTypeKeyPrefix}{col}.logical_type"] = inferredLogicalType;
+                    }
+                }
+
+                if (allowDictionaryEncoding
+                    && rows.Count >= DictionaryMinNonNullRows
+                    && field.DataType is StringType
+                    && IsDictionaryEligibleLogicalType(logicalTypes[col])
+                    && ShouldDictionaryEncodeColumn(rows, col))
+                {
+                    updatedFields ??= new List<Field>(schema.FieldsList);
+                    updatedFields[col] = new Field(field.Name, StringDictionaryType, field.IsNullable, field.Metadata);
+                }
+            }
+
+            return updatedFields == null
+                ? schema
+                : new Schema(updatedFields, updatedMetadata ?? schema.Metadata);
+        }
+
+        private static bool TryInferHomogeneousNonNullType(
+            List<object?[]> rows,
+            int columnIndex,
+            out IArrowType arrowType,
+            out string logicalType)
+        {
+            arrowType = StringType.Default;
+            logicalType = "Dynamic";
+            string? seenLogical = null;
+            IArrowType? seenArrow = null;
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var v = rows[i][columnIndex];
+                if (v is null or DBNull) continue;
+                var lt = GetLogicalType(v);
+                if (lt is "Dynamic" or "Json")
+                    return false;
+                if (seenLogical == null)
+                {
+                    seenLogical = lt;
+                    seenArrow = GetArrowType(v);
+                }
+                else if (!string.Equals(seenLogical, lt, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            if (seenLogical == null || seenArrow == null)
+                return false;
+
+            arrowType = seenArrow;
+            logicalType = seenLogical;
+            return true;
+        }
+
+        private static bool ShouldDictionaryEncodeColumn(List<object?[]> rows, int columnIndex)
+        {
+            var distinct = new HashSet<string>(StringComparer.Ordinal);
+            int nonNull = 0;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var v = rows[i][columnIndex];
+                if (v is null or DBNull) continue;
+                if (v is not string s) return false;
+                nonNull++;
+                if (distinct.Add(s) && distinct.Count > DictionaryMaxCardinality)
+                    return false;
+            }
+            return nonNull >= DictionaryMinNonNullRows
+                && distinct.Count > 0
+                && distinct.Count <= (int)(nonNull * DictionaryMaxDistinctRatio);
+        }
+
         private static Schema InferSchema(Row row)
         {
             var columns = row.Columns.ToList();
@@ -1329,8 +1434,17 @@ public partial class SpillStore : ISpillStore
             {
                 [SchemaVersionKey] = SchemaVersion
             };
+            var rowSchema = row.Schema;
             for (var i = 0; i < columns.Count; i++)
+            {
                 metadata[$"{LogicalTypeKeyPrefix}{i}.logical_type"] = GetLogicalType(columns[i].Value);
+                if (rowSchema != null)
+                {
+                    var aliases = rowSchema.EnumerateAliasesOf(columns[i].Key).ToList();
+                    if (aliases.Count > 0)
+                        metadata[$"{LogicalTypeKeyPrefix}{i}{AliasesKeySuffix}"] = string.Join(AliasSeparator, aliases);
+                }
+            }
             return new Schema(fields, metadata);
         }
 
@@ -1344,7 +1458,12 @@ public partial class SpillStore : ISpillStore
                 [SchemaVersionKey] = SchemaVersion
             };
             for (var i = 0; i < batch.Schema.Count; i++)
-                metadata[$"{LogicalTypeKeyPrefix}{i}.logical_type"] = batch.Schema.Fields[i].LogicalType;
+            {
+                var batchField = batch.Schema.Fields[i];
+                metadata[$"{LogicalTypeKeyPrefix}{i}.logical_type"] = batchField.LogicalType;
+                if (batchField.Aliases is { Count: > 0 })
+                    metadata[$"{LogicalTypeKeyPrefix}{i}{AliasesKeySuffix}"] = string.Join(AliasSeparator, batchField.Aliases);
+            }
             return new Schema(fields, metadata);
         }
 
@@ -1377,8 +1496,11 @@ public partial class SpillStore : ISpillStore
             {
                 var field = batch.Schema.Fields[i];
                 var expectedType = GetArrowType(field.ElementType);
+                var existingType = _schema.FieldsList[i].DataType;
+                bool typeMatches = existingType.TypeId == expectedType.TypeId
+                    || (expectedType is StringType && existingType is DictionaryType);
                 if (!_schema.FieldsList[i].Name.Equals(field.Name, StringComparison.OrdinalIgnoreCase)
-                    || _schema.FieldsList[i].DataType.TypeId != expectedType.TypeId)
+                    || !typeMatches)
                     throw new InvalidOperationException(
                         $"Column batch field {i} ('{field.Name}', {expectedType.Name}) does not match " +
                         $"spill field '{_schema.FieldsList[i].Name}' ({_schema.FieldsList[i].DataType.Name}).");
@@ -1427,11 +1549,11 @@ public partial class SpillStore : ISpillStore
         {
             var arrays = new List<IArrowArray>(batch.Columns.Count);
             for (var i = 0; i < batch.Columns.Count; i++)
-                arrays.Add(BuildArray(batch.Columns[i], startRow, length));
+                arrays.Add(BuildArray(batch.Columns[i], startRow, length, _schema!.FieldsList[i].DataType));
             return new RecordBatch(_schema!, arrays, length);
         }
 
-        private static IArrowArray BuildArray(IColumnBuffer column, int startRow, int length)
+        private static IArrowArray BuildArray(IColumnBuffer column, int startRow, int length, IArrowType targetType)
         {
             if (column is ColumnBuffer<byte> bytes) return BuildInt64(bytes, startRow, length);
             if (column is ColumnBuffer<short> shorts) return BuildInt64(shorts, startRow, length);
@@ -1533,6 +1655,9 @@ public partial class SpillStore : ISpillStore
             }
             if (column is Utf8ColumnBuffer strings)
             {
+                if (targetType is DictionaryType dictType)
+                    return BuildUtf8DictionaryArray(strings, startRow, length, dictType);
+
                 var offsetsSpan = strings.Offsets.Span;
                 var baseByteOffset = offsetsSpan[startRow];
                 var totalByteLength = offsetsSpan[startRow + length] - baseByteOffset;
@@ -1569,6 +1694,36 @@ public partial class SpillStore : ISpillStore
                 return new StringArray(length, offsetBuilder.Build(), valueBuilder.Build(), validityBuffer, nullCount);
             }
             throw new NotSupportedException($"Native spill writing does not support '{column.ElementType.Name}' columns.");
+        }
+
+        private static DictionaryArray BuildUtf8DictionaryArray(
+            Utf8ColumnBuffer strings,
+            int startRow,
+            int length,
+            DictionaryType dictType)
+        {
+            var dict = new Dictionary<string, int>(StringComparer.Ordinal);
+            var dictBuilder = new StringArray.Builder();
+            var idxBuilder = new Int32Array.Builder();
+            idxBuilder.Reserve(length);
+            for (var i = 0; i < length; i++)
+            {
+                var idx = startRow + i;
+                if (strings.IsNull(idx))
+                {
+                    idxBuilder.AppendNull();
+                    continue;
+                }
+                var text = Encoding.UTF8.GetString(strings.GetUtf8Bytes(idx));
+                if (!dict.TryGetValue(text, out var dictIndex))
+                {
+                    dictIndex = dict.Count;
+                    dict[text] = dictIndex;
+                    dictBuilder.Append(text);
+                }
+                idxBuilder.Append(dictIndex);
+            }
+            return new DictionaryArray(dictType, idxBuilder.Build(), dictBuilder.Build());
         }
 
         private static FixedSizeBinaryArray BuildBinaryDecimalArray(ColumnBuffer<decimal> decimals, int startRow, int length)
@@ -1719,6 +1874,35 @@ public partial class SpillStore : ISpillStore
                         }
                         return b.Build();
                     }
+                case DictionaryType dictType:
+                    {
+                        var dict = new Dictionary<string, int>(StringComparer.Ordinal);
+                        var dictBuilder = new StringArray.Builder();
+                        var idxBuilder = new Int32Array.Builder();
+                        idxBuilder.Reserve(rows.Count);
+                        for (var i = 0; i < rows.Count; i++)
+                        {
+                            var v = rows[i][columnIndex];
+                            if (v is null or DBNull)
+                            {
+                                idxBuilder.AppendNull();
+                                continue;
+                            }
+                            string text = v is string s
+                                ? s
+                                : v is DateOnly dateOnly
+                                    ? DateOnlyPrefix + dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                                    : JsonPrefix + JsonSerializer.Serialize(v);
+                            if (!dict.TryGetValue(text, out var dictIndex))
+                            {
+                                dictIndex = dict.Count;
+                                dict[text] = dictIndex;
+                                dictBuilder.Append(text);
+                            }
+                            idxBuilder.Append(dictIndex);
+                        }
+                        return new DictionaryArray(dictType, idxBuilder.Build(), dictBuilder.Build());
+                    }
                 default:
                     {
                         var b = new StringArray.Builder();
@@ -1768,7 +1952,7 @@ public partial class SpillStore : ISpillStore
             {
                 if (!_faulted)
                 {
-                    await FlushBatchAsync();
+                    await FlushBatchAsync(isFinalFlush: true);
                     if (_arrowWriter == null)
                     {
                         _schema = new Schema.Builder().Build();
@@ -1813,6 +1997,8 @@ public partial class SpillStore : ISpillStore
     {
         private const string SchemaVersionKey = "etlsql.spill.schema_version";
         private const string LogicalTypeKeyPrefix = "etlsql.spill.column.";
+        private const string AliasesKeySuffix = ".aliases";
+        private const char AliasSeparator = '\x1F';
         private readonly string _path;
         private readonly byte[] _key;
         private readonly bool _encrypt;
@@ -1827,6 +2013,7 @@ public partial class SpillStore : ISpillStore
         private RecordBatch? _currentBatch;
         private int _currentBatchRow;
         private SpillReadMode _readMode;
+        private string?[]?[]? _decodedDictionaries;
 
         // Row-extraction caches, built once from the stream's (single, fixed) Arrow schema: a shared
         // TableSchema so rehydrated rows are array-backed instead of per-row dynamic dictionaries,
@@ -1915,6 +2102,7 @@ public partial class SpillStore : ISpillStore
                     return ExtractRow(_currentBatch, _currentBatchRow++);
 
                 _currentBatch?.Dispose();
+                _decodedDictionaries = null;
                 _currentBatch = await _arrowReader!.ReadNextRecordBatchAsync();
                 if (_currentBatch == null) return null;
                 _currentBatchRow = 0;
@@ -1946,11 +2134,11 @@ public partial class SpillStore : ISpillStore
             if (keyIndices.Length > 0)
             {
                 int k0 = keyIndices[0];
-                key0 = k0 >= 0 ? ExtractSortKey(batch.Column(k0), rowIndex, logicalTypes[k0]) : SortKey.Null;
+                key0 = k0 >= 0 ? ExtractSortKey(batch.Column(k0), rowIndex, logicalTypes[k0], k0) : SortKey.Null;
                 for (int k = 1; k < keyIndices.Length; k++)
                 {
                     int ki = keyIndices[k];
-                    extraKeys[k - 1] = ki >= 0 ? ExtractSortKey(batch.Column(ki), rowIndex, logicalTypes[ki]) : SortKey.Null;
+                    extraKeys[k - 1] = ki >= 0 ? ExtractSortKey(batch.Column(ki), rowIndex, logicalTypes[ki], ki) : SortKey.Null;
                 }
             }
             else
@@ -1965,7 +2153,7 @@ public partial class SpillStore : ISpillStore
                 for (int i = 0; i < kept.Length; i++)
                 {
                     int colIdx = kept[i];
-                    values[i] = ExtractValue(batch.Column(colIdx), rowIndex, logicalTypes[colIdx]);
+                    values[i] = ExtractValue(batch.Column(colIdx), rowIndex, logicalTypes[colIdx], colIdx);
                 }
                 row = new Row(_strippedRowSchema, values);
             }
@@ -1973,7 +2161,7 @@ public partial class SpillStore : ISpillStore
             {
                 var values = new object?[logicalTypes.Length];
                 for (int i = 0; i < logicalTypes.Length; i++)
-                    values[i] = ExtractValue(batch.Column(i), rowIndex, logicalTypes[i]);
+                    values[i] = ExtractValue(batch.Column(i), rowIndex, logicalTypes[i], i);
                 row = new Row(_rowSchema!, values);
             }
 
@@ -1991,6 +2179,7 @@ public partial class SpillStore : ISpillStore
                     return true;
 
                 _currentBatch?.Dispose();
+                _decodedDictionaries = null;
                 _currentBatch = await _arrowReader.ReadNextRecordBatchAsync();
                 if (_currentBatch == null) return false;
                 _currentBatchRow = 0;
@@ -2010,6 +2199,7 @@ public partial class SpillStore : ISpillStore
                         yield return ExtractRow(_currentBatch, _currentBatchRow++);
                     _currentBatch.Dispose();
                     _currentBatch = null;
+                    _decodedDictionaries = null;
                 }
 
                 _currentBatch = await _arrowReader.ReadNextRecordBatchAsync();
@@ -2030,7 +2220,15 @@ public partial class SpillStore : ISpillStore
                 names[i] = fields[i].Name;
                 _logicalTypes[i] = GetLogicalType(batch.Schema, i);
             }
-            _rowSchema = new ETL_SQL.Data.TableSchema(names);
+            var rowSchema = new ETL_SQL.Data.TableSchema(names);
+            for (int i = 0; i < fields.Count; i++)
+            {
+                var aliases = GetColumnAliases(batch.Schema, i);
+                if (aliases == null) continue;
+                for (int a = 0; a < aliases.Length; a++)
+                    rowSchema.AddAlias(aliases[a], i);
+            }
+            _rowSchema = rowSchema;
         }
 
         private void EnsureSortPlan(
@@ -2091,6 +2289,7 @@ public partial class SpillStore : ISpillStore
                 if (kept.Count < schema.ColumnCount)
                 {
                     _strippedRowSchema = new ETL_SQL.Data.TableSchema(keptNames);
+                    schema.CopyAliasesTo(_strippedRowSchema);
                     _strippedKeptIndices = kept.ToArray();
                 }
             }
@@ -2109,7 +2308,7 @@ public partial class SpillStore : ISpillStore
 
             var row = new Row(_rowSchema!);
             for (int i = 0; i < _logicalTypes!.Length; i++)
-                row[i] = ExtractValue(batch.Column(i), rowIndex, _logicalTypes[i]);
+                row[i] = ExtractValue(batch.Column(i), rowIndex, _logicalTypes[i], i);
             return row;
         }
 
@@ -2142,18 +2341,25 @@ public partial class SpillStore : ISpillStore
             {
                 for (var i = 0; i < batch.ColumnCount; i++)
                 {
-                    var data = batch.Column(i).Data;
-                    if (data?.Buffers == null) continue;
-                    foreach (var buf in data.Buffers)
-                    {
-                        if (!buf.IsEmpty)
-                            CryptographicOperations.ZeroMemory(MemoryMarshal.AsMemory(buf.Memory).Span);
-                    }
+                    var column = batch.Column(i);
+                    ZeroArrayDataBuffers(column.Data);
+                    if (column is DictionaryArray dictArray && dictArray.Dictionary != null)
+                        ZeroArrayDataBuffers(dictArray.Dictionary.Data);
                 }
             }
             finally
             {
                 batch.Dispose();
+            }
+        }
+
+        private static void ZeroArrayDataBuffers(ArrayData? data)
+        {
+            if (data?.Buffers == null) return;
+            foreach (var buf in data.Buffers)
+            {
+                if (!buf.IsEmpty)
+                    CryptographicOperations.ZeroMemory(MemoryMarshal.AsMemory(buf.Memory).Span);
             }
         }
 
@@ -2174,8 +2380,9 @@ public partial class SpillStore : ISpillStore
                 {
                     var field = batch.Schema.FieldsList[i];
                     var logicalType = GetLogicalType(batch.Schema, i) ?? field.DataType.Name;
+                    var aliases = GetColumnAliases(batch.Schema, i);
                     var column = ConvertArray(batch.Column(i), batch.Length, logicalType);
-                    fields.Add(new ColumnBatchField(field.Name, column.ElementType, logicalType, field.IsNullable));
+                    fields.Add(new ColumnBatchField(field.Name, column.ElementType, logicalType, field.IsNullable, aliases));
                     columns.Add(column);
                 }
                 return new ColumnBatch(new ColumnBatchSchema(fields), columns, batch.Length);
@@ -2227,8 +2434,26 @@ public partial class SpillStore : ISpillStore
                 values.Values,
                 values.NullBitmapBuffer.Span,
                 values.Offset),
+            DictionaryArray values when values.Dictionary is StringArray dictValues && values.Indices is Int32Array indices
+                => ConvertDictionaryStrings(dictValues, indices, count),
             _ => throw new NotSupportedException($"Arrow spill column type '{array.Data.DataType.Name}' is not supported by native batches.")
         };
+
+        private static Utf8ColumnBuffer ConvertDictionaryStrings(StringArray dictValues, Int32Array indices, int count)
+        {
+            var decodedDict = new string?[dictValues.Length];
+            for (int i = 0; i < dictValues.Length; i++)
+                decodedDict[i] = dictValues.IsNull(i) ? null : dictValues.GetString(i);
+
+            var expanded = new string?[count];
+            for (int i = 0; i < count; i++)
+            {
+                if (indices.IsNull(i)) continue;
+                int dictIdx = indices.GetValue(i)!.Value;
+                expanded[i] = (uint)dictIdx < (uint)decodedDict.Length ? decodedDict[dictIdx] : null;
+            }
+            return Utf8ColumnBuffer.FromStrings(expanded);
+        }
 
         private static ColumnBuffer<T> WrapFixed<T>(
             ReadOnlyMemory<byte> rawBuffer,
@@ -2283,7 +2508,19 @@ public partial class SpillStore : ISpillStore
                 : null;
         }
 
-        private object? ExtractValue(IArrowArray array, int index, string? logicalType)
+        private static string[]? GetColumnAliases(Schema schema, int columnIndex)
+        {
+            if (schema.Metadata == null
+                || !schema.Metadata.TryGetValue(SchemaVersionKey, out var version)
+                || version != "1")
+                return null;
+            if (!schema.Metadata.TryGetValue($"{LogicalTypeKeyPrefix}{columnIndex}{AliasesKeySuffix}", out var raw)
+                || string.IsNullOrEmpty(raw))
+                return null;
+            return raw.Split(AliasSeparator, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        private object? ExtractValue(IArrowArray array, int index, string? logicalType, int columnIndex = -1)
         {
             if (array.IsNull(index)) return null;
 
@@ -2303,11 +2540,37 @@ public partial class SpillStore : ISpillStore
                 StringArray a when IsGuidLogicalType(logicalType)
                     => Guid.Parse(a.GetString(index)!),
                 StringArray a => (object?)DecodeArrowString(a.GetString(index), logicalType, _logger),
+                DictionaryArray a when a.Dictionary is StringArray dictValues && a.Indices is Int32Array indices
+                    => DecodeArrowString(GetDictionaryString(dictValues, indices, index, columnIndex), logicalType, _logger),
                 _ => null
             };
         }
 
-        private SortKey ExtractSortKey(IArrowArray array, int index, string? logicalType)
+        private string? GetDictionaryString(StringArray dictValues, Int32Array indices, int rowIndex, int columnIndex)
+        {
+            var dictIdxNullable = indices.GetValue(rowIndex);
+            if (!dictIdxNullable.HasValue) return null;
+            int dictIdx = dictIdxNullable.Value;
+            if ((uint)dictIdx >= (uint)dictValues.Length) return null;
+
+            if (columnIndex >= 0 && _logicalTypes != null)
+            {
+                _decodedDictionaries ??= new string?[_logicalTypes.Length][];
+                var cached = _decodedDictionaries[columnIndex];
+                if (cached == null)
+                {
+                    cached = new string?[dictValues.Length];
+                    for (int i = 0; i < dictValues.Length; i++)
+                        cached[i] = dictValues.IsNull(i) ? null : dictValues.GetString(i);
+                    _decodedDictionaries[columnIndex] = cached;
+                }
+                return cached[dictIdx];
+            }
+
+            return dictValues.IsNull(dictIdx) ? null : dictValues.GetString(dictIdx);
+        }
+
+        private SortKey ExtractSortKey(IArrowArray array, int index, string? logicalType, int columnIndex = -1)
         {
             if (array.IsNull(index)) return SortKey.Null;
 
@@ -2327,6 +2590,8 @@ public partial class SpillStore : ISpillStore
                 StringArray a when IsGuidLogicalType(logicalType)
                     => SortKey.FromOther(Guid.Parse(a.GetString(index)!)),
                 StringArray a => SortKey.FromValue(DecodeArrowString(a.GetString(index), logicalType, _logger)),
+                DictionaryArray a when a.Dictionary is StringArray dictValues && a.Indices is Int32Array indices
+                    => SortKey.FromValue(DecodeArrowString(GetDictionaryString(dictValues, indices, index, columnIndex), logicalType, _logger)),
                 _ => SortKey.Null
             };
         }

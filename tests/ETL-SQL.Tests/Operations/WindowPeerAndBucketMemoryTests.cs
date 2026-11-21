@@ -72,6 +72,7 @@ public class WindowPeerAndBucketMemoryTests
         const string sql = """
             SELECT id,
                    grp,
+                   payload,
                    FIRST_VALUE(tag) OVER (PARTITION BY grp ORDER BY k) AS fv,
                    SUM(val) OVER (PARTITION BY grp ORDER BY k) AS total_val
             FROM #src;
@@ -108,6 +109,7 @@ public class WindowPeerAndBucketMemoryTests
         const string sql = """
             SELECT id,
                    grp,
+                   payload,
                    FIRST_VALUE(tag) OVER (PARTITION BY grp ORDER BY k) AS fv,
                    LAST_VALUE(tag) OVER (PARTITION BY grp ORDER BY k) AS lv,
                    SUM(val) OVER (PARTITION BY grp ORDER BY k) AS running_sum
@@ -234,7 +236,7 @@ public class WindowPeerAndBucketMemoryTests
     {
         var input = BuildWideRows(60, payloadLength: 2048, i => (decimal)i); // ~240 KB, below WindowSpillThreshold=1000
         const string sql = """
-            SELECT id,
+            SELECT id, payload,
                    SUM(val) OVER (PARTITION BY grp ORDER BY k ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS centered_sum
             FROM #src;
             """;

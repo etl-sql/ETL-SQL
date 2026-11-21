@@ -157,10 +157,6 @@ fuzzy matching recipes run on MOCKDB; multi-context-join and SCD Type 2 bugs fix
 
 **Design:** [ROADMAP: Engine & Security](ROADMAP.md#engine--security--encrypted-spill-framing-byte-budgeted-scale-and-plaintext-memory-hygiene).
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| SP07 | **Reduce spill volume via projection pruning and bounded dictionary encoding.** Carry only required columns through `ExternalJoinEngine`, `ExternalSortEngine`, and `ExternalWindowEngine` (delaying full row reconstruction where correctness permits), and evaluate bounded Arrow dictionary encoding for repeated low-cardinality strings with a fallback for high-cardinality columns. | — | M |
-
 - [ ] **Cut allocation churn in the external sort, window and join** (measures SP08/SP09). At 100M
   rows (Scale Measurement 43504065542) the sort allocated 593 GB (about 6 KB per row), the window
   621 GB and the join 335 GB; the join spent 337 s of 896 s in GC pauses. Peak memory stays low, so
@@ -194,7 +190,21 @@ fuzzy matching recipes run on MOCKDB; multi-context-join and SCD Type 2 bugs fix
   merge rebuilds them from the row (expressions still stamp). Local 500k-row profile: sort
   1,487 → 1,257 B/row, window 2,148 → 1,912. Hosted: sort spill bytes −20%, window −11.1%,
   Standard sort allocated MB −16%; baselines recalibrated (run 44551213314, r1).
-  Still open: columnar batch reads for sort/window.
+  Slice 5 (`SP07` + window churn): projection pruning before `ExternalJoinEngine`,
+  `ExternalSortEngine`, and `ExternalWindowEngine` (including post-`WHERE` pruning), alias-preserving
+  Arrow spill metadata (no duplicated `alias.col` physical columns), bounded Arrow dictionary
+  encoding for low-cardinality strings, unpartitioned deep-spill window bypass, reusable compiled
+  window key buffers, and zero-copy `ReadPartitionStream` when no `JsonElement` cells are present.
+  Same-host 500k-row profile: window 2,151 → 1,254 B/row (−41.7%), sort 1,495 → 1,244 (−16.8%),
+  join 2,061 → 1,741 (−15.5%).
+  Slice 6 (columnar sort merge & partitioned window sort input): added `SortKey.FromBatchColumn`,
+  pooled `ColumnBatchRowBuilder`, zero-boxing columnar intermediate multi-pass merge in
+  `ExternalSortEngine.MergeChunksToFileAsync`, columnar `ExternalSortEngine.SortSpillChunkAsync`
+  wired into all four `ExternalWindowEngine` bucket-sort paths, and homogeneous non-null type
+  refinement on `ArrowSpillWriter`'s first batch flush. Same-host 500k-row profile: sort
+  1,244 → 1,117 B/row (overhead above control 782: 335 B/row), window 1,254 → 1,131 B/row
+  (overhead above control 742: 389 B/row).
+  Still open: hosted baseline recalibration for Slices 5–6.
 
 ### 3.3 Operations console completion
 

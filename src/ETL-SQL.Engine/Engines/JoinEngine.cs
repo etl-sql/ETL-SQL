@@ -53,13 +53,17 @@ public class JoinEngine
         return string.Compare(a.ToString(), b.ToString(), StringComparison.Ordinal);
     }
 
-    public async IAsyncEnumerable<Row> ApplyJoinsStreaming(IAsyncEnumerable<Row> leftStream, List<JoinClause> joins, SelectStatement stmt)
+    public async IAsyncEnumerable<Row> ApplyJoinsStreaming(
+        IAsyncEnumerable<Row> leftStream,
+        List<JoinClause> joins,
+        SelectStatement stmt,
+        HashSet<string>? requiredColumns = null)
     {
         var currentStream = leftStream;
         var leftTables = new List<TableReference> { stmt.FromTable };
         foreach (var join in joins)
         {
-            currentStream = StreamSingleJoin(currentStream, join, stmt, leftTables.ToList());
+            currentStream = StreamSingleJoin(currentStream, join, stmt, leftTables.ToList(), requiredColumns);
             leftTables.Add(join.Table);
         }
         await foreach (var row in currentStream)
@@ -68,7 +72,12 @@ public class JoinEngine
         }
     }
 
-    private async IAsyncEnumerable<Row> StreamSingleJoin(IAsyncEnumerable<Row> leftStream, JoinClause join, SelectStatement stmt, List<TableReference> leftTables)
+    private async IAsyncEnumerable<Row> StreamSingleJoin(
+        IAsyncEnumerable<Row> leftStream,
+        JoinClause join,
+        SelectStatement stmt,
+        List<TableReference> leftTables,
+        HashSet<string>? requiredColumns = null)
     {
         var leftAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
         var rightAlias = join.Table.Alias ?? join.Table.TableName;
@@ -141,7 +150,7 @@ public class JoinEngine
             var externalJoin = new ExternalJoinEngine(_context, _logger) { Shape = shape };
             await foreach (var row in externalJoin.ApplyHashJoinExternal(
                 leftStream,
-                GetJoinRowsAsyncEnumerable(join, shape),
+                GetJoinRowsAsyncEnumerable(join, shape, requiredColumns),
                 join,
                 streamingLeftKeys,
                 streamingRightKeys,
@@ -150,7 +159,7 @@ public class JoinEngine
             yield break;
         }
 
-        var joinRows = await GetJoinRows(join, shape); // Buffer right side (usually smaller)
+        var joinRows = await GetJoinRows(join, shape, requiredColumns); // Buffer right side (usually smaller)
         if (joinRows.Count > 0) shape.SeeRight(joinRows[0]);
         else await DeclareEmptyRightAsync(join, shape, rightSource);
 
@@ -314,22 +323,27 @@ public class JoinEngine
 
     }
 
-    public Task<List<Row>> GetJoinRows(JoinClause join) => GetJoinRows(join, null);
+    public Task<List<Row>> GetJoinRows(JoinClause join) => GetJoinRows(join, null, null);
 
-    private async Task<List<Row>> GetJoinRows(JoinClause join, OuterJoinShape? shape)
+    private async Task<List<Row>> GetJoinRows(JoinClause join, OuterJoinShape? shape, HashSet<string>? requiredColumns = null)
     {
         var rows = new List<Row>();
-        await foreach (var r in GetJoinRowsAsyncEnumerable(join, shape)) rows.Add(r);
+        await foreach (var r in GetJoinRowsAsyncEnumerable(join, shape, requiredColumns)) rows.Add(r);
         return rows;
     }
 
-    public IAsyncEnumerable<Row> GetJoinRowsAsyncEnumerable(JoinClause join) => GetJoinRowsAsyncEnumerable(join, null);
+    public IAsyncEnumerable<Row> GetJoinRowsAsyncEnumerable(JoinClause join) => GetJoinRowsAsyncEnumerable(join, null, null);
 
-    private async IAsyncEnumerable<Row> GetJoinRowsAsyncEnumerable(JoinClause join, OuterJoinShape? shape)
+    private async IAsyncEnumerable<Row> GetJoinRowsAsyncEnumerable(
+        JoinClause join,
+        OuterJoinShape? shape,
+        HashSet<string>? requiredColumns = null)
     {
         var joinBatches = _context.ResolveAndApplyOperators(join.Table);
         string joinName = join.Table.Alias ?? join.Table.TableName;
+        TableSchema? sourceSchema = null;
         TableSchema? joinSchema = null;
+        int[] keptIndices = Array.Empty<int>();
 
         await foreach (var jb in joinBatches)
         {
@@ -339,21 +353,44 @@ public class JoinEngine
 
             foreach (var jr in jb.Rows)
             {
-                if (jr.Schema != null)
+                if (jr.Schema != null && !jr.HasDynamicColumns)
                 {
                     // Build schema once per join: bare names are canonical, qualified names are
-                    // aliases pointing to the same slot. All rows in this join table share this
-                    // schema — no per-row duplication of qualified column entries.
-                    if (joinSchema == null)
+                    // aliases pointing to the same slot. Prune columns not referenced by the query
+                    // so ExternalJoinEngine never spills or packs unused right-side columns.
+                    if (!ReferenceEquals(jr.Schema, sourceSchema) || joinSchema == null)
                     {
-                        joinSchema = new TableSchema(jr.Schema.ColumnNames);
+                        var kept = new List<int>(jr.Schema.ColumnCount);
+                        var names = new List<string>(jr.Schema.ColumnCount);
                         for (int i = 0; i < jr.Schema.ColumnCount; i++)
-                            joinSchema.AddAlias($"{joinName}.{jr.Schema.GetName(i)}", i);
+                        {
+                            var name = jr.Schema.GetName(i);
+                            if (requiredColumns != null && !QualifiedRowLayout.IsColumnOrAliasRequired(jr.Schema, i, name, requiredColumns))
+                                continue;
+                            kept.Add(i);
+                            names.Add(name);
+                        }
+                        if (kept.Count == 0 && jr.Schema.ColumnCount > 0)
+                        {
+                            kept.Add(0);
+                            names.Add(jr.Schema.GetName(0));
+                        }
+
+                        var built = new TableSchema(names);
+                        jr.Schema.CopyAliasesTo(built);
+                        for (int outIdx = 0; outIdx < names.Count; outIdx++)
+                        {
+                            if (!names[outIdx].Contains('.'))
+                                built.AddAlias($"{joinName}.{names[outIdx]}", outIdx);
+                        }
+                        sourceSchema = jr.Schema;
+                        joinSchema = built;
+                        keptIndices = kept.ToArray();
                     }
 
-                    var vals = new object?[joinSchema.ColumnCount];
-                    for (int i = 0; i < Math.Min(jr.Schema.ColumnCount, vals.Length); i++)
-                        vals[i] = jr[jr.Schema.GetName(i)];
+                    var vals = new object?[keptIndices.Length];
+                    for (int i = 0; i < keptIndices.Length; i++)
+                        vals[i] = jr[keptIndices[i]];
                     yield return new Row(joinSchema, vals);
                 }
                 else

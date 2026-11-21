@@ -90,6 +90,98 @@ public sealed class SpillCompressionAssessmentTests(ITestOutputHelper output)
             $"Expected concurrent adaptive mode to select Fastest for concurrent writers, observed Fastest={adaptive.FastestSelections}, Optimal={adaptive.OptimalSelections}.");
     }
 
+    [Fact]
+    public async Task ArrowSpill_BoundedDictionaryEncoding_EvaluatesLowAndHighCardinalityStrings()
+    {
+        var lowCardUncompressed = await MeasureDictionaryWorkloadAsync(highCardinality: false, compress: false, encrypt: false);
+        var highCardUncompressed = await MeasureDictionaryWorkloadAsync(highCardinality: true, compress: false, encrypt: false);
+        var lowCardEncrypted = await MeasureDictionaryWorkloadAsync(highCardinality: false, compress: true, encrypt: true);
+        var highCardEncrypted = await MeasureDictionaryWorkloadAsync(highCardinality: true, compress: true, encrypt: true);
+
+        output.WriteLine("SPILL_DICTIONARY_EVALUATION_METRIC:" + JsonSerializer.Serialize(new
+        {
+            rowCount = RowCount,
+            lowCardUncompressed,
+            highCardUncompressed,
+            lowCardEncrypted,
+            highCardEncrypted,
+            uncompressedLowToHighByteRatio = Math.Round((double)lowCardUncompressed.PhysicalBytes / Math.Max(1, highCardUncompressed.PhysicalBytes), 4),
+            encryptedLowToHighByteRatio = Math.Round((double)lowCardEncrypted.PhysicalBytes / Math.Max(1, highCardEncrypted.PhysicalBytes), 4),
+        }));
+
+        Assert.Equal(RowCount, lowCardUncompressed.RowsRead);
+        Assert.Equal(RowCount, highCardUncompressed.RowsRead);
+        Assert.Equal(RowCount, lowCardEncrypted.RowsRead);
+        Assert.Equal(RowCount, highCardEncrypted.RowsRead);
+        Assert.Equal(lowCardUncompressed.Checksum, lowCardEncrypted.Checksum);
+        Assert.Equal(highCardUncompressed.Checksum, highCardEncrypted.Checksum);
+        Assert.True(lowCardUncompressed.PhysicalBytes < highCardUncompressed.PhysicalBytes / 2,
+            $"Expected bounded dictionary encoding on repeated low-cardinality strings ({lowCardUncompressed.PhysicalBytes} B) to be less than half of high-cardinality fallback ({highCardUncompressed.PhysicalBytes} B).");
+    }
+
+    private static async Task<Measurement> MeasureDictionaryWorkloadAsync(bool highCardinality, bool compress, bool encrypt)
+    {
+        await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.SpillEncryptionEnabled = encrypt;
+        evaluator.SpillCompressionEnabled = compress;
+        evaluator.Telemetry.Clear();
+
+        var categories = Enumerable.Range(0, 16)
+            .Select(i => $"DEPARTMENT-ANALYTICS-REGION-CATEGORY-{i:D4}-STANDARD-LABEL")
+            .ToArray();
+        var schema = new TableSchema(["Id", "Label"]);
+        IEnumerable<Row> Rows()
+        {
+            for (var i = 0; i < RowCount; i++)
+            {
+                var row = new Row(schema);
+                row["Id"] = (decimal)(i + 1);
+                row["Label"] = highCardinality
+                    ? $"UNIQUE-ENTITY-PAYLOAD-IDENTIFIER-RECORD-{i:D10}-SUFFIX"
+                    : categories[i % categories.Length];
+                yield return row;
+            }
+        }
+
+        var chunkName = $"dict-eval-{highCardinality}-{compress}-{Guid.NewGuid():N}.arrow";
+        var process = Process.GetCurrentProcess();
+        var cpuBeforeWrite = process.TotalProcessorTime;
+        var writeWatch = Stopwatch.StartNew();
+        // Single-batch chunk so bounded DictionaryType activates when cardinality is within bounds.
+        await using (var writer = await evaluator.SpillStore.CreateWriterAsync(chunkName, flushBatchRows: RowCount + 1, flushBatchBytes: 0))
+            await writer.WriteRowsAsync(Rows());
+        writeWatch.Stop();
+        process.Refresh();
+        var writeCpu = process.TotalProcessorTime - cpuBeforeWrite;
+
+        var physicalBytes = new FileInfo(Path.Combine(evaluator.SpillStore.RootPath, chunkName)).Length;
+        long rowsRead = 0;
+        long checksum = 0;
+        var cpuBeforeRead = process.TotalProcessorTime;
+        var readWatch = Stopwatch.StartNew();
+        await using (var reader = await evaluator.SpillStore.CreateReaderAsync(chunkName))
+        {
+            await foreach (var row in reader.AsEnumerableAsync())
+            {
+                rowsRead++;
+                checksum += Convert.ToInt64(row["Id"]) + ((string?)row["Label"])!.Length;
+            }
+        }
+        readWatch.Stop();
+        process.Refresh();
+        var readCpu = process.TotalProcessorTime - cpuBeforeRead;
+
+        evaluator.SpillStore.DeleteChunk(chunkName);
+        return new Measurement(
+            physicalBytes,
+            writeWatch.ElapsedMilliseconds,
+            Math.Round(writeCpu.TotalMilliseconds, 1),
+            readWatch.ElapsedMilliseconds,
+            Math.Round(readCpu.TotalMilliseconds, 1),
+            rowsRead,
+            checksum);
+    }
+
     private static async Task<Comparison> CompareAsync(bool highEntropy)
     {
         var uncompressed = await MeasureAsync(compress: false, highEntropy, encrypt: false);

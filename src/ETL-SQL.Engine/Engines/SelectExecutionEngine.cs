@@ -95,7 +95,7 @@ public class SelectExecutionEngine
 
         _logger.Debug("[PIPELINE] Initializing Multi-Pass Engine Pipeline for {TableName}", fromName);
 
-        var qualifier = new QualifiedRowLayout(fromName);
+        var qualifier = new QualifiedRowLayout(fromName, logicalPlan.RequiredColumns);
         var inputStream = sourceBatches.SelectMany(b => b.Rows.Select(r =>
         {
             // Rows held by their schema qualify into one cached layout; others keep the per-column
@@ -192,7 +192,7 @@ public class SelectExecutionEngine
                     "Join output can stream directly to projection.",
                     ("executionMode", "streaming"),
                     ("stage", "join-projection"));
-                IAsyncEnumerable<Row> joinedStream = _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt);
+                IAsyncEnumerable<Row> joinedStream = _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt, logicalPlan.RequiredColumns);
                 if (!whereApplied && stmt.WhereClause != null)
                 {
                     joinedStream = WhereStream(joinedStream, stmt.WhereClause, _context);
@@ -216,7 +216,7 @@ public class SelectExecutionEngine
                 ("executionMode", "blocking"),
                 ("stage", hasGroupBy || hasAggInColumns ? "join-aggregate" : hasWindowInColumns ? "join-window" : "join-materialize"),
                 ("fallbackDestination", "blocking-row-pipeline"));
-            IAsyncEnumerable<Row> blockingJoinStream = _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt);
+            IAsyncEnumerable<Row> blockingJoinStream = _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt, logicalPlan.RequiredColumns);
             if (!whereApplied && stmt.WhereClause != null)
             {
                 blockingJoinStream = WhereStream(blockingJoinStream, stmt.WhereClause, _context);
@@ -713,19 +713,33 @@ public class SelectExecutionEngine
         }
 
         // 3. WINDOW FUNCTIONS
+        var postWhereRequired = whereApplied
+            ? RequiredColumnAnalyzer.Analyze(stmt, includeWhere: false)
+            : logicalPlan.RequiredColumns;
+        bool canPrunePostWhere = whereApplied
+            && postWhereRequired != null
+            && logicalPlan.RequiredColumns != null
+            && postWhereRequired.Count < logicalPlan.RequiredColumns.Count;
+
         if (hasWindowInColumns && !windowApplied)
         {
             if (externalEngineStream != null)
             {
                 // Phase 7: External agg output streams directly into the window engine —
                 // no intermediate materialization. The result stays lazy until QUALIFY or ORDER BY forces it.
-                externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(externalEngineStream, stmt);
+                var windowInput = canPrunePostWhere
+                    ? ProjectRequiredStream(externalEngineStream, postWhereRequired!)
+                    : externalEngineStream;
+                externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(windowInput, stmt);
             }
             else if (ShouldSpillWindow(allRows))
             {
                 _logger.WriteLine($"[yellow]HYPER-SCALE: Switching to ExternalWindowEngine. Row count {allRows.Count} >= threshold {_context.WindowSpillThreshold}. Session: {_context.SessionId}[/]");
+                var windowInput = canPrunePostWhere
+                    ? ProjectRequiredStream(allRows.ToAsyncEnumerable(), postWhereRequired!)
+                    : allRows.ToAsyncEnumerable();
                 externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(
-                    allRows.ToAsyncEnumerable(), stmt,
+                    windowInput, stmt,
                     knownRowCount: allRows.Count,
                     knownInputBytes: RowWidthEstimator.EstimateTotalBytes(allRows));
                 allRows = [];
@@ -806,7 +820,10 @@ public class SelectExecutionEngine
             else if (externalEngineStream != null)
             {
                 var externalSort = new ExternalSortEngine(_context, _logger);
-                externalEngineStream = externalSort.SortStreamAsync(externalEngineStream, stmt.OrderBy);
+                var sortInput = canPrunePostWhere
+                    ? ProjectRequiredStream(externalEngineStream, postWhereRequired!)
+                    : externalEngineStream;
+                externalEngineStream = externalSort.SortStreamAsync(sortInput, stmt.OrderBy);
             }
             else
             {
@@ -817,7 +834,10 @@ public class SelectExecutionEngine
                     // Collecting the sorted rows into a list again would hold the whole result in
                     // memory, which is what spilling the sort was meant to avoid.
                     var externalSort = new ExternalSortEngine(_context, _logger);
-                    externalEngineStream = externalSort.SortStreamAsync(allRows.ToAsyncEnumerable(), stmt.OrderBy);
+                    var sortInput = canPrunePostWhere
+                        ? ProjectRequiredStream(allRows.ToAsyncEnumerable(), postWhereRequired!)
+                        : allRows.ToAsyncEnumerable();
+                    externalEngineStream = externalSort.SortStreamAsync(sortInput, stmt.OrderBy);
                     allRows = [];
                     ResetProbeMemoryLease();
                 }
@@ -1730,6 +1750,15 @@ public class SelectExecutionEngine
     /// reference is cleared, freeing GC pressure on wide join results.
     /// A null <paramref name="required"/> set (e.g. SELECT *) means pruning is skipped.
     /// </summary>
+    private static async IAsyncEnumerable<Row> ProjectRequiredStream(
+        IAsyncEnumerable<Row> source,
+        HashSet<string> required)
+    {
+        var layout = new ProjectedRowLayout(required);
+        await foreach (var row in source)
+            yield return layout.Project(row);
+    }
+
     private static void PruneColumns(List<Row> rows, HashSet<string>? required)
     {
         if (required == null || rows.Count == 0) return;
