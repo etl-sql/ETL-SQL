@@ -72,6 +72,7 @@ public static class ColumnBatchAdapter
         "GUID" or "UUID" or "UNIQUEIDENTIFIER" => typeof(Guid),
         "STRING" or "VARCHAR" or "NVARCHAR" or "TEXT" or "NTEXT" or "CHAR" or "NCHAR" or
             "VARCHAR2" or "JSON" or "XML" or "PATH" => typeof(string),
+        "BINARY" or "VARBINARY" or "BLOB" or "LOB" or "BYTEA" => typeof(byte[]),
         _ => throw new NotSupportedException($"Logical type '{logicalType}' does not yet have a native column buffer.")
     };
 
@@ -265,6 +266,17 @@ public static class ColumnBatchAdapter
                     var value = row[ordinal];
                     return value == null || value == DBNull.Value ? null : (value is string s ? s : TypeConverter.ToInvariantText(value));
                 }).ToArray());
+            case "BINARY":
+            case "VARBINARY":
+            case "BLOB":
+            case "LOB":
+            case "BYTEA":
+                return BinaryColumnBuffer.FromByteArrays(rows.Select(row =>
+                {
+                    var value = row[ordinal];
+                    if (value == null || value == DBNull.Value) return null;
+                    return value is byte[] bytes ? bytes : TypeConverter.Cast(value, "VARBINARY") as byte[];
+                }).ToArray());
             default:
                 throw new NotSupportedException($"Logical type '{logicalType}' does not yet have a native column buffer.");
         }
@@ -282,6 +294,12 @@ public static class ColumnBatchAdapter
             return hasSelection
                 ? utf8.Compact(selectedRows.Span, sourceRowCount, cancellationToken)
                 : utf8.Clone(cancellationToken);
+        }
+        if (source is BinaryColumnBuffer binary)
+        {
+            return hasSelection
+                ? binary.Compact(selectedRows.Span, sourceRowCount, cancellationToken)
+                : binary.Clone(cancellationToken);
         }
 
         if (source is ColumnBuffer<byte> bytes) return CopyFixed(bytes, sourceRowCount, selectedRows, hasSelection, cancellationToken);
@@ -307,6 +325,8 @@ public static class ColumnBatchAdapter
     {
         if (source is Utf8ColumnBuffer utf8)
             return utf8.Gather(rows.Span, sourceRowCount, cancellationToken);
+        if (source is BinaryColumnBuffer binary)
+            return binary.Gather(rows.Span, sourceRowCount, cancellationToken);
         if (source is ColumnBuffer<byte> bytes) return GatherFixed(bytes, sourceRowCount, rows, cancellationToken);
         if (source is ColumnBuffer<short> shorts) return GatherFixed(shorts, sourceRowCount, rows, cancellationToken);
         if (source is ColumnBuffer<int> ints) return GatherFixed(ints, sourceRowCount, rows, cancellationToken);
@@ -450,6 +470,7 @@ public static class ColumnBatchAdapter
             DateTimeOffset => "DATETIMEOFFSET",
             TimeSpan => "TIME",
             Guid => "UUID",
+            byte[] => "VARBINARY",
             string => "VARCHAR",
             null => "VARCHAR",
             _ => throw new NotSupportedException($"CLR type '{value.GetType().Name}' does not yet have a native column buffer.")

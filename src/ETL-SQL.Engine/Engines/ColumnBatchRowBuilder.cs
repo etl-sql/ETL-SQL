@@ -72,7 +72,8 @@ internal sealed class ColumnBatchRowBuilder : IDisposable
         || t == typeof(DateTimeOffset)
         || t == typeof(Guid)
         || t == typeof(TimeSpan)
-        || t == typeof(string);
+        || t == typeof(string)
+        || t == typeof(byte[]);
 
     private void EnsureWriters()
     {
@@ -107,6 +108,7 @@ internal sealed class ColumnBatchRowBuilder : IDisposable
         if (elementType == typeof(Guid)) return new FixedColumnWriter<Guid>(capacity);
         if (elementType == typeof(TimeSpan)) return new FixedColumnWriter<TimeSpan>(capacity);
         if (elementType == typeof(string)) return new Utf8ColumnWriter(capacity);
+        if (elementType == typeof(byte[])) return new BinaryColumnWriter(capacity);
         throw new NotSupportedException($"Columnar row builder does not support '{elementType.Name}'.");
     }
 
@@ -302,6 +304,116 @@ internal sealed class ColumnBatchRowBuilder : IDisposable
                 }
 
                 var result = Utf8ColumnBuffer.CopyEncoded(
+                    offsets.AsSpan(0, rowCount + 1),
+                    data.AsSpan(0, dataLen),
+                    validitySpan,
+                    validityBitOffset: 0);
+
+                Dispose();
+                return result;
+            }
+            finally
+            {
+                if (arrowValidity != null)
+                    ArrayPool<byte>.Shared.Return(arrowValidity, clearArray: true);
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_offsets != null)
+            {
+                ArrayPool<int>.Shared.Return(_offsets, clearArray: true);
+                _offsets = null;
+            }
+            if (_data != null)
+            {
+                if (_dataLength > 0)
+                    CryptographicOperations.ZeroMemory(_data.AsSpan(0, _dataLength));
+                ArrayPool<byte>.Shared.Return(_data);
+                _data = null;
+            }
+            if (_nullBitmap != null)
+            {
+                ArrayPool<byte>.Shared.Return(_nullBitmap, clearArray: true);
+                _nullBitmap = null;
+            }
+            _dataLength = 0;
+        }
+    }
+
+    private sealed class BinaryColumnWriter : IColumnWriter
+    {
+        private int[]? _offsets;
+        private byte[]? _data;
+        private byte[]? _nullBitmap;
+        private int _dataLength;
+
+        public BinaryColumnWriter(int capacity)
+        {
+            _offsets = ArrayPool<int>.Shared.Rent(Math.Max(2, capacity + 1));
+            _offsets[0] = 0;
+            _data = ArrayPool<byte>.Shared.Rent(Math.Max(256, capacity * 32));
+            int bitmapBytes = (capacity + 7) / 8;
+            _nullBitmap = ArrayPool<byte>.Shared.Rent(Math.Max(1, bitmapBytes));
+            _nullBitmap.AsSpan(0, bitmapBytes).Clear();
+        }
+
+        public long AppendFrom(IColumnBuffer source, int sourceRow, int destRow)
+        {
+            var binary = (BinaryColumnBuffer)source;
+            if (binary.IsNull(sourceRow))
+            {
+                _nullBitmap![destRow >> 3] |= (byte)(1 << (destRow & 7));
+                _offsets![destRow + 1] = _dataLength;
+                return 4;
+            }
+
+            var bytes = binary.GetBytes(sourceRow);
+            if (!bytes.IsEmpty)
+            {
+                EnsureDataCapacity(_dataLength + bytes.Length);
+                bytes.CopyTo(_data.AsSpan(_dataLength));
+                _dataLength += bytes.Length;
+            }
+            _offsets![destRow + 1] = _dataLength;
+            return 4L + bytes.Length;
+        }
+
+        private void EnsureDataCapacity(int required)
+        {
+            if (required <= _data!.Length) return;
+            int nextSize = Math.Max(_data.Length * 2, required);
+            var grown = ArrayPool<byte>.Shared.Rent(nextSize);
+            if (_dataLength > 0)
+                Buffer.BlockCopy(_data, 0, grown, 0, _dataLength);
+            CryptographicOperations.ZeroMemory(_data.AsSpan(0, _dataLength));
+            ArrayPool<byte>.Shared.Return(_data);
+            _data = grown;
+        }
+
+        public IColumnBuffer Build(int rowCount)
+        {
+            var offsets = _offsets!;
+            var data = _data!;
+            var nullBitmap = _nullBitmap!;
+            int dataLen = _dataLength;
+            int bitmapBytes = (rowCount + 7) / 8;
+
+            bool hasNulls = nullBitmap.AsSpan(0, bitmapBytes).IndexOfAnyExcept((byte)0) >= 0;
+            byte[]? arrowValidity = null;
+            try
+            {
+                ReadOnlySpan<byte> validitySpan = ReadOnlySpan<byte>.Empty;
+                if (hasNulls)
+                {
+                    arrowValidity = ArrayPool<byte>.Shared.Rent(Math.Max(1, bitmapBytes));
+                    for (int i = 0; i < bitmapBytes; i++)
+                        arrowValidity[i] = (byte)~nullBitmap[i];
+                    validitySpan = arrowValidity.AsSpan(0, bitmapBytes);
+                }
+
+                var result = BinaryColumnBuffer.CopyEncoded(
                     offsets.AsSpan(0, rowCount + 1),
                     data.AsSpan(0, dataLen),
                     validitySpan,

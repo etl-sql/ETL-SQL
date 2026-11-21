@@ -107,9 +107,10 @@ Files, SFTP, REST, and the rest of the [connectors](#connectors--everything-you-
 | If you're using… | The ETL-SQL advantage |
 | :--- | :--- |
 | **Python + pandas** | No environment setup, no dependency drift. SQL is the orchestration language — readable and maintainable across your entire team. |
-| **SSIS / Azure Data Factory** | Plain-text scripts in Git. No proprietary XML or UI-locked designer formats. Run from the CLI, VS Code, the Orchestrator, or CI/CD. |
-| **dbt** | ETL-SQL moves data across heterogeneous systems, enforces in-stream quality gates, *and* renders dashboards from the same script. |
-| **AI Agents & Copilots** | Plain-text, deterministic SQL that agents can read, write, and review. |
+| **Visual ETL designers** | Plain-text scripts in Git. No proprietary XML or UI-locked project files. Run the same script from VS Code, the CLI, the Orchestrator, or CI/CD. |
+| **Separate BI & reporting tools** | Data prep, quality gates, and interactive dashboards live in one `.rptsql` file — previewed side-by-side in VS Code and hosted in the Portal. |
+| **Warehouse-only SQL (ELT)** | ETL-SQL moves data across heterogeneous databases, files, SFTP, and APIs, enforces in-stream quality gates, *and* renders dashboards from the same script. |
+| **AI Agents & Copilots** | Plain-text, deterministic SQL with structured diagnostics and `WHAT_IF` dry-runs that agents can read, write, and review safely. |
 | **Raw SQL scripts** | Cross-source joins, procedural control flow, SFTP, emails, file ops, scheduling, lineage, and reporting — all in one unified dialect. |
 
 ---
@@ -235,6 +236,23 @@ CREATE PAGE SalesDashboard AS DASHBOARD (
 
 ---
 
+## Beyond the Editor — The Full ETL-SQL Platform
+
+VS Code is where you author, test, and preview. When you're ready to share dashboards with your team or run pipelines on a schedule, the rest of the self-hosted **ETL-SQL platform** runs the exact same `.etlsql` and `.rptsql` scripts with zero rewrites.
+
+| Component | What it gives your team |
+| :--- | :--- |
+| **ETL-SQL Portal** *(Reporting & Dashboards)* | Self-hosted web hub for interactive dashboards and paginated reports. Publish directly from VS Code (`ETL-SQL: Publish to Portal`) with multi-page navigation, live slicers and drill-through, PDF/SVG/Markdown export, scheduled email/Slack/Teams subscriptions, data-driven alerts, row-level security (RLS), role-based access control, and usage analytics. |
+| **ETL-SQL Orchestrator** *(Job Scheduling & Operations)* | Always-on pipeline runner with cron schedules, retries, timeouts, incremental watermarks (`GET_JOB_STATE` / `SET_JOB_STATE`), quality-gate assertions (`ASSERT JOB`), quarantine replay, live per-statement run waterfalls, parameter overrides, and fleet health monitoring — managed from the Portal operations console or SQL (`CREATE JOB`, `TRIGGER JOB`). |
+| **ETL-SQL Studio** *(Web Authoring)* | Browser-based workbench in the Portal for authoring, previewing, and approving reports and pipelines without leaving the web app. |
+| **CLI & Terminal IDE** (`ETL-SQL`, `ETL-SQL-TUI`) | Single-binary execution for CI/CD, servers, and containers, plus a keyboard-driven terminal IDE with autocomplete, live results grid, and compare mode for headless or SSH environments. |
+
+**One workflow end to end:** write and preview in VS Code → review plain-text scripts in Git → publish dashboards to the Portal and schedule pipelines in the Orchestrator.
+
+Download installers (Windows MSI, Linux DEB, native archives) and read the deployment guide at [github.com/etl-sql/ETL-SQL](https://github.com/etl-sql/ETL-SQL/blob/main/docs/administration/platform/README.md).
+
+---
+
 ## Connectors — Everything You Already Have
 
 Mix and match any of these freely within a single script.
@@ -265,11 +283,6 @@ Supported operating systems:
 - **VS Code**: version 1.91.0 or higher
 
 The extension bundles the native language server and engine binaries for supported platforms; no external runtime or SDK installation is required.
-
-**Want the full platform?** Download the optional extras from [github.com/etl-sql/ETL-SQL](https://github.com/etl-sql/ETL-SQL):
-- **Terminal IDE** (`ETL-SQL-TUI`) — full-featured TUI editor with autocomplete and results grid for headless environments
-- **Orchestrator** — always-on job runner with scheduling, history, and dependency management
-- **Portal** — multi-report hosting, permissions, subscriptions, alerts, and usage metrics
 
 ---
 

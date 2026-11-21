@@ -1485,6 +1485,7 @@ public partial class SpillStore : ISpillStore
             // types model a time of day and can represent neither.
             if (elementType == typeof(TimeSpan)) return StringType.Default;
             if (elementType == typeof(string)) return StringType.Default;
+            if (elementType == typeof(byte[])) return BinaryType.Default;
             throw new NotSupportedException($"Native spill writing does not support '{elementType.Name}' columns.");
         }
 
@@ -1520,6 +1521,7 @@ public partial class SpillStore : ISpillStore
             DateTimeOffset => "DateTimeOffset",
             TimeSpan => "TIME",
             Guid => "UUID",
+            byte[] => "VARBINARY",
             _ => "Json"
         };
 
@@ -1531,6 +1533,7 @@ public partial class SpillStore : ISpillStore
             bool => BooleanType.Default,
             DateOnly => StringType.Default,
             DateTime => new TimestampType(TimeUnit.Microsecond, "UTC"),
+            byte[] => BinaryType.Default,
             _ => StringType.Default
         };
 
@@ -1692,6 +1695,43 @@ public partial class SpillStore : ISpillStore
                 }
 
                 return new StringArray(length, offsetBuilder.Build(), valueBuilder.Build(), validityBuffer, nullCount);
+            }
+            if (column is BinaryColumnBuffer binary)
+            {
+                var offsetsSpan = binary.Offsets.Span;
+                var baseByteOffset = offsetsSpan[startRow];
+                var totalByteLength = offsetsSpan[startRow + length] - baseByteOffset;
+                var offsetBuilder = new ArrowBuffer.Builder<int>();
+                offsetBuilder.Reserve(length + 1);
+                for (var i = 0; i <= length; i++)
+                    offsetBuilder.Append(offsetsSpan[startRow + i] - baseByteOffset);
+
+                var valueBuilder = new ArrowBuffer.Builder<byte>();
+                if (totalByteLength > 0)
+                {
+                    valueBuilder.Reserve(totalByteLength);
+                    valueBuilder.Append(binary.BinaryData.Span.Slice(baseByteOffset, totalByteLength));
+                }
+
+                var nullCount = 0;
+                ArrowBuffer validityBuffer;
+                if (binary.NullBitmap.Span.IndexOfAnyExcept((byte)0) < 0)
+                {
+                    validityBuffer = ArrowBuffer.Empty;
+                }
+                else
+                {
+                    var bitmapBuilder = new ArrowBuffer.BitmapBuilder(length);
+                    for (var i = 0; i < length; i++)
+                    {
+                        var valid = !binary.IsNull(startRow + i);
+                        bitmapBuilder.Append(valid);
+                        if (!valid) nullCount++;
+                    }
+                    validityBuffer = nullCount == 0 ? ArrowBuffer.Empty : bitmapBuilder.Build();
+                }
+
+                return new BinaryArray(BinaryType.Default, length, offsetBuilder.Build(), valueBuilder.Build(), validityBuffer, nullCount);
             }
             throw new NotSupportedException($"Native spill writing does not support '{column.ElementType.Name}' columns.");
         }
@@ -1870,6 +1910,23 @@ public partial class SpillStore : ISpillStore
                                     ? new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc))
                                     : new DateTimeOffset(dt);
                                 b.Append(dto);
+                            }
+                        }
+                        return b.Build();
+                    }
+                case BinaryType:
+                    {
+                        var b = new BinaryArray.Builder();
+                        b.Reserve(rows.Count);
+                        for (var i = 0; i < rows.Count; i++)
+                        {
+                            var v = rows[i][columnIndex];
+                            if (v is null or DBNull) b.AppendNull();
+                            else if (v is byte[] bytes) b.Append(bytes);
+                            else
+                            {
+                                var coerced = TypeConverter.Cast(v, "VARBINARY") as byte[] ?? System.Array.Empty<byte>();
+                                b.Append(coerced);
                             }
                         }
                         return b.Build();
@@ -2436,6 +2493,24 @@ public partial class SpillStore : ISpillStore
                 values.Offset),
             DictionaryArray values when values.Dictionary is StringArray dictValues && values.Indices is Int32Array indices
                 => ConvertDictionaryStrings(dictValues, indices, count),
+            BinaryArray values when values.Offset == 0
+                && count > 0
+                && values.ValueOffsets[0] == 0
+                && values.ValueOffsetsBuffer.Memory.Length >= (count + 1) * sizeof(int)
+                && values.ValueOffsets[count] <= values.Values.Length
+                => BinaryColumnBuffer.WrapExternal(
+                    values.ValueOffsetsBuffer.Memory,
+                    values.ValueBuffer.Memory,
+                    count,
+                    values.ValueOffsets[count],
+                    values.NullBitmapBuffer.Memory,
+                    values.Offset,
+                    values.NullCount),
+            BinaryArray values => BinaryColumnBuffer.CopyEncoded(
+                values.ValueOffsets,
+                values.Values,
+                values.NullBitmapBuffer.Span,
+                values.Offset),
             _ => throw new NotSupportedException($"Arrow spill column type '{array.Data.DataType.Name}' is not supported by native batches.")
         };
 
@@ -2542,6 +2617,7 @@ public partial class SpillStore : ISpillStore
                 StringArray a => (object?)DecodeArrowString(a.GetString(index), logicalType, _logger),
                 DictionaryArray a when a.Dictionary is StringArray dictValues && a.Indices is Int32Array indices
                     => DecodeArrowString(GetDictionaryString(dictValues, indices, index, columnIndex), logicalType, _logger),
+                BinaryArray a => a.GetBytes(index).ToArray(),
                 _ => null
             };
         }
@@ -2592,6 +2668,7 @@ public partial class SpillStore : ISpillStore
                 StringArray a => SortKey.FromValue(DecodeArrowString(a.GetString(index), logicalType, _logger)),
                 DictionaryArray a when a.Dictionary is StringArray dictValues && a.Indices is Int32Array indices
                     => SortKey.FromValue(DecodeArrowString(GetDictionaryString(dictValues, indices, index, columnIndex), logicalType, _logger)),
+                BinaryArray a => SortKey.FromValue(a.GetBytes(index).ToArray()),
                 _ => SortKey.Null
             };
         }

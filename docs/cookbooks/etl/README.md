@@ -23,11 +23,11 @@ into a `.etlsql` file and press **F5**. The rest show production patterns agains
 | [Immutable Published Script Bundles (CI/CD Deployment)](immutable-published-bundles.md) | This pattern compiles and packages a multi-file script folder into an immutable versioned bundle inside the Orchestrator lockbox. It then registers... |
 | [Importing Curated Lineage & Tags (Non-Standard Sources)](importing-curated-lineage.md) | When column documentation, ownership, or lineage already lives in your own catalog — a spreadsheet, a governance tool, or a previous run's OpenLine... |
 | [Incremental Load with High-Water Mark](incremental-load-with-high-water-mark.md) | **▶ Runs as-is.** Store a watermark, extract only rows newer than it on each run, then advance it on success — the basis of almost every scheduled ETL job. |
-| [IoT Ingestion with Regex Filtering](iot-regex-filtering.md) | Filter and clean high-frequency sensor data using regular expressions before batch loading. |
+| [IoT Ingestion with Regex Filtering](iot-regex-filtering.md) | **▶ Runs as-is.** Filter and clean high-frequency sensor data using regular expressions (`REGEXP_LIKE` and `REGEXP_SUBSTR`) before batch loading. |
 | [Master-Detail Cross-Report Drill-through](master-detail-drill-through.md) | The most powerful interactive pattern. It allows navigating from a high-level summary report to a completely separate, detailed report file while p... |
 | [Multi-Context Join](multi-context-join.md) | Join data from three different platforms (SQL, Postgres, and CSV) in a single engine statement. |
 | [The Parallel Dimension Loader](parallel-dimension-loader.md) | Optimizes runtime by loading independent, non-conflicting dimension tables simultaneously. |
-| [Secure PII Masking & Hashing](pii-masking-and-hashing.md) | Anonymize sensitive customer data for compliance before moving it from PROD to a Dev/QA environment. |
+| [Secure PII Masking & Hashing](pii-masking-and-hashing.md) | **▶ Runs as-is.** Anonymize sensitive customer data with `MASK_EMAIL` and `HASHBYTES` before moving it from PROD to a Dev/QA environment. |
 | [Publishing and Operating a Portal Catalog](portal-catalog.md) | Portal administration is script-first: connect with `PORTAL`, then send catalog commands inside an `EXECUTE <portal> BEGIN ... END` block. This mak... |
 | [Scheduling a Recurring Job on a Remote Orchestrator](remote-orchestrator-schedule.md) | Once a pipeline is published, register it as a scheduled job on the Orchestrator so it runs unattended with retries. Remote job creation is wrapped... |
 | [REST API Ingestion](rest-api-ingestion.md) | Pull data from a REST API and load it into a database table. The `API` connector auto-handles authentication, pagination, and JSON path extraction. |

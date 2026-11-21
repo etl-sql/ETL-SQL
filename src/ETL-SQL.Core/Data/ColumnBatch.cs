@@ -736,6 +736,393 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
     }
 }
 
+/// <summary>Variable-width binary column backed by pooled offsets and byte data.</summary>
+public sealed class BinaryColumnBuffer : IColumnBuffer
+{
+    private int[]? _offsets;
+    private byte[]? _data;
+    private byte[]? _nullBitmap;
+    private ReadOnlyMemory<int> _externalOffsets;
+    private ReadOnlyMemory<byte> _externalData;
+    private ReadOnlyMemory<byte> _readOnlyNullBitmap;
+    private readonly bool _hasExternalData;
+    private readonly bool _bitmapPooled;
+    private readonly int _count;
+    private readonly int _dataLength;
+    private readonly int _nullByteCount;
+    private bool _disposed;
+
+    private BinaryColumnBuffer(int[] offsets, byte[] data, byte[] nullBitmap, int count, int dataLength)
+    {
+        _offsets = offsets;
+        _data = data;
+        _nullBitmap = nullBitmap;
+        _readOnlyNullBitmap = nullBitmap.AsMemory(0, (count + 7) / 8);
+        _hasExternalData = false;
+        _bitmapPooled = true;
+        _count = count;
+        _dataLength = dataLength;
+        _nullByteCount = (count + 7) / 8;
+    }
+
+    private BinaryColumnBuffer(
+        ReadOnlyMemory<int> externalOffsets,
+        ReadOnlyMemory<byte> externalData,
+        byte[]? ownedNullBitmap,
+        ReadOnlyMemory<byte> readOnlyNullBitmap,
+        bool bitmapPooled,
+        int count,
+        int dataLength)
+    {
+        _externalOffsets = externalOffsets;
+        _externalData = externalData;
+        _nullBitmap = ownedNullBitmap;
+        _readOnlyNullBitmap = readOnlyNullBitmap;
+        _hasExternalData = true;
+        _bitmapPooled = bitmapPooled;
+        _count = count;
+        _dataLength = dataLength;
+        _nullByteCount = (count + 7) / 8;
+    }
+
+    public static BinaryColumnBuffer WrapExternal(
+        ReadOnlyMemory<byte> rawOffsets,
+        ReadOnlyMemory<byte> rawData,
+        int count,
+        int dataLength,
+        ReadOnlyMemory<byte> validityBitmap = default,
+        int validityBitOffset = 0,
+        int nullCount = -1)
+    {
+        if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+        if (dataLength < 0 || dataLength > rawData.Length) throw new ArgumentOutOfRangeException(nameof(dataLength));
+        var externalOffsets = new ByteCastMemoryManager<int>(rawOffsets, checked(count + 1)).Memory;
+        var (ownedBitmap, readOnlyBitmap, bitmapPooled) =
+            ColumnBufferBitmapHelper.BuildNullBitmap(count, validityBitmap.Span, validityBitOffset, nullCount);
+        return new BinaryColumnBuffer(
+            externalOffsets,
+            rawData.Slice(0, dataLength),
+            ownedBitmap,
+            readOnlyBitmap,
+            bitmapPooled,
+            count,
+            dataLength);
+    }
+
+    public static BinaryColumnBuffer FromByteArrays(IReadOnlyList<byte[]?> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        var dataLength = 0;
+        for (var i = 0; i < values.Count; i++)
+            if (values[i] is { } value)
+                dataLength = checked(dataLength + value.Length);
+
+        var nullBytes = checked((values.Count + 7) / 8);
+        var offsets = ArrayPool<int>.Shared.Rent(Math.Max(1, values.Count + 1));
+        var data = ArrayPool<byte>.Shared.Rent(Math.Max(1, dataLength));
+        var bitmap = ArrayPool<byte>.Shared.Rent(Math.Max(1, nullBytes));
+        try
+        {
+            bitmap.AsSpan(0, nullBytes).Clear();
+            var position = 0;
+            offsets[0] = 0;
+            for (var i = 0; i < values.Count; i++)
+            {
+                if (values[i] is { } value)
+                {
+                    value.AsSpan().CopyTo(data.AsSpan(position));
+                    position += value.Length;
+                }
+                else
+                {
+                    bitmap[i >> 3] |= (byte)(1 << (i & 7));
+                }
+                offsets[i + 1] = position;
+            }
+            return new BinaryColumnBuffer(offsets, data, bitmap, values.Count, dataLength);
+        }
+        catch
+        {
+            ArrayPool<int>.Shared.Return(offsets, clearArray: true);
+            ArrayPool<byte>.Shared.Return(data, clearArray: true);
+            ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
+            throw;
+        }
+    }
+
+    public static BinaryColumnBuffer CopyEncoded(
+        ReadOnlySpan<int> offsets,
+        ReadOnlySpan<byte> data,
+        ReadOnlySpan<byte> validityBitmap,
+        int validityBitOffset = 0)
+    {
+        if (offsets.Length == 0) throw new ArgumentException("At least one offset is required.", nameof(offsets));
+        if (validityBitOffset < 0) throw new ArgumentOutOfRangeException(nameof(validityBitOffset));
+        var count = offsets.Length - 1;
+        var baseOffset = offsets[0];
+        var endOffset = offsets[count];
+        if (baseOffset < 0 || endOffset < baseOffset || endOffset > data.Length)
+            throw new ArgumentException("Encoded offsets fall outside the supplied data buffer.", nameof(offsets));
+        for (var i = 1; i < offsets.Length; i++)
+            if (offsets[i] < offsets[i - 1] || offsets[i] > endOffset)
+                throw new ArgumentException("Encoded offsets must be ordered and in range.", nameof(offsets));
+
+        var dataLength = endOffset - baseOffset;
+        var nullBytes = checked((count + 7) / 8);
+        var copiedOffsets = ArrayPool<int>.Shared.Rent(Math.Max(1, count + 1));
+        var copiedData = ArrayPool<byte>.Shared.Rent(Math.Max(1, dataLength));
+        var nullBitmap = ArrayPool<byte>.Shared.Rent(Math.Max(1, nullBytes));
+        try
+        {
+            for (var i = 0; i <= count; i++) copiedOffsets[i] = offsets[i] - baseOffset;
+            data.Slice(baseOffset, dataLength).CopyTo(copiedData);
+            nullBitmap.AsSpan(0, nullBytes).Clear();
+            if (!validityBitmap.IsEmpty)
+            {
+                for (var i = 0; i < count; i++)
+                {
+                    var sourceBit = checked(validityBitOffset + i);
+                    if ((sourceBit >> 3) >= validityBitmap.Length)
+                        throw new ArgumentException("Validity bitmap is too small for the encoded values.", nameof(validityBitmap));
+                    var valid = (validityBitmap[sourceBit >> 3] & (1 << (sourceBit & 7))) != 0;
+                    if (!valid) nullBitmap[i >> 3] |= (byte)(1 << (i & 7));
+                }
+            }
+            return new BinaryColumnBuffer(copiedOffsets, copiedData, nullBitmap, count, dataLength);
+        }
+        catch
+        {
+            ArrayPool<int>.Shared.Return(copiedOffsets, clearArray: true);
+            ArrayPool<byte>.Shared.Return(copiedData, clearArray: true);
+            ArrayPool<byte>.Shared.Return(nullBitmap, clearArray: true);
+            throw;
+        }
+    }
+
+    public Type ElementType => typeof(byte[]);
+    public int Count => _count;
+    public ReadOnlyMemory<int> Offsets
+    {
+        get
+        {
+            EnsureNotDisposed();
+            return _hasExternalData ? _externalOffsets.Slice(0, _count + 1) : _offsets!.AsMemory(0, _count + 1);
+        }
+    }
+    public ReadOnlyMemory<byte> BinaryData
+    {
+        get
+        {
+            EnsureNotDisposed();
+            return _hasExternalData ? _externalData.Slice(0, _dataLength) : _data!.AsMemory(0, _dataLength);
+        }
+    }
+    public ReadOnlyMemory<byte> NullBitmap
+    {
+        get
+        {
+            EnsureNotDisposed();
+            return _readOnlyNullBitmap;
+        }
+    }
+    public long AllocatedBytes
+    {
+        get
+        {
+            EnsureNotDisposed();
+            long offsetsBytes = _hasExternalData ? (long)(_count + 1) * sizeof(int) : (long)_offsets!.Length * sizeof(int);
+            long dataBytes = _hasExternalData ? _dataLength : _data!.LongLength;
+            long bitmapBytes = _nullBitmap != null ? _nullBitmap.LongLength : _nullByteCount;
+            return offsetsBytes + dataBytes + bitmapBytes;
+        }
+    }
+
+    public bool IsNull(int index)
+    {
+        ValidateIndex(index);
+        EnsureNotDisposed();
+        return (_readOnlyNullBitmap.Span[index >> 3] & (1 << (index & 7))) != 0;
+    }
+
+    public ReadOnlySpan<byte> GetBytes(int index)
+    {
+        ValidateIndex(index);
+        var offsets = GetOffsetsSpan();
+        return GetDataSpan().Slice(offsets[index], offsets[index + 1] - offsets[index]);
+    }
+
+    public object? GetBoxedValue(int index) => IsNull(index) ? null : GetBytes(index).ToArray();
+
+    internal BinaryColumnBuffer Compact(
+        ReadOnlySpan<int> selectedRows,
+        int sourceRowCount,
+        CancellationToken cancellationToken = default)
+    {
+        if (sourceRowCount != _count)
+            throw new ArgumentException("Source row count does not match the binary buffer.", nameof(sourceRowCount));
+        var sourceOffsets = GetOffsetsSpan();
+        var sourceData = GetDataSpan();
+        var dataLength = 0;
+        for (var output = 0; output < selectedRows.Length; output++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var input = selectedRows[output];
+            if ((uint)input >= (uint)sourceRowCount)
+                throw new ArgumentOutOfRangeException(nameof(selectedRows), "Selection contains an invalid row ordinal.");
+            dataLength = checked(dataLength + sourceOffsets[input + 1] - sourceOffsets[input]);
+        }
+
+        var nullBytes = checked((selectedRows.Length + 7) / 8);
+        var offsets = ArrayPool<int>.Shared.Rent(Math.Max(1, selectedRows.Length + 1));
+        var data = ArrayPool<byte>.Shared.Rent(Math.Max(1, dataLength));
+        var bitmap = ArrayPool<byte>.Shared.Rent(Math.Max(1, nullBytes));
+        try
+        {
+            bitmap.AsSpan(0, nullBytes).Clear();
+            var position = 0;
+            offsets[0] = 0;
+            for (var output = 0; output < selectedRows.Length; output++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var input = selectedRows[output];
+                var length = sourceOffsets[input + 1] - sourceOffsets[input];
+                sourceData.Slice(sourceOffsets[input], length).CopyTo(data.AsSpan(position));
+                position += length;
+                offsets[output + 1] = position;
+                if (IsNull(input)) bitmap[output >> 3] |= (byte)(1 << (output & 7));
+            }
+            return new BinaryColumnBuffer(offsets, data, bitmap, selectedRows.Length, dataLength);
+        }
+        catch
+        {
+            ArrayPool<int>.Shared.Return(offsets, clearArray: true);
+            ArrayPool<byte>.Shared.Return(data, clearArray: true);
+            ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
+            throw;
+        }
+    }
+
+    internal BinaryColumnBuffer Gather(
+        ReadOnlySpan<int> rows,
+        int sourceRowCount,
+        CancellationToken cancellationToken = default)
+    {
+        if (sourceRowCount != _count)
+            throw new ArgumentException("Source row count does not match the binary buffer.", nameof(sourceRowCount));
+        var sourceOffsets = GetOffsetsSpan();
+        var sourceData = GetDataSpan();
+        var dataLength = 0;
+        for (var output = 0; output < rows.Length; output++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var input = rows[output];
+            if (input == -1) continue;
+            if ((uint)input >= (uint)sourceRowCount)
+                throw new ArgumentOutOfRangeException(nameof(rows), "Gather contains an invalid row ordinal.");
+            dataLength = checked(dataLength + sourceOffsets[input + 1] - sourceOffsets[input]);
+        }
+
+        var nullBytes = checked((rows.Length + 7) / 8);
+        var offsets = ArrayPool<int>.Shared.Rent(Math.Max(1, rows.Length + 1));
+        var data = ArrayPool<byte>.Shared.Rent(Math.Max(1, dataLength));
+        var bitmap = ArrayPool<byte>.Shared.Rent(Math.Max(1, nullBytes));
+        try
+        {
+            bitmap.AsSpan(0, nullBytes).Clear();
+            var position = 0;
+            offsets[0] = 0;
+            for (var output = 0; output < rows.Length; output++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var input = rows[output];
+                if (input == -1)
+                {
+                    bitmap[output >> 3] |= (byte)(1 << (output & 7));
+                }
+                else
+                {
+                    var length = sourceOffsets[input + 1] - sourceOffsets[input];
+                    sourceData.Slice(sourceOffsets[input], length).CopyTo(data.AsSpan(position));
+                    position += length;
+                    if (IsNull(input)) bitmap[output >> 3] |= (byte)(1 << (output & 7));
+                }
+                offsets[output + 1] = position;
+            }
+            return new BinaryColumnBuffer(offsets, data, bitmap, rows.Length, dataLength);
+        }
+        catch
+        {
+            ArrayPool<int>.Shared.Return(offsets, clearArray: true);
+            ArrayPool<byte>.Shared.Return(data, clearArray: true);
+            ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
+            throw;
+        }
+    }
+
+    internal BinaryColumnBuffer Clone(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        EnsureNotDisposed();
+        var offsets = ArrayPool<int>.Shared.Rent(Math.Max(1, _count + 1));
+        var data = ArrayPool<byte>.Shared.Rent(Math.Max(1, _dataLength));
+        var bitmap = ArrayPool<byte>.Shared.Rent(Math.Max(1, _nullByteCount));
+        try
+        {
+            GetOffsetsSpan().Slice(0, _count + 1).CopyTo(offsets);
+            GetDataSpan().Slice(0, _dataLength).CopyTo(data);
+            _readOnlyNullBitmap.Span.Slice(0, _nullByteCount).CopyTo(bitmap);
+            return new BinaryColumnBuffer(offsets, data, bitmap, _count, _dataLength);
+        }
+        catch
+        {
+            ArrayPool<int>.Shared.Return(offsets, clearArray: true);
+            ArrayPool<byte>.Shared.Return(data, clearArray: true);
+            ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
+            throw;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        var offsets = _offsets;
+        var data = _data;
+        var bitmap = _nullBitmap;
+        _offsets = null;
+        _data = null;
+        _nullBitmap = null;
+        _externalOffsets = default;
+        _externalData = default;
+        _readOnlyNullBitmap = default;
+        if (offsets != null) ArrayPool<int>.Shared.Return(offsets, clearArray: true);
+        if (data != null) ArrayPool<byte>.Shared.Return(data, clearArray: true);
+        if (_bitmapPooled && bitmap != null) ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
+    }
+
+    private void EnsureNotDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(BinaryColumnBuffer));
+    }
+
+    private ReadOnlySpan<int> GetOffsetsSpan()
+    {
+        EnsureNotDisposed();
+        return _hasExternalData ? _externalOffsets.Span.Slice(0, _count + 1) : _offsets!.AsSpan(0, _count + 1);
+    }
+
+    private ReadOnlySpan<byte> GetDataSpan()
+    {
+        EnsureNotDisposed();
+        return _hasExternalData ? _externalData.Span.Slice(0, _dataLength) : _data!.AsSpan(0, _dataLength);
+    }
+
+    private void ValidateIndex(int index)
+    {
+        if ((uint)index >= (uint)_count) throw new ArgumentOutOfRangeException(nameof(index));
+    }
+}
+
 /// <summary>Owned, immutable-shape group of equal-length typed columns.</summary>
 public sealed class ColumnBatch : IDisposable
 {

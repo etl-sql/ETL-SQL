@@ -34,6 +34,7 @@ internal sealed class RowPacker : IDisposable
     private const byte TString = 5;
     private const byte TJson = 6;
     private const byte TDateOnly = 7;
+    private const byte TBinary = 8;
 
     private const int InitialScratchBytes = 256;
 
@@ -152,6 +153,9 @@ internal sealed class RowPacker : IDisposable
                             WriteUtf8String(utf8Bytes);
                         break;
                     }
+                case BatchColumnKind.Binary:
+                    WriteBinary(((BinaryColumnBuffer)buffer).GetBytes(rowIndex));
+                    break;
                 default:
                     WriteValue(ReadBatchValue(batch, col, rowIndex));
                     break;
@@ -302,6 +306,18 @@ internal sealed class RowPacker : IDisposable
         }
     }
 
+    private void WriteBinary(ReadOnlySpan<byte> bytes)
+    {
+        EnsureCapacity(1 + 5 + bytes.Length);
+        _buffer[_position++] = TBinary;
+        Write7BitEncodedInt(bytes.Length);
+        if (!bytes.IsEmpty)
+        {
+            bytes.CopyTo(_buffer.AsSpan(_position));
+            _position += bytes.Length;
+        }
+    }
+
     private void WriteJson(string json)
     {
         int byteCount = Encoding.UTF8.GetByteCount(json);
@@ -376,6 +392,7 @@ internal sealed class RowPacker : IDisposable
             BatchColumnKind.DateTime => ((ColumnBuffer<DateTime>)buffer).Values.Span[rowIndex],
             BatchColumnKind.DateOnly => ((ColumnBuffer<DateOnly>)buffer).Values.Span[rowIndex],
             BatchColumnKind.Utf8String => ReadUtf8Scalar(batch, (Utf8ColumnBuffer)buffer, columnIndex, rowIndex),
+            BatchColumnKind.Binary => ((BinaryColumnBuffer)buffer).GetBytes(rowIndex).ToArray(),
             _ => ReadBatchValue(batch, columnIndex, rowIndex),
         };
     }
@@ -401,6 +418,7 @@ internal sealed class RowPacker : IDisposable
         DateTime = 8,
         DateOnly = 9,
         Utf8String = 10,
+        Binary = 11,
     }
 
     internal sealed class BatchColumnPlan
@@ -440,6 +458,7 @@ internal sealed class RowPacker : IDisposable
             ColumnBuffer<DateTime> => BatchColumnKind.DateTime,
             ColumnBuffer<DateOnly> => BatchColumnKind.DateOnly,
             Utf8ColumnBuffer when logicalType == "String" => BatchColumnKind.Utf8String,
+            BinaryColumnBuffer => BatchColumnKind.Binary,
             _ => BatchColumnKind.Fallback,
         };
     }
@@ -598,6 +617,9 @@ internal sealed class RowPacker : IDisposable
             case string s:
                 WriteString(s);
                 break;
+            case byte[] bin:
+                WriteBinary(bin);
+                break;
             case sbyte or byte or short or ushort or int or uint or long or ulong:
                 // Integral types box as decimal on the common runtime path; store losslessly as decimal.
                 WriteDecimal(Convert.ToDecimal(value));
@@ -653,6 +675,14 @@ internal sealed class RowPacker : IDisposable
                     var s = Encoding.UTF8.GetString(data.Slice(pos, len));
                     pos += len;
                     return s;
+                }
+            case TBinary:
+                {
+                    int len = Read7BitEncodedInt(data, ref pos);
+                    if (len == 0) return Array.Empty<byte>();
+                    var bytes = data.Slice(pos, len).ToArray();
+                    pos += len;
+                    return bytes;
                 }
             case TJson:
                 {
