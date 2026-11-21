@@ -21,6 +21,7 @@ END;
 | Collection Source | Syntax Pattern | Value Binding in Body |
 | :--- | :--- | :--- |
 | `LIST` Variable | `FOREACH @item IN @list_variable` | `@item` contains scalar string / element |
+| `LIST` from a query | `DECLARE @list LIST = (SELECT col ...)` then `FOREACH @item IN @list` | `@item` holds one row's value; the query must return one column |
 | `#temp` Table | `FOREACH @row IN #temp_table` | `@row.column_name` accesses row fields |
 | Inline `SELECT` | `FOREACH @row IN (SELECT ...)` | `@row.column_name` accesses projection columns |
 
@@ -36,6 +37,13 @@ DECLARE @regions LIST = 'North,South,East,West';
 FOREACH @region IN @regions
 BEGIN
   PRINT 'Processing partition: ' + @region;
+END;
+
+-- A LIST can also be filled from a one-column query: every row becomes an item
+DECLARE @countries LIST = (SELECT DISTINCT country FROM #customers);
+FOREACH @country IN @countries
+BEGIN
+  PRINT 'Exporting: ' + @country;
 END;
 
 -- 2. Iterate over structured in-memory table rows

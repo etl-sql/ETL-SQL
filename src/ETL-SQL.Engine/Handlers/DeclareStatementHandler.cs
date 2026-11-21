@@ -45,6 +45,11 @@ public class DeclareStatementHandler : IStatementHandler
             // Prioritize value injected by CLI or host
             val = context.EvaluationContext.CastToType(existing, stmt.DataType);
         }
+        else if (stmt.InitialValue is ETL_SQL.Core.SubqueryExpression listQuery &&
+                 string.Equals(stmt.DataType, "LIST", StringComparison.OrdinalIgnoreCase))
+        {
+            val = await CollectListAsync(listQuery, context);
+        }
         else if (stmt.InitialValue != null)
         {
             val = await context.EvaluationContext.EvaluateValue(stmt.InitialValue, new Row(), !stmt.IsSensitive);
@@ -75,6 +80,31 @@ public class DeclareStatementHandler : IStatementHandler
             DataType = stmt.DataType
         };
         context.VarContext.DeclareVariable(stmt.VariableName, val, metadata);
+    }
+
+    /// <summary>
+    /// <c>DECLARE @x LIST = (SELECT col FROM ...)</c> holds every row of the one-column query.
+    /// Evaluated as a scalar subquery it kept only the first row, with no error, so a FOREACH over
+    /// the list quietly handled one item.
+    /// </summary>
+    private static async Task<List<object?>> CollectListAsync(ETL_SQL.Core.SubqueryExpression query, IExecutionContext context)
+    {
+        var items = new List<object?>();
+        await foreach (var batch in context.ExecuteQuery(query.Query))
+        {
+            if (batch.ColumnNames.Count > 1)
+                throw new ExecutionException(
+                    $"A query that fills a LIST must return one column; this one returns {batch.ColumnNames.Count}. " +
+                    "To loop over rows with several columns, use FOREACH @row IN (SELECT ...).");
+            if (batch.ColumnNames.Count == 0) continue;
+            var column = batch.ColumnNames[0];
+            foreach (var row in batch.Rows)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                items.Add(row[column]);
+            }
+        }
+        return items;
     }
 }
 
