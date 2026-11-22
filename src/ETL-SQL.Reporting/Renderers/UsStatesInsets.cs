@@ -24,7 +24,8 @@ internal static class UsStatesInsets
 
     // Puerto Rico (lon -67.3..-65.6, lat 17.9..18.5) would otherwise set the map's bottom edge
     // well below the Florida Keys; it moves into the Atlantic east of Florida, at its own size.
-    private const double PuertoRicoMinLon = -68.0, PuertoRicoMaxLon = -65.0, PuertoRicoMinLat = 17.5, PuertoRicoMaxLat = 19.0;
+    // The box reaches east to -64.4 so US Virgin Islands markers (lon -65.1..-64.5) move with it.
+    private const double PuertoRicoMinLon = -68.0, PuertoRicoMaxLon = -64.4, PuertoRicoMinLat = 17.5, PuertoRicoMaxLat = 19.0;
     private const double PuertoRicoCenterLon = -66.45, PuertoRicoCenterLat = 18.22;
     private const double PuertoRicoInsetLon = -75.0, PuertoRicoInsetLat = 25.5;
 

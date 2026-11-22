@@ -62,6 +62,8 @@ public sealed class UsStatesInsetsTests
     [InlineData(-129.5, 50.9, false)]
     [InlineData(-154.0, 23.0, true)]
     [InlineData(-153.9, 20.0, false)]
+    [InlineData(-64.4, 18.3, true)]  // US Virgin Islands move with Puerto Rico
+    [InlineData(-64.3, 18.3, false)]
     public void BoxEdges(double lon, double lat, bool moves)
     {
         Assert.Equal(moves, UsStatesInsets.Apply(lon, lat) != (lon, lat));

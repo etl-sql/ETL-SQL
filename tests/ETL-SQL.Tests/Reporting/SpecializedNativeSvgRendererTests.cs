@@ -114,6 +114,35 @@ public sealed class SpecializedNativeSvgRendererTests
         }
     }
 
+    [Fact]
+    public void Map_UsStatesPoints_VirginIslandsMarkerStaysOnTheMap()
+    {
+        // Puerto Rico's true position used to stretch the fit far enough to include the Virgin Islands.
+        var map = Extent(TitledPaths(new SvgChartRenderer().Render(UsStatesChoropleth())!).SelectMany(s => s.Points));
+        var points = Visual("MAP", ["Longitude", "Latitude", "Value", "Label"],
+            [["-64.93", "18.34", "10", "St. Thomas"], ["-122.33", "47.61", "10", "Seattle"]],
+            ("lon", "Longitude"), ("lat", "Latitude"), ("value", "Value"), ("label", "Label"), ("MODE", "POINTS"));
+        points.Options["MAP_NAME"] = "US_STATES";
+        var svg = new SvgChartRenderer().Render(points)!;
+        var (width, height) = Size(svg);
+
+        var circle = Regex.Match(svg, "<circle data-row-index='0' cx='(?<x>[-0-9.]+)' cy='(?<y>[-0-9.]+)'");
+        var (x, y) = (Number(circle.Groups["x"].Value), Number(circle.Groups["y"].Value));
+        Assert.True(x >= map.MinX && x <= map.MaxX && y >= map.MinY && y <= map.MaxY, $"St. Thomas marker ({x}, {y}) is off the map {map} in {width}x{height}");
+    }
+
+    [Fact]
+    public void Map_UsStatesWithZoom_KeepsAlaskaAtItsRealPosition()
+    {
+        // An explicit view is the author's own framing; insets apply only to fitted maps.
+        var visual = UsStatesChoropleth();
+        visual.Options["ZOOM"] = "1";
+        var regions = TitledPaths(new SvgChartRenderer().Render(visual)!);
+        var alaska = Extent(regions.Where(r => r.Name == "Alaska").SelectMany(r => r.Points));
+        var washington = Extent(regions.Where(r => r.Name == "Washington").SelectMany(r => r.Points));
+        Assert.True(alaska.MinY < washington.MinY && alaska.MinX < washington.MinX, $"Alaska {alaska} is not north-west of Washington {washington}");
+    }
+
     private static VisualManifest UsStatesChoropleth()
     {
         var visual = Visual("MAP", ["State", "Revenue"],

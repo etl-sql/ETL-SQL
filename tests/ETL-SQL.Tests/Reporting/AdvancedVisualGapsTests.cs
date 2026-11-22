@@ -168,6 +168,82 @@ CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = RevenueMap));
     }
 
     [Fact]
+    public async Task Map_UsStatesPoints_MarkersMoveWithTheirInsets()
+    {
+        // Lower-case, hyphenated MAP_NAME also reaches the insets (its source authority is upper-cased).
+        static string Choropleth(string options) => $@"
+SELECT 'California' AS State, 1 AS Revenue INTO #state_rev;
+CREATE VISUAL M AS MAP (SOURCE = #state_rev, MAPPINGS (REGION = State, VALUE = Revenue), OPTIONS (MAP_NAME = US_STATES{options}));
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = M));";
+        const string points = @"
+SELECT -149.90 AS Lon, 61.22 AS Lat, 'Anchorage' AS Label INTO #pts
+UNION ALL SELECT -122.33, 47.61, 'Seattle'
+UNION ALL SELECT -64.93, 18.34, 'St. Thomas';
+CREATE VISUAL M AS MAP (SOURCE = #pts, MAPPINGS (LON = Lon, LAT = Lat, TOOLTIP = Label), OPTIONS (MAP_NAME = 'us-states', MODE = 'POINTS'));
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = M));";
+
+        var shapes = GeographicRegions(await RenderMapScriptAsync(Choropleth("")));
+        var svg = await RenderMapScriptAsync(points);
+        static double Num(string s) => double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+        var box = System.Text.RegularExpressions.Regex.Match(svg, "viewBox='0 0 (?<w>[0-9.]+) (?<h>[0-9.]+)'");
+        var (width, height) = (Num(box.Groups["w"].Value), Num(box.Groups["h"].Value));
+        var markers = System.Text.RegularExpressions.Regex.Matches(svg, "<circle(?<a>[^>]*plot-geographic-point[^>]*)>\\s*<title>(?<t>[^<]+)")
+            .ToDictionary(m => m.Groups["t"].Value, m => (
+                X: Num(System.Text.RegularExpressions.Regex.Match(m.Groups["a"].Value, "cx='(?<v>[-0-9.]+)'").Groups["v"].Value),
+                Y: Num(System.Text.RegularExpressions.Regex.Match(m.Groups["a"].Value, "cy='(?<v>[-0-9.]+)'").Groups["v"].Value)));
+
+        foreach (var (label, state) in new[] { ("Anchorage", "Alaska"), ("Seattle", "Washington") })
+        {
+            var (x, y) = markers[label];
+            var e = MapExtent(shapes.Where(s => s.Name == state).SelectMany(s => s.Points));
+            Assert.True(x >= e.MinX && x <= e.MaxX && y >= e.MinY && y <= e.MaxY, $"{label} marker ({x}, {y}) is off {state} {e}");
+        }
+        // Puerto Rico's true position used to stretch the fit far enough to include the Virgin Islands.
+        var (vx, vy) = markers["St. Thomas"];
+        var map = MapExtent(shapes.SelectMany(s => s.Points));
+        Assert.True(vx >= map.MinX && vx <= map.MaxX && vy >= map.MinY && vy <= map.MaxY, $"St. Thomas marker ({vx}, {vy}) is off the map {map} in {width}x{height}");
+
+        // An explicit view is the author's own framing: Alaska stays north-west of Washington.
+        var zoomed = GeographicRegions(await RenderMapScriptAsync(Choropleth(", ZOOM = 1")));
+        var alaska = MapExtent(zoomed.Where(r => r.Name == "Alaska").SelectMany(r => r.Points));
+        var washington = MapExtent(zoomed.Where(r => r.Name == "Washington").SelectMany(r => r.Points));
+        Assert.True(alaska.MinY < washington.MinY && alaska.MinX < washington.MinX, $"Alaska {alaska} is not north-west of Washington {washington}");
+    }
+
+    private static async Task<string> RenderMapScriptAsync(string script)
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"map_script_{Guid.NewGuid()}.rptsql");
+        File.WriteAllText(scriptPath, script);
+        try
+        {
+            var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+            var visual = (await service.GetManifestAsync()).Visuals.Single(v => v.Name == "M");
+            Assert.Null(visual.Error);
+            return new SvgChartRenderer().Render(visual)!;
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+        }
+    }
+
+    private static List<(string Name, List<(double X, double Y)> Points)> GeographicRegions(string svg)
+    {
+        static double Num(string s) => double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+        return System.Text.RegularExpressions.Regex.Matches(svg, "class='plot-geographic-region'[^>]* d='(?<d>[^']+)'[^>]*><title>(?<t>[^<:]+)")
+            .Select(m => (m.Groups["t"].Value.Trim(), System.Text.RegularExpressions.Regex.Matches(m.Groups["d"].Value, "[ML] (?<x>[-0-9.]+) (?<y>[-0-9.]+)")
+                .Select(p => (Num(p.Groups["x"].Value), Num(p.Groups["y"].Value))).ToList()))
+            .ToList();
+    }
+
+    private static (double MinX, double MaxX, double MinY, double MaxY) MapExtent(IEnumerable<(double X, double Y)> points)
+    {
+        var list = points.ToList();
+        Assert.NotEmpty(list);
+        return (list.Min(p => p.X), list.Max(p => p.X), list.Min(p => p.Y), list.Max(p => p.Y));
+    }
+
+    [Fact]
     public async Task Map_WithoutZoomOrCenter_FitsUsStatesToThePlot()
     {
         // The projection mapped the whole world onto the plot, so a US_STATES choropleth was
