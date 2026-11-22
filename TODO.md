@@ -48,7 +48,7 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 
 ### 1.1 Release follow-ups
 
-- [ ] **First release through the Marketplace call.** v0.23.0 is the first Release that calls
+- [x] **First release through the Marketplace call.** v0.23.0 is the first Release that calls
   `publish-marketplace.yml`. Keep the Marketplace trusted-publisher entries for both `release.yml`
   and `publish-marketplace.yml` until it has published; then delete the one the OIDC token does not
   use.
@@ -68,6 +68,21 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
   `collect-release-evidence.mjs` from v0.22.0 candidate `0a1507282` (`43786591392` / `43888292114` /
   `43893010630`) in `scripts/checks/test-real-release-output.mjs`. **Left:** the native Windows and
   macOS collectors and the draft-manifest check (about 1 GB of packages per platform).
+- [ ] **W9 Spill Certification group 1 is red (engine; owner: Gemini).** Found 2026-11-22 while
+  certifying MI01; blocks the Merge Gate, and the Supervisor then cancels the MSI run. Two causes,
+  neither in MI01's code (MI01's new test classes reshuffled the shards):
+  1. **Wrong result on the spill path.** SLT `join.test` line 175 returned `3` where `NULL` was
+     expected, and again on retry (run 45021159314, Spill Certification 1/3).
+  2. **Memory-floor refusals read as governor ceilings.** In the app DI the engine's grants come
+     from `BufferManager`, which refuses every grant while machine RAM is below
+     `SystemMemoryFloorMB` (512 MB). A 2-row join then fails "exceeded the memory governor ceiling"
+     (`JoinSemanticsTests`, `MockDbQuerySemanticsTests`, `IntegrationScriptTests`, `WhatIfTests`,
+     doc samples). The lane's retry clears these; the cause is host RAM in the group-1 shards.
+     `MemoryGrantArbiter.Shared` is not the cause: the leak trace added for this
+     (`arbiter-leaks-<pid>.log` in the engine and spill lane evidence) shows about 50 KB of
+     leaked reservations against a 6.8 GB budget.
+  **Finish line:** `join.test:175` fixed with a regression test; the governor errors name the RAM
+  floor when that is the cause; Spill 1/3 green without retries.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
@@ -103,9 +118,11 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
 
 **Design:** [ROADMAP: Windows Installer](ROADMAP.md#windows-installer--the-msi-copies-files-and-registers-services-only).
 
-- [ ] **MI01 Services create and migrate their own configuration.** The Orchestrator and Portal
+- [x] **MI01 Services create and migrate their own configuration.** The Orchestrator and Portal
   generate missing secrets and migrate settings on first start; the `WriteJwt`, `ReadSettings` and
-  `RestoreSettings` custom actions are removed.
+  `RestoreSettings` custom actions are removed. Done 2026-11-22: MSI In-Place Upgrade run
+  `45026731512` (portal and workstation) green on `65e79db52`, with services started after the
+  old product's removal (`55ee6b580`).
 
 ### 2.8 Scale baseline recalibration
 
