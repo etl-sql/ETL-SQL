@@ -486,7 +486,12 @@ switch ($Lane) {
             } else {
                 Join-Path $repoRoot ("release-validation\engine-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
             }
-            Invoke-ShardedTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $evidenceDir engine -Group $EngineShardGroup -GroupCount $EngineShardGroupCount
+            # Name tests that leave MemoryGrantArbiter.Shared reservations behind (see the spill lane).
+            $previousArbiterTrace = $env:ETLSQL_ARBITER_TRACE_DIR
+            $env:ETLSQL_ARBITER_TRACE_DIR = $evidenceDir
+            try {
+                Invoke-ShardedTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $evidenceDir engine -Group $EngineShardGroup -GroupCount $EngineShardGroupCount
+            } finally { $env:ETLSQL_ARBITER_TRACE_DIR = $previousArbiterTrace }
         } else {
             Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter
         }
@@ -591,6 +596,10 @@ switch ($Lane) {
             }
 
             $spillEvidence = Join-Path $repoRoot ("release-validation\spill-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+            # Name the tests that leave MemoryGrantArbiter.Shared reservations behind (they make later
+            # tests in the process fail on the memory governor ceiling); restored with the overrides.
+            $previous['ETLSQL_ARBITER_TRACE_DIR'] = $env:ETLSQL_ARBITER_TRACE_DIR
+            $env:ETLSQL_ARBITER_TRACE_DIR = $spillEvidence
             Invoke-ShardedTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $spillEvidence engine -Group $EngineShardGroup -GroupCount $EngineShardGroupCount
 
             # CI splits the engine shards across workers (Spill Certification); the SLT corpus
