@@ -175,8 +175,8 @@ jobs:
         timeout-minutes: 45
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'engine', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-ResultsDirectory', 'release-validation/build/engine-regression') -EvidenceDirectory release-validation/build/engine-regression-process -TimeoutSeconds 2580
 
-      - name: Run language server tests (Pull Requests)
-        if: github.event_name == 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.test_projects || '["language-server"]'), 'language-server')
+      - name: Run language server tests
+        if: contains(fromJSON(needs.source-preflight.outputs.test_projects || '["language-server"]'), 'language-server')
         shell: pwsh
         timeout-minutes: 22
         env:
@@ -216,8 +216,8 @@ jobs:
         env:
           DOTNET_GCHeapHardLimit: '200000000'
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-smoke.ps1 -ScriptArguments @('-Lane', 'all', '-ProjectGroup', 'portal', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/portal-smoke/tests -TimeoutSeconds 1500
-      - name: Run Portal regression tests (Pull Requests)
-        if: github.event_name == 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.test_projects || '["portal"]'), 'portal')
+      - name: Run Portal regression tests
+        if: contains(fromJSON(needs.source-preflight.outputs.test_projects || '["portal"]'), 'portal')
         shell: pwsh
         timeout-minutes: 35
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'portal', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-ResultsDirectory', 'release-validation/portal-smoke/regression') -EvidenceDirectory release-validation/portal-smoke/regression-process -TimeoutSeconds 1980
@@ -1174,8 +1174,8 @@ jobs:
 
       - name: Run Docker Integration Tests
         shell: pwsh
-        timeout-minutes: 42
-        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'integration', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/integration/tests -TimeoutSeconds 2400
+        timeout-minutes: 52
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'integration', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/integration/tests -TimeoutSeconds 3000
 
       - name: Local and container smoke parity
         shell: pwsh

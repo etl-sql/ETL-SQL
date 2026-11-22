@@ -1,0 +1,66 @@
+# Tests that no push lane runs (v0.23.0 script and test review, RV01 findings 3 and 4):
+#   - ETL-SQL.Tests Category=Performance and Category=ScaleAssessment (engine-lane exclusions),
+#   - ETL-SQL.PerfTests, and
+#   - the deterministic ETL-SQL.FuzzTests smoke.
+# They are slow or memory-heavy, so they run once a night instead of on every push.
+# BenchmarkDotNet (tests/ETL-SQL.Benchmarks) is a measurement tool, not a test, and stays opt-in.
+# scripts/dispatch-nightly-release.mjs requests it nightly on each unreleased release branch once it is
+# registered on the default branch; the schedule covers the default branch; a `nightly-tests/**`
+# branch push runs it at any commit before then.
+name: Nightly Tests
+
+on:
+  schedule:
+    - cron: '41 3 * * *'
+  workflow_dispatch:
+  push:
+    branches: [ 'nightly-tests/**' ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-tests-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+
+jobs:
+  nightly-tests:
+    name: Performance, scale assessment and fuzz smoke
+    runs-on: windows-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        timeout-minutes: 15
+      - uses: ./.github/actions/prepare-test-project
+        with:
+          project: tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj
+          evidence: release-validation/nightly-tests/prepare-engine
+      - name: Build performance and fuzz test projects
+        shell: pwsh
+        timeout-minutes: 20
+        run: |
+          foreach ($project in 'tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj', 'tests/ETL-SQL.FuzzTests/ETL-SQL.FuzzTests.csproj') {
+            ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', $project, '--configuration', 'Release', '-m:1', '-nr:false') -EvidenceDirectory "release-validation/nightly-tests/build-$([IO.Path]::GetFileNameWithoutExtension($project))" -TimeoutSeconds 540
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Run performance and scale assessment tests
+        shell: pwsh
+        timeout-minutes: 75
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'perf', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/nightly-tests/perf -TimeoutSeconds 4440
+      - name: Run fuzz smoke
+        if: always()
+        shell: pwsh
+        timeout-minutes: 20
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'fuzz-smoke', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/nightly-tests/fuzz -TimeoutSeconds 1140
+      - name: Retain nightly test diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: nightly-tests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/nightly-tests/
+          if-no-files-found: warn
+          retention-days: 14

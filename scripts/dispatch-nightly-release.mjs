@@ -29,16 +29,29 @@ export function dispatch(repository, gh = args => {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? '')) throw new Error('A repository owner/name is required.');
   const pages = endpoint => JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${repository}/${endpoint}`])).flat();
   const candidates = activeBranches(pages('git/matching-refs/heads/release/'), pages('releases?per_page=100'));
+  // Nightly Tests runs the lanes no push runs (performance, scale assessment, fuzz smoke). It is
+  // dispatched beside the rehearsal so its result never decides whether a night is green, and only
+  // once GitHub has registered it from the default branch.
+  const registered = JSON.parse(gh(['api', `repos/${repository}/actions/workflows?per_page=100`])).workflows;
+  if (!Array.isArray(registered)) throw new Error('Missing workflow inventory.');
+  const nightlyTests = registered.some(workflow => workflow.path === '.github/workflows/nightly-tests.yml');
+  if (!nightlyTests) console.log('Nightly Tests is not registered on the default branch yet; not requesting it.');
+  const workflows = [
+    { file: 'nightly-release.yml', label: 'nightly', fields: candidate => ['-f', `candidate_sha=${candidate.sha}`] },
+    ...(nightlyTests ? [{ file: 'nightly-tests.yml', label: 'Nightly Tests', fields: () => [] }] : []),
+  ];
   for (const candidate of candidates) {
-    // A still-running nightly for this branch already supplies broad coverage; do not queue copies.
-    const runs = JSON.parse(gh(['api', `repos/${repository}/actions/workflows/nightly-release.yml/runs?event=workflow_dispatch&branch=${encodeURIComponent(candidate.branch)}&per_page=100`])).workflow_runs;
-    if (!Array.isArray(runs)) throw new Error('Missing nightly run inventory.');
-    if (runs.some(run => run.status !== 'completed')) {
-      console.log(`Nightly already active for ${candidate.branch}; leaving it running.`);
-      continue;
+    for (const workflow of workflows) {
+      // A still-running run for this branch already supplies the coverage; do not queue copies.
+      const runs = JSON.parse(gh(['api', `repos/${repository}/actions/workflows/${workflow.file}/runs?event=workflow_dispatch&branch=${encodeURIComponent(candidate.branch)}&per_page=100`])).workflow_runs;
+      if (!Array.isArray(runs)) throw new Error(`Missing ${workflow.label} run inventory.`);
+      if (runs.some(run => run.status !== 'completed')) {
+        console.log(`${workflow.label} already active for ${candidate.branch}; leaving it running.`);
+        continue;
+      }
+      gh(['workflow', 'run', workflow.file, '--repo', repository, '--ref', candidate.branch, ...workflow.fields(candidate)]);
+      console.log(`Requested ${workflow.label} ${candidate.branch} at ${candidate.sha}.`);
     }
-    gh(['workflow', 'run', 'nightly-release.yml', '--repo', repository, '--ref', candidate.branch, '-f', `candidate_sha=${candidate.sha}`]);
-    console.log(`Requested nightly ${candidate.branch} at ${candidate.sha}.`);
   }
   return candidates;
 }

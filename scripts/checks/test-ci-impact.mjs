@@ -176,12 +176,14 @@ const stepIf = (jobBlock, stepName) => {
   assert.ok(match, `Missing condition on workflow step: ${stepName}`);
   return match[1].replaceAll('needs.source-preflight', 'needs.source');
 };
-const prSteps = [
-  [stepIf(buildJob, 'Run engine regression tests (Pull Requests)'), 'engine'],
-  [stepIf(buildJob, 'Run language server tests (Pull Requests)'), 'language-server'],
-  [stepIf(portalJob, 'Run Portal regression tests (Pull Requests)'), 'portal'],
+// Engine Coverage shards the engine lane on every push, so its regression step is for pull requests
+// only. Release work is pushed directly, so the Portal and Language Server steps run on pushes too.
+const regressionSteps = [
+  [stepIf(buildJob, 'Run engine regression tests (Pull Requests)'), 'engine', ['pull_request']],
+  [stepIf(buildJob, 'Run language server tests'), 'language-server', ['pull_request', 'push', 'workflow_dispatch']],
+  [stepIf(portalJob, 'Run Portal regression tests'), 'portal', ['pull_request', 'push', 'workflow_dispatch']],
 ];
-for (const [expression, project] of prSteps) {
+for (const [expression, project, events] of regressionSteps) {
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const selectedProjects of ['', '[]', '["language-server"]', '["portal"]', '["engine"]', '["engine","portal","language-server"]']) {
       const actual = runInNewContext(expression, {
@@ -191,7 +193,7 @@ for (const [expression, project] of prSteps) {
         contains: (items, value) => items.includes(value),
       }, { timeout: 1000 });
       const expectedProjects = selectedProjects ? JSON.parse(selectedProjects) : [project];
-      assert.equal(actual, event === 'pull_request' && expectedProjects.includes(project), `${project}/${event}/${selectedProjects}`);
+      assert.equal(actual, events.includes(event) && expectedProjects.includes(project), `${project}/${event}/${selectedProjects}`);
     }
   }
 }

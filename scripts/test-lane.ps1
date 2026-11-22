@@ -523,9 +523,12 @@ switch ($Lane) {
     "integration" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category=Integration"
         Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "Category=Integration"
+        # Real Docker practice journey (StudioSandboxPracticeTests); needs the sandbox worker image the CI job builds.
+        Invoke-DotNetTest "tests\ETL-SQL.Portal.BrowserTests\ETL-SQL.Portal.BrowserTests.csproj" "Category=Integration"
     }
     "perf" {
-        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category=Performance"
+        # Scale assessments are engine-lane exclusions too; this lane is their only runner (nightly-tests.yml).
+        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category=Performance|Category=ScaleAssessment"
         Invoke-DotNetTest "tests\ETL-SQL.PerfTests\ETL-SQL.PerfTests.csproj" "Category=Performance"
     }
     "full" {

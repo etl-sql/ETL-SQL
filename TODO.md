@@ -100,9 +100,10 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
   the review criteria and `RV01`–`RV05` slice estimate (14–15 developer-days) in
   [v0.23.0-script-and-test-review-plan.md](docs/releases/v0.23.0-script-and-test-review-plan.md).
   Owner accepted the plan 2026-11-22.
-- [ ] **RV01 Lane-membership and orphan audit** (`scripts/` and all 9 test projects). Every script
-  has a live caller or a retirement note; every `scripts/checks/` file runs in preflight or
-  consumer contracts; every test class belongs to at least one CI or Release Evidence lane. S
+- [x] **RV01 Lane-membership and orphan audit** (`scripts/` and all 9 test projects). Done
+  2026-11-22: 10 findings, all fixed or waived ([findings log](docs/releases/v0.23.0-script-and-test-review-plan.md#rv01-findings-2026-11-22)). Portal and Language
+  Server regression now run on push; new `nightly-tests.yml` (perf, scale assessment, fuzz smoke).
+  **Left:** a first green `nightly-tests.yml` run (push a `nightly-tests/**` branch). S
 - [ ] **RV02 Engine, language, connector and corpus tests** (523 `.cs` files in `ETL-SQL.Tests`,
   `SqlLogicTests`, `FuzzTests`, `tests/Integration/`). M
 - [ ] **RV03 Reporting, UI, Language Server and browser checks** (235 + 14 `.cs` files,

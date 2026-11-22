@@ -16,18 +16,33 @@ const refs = [ref('0.20.0'), ref('0.21.0'), ref('0.22.0'), ref('0.100.0'), ref('
 assert.deepEqual(activeBranches(refs, releases).map(r => r.branch), ['release/v0.22.0', 'release/v0.100.0']);
 assert.throws(() => activeBranches(refs, []), /baseline/);
 assert.throws(() => activeBranches([{ ...ref('0.22.0'), object: { sha: 'bad' } }], releases), /SHA/);
+// Nightly Tests (nightly-tests.yml) is dispatched beside the rehearsal, never inside it: its slow
+// performance and fuzz lanes must not decide whether a night is green. It is skipped, not failed,
+// until the workflow is registered on the default branch.
 for (const status of ['in_progress', 'queued', 'completed']) {
-  const writes = [];
-  dispatch('owner/repo', args => {
-    if (args[0] === 'workflow') { writes.push(args); return ''; }
-    const endpoint = args.at(-1);
-    if (endpoint.includes('matching-refs')) return JSON.stringify([[ref('0.22.0')]]);
-    if (endpoint.includes('releases?')) return JSON.stringify([releases]);
-    return JSON.stringify({ workflow_runs: [{ status }] });
-  });
-  assert.equal(writes.length, status === 'completed' ? 1 : 0);
-  if (writes.length) assert.deepEqual(writes[0].slice(-4), ['--ref', 'release/v0.22.0', '-f', `candidate_sha=${sha}`]);
+  for (const registered of [false, true]) {
+    const writes = [];
+    dispatch('owner/repo', args => {
+      if (args[0] === 'workflow') { writes.push(args); return ''; }
+      const endpoint = args.at(-1);
+      if (endpoint.includes('matching-refs')) return JSON.stringify([[ref('0.22.0')]]);
+      if (endpoint.includes('releases?')) return JSON.stringify([releases]);
+      if (endpoint.includes('actions/workflows?')) return JSON.stringify({ workflows: registered ? [{ path: '.github/workflows/nightly-tests.yml' }] : [] });
+      return JSON.stringify({ workflow_runs: [{ status }] });
+    });
+    const expected = status === 'completed' ? (registered ? 2 : 1) : 0;
+    assert.equal(writes.length, expected, `${status}/${registered}`);
+    if (writes.length) assert.deepEqual(writes[0].slice(2), ['nightly-release.yml', '--repo', 'owner/repo', '--ref', 'release/v0.22.0', '-f', `candidate_sha=${sha}`]);
+    if (writes.length === 2) assert.deepEqual(writes[1].slice(2), ['nightly-tests.yml', '--repo', 'owner/repo', '--ref', 'release/v0.22.0']);
+  }
 }
+assert.throws(() => dispatch('owner/repo', args => {
+  const endpoint = args.at(-1);
+  if (endpoint.includes('matching-refs')) return JSON.stringify([[ref('0.22.0')]]);
+  if (endpoint.includes('releases?')) return JSON.stringify([releases]);
+  if (endpoint.includes('actions/workflows?')) return JSON.stringify({});
+  return JSON.stringify({ workflow_runs: [] });
+}), /workflow inventory/);
 assert.throws(() => dispatch('owner/repo', () => { throw new Error('API unavailable'); }), /API unavailable/);
 // Rehearsal: starts each certification once, waits, then runs the release collectors.
 const repo = 'owner/repo', branch = 'release/v0.22.0', startedAt = '2026-11-08T06:30:00Z';
