@@ -123,6 +123,21 @@ public static class InstalledConfigurationBootstrap
             result |= InstalledBootstrapResult.SecretsMoved;
         }
 
+        // A v0.22.0 appsettings.json kept by the upgrade holds every v0.22.0 default, which would hide
+        // any default a later release changes. Reduce it to the operator's edits, once: afterwards a
+        // value equal to an old default is a deliberate choice.
+        if (IsEmpty(Get(secrets, SlimmedMarkerPath)))
+        {
+            stage = "slim";
+            if (RemoveLeavesEqualTo(operatorFile, ShippedDefaults()))
+            {
+                operatorChanged = true;
+                result |= InstalledBootstrapResult.Slimmed;
+            }
+            Set(secrets, SlimmedMarkerPath, SlimmedFromVersion);
+            secretsChanged = true;
+        }
+
         stage = "generate";
         foreach (var path in new[] { "Portal:Jwt:Secret", "Portal:Dataset:AtRestKey" })
         {
@@ -184,6 +199,43 @@ public static class InstalledConfigurationBootstrap
             result |= InstalledBootstrapResult.FirstRunWritten;
         }
         return result;
+    }
+
+    /// <summary>
+    /// Removes from <paramref name="operatorFile"/> every value equal to the same path in
+    /// <paramref name="shippedDefaults"/> (arrays compare whole), and objects that this leaves empty.
+    /// An object the operator wrote empty on purpose stays.
+    /// </summary>
+    internal static bool RemoveLeavesEqualTo(JsonObject operatorFile, JsonObject shippedDefaults)
+    {
+        var changed = false;
+        foreach (var (key, value) in new List<KeyValuePair<string, JsonNode?>>(operatorFile))
+        {
+            if (!shippedDefaults.TryGetPropertyValue(key, out var shipped)) continue;
+            if (value is JsonObject child && shipped is JsonObject shippedChild && child.Count > 0)
+            {
+                if (!RemoveLeavesEqualTo(child, shippedChild)) continue;
+                changed = true;
+                if (child.Count == 0) operatorFile.Remove(key);
+            }
+            else if (JsonNode.DeepEquals(value, shipped))
+            {
+                operatorFile.Remove(key);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private const string SlimmedMarkerPath = "Installer:SlimmedFrom";
+    private const string SlimmedFromVersion = "0.22.0";
+
+    private static JsonObject ShippedDefaults()
+    {
+        using var stream = typeof(InstalledConfigurationBootstrap).Assembly
+            .GetManifestResourceStream("ETL_SQL.appsettings.v0.22.0.json")
+            ?? throw new InvalidDataException();
+        return JsonNode.Parse(stream, documentOptions: ReadOptions) as JsonObject ?? throw new InvalidDataException();
     }
 
     private static JsonObject ReadObject(string path) =>

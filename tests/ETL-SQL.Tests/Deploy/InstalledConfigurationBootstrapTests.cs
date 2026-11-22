@@ -114,7 +114,8 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
               "UpgradeSentinel": { "Value": "kept" }
             }
             """);
-        WriteSecrets("""{ "Portal": { "Jwt": { "Secret": "protected-wins" } } }""");
+        // Already slimmed, so this checks the move alone (slimming would drop the emptied values).
+        WriteSecrets("""{ "Portal": { "Jwt": { "Secret": "protected-wins" } }, "Installer": { "SlimmedFrom": "0.22.0" } }""");
 
         Assert.True(Run().HasFlag(InstalledBootstrapResult.SecretsMoved));
 
@@ -223,6 +224,60 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
         Run();
         Assert.Equal("kept-key", Get(ReadSecrets(), "Orchestrator:ApiKey"));
         Assert.Equal(Planted, Get(ReadSecrets(), "Portal:Jwt:Secret"));
+    }
+
+    [WindowsFact]
+    public void V022File_KeepsOnlyRealEdits()
+    {
+        var file = V022Defaults();
+        file["Portal"]!["Surface"] = "ReportOnly";
+        file["UpgradeSentinel"] = new JsonObject { ["Value"] = "kept" };
+        var zones = file["Security"]!["ApprovedSafeZones"]!.AsArray();
+        zones.Add(_install);
+        WriteOperator(file.ToJsonString());
+
+        var result = Run();
+
+        Assert.True(result.HasFlag(InstalledBootstrapResult.Slimmed));
+        var slimmed = JsonNode.Parse(File.ReadAllText(Path.Combine(_install, "appsettings.json")))!.AsObject();
+        Assert.Equal(["Portal", "Security", "UpgradeSentinel"], slimmed.Select(p => p.Key).Order());
+        Assert.Equal(["Surface"], slimmed["Portal"]!.AsObject().Select(p => p.Key));
+        Assert.Equal(["ApprovedSafeZones"], slimmed["Security"]!.AsObject().Select(p => p.Key));
+        Assert.Contains(_install, slimmed["Security"]!["ApprovedSafeZones"]!.AsArray().Select(z => (string?)z));
+        Assert.Equal("kept", Get(slimmed, "UpgradeSentinel:Value"));
+        Assert.Equal("0.22.0", Get(ReadSecrets(), "Installer:SlimmedFrom"));
+    }
+
+    [WindowsFact]
+    public void SlimmingRunsOnce()
+    {
+        WriteOperator(V022Defaults().ToJsonString());
+        Run();
+        GrantCurrentUser(Path.Combine(_install, ConfigurationExtensions.InstalledSecretsFileName));
+        var pinned = V022Defaults()["AllowedHosts"]!.ToJsonString();
+        WriteOperator($$"""{ "AllowedHosts": {{pinned}} }""");
+
+        Assert.False(Run().HasFlag(InstalledBootstrapResult.Slimmed));
+
+        Assert.Equal($$"""{ "AllowedHosts": {{pinned}} }""", File.ReadAllText(Path.Combine(_install, "appsettings.json")));
+    }
+
+    [WindowsFact]
+    public void FreshInstall_SetsMarkerWithoutSlimming()
+    {
+        WriteOperator("{}");
+
+        Assert.False(Run().HasFlag(InstalledBootstrapResult.Slimmed));
+
+        Assert.Equal("0.22.0", Get(ReadSecrets(), "Installer:SlimmedFrom"));
+        Assert.Equal("{}", File.ReadAllText(Path.Combine(_install, "appsettings.json")));
+    }
+
+    private static JsonObject V022Defaults()
+    {
+        using var stream = typeof(InstalledConfigurationBootstrap).Assembly
+            .GetManifestResourceStream("ETL_SQL.appsettings.v0.22.0.json")!;
+        return JsonNode.Parse(stream)!.AsObject();
     }
 
     private InstalledBootstrapResult Run(string? registered = "") =>

@@ -20,6 +20,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The v0.22.0 shipped settings: the MSI bootstrap removes them from a kept operator file once (MI01). -->
+    <EmbeddedResource Include="Common\Resources\appsettings.v0.22.0.json" LogicalName="ETL_SQL.appsettings.v0.22.0.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Core Language Statements & Flow Control (Keywords Category) -->
     <EmbeddedResource Include="..\..\docs\reference\statements\**\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\reference\statements\session-control\lineage.md;..\..\docs\reference\statements\**\README.md" />
     <EmbeddedResource Include="..\..\docs\reference\control-flow\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\reference\control-flow\README.md" />
