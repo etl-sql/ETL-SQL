@@ -67,6 +67,7 @@ try
     builder.Configuration
         .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
         .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+        .AddInstallerLayers(AppDomain.CurrentDomain.BaseDirectory)
         .AddInstalledSecrets(AppDomain.CurrentDomain.BaseDirectory)
         .AddEnvironmentVariables()
         .AddSecureConfiguration()

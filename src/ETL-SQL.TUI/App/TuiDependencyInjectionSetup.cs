@@ -62,6 +62,7 @@ namespace ETL_SQL.TUI
             var configuration = new ConfigurationBuilder()
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                .AddInstallerLayers(AppDomain.CurrentDomain.BaseDirectory)
                 .AddEnvironmentVariables()
                 .AddEnterprisePolicy()
                 .Build();

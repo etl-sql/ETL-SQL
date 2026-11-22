@@ -59,12 +59,52 @@ public static class ConfigurationExtensions
         return builder;
     }
 
+    /// <summary>
+    /// The release defaults in an MSI install. The MSI replaces this file on every upgrade and never
+    /// touches appsettings.json, which holds only the operator's settings there.
+    /// </summary>
+    public const string DefaultsFileName = "appsettings.defaults.json";
+
+    /// <summary>
+    /// Layers <see cref="DefaultsFileName"/> and then the installer's registry values from
+    /// <paramref name="directory"/> directly below the first appsettings*.json source, so the
+    /// operator's appsettings.json overrides both. Outside an MSI install neither exists and nothing
+    /// changes.
+    /// </summary>
+    public static IConfigurationBuilder AddInstallerLayers(this IConfigurationBuilder builder, string directory, IInstallerRegistry? registry = null)
+    {
+        var defaults = new Microsoft.Extensions.Configuration.Json.JsonConfigurationSource
+        {
+            Path = System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, DefaultsFileName)),
+            Optional = true,
+            ReloadOnChange = true,
+        };
+        defaults.ResolveFileProvider();
+        var installer = new InstallerRegistryConfigurationSource(directory, registry ?? WindowsInstallerRegistry.Instance);
+
+        var sources = builder.Sources;
+        var firstAppSettings = sources.Count;
+        for (var i = 0; i < sources.Count; i++)
+        {
+            if (sources[i] is Microsoft.Extensions.Configuration.Json.JsonConfigurationSource json
+                && IsAppSettingsFile(json.Path))
+            {
+                firstAppSettings = i;
+                break;
+            }
+        }
+        sources.Insert(firstAppSettings, installer);
+        sources.Insert(firstAppSettings, defaults);
+        return builder;
+    }
+
     private static bool IsAppSettingsFile(string? path)
     {
         var name = System.IO.Path.GetFileName(path ?? string.Empty);
         return name.StartsWith("appsettings", StringComparison.OrdinalIgnoreCase)
             && name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(name, InstalledSecretsFileName, StringComparison.OrdinalIgnoreCase);
+            && !string.Equals(name, InstalledSecretsFileName, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(name, DefaultsFileName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool CanRead(string path)

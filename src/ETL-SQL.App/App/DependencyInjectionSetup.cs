@@ -65,6 +65,7 @@ namespace ETL_SQL.App
             var builder = new ConfigurationBuilder()
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                .AddInstallerLayers(AppDomain.CurrentDomain.BaseDirectory)
                 .AddInstalledSecrets(AppDomain.CurrentDomain.BaseDirectory)
                 .AddEnvironmentVariables();
             if (effectiveOverrides.Count > 0)

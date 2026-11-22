@@ -73,6 +73,7 @@ namespace ETL_SQL.LSP
                         var configuration = new ConfigurationBuilder()
                             .SetBasePath(AppContext.BaseDirectory)
                             .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                            .AddInstallerLayers(AppContext.BaseDirectory)
                             .AddEnterprisePolicy()
                             .Build();
                         services.AddSingleton<IConfiguration>(configuration);

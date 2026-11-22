@@ -41,6 +41,8 @@ if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindows
 // this also sets the content root to the executable's directory.
 builder.Host.UseWindowsService(o => o.ServiceName = "ETL-SQL Portal");
 #endif
+// An MSI install keeps the release defaults and the installer's choices below appsettings.json.
+builder.Configuration.AddInstallerLayers(System.AppContext.BaseDirectory);
 // Installed service secrets sit beside the executable, in a file only the service can read.
 builder.Configuration.AddInstalledSecrets(System.AppContext.BaseDirectory);
 builder.Configuration.AddSecureConfiguration();
