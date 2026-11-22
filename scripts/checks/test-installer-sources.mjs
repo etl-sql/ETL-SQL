@@ -22,12 +22,10 @@ try {
   const property = '<Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" Secure="yes"/>';
   const orchStop = '<ServiceControl Id="StopOrch" Name="ETL-SQL-Orchestrator" Stop="both" Remove="uninstall" Wait="yes"/>';
   const portalStop = '<ServiceControl Id="StopPortal" Name="ETL-SQL-Portal" Stop="both" Remove="uninstall" Wait="yes"/>';
-  const xml = `<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"><Product>${property}${orchStop}${portalStop}<File Source="$(var.PublishDir)\\app.exe"/><File Source="..\\..\\LICENSE.md"/><Binary SourceFile="installer-actions.js"/></Product></Wix>`;
+  const xml = `<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"><Product>${property}${orchStop}${portalStop}<File Source="$(var.PublishDir)\\app.exe"/><File Source="..\\..\\LICENSE.md"/></Product></Wix>`;
   write(installer + 'Installer.wxs', xml);
   write('LICENSE.md', 'fixture');
   write('scripts/build-msi.ps1', 'throw "Must never execute"');
-  write(installer + 'configure-portal-jwt.ps1', 'throw "Must never execute"');
-  write(installer + 'installer-actions.js', 'throw new Error("Must never execute");');
   const passed = run();
   assert.equal(passed.status, 0, passed.stdout + passed.stderr);
   // Missing, weakened (DisableShutdown still shut the runner host's provjobd down), wrong-case and
@@ -56,23 +54,23 @@ try {
   assert.match(rejectedUtilExt.stdout, /must not link WixUtilExtension/);
   write('scripts/build-msi.ps1', 'throw "Must never execute"');
   write(installer + 'Installer.wxs', xml.replace('LICENSE.md', 'missing.md'));
-  write(installer + 'configure-portal-jwt.ps1', 'function Broken {');
-  write(installer + 'installer-actions.js', 'function broken( {');
+  write('scripts/build-msi.ps1', 'function Broken {');
   const failed = run();
   assert.equal(failed.status, 1);
-  for (const name of ['missing.md', 'configure-portal-jwt.ps1', 'installer-actions.js']) assert.ok(failed.stdout.includes(name), failed.stdout);
+  for (const name of ['missing.md', 'build-msi.ps1']) assert.ok(failed.stdout.includes(name), failed.stdout);
   write(installer + 'Installer.wxs', '<Wix>');
   assert.match(run().stdout, /FAIL Installer.wxs/);
   write(installer + 'Installer.wxs', xml.replace('$(var.PublishDir)', '$(var.Unknown)'));
   assert.match(run().stdout, /Unresolved source variable/);
   write(installer + 'Installer.wxs', xml);
-  write(installer + 'configure-portal-jwt.ps1', 'throw "Must never execute"');
-  write(installer + 'installer-actions.js', 'throw new Error("Must never execute");');
+  write('scripts/build-msi.ps1', 'throw "Must never execute"');
   assert.equal(run().status, 0);
   // COMPAT_BREAK: 0.22 — resurrected no-op/unsafe installers fail the source gate.
   for (const retired of ['scripts/install.ps1', 'scripts/install.sh',
     'src/ETL-SQL.Orchestrator.Service/install-service-windows.ps1',
-    'src/ETL-SQL.Orchestrator.Service/install-service-linux.sh']) {
+    'src/ETL-SQL.Orchestrator.Service/install-service-linux.sh',
+    // COMPAT_BREAK: 0.23 — the MSI runs no script custom actions (MI01).
+    'src/ETL-SQL.Installer/configure-portal-jwt.ps1', 'src/ETL-SQL.Installer/installer-actions.js']) {
     write(retired, 'Retired fixture: must never execute');
     const rejected = run();
     assert.equal(rejected.status, 1, `${retired} was accepted`);

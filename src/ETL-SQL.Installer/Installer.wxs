@@ -10,13 +10,12 @@
              mode, so it is not enough. ServiceControl (Stop="both" Wait="yes") stops our services. -->
         <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" Secure="yes" />
 
-        <!-- Default schedule (afterInstallValidate). RemoveExistingProducts must directly follow
-             InstallValidate or InstallInitialize (error 2613), so the installed configuration is
-             read by an immediate action (ReadSettings) rather than copied by a deferred one. -->
-        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
-        <!-- The installed appsettings.json can hold an operator's secrets: keep the property out
-             of the verbose log (the actions that carry it set HideTarget). -->
-        <Property Id="PREVIOUS_SETTINGS" Hidden="yes" />
+        <!-- The old product is removed after the new one is installed. Every component keeps its
+             GUID across releases (Guid="*" is derived from the target path), so a shared component
+             is reference-counted rather than deleted. That is how the operator's appsettings.json
+             (NeverOverwrite, below) survives an upgrade without any custom action reading it first.
+             The upgrade certification compares the two packages' component GUIDs (MI01). -->
+        <MajorUpgrade Schedule="afterInstallExecute" DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
         <MediaTemplate EmbedCab="yes" />
         <!-- Publish the resolved folder in Add/Remove Programs so upgrade certification and
              operators can locate the installed binaries without assuming Program Files. -->
@@ -71,7 +70,7 @@
                                        Team and above require a Portal for identity)
              INSTALL_REPORT_PORTAL  — Reporting catalog, designer, and data-steward
                                       surfaces; can be hosted on a separate server
-             PORTAL_SURFACE         — Runtime flag written to appsettings.json controlling
+             PORTAL_SURFACE         — Informational runtime flag (the Portal computes Portal:Surface) for
                                       which surfaces the installed Portal binary activates.
                                       Values: "All" | "AdminOnly" | "ReportOnly"
                                       Decided here so the installer feature and the
@@ -85,18 +84,25 @@
         <!-- Admin Portal sub-surface selectors (both default on when Admin Portal is selected).
              These let an operator install only the Orchestrator job-management UI, only the
              Data Steward / governance UI, or both — without changing which binary is installed.
-             The PORTAL_SURFACE value is derived from these in configure-portal-jwt.ps1.
+             The Portal derives Portal:Surface from them (InstallerRegistryConfigurationSource).
 
              INSTALL_PORTAL_ORCH_SURFACE    — Orchestrator tab: job table, triage board, DAG,
                                               run history, schedule management, watermarks.
              INSTALL_PORTAL_STEWARD_SURFACE — Data Steward tab: data-quality queue, quarantine,
                                               lineage, governance policies.
-        -->
-        <Property Id="INSTALL_PORTAL_ORCH_SURFACE"   Value="1" Secure="yes" />
-        <Property Id="INSTALL_PORTAL_STEWARD_SURFACE" Value="1" Secure="yes" />
 
-        <!-- PORTAL_SURFACE — written to Portal:Surface in appsettings.json.
-             Derived from the four selectors above; set by configure-portal-jwt.ps1.
+             The six sub-choices (these two and the module flags below) are recorded under
+             HKLM\Software\ETL-SQL\Install and read back here, so an upgrade keeps the previous
+             choices unless the command line sets them. They have no @Value: "1" is applied after
+             AppSearch when nothing is recorded or given (see the RememberedChoice actions). -->
+        <Property Id="INSTALL_PORTAL_ORCH_SURFACE" Secure="yes">
+            <RegistrySearch Id="Remembered_OrchSurface" Root="HKLM" Key="Software\ETL-SQL\Install" Name="OrchSurface" Type="raw" Win64="yes" />
+        </Property>
+        <Property Id="INSTALL_PORTAL_STEWARD_SURFACE" Secure="yes">
+            <RegistrySearch Id="Remembered_StewardSurface" Root="HKLM" Key="Software\ETL-SQL\Install" Name="StewardSurface" Type="raw" Win64="yes" />
+        </Property>
+
+        <!-- PORTAL_SURFACE — informational; the Portal computes Portal:Surface from the selectors.
              Valid values (all combinations):
                "All"                    — Report + Orchestrator + DataSteward
                "OrchestratorOnly"       — Orchestrator job UI only, no reports or steward
@@ -108,12 +114,22 @@
         -->
         <Property Id="PORTAL_SURFACE" Value="All" Secure="yes" />
 
-        <!-- Legacy aliases for the JWT custom action — kept so configure-portal-jwt.ps1
-             continues to receive familiar flag names in its CustomActionData string. -->
-        <Property Id="INSTALL_PORTAL_REPORTING"  Value="1" Secure="yes" />
-        <Property Id="INSTALL_PORTAL_DESIGNER"   Value="1" Secure="yes" />
-        <Property Id="INSTALL_PORTAL_SCHEDULING" Value="1" Secure="yes" />
-        <Property Id="INSTALL_PORTAL_OPERATIONS" Value="1" Secure="yes" />
+        <!-- Portal module flags, recorded as Portal:Modules:* through the registry. -->
+        <Property Id="INSTALL_PORTAL_REPORTING" Secure="yes">
+            <RegistrySearch Id="Remembered_Reporting" Root="HKLM" Key="Software\ETL-SQL\Install" Name="Reporting" Type="raw" Win64="yes" />
+        </Property>
+        <Property Id="INSTALL_PORTAL_DESIGNER" Secure="yes">
+            <RegistrySearch Id="Remembered_Designer" Root="HKLM" Key="Software\ETL-SQL\Install" Name="Designer" Type="raw" Win64="yes" />
+        </Property>
+        <Property Id="INSTALL_PORTAL_SCHEDULING" Secure="yes">
+            <RegistrySearch Id="Remembered_Scheduling" Root="HKLM" Key="Software\ETL-SQL\Install" Name="Scheduling" Type="raw" Win64="yes" />
+        </Property>
+        <Property Id="INSTALL_PORTAL_OPERATIONS" Secure="yes">
+            <RegistrySearch Id="Remembered_Operations" Root="HKLM" Key="Software\ETL-SQL\Install" Name="Operations" Type="raw" Win64="yes" />
+        </Property>
+        <!-- Set by the UI sequence once its dialogs own the choices, so the execute sequence takes an
+             unchecked box (property absent) as "off" instead of re-applying a remembered "1". -->
+        <Property Id="CHOICES_RESOLVED" Secure="yes" />
 
         <!-- ═══════════════════════════════════════════════════════════════
              Feature tree.
@@ -154,6 +170,7 @@
                 <ComponentGroupRef Id="PortalWwwroot" />
                 <ComponentRef Id="PathEnvironment" />
                 <ComponentRef Id="AppSettings" />
+                <ComponentRef Id="AppSettingsDefaults" />
             </Feature>
 
             <!-- ── Orchestrator Service ───────────────────────────────────────
@@ -171,6 +188,8 @@
                 <Condition Level="0"><![CDATA[INSTALL_ORCHESTRATOR <> "1"]]></Condition>
                 <ComponentRef Id="Orchestrator_EXE" />
                 <ComponentRef Id="AppSettings" />
+                <ComponentRef Id="AppSettingsDefaults" />
+                <ComponentRef Id="InstallRegistryCore" />
 
                 <!-- ── Admin Portal (sub-feature of Orchestrator) ─────────────
                      The orchestration, data-steward, and admin surfaces of the
@@ -189,8 +208,10 @@
                          Description="Orchestrator administration, job triage, data-steward, and governance surfaces of the Portal, co-located with the Orchestrator for identity exchange. Installed as a Windows Service (http://localhost:5002).">
                     <Condition Level="0"><![CDATA[INSTALL_ADMIN_PORTAL <> "1"]]></Condition>
                     <ComponentRef Id="Portal_EXE" />
-                    <ComponentRef Id="PortalJwtScript" />
                     <ComponentRef Id="AppSettings" />
+                    <ComponentRef Id="AppSettingsDefaults" />
+                    <ComponentRef Id="InstallRegistryCore" />
+                    <ComponentRef Id="InstallRegistryChoices" />
                     <ComponentGroupRef Id="PortalWwwroot" />
                 </Feature>
             </Feature>
@@ -211,8 +232,10 @@
                 <Condition Level="0"><![CDATA[INSTALL_REPORT_PORTAL <> "1"]]></Condition>
                 <!-- If AdminPortal is not selected, we still need the Portal binary and assets. -->
                 <ComponentRef Id="Portal_EXE" />
-                <ComponentRef Id="PortalJwtScript" />
                 <ComponentRef Id="AppSettings" />
+                <ComponentRef Id="AppSettingsDefaults" />
+                <ComponentRef Id="InstallRegistryCore" />
+                <ComponentRef Id="InstallRegistryChoices" />
                 <ComponentGroupRef Id="PortalWwwroot" />
             </Feature>
         </Feature>
@@ -253,9 +276,36 @@
                 <File Id="third_party_notices_md" Source="..\..\THIRD-PARTY-NOTICES.md" KeyPath="yes" />
             </Component>
 
-            <!-- Single shared configuration file -->
-            <Component Id="AppSettings" Guid="*" Win64="yes">
-                <File Id="appsettings_json" Source="$(var.PublishDir)\appsettings.json" KeyPath="yes" />
+            <!-- The operator's settings file. Installed once (as "{}") and never overwritten, so an
+                 upgrade keeps every edit; with the late RemoveExistingProducts the old product's
+                 copy (same Id, same target, so the same auto-GUID) is reference-counted, not
+                 deleted. Uninstall removes it, as before. Keep the Id and target unchanged. -->
+            <Component Id="AppSettings" Guid="*" Win64="yes" NeverOverwrite="yes">
+                <File Id="appsettings_json" Source="operator-appsettings.json" Name="appsettings.json" KeyPath="yes" />
+            </Component>
+
+            <!-- The release defaults, replaced on every upgrade. Every host loads them below
+                 appsettings.json (ConfigurationExtensions.AddInstallerLayers). -->
+            <Component Id="AppSettingsDefaults" Guid="*" Win64="yes">
+                <File Id="appsettings_defaults_json" Source="$(var.PublishDir)\appsettings.json" Name="appsettings.defaults.json" KeyPath="yes" />
+            </Component>
+
+            <!-- Install facts and choices as native registry values (no installer script). The
+                 hosts read them as configuration below appsettings.json, only when InstallFolder is
+                 their own folder. OrchestratorDatabasePath is the LocalSystem profile's default so
+                 `admin backup`, run as the operator, finds the database the services write. -->
+            <Component Id="InstallRegistryCore" Guid="ba114b34-f3b0-4c50-b0a6-a66c00d75580" Win64="yes">
+                <RegistryValue Root="HKLM" Key="Software\ETL-SQL\Install" Name="InstallFolder" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+                <RegistryValue Root="HKLM" Key="Software\ETL-SQL\Install" Name="OrchestratorDatabasePath" Type="string" Value="[WindowsFolder]System32\config\systemprofile\AppData\Local\etlsql-data\etlsql.db" />
+            </Component>
+            <Component Id="InstallRegistryChoices" Guid="a1e1e565-861d-4d2e-9f48-2c62754461c9" Win64="yes">
+                <RegistryValue Root="HKLM" Key="Software\ETL-SQL\Install" Name="OrchSurface" Type="string" Value="[REG_INSTALL_PORTAL_ORCH_SURFACE]" KeyPath="yes" />
+                <RegistryValue Root="HKLM" Key="Software\ETL-SQL\Install" Name="StewardSurface" Type="string" Value="[REG_INSTALL_PORTAL_STEWARD_SURFACE]" />
+                <RegistryValue Root="HKLM" Key="Software\ETL-SQL\Install" Name="ReportPortal" Type="string" Value="[REG_INSTALL_REPORT_PORTAL]" />
+                <RegistryValue Root="HKLM" Key="Software\ETL-SQL\Install" Name="Reporting" Type="string" Value="[REG_INSTALL_PORTAL_REPORTING]" />
+                <RegistryValue Root="HKLM" Key="Software\ETL-SQL\Install" Name="Designer" Type="string" Value="[REG_INSTALL_PORTAL_DESIGNER]" />
+                <RegistryValue Root="HKLM" Key="Software\ETL-SQL\Install" Name="Scheduling" Type="string" Value="[REG_INSTALL_PORTAL_SCHEDULING]" />
+                <RegistryValue Root="HKLM" Key="Software\ETL-SQL\Install" Name="Operations" Type="string" Value="[REG_INSTALL_PORTAL_OPERATIONS]" />
             </Component>
 
             <!-- Orchestrator service (pinned to port 5001 via the urls argument) -->
@@ -303,11 +353,6 @@
                 <ServiceControl Id="StopService_Portal" Stop="both" Remove="uninstall" Name="ETL-SQL-Portal" Wait="yes" />
             </Component>
 
-            <!-- JWT bootstrap script (used by the deferred WriteJwt custom action) -->
-            <Component Id="PortalJwtScript" Guid="*" Win64="yes">
-                <File Id="configure_portal_jwt_ps1" Source="configure-portal-jwt.ps1" KeyPath="yes" />
-            </Component>
-
             <!-- PATH entry for the workstation authoring tools -->
             <Component Id="PathEnvironment" Guid="dc70ead1-c4db-42f1-a8e1-7a35cc06cf3f" Win64="yes">
                 <RegistryValue Root="HKLM" Key="Software\ETL-SQL" Name="PathConfigured" Value="1" Type="integer" KeyPath="yes" />
@@ -315,19 +360,32 @@
             </Component>
         </DirectoryRef>
 
-        <!-- Custom actions (JScript). Deferred actions only see CustomActionData, so the install
-             folder path is marshaled in via the matching type-51 SetWriteJwtData/SetRestoreSettingsData.
+        <!-- No installer code runs: the services create and migrate their own configuration on
+             first start (InstalledConfigurationBootstrap, MI01). The actions below only set
+             properties (type 51).
 
-             PORTAL_SURFACE is forwarded so configure-portal-jwt.ps1 can write the correct
-             Portal:Surface value in appsettings.json. -->
-        <Binary Id="InstallerActionsJs" SourceFile="installer-actions.js" />
-        <CustomAction Id="SetWriteJwtData" Property="WriteJwt"
-                      Value="[INSTALLFOLDER]|UPGRADE=[WIX_UPGRADE_DETECTED]|INSTALL_PORTAL=[INSTALL_ADMIN_PORTAL]|REPORTING=[INSTALL_PORTAL_REPORTING]|DESIGNER=[INSTALL_PORTAL_DESIGNER]|SCHEDULING=[INSTALL_PORTAL_SCHEDULING]|OPERATIONS=[INSTALL_PORTAL_OPERATIONS]|ORCH_SURFACE=[INSTALL_PORTAL_ORCH_SURFACE]|STEWARD_SURFACE=[INSTALL_PORTAL_STEWARD_SURFACE]|REPORT_PORTAL=[INSTALL_REPORT_PORTAL]"
-                      Execute="immediate" />
-        <CustomAction Id="WriteJwt" BinaryKey="InstallerActionsJs" JScriptCall="ConfigureJwt" Execute="deferred" Impersonate="no" Return="check" />
-        <CustomAction Id="ReadSettings" BinaryKey="InstallerActionsJs" JScriptCall="ReadSettings" Execute="immediate" Return="check" HideTarget="yes" />
-        <CustomAction Id="SetRestoreSettingsData" Property="RestoreSettings" Value="[INSTALLFOLDER]|[PREVIOUS_SETTINGS]" Execute="immediate" HideTarget="yes" />
-        <CustomAction Id="RestoreSettings" BinaryKey="InstallerActionsJs" JScriptCall="RestoreSettings" Execute="deferred" Impersonate="no" Return="check" HideTarget="yes" />
+             Remembered choices. AppSearch overwrites a property given on the command line, and an
+             unchecked box leaves its property unset, so for each sub-choice, in both sequences:
+               Capture  CMDLINE_X = X               before AppSearch (the command line or the UI's value)
+               Restore  X = CMDLINE_X               after AppSearch, when one was given
+               Clear    X unset                     when the UI already decided and left it unchecked
+               Default  X = "1"                     when nothing was given or recorded (fresh install)
+               Off      X unset when X = "0"        a recorded or given "0" must not tick the box
+             REG_X ("1"/"0") is what the registry records. ETLSQL_UNSET is never defined, so
+             "[ETLSQL_UNSET]" formats to empty, which removes the property. -->
+
+        <?foreach CHOICE in INSTALL_PORTAL_ORCH_SURFACE;INSTALL_PORTAL_STEWARD_SURFACE;INSTALL_PORTAL_REPORTING;INSTALL_PORTAL_DESIGNER;INSTALL_PORTAL_SCHEDULING;INSTALL_PORTAL_OPERATIONS?>
+        <CustomAction Id="Capture_$(var.CHOICE)" Property="CMDLINE_$(var.CHOICE)" Value="[$(var.CHOICE)]" Execute="immediate" />
+        <CustomAction Id="Restore_$(var.CHOICE)" Property="$(var.CHOICE)" Value="[CMDLINE_$(var.CHOICE)]" Execute="immediate" />
+        <CustomAction Id="Clear_$(var.CHOICE)" Property="$(var.CHOICE)" Value="[ETLSQL_UNSET]" Execute="immediate" />
+        <CustomAction Id="Default_$(var.CHOICE)" Property="$(var.CHOICE)" Value="1" Execute="immediate" />
+        <CustomAction Id="Off_$(var.CHOICE)" Property="$(var.CHOICE)" Value="[ETLSQL_UNSET]" Execute="immediate" />
+        <?endforeach?>
+        <CustomAction Id="ResolveChoices" Property="CHOICES_RESOLVED" Value="1" Execute="immediate" />
+        <?foreach CHOICE in INSTALL_PORTAL_ORCH_SURFACE;INSTALL_PORTAL_STEWARD_SURFACE;INSTALL_PORTAL_REPORTING;INSTALL_PORTAL_DESIGNER;INSTALL_PORTAL_SCHEDULING;INSTALL_PORTAL_OPERATIONS;INSTALL_REPORT_PORTAL?>
+        <CustomAction Id="RegOff_$(var.CHOICE)" Property="REG_$(var.CHOICE)" Value="0" Execute="immediate" />
+        <CustomAction Id="RegOn_$(var.CHOICE)" Property="REG_$(var.CHOICE)" Value="1" Execute="immediate" />
+        <?endforeach?>
 
         <!-- Apply Solo preset defaults: Workstation only -->
         <CustomAction Id="ApplySoloPreset" Property="INSTALL_WORKSTATION"   Value="1"  Execute="immediate" />
@@ -369,18 +427,33 @@
             <Custom Action="EntReport"             After="EntAdmin"><![CDATA[DEPLOY_PROFILE = "ENTERPRISE"]]></Custom>
             <Custom Action="EntSurface"            After="EntReport"><![CDATA[DEPLOY_PROFILE = "ENTERPRISE"]]></Custom>
 
-            <!-- On a major upgrade: keep the installed configuration before the old files go, and
-                 hand it to WriteJwt after the new files land. Only where WriteJwt runs to carry it
-                 forward (a workstation-only install has no script). -->
-            <Custom Action="ReadSettings" After="CostFinalize"><![CDATA[WIX_UPGRADE_DETECTED AND (&Feature_AdminPortal=3 OR &Feature_ReportPortal=3 OR &Feature_Orchestrator=3)]]></Custom>
-            <Custom Action="SetRestoreSettingsData" After="ReadSettings"><![CDATA[WIX_UPGRADE_DETECTED AND PREVIOUS_SETTINGS AND (&Feature_AdminPortal=3 OR &Feature_ReportPortal=3 OR &Feature_Orchestrator=3)]]></Custom>
-            <Custom Action="RestoreSettings" After="InstallFiles"><![CDATA[WIX_UPGRADE_DETECTED AND PREVIOUS_SETTINGS AND (&Feature_AdminPortal=3 OR &Feature_ReportPortal=3 OR &Feature_Orchestrator=3)]]></Custom>
-            <!-- On install: generate the JWT secret + approve the install folder as a safe zone. -->
-            <Custom Action="SetWriteJwtData" After="CostFinalize"><![CDATA[&Feature_AdminPortal=3 OR &Feature_ReportPortal=3 OR &Feature_Orchestrator=3]]></Custom>
-            <Custom Action="WriteJwt" After="RestoreSettings"><![CDATA[&Feature_AdminPortal=3 OR &Feature_ReportPortal=3 OR &Feature_Orchestrator=3]]></Custom>
+            <!-- Remembered choices (see the actions above). -->
+            <?foreach CHOICE in INSTALL_PORTAL_ORCH_SURFACE;INSTALL_PORTAL_STEWARD_SURFACE;INSTALL_PORTAL_REPORTING;INSTALL_PORTAL_DESIGNER;INSTALL_PORTAL_SCHEDULING;INSTALL_PORTAL_OPERATIONS?>
+            <Custom Action="Capture_$(var.CHOICE)" Before="AppSearch" />
+            <Custom Action="Restore_$(var.CHOICE)" After="AppSearch"><![CDATA[CMDLINE_$(var.CHOICE)]]></Custom>
+            <Custom Action="Clear_$(var.CHOICE)" After="Restore_$(var.CHOICE)"><![CDATA[NOT CMDLINE_$(var.CHOICE) AND CHOICES_RESOLVED]]></Custom>
+            <Custom Action="Default_$(var.CHOICE)" After="Clear_$(var.CHOICE)"><![CDATA[NOT $(var.CHOICE) AND NOT CHOICES_RESOLVED]]></Custom>
+            <Custom Action="Off_$(var.CHOICE)" After="Default_$(var.CHOICE)"><![CDATA[$(var.CHOICE) = "0"]]></Custom>
+            <?endforeach?>
+            <!-- What the registry records: "1" or "0", never an empty value. -->
+            <?foreach CHOICE in INSTALL_PORTAL_ORCH_SURFACE;INSTALL_PORTAL_STEWARD_SURFACE;INSTALL_PORTAL_REPORTING;INSTALL_PORTAL_DESIGNER;INSTALL_PORTAL_SCHEDULING;INSTALL_PORTAL_OPERATIONS;INSTALL_REPORT_PORTAL?>
+            <Custom Action="RegOff_$(var.CHOICE)" After="CostFinalize" />
+            <Custom Action="RegOn_$(var.CHOICE)" After="RegOff_$(var.CHOICE)"><![CDATA[$(var.CHOICE) = "1"]]></Custom>
+            <?endforeach?>
             <!-- Uninstalls and major upgrades (UPGRADINGPRODUCTCODE) always preserve runtime data;
                  operators remove runtime data explicitly via `etl-sql admin purge-data`. -->
         </InstallExecuteSequence>
+
+        <InstallUISequence>
+            <!-- The dialogs show the remembered (or default) choices; after that they own them. -->
+            <?foreach CHOICE in INSTALL_PORTAL_ORCH_SURFACE;INSTALL_PORTAL_STEWARD_SURFACE;INSTALL_PORTAL_REPORTING;INSTALL_PORTAL_DESIGNER;INSTALL_PORTAL_SCHEDULING;INSTALL_PORTAL_OPERATIONS?>
+            <Custom Action="Capture_$(var.CHOICE)" Before="AppSearch" />
+            <Custom Action="Restore_$(var.CHOICE)" After="AppSearch"><![CDATA[CMDLINE_$(var.CHOICE)]]></Custom>
+            <Custom Action="Default_$(var.CHOICE)" After="Restore_$(var.CHOICE)"><![CDATA[NOT $(var.CHOICE)]]></Custom>
+            <Custom Action="Off_$(var.CHOICE)" After="Default_$(var.CHOICE)"><![CDATA[$(var.CHOICE) = "0"]]></Custom>
+            <?endforeach?>
+            <Custom Action="ResolveChoices" After="CostFinalize" />
+        </InstallUISequence>
 
         <!-- Connection hint shown on the final installer page -->
         <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT"

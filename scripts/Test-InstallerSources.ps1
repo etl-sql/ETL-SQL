@@ -12,6 +12,12 @@ foreach ($relative in @('scripts/install.ps1', 'scripts/install.sh',
         $findings.Add("Retired installer helper: $relative. Use the maintained MSI or Linux package installer.")
     }
 }
+# COMPAT_BREAK: 0.23 — the MSI runs no script custom actions (MI01); the services configure themselves.
+foreach ($relative in @('src/ETL-SQL.Installer/configure-portal-jwt.ps1', 'src/ETL-SQL.Installer/installer-actions.js')) {
+    if (Test-Path -LiteralPath (Join-Path $Root $relative)) {
+        $findings.Add("Retired installer script: $relative. The Orchestrator and Portal create their configuration on first start.")
+    }
+}
 $installer = Join-Path $Root 'src/ETL-SQL.Installer'
 try {
     [xml]$manifest = Get-Content (Join-Path $installer 'Installer.wxs') -Raw
@@ -52,7 +58,7 @@ try {
     }
 } catch { $findings.Add("Installer.wxs: $($_.Exception.Message)") }
 
-foreach ($relative in @('scripts/build-msi.ps1', 'src/ETL-SQL.Installer/configure-portal-jwt.ps1')) {
+foreach ($relative in @('scripts/build-msi.ps1')) {
     $file = Join-Path $Root $relative
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
         $findings.Add("Missing PowerShell source: $relative")
@@ -69,12 +75,8 @@ foreach ($relative in @('scripts/build-msi.ps1', 'src/ETL-SQL.Installer/configur
     }
 }
 
-try {
-    # Parse only. The installer JScript must never execute on the preflight host.
-    $output = & node --check (Join-Path $installer 'installer-actions.js') 2>&1
-    if ($LASTEXITCODE -ne 0) { $findings.Add("installer-actions.js syntax: $($output -join [Environment]::NewLine)") }
-} catch { $findings.Add("installer-actions.js: $($_.Exception.Message)") }
-
 foreach ($finding in $findings) { Write-Output "FAIL $finding" }
 if ($findings.Count -gt 0) { exit 1 }
-Write-Output 'Installer source checks passed: XML, static source files, retired-helper policy and PowerShell/JavaScript syntax. WiX compilation and installation remain required.'
+Write-Output 'Installer source checks passed: XML, static source files, retired-helper and retired-script policy and PowerShell syntax. WiX compilation and installation remain required.'
+# Callers read $LASTEXITCODE; no native command runs above to set it.
+exit 0

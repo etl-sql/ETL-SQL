@@ -17,8 +17,8 @@ public static class ConfigurationExtensions
 
     /// <summary>
     /// The settings the installers move into <see cref="InstalledSecretsFileName"/>, as
-    /// colon-separated paths. Keep in sync with build-linux-packages.sh and configure-portal-jwt.ps1
-    /// (InstallerConfigurationScriptTests compares all three).
+    /// colon-separated paths. The MSI bootstrap (InstalledConfigurationBootstrap) uses this list; keep
+    /// build-linux-packages.sh in sync (InstallerConfigurationScriptTests compares them).
     /// </summary>
     public static readonly IReadOnlyList<string> InstalledSecretPaths =
     [
