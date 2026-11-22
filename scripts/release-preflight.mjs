@@ -19,6 +19,8 @@ export const sourceChecks = [
 sourceChecks.push({ id: 'test-inventory', command: 'pwsh', args: ['-NoProfile', '-File', 'scripts/Get-TestLaneInventory.ps1', '-FailOnIssues'] });
 sourceChecks.push({ id: 'release-versions', command: 'pwsh', args: ['-NoProfile', '-File', 'scripts/Test-ReleaseVersions.ps1'] });
 sourceChecks.push({ id: 'installer-sources', command: 'pwsh', args: ['-NoProfile', '-File', 'scripts/Test-InstallerSources.ps1'] });
+// Summarize-PlanFallbacks.ps1 is operator tooling with no CI caller, so its self-test is its only guard.
+sourceChecks.push({ id: 'plan-fallback-ranking', command: 'pwsh', args: ['-NoProfile', '-File', 'scripts/Test-PlanFallbackRanking.ps1'] });
 
 // These fixtures require no restore, build, network or installed product. Each runs in its own
 // process so a failing policy test cannot hide the other source or recovery findings.

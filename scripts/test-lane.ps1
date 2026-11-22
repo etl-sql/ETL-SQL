@@ -655,6 +655,8 @@ switch ($Lane) {
         }
     }
     "slt" {
+        # The runner's own parser, value-format and error-handling tests carry no SLT category.
+        Invoke-DotNetTest "tests\ETL-SQL.SqlLogicTests\ETL-SQL.SqlLogicTests.csproj" "Category!=SLT"
         $previousRunSlt = $env:ETL_SQL_RUN_SLT
         try {
             $env:ETL_SQL_RUN_SLT = "1"

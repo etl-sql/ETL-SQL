@@ -469,6 +469,8 @@ ones below are also included in the `portal` and `full` test lanes.
 | :--- | :--- | :---: | :--- |
 | **[`build-codemirror-bundle.ps1`](./build-codemirror-bundle.ps1)** | PowerShell | Cross-platform | Rebuilds the vendored CodeMirror 6 bundle used by the designer. Run after changing `scripts/codemirror/package.json`. |
 | **[`generate-readmes.js`](./generate-readmes.js)** | JavaScript | Cross-platform | Regenerates the per-folder `README.md` index pages across the documentation tree. |
+| **[`Generate-ReportingCascadingSlicerBaselines.ps1`](./Generate-ReportingCascadingSlicerBaselines.ps1)** | PowerShell | Windows | Regenerates `docs/benchmarks/reporting-phase6-cascading-slicer-baselines.md` and `.json` from `CascadingSlicerBaselineModel`. Build `tests/ETL-SQL.Tests` (Debug) first. |
+| **[`Generate-ReportingSemanticReadiness.ps1`](./Generate-ReportingSemanticReadiness.ps1)** | PowerShell | Windows | Regenerates `docs/benchmarks/reporting-phase7-semantic-readiness.md` and `.json` from `AdvancedAuthoringSemanticReadinessHarness`. Build `tests/ETL-SQL.Tests` (Debug) first. |
 
 ---
 
