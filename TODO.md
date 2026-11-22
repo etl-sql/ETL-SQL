@@ -95,11 +95,22 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
 [the v0.23.0 script and test review plan](docs/releases/v0.23.0-script-and-test-review-plan.md).
 
-- [ ] **Scope the review (D).** Inventoried `scripts/` (474 files) and `tests/` (1,355 `.cs` files +
+- [x] **Scope the review (D).** Inventoried `scripts/` (474 files) and `tests/` (1,355 `.cs` files +
   corpora/fixtures) by owner and lane, summarized the v0.22.0 tooling review baseline, and defined
   the review criteria and `RV01`–`RV05` slice estimate (14–15 developer-days) in
   [v0.23.0-script-and-test-review-plan.md](docs/releases/v0.23.0-script-and-test-review-plan.md).
-  **Left:** owner acceptance of the plan (and scheduling `RV01`–`RV05`).
+  Owner accepted the plan 2026-11-22.
+- [ ] **RV01 Lane-membership and orphan audit** (`scripts/` and all 9 test projects). Every script
+  has a live caller or a retirement note; every `scripts/checks/` file runs in preflight or
+  consumer contracts; every test class belongs to at least one CI or Release Evidence lane. S
+- [ ] **RV02 Engine, language, connector and corpus tests** (523 `.cs` files in `ETL-SQL.Tests`,
+  `SqlLogicTests`, `FuzzTests`, `tests/Integration/`). M
+- [ ] **RV03 Reporting, UI, Language Server and browser checks** (235 + 14 `.cs` files,
+  198 `scripts/checks/test-*` files). M
+- [ ] **RV04 Orchestration, governance, hardening, security and scale tests** (227 `.cs` files,
+  `Scale.Tests`, `PerfTests`, `Benchmarks`). M
+- [ ] **RV05 Portal and browser suites** (`Portal.Tests` 226 and `Portal.BrowserTests` 98 `.cs`
+  files). M
 
 ### 1.9 Spill GC-pause gap
 
