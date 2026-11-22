@@ -20,7 +20,7 @@ try {
     $DiagnosticScenario = 'All'
     if (-not (Invoke-Expression $fresh.Clauses[0].Item1.Extent.Text)) { throw 'Full certification omitted fresh install.' }
 } finally { $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = $priorDiagnostic }
-foreach ($name in @('Get-Setting', 'Initialize-PreviousPortalUpgradeBaseline')) {
+foreach ($name in @('Get-InstallRecord', 'Get-Setting', 'Initialize-PreviousPortalUpgradeBaseline')) {
     $function = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     if ($null -eq $function) { throw "Missing baseline function $name" }
     Invoke-Expression $function.Extent.Text

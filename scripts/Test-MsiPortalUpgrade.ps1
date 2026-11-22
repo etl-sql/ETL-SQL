@@ -175,15 +175,33 @@ function Assert-ServiceRunsVersion([string]$Service, [string]$Version) {
     if ($product -notmatch [regex]::Escape(([version]$Version).ToString(3))) { throw "$Service runs $product, expected $Version." }
 }
 
-# The effective value, as the services read it: the installed secrets file overrides appsettings.json.
+# The installer's registry record (MI01), or $null when it is absent or names another folder.
+function Get-InstallRecord {
+    $key = 'HKLM:\Software\ETL-SQL\Install'
+    if (-not (Test-Path -LiteralPath $key)) { return $null }
+    $record = Get-ItemProperty -LiteralPath $key
+    if ([string]$record.InstallFolder -and
+        ([string]$record.InstallFolder).TrimEnd('\') -ieq $installDir.TrimEnd('\')) { return $record }
+    return $null
+}
+
+# The effective value, as the services read it (MI01 layers, lowest first): the release defaults,
+# the installer's registry values, the operator's appsettings.json, then the installed secrets file.
 function Get-Setting([string]$Path) {
     $value = ''
-    foreach ($file in 'appsettings.json', 'appsettings.secrets.json') {
+    foreach ($file in 'appsettings.defaults.json', '(registry)', 'appsettings.json', 'appsettings.secrets.json') {
+        if ($file -ceq '(registry)') {
+            $record = Get-InstallRecord
+            if ($null -ne $record -and $Path -ceq 'Portal:Orchestrator:DatabasePath' -and $record.OrchestratorDatabasePath) {
+                $value = [string]$record.OrchestratorDatabasePath
+            }
+            continue
+        }
         $full = Join-Path $installDir $file
         if (-not (Test-Path -LiteralPath $full)) { continue }
         $node = Get-Content -LiteralPath $full -Raw | ConvertFrom-Json
         $found = $true
-        # Strict mode: a key missing from one of the two files is absent, not an error.
+        # Strict mode: a key missing from one of the files is absent, not an error.
         foreach ($part in $Path.Split(':')) {
             if ($null -eq $node -or $null -eq $node.PSObject.Properties[$part]) { $found = $false; break }
             $node = $node.$part
@@ -303,6 +321,13 @@ try {
         }
         Test-Step 'fresh: dataset at-rest key generated' { -not [string]::IsNullOrWhiteSpace((Get-Setting 'Portal:Dataset:AtRestKey')) }
         Test-Step 'fresh: secrets only in the Administrators and SYSTEM file' { Assert-SecretsProtected }
+        # MI01: the MSI ran no script; the services configured themselves from these.
+        Test-Step 'fresh: appsettings.json is the empty operator template' {
+            $operator = Get-Content -LiteralPath (Join-Path $installDir 'appsettings.json') -Raw | ConvertFrom-Json
+            if (@($operator.PSObject.Properties).Count -ne 0) { throw "appsettings.json holds $(@($operator.PSObject.Properties).Count) top-level settings." }
+            if (-not (Test-Path -LiteralPath (Join-Path $installDir 'appsettings.defaults.json'))) { throw 'appsettings.defaults.json is missing.' }
+        }
+        Test-Step 'fresh: installer choices recorded' { if ($null -eq (Get-InstallRecord)) { throw 'HKLM\Software\ETL-SQL\Install does not name the install folder.' } }
         Test-Step 'fresh: served assets match the candidate' { Invoke-Assets @('--inventory-root', $repoRoot, '--out', (Join-Path $out 'fresh-assets.json')) }
         # `admin backup` runs as the operator, not LocalSystem, so it must be told where the service's
         # job history is.
@@ -377,6 +402,13 @@ try {
 
         # 2. Upgrade in place.
         Write-Line "== upgrade to $($currentVersion)"
+        # The previous release is removed after the candidate installs (MI01): a shared component
+        # whose GUID changed would delete the candidate's file, the operator's appsettings.json included.
+        Test-Step 'upgrade: component GUIDs match the previous release' {
+            $compare = & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'checks/Compare-MsiComponentGuids.ps1') -Previous $previousPath -Current $currentPath
+            $compare | ForEach-Object { Write-Line "  $_" }
+            if ($LASTEXITCODE -ne 0) { throw 'Component GUIDs or file ownership differ from the previous release.' }
+        }
         Test-Step 'upgrade: msiexec install' { Install-Msi $currentPath '02-upgrade.log' }
         Test-Step 'upgrade: one installed product' { [void](Assert-EntryCount 1 'Upgrade') }
         Test-Step 'upgrade: Portal healthy' { Wait-Portal 'upgrade' }
@@ -391,6 +423,11 @@ try {
         Test-Step 'upgrade: secrets moved to the Administrators and SYSTEM file' { Assert-SecretsProtected }
         Test-Step 'upgrade: no one-time sign-in for an existing Portal' { -not (Test-Path -LiteralPath (Join-Path $installDir 'first-run-password.txt')) }
         Test-Step 'upgrade: no configuration backup left behind' { -not (Test-Path -LiteralPath (Join-Path $installDir 'appsettings.pre-upgrade.json')) }
+        Test-Step 'upgrade: release defaults installed and no installer script left' {
+            if (-not (Test-Path -LiteralPath (Join-Path $installDir 'appsettings.defaults.json'))) { throw 'appsettings.defaults.json is missing.' }
+            if (Test-Path -LiteralPath (Join-Path $installDir 'configure-portal-jwt.ps1')) { throw 'configure-portal-jwt.ps1 is still installed.' }
+        }
+        Test-Step 'upgrade: installer choices recorded' { if ($null -eq (Get-InstallRecord)) { throw 'HKLM\Software\ETL-SQL\Install does not name the install folder.' } }
         $cacheCurrent = Join-Path $out 'cache-current.json'
         Test-Step 'upgrade: served assets match the candidate; cached browser refetches changes' {
             Invoke-Assets @('--inventory-root', $repoRoot, '--revalidate', $cachePrevious, '--record', $cacheCurrent, '--out', (Join-Path $out 'upgrade-assets.json'))
