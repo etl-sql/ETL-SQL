@@ -56,8 +56,9 @@ public sealed class ConnectionsDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
@@ -117,8 +118,9 @@ public sealed class TablesDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
@@ -172,8 +174,9 @@ public sealed class ViewsDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
@@ -251,8 +254,9 @@ public sealed class VariablesDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
@@ -374,8 +378,9 @@ public sealed class SafeZonesDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
@@ -484,8 +489,9 @@ public sealed class ProfileDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
@@ -544,8 +550,9 @@ public sealed class ConnectionConfigDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>

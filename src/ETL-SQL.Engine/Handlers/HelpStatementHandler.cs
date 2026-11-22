@@ -54,7 +54,7 @@ public class HelpStatementHandler : IStatementHandler
         {
             if (string.IsNullOrEmpty(subTopic))
             {
-                var helpText = context.LanguageHelp.GetHelp("CONNECTION", "INDEX");
+                var helpText = context.LanguageHelp.GetHelp("CONNECTION"); // connectors/README.md registers as the top-level topic
                 _logger.WriteLine("HELP: CONNECTION", ConsoleColor.Cyan);
                 _logger.WriteLine(helpText ?? "List of connection types not found.");
                 return;
