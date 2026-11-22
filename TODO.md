@@ -187,10 +187,11 @@ fuzzy matching recipes run on MOCKDB; multi-context-join and SCD Type 2 bugs fix
   `[Slicer — interactive in ReportPlayer only]` (jsdom tests in `reportRuntime.test.ts`). The
   VS Code README's restart-after-install note is a callout again (the 60-second rewrite had folded
   it into step 1). The combo chart and KPI dashboard can now join the README gallery. S
-- [ ] **DOC09 Alaska and Hawaii insets on US maps.** `US_STATES` maps draw Alaska and Hawaii at
-  their true positions, so Alaska takes much of the card. Draw them as insets below the lower 48,
-  as US maps usually do, without moving `MODE = POINTS` markers for those states off their shapes.
-  M
+- [x] **DOC09 Alaska and Hawaii insets on US maps.** Done 2026-11-22: fitted `US_STATES` maps
+  (no `ZOOM`/`CENTER`) draw Alaska (35% scale) and Hawaii below the lower 48 and Puerto Rico
+  beside Florida, in both native renderers; markers move with their states (`UsStatesInsets`,
+  `UsStatesInsetsTests`, `Map_UsStates_DrawsAlaskaAndHawaiiAsInsets` in both renderer test classes,
+  `Map_UsStatesPoints_AnchorageMarkerLandsOnAlaskaInset`). README map image refreshed. M
 - [ ] **DOC10 Manual check of the VS Code Get Started walkthrough (owner).** Run
   `etlsql.getStarted` on a fresh VS Code install from the Marketplace build and confirm each step
   (open sample, run, preview dashboard, cookbooks). S

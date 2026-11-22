@@ -53,7 +53,7 @@ Options (CHOROPLETH only):
 
 Built-in map keys (MAP_NAME):
 - **WORLD** — 177 countries (Natural Earth 110m)
-- **US_STATES** — 50 states + DC
+- **US_STATES** — 50 states + DC. A fitted map draws Alaska and Hawaii as insets below the lower 48 and Puerto Rico beside Florida; setting `ZOOM` or `CENTER` shows them at their real positions.
 - **US_COUNTIES** — 3,221 US counties (Census 20m simplified)
 - **MN_COUNTIES** — 87 Minnesota counties
 - **CANADA_PROVINCES** — 13 provinces and territories
