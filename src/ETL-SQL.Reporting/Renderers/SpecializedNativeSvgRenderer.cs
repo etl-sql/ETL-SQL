@@ -919,6 +919,9 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         // ZOOM or CENTER keeps the whole-world view they are relative to; otherwise the map is
         // fitted to its geometry (a US_STATES map used to be drawn at world scale).
         var explicitView = v.Options.ContainsKey("ZOOM") || v.Options.ContainsKey("CENTER");
+        // A fitted bundled US states map draws Alaska and Hawaii as insets; explicit views keep real positions.
+        var insets = !explicitView && string.IsNullOrWhiteSpace(v.ResolvedMapFile) &&
+            UsStatesInsets.IsBuiltInUsStates(v.Options.GetValueOrDefault("MAP_NAME"));
 
         if (mode.Equals("POINTS", StringComparison.OrdinalIgnoreCase))
         {
@@ -929,7 +932,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
                 ? WorldView(inputs, zoom, centerLat, centerLon)
                 : FitView(inputs, outline is null
                     ? v.Rows.Select(r => (Number(r, lon), Number(r, lat)))
-                    : GeometryPoints(outline));
+                    : GeometryPoints(outline), insets);
             DrawMapOutline(sb, outline, inputs, pointView);
             var val = Index(v, "value", fallback: 2);
             var label = Index(v, "label", fallback: 3);
@@ -941,8 +944,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
             foreach (var (row, i) in v.Rows.Select((r, i) => (r, i)))
             {
-                var x = pointView.X(Number(row, lon));
-                var y = pointView.Y(Number(row, lat));
+                var (x, y) = pointView.Point(Number(row, lon), Number(row, lat));
                 var fill = accent;
                 if (colorCol >= 0)
                 {
@@ -963,7 +965,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         using var geo = LoadGeoJson(v);
         if (geo is null) { sb.Append($"<text x='{F(inputs.Width / 2)}' y='{F(inputs.Height / 2)}' text-anchor='middle' fill='{inputs.OnSurface}'>Map geometry unavailable</text>"); return End(sb); }
 
-        var view = explicitView ? WorldView(inputs, zoom, centerLat, centerLon) : FitView(inputs, GeometryPoints(geo));
+        var view = explicitView ? WorldView(inputs, zoom, centerLat, centerLon) : FitView(inputs, GeometryPoints(geo), insets);
         var regionIndex = Index(v, "region", fallback: 0);
         var valueIndex = Index(v, "value", fallback: 1);
         var tooltipIndex = Index(v, "tooltip");
@@ -1194,10 +1196,17 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
     }
 
     /// <summary>Degrees to chart pixels: x = OriginX + (lon - CenterLon) * ScaleX, y likewise with latitude flipped.</summary>
-    private readonly record struct MapView(double OriginX, double OriginY, double ScaleX, double ScaleY, double CenterLon, double CenterLat)
+    private readonly record struct MapView(double OriginX, double OriginY, double ScaleX, double ScaleY, double CenterLon, double CenterLat, bool Insets = false)
     {
         public double X(double lon) => OriginX + (lon - CenterLon) * ScaleX;
         public double Y(double lat) => OriginY + (CenterLat - lat) * ScaleY;
+
+        /// <summary>Projects a longitude/latitude, first moving Alaska and Hawaii to their insets when <see cref="Insets"/>.</summary>
+        public (double X, double Y) Point(double lon, double lat)
+        {
+            if (Insets) (lon, lat) = UsStatesInsets.Apply(lon, lat);
+            return (X(lon), Y(lat));
+        }
     }
 
     /// <summary>The whole world stretched over the plot area; ZOOM and CENTER are relative to it.</summary>
@@ -1212,13 +1221,15 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
     /// <summary>
     /// Fits the points' extent into the plot area with one scale for both axes. Longitude is
     /// narrowed by the cosine of the middle latitude so shapes away from the equator keep their
-    /// proportions.
+    /// proportions. With <paramref name="insets"/>, Alaska and Hawaii are fitted, and later
+    /// projected, at their inset positions.
     /// </summary>
-    private static MapView FitView(FocusedLayoutInputs inputs, IEnumerable<(double Lon, double Lat)> points)
+    private static MapView FitView(FocusedLayoutInputs inputs, IEnumerable<(double Lon, double Lat)> points, bool insets = false)
     {
         double minLon = double.MaxValue, maxLon = double.MinValue, minLat = double.MaxValue, maxLat = double.MinValue;
-        foreach (var (lon, lat) in points)
+        foreach (var point in points)
         {
+            var (lon, lat) = insets ? UsStatesInsets.Apply(point.Lon, point.Lat) : point;
             if (!double.IsFinite(lon) || !double.IsFinite(lat)) continue;
             minLon = Math.Min(minLon, lon); maxLon = Math.Max(maxLon, lon);
             minLat = Math.Min(minLat, lat); maxLat = Math.Max(maxLat, lat);
@@ -1236,7 +1247,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         var plotWidth = inputs.Width - 20;
         var plotHeight = inputs.Height - TitleBand - 8;
         var scale = Math.Min(plotWidth / (lonSpan * narrowing), plotHeight / latSpan) * 0.96;
-        return new MapView(10 + plotWidth / 2.0, TitleBand + plotHeight / 2.0, scale * narrowing, scale, centerLon, centerLat);
+        return new MapView(10 + plotWidth / 2.0, TitleBand + plotHeight / 2.0, scale * narrowing, scale, centerLon, centerLat, insets);
     }
 
     private static IEnumerable<JsonElement> Polygons(JsonElement geometry)
@@ -1246,7 +1257,11 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         else if (type == "MultiPolygon") foreach (var polygon in coordinates.EnumerateArray()) foreach (var ring in polygon.EnumerateArray().Take(1)) yield return ring;
     }
 
-    private static string PolygonPath(JsonElement ring, MapView view) => string.Join(" ", ring.EnumerateArray().Select((point, i) => $"{(i == 0 ? "M" : "L")} {F(view.X(point[0].GetDouble()))} {F(view.Y(point[1].GetDouble()))}")) + " Z";
+    private static string PolygonPath(JsonElement ring, MapView view) => string.Join(" ", ring.EnumerateArray().Select((point, i) =>
+    {
+        var (x, y) = view.Point(point[0].GetDouble(), point[1].GetDouble());
+        return $"{(i == 0 ? "M" : "L")} {F(x)} {F(y)}";
+    })) + " Z";
     private static string InterpolateColorDouble(string low, string high, double ratio)
     {
         ratio = Math.Clamp(ratio, 0.0, 1.0);

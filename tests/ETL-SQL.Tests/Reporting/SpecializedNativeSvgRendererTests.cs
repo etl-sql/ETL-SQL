@@ -71,6 +71,70 @@ public sealed class SpecializedNativeSvgRendererTests
     }
 
     [Fact]
+    public void Map_UsStates_DrawsAlaskaAndHawaiiAsInsets()
+    {
+        // At their true positions Alaska took much of the card and the lower 48 about half its width.
+        var svg = new SvgChartRenderer().Render(UsStatesChoropleth())!;
+        var (width, height) = Size(svg);
+        var regions = TitledPaths(svg);
+        var all = Extent(regions.SelectMany(r => r.Points));
+        var lower48 = Extent(regions.Where(r => r.Name is not ("Alaska" or "Hawaii")).SelectMany(r => r.Points));
+        var texas = Extent(regions.Where(r => r.Name == "Texas").SelectMany(r => r.Points));
+
+        Assert.True(all.MinX >= 0 && all.MaxX <= width && all.MinY >= 0 && all.MaxY <= height, $"map leaves the chart: {all} in {width}x{height}");
+        Assert.True((lower48.MaxX - lower48.MinX) / (all.MaxX - all.MinX) > .90 && (lower48.MaxY - lower48.MinY) / (all.MaxY - all.MinY) > .90,
+            $"lower 48 {lower48} do not set the map extent {all}");
+        Assert.True((lower48.MaxX - lower48.MinX) / width > .60, $"lower 48 span {(lower48.MaxX - lower48.MinX) / width:P0} of the width");
+        foreach (var inset in new[] { "Alaska", "Hawaii" })
+        {
+            var e = Extent(regions.Where(r => r.Name == inset).SelectMany(r => r.Points));
+            Assert.True(e.MaxY > texas.MinY && e.MinX < texas.MaxX, $"{inset} {e} is not below and left of Texas {texas}");
+        }
+    }
+
+    [Fact]
+    public void Map_UsStatesPoints_AnchorageMarkerLandsOnAlaskaInset()
+    {
+        // POINTS and choropleth fit the same outline into the same card, so the choropleth names the shapes.
+        var shapes = TitledPaths(new SvgChartRenderer().Render(UsStatesChoropleth())!);
+        var points = Visual("MAP", ["Longitude", "Latitude", "Value", "Label"],
+            [["-149.90", "61.22", "10", "Anchorage"], ["-122.33", "47.61", "10", "Seattle"]],
+            ("lon", "Longitude"), ("lat", "Latitude"), ("value", "Value"), ("label", "Label"), ("MODE", "POINTS"));
+        points.Options["MAP_NAME"] = "us_states";
+        var svg = new SvgChartRenderer().Render(points)!;
+
+        foreach (var (row, state) in new[] { (0, "Alaska"), (1, "Washington") })
+        {
+            var circle = Regex.Match(svg, $"<circle data-row-index='{row}' cx='(?<x>[-0-9.]+)' cy='(?<y>[-0-9.]+)'");
+            var (x, y) = (Number(circle.Groups["x"].Value), Number(circle.Groups["y"].Value));
+            var e = Extent(shapes.Where(s => s.Name == state).SelectMany(s => s.Points));
+            Assert.True(x >= e.MinX && x <= e.MaxX && y >= e.MinY && y <= e.MaxY, $"{state} marker ({x}, {y}) is off its shape {e}");
+        }
+    }
+
+    private static VisualManifest UsStatesChoropleth()
+    {
+        var visual = Visual("MAP", ["State", "Revenue"],
+            [["California", "1250000"], ["Texas", "980000"], ["Alaska", "120000"], ["Hawaii", "150000"]],
+            ("region", "State"), ("value", "Revenue"));
+        visual.Options["MAP_NAME"] = "US_STATES";
+        return visual;
+    }
+
+    private static List<(string Name, List<(double X, double Y)> Points)> TitledPaths(string svg) =>
+        Regex.Matches(svg, "<path[^>]* d='(?<d>[^']+)'[^>]*><title>(?<t>[^<:]+)").Cast<Match>()
+            .Select(m => (m.Groups["t"].Value.Trim(), Regex.Matches(m.Groups["d"].Value, "[ML] (?<x>[-0-9.]+) (?<y>[-0-9.]+)").Cast<Match>()
+                .Select(p => (Number(p.Groups["x"].Value), Number(p.Groups["y"].Value))).ToList()))
+            .ToList();
+
+    private static (double MinX, double MaxX, double MinY, double MaxY) Extent(IEnumerable<(double X, double Y)> points)
+    {
+        var list = points.ToList();
+        Assert.NotEmpty(list);
+        return (list.Min(p => p.X), list.Max(p => p.X), list.Min(p => p.Y), list.Max(p => p.Y));
+    }
+
+    [Fact]
     public void Map_WithZoomAndCenter_KeepsTheExplicitView()
     {
         var visual = Visual("MAP", ["Longitude", "Latitude", "Value", "Label"], [["-93.2", "44.9", "10", "Minneapolis"]],
