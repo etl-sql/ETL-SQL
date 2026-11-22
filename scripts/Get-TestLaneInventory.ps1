@@ -31,7 +31,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$RepoRoot = Resolve-Path $RepoRoot
+# Get-Item expands an 8.3 short path (C:\Users\RUNNER~1\...) to the long form Get-ChildItem
+# returns, so the prefix strips below line up. CI's temp directory is a short path.
+$RepoRoot = (Get-Item -LiteralPath (Resolve-Path $RepoRoot).Path).FullName
 $TestsRoot = Join-Path $RepoRoot "tests"
 
 function Get-ProjectForFile {
@@ -41,7 +43,7 @@ function Get-ProjectForFile {
     while ($dir -and $dir.StartsWith($TestsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
         $project = Get-ChildItem -LiteralPath $dir -Filter "*.csproj" -File -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($project) {
-            return $project.FullName.Substring($RepoRoot.Path.Length).TrimStart('\', '/')
+            return $project.FullName.Substring($RepoRoot.Length).TrimStart('\', '/')
         }
         $parent = Split-Path -Parent $dir
         if ($parent -eq $dir) { break }
@@ -72,7 +74,7 @@ function Get-TestRecords {
     }
 
     foreach ($file in $files) {
-        $relative = $file.FullName.Substring($RepoRoot.Path.Length).TrimStart('\', '/')
+        $relative = $file.FullName.Substring($RepoRoot.Length).TrimStart('\', '/')
         $project = Get-ProjectForFile $file.FullName
         $lines = [System.IO.File]::ReadAllLines($file.FullName)
         $outerIndent = $null
@@ -243,7 +245,7 @@ $sourceFiles = @(Get-ChildItem -LiteralPath $TestsRoot -Recurse -Filter "*.cs" -
     Where-Object { $_.FullName -notmatch "\\(bin|obj)\\|\\\.vscode-test\\" })
 $staleMilestoneNames = New-Object System.Collections.Generic.List[string]
 foreach ($file in $sourceFiles) {
-    $relative = $file.FullName.Substring($RepoRoot.Path.Length).TrimStart('\', '/')
+    $relative = $file.FullName.Substring($RepoRoot.Length).TrimStart('\', '/')
     if ($file.BaseName -match '(?i)(Phase|Wave|Sprint)\d+') {
         $staleMilestoneNames.Add($relative)
         continue
@@ -255,7 +257,7 @@ foreach ($file in $sourceFiles) {
 $engineTestsRoot = Join-Path $TestsRoot "ETL-SQL.Tests"
 $misplacedRootFiles = @(Get-ChildItem -LiteralPath $engineTestsRoot -File -Filter "*.cs" -ErrorAction $(if (Test-Path -LiteralPath $engineTestsRoot) { 'Stop' } else { 'Ignore' }) |
     Where-Object { $_.Name -ne "GlobalUsings.cs" } |
-    ForEach-Object { $_.FullName.Substring($RepoRoot.Path.Length).TrimStart('\', '/') })
+    ForEach-Object { $_.FullName.Substring($RepoRoot.Length).TrimStart('\', '/') })
 $byProject = Group-Count -Items $records -KeySelector { param($r) $r.project }
 
 $categoryRows = New-Object System.Collections.Generic.List[object]
