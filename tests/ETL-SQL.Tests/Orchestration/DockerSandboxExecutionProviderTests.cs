@@ -78,6 +78,8 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
         Assert.DoesNotContain("--privileged", create);
         Assert.Contains($"{DockerSandboxExecutionProvider.AdmissionLabel}=admission-1", create);
         Assert.Contains("Session__Root=/var/lib/etl-sql/sessions", create);
+        // The host must be able to remove what the sandbox uid creates under the session mount.
+        Assert.Contains("ETLSQL_SANDBOX_UMASK=0000", create);
         Assert.Contains("Security__PathProtectionMode=Defined", create);
         Assert.Contains("Security__ApprovedSafeZones__0=/workspace", create);
         Assert.Contains("Security__ApprovedSafeZones__1=/var/lib/etl-sql/sessions", create);

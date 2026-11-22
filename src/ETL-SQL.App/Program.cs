@@ -38,6 +38,9 @@ namespace ETL_SQL
 
             try
             {
+                // Before anything creates a file: a sandbox worker's session state must stay
+                // removable by the orchestrator that mounted it.
+                SandboxProcessUmask.ApplyToProcess();
                 ETL_SQL.Core.Governance.SecurityEventRuntime.ConfigureLocalOutboxFactory(
                     new ETL_SQL.Core.Governance.SqliteSecurityEventOutboxFactory());
                 if (args.Length == 0 || !string.Equals(args[0], "enterprise", StringComparison.OrdinalIgnoreCase))
