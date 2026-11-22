@@ -23,6 +23,12 @@ for (const retired of ['configure-portal-jwt.ps1', 'installer-actions.js']) {
 
 // The old product goes after the new one is installed, so its appsettings.json is never deleted.
 assert.match(manifest, /<MajorUpgrade\b[^>]*\sSchedule="afterInstallExecute"/, 'MajorUpgrade must remove the old product after InstallExecute');
+// v0.22.0's uninstall force-closes ETL-SQL-Service.exe and ETL-SQL-Portal.exe (util:CloseApplication
+// TerminateProcess); started before that removal, the new services were killed (run 45002373338).
+const executeSequence = manifest.match(/<InstallExecuteSequence>[\s\S]*?<\/InstallExecuteSequence>/)?.[0] ?? '';
+// WiX 3 puts RemoveExistingProducts at 6501 for afterInstallExecute and InstallFinalize is 6600.
+const startServices = Number(executeSequence.match(/<StartServices\s+Sequence="(\d+)"\s*\/>/)?.[1]);
+assert.ok(startServices > 6501 && startServices < 6600, 'Services must start after the old product is removed (StartServices between 6501 and 6600)');
 
 // Same Id and target as v0.22.0 so the auto-GUID matches, and never overwritten by an upgrade.
 const appSettings = manifest.match(/<Component Id="AppSettings"[^>]*>[\s\S]*?<\/Component>/)?.[0] ?? '';

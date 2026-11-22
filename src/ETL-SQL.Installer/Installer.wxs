@@ -440,6 +440,14 @@
             <Custom Action="RegOff_$(var.CHOICE)" After="CostFinalize" />
             <Custom Action="RegOn_$(var.CHOICE)" After="RegOff_$(var.CHOICE)"><![CDATA[$(var.CHOICE) = "1"]]></Custom>
             <?endforeach?>
+            <!-- Start the services only after the old product is removed. v0.22.0's uninstall
+                 force-closes ETL-SQL-Service.exe and ETL-SQL-Portal.exe (util:CloseApplication,
+                 TerminateProcess), so services started inside InstallExecute were killed by it
+                 (run 45002373338). The start now runs in InstallFinalize's script; on a fresh
+                 install RemoveExistingProducts is skipped and the order is otherwise unchanged. -->
+            <!-- WiX 3 schedules RemoveExistingProducts at 6501 (afterInstallExecute) and allows
+                 only a sequence number here; InstallFinalize is 6600. -->
+            <StartServices Sequence="6550" />
             <!-- Uninstalls and major upgrades (UPGRADINGPRODUCTCODE) always preserve runtime data;
                  operators remove runtime data explicitly via `etl-sql admin purge-data`. -->
         </InstallExecuteSequence>
