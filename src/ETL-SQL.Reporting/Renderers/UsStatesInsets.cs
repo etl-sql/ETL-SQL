@@ -3,8 +3,9 @@ using System;
 namespace ETL_SQL.Reporting.Renderers;
 
 /// <summary>
-/// Moves Alaska and Hawaii below the lower 48 on the bundled US states map, as US maps usually
-/// draw them: at their true positions Alaska takes much of the card and the lower 48 shrink.
+/// Moves Alaska and Hawaii below the lower 48, and Puerto Rico beside Florida, on the bundled US
+/// states map, as US maps usually draw them: at their true positions Alaska takes much of the card
+/// and Puerto Rico stretches it downward, so the lower 48 shrink.
 /// Renderers apply it to outlines and markers alike, before projecting, so markers stay on their
 /// states. Points outside both boxes come back unchanged.
 /// </summary>
@@ -21,6 +22,12 @@ internal static class UsStatesInsets
     private const double HawaiiCenterLon = -157.29, HawaiiCenterLat = 20.59;
     private const double HawaiiInsetLon = -105.0, HawaiiInsetLat = 24.5;
 
+    // Puerto Rico (lon -67.3..-65.6, lat 17.9..18.5) would otherwise set the map's bottom edge
+    // well below the Florida Keys; it moves into the Atlantic east of Florida, at its own size.
+    private const double PuertoRicoMinLon = -68.0, PuertoRicoMaxLon = -65.0, PuertoRicoMinLat = 17.5, PuertoRicoMaxLat = 19.0;
+    private const double PuertoRicoCenterLon = -66.45, PuertoRicoCenterLat = 18.22;
+    private const double PuertoRicoInsetLon = -75.0, PuertoRicoInsetLat = 25.5;
+
     public static (double Lon, double Lat) Apply(double lon, double lat)
     {
         if (lon <= AlaskaMaxLon && lat >= AlaskaMinLat)
@@ -28,6 +35,8 @@ internal static class UsStatesInsets
                 AlaskaInsetLat + (lat - AlaskaCenterLat) * AlaskaScale);
         if (lon is >= HawaiiMinLon and <= HawaiiMaxLon && lat is >= HawaiiMinLat and <= HawaiiMaxLat)
             return (HawaiiInsetLon + (lon - HawaiiCenterLon), HawaiiInsetLat + (lat - HawaiiCenterLat));
+        if (lon is >= PuertoRicoMinLon and <= PuertoRicoMaxLon && lat is >= PuertoRicoMinLat and <= PuertoRicoMaxLat)
+            return (PuertoRicoInsetLon + (lon - PuertoRicoCenterLon), PuertoRicoInsetLat + (lat - PuertoRicoCenterLat));
         return (lon, lat);
     }
 

@@ -147,7 +147,9 @@ CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = RevenueMap));
 
             var all = Extent(regions.SelectMany(r => r.Points));
             Assert.True(all.MinX >= 0 && all.MaxX <= width && all.MinY >= 0 && all.MaxY <= height, $"map leaves the chart: {all} in {width}x{height}");
-            var lower48 = Extent(regions.Where(r => r.Name is not ("Alaska" or "Hawaii")).SelectMany(r => r.Points));
+            var lower48 = Extent(regions.Where(r => r.Name is not ("Alaska" or "Hawaii" or "Puerto Rico")).SelectMany(r => r.Points));
+            var puertoRico = Extent(regions.Where(r => r.Name == "Puerto Rico").SelectMany(r => r.Points));
+            Assert.True(puertoRico.MinY >= lower48.MinY && puertoRico.MaxY <= lower48.MaxY, $"Puerto Rico {puertoRico} sits outside the lower 48 {lower48}");
             // The lower 48 now set the map's extent (the insets sit inside it), whatever the card's shape.
             Assert.True((lower48.MaxX - lower48.MinX) / (all.MaxX - all.MinX) > .90 && (lower48.MaxY - lower48.MinY) / (all.MaxY - all.MinY) > .90,
                 $"lower 48 {lower48} do not set the map extent {all}");

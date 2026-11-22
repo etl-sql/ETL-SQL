@@ -33,6 +33,15 @@ public sealed class UsStatesInsetsTests
     }
 
     [Fact]
+    public void SanJuan_MovesIntoTheAtlanticBesideFlorida()
+    {
+        // At 18°N Puerto Rico set the map's bottom edge, well below the Florida Keys (24.5°N).
+        var (lon, lat) = UsStatesInsets.Apply(-66.11, 18.47);
+        Assert.InRange(lon, -78, -72);
+        Assert.InRange(lat, 24.6, 27);
+    }
+
+    [Fact]
     public void AlaskaShrinks_HawaiiKeepsItsSize()
     {
         static double Distance((double Lon, double Lat) a, (double Lon, double Lat) b) =>

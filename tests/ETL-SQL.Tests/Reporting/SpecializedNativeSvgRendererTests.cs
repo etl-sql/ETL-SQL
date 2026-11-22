@@ -78,7 +78,9 @@ public sealed class SpecializedNativeSvgRendererTests
         var (width, height) = Size(svg);
         var regions = TitledPaths(svg);
         var all = Extent(regions.SelectMany(r => r.Points));
-        var lower48 = Extent(regions.Where(r => r.Name is not ("Alaska" or "Hawaii")).SelectMany(r => r.Points));
+        var lower48 = Extent(regions.Where(r => r.Name is not ("Alaska" or "Hawaii" or "Puerto Rico")).SelectMany(r => r.Points));
+        var puertoRico = Extent(regions.Where(r => r.Name == "Puerto Rico").SelectMany(r => r.Points));
+        Assert.True(puertoRico.MinY >= lower48.MinY && puertoRico.MaxY <= lower48.MaxY, $"Puerto Rico {puertoRico} sits outside the lower 48 {lower48}");
         var texas = Extent(regions.Where(r => r.Name == "Texas").SelectMany(r => r.Points));
 
         Assert.True(all.MinX >= 0 && all.MaxX <= width && all.MinY >= 0 && all.MaxY <= height, $"map leaves the chart: {all} in {width}x{height}");
