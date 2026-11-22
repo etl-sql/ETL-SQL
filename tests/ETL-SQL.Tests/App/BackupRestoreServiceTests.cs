@@ -575,6 +575,46 @@ namespace ETL_SQL.Tests.CliCommands
         }
 
         [Fact]
+        public async Task InPlaceRestore_ResolvesPathsFromTheDefaultsFile()
+        {
+            // An MSI host names the outside path in appsettings.defaults.json; its appsettings.json
+            // holds only the operator's edits.
+            var installDir = Path.Combine(_root, "installed-defaults");
+            var backupSource = Path.Combine(_root, "backup-src-defaults");
+            var sharedSnaps = Path.Combine(_root, "shared-defaults-snapshots");
+            Directory.CreateDirectory(installDir);
+            Directory.CreateDirectory(backupSource);
+            Directory.CreateDirectory(sharedSnaps);
+
+            File.WriteAllText(Path.Combine(sharedSnaps, "v1.json"), "{\"v\":1}");
+            WriteWorkspaceTree(backupSource, sharedSnaps, "./portal.db", "V1");
+            var backupConfig = new ConfigurationBuilder()
+                .AddJsonFile(Path.Combine(backupSource, "appsettings.json"))
+                .Build();
+            var backupDir = Path.Combine(_root, "defaults-backup");
+            Assert.Equal(0, await BackupRestoreService.BackupCoreAsync(backupConfig, backupSource, backupDir, NullLogger.Instance));
+            var (dataZip, keysZip) = FindArchives(backupDir);
+
+            WriteWorkspaceTree(installDir, sharedSnaps, "./portal.db", "V2");
+            File.Move(Path.Combine(installDir, "appsettings.json"),
+                Path.Combine(installDir, ETL_SQL.Common.ConfigurationExtensions.DefaultsFileName));
+            File.WriteAllText(Path.Combine(installDir, "appsettings.json"), "{}");
+
+            var exit = await BackupRestoreService.RestoreAsync(new CliContext
+            {
+                Command = "admin-restore",
+                RestoreFrom = dataZip,
+                RestoreKeys = keysZip,
+                RestoreTo = installDir,
+                RestoreInPlace = true
+            }, NullLogger.Instance);
+
+            Assert.Equal(0, exit);
+            Assert.Equal("{\"v\":1}", File.ReadAllText(Path.Combine(sharedSnaps, "v1.json")));
+            Assert.Equal("V1-PORTAL", File.ReadAllText(Path.Combine(installDir, "portal.db")));
+        }
+
+        [Fact]
         public async Task InPlaceRestore_AllowsContentDirOutsideInstallDir_WhenHostConfigNamesItToo()
         {
             var installDir = Path.Combine(_root, "installed-allowed");

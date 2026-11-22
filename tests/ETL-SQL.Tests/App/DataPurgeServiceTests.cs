@@ -361,6 +361,35 @@ namespace ETL_SQL.Tests.CliCommands
             }
         }
 
+        [Fact]
+        public void PurgeData_FindsPathsDeclaredOnlyInDefaults()
+        {
+            // An MSI install's appsettings.json holds only the operator's edits; the data paths come
+            // from appsettings.defaults.json.
+            var installDir = SeedInstalledInstance(out var systemDb, out _);
+            try
+            {
+                File.Move(Path.Combine(installDir, "appsettings.json"),
+                    Path.Combine(installDir, ETL_SQL.Common.ConfigurationExtensions.DefaultsFileName));
+                File.WriteAllText(Path.Combine(installDir, "appsettings.json"), "{}");
+
+                var exit = DataPurgeService.RunAdminPurgeData(new ETL_SQL.Core.CliContext
+                {
+                    Command = "admin-purge-data",
+                    AdminPurgeInstallDir = installDir,
+                    AdminPurgeConfirm = true,
+                }, ETL_SQL.Common.NullLogger.Instance);
+
+                Assert.Equal(0, exit);
+                Assert.False(File.Exists(systemDb));
+                Assert.True(File.Exists(Path.Combine(installDir, "ETL-SQL.exe")));
+            }
+            finally
+            {
+                TryDeleteDirectory(Path.GetDirectoryName(installDir)!);
+            }
+        }
+
         private string SeedInstalledInstance(out string systemDb, out string sessionDir)
         {
             var root = Path.Combine(_baseDir, "etlsql_admin_purge_" + Guid.NewGuid().ToString("N"));

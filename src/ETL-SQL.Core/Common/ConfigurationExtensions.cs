@@ -98,6 +98,18 @@ public static class ConfigurationExtensions
         return builder;
     }
 
+    /// <summary>
+    /// The settings of the host installed in <paramref name="directory"/>, layered as the host reads
+    /// them (defaults, installer values, appsettings.json, secrets) without this process's
+    /// environment variables. Used by admin commands that act on an install folder.
+    /// </summary>
+    public static IConfiguration BuildInstalledSettings(string directory, IInstallerRegistry? registry = null) =>
+        new ConfigurationBuilder()
+            .AddJsonFile(System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, "appsettings.json")), optional: true)
+            .AddInstallerLayers(directory, registry)
+            .AddInstalledSecrets(directory)
+            .Build();
+
     private static bool IsAppSettingsFile(string? path)
     {
         var name = System.IO.Path.GetFileName(path ?? string.Empty);

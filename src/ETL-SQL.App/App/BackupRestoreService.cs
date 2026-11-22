@@ -140,13 +140,10 @@ namespace ETL_SQL.App
                 if (!string.IsNullOrWhiteSpace(inPlaceTarget))
                 {
                     baseDir = inPlaceTarget;
-                    var targetCfg = Path.Combine(inPlaceTarget, "appsettings.json");
-                    if (File.Exists(targetCfg))
+                    if (File.Exists(Path.Combine(inPlaceTarget, "appsettings.json"))
+                        || File.Exists(Path.Combine(inPlaceTarget, ETL_SQL.Common.ConfigurationExtensions.DefaultsFileName)))
                     {
-                        config = new ConfigurationBuilder()
-                            .AddJsonFile(targetCfg, optional: true)
-                            .AddInstalledSecrets(inPlaceTarget)
-                            .Build();
+                        config = ETL_SQL.Common.ConfigurationExtensions.BuildInstalledSettings(inPlaceTarget);
                     }
                 }
                 var store = OutcomeStore(config, baseDir);
@@ -603,13 +600,12 @@ namespace ETL_SQL.App
         {
             var normalizedTarget = NormalizeFullPath(target);
             var backupSettingsPath = Path.Combine(dataExtract, "appsettings.json");
-            var hostSettingsPath = Path.Combine(normalizedTarget, "appsettings.json");
             var backupConfig = File.Exists(backupSettingsPath)
                 ? new ConfigurationBuilder().AddJsonFile(backupSettingsPath, optional: true).Build()
                 : new ConfigurationBuilder().Build();
-            var hostConfig = File.Exists(hostSettingsPath)
-                ? new ConfigurationBuilder().AddJsonFile(hostSettingsPath, optional: true).Build()
-                : new ConfigurationBuilder().Build();
+            // The host's settings as its services read them: an MSI host keeps the defaults in
+            // appsettings.defaults.json and only the operator's edits in appsettings.json.
+            var hostConfig = ETL_SQL.Common.ConfigurationExtensions.BuildInstalledSettings(normalizedTarget);
 
             static (string Key, string? Value) ConfiguredEntry(
                 IConfiguration primary,

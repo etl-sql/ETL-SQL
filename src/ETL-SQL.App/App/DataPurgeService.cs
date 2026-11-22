@@ -307,10 +307,7 @@ namespace ETL_SQL.App
             IConfiguration config;
             if (!string.IsNullOrWhiteSpace(ctx.AdminPurgeInstallDir) || fallbackConfig is null)
             {
-                var cfgPath = Path.Combine(installDir, "appsettings.json");
-                config = File.Exists(cfgPath)
-                    ? new ConfigurationBuilder().AddJsonFile(cfgPath, optional: true).Build()
-                    : new ConfigurationBuilder().Build();
+                config = ETL_SQL.Common.ConfigurationExtensions.BuildInstalledSettings(installDir);
             }
             else
             {
