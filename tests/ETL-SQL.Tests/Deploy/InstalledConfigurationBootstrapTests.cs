@@ -273,6 +273,26 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
         Assert.Equal("{}", File.ReadAllText(Path.Combine(_install, "appsettings.json")));
     }
 
+    [Theory]
+    [InlineData("src/ETL-SQL.Orchestrator.Service/Program.cs")]
+    [InlineData("src/ETL-SQL.Portal/Program.cs")]
+    public void SourceCheck_BothServicesEnsureBeforeBuildingConfiguration(string relative)
+    {
+        var text = File.ReadAllText(Path.Combine(RepoRoot(), relative));
+
+        var ensure = text.IndexOf("InstalledConfigurationBootstrap.Ensure(", StringComparison.Ordinal);
+        Assert.True(ensure >= 0, $"{relative} does not run the installed-configuration bootstrap.");
+        Assert.True(ensure < text.IndexOf("AddInstalledSecrets(", StringComparison.Ordinal),
+            $"{relative} must prepare the installed configuration before it reads the secrets file.");
+    }
+
+    private static string RepoRoot([System.Runtime.CompilerServices.CallerFilePath] string source = "")
+    {
+        var dir = Path.GetDirectoryName(source);
+        while (dir is not null && !File.Exists(Path.Combine(dir, "AGENTS.md"))) dir = Path.GetDirectoryName(dir);
+        return dir ?? throw new InvalidOperationException("Repository root not found.");
+    }
+
     private static JsonObject V022Defaults()
     {
         using var stream = typeof(InstalledConfigurationBootstrap).Assembly

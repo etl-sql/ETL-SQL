@@ -28,6 +28,10 @@ using Microsoft.IdentityModel.Tokens;
 ETL_SQL.Core.Governance.SecurityEventRuntime.ConfigureLocalOutboxFactory(
     new ETL_SQL.Core.Governance.SqliteSecurityEventOutboxFactory());
 await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
+// An MSI install: create missing secrets and the first-run sign-in before configuration loads.
+// Elsewhere this does nothing, so a missing secret still fails fast.
+if (OperatingSystem.IsWindows())
+    ETL_SQL.Common.InstalledConfigurationBootstrap.Ensure(System.AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
 #if WINDOWS
 // Running as a Windows Service, the working directory defaults to System32, which sends every

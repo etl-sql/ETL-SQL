@@ -54,6 +54,10 @@ try
     ETL_SQL.Core.Governance.SecurityEventRuntime.ConfigureLocalOutboxFactory(
         new ETL_SQL.Core.Governance.SqliteSecurityEventOutboxFactory());
     await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
+    // An MSI install: create missing secrets and the first-run sign-in before configuration loads.
+    // Elsewhere this does nothing, so a missing secret still fails fast.
+    if (OperatingSystem.IsWindows())
+        ETL_SQL.Common.InstalledConfigurationBootstrap.Ensure(AppDomain.CurrentDomain.BaseDirectory);
     var builder = WebApplication.CreateBuilder(args);
 
     // ── Windows Service / systemd integration ────────────────────────────
