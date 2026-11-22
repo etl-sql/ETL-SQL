@@ -327,6 +327,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     {
         foreach (var file in Directory.GetFiles(_install))
         {
+            // A concurrent run may be replacing the file; the caller retries.
             try { GrantCurrentUser(file); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }

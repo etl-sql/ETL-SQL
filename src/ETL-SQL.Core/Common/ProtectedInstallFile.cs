@@ -47,6 +47,8 @@ internal static class ProtectedInstallFile
         {
             if (File.Exists(temporary))
             {
+                // Best effort: the write's own outcome must surface, and a leftover staging file
+                // carries the same SYSTEM/Administrators ACL as the destination.
                 try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
             }
             if (File.Exists(path)) new FileInfo(path).SetAccessControl(final);
