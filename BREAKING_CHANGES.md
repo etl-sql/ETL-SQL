@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.23.0 — Runtime: MSI release defaults move to appsettings.defaults.json
+- **What changed**: The Windows MSI installs the full release defaults as `appsettings.defaults.json` and no longer replaces `appsettings.json`, which holds only the operator's settings (`{}` on a fresh install). The services, not the installer, generate secrets on first start. An upgrade from v0.22.0 removes, once, every value in `appsettings.json` that equals the v0.22.0 default.
+- **Who is affected**: Windows operators and scripts that read release defaults from the installed `appsettings.json`, or that call the removed `configure-portal-jwt.ps1`.
+- **Migration**: Edit `appsettings.json` as before; read defaults from `appsettings.defaults.json` and do not edit it. Values you set keep overriding the defaults.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.23.0 — Runtime: publishing a report by script path requires ScriptIngress
 - **What changed**: `POST /api/reports` (the CLI `PUBLISH REPORT` statement and script-path publication in SourceControlled Studio mode) now requires the `ScriptIngress` Studio capability in addition to `ReportPublish` and folder Manage. Previously `ReportPublish` was enough.
 - **Who is affected**: SourceControlled Portals whose publishing roles or groups hold `ReportPublish` but not `ScriptIngress`, and scripts that run `PUBLISH REPORT` as those users.

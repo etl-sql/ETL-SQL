@@ -70,8 +70,9 @@ manages jobs — including the ad-hoc execution routes `POST /jobs`, `DELETE /jo
 }
 ```
 
-The installers (MSI custom action and Linux `postinst`) generate a random `Orchestrator:ApiKey` on
-first install and mirror it to `Portal:Orchestrator:ApiKey` so the two halves match out of the box.
+On Linux the package's `postinst`, and on Windows the services' first start (from v0.23.0), generate
+a random `Orchestrator:ApiKey` and mirror it to `Portal:Orchestrator:ApiKey` so the two halves match
+out of the box.
 
 Rotate without downtime by first adding the new key to `Orchestrator__PreviousApiKeys__0`, restarting
 the Orchestrator, switching `Portal__Orchestrator__ApiKey` to the new key, then making the new key

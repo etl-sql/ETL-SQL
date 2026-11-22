@@ -210,9 +210,9 @@ blocked by the single required check on `main` and `release/*`; a clean clone bu
 
 ### Windows Installer — The MSI Copies Files and Registers Services Only
 
-**Status:** Planned (v0.23.0, tasks in `TODO.md`)  
+**Status:** In progress (v0.23.0, tasks in `TODO.md`); slice 1 implemented, pending hosted MSI certification  
 **Horizon:** Next (v0.23.0)  
-**Authoritative design:** none yet; [Release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md)
+**Authoritative design:** slice 1: [MI01 design](docs/releases/v0.23.0-mi01-services-own-configuration-design.md); [Release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md)
 section 10 holds the runner-loss evidence that prompted it.
 
 **Problem and intended outcome:** The WiX 3.14 MSI does more than install. Five JScript custom

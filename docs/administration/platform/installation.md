@@ -51,20 +51,30 @@ On macOS, use the native ZIP or Intel DMG described below.
    - `ETL-SQL-Portal`
 4. Review the service accounts before production use. The installer default is `LocalSystem`; use a least-privilege domain or local service account when the service needs access to network shares, database drivers, certificates, or controlled script roots.
 
-From v0.22.0, the MSI stops if it cannot preserve installed settings or complete service
-configuration. Protected files are staged before replacement, and failed writes retain existing
-keys. Final secret-file permissions allow only SYSTEM and Administrators.
+From v0.23.0, the MSI only copies files and registers the services; it runs no configuration
+script. The install folder holds three settings files:
 
-If a failed replacement leaves an `appsettings.secrets.json.*.recovery` file, keep it. Configuration
-will refuse to retry until an administrator reviews that protected recovery copy and restores the
-original secrets file if needed. Do not discard it or generate replacement keys: existing cached
-datasets require their original at-rest key.
+| File | Owner | On upgrade |
+| :--- | :--- | :--- |
+| `appsettings.defaults.json` | The release. Do not edit it. | Replaced. |
+| `appsettings.json` | You. Put your settings here; it starts as `{}`. | Kept as it is. |
+| `appsettings.secrets.json` | The services. Readable only by SYSTEM and Administrators. | Kept. |
 
-From v0.22.0, both MSI and DEB save configuration before publishing the protected first-sign-in
-file. If a fresh installation fails while writing settings or that file, resolve the file access
-failure and retry. Keep `appsettings.secrets.json`: the retry reuses its bootstrap password and
-service keys. If a bootstrap password was configured already, a fresh install also records it in
-the protected sign-in file when that file is absent. Normal upgrades do not create a sign-in file.
+`appsettings.json` overrides the defaults, and the secrets file and environment variables override
+both. The installer records its feature choices (install folder, Portal surface and modules, the
+Orchestrator job-history path) under `HKLM\Software\ETL-SQL\Install`; an upgrade reuses them unless
+you pass new values on the `msiexec` command line.
+
+On first start, the Orchestrator or Portal (whichever starts first) generates the service secrets
+into `appsettings.secrets.json`, moves any secrets it finds in `appsettings.json` there, and on a
+fresh install writes the one-time sign-in to `first-run-password.txt`, readable only by SYSTEM and
+Administrators. If it cannot, the service does not start and the Windows Application event log
+records `ETL-SQL installed configuration could not be prepared.` with the failing step. Fix the file access
+and start the service again; existing keys are never replaced. Keep `appsettings.secrets.json`:
+cached datasets need their original at-rest key.
+
+Upgrading from v0.22.0 keeps your `appsettings.json` and, once, removes from it every value that
+equals the v0.22.0 default, so it holds only your edits and later releases' defaults apply.
 
 Uninstalling the MSI preserves runtime data (databases, reports, snapshots, logs, and secrets) so
 upgrades and reinstalls never lose state. To remove an installation's runtime data permanently,

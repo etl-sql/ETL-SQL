@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Changed the Windows MSI to run no script custom actions (`MI01`): the Orchestrator and Portal generate missing secrets, move secrets out of `appsettings.json` and write the one-time sign-in on first start (`InstalledConfigurationBootstrap.cs`). The MSI installs the release defaults as `appsettings.defaults.json`, never replaces the operator's `appsettings.json` (a fresh install starts it as `{}`), records its choices under `HKLM\Software\ETL-SQL\Install`, and removes the previous release after installing the new one. An upgrade from v0.22.0 keeps `appsettings.json` and, once, drops the values equal to the v0.22.0 defaults. `configure-portal-jwt.ps1` and `installer-actions.js` are removed; `scripts/checks/Compare-MsiComponentGuids.ps1` guards the upgrade's component GUIDs.
+
 - Fixed report maps without `ZOOM` or `CENTER` drawing at world scale: a `US_STATES` choropleth filled about a third of its card, left of centre. The view now fits the map's geometry (or the points, when there is no geometry); `ZOOM` and `CENTER` keep their whole-world meaning. Fixed Sankey labels in the last column running off the chart; they now sit left of their nodes.
 
 - Added a report gallery to the README, rendered from the runnable recipes by `scripts/update-readme-gallery.mjs` (`DOC06`).

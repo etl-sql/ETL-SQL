@@ -7,6 +7,7 @@
 | [ETL-SQL v0.23.0 — Draft](v0.23.0.md) | Planned scope and migration notes; certification and publication are pending. |
 | [v0.23.0 Script and Test Review Plan](v0.23.0-script-and-test-review-plan.md) | Inventory, finding criteria, ownership, and slice estimates for `scripts/` and `tests/`. |
 | [v0.23.0 W6 Performance Gates Design](v0.23.0-w6-performance-gates-design.md) | Deterministic performance gates, paired A/B timing and hosted baselines (approved). |
+| [v0.23.0 MI01 Services Own Their Configuration](v0.23.0-mi01-services-own-configuration-design.md) | MSI runs no script custom actions; operator-owned `appsettings.json` and late removal (approved). |
 | [ETL-SQL v0.22.0](v0.22.0.md) | Released 2026-11-04: release recovery, installed-package checks and security boundaries. |
 | [Release recovery acceptance](recovery-acceptance.md) | Timing targets, verified recovery cases and remaining hosted acceptance. |
 | [v0.22.0 release tooling review](v0.22.0-tooling-review.md) | Findings and fixes from the review of `scripts/`, the installers and `tests/`. |

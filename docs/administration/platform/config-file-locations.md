@@ -1,6 +1,6 @@
 # Configuration Files
 
-The published services read `appsettings.json`, environment variables, and encrypted configuration values. Production templates live beside the service projects:
+The published services read `appsettings.json`, environment variables, and encrypted configuration values. In an MSI install (from v0.23.0), the release defaults are in `appsettings.defaults.json`, which upgrades replace, and `appsettings.json` holds only your settings, which upgrades keep; see [Windows installation](installation.md#windows). Production templates live beside the service projects:
 
 | Service | Template |
 | :--- | :--- |
