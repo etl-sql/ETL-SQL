@@ -101,6 +101,70 @@ CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = WorldChoropleth))
         }
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(", PROJECTION = MERCATOR")]
+    public async Task Map_UsStates_DrawsAlaskaAndHawaiiAsInsets(string projection)
+    {
+        // At their true positions Alaska took much of the card and the lower 48 about half its width.
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"map_insets_{Guid.NewGuid()}.rptsql");
+        File.WriteAllText(scriptPath, $@"
+SELECT 'California' AS State, 1250000 AS Revenue INTO #state_rev
+UNION ALL SELECT 'Texas', 980000
+UNION ALL SELECT 'Alaska', 120000
+UNION ALL SELECT 'Hawaii', 150000;
+
+CREATE VISUAL RevenueMap AS MAP (
+  SOURCE = #state_rev,
+  MAPPINGS (REGION = State, VALUE = Revenue),
+  OPTIONS (MAP_NAME = US_STATES, TITLE = 'Revenue by State'{projection})
+);
+
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = RevenueMap));
+");
+        try
+        {
+            var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+            var manifest = await service.GetManifestAsync();
+            var visual = manifest.Visuals.Single(v => v.Name == "RevenueMap");
+            Assert.Null(visual.Error);
+            var svg = new SvgChartRenderer().Render(visual)!;
+
+            static double Num(string s) => double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+            var box = System.Text.RegularExpressions.Regex.Match(svg, "viewBox='0 0 (?<w>[0-9.]+) (?<h>[0-9.]+)'");
+            var width = Num(box.Groups["w"].Value);
+            var height = Num(box.Groups["h"].Value);
+            var regions = System.Text.RegularExpressions.Regex.Matches(svg, "class='plot-geographic-region'[^>]* d='(?<d>[^']+)'[^>]*><title>(?<t>[^<:]+)")
+                .Select(m => (Name: m.Groups["t"].Value.Trim(), Points: System.Text.RegularExpressions.Regex.Matches(m.Groups["d"].Value, "[ML] (?<x>[-0-9.]+) (?<y>[-0-9.]+)")
+                    .Select(p => (X: Num(p.Groups["x"].Value), Y: Num(p.Groups["y"].Value))).ToList()))
+                .ToList();
+            (double MinX, double MaxX, double MinY, double MaxY) Extent(IEnumerable<(double X, double Y)> points)
+            {
+                var list = points.ToList();
+                Assert.NotEmpty(list);
+                return (list.Min(p => p.X), list.Max(p => p.X), list.Min(p => p.Y), list.Max(p => p.Y));
+            }
+
+            var all = Extent(regions.SelectMany(r => r.Points));
+            Assert.True(all.MinX >= 0 && all.MaxX <= width && all.MinY >= 0 && all.MaxY <= height, $"map leaves the chart: {all} in {width}x{height}");
+            var lower48 = Extent(regions.Where(r => r.Name is not ("Alaska" or "Hawaii")).SelectMany(r => r.Points));
+            // The lower 48 now set the map's extent (the insets sit inside it), whatever the card's shape.
+            Assert.True((lower48.MaxX - lower48.MinX) / (all.MaxX - all.MinX) > .90 && (lower48.MaxY - lower48.MinY) / (all.MaxY - all.MinY) > .90,
+                $"lower 48 {lower48} do not set the map extent {all}");
+            Assert.True((lower48.MaxX - lower48.MinX) / width > .60, $"lower 48 span {(lower48.MaxX - lower48.MinX) / width:P0} of the width: lower 48 {lower48}, all {all} in {width}x{height}");
+            var texas = Extent(regions.Where(r => r.Name == "Texas").SelectMany(r => r.Points));
+            foreach (var inset in new[] { "Alaska", "Hawaii" })
+            {
+                var e = Extent(regions.Where(r => r.Name == inset).SelectMany(r => r.Points));
+                Assert.True(e.MaxY > texas.MinY && e.MinX < texas.MaxX, $"{inset} {e} is not below and left of Texas {texas}");
+            }
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+        }
+    }
+
     [Fact]
     public async Task Map_WithoutZoomOrCenter_FitsUsStatesToThePlot()
     {

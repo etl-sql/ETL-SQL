@@ -4469,15 +4469,20 @@ internal sealed class PlotPlanSvgRenderer
 
         // ZOOM or CENTER keeps the whole-world view they are relative to; otherwise the view is
         // fitted to the geometry (a US_STATES map used to be drawn at world scale).
-        if (string.IsNullOrWhiteSpace(Style(plan, "ZOOM")) && string.IsNullOrWhiteSpace(Style(plan, "CENTER")))
+        var fitted = string.IsNullOrWhiteSpace(Style(plan, "ZOOM")) && string.IsNullOrWhiteSpace(Style(plan, "CENTER"));
+        // A fitted bundled US states map draws Alaska and Hawaii as insets; explicit views keep real positions.
+        var insets = fitted && geography.SourceAuthority.StartsWith("builtin:", StringComparison.Ordinal) &&
+            UsStatesInsets.IsBuiltInUsStates(geography.SourceAuthority["builtin:".Length..]);
+        (decimal Lon, decimal Lat) Place(decimal lon, decimal lat) => insets ? UsStatesInsets.Apply(lon, lat) : (lon, lat);
+        if (fitted)
         {
             var extent = geography.Features.SelectMany(feature => feature.Rings).SelectMany(ring => ring)
-                .Select(point => (point.Longitude, point.Latitude));
+                .Select(point => Place(point.Longitude, point.Latitude));
             if (geography.Features.IsEmpty)
                 extent = plan.Layers.SelectMany(layer => layer.Data).Where(datum => !datum.IsGap)
                     .Select(datum => (Lon: Number(Channel(datum, FieldChannel.Longitude)), Lat: Number(Channel(datum, FieldChannel.Latitude))))
                     .Where(point => point.Lon is >= -180m and <= 180m && point.Lat is >= -90m and <= 90m)
-                    .Select(point => (point.Lon!.Value, point.Lat!.Value));
+                    .Select(point => Place(point.Lon!.Value, point.Lat!.Value));
             if (FitGeographicView(extent, geography.Projection) is { } fit)
                 (zoom, centerLat, centerLon) = fit;
         }
@@ -4558,7 +4563,8 @@ internal sealed class PlotPlanSvgRenderer
             {
                 var path = string.Join(" ", ring.Select((point, index) =>
                 {
-                    var projected = ProjectGeographic(point.Longitude, point.Latitude, geography.Projection, plotWidth, plotHeight, zoom, centerLat, centerLon);
+                    var (lon, lat) = Place(point.Longitude, point.Latitude);
+                    var projected = ProjectGeographic(lon, lat, geography.Projection, plotWidth, plotHeight, zoom, centerLat, centerLon);
                     return $"{(index == 0 ? "M" : "L")} {N(projected.X)} {N(projected.Y)}";
                 })) + " Z";
                 var row = match.Datum is null ? string.Empty : $" data-row-index='{match.Datum.RowIndex}'";
@@ -4575,7 +4581,7 @@ internal sealed class PlotPlanSvgRenderer
             if (routes.Length > 500) throw new InvalidOperationException("Geographic chart exceeds the 500 route limit.");
             foreach (var route in routes)
             {
-                var points = route.Select(datum => GeographicDatum(datum, geography.Projection, plotWidth, plotHeight, zoom, centerLat, centerLon))
+                var points = route.Select(datum => GeographicDatum(datum, geography.Projection, plotWidth, plotHeight, zoom, centerLat, centerLon, insets))
                     .Where(point => point.HasValue).Select(point => point!.Value).ToArray();
                 if (points.Length < 2) continue;
                 var path = string.Join(" ", points.Select((point, index) => $"{(index == 0 ? "M" : "L")} {N(point.X)} {N(point.Y)}"));
@@ -4589,7 +4595,7 @@ internal sealed class PlotPlanSvgRenderer
             foreach (var datum in layer.Data.Where(datum => !datum.IsGap))
             {
                 if (++pointCount > 20000) throw new InvalidOperationException("Geographic chart exceeds the 20,000 point/label limit.");
-                var point = GeographicDatum(datum, geography.Projection, plotWidth, plotHeight, zoom, centerLat, centerLon);
+                var point = GeographicDatum(datum, geography.Projection, plotWidth, plotHeight, zoom, centerLat, centerLon, insets);
                 if (!point.HasValue) continue;
                 var customTooltip = DisplayChannel(datum, FieldChannel.Tooltip);
                 var text = customTooltip ?? DisplayChannel(datum, FieldChannel.Text) ?? DisplayChannel(datum, FieldChannel.Region) ?? $"Row {datum.RowIndex + 1}";
@@ -4611,12 +4617,13 @@ internal sealed class PlotPlanSvgRenderer
         RenderSmartLabels(builder, plan, labels, plotWidth, plotHeight);
     }
 
-    private static (decimal X, decimal Y)? GeographicDatum(ResolvedDatum datum, GeographicProjectionKind projection, decimal width, decimal height, decimal zoom = 1m, decimal centerLat = 0m, decimal centerLon = 0m)
+    private static (decimal X, decimal Y)? GeographicDatum(ResolvedDatum datum, GeographicProjectionKind projection, decimal width, decimal height, decimal zoom = 1m, decimal centerLat = 0m, decimal centerLon = 0m, bool insets = false)
     {
         var longitude = Number(Channel(datum, FieldChannel.Longitude));
         var latitude = Number(Channel(datum, FieldChannel.Latitude));
         if (!longitude.HasValue || !latitude.HasValue || longitude is < -180m or > 180m || latitude is < -90m or > 90m) return null;
-        return ProjectGeographic(longitude.Value, latitude.Value, projection, width, height, zoom, centerLat, centerLon);
+        var (lon, lat) = insets ? UsStatesInsets.Apply(longitude.Value, latitude.Value) : (longitude.Value, latitude.Value);
+        return ProjectGeographic(lon, lat, projection, width, height, zoom, centerLat, centerLon);
     }
 
     /// <summary>
