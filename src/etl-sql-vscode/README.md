@@ -30,7 +30,9 @@
 
 ## Getting Started in 60 Seconds
 
-1. **Install** ETL-SQL Tools. The engine, language server, and report renderer are bundled for your platform — no SDK, runtime, or database required. *(If commands don't appear right away, restart VS Code once.)*
+> **Restart VS Code after installing.** On a fresh install you may need to close and reopen VS Code before ETL-SQL commands, F5 and syntax features appear. Do the same after an update.
+
+1. **Install** ETL-SQL Tools. The engine, language server, and report renderer are bundled for your platform, so you don't need .NET, an SDK or a database.
 2. **Create** a `.etlsql` file in any folder and paste the [pipeline below](#try-it-right-now--no-database-required).
 3. **Press F5.** Results open in the **ETL-SQL Results** panel.
 4. **Make it a dashboard:** save the [dashboard example](#interactive-dashboard-sales_reportrptsql) as `sales_report.rptsql` and run **`F1` → `ETL-SQL: Preview Report`**.

@@ -114,6 +114,36 @@ function shouldShowVisualToolbar(type: string, styles: Record<string, unknown>):
     return !NON_MAXIMIZABLE_CONTROL_TYPES.has(type);
 }
 
+// Corner arrows pointing out (maximize) or in (restore); drawn as SVG so no font or glyph is needed.
+const MAXIMIZE_ICON_PATHS: Record<'maximize' | 'restore', string> = {
+    maximize: 'M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4',
+    restore: 'M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4',
+};
+
+function setMaximizeButtonState(button: HTMLButtonElement, maximized: boolean): void {
+    const icon: 'maximize' | 'restore' = maximized ? 'restore' : 'maximize';
+    const label = maximized ? 'Restore visual' : 'Maximize visual';
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    svg.setAttribute('width', '14');
+    svg.setAttribute('height', '14');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.setAttribute('data-icon', icon);
+    const path = document.createElementNS(svgNs, 'path');
+    path.setAttribute('d', MAXIMIZE_ICON_PATHS[icon]);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '1.75');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+    button.replaceChildren(svg);
+    button.title = label;
+    button.setAttribute('aria-label', label);
+}
+
 function addVisualToolbar(card: MaximizedVisualCard): void {
     card.classList.add('has-visual-toolbar');
     const toolbar = document.createElement('div');
@@ -122,9 +152,7 @@ function addVisualToolbar(card: MaximizedVisualCard): void {
     const maxBtn = document.createElement('button');
     maxBtn.type = 'button';
     maxBtn.className = 'visual-tool-btn';
-    maxBtn.textContent = '[]';
-    maxBtn.title = 'Maximize visual';
-    maxBtn.setAttribute('aria-label', 'Maximize visual');
+    setMaximizeButtonState(maxBtn, false);
     maxBtn.addEventListener('click', e => {
         e.stopPropagation();
         toggleVisualMaximize(card, maxBtn);
@@ -184,11 +212,7 @@ function toggleVisualMaximize(card: MaximizedVisualCard, button: HTMLButtonEleme
     card.style.backgroundColor = card.classList.contains('theme-dark') ? '#1e1e1e' : '#fff';
     card.style.backgroundImage = 'none';
     document.body.classList.add('visual-maximize-active');
-    if (button) {
-        button.textContent = 'x';
-        button.title = 'Restore visual';
-        button.setAttribute('aria-label', 'Restore visual');
-    }
+    if (button) setMaximizeButtonState(button, true);
     setTimeout(() => resizeChartsIn(card), 50);
 }
 
@@ -239,11 +263,7 @@ export function closeMaximizedVisual(): void {
     card._maxOrigBgImage = null;
 
     const button = card.querySelector<HTMLButtonElement>('.visual-tool-btn');
-    if (button) {
-        button.textContent = '[]';
-        button.title = 'Maximize visual';
-        button.setAttribute('aria-label', 'Maximize visual');
-    }
+    if (button) setMaximizeButtonState(button, false);
 
     _maximizedVisualCard = null;
     setTimeout(() => resizeChartsIn(card), 50);

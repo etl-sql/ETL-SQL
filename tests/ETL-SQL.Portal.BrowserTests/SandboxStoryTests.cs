@@ -6715,7 +6715,8 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await slider.FillAsync("24");
         await slider.DispatchEventAsync("input");
         await Expect(page.Locator(".visual-card[data-name='Threshold'] .range-value")).ToHaveTextAsync("30", new() { UseInnerText = true });
-        await Expect(page.Locator(".visual-card[data-name='Region'] .slicer-note")).ToContainTextAsync("interactive in ReportPlayer", new() { UseInnerText = true });
+        await Expect(page.Locator(".visual-card[data-name='Region'] .slicer-note")).ToContainTextAsync("opened in ReportPlayer", new() { UseInnerText = true });
+        await Expect(page.Locator(".visual-card[data-name='Region'] select")).ToBeDisabledAsync();
         Assert.Empty(session.PageErrors);
     }
 

@@ -98,6 +98,30 @@ namespace ETL_SQL.Tests.Docs
                 $"{id} report build failed: {manifest.Error} {string.Join("; ", failed)}");
         }
 
+        // A text month column sorts Apr, Aug, Dec, ...; the recipe orders by a month number instead.
+        [Fact]
+        public async Task ComboRecipe_PlotsMonthsInCalendarOrder()
+        {
+            var path = Path.Combine(RepoRoot, "docs", "cookbooks", "report", "combo-chart.md");
+            var (id, code) = CookbookVerificationTests.ExtractSqlBlocks(File.ReadAllText(path), "combo-chart.md").First();
+            var script = new Parser(new Lexer(code).Tokenize(), code).Parse();
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            evaluator.RedirectOutput = true;
+            evaluator.DisplayExecuteTree = false;
+            await evaluator.Evaluate(script);
+            var manifest = await new ManifestBuilder(evaluator).BuildAsync(id.Split(':')[0] + ".rptsql");
+
+            string[] MonthsOf(string visual)
+            {
+                var v = manifest.Visuals.Single(x => x.Name == visual);
+                var month = v.Columns.FindIndex(c => string.Equals(c, "month", StringComparison.OrdinalIgnoreCase));
+                return v.Rows.Select(r => r[month]!).Distinct().ToArray();
+            }
+
+            Assert.Equal(new[] { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" }, MonthsOf("RevUnitsCombo"));
+            Assert.Equal(new[] { "Jan", "Feb", "Mar", "Apr" }, MonthsOf("StackedRevenue"));
+        }
+
         private static IEnumerable<string> RecipeFiles(string collection) =>
             Directory.GetFiles(Path.Combine(RepoRoot, "docs", "cookbooks", collection), "*.md")
                 .Where(p => !string.Equals(Path.GetFileName(p), "README.md", StringComparison.OrdinalIgnoreCase))

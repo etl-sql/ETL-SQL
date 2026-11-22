@@ -16,7 +16,7 @@ import { closeMaximizedVisual, renderCard, renderVisual, resizeChartsIn } from '
 import { DETAIL_ANCHOR_GAP, DETAIL_PREFERRED_SIDE, DETAIL_VIEWPORT_MARGIN, closeOpenDetail, computeDetailPlacement, destroyDetailSurfaces, getOpenDetail } from './rt-detail.js';
 import { reApplyCrossFilterStyling } from './rt-actions.js';
 import { renderDatePicker } from './rt-controls-date.js';
-import { renderButton, renderSearch, renderSlider } from './rt-controls-input.js';
+import { renderButton, renderSearch, renderSlicer, renderSlider } from './rt-controls-input.js';
 import type { ActionVisual, ReportAction } from './rt-actions.js';
 
 export interface RuntimeParameterMeta {
@@ -512,5 +512,5 @@ if (vscode) {
 // Test escape hatch: exposes pure functions for automated testing.
 // Harmless in production (just sets a window property that nothing reads).
 if (typeof window !== 'undefined') {
-    window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, nativeLayoutTier, observeNativeLayout, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash, applyBookmark, applySavedView, captureResolvedState, isOfflineSnapshot, resolveDesignTokens, applyDesignTokens, isSafeCssValue, isAllowedTokenName, DESIGN_TOKENS };
+    window.__reportRuntime__ = { isOn, renderCard, renderVisual, renderSlicer, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, nativeLayoutTier, observeNativeLayout, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash, applyBookmark, applySavedView, captureResolvedState, isOfflineSnapshot, resolveDesignTokens, applyDesignTokens, isSafeCssValue, isAllowedTokenName, DESIGN_TOKENS };
 }

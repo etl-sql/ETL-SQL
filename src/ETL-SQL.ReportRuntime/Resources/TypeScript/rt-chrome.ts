@@ -287,7 +287,7 @@ export function renderHeader(container: HTMLElement | DocumentFragment, manifest
         `;
 
     const badges = [];
-    badges.push(`<span class="header-badge owner" title="Owner">👤 ${escHtml(manifest.owner || 'Owner unknown')}</span>`);
+    if (manifest.owner) badges.push(`<span class="header-badge owner" title="Owner">👤 ${escHtml(manifest.owner)}</span>`);
     if (manifest.steward) badges.push(`<span class="header-badge steward" title="Steward">🛡️ ${escHtml(manifest.steward)}</span>`);
     if (manifest.certification) badges.push(`<span class="header-badge cert" title="Certification">⭐ ${escHtml(manifest.certification)}</span>`);
     const rawFreshnessStatus = String(manifest.freshnessStatus || (manifest.lastRefreshed || manifest.builtAt ? 'fresh' : 'unknown')).toLowerCase();
