@@ -163,7 +163,8 @@ namespace ETL_SQL.Tests.Reporting
                 new[] { new[] { "A", "notanumber" } });
             var text = RenderToText(TerminalRenderer.RenderVisual(v));
             Assert.Contains("B", text);
-            Assert.Contains("Unsupported", text);
+            Assert.Contains("No data available", text);
+            Assert.DoesNotContain("Unsupported", text);
         }
 
         [Fact]
@@ -172,7 +173,8 @@ namespace ETL_SQL.Tests.Reporting
             var v = V("B", "BAR", new[] { "Label", "Value" });
             var text = RenderToText(TerminalRenderer.RenderVisual(v));
             Assert.Contains("B", text);
-            Assert.Contains("Unsupported", text);
+            Assert.Contains("No data available", text);
+            Assert.DoesNotContain("Unsupported", text);
         }
 
         // ── RenderVisual – HBAR ───────────────────────────────────────────────
@@ -320,7 +322,8 @@ namespace ETL_SQL.Tests.Reporting
             var v = V("BP", "BOXPLOT", new[] { "Cat" });
             var text = RenderToText(TerminalRenderer.RenderVisual(v));
             Assert.Contains("BP", text);
-            Assert.Contains("Unsupported", text);
+            Assert.Contains("No data available", text);
+            Assert.DoesNotContain("Unsupported", text);
         }
 
         [Fact]
@@ -329,7 +332,7 @@ namespace ETL_SQL.Tests.Reporting
             var v = V("BP", "BOXPLOT", new[] { "Cat", "V" },
                 new[] { new[] { "A", "5" } });
             var text = RenderToText(TerminalRenderer.RenderVisual(v));
-            Assert.DoesNotContain("A", text);
+            Assert.Contains("No data available", text);
         }
 
         // ── RenderVisual – WATERFALL ──────────────────────────────────────────
@@ -357,7 +360,8 @@ namespace ETL_SQL.Tests.Reporting
             var v = V("WF", "WATERFALL", new[] { "Item", "Amount" });
             var text = RenderToText(TerminalRenderer.RenderVisual(v));
             Assert.Contains("WF", text);
-            Assert.Contains("Unsupported", text);
+            Assert.Contains("No data available", text);
+            Assert.DoesNotContain("Unsupported", text);
         }
 
         // ── RenderVisual – LINE ───────────────────────────────────────────────
@@ -414,7 +418,8 @@ namespace ETL_SQL.Tests.Reporting
             var v = V("S", "SCATTER", new[] { "X", "Y" });
             var text = RenderToText(TerminalRenderer.RenderVisual(v));
             Assert.Contains("S", text);
-            Assert.Contains("Unsupported", text);
+            Assert.Contains("No data available", text);
+            Assert.DoesNotContain("Unsupported", text);
         }
 
         [Fact]
@@ -449,7 +454,8 @@ namespace ETL_SQL.Tests.Reporting
             var v = V("HM", "HEATMAP", new[] { "Row", "Col" });
             var text = RenderToText(TerminalRenderer.RenderVisual(v));
             Assert.Contains("HM", text);
-            Assert.Contains("Unsupported", text);
+            Assert.Contains("No data available", text);
+            Assert.DoesNotContain("Unsupported", text);
         }
 
         // ── RenderVisual – SLICER / controls ─────────────────────────────────
