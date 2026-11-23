@@ -26,11 +26,11 @@ const replay = responses => endpoint => {
   const actual = await collectHostedEvidence(recorded.repository, recorded.sha, {
     query: replay(recorded.responses), now: Date.parse(recorded.now), policy: recorded.policy, history });
   assert.deepEqual(actual, expected);
-  // The release policy has since gained Engine Certification (W4b), which that candidate's full run
-  // predates, so the same real data no longer certifies under the current policy.
+  // The release policy has since gained jobs that candidate's full run predates (Engine Certification
+  // in W4b, the Portal Regression workers in RV02), so the same real data no longer certifies.
   await assert.rejects(collectHostedEvidence(recorded.repository, recorded.sha, {
     query: replay(recorded.responses), now: Date.parse(recorded.now), policy: hostedPolicy, history }),
-  error => error.code === 'INCOMPLETE_COVERAGE' && /Engine Certification/.test(error.message));
+  error => error.code === 'INCOMPLETE_COVERAGE' && /Engine Certification|Portal Regression/.test(error.message));
 }
 
 // DEB selection: the same dry run logged "Reusing certified DEB run 42688144873, artifact 13707941967."

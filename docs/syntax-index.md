@@ -79,6 +79,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `eng.variables` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.variables](reference/eng/variables.md) |
 | `eng.connection_config` | Diagnostics| [Engine Catalog](reference/eng/README.md) | [eng.connection_config](reference/eng/connection-config.md) |
 | `eng.connections` | Diagnostics| [Engine Catalog](reference/eng/README.md) | [eng.connections](reference/eng/connections.md) |
+| `eng.datasets` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.datasets](reference/eng/datasets.md) |
 | `eng.locks` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.locks](reference/eng/locks.md) |
 | `CLEAR SESSION` | Session | [Statement Reference](reference/statements/README.md) | [CLEAR.md](reference/statements/session-control/clear.md) |
 | `USE PASSWORD` | Session / Security | [Statement Reference](reference/statements/README.md) | [USE.md](reference/variables-parameters/use.md) |
@@ -1189,6 +1190,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `eng.columns` | Diagnostics | Queryable virtual table for session and connection column metadata |
 | `eng.connections` | Diagnostics | Queryable virtual table for active session connections |
 | `eng.connection_config` | Diagnostics | Queryable virtual table for redacted active connection configuration |
+| `eng.datasets` | Diagnostics | Queryable virtual table for the datasets visible to the caller |
 | `eng.effective_permissions` | Governance | Queryable virtual table for effective principal permissions |
 | `eng.tables` | Diagnostics | Queryable virtual table for session and connection table metadata |
 | `eng.tenant_context` | Governance | Queryable virtual table for verified tenant identity and isolation |
