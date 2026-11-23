@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Advertised all supported `ENCRYPT` modes (`ON`, `OFF`, `MACHINE`, `PASSWORD`, `KEYFILE`, `PORTAL`) in `GetSupportedOptions`, `GetOptionValues`, and `GetHelp` across all six file connectors (`AvroConnector`, `ExcelConnector`, `FlatFileConnector`, `JsonConnector`, `ParquetConnector`, `XmlConnector`) and pinned acceptance in `ConnectorMetadataContractTests` (`RF02`).
+
 - Hardened `ExternalToolSecurityTests` temp-root setup on Windows with an explicit protected ACL (current owner, SYSTEM, Administrators, inheritance disabled) so tests pass on hosts whose `%TEMP%` grants write access to extra principals such as AppContainer capability SIDs without loosening `ToolPathGuard` (`RF04` in `tests/ETL-SQL.Tests/Hardening/ExternalToolSecurityTests.cs`).
 
 - Bounded `BufferManager_FifoOrder_Memory` waits with `WaitAsync` and `Task.WhenAny` so a FIFO ordering regression fails immediately with a clear message instead of hanging (`RF05` in `tests/ETL-SQL.Tests/Orchestration/BufferManagerTests.cs`).

@@ -27,18 +27,21 @@ namespace ETL_SQL.Connectors.Parquet
         {
             { "PATH", Array.Empty<string>() },
             { "COMPRESSION", new[] { "SNAPPY", "GZIP", "LZO", "BROTLI", "LZ4", "ZSTD", "UNCOMPRESSED" } },
-            { "ENCRYPT", new[] { "ON", "OFF" } },
+            { "ENCRYPT", new[] { "ON", "OFF", "MACHINE", "PASSWORD", "KEYFILE", "PORTAL" } },
             { "PASSWORD", Array.Empty<string>() },
             { "TRANSACTIONAL", new[] { "ON", "OFF", "TRUE", "FALSE" } }
         };
 
-        public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "ENCRYPT", new[] { "ON", "OFF", "MACHINE", "PASSWORD", "KEYFILE", "PORTAL" } }
+        };
 
         public string GetHelp() =>
             "Parquet Connector: Connects to Apache Parquet files.\n" +
             "Options:\n" +
             "  COMPRESSION: SNAPPY (default) | GZIP | LZO | BROTLI | LZ4 | ZSTD | UNCOMPRESSED\n" +
-            "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
+            "  ENCRYPT: ON | OFF | MACHINE | PASSWORD | KEYFILE | PORTAL (AES encryption for the file)\n" +
             "  PASSWORD: Password for encryption/decryption\n" +
             "  TRANSACTIONAL: ON | OFF (Stage write locally and rename atomically)";
 

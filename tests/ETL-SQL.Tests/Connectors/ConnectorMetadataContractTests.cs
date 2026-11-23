@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using ETL_SQL.App;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -70,6 +72,63 @@ namespace ETL_SQL.Tests.Connectors
                 .Select(entry => entry.Key)
                 .ToList();
             Assert.True(empty.Count == 0, $"{name}: options with an empty value list: {string.Join(", ", empty)}");
+        }
+
+        [Theory]
+        [InlineData("AVRO", "sample.avro")]
+        [InlineData("EXCEL", "sample.xlsx")]
+        [InlineData("FLATFILE", "sample.csv")]
+        [InlineData("JSON", "sample.json")]
+        [InlineData("PARQUET", "sample.parquet")]
+        [InlineData("XML", "sample.xml")]
+        public void FileConnector_EncryptOptionValues_AdvertiseAndAcceptAllKeySources(string name, string fileName)
+        {
+            var connector = Connectors.Value[name];
+            var expected = new[] { "ON", "OFF", "MACHINE", "PASSWORD", "KEYFILE", "PORTAL" };
+
+            Assert.True(connector.GetSupportedOptions().TryGetValue("ENCRYPT", out var supportedValues),
+                $"{name}: GetSupportedOptions missing ENCRYPT");
+            Assert.True(connector.GetOptionValues().TryGetValue("ENCRYPT", out var advertisedValues),
+                $"{name}: GetOptionValues missing ENCRYPT");
+
+            foreach (var mode in expected)
+            {
+                Assert.Contains(mode, supportedValues!, StringComparer.OrdinalIgnoreCase);
+                Assert.Contains(mode, advertisedValues!, StringComparer.OrdinalIgnoreCase);
+            }
+
+            var prevPortalKey = Environment.GetEnvironmentVariable(EncryptionOptions.PortalAtRestKeyEnvVar);
+            try
+            {
+                Environment.SetEnvironmentVariable(
+                    EncryptionOptions.PortalAtRestKeyEnvVar,
+                    Convert.ToBase64String(new byte[32]));
+
+                var path = Path.Combine(Path.GetTempPath(), $"rf02_{Guid.NewGuid():N}_{fileName}");
+                foreach (var mode in advertisedValues!)
+                {
+                    var opts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["ENCRYPT"] = mode
+                    };
+                    if (mode.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
+                        mode.Equals("PASSWORD", StringComparison.OrdinalIgnoreCase))
+                    {
+                        opts["PASSWORD"] = "rf02-test-password";
+                    }
+                    else if (mode.Equals("KEYFILE", StringComparison.OrdinalIgnoreCase))
+                    {
+                        opts["KEYFILE"] = Path.Combine(Path.GetTempPath(), "rf02_dummy.key");
+                    }
+
+                    var ds = connector.CreateDataSource(SystemExecutionContext.Instance, path, opts);
+                    Assert.NotNull(ds);
+                }
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(EncryptionOptions.PortalAtRestKeyEnvVar, prevPortalKey);
+            }
         }
     }
 }

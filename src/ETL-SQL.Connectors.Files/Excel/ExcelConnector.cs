@@ -29,7 +29,7 @@ namespace ETL_SQL.Connectors.Excel
             { "HEADER", new[] { "ON", "OFF" } },
             { "RANGE", Array.Empty<string>() },
             { "COMPRESS", new[] { "ON", "OFF" } },
-            { "ENCRYPT", new[] { "ON", "OFF" } },
+            { "ENCRYPT", new[] { "ON", "OFF", "MACHINE", "PASSWORD", "KEYFILE", "PORTAL" } },
             { "PASSWORD", Array.Empty<string>() },
             { "TRANSACTIONAL", new[] { "ON", "OFF", "TRUE", "FALSE" } },
             { "IGNORE_EXTRA_COLUMNS", new[] { "ON", "OFF", "TRUE", "FALSE" } },
@@ -41,7 +41,7 @@ namespace ETL_SQL.Connectors.Excel
         {
             { "HEADER", new[] { "ON", "OFF" } },
             { "COMPRESS", new[] { "ON", "OFF" } },
-            { "ENCRYPT", new[] { "ON", "OFF" } },
+            { "ENCRYPT", new[] { "ON", "OFF", "MACHINE", "PASSWORD", "KEYFILE", "PORTAL" } },
             { "IGNORE_EXTRA_COLUMNS", new[] { "ON", "OFF" } },
             { "NULL_MISSING_COLUMNS", new[] { "ON", "OFF" } },
             { "MAP_BY_HEADER_NAME", new[] { "ON", "OFF" } }
@@ -56,7 +56,7 @@ namespace ETL_SQL.Connectors.Excel
             "  HEADER: ON (default) | OFF (First row is column names)\n" +
             "  RANGE: Cell range to read (e.g. 'A1:D100')\n" +
             "  COMPRESS: ON | OFF (ZIP archive; adds .zip to the path)\n" +
-            "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
+            "  ENCRYPT: ON | OFF | MACHINE | PASSWORD | KEYFILE | PORTAL (AES encryption for the file)\n" +
             "  PASSWORD: Password for encryption/decryption\n" +
             "  TRANSACTIONAL: ON | OFF (Stage write locally and rename atomically)";
 
