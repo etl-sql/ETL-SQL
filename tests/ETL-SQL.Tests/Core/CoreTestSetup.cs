@@ -25,6 +25,22 @@ namespace ETL_SQL.Tests.Core
                     "ETLSQL_TEST_ISOLATE_DEFAULT_ORCHESTRATOR_DB",
                     Environment.GetEnvironmentVariable("ETLSQL_TEST_ISOLATE_DEFAULT_ORCHESTRATOR_DB") ?? "1");
 
+                // Sessions default to the user's %LocalAppData%\ETL-SQL\Sessions, where CLEAR SESSION
+                // ALL/STALE would delete a developer's real sessions. A test that sets Session:Root
+                // itself still wins: in-memory overrides are applied after environment variables.
+                if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("Session__Root")))
+                {
+                    var sessionRoot = System.IO.Path.Combine(
+                        System.IO.Path.GetTempPath(), "ETL-SQL.Tests", "sessions", $"run-{Environment.ProcessId}");
+                    Environment.SetEnvironmentVariable("Session__Root", sessionRoot);
+                    AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+                    {
+                        try { System.IO.Directory.Delete(sessionRoot, recursive: true); }
+                        catch (System.IO.IOException) { } // A file still open at exit; the next run uses a new folder.
+                        catch (UnauthorizedAccessException) { }
+                    };
+                }
+
                 // ── Test file logger ─────────────────────────────────────────────
                 // Use the centralized Logger for test output to ensure all engine 
                 // messages are captured in the logs/tests folder.

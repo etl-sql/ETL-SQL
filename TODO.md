@@ -108,7 +108,7 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
   Server regression now run on push; new `nightly-tests.yml` (perf, scale assessment, fuzz smoke).
   First green `nightly-tests.yml` run: 45057462832. S
 - [ ] **RV02 Engine, language, connector and corpus tests** (523 `.cs` files in `ETL-SQL.Tests`,
-  `SqlLogicTests`, `FuzzTests`, `tests/Integration/`). M. In progress: 14 findings so far, 13 fixed
+  `SqlLogicTests`, `FuzzTests`, `tests/Integration/`). M. In progress: 15 findings so far, all fixed
   ([findings log](docs/releases/v0.23.0-script-and-test-review-plan.md#rv02-findings-in-progress-2026-11-22)).
   **Left:** the `Coverage/*` no-assertion tests, then the weak-assertion, locale, empty-catch,
   temp-cleanup, sleep and clock scan categories.
