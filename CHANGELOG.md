@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Closed `RV02` weak-assertion audit (finding 28): strengthened 18 remaining single-file assertions across `FileConnectorTests`, `MoreHandlerTests` (fixing `ShowTables_ReturnsTableList`, which previously got 0 rows from `eng.tables` for temp tables and passed on `NotNull`), `UtilityCoverageTests`, `FuncFuzzyJoinTests`, `TestDataFilesTests`, `FlatFileReproTests`, `StmtGoldenTests`, and `OpAliasTests`.
+
 - Strengthened 37 weak/redundant assertions across `SnowflakeConnectorTests`, `BigQueryConnectorTests`, `ConnectorMetadataTests`, `DialectSyntaxTests`, `FileConnectorTests`, `FuncFuzzyTests`, `StmtShowTests`, `RemoteExecuteTests`, and `CoverageBoostTests` (`RV02` finding 27).
 
 - Added `TRANSFORM ... USING UNPIVOT` (`MELT`) reshaping wide columns (`ID_COLS`, `VALUE_COLS`, `NAME_COL`, `VALUE_COL`, `INCLUDE_NULLS = OFF | ON`) into normalized key/value rows with preserved schema types, lineage/scope projection, `WHAT_IF` safety, and SLT coverage (`TR06` in `DataParser.cs`, `TransformSchemaProjection.cs`, `LineageAnalyzer.cs`, `TransformStatementHandler.cs`, `docs/reference/transform/unpivot.md`, `TransformCorrectnessTests.cs`, and `tests/slt_data/transform.test`).

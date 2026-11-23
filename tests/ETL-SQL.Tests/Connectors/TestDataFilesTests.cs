@@ -57,7 +57,11 @@ namespace ETL_SQL.Tests.Connectors
 
             var result = ev.LastResult;
             Assert.NotNull(result);
-            Assert.True(result.Rows.Count >= 1, "Expected at least one product row");
+            Assert.Equal(10, result!.Rows.Count);
+            Assert.Equal("101", result.Rows[0]["id"]?.ToString());
+            Assert.Equal("Laptop Pro", result.Rows[0]["name"]?.ToString());
+            Assert.Equal("Electronics", result.Rows[0]["category"]?.ToString());
+            Assert.Equal("1299.99", result.Rows[0]["price"]?.ToString());
         }
 
         [Fact]

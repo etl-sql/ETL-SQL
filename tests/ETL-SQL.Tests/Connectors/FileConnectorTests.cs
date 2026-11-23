@@ -836,7 +836,7 @@ namespace ETL_SQL.Tests.Connectors
             var path = Write("empty.xml", "<root></root>");
             var ds = new XmlDataSource(Ctx, path);
             var batches = await ds.ReadBatches().ToListAsync();
-            Assert.NotNull(batches);
+            Assert.Equal(0, batches.Sum(b => b.Rows.Count));
         }
 
         [Fact]
@@ -1052,7 +1052,8 @@ namespace ETL_SQL.Tests.Connectors
                 ["POOL_LIFETIME"] = "300"
             };
             var cs = DatabaseConnectionStringBuilder.Build("MSSQL", props);
-            Assert.NotEmpty(cs);
+            Assert.Contains("Data Source=srv", cs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Load Balance Timeout=300", cs, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -1077,7 +1078,8 @@ namespace ETL_SQL.Tests.Connectors
                 ["APPLICATION_INTENT"] = "READWRITE"
             };
             var cs = DatabaseConnectionStringBuilder.Build("MSSQL", props);
-            Assert.NotEmpty(cs);
+            Assert.Contains("Data Source=srv", cs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Application Intent=ReadWrite", cs, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -1098,7 +1100,8 @@ namespace ETL_SQL.Tests.Connectors
         {
             var props = new Dictionary<string, string> { ["HOST"] = "host", ["DATABASE"] = "db" };
             var cs = DatabaseConnectionStringBuilder.Build("NPSQL", props);
-            Assert.NotEmpty(cs);
+            Assert.Contains("Host=host", cs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Database=db", cs, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -1123,7 +1126,9 @@ namespace ETL_SQL.Tests.Connectors
                 ["CONNECTION_LIFETIME"] = "300"
             };
             var cs = DatabaseConnectionStringBuilder.Build("ORACLE", props);
-            Assert.NotEmpty(cs);
+            Assert.Contains("orahost", cs);
+            Assert.Contains("xe", cs);
+            Assert.Contains("300", cs);
         }
 
         [Fact]
@@ -1257,7 +1262,7 @@ namespace ETL_SQL.Tests.Connectors
         {
             var props = new Dictionary<string, string> { ["HOST"] = "myblob.example.com" };
             var cs = ConnectionStringBuilder.Build("BLOB", props);
-            Assert.NotEmpty(cs);
+            Assert.Contains("myblob.example.com", cs);
         }
 
         [Fact]

@@ -145,7 +145,8 @@ namespace ETL_SQL.Tests.Coverage
             node.StartTicks = Stopwatch.GetTimestamp() - Stopwatch.Frequency;
             node.EndTicks = Stopwatch.GetTimestamp();
             var stats = ExecutionTreeAsciiRenderer.FormatStats(node);
-            Assert.NotEmpty(stats);
+            Assert.Contains("1.5k", stats);
+            Assert.Contains("s", stats);
         }
 
         [Fact]

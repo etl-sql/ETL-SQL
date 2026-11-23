@@ -406,7 +406,9 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = Eval();
             await eval.Evaluate(Parse("DECLARE @v STRING = @@VERSION;"));
-            Assert.NotNull(eval.GetVariable("@v"));
+            var version = Assert.IsType<string>(eval.GetVariable("@v"));
+            Assert.False(string.IsNullOrWhiteSpace(version));
+            Assert.Contains(".", version);
         }
 
         [Fact]
@@ -419,7 +421,7 @@ namespace ETL_SQL.Tests.Engine
                 SELECT * FROM #T;
                 DECLARE @r INT = @@ROWCOUNT;
             "));
-            Assert.NotNull(eval.GetVariable("@r"));
+            Assert.Equal(2m, Convert.ToDecimal(eval.GetVariable("@r")));
         }
 
         [Fact]
@@ -534,6 +536,8 @@ namespace ETL_SQL.Tests.Engine
                 SELECT * FROM eng.columns WHERE table_name = '#Emp';
             "));
             Assert.NotNull(eval.LastResult);
+            var cols = eval.LastResult!.Rows.Select(r => r["column_name"]?.ToString()).ToList();
+            Assert.Equal(new[] { "Id", "Name" }, cols);
         }
 
         // ── SHOW TABLES ───────────────────────────────────────────────────────
@@ -543,11 +547,13 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = Eval();
             await eval.Evaluate(Parse(@"
-                SELECT 1 AS Id INTO #A;
-                SELECT 2 AS Id INTO #B;
-                SELECT * FROM eng.tables;
+                CREATE CONNECTION m AS MOCKDB();
+                SELECT * FROM eng.tables WHERE connection_name = 'm';
             "));
             Assert.NotNull(eval.LastResult);
+            var tables = eval.LastResult!.Rows.Select(r => r["table_name"]?.ToString()).ToList();
+            Assert.Contains("Users", tables);
+            Assert.Contains("Employee", tables);
         }
 
         // ── SHOW PROFILE ──────────────────────────────────────────────────────
@@ -558,6 +564,9 @@ namespace ETL_SQL.Tests.Engine
             var eval = Eval();
             await eval.Evaluate(Parse("SELECT 1 AS N INTO #T; SELECT * FROM eng.profile;"));
             Assert.NotNull(eval.LastResult);
+            Assert.Contains("statement", eval.LastResult!.ColumnNames);
+            Assert.Contains("rows_processed", eval.LastResult!.ColumnNames);
+            Assert.Contains("duration_ms", eval.LastResult!.ColumnNames);
         }
 
         /// <summary>

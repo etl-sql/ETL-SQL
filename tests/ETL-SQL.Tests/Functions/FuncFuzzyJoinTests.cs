@@ -162,7 +162,10 @@ namespace ETL_SQL.Tests.Functions
                 FUZZY JOIN b6 b ON SIMILARITY(a.name, b.name) > 0.70
                 KEEP BEST 3");
 
-            Assert.True(rows.Count <= 3 && rows.Count > 0);
+            Assert.Equal(3, rows.Count);
+            var scores = rows.Select(r => Convert.ToDecimal(r["__score"])).ToList();
+            Assert.Equal(1m, scores[0]);
+            Assert.All(scores, s => Assert.True(s > 0.70m));
         }
 
         [Fact]
@@ -235,7 +238,7 @@ namespace ETL_SQL.Tests.Functions
             var stmt = (SelectStatement)new Parser(new Lexer(sql).Tokenize()).Parse().Statements[0];
             var scoreExpr = FuzzyJoinEngine.ExtractScoreExpression(stmt.Joins[0].Condition)!;
             var col = FuzzyJoinEngine.ExtractRightBlockingColumn(scoreExpr, "b");
-            Assert.NotNull(col);
+            Assert.Equal("b.name", col);
         }
     }
 

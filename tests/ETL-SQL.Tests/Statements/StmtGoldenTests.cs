@@ -447,6 +447,8 @@ namespace ETL_SQL.Tests.Statements
                     INSERT INTO csv_out SELECT * FROM #src;
                 ");
                 Assert.True(File.Exists(path), "CSV file was not created");
+                var lines = File.ReadAllLines(path);
+                Assert.Equal(new[] { "id,name", "1,Alice", "2,Bob" }, lines);
             }
             finally { TryDelete(path); }
         }

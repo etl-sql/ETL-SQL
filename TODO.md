@@ -76,14 +76,8 @@ After publication:
 ### 1.3 Full script and test review
 
 Plan and findings: [v0.23.0 script and test review plan](docs/releases/v0.23.0-script-and-test-review-plan.md).
-RV01 (lane-membership and orphan audit) is done; its findings are in the plan.
+RV01 (lane-membership and orphan audit) and RV02 (engine, language, connector and corpus tests; 28 findings) are done; their findings are in the plan.
 
-- [ ] **RV02 Engine, language, connector and corpus tests** (523 `.cs` files in `ETL-SQL.Tests`,
-  `SqlLogicTests`, `FuzzTests`, `tests/Integration/`). M. In progress: 27 findings so far, all fixed
-  ([findings log](docs/releases/v0.23.0-script-and-test-review-plan.md#rv02-findings-in-progress-2026-11-22)).
-  **Left:** ~10 remaining single-file weak-assertion hits (`MoreHandlerTests`, `UtilityCoverageTests`,
-  `FuncFuzzyJoinTests`, `AdvancedFileTests`, `TestDataFilesTests`, `CoreDataGeneratorTests`,
-  `FtpTlsAndTimeoutTests`, `ConnectionTelemetryTests`, `LintingGapsTests`, `AnalysisExplainTests_Old`).
 - [ ] **RV03 Reporting, UI, Language Server and browser checks** (235 + 14 `.cs` files,
   198 `scripts/checks/test-*` files). M
 - [ ] **RV04 Orchestration, governance, hardening, security and scale tests** (227 `.cs` files,
@@ -115,3 +109,6 @@ RV01 (lane-membership and orphan audit) is done; its findings are in the plan.
   **Watch:** Smoke join/aggregate allocations jump about 2–3 MB between runs (cause not found; can
   trip the 2% warning, never the 5% failure); Standard cube allocation is bimodal per sample (about
   1,150 or 2,010 MB).
+
+### 3.2 Bugs
+- [ ] **VS Code Connection Wizard has bad spacing**  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-11-23 134301.png"  the SQL section is barley visible.  You choose the connection type at the top but then there is no way to select MSSQL, Oracle, Postgres, ...  Review with Frontend developer skill and make changes to make this work better.
