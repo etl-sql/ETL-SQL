@@ -76,13 +76,8 @@ After publication:
 ### 1.3 Full script and test review
 
 Plan and findings: [v0.23.0 script and test review plan](docs/releases/v0.23.0-script-and-test-review-plan.md).
-RV01 (lane-membership and orphan audit) and RV02 (engine, language, connector and corpus tests; 29 findings) are done; their findings are in the plan.
+RV01 (lane-membership and orphan audit), RV02 (engine, language, connector and corpus tests; 29 findings), and RV03 (reporting, UI, Language Server and browser checks; 6 findings) are done; their findings are in the plan.
 
-- [ ] **RV03 Reporting, UI, Language Server and browser checks** (235 + 14 `.cs` files,
-  198 `scripts/checks/test-*` files). M — automated sweep and findings 1–4 done (culture-invariant SVG
-  parsing, `PlotPlanTerminalRenderer` `MIN_SLICE_PCT` rollup value bug, `KeyDispatchTests`,
-  `BookmarkLanguageFeatureTests`); **Left:** `TerminalRendererTests` (62 `NotNull` tests), remaining
-  reporting/UI weak assertions, and golden/browser contract audit.
 - [ ] **RV04 Orchestration, governance, hardening, security and scale tests** (227 `.cs` files,
   `Scale.Tests`, `PerfTests`, `Benchmarks`). M
 - [ ] **RV05 Portal and browser suites** (`Portal.Tests` 226 and `Portal.BrowserTests` 98 `.cs`

@@ -40,9 +40,8 @@ CREATE PAGE P AS DASHBOARD (
                 var manifest = await service.GetManifestAsync();
 
                 var visual = manifest.Visuals.First(v => v.Name == "BadMapping");
-                Assert.NotNull(visual);
-                // The manifest should still be generated. 
-                // Depending on implementation, visual.ChartConfig might be null or simplified.
+                Assert.Equal("BAR", visual.VisualType);
+                Assert.Single(visual.Rows);
             }
             finally
             {

@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Closed `RV03` reporting, UI, Language Server, and browser-check review (findings 5–6): strengthened 62 `Assert.NotNull` tests in `TerminalRendererTests` to verify rendered text via `RenderToText`, strengthened 7 weak assertions across `BrailleCanvasTests`, `MappingRoleValidationTests`, `VisualMappingTests`, and `LiveDiagnosticsTests`, and verified all 8 golden/fixture test files and 187 `scripts/checks/test-*.mjs` checks.
+
 - Fixed `PlotPlanTerminalRenderer` displaying the first folded slice's value instead of the rolled-up `Other` total when `MIN_SLICE_PCT` merges small pie slices, and fixed culture-dependent SVG coordinate parsing in `LineGeometryAndPanelStylingTests` and `SankeyControlsTests` (`RV03` findings 1–4 in `PlotPlanTerminalRenderer.cs`, `PieDonutControlsTests.cs`, `LegendControlsTests.cs`, `LineGeometryAndPanelStylingTests.cs`, `SankeyControlsTests.cs`, `KeyDispatchTests.cs`, and `BookmarkLanguageFeatureTests.cs`).
 
 - Reconciled `RV02` weak-assertion count (finding 29): strengthened the 12 remaining weak-assertion hits across `CoreExpressionParserTests`, `CoreParserTests`, `ColumnRuleParserTests`, `StmtInsertReproTests`, `EvenMoreHandlerTests`, `SystemAndReportHandlerTests`, `FileConnectorTests` (`ConnectionStringBuilder_SqlServerAlias_WorksLikeMssql` now asserts `cs1 == cs2`), and `ExtraCoverageTests` (`LinterFactory_CreateWithAllRules_*` now verifies rules fire), bringing findings 27–29 to 67 strengthened tests and accounting for all remaining waived single-rule lint (121) and invariant/pass-fail (19) scan hits.
