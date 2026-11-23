@@ -732,6 +732,243 @@ public sealed class ExternalToolSecurityTests : IDisposable
         info.SetAccessControl(sec);
     }
 
+    // ── XT09: Separate working directory, approved assets and disposable scratch ──
+
+    [Fact]
+    public void XT09_ArgumentTemplateQuoting_PreservesPathsWithSpacesAndRejectsUnclosedQuotes()
+    {
+        var toolDef = new ToolDefinition(
+            "PyTool",
+            "EXECUTABLE",
+            new Dictionary<string, string> { ["PARAM_ROLES"] = "batch=NUMBER;file=PATH" },
+            Disabled: false);
+
+        var handler = new ExecuteToolStatementHandler(new Mock<ILogger>().Object);
+
+        var winArgs = handler.ValidateAndBuildArguments(
+            toolDef,
+            @"C:\Program Files\Python312\python.exe",
+            "\"C:\\Program Files\\My Tools\\transform.py\" --batch-size {batch} --input {file}",
+            new Dictionary<string, string>
+            {
+                ["batch"] = "250",
+                ["file"] = @"C:\Data Files\orders 2026.csv"
+            });
+
+        Assert.Equal(
+            [
+                @"C:\Program Files\My Tools\transform.py",
+                "--batch-size",
+                "250",
+                "--input",
+                @"C:\Data Files\orders 2026.csv"
+            ],
+            winArgs);
+
+        var unixArgs = handler.ValidateAndBuildArguments(
+            toolDef,
+            "/usr/bin/python3",
+            "'/opt/my tools/run.py' --batch-size {batch}",
+            new Dictionary<string, string> { ["batch"] = "10" });
+
+        Assert.Equal(["/opt/my tools/run.py", "--batch-size", "10"], unixArgs);
+
+        var unclosed = Assert.Throws<ExecutionException>(() =>
+            ExecuteToolStatementHandler.BuildArguments("\"C:\\Program Files\\unclosed.py --x", new Dictionary<string, string>()));
+        Assert.Contains("unclosed", unclosed.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task XT09_WorkingDirAndRelativeScriptValidation_EnforcesBoundaries()
+    {
+        var approvedDir = Path.Combine(_tempRoot, "approved assets with spaces");
+        var scriptsDir = Path.Combine(approvedDir, "scripts");
+        Directory.CreateDirectory(scriptsDir);
+        var scriptFile = Path.Combine(scriptsDir, "transform.py");
+        await File.WriteAllTextAsync(scriptFile, "print('ok')");
+
+        // Relative and UNC WORKING_DIR must be rejected.
+        Assert.Throws<InvalidOperationException>(() =>
+            ToolPathGuard.ValidateNativeDirectoryPath("relative/dir", ToolCatalogOwnershipMode.PersonalWorkstation));
+        Assert.Throws<InvalidOperationException>(() =>
+            ToolPathGuard.ValidateNativeDirectoryPath(@"\\server\share\tools", ToolCatalogOwnershipMode.PersonalWorkstation));
+
+        // Relative SCRIPT_PATH without WORKING_DIR must be rejected.
+        Assert.Throws<InvalidOperationException>(() =>
+            ToolPathGuard.ValidateNativeScriptPath("scripts/transform.py", null, ToolCatalogOwnershipMode.PersonalWorkstation));
+
+        // Relative SCRIPT_PATH escaping WORKING_DIR must be rejected.
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            ToolPathGuard.ValidateNativeScriptPath("../escape.py", approvedDir, ToolCatalogOwnershipMode.PersonalWorkstation));
+
+        // Valid WORKING_DIR and contained relative SCRIPT_PATH succeed.
+        var validatedDir = ToolPathGuard.ValidateNativeDirectoryPath(
+            approvedDir, ToolCatalogOwnershipMode.PersonalWorkstation, requireExists: true, verifyWriteBoundary: true);
+        var resolvedScript = ToolPathGuard.ValidateNativeScriptPath(
+            Path.Combine("scripts", "transform.py"), validatedDir, ToolCatalogOwnershipMode.PersonalWorkstation, requireExists: true, verifyWriteBoundary: true);
+
+        Assert.Equal(Path.GetFullPath(approvedDir), validatedDir);
+        Assert.Equal(Path.GetFullPath(scriptFile), resolvedScript);
+    }
+
+    [Theory]
+    [InlineData("success")]
+    [InlineData("timeout")]
+    [InlineData("cancel")]
+    public async Task XT09_NativeTool_SuccessTimeoutCancellation_HonorsWorkingDirAndCleansOnlyScratch(string mode)
+    {
+        var approvedDir = Path.Combine(_tempRoot, "approved workdir " + mode);
+        var scriptsDir = Path.Combine(approvedDir, "sub dir");
+        Directory.CreateDirectory(scriptsDir);
+        var approvedAsset = Path.Combine(scriptsDir, "mask tool.py");
+        await File.WriteAllTextAsync(approvedAsset, "# approved asset");
+
+        var fakeBin = Path.Combine(_tempRoot, OperatingSystem.IsWindows() ? "tool.exe" : "tool");
+        await File.WriteAllTextAsync(fakeBin, "binary");
+
+        var catalogRoot = Path.Combine(_tempRoot, "catalog_" + mode);
+        var catalog = new LocalToolCatalogProvider(
+            catalogRoot,
+            ToolCatalogOwnershipMode.PersonalWorkstation,
+            new OsToolCatalogProtector(),
+            validateOwnership: true);
+
+        await catalog.StoreAsync(new ToolDefinition(
+            "CleanRunner",
+            "EXECUTABLE",
+            new Dictionary<string, string>
+            {
+                ["COMMAND"] = fakeBin,
+                ["WORKING_DIR"] = approvedDir,
+                ["SCRIPT_PATH"] = Path.Combine("sub dir", "mask tool.py"),
+                ["ARGS"] = "\"sub dir/mask tool.py\" --tag {tag}",
+                ["TIMEOUT"] = "1"
+            },
+            Disabled: false));
+
+        var factory = new LifecycleToolProcessFactory(mode);
+        var handler = new ExecuteToolStatementHandler(new Mock<ILogger>().Object, catalog, processFactory: factory);
+
+        using var cts = new CancellationTokenSource();
+        var ctx = new Mock<IExecutionContext>();
+        ctx.SetupGet(c => c.CancellationToken).Returns(cts.Token);
+        ctx.SetupGet(c => c.IsWhatIf).Returns(false);
+        ctx.SetupGet(c => c.Connections).Returns(new Dictionary<string, IDataSource>());
+
+        var stmt = new ExecuteToolStatement("CleanRunner", null, null, null, null);
+
+        if (mode == "cancel")
+        {
+            factory.OnStarted = () => cts.Cancel();
+            await Assert.ThrowsAsync<OperationCanceledException>(() => handler.Execute(stmt, ctx.Object));
+        }
+        else if (mode == "timeout")
+        {
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => handler.Execute(stmt, ctx.Object));
+            Assert.Contains("timed out", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        else
+        {
+            await handler.Execute(stmt, ctx.Object);
+        }
+
+        Assert.NotNull(factory.CapturedStartInfo);
+        Assert.Equal(Path.GetFullPath(approvedDir), factory.CapturedStartInfo!.WorkingDirectory);
+        Assert.Equal(["sub dir/mask tool.py", "--tag", "{tag}"], factory.CapturedStartInfo.ArgumentList.ToList());
+
+        var scratchDir = factory.CapturedStartInfo.EnvironmentVariables["ETLSQL_SCRATCH_DIR"];
+        Assert.False(string.IsNullOrWhiteSpace(scratchDir));
+        Assert.NotEqual(Path.GetFullPath(approvedDir), Path.GetFullPath(scratchDir!));
+        Assert.Equal(scratchDir, factory.CapturedStartInfo.EnvironmentVariables["TMP"]);
+        Assert.Equal(scratchDir, factory.CapturedStartInfo.EnvironmentVariables["TEMP"]);
+        Assert.Equal(scratchDir, factory.CapturedStartInfo.EnvironmentVariables["TMPDIR"]);
+        Assert.True(factory.ScratchExistedDuringRun, "Disposable scratch directory must exist while the tool runs.");
+        Assert.False(Directory.Exists(scratchDir), $"Disposable scratch directory must be removed on {mode}.");
+
+        // Approved WORKING_DIR and its assets must NEVER be deleted.
+        Assert.True(Directory.Exists(approvedDir), $"Approved WORKING_DIR must remain intact on {mode}.");
+        Assert.True(File.Exists(approvedAsset), $"Approved asset inside WORKING_DIR must remain intact on {mode}.");
+    }
+
+    [Fact]
+    public async Task XT09_NativeTool_WithoutWorkingDir_UsesAndCleansUpDisposableScratch()
+    {
+        var fakeBin = Path.Combine(_tempRoot, OperatingSystem.IsWindows() ? "noscratch.exe" : "noscratch");
+        await File.WriteAllTextAsync(fakeBin, "binary");
+
+        var catalogRoot = Path.Combine(_tempRoot, "catalog_default_wd");
+        var catalog = new LocalToolCatalogProvider(
+            catalogRoot,
+            ToolCatalogOwnershipMode.PersonalWorkstation,
+            new OsToolCatalogProtector(),
+            validateOwnership: true);
+
+        await catalog.StoreAsync(new ToolDefinition(
+            "ScratchDefault",
+            "EXECUTABLE",
+            new Dictionary<string, string> { ["COMMAND"] = fakeBin },
+            Disabled: false));
+
+        var factory = new LifecycleToolProcessFactory("success");
+        var handler = new ExecuteToolStatementHandler(new Mock<ILogger>().Object, catalog, processFactory: factory);
+
+        var ctx = new Mock<IExecutionContext>();
+        ctx.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+        ctx.SetupGet(c => c.IsWhatIf).Returns(false);
+        ctx.SetupGet(c => c.Connections).Returns(new Dictionary<string, IDataSource>());
+
+        await handler.Execute(new ExecuteToolStatement("ScratchDefault", null, null, null, null), ctx.Object);
+
+        Assert.NotNull(factory.CapturedStartInfo);
+        var scratchDir = factory.CapturedStartInfo!.EnvironmentVariables["ETLSQL_SCRATCH_DIR"];
+        Assert.False(string.IsNullOrWhiteSpace(scratchDir));
+        Assert.Equal(scratchDir, factory.CapturedStartInfo.WorkingDirectory);
+        Assert.True(factory.ScratchExistedDuringRun);
+        Assert.False(Directory.Exists(scratchDir));
+    }
+
+    private sealed class LifecycleToolProcessFactory(string mode) : IToolProcessFactory
+    {
+        public ProcessStartInfo? CapturedStartInfo { get; private set; }
+        public bool ScratchExistedDuringRun { get; private set; }
+        public Action? OnStarted { get; set; }
+
+        public IToolProcess Create(ProcessStartInfo start)
+        {
+            CapturedStartInfo = start;
+            var scratch = start.EnvironmentVariables["ETLSQL_SCRATCH_DIR"];
+            ScratchExistedDuringRun = !string.IsNullOrEmpty(scratch) && Directory.Exists(scratch);
+            return new LifecycleToolProcess(mode, OnStarted);
+        }
+    }
+
+    private sealed class LifecycleToolProcess(string mode, Action? onStarted) : IToolProcess
+    {
+        private bool _killed;
+        public int ExitCode => 0;
+        public bool HasExited => mode == "success" || _killed;
+        public StreamWriter StandardInput { get; } = new(new MemoryStream(), Encoding.UTF8);
+        public StreamReader StandardOutput { get; } = new(new MemoryStream());
+        public StreamReader StandardError { get; } = new(new MemoryStream());
+
+        public void Start() => onStarted?.Invoke();
+        public void Kill() => _killed = true;
+
+        public Task WaitForExitAsync(CancellationToken token)
+        {
+            if (mode == "success" || _killed)
+                return Task.CompletedTask;
+            return Task.Delay(Timeout.InfiniteTimeSpan, token);
+        }
+
+        public void Dispose()
+        {
+            StandardInput.Dispose();
+            StandardOutput.Dispose();
+            StandardError.Dispose();
+        }
+    }
+
     private sealed class RecordingProcessFactory : IToolProcessFactory
     {
         public List<ProcessStartInfo> StartedCommands { get; } = [];

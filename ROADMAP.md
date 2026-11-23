@@ -959,7 +959,7 @@ must complete before the unified beginner experience can be accepted.
 
 ### Security — External Tool Permissions, Artifact Identity, and Launch Contracts
 
-**Status:** In Progress (v0.23.0: XT09 in `TODO.md` 2.3)
+**Status:** In Progress (v0.23.0: XT09 shipped; XT07–XT08 open for future scheduling)
 
 **Horizon:** Next
 

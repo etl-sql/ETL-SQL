@@ -395,6 +395,100 @@ public static class ToolPathGuard
         return fullPath;
     }
 
+    public static string ValidateNativeDirectoryPath(
+        string directory,
+        ToolCatalogOwnershipMode ownershipMode,
+        bool requireExists = false,
+        bool verifyWriteBoundary = false)
+    {
+        if (string.IsNullOrWhiteSpace(directory))
+            throw new ArgumentException("Native tool WORKING_DIR is required.");
+
+        var trimmed = directory.Trim();
+        if (trimmed.Contains('\0') || trimmed.Contains('"') || trimmed.Contains('\'')
+            || trimmed.Contains('\r') || trimmed.Contains('\n'))
+        {
+            throw new ArgumentException($"Native tool WORKING_DIR '{directory}' contains prohibited characters.");
+        }
+
+        if (!Path.IsPathFullyQualified(trimmed))
+        {
+            throw new InvalidOperationException(
+                $"Native tool WORKING_DIR '{directory}' must be a fully qualified absolute path.");
+        }
+
+        if (trimmed.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Native tool WORKING_DIR '{directory}' cannot target a UNC network path.");
+        }
+
+        var fullPath = Path.GetFullPath(trimmed);
+        EnsureNotReparsePoint(fullPath);
+
+        if (requireExists && !Directory.Exists(fullPath))
+            throw new DirectoryNotFoundException($"Approved native tool working directory '{fullPath}' was not found.");
+
+        if (verifyWriteBoundary)
+        {
+            if (Directory.Exists(fullPath))
+                VerifyDirectoryBinaryWriteBoundary(fullPath, ownershipMode);
+            VerifyAncestorWriteBoundaries(Path.GetDirectoryName(fullPath), ownershipMode);
+        }
+
+        return fullPath;
+    }
+
+    public static string ValidateNativeScriptPath(
+        string scriptPath,
+        string? validatedWorkingDir,
+        ToolCatalogOwnershipMode ownershipMode,
+        bool requireExists = false,
+        bool verifyWriteBoundary = false)
+    {
+        if (string.IsNullOrWhiteSpace(scriptPath))
+            throw new ArgumentException("Native tool SCRIPT_PATH is required.");
+
+        var trimmed = scriptPath.Trim();
+        if (trimmed.Contains('\0') || trimmed.Contains('"') || trimmed.Contains('\'')
+            || trimmed.Contains('\r') || trimmed.Contains('\n'))
+        {
+            throw new ArgumentException($"Native tool SCRIPT_PATH '{scriptPath}' contains prohibited characters.");
+        }
+
+        if (trimmed.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Native tool SCRIPT_PATH '{scriptPath}' cannot target a UNC network path.");
+        }
+
+        if (Path.IsPathFullyQualified(trimmed))
+        {
+            return ValidateNativeCommandPath(trimmed, ownershipMode, requireExists, verifyWriteBoundary);
+        }
+
+        if (string.IsNullOrWhiteSpace(validatedWorkingDir))
+        {
+            throw new InvalidOperationException(
+                $"Relative native tool SCRIPT_PATH '{scriptPath}' requires a validated WORKING_DIR.");
+        }
+
+        var normalizedRoot = Path.GetFullPath(validatedWorkingDir);
+        var combined = Path.GetFullPath(Path.Combine(normalizedRoot, trimmed));
+        var rootWithSep = normalizedRoot.EndsWith(Path.DirectorySeparatorChar)
+            || normalizedRoot.EndsWith(Path.AltDirectorySeparatorChar)
+            ? normalizedRoot
+            : normalizedRoot + Path.DirectorySeparatorChar;
+        var cmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!combined.StartsWith(rootWithSep, cmp))
+        {
+            throw new UnauthorizedAccessException(
+                $"Relative native tool SCRIPT_PATH '{scriptPath}' cannot escape WORKING_DIR '{normalizedRoot}'.");
+        }
+
+        return ValidateNativeCommandPath(combined, ownershipMode, requireExists, verifyWriteBoundary);
+    }
+
     internal static void VerifyBinaryWriteBoundary(string file, ToolCatalogOwnershipMode ownershipMode, bool allowTrustedInstaller)
     {
         EnsureNotReparsePoint(file);
@@ -540,21 +634,35 @@ public sealed class LocalToolCatalogProvider(
             throw new ArgumentException("A tool type is required.", nameof(definition));
 
         var toolType = definition.ToolType.Trim().ToUpperInvariant();
-        if (toolType == "EXECUTABLE"
-            && definition.Options.TryGetValue("COMMAND", out var nativeCommand)
-            && !string.IsNullOrWhiteSpace(nativeCommand))
+        string? validatedWorkingDir = null;
+        if (toolType == "EXECUTABLE")
         {
-            ToolPathGuard.ValidateNativeCommandPath(
-                nativeCommand,
-                ownershipMode,
-                requireExists: false,
-                verifyWriteBoundary: validateOwnership);
+            if (definition.Options.TryGetValue("COMMAND", out var nativeCommand)
+                && !string.IsNullOrWhiteSpace(nativeCommand))
+            {
+                ToolPathGuard.ValidateNativeCommandPath(
+                    nativeCommand,
+                    ownershipMode,
+                    requireExists: false,
+                    verifyWriteBoundary: validateOwnership);
+            }
+
+            if (definition.Options.TryGetValue("WORKING_DIR", out var workingDir)
+                && !string.IsNullOrWhiteSpace(workingDir))
+            {
+                validatedWorkingDir = ToolPathGuard.ValidateNativeDirectoryPath(
+                    workingDir,
+                    ownershipMode,
+                    requireExists: false,
+                    verifyWriteBoundary: validateOwnership);
+            }
         }
 
         if (definition.Options.TryGetValue("SCRIPT_PATH", out var scriptPath) && !string.IsNullOrWhiteSpace(scriptPath))
         {
-            ToolPathGuard.ValidateNativeCommandPath(
+            ToolPathGuard.ValidateNativeScriptPath(
                 scriptPath,
+                validatedWorkingDir,
                 ownershipMode,
                 requireExists: false,
                 verifyWriteBoundary: validateOwnership);

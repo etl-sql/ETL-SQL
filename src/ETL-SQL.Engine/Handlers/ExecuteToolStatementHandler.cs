@@ -96,6 +96,8 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
         long? containerPidsLimit = null;
         bool isolateNetwork = true;
         string? resolvedNativeCommand = null;
+        string? validatedNativeWorkingDir = null;
+        string? scratchDir = null;
 
         if (toolType == "CONTAINER")
         {
@@ -119,11 +121,21 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
                 requireExists: _processFactory is ToolProcessFactory,
                 verifyWriteBoundary: true);
 
+            if (!string.IsNullOrWhiteSpace(workingDir))
+            {
+                validatedNativeWorkingDir = ToolPathGuard.ValidateNativeDirectoryPath(
+                    workingDir,
+                    ownershipMode,
+                    requireExists: _processFactory is ToolProcessFactory,
+                    verifyWriteBoundary: true);
+            }
+
             var scriptPath = GetOptionString(toolDef.Options, "SCRIPT_PATH");
             if (!string.IsNullOrWhiteSpace(scriptPath))
             {
-                ToolPathGuard.ValidateNativeCommandPath(
+                ToolPathGuard.ValidateNativeScriptPath(
                     scriptPath,
+                    validatedNativeWorkingDir,
                     ownershipMode,
                     requireExists: _processFactory is ToolProcessFactory,
                     verifyWriteBoundary: true);
@@ -247,10 +259,19 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
             startInfo.EnvironmentVariables.Clear();
             if (path != null) startInfo.EnvironmentVariables["PATH"] = path;
 
-            // Canonical scratch root
-            workingDir = Path.Combine(Path.GetTempPath(), "etlsql_tool_" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(workingDir);
-            startInfo.WorkingDirectory = workingDir;
+            // Disposable per-invocation scratch root, kept separate from any approved WORKING_DIR.
+            scratchDir = Path.Combine(Path.GetTempPath(), "etlsql_tool_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(scratchDir);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(scratchDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
+            startInfo.EnvironmentVariables["ETLSQL_SCRATCH_DIR"] = scratchDir;
+            startInfo.EnvironmentVariables["TMP"] = scratchDir;
+            startInfo.EnvironmentVariables["TEMP"] = scratchDir;
+            startInfo.EnvironmentVariables["TMPDIR"] = scratchDir;
+            startInfo.WorkingDirectory = validatedNativeWorkingDir ?? scratchDir;
         }
 
         IDataSource? ownedOutput = null;
@@ -261,7 +282,12 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
             // P2 - Immutable Logical Checkpoint Identities
             var argString = string.Join("|", startInfo.ArgumentList);
             var envKeys = startInfo.EnvironmentVariables.Keys.Cast<string>()
-                .Where(k => k != "ETLSQL_CAPABILITY_TOKEN" && k != "ETLSQL_IDEMPOTENCY_KEY")
+                .Where(k => k != "ETLSQL_CAPABILITY_TOKEN"
+                    && k != "ETLSQL_IDEMPOTENCY_KEY"
+                    && k != "ETLSQL_SCRATCH_DIR"
+                    && k != "TMP"
+                    && k != "TEMP"
+                    && k != "TMPDIR")
                 .OrderBy(k => k);
             var envString = string.Join("|", envKeys.Select(k => $"{k}={startInfo.EnvironmentVariables[k]}"));
             var policyHash = context.ExecutionPolicy?.PolicyHash ?? "no-policy";
@@ -434,18 +460,20 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
         finally
         {
             if (ownedOutput != null) await ownedOutput.DisposeAsync();
-            if (toolType == "EXECUTABLE" && !string.IsNullOrEmpty(workingDir) && workingDir.StartsWith(Path.GetTempPath()))
+            if (toolType == "EXECUTABLE"
+                && !string.IsNullOrEmpty(scratchDir)
+                && !string.Equals(scratchDir, validatedNativeWorkingDir, StringComparison.OrdinalIgnoreCase))
             {
                 try
                 {
-                    if (Directory.Exists(workingDir))
+                    if (Directory.Exists(scratchDir))
                     {
-                        Directory.Delete(workingDir, true);
+                        Directory.Delete(scratchDir, true);
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warning("Failed to clean up scratch root {Dir}: {Error}", workingDir, ex.Message);
+                    _logger.Warning("Failed to clean up scratch root {Dir}: {Error}", scratchDir, ex.Message);
                 }
             }
         }
@@ -621,14 +649,15 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
     }
 
     /// <summary>
-    /// Splits the ARGS template on spaces, then performs a single-pass replacement of each
-    /// <c>{NAME}</c> placeholder inside each token. Values never introduce new arguments or expand
-    /// nested placeholders; an argument left empty is dropped.
+    /// Splits the ARGS template into argument tokens honoring single and double quotes (so paths
+    /// with spaces stay intact), then performs a single-pass replacement of each <c>{NAME}</c>
+    /// placeholder inside each token. Values never introduce new arguments or expand nested
+    /// placeholders; an argument left empty is dropped.
     /// </summary>
     internal static List<string> BuildArguments(string template, IReadOnlyDictionary<string, string> values)
     {
-        var tokens = template.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var result = new List<string>(tokens.Length);
+        var tokens = TokenizeArgumentTemplate(template);
+        var result = new List<string>(tokens.Count);
         foreach (var token in tokens)
         {
             var replaced = PlaceholderRegex().Replace(token, match =>
@@ -641,6 +670,74 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
         }
 
         return result;
+    }
+
+    internal static List<string> TokenizeArgumentTemplate(string template)
+    {
+        var tokens = new List<string>();
+        if (string.IsNullOrWhiteSpace(template))
+            return tokens;
+
+        var current = new System.Text.StringBuilder();
+        var inToken = false;
+        char quote = '\0';
+
+        for (int i = 0; i < template.Length; i++)
+        {
+            char c = template[i];
+
+            if (quote != '\0')
+            {
+                if (quote == '"' && c == '\\' && i + 1 < template.Length && template[i + 1] == '"')
+                {
+                    current.Append('"');
+                    i++;
+                    continue;
+                }
+
+                if (c == quote)
+                {
+                    quote = '\0';
+                    continue;
+                }
+
+                current.Append(c);
+                continue;
+            }
+
+            if (char.IsWhiteSpace(c))
+            {
+                if (inToken)
+                {
+                    tokens.Add(current.ToString());
+                    current.Clear();
+                    inToken = false;
+                }
+                continue;
+            }
+
+            if (c is '"' or '\'')
+            {
+                quote = c;
+                inToken = true;
+                continue;
+            }
+
+            current.Append(c);
+            inToken = true;
+        }
+
+        if (quote != '\0')
+        {
+            throw new ExecutionException($"Tool ARGS template contains an unclosed {quote} quote.");
+        }
+
+        if (inToken)
+        {
+            tokens.Add(current.ToString());
+        }
+
+        return tokens;
     }
 
     internal List<string> ValidateAndBuildArguments(
@@ -663,7 +760,7 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
             ValidateParameterValue(paramName, value, maxParamLength, roles, allowCallerCodeArgs);
         }
 
-        var tokens = template.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        var tokens = TokenizeArgumentTemplate(template);
         var isInterpreter = IsInterpreterCommand(command);
         var hasFixedScriptBeforeParam = false;
         var pastEndOfOptions = false;
@@ -681,7 +778,7 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
             var placeholders = PlaceholderRegex().Matches(token);
             if (placeholders.Count == 0)
             {
-                if (!token.StartsWith('-') && !token.StartsWith('/'))
+                if (!token.StartsWith('-') && !DosSwitchRegex().IsMatch(token))
                     hasFixedScriptBeforeParam = true;
                 continue;
             }
