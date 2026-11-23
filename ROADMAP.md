@@ -364,7 +364,7 @@ tested and matches its neighbors; and the docs-versus-registry check passes.
 
 ### File Operations — `ENCRYPT FILE` / `DECRYPT FILE` Match Their Documentation
 
-**Status:** In Progress (v0.23.0: FO07 and FO08 shipped; FO05 decision in `TODO.md` 2.3)  
+**Status:** In Progress (v0.23.0: FO05, FO07, and FO08 closed; FO12 open for future scheduling)  
 **Horizon:** Next  
 **Authoritative design:** none yet; [ENCRYPT / DECRYPT FILE](docs/reference/file-operations/encrypt-file.md)
 is the reference page, and [`ExtensionParser.cs`](src/ETL-SQL.Core/Parser/Components/ExtensionParser.cs)
@@ -398,11 +398,9 @@ has the options users expect and every connector page says how to encrypt on wri
 | FO12 | **Detached `SIGN FILE` / `VERIFY FILE SIGNATURE`.** A `.sig` without encryption, left out of FO11 (encrypt-and-sign and decrypt-and-verify shipped in v0.22.0). PGP only, through PgpCore; reference page, grammar, help text, `LanguageMetadata`, and tests for a good signature, a wrong signer, a tampered file and a missing signature. Never echo key material in errors. | — | S |
 | FO08 | **`TO DIRECTORY` for `ENCRYPT`/`DECRYPT` and `COMPRESS`/`DECOMPRESS`.** Today `TO DIRECTORY` and `DATE_SUFFIX` throw for anything but copy, move and rename. Decide whether to allow them; if not, the reference states it. | — | D |
 
-Selected for v0.23.0 (owner, 2026-11-23): FO07 shipped; FO05 and FO08 decisions pending owner confirmation in [`TODO.md`](TODO.md):
+Selected for v0.23.0 (owner, 2026-11-23): FO05, FO07, and FO08 closed in v0.23.0:
 
-- **FO05 recommendation (`ALGORITHM` on `ENCRYPT FILE` / `DECRYPT FILE`): leave `ALGORITHM` out of the language.**
-  - *Evidence:* `CryptoUtils.EncryptFile` / `DecryptFile` (`src/ETL-SQL.Core/Common/CryptoUtils.cs`) only pass `HashAlgorithmName? algo` into `DeriveFileKeys` (PBKDF2 PRF hash; default `SHA256`, 600,000 iterations). It does not change the cipher (always AES-256-CBC), does not change the MAC (always `HMACSHA256`), and does not apply to `KEYFILE` (RSA-OAEP-SHA256 + AES-256) or `PGP_KEY` (OpenPGP). Crucially, the v2 file header (`FileMagicV2` + salt + IV) does not record which PBKDF2 hash was used, so exposing a non-default KDF hash would force callers to remember and repeat it on `DECRYPT FILE` or get a generic wrong-password failure. The encryption method is already unambiguously chosen by the `PASSWORD` / `KEYFILE` / `PGP_KEY` clause, and `encrypt-file.md` already matches.
-  - *If approved:* close `FO05` with a brief note in `encrypt-file.md` and a negative test pinning that `WITH (ALGORITHM = ...)` is rejected.
+- **FO05 decision (approved 2026-11-23, closed in v0.23.0):** Leave `ALGORITHM` out of `ENCRYPT FILE` / `DECRYPT FILE`. The method is selected by `PASSWORD` / `KEYFILE` / `PGP_KEY` with fixed modern primitives (AES-256-CBC + PBKDF2-SHA256 600k + HMAC-SHA256, RSA-OAEP-SHA256, OpenPGP), and the v2 file header does not record a KDF hash; `encrypt-file.md` and `FileOperationWithOptionTests` match.
 
 - **FO08 decision (approved 2026-11-23, shipped in v0.23.0):** Support `TO DIRECTORY` for `ENCRYPT FILE`, `DECRYPT FILE`, `COMPRESS FILE`, and `DECOMPRESS FILE` using each operation's default filename/extraction semantics; keep `DATE_SUFFIX` restricted to `COPY`, `MOVE`, and `RENAME` with operation-specific errors.
 

@@ -38,7 +38,9 @@ DECRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' 
 | `PGP_KEY` | an OpenPGP **public** key | the matching OpenPGP **private** key, plus `PASSWORD` for its passphrase | Standard OpenPGP, readable by GnuPG and other PGP tools. |
 
 - Give exactly one method. `KEYFILE` with `PGP_KEY`, or `PASSWORD` with a key on `ENCRYPT FILE`, is a
-  syntax error, because the statement would otherwise use one and ignore the other.
+  syntax error, because the statement would otherwise use one and ignore the other. There is no
+  `ALGORITHM` option: the method is selected by `PASSWORD`, `KEYFILE`, or `PGP_KEY`, and each uses
+  the fixed format in the table above.
 - [CREATE PGP_KEY_PAIR](create-pgp-key-pair.md) writes `public.asc` and `private.asc` into a folder.
   [CREATE SSH_KEY_PAIR](create-ssh-key-pair.md) with `ALGORITHM = 'RSA'` writes `id_rsa` and
   `id_rsa.pub`. An ECDSA key cannot be used with `KEYFILE`.

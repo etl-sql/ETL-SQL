@@ -93,14 +93,10 @@ All five items (`RF01`–`RF05`) have shipped on `release/v0.23.0` (see `CHANGEL
 
 ### 2.3 Selected from ROADMAP (2026-11-23)
 
-Selected by the owner for this week; each lands on `release/v0.23.0` and ships in v0.23.0 only if it
-is finished and green before the final candidate. Design, boundaries and acceptance stay in the
-linked `ROADMAP.md` entry. For a `D` (decision) item, write the recommendation with its evidence in
-the item's ROADMAP entry and get the owner's answer before writing code.
+`FO05`, `FO08`, `XT09`, and `TR05` have shipped on `release/v0.23.0` (see `CHANGELOG.md`).
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| FO05 | **`ENCRYPT FILE` `ALGORITHM` decision** ([ROADMAP](ROADMAP.md#file-operations--encrypt-file--decrypt-file-match-their-documentation)). `CryptoUtils.EncryptFile` and `DecryptFile` take an optional `HashAlgorithmName` the statement never passes. Recommend exposing it (and what it controls) or leaving it out of the language; the method already follows from the clause, so the documented `ALGORITHM = 'AES256' \| 'PGP'` is not needed. **Finish line:** owner decision recorded; `encrypt-file.md`, grammar, help and tests match it. | — | D |
 | FO13 | **`ENCRYPT`/`DECRYPT`/`COMPRESS`/`DECOMPRESS` `TO` a directory or remote connection (owner request 2026-11-23).** Today `TO <connection>` is refused (it used to upload the unprocessed file, fixed in the commit after 15091a9ef). Write the output to a private local staging directory, then upload it through the connection's `IRemoteFileSystem` (SFTP, FTP, cloud), honoring `OVERWRITE` remotely; a remote source downloads to staging first. **Finish line:** the bridge tests in `OrchRemoteTransferTests` assert the uploaded bytes are ciphertext/archive (not the source), `DECOMPRESS` to a remote directory defines what happens when some uploads fail (stop, report which were sent), staging is deleted on success, failure and cancellation, and `encrypt-file.md`/`compress-file.md` replace the "local paths only" note. Security-sensitive: Claude reviews before push. | FO08 | M |
 
 ## Tier 3 — if time allows

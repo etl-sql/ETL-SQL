@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Closed `FO05` (`ENCRYPT FILE` / `DECRYPT FILE` `ALGORITHM` decision): left `ALGORITHM` out of the language (the encryption method is already selected by `PASSWORD` / `KEYFILE` / `PGP_KEY` with fixed AES-256 + PBKDF2-SHA256 + HMAC-SHA256 / RSA-OAEP-SHA256 / OpenPGP formats), documented the decision in `docs/reference/file-operations/encrypt-file.md`, and pinned rejection of `WITH (ALGORITHM = ...)` in `FileOperationWithOptionTests.cs`, plus added `TO my_dir` and remote fail-closed regression tests in `FileOperationToDirectoryTests.cs`.
+
 - Enabled `TO DIRECTORY` for `ENCRYPT FILE`, `DECRYPT FILE`, `COMPRESS FILE`, and `DECOMPRESS FILE` using each operation's default derived filename/extraction rules inside the target directory while keeping `DATE_SUFFIX` restricted to `COPY`, `MOVE`, and `RENAME` with operation-specific errors (`FO08` in `FileOperationStatementHandler.cs`, `docs/reference/file-operations/encrypt-file.md`, `docs/reference/file-operations/compress-file.md`, and `FileOperationToDirectoryTests.cs`).
 - `ENCRYPT FILE`, `DECRYPT FILE`, `COMPRESS FILE` and `DECOMPRESS FILE` now refuse a remote connection as source or destination. Before, the local/remote bridge treated them as a plain copy, so `ENCRYPT FILE 'data.csv' TO sftp_conn PASSWORD '…'` uploaded the unencrypted file and logged success. Encrypt or compress locally, then `COPY FILE` (`FileOperationStatementHandler`, `OrchRemoteTransferTests`; writing through a connection is TODO FO13).
 
