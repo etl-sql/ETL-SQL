@@ -207,47 +207,23 @@ blocked by the single required check on `main` and `release/*`; a clean clone bu
 
 ### Windows Installer — The MSI Copies Files and Registers Services Only
 
-**Status:** In Progress (v0.23.0); slices 1–4 shipped (`MI01`–`MI04`), slice 5 (`MI05`) in `TODO.md` 3.4  
-**Horizon:** Next (v0.23.0)  
-**Authoritative design:** slice 1: [MI01 design](docs/releases/v0.23.0-mi01-services-own-configuration-design.md); [Release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md)
-section 10 holds the runner-loss evidence that prompted it.
+**Status:** Accepted (slice 5 deferred; slices 1–4 shipped in v0.23.0 and the acceptance evidence is met)  
+**Horizon:** Later (revisit only if MSI runner losses return)  
+**Authoritative design:** [Release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md)
+section 10 (runner-loss evidence and the 2026-11-23 close).
 
-**Problem and intended outcome:** The WiX 3.14 MSI does more than install. Five JScript custom
-actions run as LocalSystem inside the install (`WriteJwt`, `ReadSettings`, `RestoreSettings`,
-`PromptCleanData`, `CleanData`) to generate secrets and carry settings forward, and
-`util:CloseApplication` force-kills processes with `TerminateProcess`. Microsoft discourages script
-custom actions as fragile and antivirus-sensitive, and a failure inside them surfaces only in the
-msiexec log. Rollback is not a product feature either: the certification uninstalls, installs the
-previous release and copies databases and configuration back by hand. The outcome: the MSI copies
-files and registers, starts and stops the two services; the services create and migrate their own
-configuration on first start; and rollback is one documented command.
+**Shipped in v0.23.0 (`MI01`–`MI04`, see `CHANGELOG.md`):** the MSI only copies files and
+registers, starts and stops the two services; the services create and migrate their own
+configuration; no script custom actions and no `CloseApplication`; `ETL-SQL admin restore
+--in-place` for rollback and `ETL-SQL admin purge-data` for clean data. The Portal-profile
+certification (fresh, upgrade, rollback) passed on its first attempt on five nightly runs.
 
-**Why next:** Recommended 2026-11-07 while diagnosing the MSI Portal runner loss (v0.22.0 TODO §1, W3). That
-diagnosis has not shown the installer to be the cause (24 of 24 install, idle, uninstall runs
-passed), so this is robustness work, not the W3 fix, and it waits for v0.23.0 unless the diagnosis
-points at it.
-
-**Boundaries:**
-- WiX 3.14 stays (free; WiX 7 needs the OSMF fee). Open to MSIX or script-based installer.
-- Install paths, profiles (`DEPLOY_PROFILE`), service names and ports are unchanged.
-- Existing installs must upgrade in place with their settings and secrets kept.
-
-**Dependencies:** the MSI upgrade certification (`msi-upgrade.yml`); `ETL-SQL admin backup`.
-
-**Slices:** 1–4 shipped in v0.23.0 (see `CHANGELOG.md`): services create and migrate their own
-configuration, no `CloseApplication`, `ETL-SQL admin restore --in-place` for rollback, and
-`ETL-SQL admin purge-data` instead of the clean-data script action. Remaining:
-
-5. Run the MSI certification inside a Hyper-V-isolated Windows Server Core container that the
-   runner only drives, so nothing on the runner host shares the installed files and a failure
-   cannot take the job and its logs with it. Proven on `windows-2022` (branch
-   `diag/nested-virt-probe`, run 42418358058, 7 of 7 attempts): the Portal-profile MSI installs,
-   both services run, `/health` answers and an immediate uninstall succeeds in about 90 s. On
-   `windows-latest` (Server 2025) the Hyper-V role is installed but no Docker engine runs.
-
-**Acceptance evidence:** The MSI has no script custom actions and no `CloseApplication`; a fresh
-install and an upgrade from v0.22.0 keep their secrets and settings; the Portal-profile certification
-(fresh, upgrade, rollback via `admin restore`) passes on its first attempt on five nightly runs.
+**Deferred slice 5 (`MI05`):** run the MSI certification inside a Hyper-V-isolated Windows Server
+Core container that the runner only drives (host supervisor, `docker run --isolation=hyperv` child
+on `windows-2022`). Proven feasible on branch `diag/nested-virt-probe` (run 42418358058, 7 of 7);
+`windows-latest` (Server 2025) runs no Docker engine. No runner loss since the 2026-11-08 Restart
+Manager fixes, so the gain no longer pays for the cost (pinned `windows-2022`, a less realistic
+install). Pick it up again if a real MSI runner loss recurs.
 
 ### Data Preparation — `TRANSFORM` Reliability, Schema/Lineage Integration, and Analyst Operations
 

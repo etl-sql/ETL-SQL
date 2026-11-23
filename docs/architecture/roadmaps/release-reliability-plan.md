@@ -430,3 +430,8 @@ script now sets the Windows Installer machine policy `DisableAutomaticApplicatio
 hosted runners only (it reaches nested sessions). After every `msiexec` call it fails if the log
 shows Restart Manager attempting a shutdown, so a pass shows the policy held. The installer source
 check requires both.
+
+**2026-11-23:** no runner loss since. The 11-22 "loss" (45002373338, attempt 1) was the Release
+Candidate Supervisor cancelling after Spill 1/3 went red. Five nightly MSI runs passed on the first
+attempt (44559721960, 44764667334, 44915547031, 45034184840, 45227061165), which closes MI05 by
+evidence; the Hyper-V container is deferred unless losses return.

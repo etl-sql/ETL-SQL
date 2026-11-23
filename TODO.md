@@ -130,14 +130,3 @@ back to its `ROADMAP.md` entry unchanged. Each row's boundaries are in its ROADM
   with identical checksums. **Watch:** Smoke join/aggregate allocations jump about 2–3 MB between
   runs (cause not found; can trip the 2% warning, never the 5% failure); Standard cube allocation
   is bimodal per sample (about 1,150 or 2,010 MB).
-
-### 3.4 MSI installer: isolated certification
-
-**Design:** [ROADMAP: Windows Installer](ROADMAP.md#windows-installer--the-msi-copies-files-and-registers-services-only).
-
-- [ ] **MI05 MSI certification in a Hyper-V-isolated Windows Server Core container.** Proven on
-  `windows-2022` (branch `diag/nested-virt-probe`, run 42418358058, 7 of 7); `windows-latest`
-  (Server 2025) runs no Docker engine. **Finish line (MI01–MI05):** no script custom actions and no
-  `CloseApplication`; fresh install and upgrade from v0.22.0 keep secrets and settings; the
-  Portal-profile certification (fresh, upgrade, rollback via `admin restore`) passes first time on
-  five nightly runs.
