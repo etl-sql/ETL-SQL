@@ -89,9 +89,8 @@ those rehearsals do not need to be repeated for each release and do not certify 
 > (`publish-marketplace.yml`), which verifies the VSIX provenance from Release on the tag,
 > publishes with the vsce version that packaged the VSIXs and skips a version and platform the
 > Marketplace already has. To retry a failed publish, dispatch it on `main` with `tag=vX.Y.Z`.
-> Keep Marketplace trusted-publisher entries for both `publish-marketplace.yml` (dispatch) and
-> `release.yml` (the caller when Release runs it) until a tagged release has published through
-> the call.
+> The Marketplace trusted publisher is `publish-marketplace.yml`; it covers both the dispatch and
+> the call from Release.
 >
 > Since v0.22.0 the local pre-release gate (`Test-PreRelease.ps1`) is an optional developer tool.
 > Release drivers no longer read its state, and no workstation run is part of the release. The
