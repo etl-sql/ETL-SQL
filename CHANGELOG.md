@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Documented write-time compression and encryption (`COMPRESS`, `COMPRESSION`, `ENCRYPT`, `PASSWORD`, `KEYFILE`, `PASSPHRASE`, `ALGORITHM`), compress-before-encrypt write order, reversed read order, and mutually exclusive key sources across all six file connectors (`FO07` in `docs/reference/connectors/files/flatfile.md`, `excel.md`, `json.md`, `xml.md`, `parquet.md`, and `avro.md`).
+
 - Documented SQL dialect notes (row capping, `DUAL`, identifier quoting, native SQL features, and linter `DialectKeyword` exclusions) for PostgreSQL, Oracle, and SQL Server (`DB06` in `docs/reference/connectors/databases/postgres.md`, `docs/reference/connectors/databases/oracle.md`, and `docs/reference/connectors/databases/mssql.md`).
 
 - Fixed `EXECUTE proc @var OUTPUT` on a local procedure ignoring `OUTPUT`: the caller's variable kept its old value. The parameter's final value is now written back, also after `RETURN`, for positional and named arguments; an `OUTPUT` argument that is not a variable is an error (`RV02`).
