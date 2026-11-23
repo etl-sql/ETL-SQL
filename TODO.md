@@ -97,18 +97,11 @@ RV01 (lane-membership and orphan audit) and RV02 (engine, language, connector an
 
 ## Tier 3 — if time allows
 
-### 3.1 External join CPU regression at 100M rows
+### 3.1 Performance watch
 
-- [ ] **Bring the 100M external join back to its baseline elapsed time.** Scale Measurement
-  45226912017 (ubuntu-latest, 100M rows, 4096/2048 MB): join elapsed 896 → 1,889 s against
-  baseline 43504065542. Cause found and fixed (see `CHANGELOG.md`): the pooled build table picked
-  hash buckets by the same low hash bits the partitioner had already fixed, so chains grew with the
-  partition count. Local 50M rows: 358 → 136 s, same checksum and allocations. **Left:** a
-  same-settings Scale Measurement (ExternalJoin, 100M) on the fix with join elapsed ≤ 896 s,
-  allocations ≤ 107 GB, same checksum.
-  **Watch:** Smoke join/aggregate allocations jump about 2–3 MB between runs (cause not found; can
-  trip the 2% warning, never the 5% failure); Standard cube allocation is bimodal per sample (about
-  1,150 or 2,010 MB).
+- [ ] **Unexplained allocation noise.** Smoke join/aggregate allocations jump about 2–3 MB between
+  runs (cause not found; can trip the 2% warning, never the 5% failure); Standard cube allocation
+  is bimodal per sample (about 1,150 or 2,010 MB).
 
 ### 3.2 Bugs
 - [ ] **VS Code Connection Wizard has bad spacing**  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-11-23 134301.png"  the SQL section is barley visible.  You choose the connection type at the top but then there is no way to select MSSQL, Oracle, Postgres, ...  Review with Frontend developer skill and make changes to make this work better.
