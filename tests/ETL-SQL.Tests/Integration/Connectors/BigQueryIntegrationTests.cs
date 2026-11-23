@@ -55,7 +55,9 @@ namespace ETL_SQL.Tests.Integration.Connectors
             var batches = await ds.ExecuteRawSql("SELECT 1 AS value, 'hello' AS label").ToListAsync();
             Assert.NotEmpty(batches);
             var rows = batches.SelectMany(b => b.Rows).ToList();
-            Assert.NotEmpty(rows);
+            var row = Assert.Single(rows);
+            Assert.Equal(1m, Convert.ToDecimal(row["value"]));
+            Assert.Equal("hello", row["label"]?.ToString());
         }
 
         [Fact]

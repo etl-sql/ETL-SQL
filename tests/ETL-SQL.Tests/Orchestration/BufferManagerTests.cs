@@ -66,20 +66,20 @@ namespace ETL_SQL.Tests.Orchestration
             // Hold all memory
             var res1 = await bm.ReserveMemoryAsync("session1", 10 * 1024 * 1024);
 
-            var task2 = bm.ReserveMemoryAsync("session2", 5 * 1024 * 1024);
-            var task3 = bm.ReserveMemoryAsync("session3", 5 * 1024 * 1024);
+            // Request 6MB each so only one fits at a time (6 + 6 > 10)
+            var task2 = bm.ReserveMemoryAsync("session2", 6 * 1024 * 1024);
+            var task3 = bm.ReserveMemoryAsync("session3", 6 * 1024 * 1024);
 
             // Release session 1
             res1.Dispose();
 
-            // Task 2 should complete first (FIFO)
+            // Task 2 must complete first (FIFO) while task 3 waits for 6MB to free up
             var res2 = await task2;
             Assert.NotNull(res2);
+            Assert.False(task3.IsCompleted, "task3 should wait until task2 releases its 6MB reservation");
 
-            // Task 3 should still be waiting (since task 2 took 5MB and 10 is max)
-            // If we release task 2, task 3 is next
             res2.Dispose();
-            var res3 = await task3;
+            using var res3 = await task3;
             Assert.NotNull(res3);
         }
 

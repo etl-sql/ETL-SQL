@@ -217,7 +217,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             var parse = root.Parse(new[] { "admin", "user", "create", "--username", "jsmith", "--password", "hunter2" });
 
-            Assert.NotEmpty(parse.Errors);
+            Assert.Contains(parse.Errors, e => e.Message.Contains("--password", StringComparison.Ordinal));
             Assert.Null(captured);
         }
 
@@ -258,7 +258,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             var parse = root.Parse(new[] { "admin", "portal-whoami", "--client-secret", "sas_leak" });
 
-            Assert.NotEmpty(parse.Errors);
+            Assert.Contains(parse.Errors, e => e.Message.Contains("--client-secret", StringComparison.Ordinal));
             Assert.Null(captured);
         }
 
@@ -364,7 +364,7 @@ namespace ETL_SQL.Tests.Orchestration
                 "--client-secret", "sas_leak"
             });
 
-            Assert.NotEmpty(parse.Errors);
+            Assert.Contains(parse.Errors, e => e.Message.Contains("--client-secret", StringComparison.Ordinal));
         }
 
         [Fact]
@@ -382,7 +382,7 @@ namespace ETL_SQL.Tests.Orchestration
                 "admin", "user", "reset-password", "--username", "jsmith", "--password", "hunter2"
             });
 
-            Assert.NotEmpty(parse.Errors);
+            Assert.Contains(parse.Errors, e => e.Message.Contains("--password", StringComparison.Ordinal));
             Assert.Null(captured);
         }
 

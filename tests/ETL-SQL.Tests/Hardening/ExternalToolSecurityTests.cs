@@ -46,11 +46,12 @@ public sealed class ExternalToolSecurityTests : IDisposable
     // Stock Windows lets Authenticated Users create folders in C:\ and Users write to
     // C:\ProgramData. Checking ancestors with the full write mask rejected every catalog on every
     // Windows host, so ancestors are held only to the rights that could replace the path.
-    [Fact]
+    [WindowsFact]
+    [Trait("Platform", "Windows")]
+    [SupportedOSPlatform("windows")]
     public void XT04_WindowsAncestorMayAllowNewSiblingsButNotReplacement()
     {
-        if (OperatingSystem.IsWindows())
-            AssertWindowsAncestorRule();
+        AssertWindowsAncestorRule();
     }
 
     [SupportedOSPlatform("windows")]
@@ -144,12 +145,10 @@ public sealed class ExternalToolSecurityTests : IDisposable
         await Assert.ThrowsAnyAsync<Exception>(() => catalog.ListAsync());
     }
 
-    [Fact]
+    [WindowsFact]
+    [Trait("Platform", "Windows")]
     public async Task XT01_LocalCatalogRejectsDirectoryLinkRoot()
     {
-        if (!OperatingSystem.IsWindows())
-            return;
-
         var targetDir = Path.Combine(_tempRoot, "real_target");
         var junctionDir = Path.Combine(_tempRoot, "junction_catalog");
         Directory.CreateDirectory(targetDir);
@@ -161,9 +160,10 @@ public sealed class ExternalToolSecurityTests : IDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true
         });
-        mklink?.WaitForExit(5000);
-        if (mklink?.ExitCode != 0 || !Directory.Exists(junctionDir))
-            return;
+        Assert.NotNull(mklink);
+        Assert.True(mklink!.WaitForExit(5000), "mklink /J timed out");
+        Assert.Equal(0, mklink.ExitCode);
+        Assert.True(Directory.Exists(junctionDir), "Expected junction directory to be created");
 
         try
         {

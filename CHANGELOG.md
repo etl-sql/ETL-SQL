@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Closed `RV04` orchestration, governance, hardening, security, scale, and integration test review (findings 1–4): converted two Windows-only early-return tests in `ExternalToolSecurityTests` to `[WindowsFact]` + `[Trait("Platform", "Windows")]` with strict `mklink /J` assertions, fixed `OrchestratorStoreFactoryTests.DefaultProvider_IsSqlite` to assert `SQLiteJobHistoryStore` with temp-file cleanup, fixed `BufferManagerTests.BufferManager_FifoOrder_Memory` to actually contend (`6 MB + 6 MB > 10 MB`) and verify FIFO waiting, and strengthened `CliOrchestratorTests` and `BigQueryIntegrationTests`.
+
 - Closed `RV03` reporting, UI, Language Server, and browser-check review (findings 5–6): strengthened 62 `Assert.NotNull` tests in `TerminalRendererTests` to verify rendered text via `RenderToText`, strengthened 7 weak assertions across `BrailleCanvasTests`, `MappingRoleValidationTests`, `VisualMappingTests`, and `LiveDiagnosticsTests`, and verified all 8 golden/fixture test files and 187 `scripts/checks/test-*.mjs` checks.
 
 - Fixed `PlotPlanTerminalRenderer` displaying the first folded slice's value instead of the rolled-up `Other` total when `MIN_SLICE_PCT` merges small pie slices, and fixed culture-dependent SVG coordinate parsing in `LineGeometryAndPanelStylingTests` and `SankeyControlsTests` (`RV03` findings 1–4 in `PlotPlanTerminalRenderer.cs`, `PieDonutControlsTests.cs`, `LegendControlsTests.cs`, `LineGeometryAndPanelStylingTests.cs`, `SankeyControlsTests.cs`, `KeyDispatchTests.cs`, and `BookmarkLanguageFeatureTests.cs`).

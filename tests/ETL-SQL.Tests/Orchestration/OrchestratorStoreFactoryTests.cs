@@ -90,9 +90,19 @@ namespace ETL_SQL.Tests.Orchestration
         public void DefaultProvider_IsSqlite()
         {
             // An unset provider must behave exactly as before (SQLite), so nothing regresses by default.
-            var factory = new OrchestratorStoreFactory(Config(null));
-            var store = factory.Create(Path.Combine(Path.GetTempPath(), $"orch_default_{Guid.NewGuid():N}.db"));
-            Assert.NotNull(store);
+            var dbPath = Path.Combine(Path.GetTempPath(), $"orch_default_{Guid.NewGuid():N}.db");
+            try
+            {
+                var factory = new OrchestratorStoreFactory(Config(null));
+                var store = factory.Create(dbPath);
+                Assert.IsType<SQLiteJobHistoryStore>(store);
+            }
+            finally
+            {
+                SqliteConnection.ClearAllPools();
+                foreach (var p in new[] { dbPath, dbPath + "-wal", dbPath + "-shm" })
+                    try { if (File.Exists(p)) File.Delete(p); } catch { /* best-effort */ }
+            }
         }
 
         [Fact]
