@@ -134,17 +134,5 @@ namespace ETL_SQL.Tests.Dialects.Dialects
             Assert.DoesNotContain("TOP", OracleSyntax.Additions);
             Assert.DoesNotContain("LIMIT", OracleSyntax.Additions);
         }
-
-        [Fact]
-        public void Oracle_Functions_NotEmpty()
-        {
-            Assert.NotEmpty(OracleSyntax.Functions);
-        }
-
-        [Fact]
-        public void MockDb_Functions_NotEmpty()
-        {
-            Assert.NotEmpty(MockDbSyntax.Functions);
-        }
     }
 }

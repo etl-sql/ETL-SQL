@@ -597,26 +597,32 @@ namespace ETL_SQL.Tests.Connectors
         // ── FlatFileConnector ──────────────────────────────────────────────────
 
         [Fact]
-        public void FlatFileConnector_GetHelp_ReturnsNonEmpty()
+        public void FlatFileConnector_GetHelp_DescribesConnectorAndOptions()
         {
             var conn = new FlatFileConnector();
-            Assert.NotEmpty(conn.GetHelp());
+            var help = conn.GetHelp();
+            Assert.Contains("FLATFILE", help, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("DELIMITER", help);
         }
 
         [Fact]
-        public void FlatFileConnector_GetSupportedOptions_ContainsDelimiter()
+        public void FlatFileConnector_GetSupportedOptions_ContainsCoreKeys()
         {
             var conn = new FlatFileConnector();
             var opts = conn.GetSupportedOptions();
-            Assert.True(opts.ContainsKey("DELIMITER"));
+            Assert.Contains("PATH", opts.Keys);
+            Assert.Contains("DELIMITER", opts.Keys);
+            Assert.Contains("HEADER", opts.Keys);
+            Assert.Contains("COMPRESS", opts.Keys);
+            Assert.Contains("ENCRYPT", opts.Keys);
         }
 
         [Fact]
-        public void FlatFileConnector_GetOptionValues_ReturnsValues()
+        public void FlatFileConnector_GetOptionValues_ReturnsHeaderOnOff()
         {
             var conn = new FlatFileConnector();
             var vals = conn.GetOptionValues();
-            Assert.True(vals.ContainsKey("HEADER"));
+            Assert.Equal(new[] { "ON", "OFF" }, vals["HEADER"]);
         }
 
         [Fact]
@@ -755,18 +761,24 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void JsonConnector_GetHelp_ReturnsNonEmpty()
+        public void JsonConnector_GetHelp_DescribesConnectorAndOptions()
         {
             var conn = new JsonConnector();
-            Assert.NotEmpty(conn.GetHelp());
+            var help = conn.GetHelp();
+            Assert.Contains("JSON", help, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ROOT_PATH", help);
         }
 
         [Fact]
-        public void JsonConnector_GetSupportedOptions_ReturnsOptions()
+        public void JsonConnector_GetSupportedOptions_ContainsCoreKeys()
         {
             var conn = new JsonConnector();
             var opts = conn.GetSupportedOptions();
-            Assert.NotNull(opts);
+            Assert.Contains("PATH", opts.Keys);
+            Assert.Contains("ROOT_PATH", opts.Keys);
+            Assert.Contains("COMPRESS", opts.Keys);
+            Assert.Contains("ENCRYPT", opts.Keys);
+            Assert.Contains("PASSWORD", opts.Keys);
         }
 
         [Fact]
@@ -850,17 +862,24 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void XmlConnector_GetHelp_ReturnsNonEmpty()
+        public void XmlConnector_GetHelp_DescribesConnectorAndOptions()
         {
             var conn = new XmlConnector();
-            Assert.NotEmpty(conn.GetHelp());
+            var help = conn.GetHelp();
+            Assert.Contains("XML", help, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ROOT_PATH", help);
         }
 
         [Fact]
-        public void XmlConnector_GetSupportedOptions_ReturnsOptions()
+        public void XmlConnector_GetSupportedOptions_ContainsCoreKeys()
         {
             var conn = new XmlConnector();
-            Assert.NotNull(conn.GetSupportedOptions());
+            var opts = conn.GetSupportedOptions();
+            Assert.Contains("PATH", opts.Keys);
+            Assert.Contains("ROOT_PATH", opts.Keys);
+            Assert.Contains("COMPRESS", opts.Keys);
+            Assert.Contains("ENCRYPT", opts.Keys);
+            Assert.Contains("PASSWORD", opts.Keys);
         }
 
         [Fact]

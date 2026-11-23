@@ -116,7 +116,9 @@ namespace ETL_SQL.Tests.Connectors
                 ["USER"] = "admin",
                 ["PASSWORD"] = "pass"
             });
-            Assert.NotEmpty(result);
+            Assert.Contains("oraserver:1521/ORCL", result);
+            Assert.Contains("User Id=admin", result, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Password=pass", result, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -182,7 +184,10 @@ namespace ETL_SQL.Tests.Connectors
                 ["USER"] = "pguser",
                 ["PASSWORD"] = "secret"
             });
-            Assert.NotEmpty(result);
+            Assert.Contains("Host=pgserver", result, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Database=mydb", result, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Username=pguser", result, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Password=secret", result, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -289,7 +294,7 @@ namespace ETL_SQL.Tests.Connectors
         {
             var c = new RestConnector();
             var result = c.GetHost("https://api.example.com/v1");
-            Assert.NotNull(result);
+            Assert.Equal("api.example.com", result);
         }
 
         // ── ExcelConnector ────────────────────────────────────────────────────
@@ -385,7 +390,7 @@ namespace ETL_SQL.Tests.Connectors
         public void MockDbConnector_Aliases_Empty()
         {
             var c = new MockDbConnector();
-            Assert.NotNull(c.Aliases);
+            Assert.Empty(c.Aliases);
         }
 
         // ── SnowflakeConnector ────────────────────────────────────────────────
@@ -422,55 +427,13 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Contains("BLOB", c.Aliases, StringComparer.OrdinalIgnoreCase);
         }
 
-        // ── Syntax class coverage (BigQuery, Snowflake) ───────────────────────
+        // ── Syntax class coverage ─────────────────────────────────────────────
 
         [Fact]
-        public void BigQueryConnector_GetSupportedFunctions_NotEmpty()
-        {
-            var c = new BigQueryConnector();
-            Assert.NotEmpty(c.GetSupportedFunctions());
-        }
-
-        [Fact]
-        public void BigQueryConnector_GetSupportedKeywords_NotEmpty()
-        {
-            var c = new BigQueryConnector();
-            Assert.NotEmpty(c.GetSupportedKeywords());
-        }
-
-        [Fact]
-        public void BigQueryConnector_GetExcludedKeywords_NotEmpty()
-        {
-            var c = new BigQueryConnector();
-            Assert.NotEmpty(c.GetExcludedKeywords());
-        }
-
-        [Fact]
-        public void SnowflakeConnector_GetSupportedFunctions_NotEmpty()
-        {
-            var c = new SnowflakeConnector();
-            Assert.NotEmpty(c.GetSupportedFunctions());
-        }
-
-        [Fact]
-        public void SnowflakeConnector_GetSupportedKeywords_NotEmpty()
-        {
-            var c = new SnowflakeConnector();
-            Assert.NotEmpty(c.GetSupportedKeywords());
-        }
-
-        [Fact]
-        public void SnowflakeConnector_GetExcludedKeywords_NotEmpty()
-        {
-            var c = new SnowflakeConnector();
-            Assert.NotEmpty(c.GetExcludedKeywords());
-        }
-
-        [Fact]
-        public void MockDbConnector_GetSupportedKeywords_NotNull()
+        public void MockDbConnector_GetSupportedKeywords_MatchesMockDbSyntax()
         {
             var c = new MockDbConnector();
-            Assert.NotNull(c.GetSupportedKeywords());
+            Assert.Equal(MockDbSyntax.Additions, c.GetSupportedKeywords());
         }
     }
 }

@@ -98,13 +98,14 @@ SELECT table_name, connection_name FROM eng.tables WHERE connection_name = 'mycs
         }
 
         [Fact]
-        public async Task EngTables_IntoTable_CompletesWithoutError()
+        public async Task EngTables_IntoTable_PreservesCatalogSchema()
         {
             var eval = NewEval();
             await eval.Evaluate(TestHelpers.Parse("SELECT * INTO #result FROM eng.tables;"));
-            // Can now select from #result
             await eval.Evaluate(TestHelpers.Parse("SELECT * FROM #result;"));
             Assert.NotNull(eval.LastResult);
+            Assert.Contains("table_name", eval.LastResult!.ColumnNames);
+            Assert.Contains("connection_name", eval.LastResult!.ColumnNames);
         }
 
         // ── eng.columns ────────────────────────────────────────────────────────
@@ -241,7 +242,8 @@ SELECT * FROM #conn_list;";
                 await eval.Evaluate(TestHelpers.Parse(script));
 
                 Assert.NotNull(eval.LastResult);
-                Assert.True(eval.LastResult!.Rows.Count >= 1);
+                var connRow = Assert.Single(eval.LastResult!.Rows, r => string.Equals(r["connection_name"]?.ToString(), "c1", StringComparison.OrdinalIgnoreCase));
+                Assert.Equal("FlatFileDataSource", connRow["connector_type"]?.ToString());
             }
             finally
             {

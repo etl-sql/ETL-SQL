@@ -118,7 +118,7 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void BuildConnectionString_MinimalProperties_DoesNotThrow()
+        public void BuildConnectionString_MinimalProperties_ProducesRequiredParts()
         {
             var props = new Dictionary<string, string>
             {
@@ -127,7 +127,10 @@ namespace ETL_SQL.Tests.Connectors
                 { "PASSWORD", "p" }
             };
             var cs = _connector.BuildConnectionString(props);
-            Assert.NotEmpty(cs);
+            Assert.Contains("account=acct", cs);
+            Assert.Contains("user=u", cs);
+            Assert.Contains("password=p", cs);
+            Assert.DoesNotContain("authenticator=snowflake_jwt", cs);
         }
 
         // ── GetHost / GetHostStatic ───────────────────────────────────────────
@@ -213,13 +216,17 @@ namespace ETL_SQL.Tests.Connectors
         public void GetSupportedOptions_ContainsAllExpectedKeys()
         {
             var opts = _connector.GetSupportedOptions();
-            Assert.True(opts.ContainsKey("HOST"));
-            Assert.True(opts.ContainsKey("DATABASE"));
-            Assert.True(opts.ContainsKey("SCHEMA"));
-            Assert.True(opts.ContainsKey("WAREHOUSE"));
-            Assert.True(opts.ContainsKey("USERNAME"));
-            Assert.True(opts.ContainsKey("PASSWORD"));
-            Assert.True(opts.ContainsKey("PRIVATE_KEY_FILE"));
+            Assert.Contains("HOST", opts.Keys);
+            Assert.Contains("ACCOUNT", opts.Keys);
+            Assert.Contains("PORT", opts.Keys);
+            Assert.Contains("PROTOCOL", opts.Keys);
+            Assert.Contains("DATABASE", opts.Keys);
+            Assert.Contains("SCHEMA", opts.Keys);
+            Assert.Contains("WAREHOUSE", opts.Keys);
+            Assert.Contains("USERNAME", opts.Keys);
+            Assert.Contains("PASSWORD", opts.Keys);
+            Assert.Contains("PRIVATE_KEY_FILE", opts.Keys);
+            Assert.Contains("TIMEOUT_SECONDS", opts.Keys);
         }
 
         [Fact]
@@ -296,18 +303,6 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Contains("iff", SnowflakeSyntax.Functions);
             Assert.Contains("qualify", SnowflakeSyntax.Additions);
             Assert.Contains("top", SnowflakeSyntax.Exclusions);
-        }
-
-        [Fact]
-        public void Functions_NotEmpty()
-        {
-            Assert.NotEmpty(SnowflakeSyntax.Functions);
-        }
-
-        [Fact]
-        public void Additions_NotEmpty()
-        {
-            Assert.NotEmpty(SnowflakeSyntax.Additions);
         }
     }
 

@@ -79,9 +79,11 @@ Plan and findings: [v0.23.0 script and test review plan](docs/releases/v0.23.0-s
 RV01 (lane-membership and orphan audit) is done; its findings are in the plan.
 
 - [ ] **RV02 Engine, language, connector and corpus tests** (523 `.cs` files in `ETL-SQL.Tests`,
-  `SqlLogicTests`, `FuzzTests`, `tests/Integration/`). M. In progress: 26 findings so far, all fixed
+  `SqlLogicTests`, `FuzzTests`, `tests/Integration/`). M. In progress: 27 findings so far, all fixed
   ([findings log](docs/releases/v0.23.0-script-and-test-review-plan.md#rv02-findings-in-progress-2026-11-22)).
-  **Left:** about 70 weak-assertion scan hits in single files.
+  **Left:** ~10 remaining single-file weak-assertion hits (`MoreHandlerTests`, `UtilityCoverageTests`,
+  `FuncFuzzyJoinTests`, `AdvancedFileTests`, `TestDataFilesTests`, `CoreDataGeneratorTests`,
+  `FtpTlsAndTimeoutTests`, `ConnectionTelemetryTests`, `LintingGapsTests`, `AnalysisExplainTests_Old`).
 - [ ] **RV03 Reporting, UI, Language Server and browser checks** (235 + 14 `.cs` files,
   198 `scripts/checks/test-*` files). M
 - [ ] **RV04 Orchestration, governance, hardening, security and scale tests** (227 `.cs` files,

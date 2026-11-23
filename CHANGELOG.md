@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Strengthened 37 weak/redundant assertions across `SnowflakeConnectorTests`, `BigQueryConnectorTests`, `ConnectorMetadataTests`, `DialectSyntaxTests`, `FileConnectorTests`, `FuncFuzzyTests`, `StmtShowTests`, `RemoteExecuteTests`, and `CoverageBoostTests` (`RV02` finding 27).
+
 - Added `TRANSFORM ... USING UNPIVOT` (`MELT`) reshaping wide columns (`ID_COLS`, `VALUE_COLS`, `NAME_COL`, `VALUE_COL`, `INCLUDE_NULLS = OFF | ON`) into normalized key/value rows with preserved schema types, lineage/scope projection, `WHAT_IF` safety, and SLT coverage (`TR06` in `DataParser.cs`, `TransformSchemaProjection.cs`, `LineageAnalyzer.cs`, `TransformStatementHandler.cs`, `docs/reference/transform/unpivot.md`, `TransformCorrectnessTests.cs`, and `tests/slt_data/transform.test`).
 
 - Implemented `START_ROW` (1-based row offset skipping banner rows without requiring `RANGE`) and `SHEET_INDEX` (1-based worksheet selection, mutually exclusive with `SHEET`) on the `EXCEL` connector (`XL02` in `ExcelConnector.cs`, `ExcelDataSource.cs`, `docs/reference/connectors/files/excel.md`, and `ExcelTests.cs`).

@@ -256,18 +256,19 @@ namespace ETL_SQL.Tests.Functions
         }
 
         [Fact]
-        public async Task DMetaphone_Thompson_NotEmpty()
+        public async Task DMetaphone_Thompson_ReturnsExpectedCode()
         {
             var v = (string?)await Eval("DMETAPHONE('Thompson')");
-            Assert.NotNull(v);
-            Assert.NotEmpty(v!);
+            Assert.Equal("TMPS", v);
         }
 
         [Fact]
-        public async Task DMetaphoneAlt_ReturnsString()
+        public async Task DMetaphoneAlt_Schmidt_ReturnsExpectedAlternateCode()
         {
-            var v = await Eval("DMETAPHONE_ALT('Schmidt')");
-            Assert.NotNull(v);
+            var primary = (string?)await Eval("DMETAPHONE('Schmidt')");
+            var alt = (string?)await Eval("DMETAPHONE_ALT('Schmidt')");
+            Assert.Equal("XMT", primary);
+            Assert.Equal("SMT", alt);
         }
 
         [Fact]

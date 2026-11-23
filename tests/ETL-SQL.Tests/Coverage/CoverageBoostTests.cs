@@ -74,13 +74,6 @@ namespace ETL_SQL.Tests.Coverage
             Assert.True(string.IsNullOrEmpty(host));
         }
 
-        [Fact]
-        public void FtpConnector_GetOptionValues_NotNull()
-        {
-            var c = new FtpConnector();
-            Assert.NotNull(c.GetOptionValues());
-        }
-
         [Theory]
         [InlineData("ftp://example.com:21", 2121, "example.com", 21)]
         [InlineData("ftp://example.com", 2121, "example.com", 2121)]
@@ -102,11 +95,11 @@ namespace ETL_SQL.Tests.Coverage
         public void SftpConnector_DefaultCtor_MetadataProperties()
         {
             var c = new SftpConnector();
-            Assert.NotNull(c.Aliases);
-            Assert.NotNull(c.GetSupportedFunctions());
-            Assert.NotNull(c.GetSupportedKeywords());
-            Assert.NotNull(c.GetSupportedOptions());
-            Assert.NotEmpty(c.GetHelp());
+            Assert.Equal("SFTP", c.Name);
+            Assert.Contains("SSH", c.Aliases);
+            Assert.Contains("HOST", c.GetSupportedOptions().Keys);
+            Assert.Contains("KEYFILE", c.GetSupportedOptions().Keys);
+            Assert.Contains("SFTP", c.GetHelp(), StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
