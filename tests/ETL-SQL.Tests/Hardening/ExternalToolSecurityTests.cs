@@ -31,8 +31,34 @@ public sealed class ExternalToolSecurityTests : IDisposable
     {
         SecurityEventRuntime.ConfigureLocalOutboxFactory(new SqliteSecurityEventOutboxFactory());
         EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
-        _tempRoot = Path.Combine(Path.GetTempPath(), "etlsql_xt_sec_" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_tempRoot);
+        _tempRoot = CreateProtectedTestRoot();
+    }
+
+    private static string CreateProtectedTestRoot()
+    {
+        var baseDir = Path.GetTempPath();
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                ToolPathGuard.VerifyAncestorWriteBoundaries(baseDir, ToolCatalogOwnershipMode.PersonalWorkstation);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Host %TEMP% grants write/delete-child to extra principals (e.g., sandbox SIDs),
+                // so ToolPathGuard rightly rejects any child under %TEMP%. Place the test root
+                // under the user profile (whose ancestors are trusted) with an explicit protected ACL.
+                var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                if (!string.IsNullOrWhiteSpace(profile) && Directory.Exists(profile))
+                    baseDir = profile;
+            }
+        }
+
+        var root = Path.Combine(baseDir, ".etlsql_xt_sec_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        if (OperatingSystem.IsWindows())
+            ProtectWindowsDirectory(root);
+        return root;
     }
 
     public void Dispose()
@@ -640,6 +666,37 @@ public sealed class ExternalToolSecurityTests : IDisposable
         var idx = args.IndexOf(flag);
         Assert.True(idx >= 0 && idx + 1 < args.Count, $"Expected flag '{flag}' in [{string.Join(", ", args)}]");
         Assert.Equal(expectedValue, args[idx + 1]);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void ProtectWindowsDirectory(string directory)
+    {
+        var info = new DirectoryInfo(directory);
+        var sec = new DirectorySecurity();
+        sec.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        sec.AddAccessRule(new FileSystemAccessRule(
+            new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
+            FileSystemRights.FullControl,
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+            PropagationFlags.None,
+            AccessControlType.Allow));
+        sec.AddAccessRule(new FileSystemAccessRule(
+            new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
+            FileSystemRights.FullControl,
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+            PropagationFlags.None,
+            AccessControlType.Allow));
+        using var identity = WindowsIdentity.GetCurrent();
+        if (identity.User != null)
+        {
+            sec.AddAccessRule(new FileSystemAccessRule(
+                identity.User,
+                FileSystemRights.FullControl,
+                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                PropagationFlags.None,
+                AccessControlType.Allow));
+        }
+        info.SetAccessControl(sec);
     }
 
     [SupportedOSPlatform("windows")]

@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Hardened `ExternalToolSecurityTests` temp-root setup on Windows with an explicit protected ACL (current owner, SYSTEM, Administrators, inheritance disabled) so tests pass on hosts whose `%TEMP%` grants write access to extra principals such as AppContainer capability SIDs without loosening `ToolPathGuard` (`RF04` in `tests/ETL-SQL.Tests/Hardening/ExternalToolSecurityTests.cs`).
+
 - Bounded `BufferManager_FifoOrder_Memory` waits with `WaitAsync` and `Task.WhenAny` so a FIFO ordering regression fails immediately with a clear message instead of hanging (`RF05` in `tests/ETL-SQL.Tests/Orchestration/BufferManagerTests.cs`).
 
 - Closed `RV05` Portal and browser test review (findings 1–4): strengthened `ConfigurationExportTests.ExportPortalConfigurationStatement_Parses`, `PortalConsumerUxTests.RequestDataRefresh_StaleReport_ReturnsRequestedOrStarted`, and `PortalIntegrationTests.Login_WithDefaultAdminCredentials_ReturnsJwt`, replaced five fixed `WaitForTimeoutAsync` sleeps in `AdminPanelFailureStateTests` with deterministic Playwright waits, and verified `PortalWebFactory`/`OrchestratorWebFactory` temp-directory isolation across all 336 `Portal.Tests` and `Portal.BrowserTests` files.
