@@ -417,7 +417,7 @@ namespace ETL_SQL.Tests.Engine
         // ── KILL JOB ──────────────────────────────────────────────────────────
 
         [Fact]
-        public async Task KillJob_NoJobManager_ReportsThatNothingWasKilled()
+        public async Task KillJob_UnknownRun_ReportsThatNothingWasKilled()
         {
             var eval = await RunAndGet("KILL JOB 999;");
             Assert.Contains("Job 999 was not found or is not currently running.", Output(eval), StringComparison.Ordinal);
