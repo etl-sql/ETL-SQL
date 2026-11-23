@@ -63,13 +63,9 @@ internal static class SandboxFilePermissions
     public static void AllowUnprivilegedSandboxWrites(string path, uint? sharedGroupId)
     {
         if (OperatingSystem.IsWindows()) return;
-        if (sharedGroupId is not null)
+        if (sharedGroupId is { } group)
         {
-            File.SetUnixFileMode(
-                path,
-                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
-                UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute |
-                UnixFileMode.SetGroup);
+            ShareLeafWithGroup(path, group, SetGroup, File.SetUnixFileMode);
             return;
         }
         File.SetUnixFileMode(
@@ -78,6 +74,30 @@ internal static class SandboxFilePermissions
             UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute |
             UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute);
     }
+
+    internal const UnixFileMode SharedLeafMode =
+        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+        UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute |
+        UnixFileMode.SetGroup;
+
+    internal static void ShareLeafWithGroup(
+        string path, uint group, Func<string, uint, int> setGroup, Action<string, UnixFileMode> setMode)
+    {
+        // The group is set first and explicitly. A new directory inherits a setgid parent's group,
+        // and a reused session directory keeps whatever it had, so without this the leaf could be
+        // opened to a group other than the one the sandbox joins. If it cannot be set, the leaf is
+        // left as it was rather than opened to an unknown group.
+        if (setGroup(path, group) != 0)
+            throw new InvalidOperationException(
+                $"Could not put sandbox directory '{path}' in group {group} " +
+                $"(errno {Marshal.GetLastPInvokeError()}).");
+        setMode(path, SharedLeafMode);
+    }
+
+    private static int SetGroup(string path, uint group) => chown(path, uint.MaxValue, group);
+
+    [DllImport("libc", EntryPoint = "chown", SetLastError = true)]
+    private static extern int chown(string path, uint owner, uint group);
 
     [DllImport("libc", EntryPoint = "getegid")]
     private static extern uint getegid();
