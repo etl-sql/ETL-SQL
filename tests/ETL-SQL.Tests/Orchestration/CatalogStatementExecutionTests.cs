@@ -91,7 +91,9 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal(3, job.MaxRetries);
             Assert.Equal("Nightly load", job.DisplayName);
             Assert.NotNull(job.ScriptHash);
-            Assert.Null(job.NextRun);
+            // No schedule link: parked as manual-only (a null next run would make it due at once).
+            Assert.Equal(JobDefinition.ManualOnlyNextRun, job.NextRun);
+            Assert.True(job.IsManualOnly);
         }
 
         [Fact]

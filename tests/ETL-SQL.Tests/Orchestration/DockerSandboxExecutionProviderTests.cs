@@ -80,6 +80,9 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
         Assert.Contains("Session__Root=/var/lib/etl-sql/sessions", create);
         // The host must be able to remove what the sandbox uid creates under the session mount.
         Assert.Contains("ETLSQL_SANDBOX_UMASK=0000", create);
+        // The container's --memory cap bounds the run; a host RAM floor larger than the cap would
+        // refuse every grant inside it.
+        Assert.Contains("Orchestration__ResourceManagement__SystemMemoryFloorMB=0", create);
         Assert.Contains("Security__PathProtectionMode=Defined", create);
         Assert.Contains("Security__ApprovedSafeZones__0=/workspace", create);
         Assert.Contains("Security__ApprovedSafeZones__1=/var/lib/etl-sql/sessions", create);

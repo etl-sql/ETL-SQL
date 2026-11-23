@@ -384,6 +384,9 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             // Without this, the job directories the sandbox uid creates under the session mount are
             // 0755 and this account can never remove them. The session root is owner-only (0700).
             "--env", "ETLSQL_SANDBOX_UMASK=0000",
+            // --memory above bounds the run. The host RAM floor protects a shared host; inside a
+            // capped container it can exceed the whole cap and refuse every grant.
+            "--env", "Orchestration__ResourceManagement__SystemMemoryFloorMB=0",
             "--env", "ETLSQL_MACHINE_KEY_FILE=/run/secrets/etlsql-machine-key",
             "--env", "TMPDIR=/workspace/scratch",
             // Server-owned per-tenant ceiling, not the worker image's default.

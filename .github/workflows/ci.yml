@@ -227,18 +227,18 @@ jobs:
           retention-days: 30
 
   # The Portal regression lane's twelve shards ran past one job's budget in sequence (33 min at shard
-  # 8), so they are split across three workers like Engine Coverage. Group 1 also runs the
-  # HostedServices process and the lineage UI smoke.
+  # 8), so they are split across four workers of three shards; a shard takes 7-10 minutes on a
+  # hosted runner. Group 1 also runs the HostedServices process and the lineage UI smoke.
   portal-regression:
     needs: source-preflight
     if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test') && contains(fromJSON(needs.source-preflight.outputs.test_projects || '["portal"]'), 'portal')
-    name: Portal Regression (${{ matrix.group }}/3)
+    name: Portal Regression (${{ matrix.group }}/4)
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
-        group: [1, 2, 3]
+        group: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
@@ -248,10 +248,10 @@ jobs:
           evidence: release-validation/portal-regression/prepare
       - name: Run assigned Portal regression shards
         shell: pwsh
-        timeout-minutes: 30
+        timeout-minutes: 42
         env:
           PORTAL_GROUP: ${{ matrix.group }}
-        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'portal', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-PortalShardGroup', $env:PORTAL_GROUP, '-PortalShardGroupCount', '3', '-ResultsDirectory', 'release-validation/portal-regression/results') -EvidenceDirectory release-validation/portal-regression/process -TimeoutSeconds 1680
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'portal', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-PortalShardGroup', $env:PORTAL_GROUP, '-PortalShardGroupCount', '4', '-ResultsDirectory', 'release-validation/portal-regression/results') -EvidenceDirectory release-validation/portal-regression/process -TimeoutSeconds 2400
       - name: Retain Portal regression diagnostics
         if: always()
         timeout-minutes: 5

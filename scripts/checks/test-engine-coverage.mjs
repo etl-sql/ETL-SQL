@@ -140,10 +140,11 @@ try {
     assert.ifError(result.error); assert.equal(result.status === 0, expected, `${event}/${build}/${portal}/${engine}/${regression}/${projects}: ${result.stdout}${result.stderr}`);
   }
   assert.match(job('portal-regression'), /fail-fast: false/);
-  assert.match(job('portal-regression'), /group: \[1, 2, 3\]/);
-  assert.match(job('portal-regression'), /'-PortalShardGroupCount', '3'/);
+  assert.match(job('portal-regression'), /group: \[1, 2, 3, 4\]/);
+  assert.match(job('portal-regression'), /'-PortalShardGroupCount', '4'/);
   const policy = JSON.parse(readFileSync(new URL('../hosted-release-policy.json', import.meta.url), 'utf8'));
-  for (const name of ['Build & Test', 'Build Verification', 'Portal Smoke & Security', 'Engine Coverage (1/3)', 'Engine Coverage (2/3)', 'Engine Coverage (3/3)'])
+  for (const name of ['Build & Test', 'Build Verification', 'Portal Smoke & Security', 'Engine Coverage (1/3)', 'Engine Coverage (2/3)', 'Engine Coverage (3/3)',
+    'Portal Regression (1/4)', 'Portal Regression (2/4)', 'Portal Regression (3/4)', 'Portal Regression (4/4)'])
     assert.ok(policy.workflows[0].jobs.includes(name), `Release policy omitted ${name}`);
   console.log(`Engine coverage: complete and expanded inventories, explicit existing skips, retained successful groups and ${mutations.length} fail-closed recovery cases passed.`);
 } finally { rmSync(root, { recursive: true, force: true }); }
