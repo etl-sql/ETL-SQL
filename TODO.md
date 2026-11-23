@@ -106,13 +106,12 @@ RV01 (lane-membership and orphan audit) is done; its findings are in the plan.
 ### 3.1 External join CPU regression at 100M rows
 
 - [ ] **Bring the 100M external join back to its baseline elapsed time.** Scale Measurement
-  45226912017 (ubuntu-latest, 100M rows, 4096/2048 MB) cut join allocations 335 → 107 GB and GC
-  pause 337 → 185 s, but elapsed went 896 → 1,889 s and CPU 966 → 1,929 s against baseline
-  43504065542, with the same spill bytes (9.6 GB), partitions (128) and checksum. So mutator time
-  roughly tripled (about 560 → 1,700 s). Sort and window got faster in the same run. Suspects: the
-  SP09 pooled build table (`ArrayPool` slabs, `RowSlot[]` bucket chains, `Unpack` slices) and the
-  cached-layout combined rows in `ExternalJoinEngine`. **Finish line:** a same-settings Scale
-  Measurement with join elapsed ≤ 896 s, allocations still ≤ 107 GB, same checksum.
+  45226912017 (ubuntu-latest, 100M rows, 4096/2048 MB): join elapsed 896 → 1,889 s against
+  baseline 43504065542. Cause found and fixed (see `CHANGELOG.md`): the pooled build table picked
+  hash buckets by the same low hash bits the partitioner had already fixed, so chains grew with the
+  partition count. Local 50M rows: 358 → 136 s, same checksum and allocations. **Left:** a
+  same-settings Scale Measurement (ExternalJoin, 100M) on the fix with join elapsed ≤ 896 s,
+  allocations ≤ 107 GB, same checksum.
   **Watch:** Smoke join/aggregate allocations jump about 2–3 MB between runs (cause not found; can
   trip the 2% warning, never the 5% failure); Standard cube allocation is bimodal per sample (about
   1,150 or 2,010 MB).

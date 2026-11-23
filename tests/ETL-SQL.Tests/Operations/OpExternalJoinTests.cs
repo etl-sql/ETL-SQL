@@ -397,6 +397,33 @@ namespace ETL_SQL.Tests.Operations.Operations
             Assert.Empty(Directory.GetFiles(eval.SpillStore.RootPath, "*.tmp"));
         }
 
+        [Theory]
+        [InlineData(32)]
+        [InlineData(128)]
+        public void PackedBuildTable_SpreadsOnePartitionsKeysAcrossBuckets(int partitionCount)
+        {
+            // GetPartitionIndex routes a row by ComputeHashCode(0, key) % partitionCount. With a
+            // power-of-two partition count every key in one partition shares the hash's low bits,
+            // so a table that picked buckets by those same low bits used 1/partitionCount of its
+            // buckets: chains grew with the partition count and the 100M join ran 2.1x slower.
+            const int targetPartition = 5;
+            const int keysInPartition = 20_000;
+            using var table = new ExternalJoinEngine.PackedBuildTable(keyCount: 1, expectedRows: keysInPartition);
+            var guard = new MemoryBudgetGuard(long.MaxValue);
+            int added = 0;
+            for (long candidate = 0; added < keysInPartition; candidate++)
+            {
+                var key = JoinKey.FromValue((decimal)candidate);
+                int hash = JoinKey.ComputeHashCode(0, key, ReadOnlySpan<JoinKey>.Empty, caseSensitive: false);
+                if ((hash & 0x7FFFFFFF) % partitionCount != targetPartition) continue;
+                table.IndexRow(key, ReadOnlySpan<JoinKey>.Empty, hasNullKey: false, rowIndex: added, blobLength: 0, guard);
+                added++;
+            }
+
+            // At a load factor of at most 0.75 a well-spread table keeps every chain short.
+            Assert.InRange(table.LongestHashChainForTests(), 1, 16);
+        }
+
         [Fact]
         public void PackedBuildTable_UsesBudgetCappedPooledSlabsFlatBucketChainsAndZeroesOnDispose()
         {

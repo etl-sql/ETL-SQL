@@ -1411,7 +1411,7 @@ public class ExternalJoinEngine
             int hash = _keyCount == 0
                 ? JoinKey.ComputeEmptyHashCode(0)
                 : JoinKey.ComputeHashCode(0, key0, extraKeys, _caseSensitive);
-            int bucket = (hash & 0x7FFFFFFF) & (_buckets.Length - 1);
+            int bucket = BucketIndex(hash, _buckets.Length);
 
             for (int entryIdx = _buckets[bucket]; entryIdx >= 0; entryIdx = _entries[entryIdx].NextInHash)
             {
@@ -1429,7 +1429,7 @@ public class ExternalJoinEngine
             if (_entryCount >= (_buckets.Length * 3) / 4)
             {
                 GrowBuckets();
-                bucket = (hash & 0x7FFFFFFF) & (_buckets.Length - 1);
+                bucket = BucketIndex(hash, _buckets.Length);
             }
 
             int extraOffset = -1;
@@ -1468,7 +1468,7 @@ public class ExternalJoinEngine
             int hash = _keyCount == 0
                 ? JoinKey.ComputeEmptyHashCode(0)
                 : JoinKey.ComputeHashCode(0, key0, extraKeys, _caseSensitive);
-            int bucket = (hash & 0x7FFFFFFF) & (_buckets.Length - 1);
+            int bucket = BucketIndex(hash, _buckets.Length);
 
             for (int entryIdx = _buckets[bucket]; entryIdx >= 0; entryIdx = _entries[entryIdx].NextInHash)
             {
@@ -1519,6 +1519,30 @@ public class ExternalJoinEngine
             return TryGetChain(key0, extraKeys, out chain);
         }
 
+        // Rows reach this table already partitioned by ComputeHashCode(depth, key) % PartitionCount,
+        // so with a power-of-two partition count all keys here share the hash's low bits. Take the
+        // bucket from the high bits of a Fibonacci-mixed hash instead, which depend on every bit.
+        // Bucket arrays are powers of two (rented by power-of-two size).
+        private static int BucketIndex(int hash, int bucketCount)
+        {
+            if (bucketCount <= 1) return 0;
+            int shift = 32 - System.Numerics.BitOperations.Log2((uint)bucketCount);
+            return (int)(((uint)hash * 0x9E3779B9u) >> shift);
+        }
+
+        internal int LongestHashChainForTests()
+        {
+            int longest = 0;
+            for (int bucket = 0; bucket < _buckets.Length; bucket++)
+            {
+                int length = 0;
+                for (int entryIdx = _buckets[bucket]; entryIdx >= 0; entryIdx = _entries[entryIdx].NextInHash)
+                    length++;
+                longest = Math.Max(longest, length);
+            }
+            return longest;
+        }
+
         private bool KeysMatch(in KeyEntry entry, in JoinKey key0, ReadOnlySpan<JoinKey> extraKeys)
         {
             if (_keyCount == 0) return true;
@@ -1555,10 +1579,9 @@ public class ExternalJoinEngine
             int newSize = _buckets.Length * 2;
             var grown = ArrayPool<int>.Shared.Rent(newSize);
             Array.Fill(grown, -1);
-            int mask = grown.Length - 1;
             for (int i = 0; i < _entryCount; i++)
             {
-                int bucket = (_entries[i].HashCode & 0x7FFFFFFF) & mask;
+                int bucket = BucketIndex(_entries[i].HashCode, grown.Length);
                 _entries[i].NextInHash = grown[bucket];
                 grown[bucket] = i;
             }
