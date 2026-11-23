@@ -7,12 +7,14 @@
 | [ARCHIVE_LIST](archive_list.md) | Lists entries inside a `.zip`, `.tar`, `.tar.gz`, or `.gz` archive without extracting to disk. |
 | [DIRECTORY](directory.md) | Returns directory contents as rows. `DIRECTORY` is an alias for `FILE_LIST`. |
 | [DIRECTORY_EXISTS](directory_exists.md) | Returns whether a local directory exists inside the active execution context's allowed path boundaries. |
+| [FILE_ACCESSED](file_accessed.md) | Returns the last access timestamp of a local file. |
 | [FILE_CREATED](file_created.md) | Returns the creation timestamp of a local file. |
 | [FILE_EXISTS](file_exists.md) | Returns whether a local file exists inside the active execution context's allowed path boundaries. |
 | [FILE_HASH](file_hash.md) | Computes the cryptographic checksum (hash) of a local file. |
 | [FILE_LINE_COUNT](file_line_count.md) | Streams a local file once and counts lines after skipping optional header rows. |
 | [FILE_LIST](file_list.md) | Returns a table of files in a local directory matching optional criteria. |
 | [FILE_MODIFIED](file_modified.md) | Returns the last modification (write) timestamp of a local file. |
+| [FILE_READONLY](file_readonly.md) | Returns whether a local file has the read-only attribute set. |
 | [FILE_SIZE](file_size.md) | Returns the size of a local file in bytes. |
 | [PATH_CHANGE_EXTENSION](path_change_extension.md) | Replaces or removes the extension of a file path. |
 | [PATH_COMBINE](path_combine.md) | Combines multiple path segments into a single file/directory path securely. |

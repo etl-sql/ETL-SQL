@@ -497,6 +497,8 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `FILE_SIZE(path)` | File | [FILE_SIZE.md](reference/functions/file-path/file_size.md) | Returns local file size in bytes |
 | `FILE_CREATED(path)` | File | [FILE_CREATED.md](reference/functions/file-path/file_created.md) | Returns local file creation timestamp |
 | `FILE_MODIFIED(path)` | File | [FILE_MODIFIED.md](reference/functions/file-path/file_modified.md) | Returns local file last modified timestamp |
+| `FILE_ACCESSED(path)` | File | [FILE_ACCESSED.md](reference/functions/file-path/file_accessed.md) | Returns local file last access timestamp |
+| `FILE_READONLY(path)` | File | [FILE_READONLY.md](reference/functions/file-path/file_readonly.md) | Returns 1 if local file is read-only, 0 otherwise |
 | `FILE_LINE_COUNT(path, [header_rows])` | File | [FILE_LINE_COUNT.md](reference/functions/file-path/file_line_count.md) | Counts lines in a local file with optional header exclusion |
 | `FILE_HASH(path, [algorithm])` | File | [FILE_HASH.md](reference/functions/file-path/file_hash.md) | Computes cryptographic hash of a file |
 | `DIRECTORY_EXISTS(path)` | File | [DIRECTORY_EXISTS.md](reference/functions/file-path/directory_exists.md) | 1 if directory exists, 0 otherwise |
@@ -2467,12 +2469,14 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `END_OF_WEEK` | Function | Canonical built-in function |
 | `EXP` | Function | Canonical built-in function |
 | `EXTRACTVALUE` | Function | Canonical built-in function |
+| `FILE_ACCESSED` | Function | Canonical built-in function |
 | `FILE_CREATED` | Function | Canonical built-in function |
 | `FILE_EXISTS` | Function | Canonical built-in function |
 | `FILE_HASH` | Function | Canonical built-in function |
 | `FILE_LINE_COUNT` | Function | Canonical built-in function |
 | `FILE_LIST` | Function | Canonical built-in function |
 | `FILE_MODIFIED` | Function | Canonical built-in function |
+| `FILE_READONLY` | Function | Canonical built-in function |
 | `FILE_SIZE` | Function | Canonical built-in function |
 | `FIRST_VALUE` | Function | Canonical built-in function |
 | `FLOOR` | Function | Canonical built-in function |

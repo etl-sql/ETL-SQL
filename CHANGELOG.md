@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added local file metadata functions `FILE_READONLY(path)` and `FILE_ACCESSED(path)`, confirming `FILE_READONLY` agrees with the `DIRECTORY` connector's `IsReadOnly` column (`FN05` in `FileFunctions.cs`, `PushdownEngine.cs`, `LanguageMetadata.cs`, `file_readonly.md`, `file_accessed.md`, `FilePathFunctionsTests.cs`, and `standard_library_boundaries.test`).
+
 - Added pure string path functions `PATH_ROOT(path)` and `PATH_IS_ABSOLUTE(path)` (`FN04` in `FileFunctions.cs`, `PushdownEngine.cs`, `LanguageMetadata.cs`, `path_root.md`, `path_is_absolute.md`, `FilePathFunctionsTests.cs`, and `standard_library_boundaries.test`). Dropped `PATH_NORMALIZE` because `CAST(... AS PATH)` is a plain `ToString()` pass-through in `TypeConverter`, so matching it would be a misleading no-op while calling `Path.GetFullPath` would violate the pure-string / no-CWD-resolution boundary.
 
 - Documented write-time compression and encryption (`COMPRESS`, `COMPRESSION`, `ENCRYPT`, `PASSWORD`, `KEYFILE`, `PASSPHRASE`, `ALGORITHM`), compress-before-encrypt write order, reversed read order, and mutually exclusive key sources across all six file connectors (`FO07` in `docs/reference/connectors/files/flatfile.md`, `excel.md`, `json.md`, `xml.md`, `parquet.md`, and `avro.md`).

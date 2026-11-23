@@ -133,6 +133,61 @@ public sealed class FilePathFunctionsTests : IDisposable
     }
 
     [Fact]
+    public async Task FileReadOnly_MatchesDirectoryConnectorAndHandlesMissingAndNull()
+    {
+        var path = PathFor("readonly_check.txt");
+        await File.WriteAllTextAsync(path, "hello");
+        try
+        {
+            var writableFlag = await EvalScalarAsync($"DECLARE @res INT = FILE_READONLY('{Esc(path)}');");
+            Assert.Equal(0m, writableFlag);
+
+            File.SetAttributes(path, File.GetAttributes(path) | FileAttributes.ReadOnly);
+
+            var readOnlyFlag = await EvalScalarAsync($"DECLARE @res INT = FILE_READONLY('{Esc(path)}');");
+            Assert.Equal(1m, readOnlyFlag);
+
+            var dirDs = new ETL_SQL.Connectors.Directory.DirectoryDataSource(SystemExecutionContext.Instance, _dir);
+            var rows = new List<Row>();
+            await foreach (var batch in dirDs.ReadBatches())
+                rows.AddRange(batch.Rows);
+            var row = Assert.Single(rows, r => string.Equals(r["FileName"]?.ToString(), "readonly_check.txt", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(true, row["IsReadOnly"]);
+
+            Assert.Null(await EvalScalarAsync($"DECLARE @res INT = FILE_READONLY('{Esc(PathFor("missing_ro.txt"))}');"));
+            Assert.Null(await EvalScalarAsync("DECLARE @res INT = FILE_READONLY(NULL);"));
+
+            var ex = await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+                EvalScalarAsync("DECLARE @res INT = FILE_READONLY('/etc/passwd');"));
+            Assert.Contains("Unauthorized", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
+        }
+    }
+
+    [Fact]
+    public async Task FileAccessed_ReturnsTimestampAndHandlesMissingNullAndBoundary()
+    {
+        var path = PathFor("accessed.txt");
+        await File.WriteAllTextAsync(path, "hello");
+        var expected = new FileInfo(path).LastAccessTime;
+
+        var actual = await EvalScalarAsync($"DECLARE @res DATETIME = FILE_ACCESSED('{Esc(path)}');");
+        var actualDt = Assert.IsType<DateTime>(actual);
+        Assert.Equal(expected, actualDt);
+
+        Assert.Null(await EvalScalarAsync($"DECLARE @res DATETIME = FILE_ACCESSED('{Esc(PathFor("missing_acc.txt"))}');"));
+        Assert.Null(await EvalScalarAsync("DECLARE @res DATETIME = FILE_ACCESSED(NULL);"));
+
+        var ex = await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+            EvalScalarAsync("DECLARE @res DATETIME = FILE_ACCESSED('/etc/passwd');"));
+        Assert.Contains("Unauthorized", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task FileLineCount_HandlesEmptyAndLineEndingsAndHeaderRows()
     {
         var empty = PathFor("empty.txt");

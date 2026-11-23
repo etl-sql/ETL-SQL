@@ -169,3 +169,10 @@ NULL
 1
 0
 1
+
+# Local file metadata functions: NULL propagation.
+query II
+SELECT FILE_READONLY(NULL) IS NULL, FILE_ACCESSED(NULL) IS NULL;
+----
+1
+1

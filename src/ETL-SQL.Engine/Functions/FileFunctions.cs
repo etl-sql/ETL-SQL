@@ -39,6 +39,8 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("FILE_LINE_COUNT", FileLineCount, "FILE_LINE_COUNT(path [, header_rows]): Streams a local file once and returns the number of lines after skipping optional header_rows.");
             registry.RegisterWithHelp("FILE_CREATED", FileCreated, "FILE_CREATED(path): Returns the creation timestamp of a local file as a DATETIME.");
             registry.RegisterWithHelp("FILE_MODIFIED", FileModified, "FILE_MODIFIED(path): Returns the last write timestamp of a file as a DATETIME.");
+            registry.RegisterWithHelp("FILE_ACCESSED", FileAccessed, "FILE_ACCESSED(path): Returns the last access timestamp of a local file as a DATETIME.");
+            registry.RegisterWithHelp("FILE_READONLY", FileReadOnly, "FILE_READONLY(path): Returns 1 if the local file is read-only, or 0 otherwise.");
             registry.RegisterWithHelp("PATH_COMBINE", PathCombine, "PATH_COMBINE(p1, p2 [, ...]): Combines multiple path segments into a single path.");
             registry.RegisterWithHelp("PATH_FILENAME", PathFilename, "PATH_FILENAME(path): Extracts the filename and extension from a path.");
             registry.RegisterWithHelp("PATH_FILENAME_NO_EXT", PathFilenameNoExt, "PATH_FILENAME_NO_EXT(path): Extracts the filename without its extension from a path.");
@@ -123,6 +125,22 @@ namespace ETL_SQL.Engine.Functions
             string resolvedPath = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Read);
             if (!File.Exists(resolvedPath)) return null;
             return new FileInfo(resolvedPath).LastWriteTime;
+        }
+
+        private static object? FileAccessed(List<object?> args, IExecutionContext context)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            string resolvedPath = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Read);
+            if (!File.Exists(resolvedPath)) return null;
+            return new FileInfo(resolvedPath).LastAccessTime;
+        }
+
+        private static object? FileReadOnly(List<object?> args, IExecutionContext context)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            string resolvedPath = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Read);
+            if (!File.Exists(resolvedPath)) return null;
+            return new FileInfo(resolvedPath).IsReadOnly ? 1m : 0m;
         }
 
         private static async Task<object?> FileLineCount(List<object?> args, IExecutionContext context)
