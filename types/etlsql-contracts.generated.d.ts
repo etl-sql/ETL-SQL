@@ -1208,6 +1208,9 @@ interface JobDefinition {
     modifiedBy?: string | null;
     tenantId?: string | null;
     id: string | null;
+    isManualOnly: boolean;
+    displayNextRun?: string | null;
+    scheduleLabel: string;
 }
 
 interface JobDefinitionDto {
