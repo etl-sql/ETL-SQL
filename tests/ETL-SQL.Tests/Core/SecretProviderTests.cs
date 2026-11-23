@@ -171,28 +171,42 @@ public class SecretProviderTests
     public async Task OsSecretStoreProvider_ResolvesLegacyUserScopedPayload()
     {
         var root = Path.Combine(Path.GetTempPath(), $"etl-secret-store-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(root);
-        File.WriteAllText(
-            Path.Combine(root, "legacy_secret.secret"),
-            CryptoUtils.Protect("legacy-value", "legacy_secret"));
-        var provider = new OsSecretStoreProvider(root);
+        try
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(
+                Path.Combine(root, "legacy_secret.secret"),
+                CryptoUtils.Protect("legacy-value", "legacy_secret"));
+            var provider = new OsSecretStoreProvider(root);
 
-        var result = await provider.ResolveAsync("legacy_secret");
+            var result = await provider.ResolveAsync("legacy_secret");
 
-        Assert.Equal("legacy-value", result.Value);
+            Assert.Equal("legacy-value", result.Value);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]
     public async Task OsSecretStoreProvider_RejectsUnprotectedPayload()
     {
         var root = Path.Combine(Path.GetTempPath(), $"etl-secret-store-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(root);
-        File.WriteAllText(Path.Combine(root, "tampered.secret"), "plaintext-value");
-        var provider = new OsSecretStoreProvider(root);
+        try
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(Path.Combine(root, "tampered.secret"), "plaintext-value");
+            var provider = new OsSecretStoreProvider(root);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ResolveAsync("tampered"));
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ResolveAsync("tampered"));
 
-        Assert.DoesNotContain("plaintext-value", ex.Message);
+            Assert.DoesNotContain("plaintext-value", ex.Message);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]

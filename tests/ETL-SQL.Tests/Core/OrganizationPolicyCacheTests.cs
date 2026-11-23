@@ -86,22 +86,29 @@ public class OrganizationPolicyCacheTests
     public async Task FileCacheStore_RoundTripsValidatedPolicy()
     {
         var path = Path.Combine(Path.GetTempPath(), $"org-policy-cache-{Guid.NewGuid():N}.json");
-        var store = new FileOrganizationPolicyCacheStore(path, new AllowProtectedFileValidator());
-        var entry = new OrganizationPolicyCacheEntry(
-            ValidPolicy(),
-            "https://policy.example.test/org-policy.json",
-            DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-            DateTimeOffset.Parse("2026-01-01T00:01:00Z"));
+        try
+        {
+            var store = new FileOrganizationPolicyCacheStore(path, new AllowProtectedFileValidator());
+            var entry = new OrganizationPolicyCacheEntry(
+                ValidPolicy(),
+                "https://policy.example.test/org-policy.json",
+                DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+                DateTimeOffset.Parse("2026-01-01T00:01:00Z"));
 
-        await store.WriteAsync(entry);
-        var roundTrip = await store.ReadAsync();
+            await store.WriteAsync(entry);
+            var roundTrip = await store.ReadAsync();
 
-        Assert.NotNull(roundTrip);
-        Assert.Equal(entry.Source, roundTrip.Source);
-        Assert.Equal(entry.LoadedAt, roundTrip.LoadedAt);
-        Assert.Equal(entry.CachedAt, roundTrip.CachedAt);
-        Assert.Equal(entry.Document.SchemaVersion, roundTrip.Document.SchemaVersion);
-        Assert.Equal(entry.Document.Connectors.AllowedTypes, roundTrip.Document.Connectors.AllowedTypes);
+            Assert.NotNull(roundTrip);
+            Assert.Equal(entry.Source, roundTrip.Source);
+            Assert.Equal(entry.LoadedAt, roundTrip.LoadedAt);
+            Assert.Equal(entry.CachedAt, roundTrip.CachedAt);
+            Assert.Equal(entry.Document.SchemaVersion, roundTrip.Document.SchemaVersion);
+            Assert.Equal(entry.Document.Connectors.AllowedTypes, roundTrip.Document.Connectors.AllowedTypes);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     private static OrganizationPolicySourceResult SourceResult(DateTimeOffset loadedAt) =>
