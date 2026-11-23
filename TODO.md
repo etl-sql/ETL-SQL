@@ -13,7 +13,7 @@ Each task's design, boundaries and acceptance evidence stay in its linked `ROADM
 | Tier | What is in it |
 | :--- | :--- |
 | [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Nightly streak, release tooling, merge-gate proofs, the script and test review |
-| [Tier 2 — next](#tier-2--next) | PR regression lane proof; review follow-ups (RF01–RF05, shipped); FO13; second ROADMAP pickup (FO12, XL01, XL03, DB10, TR07–TR09, DB04/DB05/DB13/DB14 docs, DB09/DB12/DB15 decisions) |
+| [Tier 2 — next](#tier-2--next) | PR regression lane proof; review follow-ups (RF01–RF05, shipped); first ROADMAP pickup (FO05, FO08, XT09, TR05, shipped); second ROADMAP pickup (FO12, XL01, XL03, DB10, TR07–TR09, DB04/DB05/DB13/DB14 docs, DB09/DB12/DB15 decisions) |
 | [Tier 3 — if time allows](#tier-3--if-time-allows) | Allocation-noise watch |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -93,11 +93,7 @@ All five items (`RF01`–`RF05`) have shipped on `release/v0.23.0` (see `CHANGEL
 
 ### 2.3 Selected from ROADMAP (2026-11-23)
 
-`FO05`, `FO08`, `XT09`, and `TR05` have shipped on `release/v0.23.0` (see `CHANGELOG.md`).
-
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| FO13 | **`ENCRYPT`/`DECRYPT`/`COMPRESS`/`DECOMPRESS` `TO` a directory or remote connection (owner request 2026-11-23).** Today `TO <connection>` is refused (it used to upload the unprocessed file, fixed in the commit after 15091a9ef). Write the output to a private local staging directory, then upload it through the connection's `IRemoteFileSystem` (SFTP, FTP, cloud), honoring `OVERWRITE` remotely; a remote source downloads to staging first. **Finish line:** the bridge tests in `OrchRemoteTransferTests` assert the uploaded bytes are ciphertext/archive (not the source), `DECOMPRESS` to a remote directory defines what happens when some uploads fail (stop, report which were sent), staging is deleted on success, failure and cancellation, and `encrypt-file.md`/`compress-file.md` replace the "local paths only" note. Security-sensitive: Claude reviews before push. | FO08 | M |
+All four items (`FO05`, `FO08`, `XT09`, `TR05`) have shipped on `release/v0.23.0` (see `CHANGELOG.md`).
 
 ### 2.4 Second ROADMAP pickup (2026-11-23)
 
