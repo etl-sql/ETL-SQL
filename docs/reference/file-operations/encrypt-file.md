@@ -49,6 +49,9 @@ DECRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' 
   writes that same derived filename inside `<dir>` (creating `<dir>` if needed). Existing
   destinations follow `OVERWRITE`. `DATE_SUFFIX` is not supported on `ENCRYPT FILE` or
   `DECRYPT FILE` (only `COPY`, `MOVE`, and `RENAME`).
+- Source and destination are local paths. `TO` a remote connection (SFTP, FTP, cloud storage) is
+  rejected rather than uploading the unencrypted file: encrypt locally, then `COPY FILE` the result
+  to the connection, as the vendor-drop example does.
 - The source file is left in place unless `DELETE_SOURCE = ON` (see the vendor-drop example).
 - `ENCRYPT DIRECTORY` encrypts every file, subfolders included, and writes each one as `<name>.enc`
   under the destination with the same folder layout. `DECRYPT DIRECTORY` decrypts only `.enc` files

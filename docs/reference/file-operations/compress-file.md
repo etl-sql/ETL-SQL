@@ -48,6 +48,7 @@ When `TO` is omitted:
 
 - `COMPRESS DIRECTORY` always includes subfolders.
 - `TO DIRECTORY '<dir>'` on `COMPRESS FILE` writes the derived archive name (`<source>.zip`, `.gz`, `.tar`, or `.tar.gz` per `FORMAT`) inside `<dir>`. On `DECOMPRESS FILE`, `TO DIRECTORY '<dir>'` extracts archives (or the decompressed single `.gz` file) into `<dir>`. `DATE_SUFFIX` is not supported on `COMPRESS` or `DECOMPRESS` (only `COPY`, `MOVE`, and `RENAME`).
+- Source and destination are local paths. `TO` a remote connection (SFTP, FTP, cloud storage) is rejected rather than copying the uncompressed file: compress or extract locally, then `COPY FILE` the result.
 - Inspect archive entries without extracting to disk using [`ARCHIVE_LIST`](../functions/file-path/archive_list.md).
 - Any other `WITH` option is a syntax error that lists the accepted options.
 

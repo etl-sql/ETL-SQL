@@ -552,6 +552,16 @@ public class FileOperationStatementHandler(
         ResolvedFileOperand destOperand,
         bool overwrite)
     {
+        // The bridge only transfers bytes. ENCRYPT/DECRYPT/COMPRESS/DECOMPRESS used to fall through
+        // to a plain upload or download, so ENCRYPT FILE ... TO <remote> sent the plaintext.
+        if (stmt.Type is not (FileOpType.Copy or FileOpType.Move or FileOpType.Rename or FileOpType.Delete))
+        {
+            var opName = $"{stmt.Type.ToString().ToUpperInvariant()} FILE";
+            throw new ExecutionException(
+                $"{opName} cannot read from or write to a remote connection. Run {opName} on a local path, then COPY FILE the result to or from the connection.",
+                null, stmt.Line, stmt.Column);
+        }
+
         var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
         context.IncrementOperationCount(OperationType.FileSystem, sourceOperand.ResolvedPath, 1);
 

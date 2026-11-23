@@ -178,6 +178,35 @@ namespace ETL_SQL.Tests.Orchestration
             if (File.Exists(downloadFile)) File.Delete(downloadFile);
         }
 
+        // The local<->remote bridge only uploads or downloads. ENCRYPT FILE ... TO <remote> used to
+        // upload the plaintext and log "File copied"; any operation it cannot perform must refuse.
+        [Theory]
+        [InlineData("ENCRYPT FILE '{0}' TO MYREMOTE PASSWORD 'bridge-test-pw';")]
+        [InlineData("COMPRESS FILE '{0}' TO MYREMOTE;")]
+        [InlineData("DECRYPT FILE '{0}' TO MYREMOTE PASSWORD 'bridge-test-pw';")]
+        [InlineData("DECOMPRESS FILE '{0}' TO MYREMOTE;")]
+        public async Task TransformingFileOperations_ToARemoteConnection_RefuseInsteadOfCopying(string template)
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = services.GetRequiredService<Evaluator>();
+            var mockFs = new MockRemoteFileSystem();
+            evaluator.Connections["MYREMOTE"] = mockFs;
+
+            string localFile = Path.Combine(Path.GetTempPath(), $"bridge_secret_{Guid.NewGuid():N}.csv");
+            File.WriteAllText(localFile, "account,balance\n1,100\n");
+            try
+            {
+                var sql = string.Format(template, localFile.Replace("\\", "\\\\"));
+                var ex = await Assert.ThrowsAnyAsync<Exception>(() => RunScriptAsync(evaluator, sql));
+                Assert.Contains("remote", ex.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.Empty(mockFs.RemoteFiles);
+            }
+            finally
+            {
+                if (File.Exists(localFile)) File.Delete(localFile);
+            }
+        }
+
         [Fact]
         public async Task Test_SqlStyle_FileTransferOverwrite()
         {
