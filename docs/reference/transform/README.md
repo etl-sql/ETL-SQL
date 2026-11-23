@@ -4,6 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
+| [CLEAN](clean.md) | Applies ordered text cleaning and standardization rules across multiple or all string columns. |
 | [DEDUPLICATE](deduplicate.md) | Removes duplicate rows based on key columns, with optional sorting to control which row is kept. |
 | [FILL_DATES](fill_dates.md) | Fills missing daily rows in a time-series dataset. |
 | [INTERPOLATE](interpolate.md) | Fills missing numeric values between known data points in a series. |

@@ -22,7 +22,8 @@ public class PushdownEngine(ILogger logger)
         "GET_JOB_STATE", "SET_JOB_STATE", "ENV", "CONNECTION_PROPERTY",
         "ERROR_NUMBER", "ERROR_MESSAGE", "ERROR_SEVERITY", "ERROR_STATE", "ERROR_LINE",
         "APPEND_TO_LIST", "ADD_TO_LIST", "REMOVE_FROM_LIST", "SORT_LIST",
-        "GET_TAGS", "GET_TAG_VALUE", "HAS_TAG"
+        "GET_TAGS", "GET_TAG_VALUE", "HAS_TAG",
+        "CLEAN_TEXT", "STANDARDIZE"
     };
 
     private bool ContainsLocalOnlyEngineFunctions(Expression? expr)

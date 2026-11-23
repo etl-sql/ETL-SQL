@@ -33,6 +33,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `SHARE_OF_TOTAL` | Transform | [Transform](reference/transform/share_of_total.md) | [share_of_total.md](reference/transform/share_of_total.md) |
 | `TOP_N_OTHERS` | Transform | [Transform](reference/transform/top_n_others.md) | [top_n_others.md](reference/transform/top_n_others.md) |
 | `UNPIVOT` | Transform | [Transform](reference/transform/unpivot.md) | [unpivot.md](reference/transform/unpivot.md) |
+| `CLEAN` | Transform | [Transform](reference/transform/clean.md) | [clean.md](reference/transform/clean.md) |
 | `COMPARE DATASETS` | Data Prep / CDC | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md#compare-datasets](reference/statements/data-prep.md#compare-datasets) |
 | `CREATE CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
 | `ALTER CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |
@@ -361,6 +362,8 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `STUFF(string, start, length, replacement)` | String | [STUFF.md](reference/functions/string/stuff.md) | Deletes part of string and inserts replacement |
 | `STR(number, [length], [decimals])` | String | [STR.md](reference/functions/string/str.md) | Formats number as string |
 | `CLEAN_STRING(string)` | String | [CLEAN_STRING.md](reference/functions/string/clean_string.md) | Clean string |
+| `CLEAN_TEXT(value [, rules])` | String | [CLEAN_TEXT.md](reference/functions/string/clean_text.md) | Applies ordered text cleaning rules (`TRIM`, `COLLAPSE_WHITESPACE`, `STRIP_CONTROL`, `NULL_IF_EMPTY`, case folding, `PHONE`, `EMAIL`, `POSTAL_CODE`) |
+| `STANDARDIZE(value, format)` | String | [STANDARDIZE.md](reference/functions/string/standardize.md) | Standardizes text into `PHONE`, `EMAIL`, or `POSTAL_CODE` format |
 | `MASK_EMAIL(string)` | String | [MASK_EMAIL.md](reference/functions/string/mask_email.md) | Mask email |
 | `MASK_PHONE(string)` | String | [MASK_PHONE.md](reference/functions/string/mask_phone.md) | Mask phone |
 | `MASK_SSN(string)` | String | [MASK_SSN.md](reference/functions/string/mask_ssn.md) | Mask SSN |
@@ -2442,6 +2445,8 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `CHARINDEX` | Function | Canonical built-in function |
 | `CHECKSUM` | Function | Canonical built-in function |
 | `CLEAN_STRING` | Function | Canonical built-in function |
+| `CLEAN_TEXT` | Function | Canonical built-in function |
+| `STANDARDIZE` | Function | Canonical built-in function |
 | `COALESCE` | Function | Canonical built-in function |
 | `CONCAT` | Function | Canonical built-in function |
 | `CONNECTION_PROPERTY` | Function | Canonical built-in function |

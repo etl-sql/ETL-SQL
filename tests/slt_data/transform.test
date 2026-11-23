@@ -610,3 +610,91 @@ USING UNPIVOT (
   ID_COLS = 'Id',
   VALUE_COLS = 'Q1, MissingCol'
 );
+
+
+# 11. CLEAN_TEXT / STANDARDIZE in SELECT and TRANSFORM ... USING CLEAN (TR05)
+statement ok
+CREATE TABLE #t_clean_src (Id INT, Name STRING, Email STRING, Phone STRING, Postal STRING);
+
+statement ok
+INSERT INTO #t_clean_src VALUES
+  (1, '  alice   smith  ', '  ALICE@Example.COM ', '(555) 123-4567', '123456789'),
+  (2, '   ', NULL, '+1 (555) 987-6543', 'k1a0b1');
+
+query TTTT
+SELECT
+  CLEAN_TEXT(Name, 'TRIM, COLLAPSE_WHITESPACE, TITLE'),
+  STANDARDIZE(Email, 'EMAIL'),
+  STANDARDIZE(Phone, 'PHONE'),
+  STANDARDIZE(Postal, 'POSTAL_CODE')
+FROM #t_clean_src
+WHERE Id = 1;
+----
+Alice Smith
+alice@example.com
+555-123-4567
+12345-6789
+
+statement ok
+TRANSFORM #t_clean_out
+FROM #t_clean_src
+USING CLEAN (
+  COLS = '*',
+  RULES = 'STRIP_CONTROL, COLLAPSE_WHITESPACE, TRIM, NULL_IF_EMPTY'
+);
+
+statement ok
+TRANSFORM #t_clean_out
+USING CLEAN (
+  COLS = 'Email',
+  RULES = 'EMAIL'
+);
+
+statement ok
+TRANSFORM #t_clean_out
+USING CLEAN (
+  COLS = 'Phone',
+  RULES = 'PHONE'
+);
+
+statement ok
+TRANSFORM #t_clean_out
+USING CLEAN (
+  COLS = 'Postal',
+  RULES = 'POSTAL_CODE'
+);
+
+query ITTTT
+SELECT
+  Id,
+  COALESCE(Name, 'NULL'),
+  COALESCE(Email, 'NULL'),
+  Phone,
+  Postal
+FROM #t_clean_out
+ORDER BY Id;
+----
+1
+alice smith
+alice@example.com
+555-123-4567
+12345-6789
+2
+NULL
+NULL
++1-555-987-6543
+K1A 0B1
+
+statement error
+SELECT CLEAN_TEXT('abc', 'UNKNOWN_RULE');
+
+statement error
+SELECT STANDARDIZE('abc', 'UNKNOWN_FORMAT');
+
+statement error
+TRANSFORM #err_clean_col
+FROM #t_clean_src
+USING CLEAN (
+  COLS = 'DoesNotExist',
+  RULES = 'TRIM'
+);

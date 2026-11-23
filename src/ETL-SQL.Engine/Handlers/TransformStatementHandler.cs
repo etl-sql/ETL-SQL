@@ -48,6 +48,9 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             case "MELT":
                 await ExecuteUnpivot(stmt, context);
                 break;
+            case "CLEAN":
+                await ExecuteClean(stmt, context);
+                break;
             case "TOP_N_OTHERS":
                 await ExecuteTopNOthers(stmt, context);
                 break;
@@ -1666,6 +1669,92 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         }
 
         throw new ExecutionException($"Unsupported {algorithm} aggregate function: {aggregate}");
+    }
+
+    private async Task ExecuteClean(TransformStatement stmt, IExecutionContext context)
+    {
+        ValidateAllowedOptions(stmt, "CLEAN", "COLS", "RULES");
+
+        var colsSpec = stmt.Options.ContainsKey("COLS")
+            ? GetStringOption(stmt.Options, "COLS", "CLEAN")
+            : "*";
+        var rulesSpec = stmt.Options.ContainsKey("RULES")
+            ? GetStringOption(stmt.Options, "RULES", "CLEAN")
+            : null;
+        var rules = ETL_SQL.Engine.Functions.TextCleaningEngine.ParseRules(rulesSpec);
+
+        using var staged = await StageSourceRows(stmt, context, "CLEAN");
+        var columns = staged.Columns;
+        var sourceSchema = staged.SourceSchema;
+
+        var targetCols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (colsSpec.Trim() == "*")
+        {
+            foreach (var col in columns)
+            {
+                if (sourceSchema.TryGetValue(col, out var def))
+                {
+                    if (IsTextColumnType(def.DataType))
+                        targetCols.Add(col);
+                }
+                else if (staged.Rows.Any(r => r.TryGetValue(col, out var v) && v is string))
+                {
+                    targetCols.Add(col);
+                }
+            }
+        }
+        else
+        {
+            var requested = colsSpec
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+            if (requested.Count == 0)
+                throw new ExecutionException("CLEAN requires COLS = '*' or a non-empty comma-separated list of column names.");
+
+            var knownCols = new HashSet<string>(columns, StringComparer.OrdinalIgnoreCase);
+            foreach (var col in requested)
+            {
+                if (!knownCols.Contains(col))
+                    throw new ExecutionException($"CLEAN column '{col}' does not exist in source table '{staged.SourceName}'.");
+                targetCols.Add(col);
+            }
+        }
+
+        var targetColumnDefs = CopySourceSchemaDefinitions(columns, sourceSchema);
+
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "CLEAN", targetColumnDefs, _logger);
+        foreach (var row in staged.Rows)
+        {
+            context.CancellationToken.ThrowIfCancellationRequested();
+            var outRow = new Row(sink.Schema);
+            foreach (var col in columns)
+            {
+                var val = GetValue(row[col]);
+                if (val != null && targetCols.Contains(col))
+                {
+                    var text = TypeConverter.ToInvariantText(val);
+                    outRow[col] = ETL_SQL.Engine.Functions.TextCleaningEngine.ApplyRules(text, rules);
+                }
+                else
+                {
+                    outRow[col] = val;
+                }
+            }
+            await sink.WriteRowAsync(outRow);
+        }
+
+        await sink.CompleteAsync();
+    }
+
+    private static bool IsTextColumnType(string? dataType)
+    {
+        if (string.IsNullOrWhiteSpace(dataType)) return false;
+        var upper = dataType.Trim().ToUpperInvariant();
+        return upper is "STRING" or "VARCHAR" or "NVARCHAR" or "CHAR" or "NCHAR" or "TEXT" or "CLOB"
+            || upper.StartsWith("VARCHAR(", StringComparison.Ordinal)
+            || upper.StartsWith("NVARCHAR(", StringComparison.Ordinal)
+            || upper.StartsWith("CHAR(", StringComparison.Ordinal)
+            || upper.StartsWith("NCHAR(", StringComparison.Ordinal);
     }
 
     private sealed class TransformOutputSink : IAsyncDisposable
