@@ -420,6 +420,13 @@ namespace ETL_SQL.Connectors.Excel
             bool append,
             CancellationToken cancellationToken)
         {
+            // SHEET_INDEX and START_ROW select what to read. The writer names its sheet from SHEET
+            // and always writes from row 1, so honoring them on write would rename or misread a sheet.
+            if (_sheetIndex.HasValue)
+                throw new ExecutionException("EXCEL option SHEET_INDEX applies to reads only; use SHEET to name the sheet to write.");
+            if (_startRow.HasValue)
+                throw new ExecutionException("EXCEL option START_ROW applies to reads only; writes start at row 1.");
+
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
             try
             {

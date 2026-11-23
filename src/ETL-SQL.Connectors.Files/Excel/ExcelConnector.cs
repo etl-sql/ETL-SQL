@@ -51,8 +51,8 @@ namespace ETL_SQL.Connectors.Excel
             "EXCEL Connector: Connects to Excel workbooks (.xlsx, .xls, .xlsb).\n" +
             "Options:\n" +
             "  SHEET: Name of the sheet to read (default: first sheet; mutually exclusive with SHEET_INDEX)\n" +
-            "  SHEET_INDEX: 1-based worksheet position (mutually exclusive with SHEET)\n" +
-            "  START_ROW: 1-based row number where the header or data begins (skips banner rows)\n" +
+            "  SHEET_INDEX: 1-based worksheet position (mutually exclusive with SHEET; reads only)\n" +
+            "  START_ROW: 1-based row number where the header or data begins (skips banner rows; reads only)\n" +
             "  HEADER: ON (default) | OFF (First row is column names)\n" +
             "  RANGE: Cell range to read (e.g. 'A1:D100')\n" +
             "  COMPRESS: ON | OFF (ZIP archive; adds .zip to the path)\n" +

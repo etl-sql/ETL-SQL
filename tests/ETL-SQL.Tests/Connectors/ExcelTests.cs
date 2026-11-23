@@ -360,5 +360,42 @@ namespace ETL_SQL.Tests.Connectors
             }
             finally { if (File.Exists(outPath)) File.Delete(outPath); }
         }
+
+        [Theory]
+        [Trait("Connector", "EXCEL")]
+        [InlineData("SHEET_INDEX", "1", true)]
+        [InlineData("SHEET_INDEX", "1", false)]
+        [InlineData("START_ROW", "2", true)]
+        [InlineData("START_ROW", "2", false)]
+        public async Task TestExcelReadOnlyOptions_RejectWritesAndLeaveTheWorkbookUnchanged(string option, string value, bool append)
+        {
+            // The writer names its sheet from SHEET only, so a write through SHEET_INDEX used to
+            // move the selected sheet's rows into a new "Sheet1", and START_ROW was ignored on append.
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_ReadOnlyOpt_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                var original = new Dictionary<string, object>
+                {
+                    ["First"] = new[] { new Dictionary<string, object?> { ["Id"] = 1, ["Name"] = "one" } }
+                };
+                MiniExcelLibs.MiniExcel.SaveAs(outPath, original);
+                var before = await File.ReadAllBytesAsync(outPath);
+
+                var ds = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { option, value },
+                    { "HEADER", "ON" }
+                });
+                var dt = new DataTable();
+                dt.SetColumns(new[] { "Id", "Name" });
+                var row = dt.NewRow(); row["Id"] = 2; row["Name"] = "two"; await dt.AddRowAsync(row);
+
+                var ex = await Assert.ThrowsAsync<ExecutionException>(() => ds.WriteBatches(new[] { dt }.ToAsyncEnumerable(), append));
+                Assert.Contains(option, ex.Message);
+                Assert.Contains("read", ex.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(before, await File.ReadAllBytesAsync(outPath));
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
     }
 }

@@ -16,7 +16,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 - Added `TRANSFORM ... USING UNPIVOT` (`MELT`) reshaping wide columns (`ID_COLS`, `VALUE_COLS`, `NAME_COL`, `VALUE_COL`, `INCLUDE_NULLS = OFF | ON`) into normalized key/value rows with preserved schema types, lineage/scope projection, `WHAT_IF` safety, and SLT coverage (`TR06` in `DataParser.cs`, `TransformSchemaProjection.cs`, `LineageAnalyzer.cs`, `TransformStatementHandler.cs`, `docs/reference/transform/unpivot.md`, `TransformCorrectnessTests.cs`, and `tests/slt_data/transform.test`).
 
-- Implemented `START_ROW` (1-based row offset skipping banner rows without requiring `RANGE`) and `SHEET_INDEX` (1-based worksheet selection, mutually exclusive with `SHEET`) on the `EXCEL` connector (`XL02` in `ExcelConnector.cs`, `ExcelDataSource.cs`, `docs/reference/connectors/files/excel.md`, and `ExcelTests.cs`).
+- Implemented `START_ROW` (1-based row offset skipping banner rows without requiring `RANGE`) and `SHEET_INDEX` (1-based worksheet selection, mutually exclusive with `SHEET`) on the `EXCEL` connector. Both apply to reads only: a write with either fails before touching the workbook, because the writer names its sheet from `SHEET` and starts at row 1 (`XL02` in `ExcelConnector.cs`, `ExcelDataSource.cs`, `docs/reference/connectors/files/excel.md`, and `ExcelTests.cs`).
 
 - Added `DIRECTORY_SIZE(path [, recursive])` and `DIRECTORY_FILE_COUNT(path [, recursive])` honoring path boundaries, `SET ALLOW_FILE_OPERATIONS`, and `SET ALLOW_RECURSIVE_LAYERS` (`FN06` in `FileFunctions.cs`, `PushdownEngine.cs`, `LanguageMetadata.cs`, `directory_size.md`, `directory_file_count.md`, `FilePathFunctionsTests.cs`, and `standard_library_boundaries.test`).
 
