@@ -639,8 +639,8 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         }
 
         if (!Directory.Exists(_root)) return;
-        // Sandboxes run with ETLSQL_SANDBOX_UMASK=0000, so everything they wrote here is
-        // removable by this account. A failure is a real leak, not noise to swallow.
+        // Sandboxes share this account's group (setgid leaves, umask 0007), so everything they
+        // wrote here is removable by this account. A failure is a real leak, not noise to swallow.
         foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
             File.SetAttributes(file, FileAttributes.Normal);
         Directory.Delete(_root, recursive: true);
