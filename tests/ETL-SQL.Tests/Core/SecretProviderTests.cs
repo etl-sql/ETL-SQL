@@ -115,6 +115,7 @@ public class SecretProviderTests
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public async Task OsSecretStoreProvider_LocalMachineScope_AppliesStrictWindowsAcls()
     {

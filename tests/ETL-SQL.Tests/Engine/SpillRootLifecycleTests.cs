@@ -135,6 +135,7 @@ public class SpillRootLifecycleTests : IDisposable
     }
 
     [UnixFact] // Unix permission bits; Windows ACLs are not modelled here.
+    [Trait("Platform", "Unix")]
     [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
     public void Sweep_IgnoresMarkersInASpillDirectoryOtherUsersCanWrite()
     {

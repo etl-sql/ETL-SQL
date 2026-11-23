@@ -27,6 +27,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void NotInstalledHere_TouchesNothing()
     {
         WriteOperator("{}");
@@ -38,6 +39,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void FreshInstall_GeneratesEverySecretIntoTheProtectedFile()
     {
         WriteOperator("{}");
@@ -58,6 +60,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void FreshInstall_WritesOneTimeSignIn()
     {
         WriteOperator("{}");
@@ -76,6 +79,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void ExistingPortalDb_WritesNoSignIn()
     {
         WriteOperator("{}");
@@ -87,6 +91,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void RetryReusesSavedPassword()
     {
         WriteOperator("{}");
@@ -104,6 +109,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void SecretsInAppSettings_MoveAndLeaveEmptyValues()
     {
         WriteOperator($$"""
@@ -135,6 +141,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void SecondRun_RegeneratesNothing()
     {
         WriteOperator("{}");
@@ -151,6 +158,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void TwoConcurrentRuns_AgreeOnSharedSecrets()
     {
         WriteOperator("{}");
@@ -173,6 +181,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void OperatorFileWithCommentsAndTrailingCommas_IsAccepted()
     {
         WriteOperator($$"""
@@ -188,6 +197,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsTheory]
+    [Trait("Platform", "Windows")]
     [InlineData("[]")]
     [InlineData("\"x\"")]
     [InlineData("null")]
@@ -204,6 +214,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void LockedSecretsFile_FailsKeepsKeysAndPublishesNoSignIn()
     {
         WriteOperator($$"""{ "Portal": { "Jwt": { "Secret": "{{Planted}}" } } }""");
@@ -227,6 +238,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void V022File_KeepsOnlyRealEdits()
     {
         var file = V022Defaults();
@@ -249,6 +261,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void SlimmingRunsOnce()
     {
         WriteOperator(V022Defaults().ToJsonString());
@@ -263,6 +276,7 @@ public sealed class InstalledConfigurationBootstrapTests : IDisposable
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void FreshInstall_SetsMarkerWithoutSlimming()
     {
         WriteOperator("{}");

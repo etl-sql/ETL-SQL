@@ -97,6 +97,7 @@ public class ConnectionCatalogTests
     }
 
     [WindowsFact]
+    [Trait("Platform", "Windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public async Task LocalProvider_LocalMachineScope_AppliesStrictWindowsAcls()
     {

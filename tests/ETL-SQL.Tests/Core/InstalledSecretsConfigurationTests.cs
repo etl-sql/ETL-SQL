@@ -55,6 +55,7 @@ public sealed class InstalledSecretsConfigurationTests : IDisposable
     }
 
     [WindowsFact] // On Linux the test user may be root, who reads anything.
+    [Trait("Platform", "Windows")]
     [SupportedOSPlatform("windows")]
     public void UnreadableFile_IsSkipped_SoAnOrdinaryUserCanStillRunTheCli()
     {
