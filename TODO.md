@@ -106,9 +106,12 @@ Named a v0.23.0 priority when v0.22.0 was scoped. Drafted
 - [x] **RV01 Lane-membership and orphan audit** (`scripts/` and all 9 test projects). Done
   2026-11-22: 10 findings, all fixed or waived ([findings log](docs/releases/v0.23.0-script-and-test-review-plan.md#rv01-findings-2026-11-22)). Portal and Language
   Server regression now run on push; new `nightly-tests.yml` (perf, scale assessment, fuzz smoke).
-  **Left:** a first green `nightly-tests.yml` run (push a `nightly-tests/**` branch). S
+  First green `nightly-tests.yml` run: 45057462832. S
 - [ ] **RV02 Engine, language, connector and corpus tests** (523 `.cs` files in `ETL-SQL.Tests`,
-  `SqlLogicTests`, `FuzzTests`, `tests/Integration/`). M
+  `SqlLogicTests`, `FuzzTests`, `tests/Integration/`). M. In progress: 14 findings so far, 13 fixed
+  ([findings log](docs/releases/v0.23.0-script-and-test-review-plan.md#rv02-findings-in-progress-2026-11-22)).
+  **Left:** the `Coverage/*` no-assertion tests, then the weak-assertion, locale, empty-catch,
+  temp-cleanup, sleep and clock scan categories.
 - [ ] **RV03 Reporting, UI, Language Server and browser checks** (235 + 14 `.cs` files,
   198 `scripts/checks/test-*` files). M
 - [ ] **RV04 Orchestration, governance, hardening, security and scale tests** (227 `.cs` files,
