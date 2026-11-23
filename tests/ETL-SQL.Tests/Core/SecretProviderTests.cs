@@ -114,12 +114,10 @@ public class SecretProviderTests
         }
     }
 
-    [Fact]
+    [WindowsFact]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public async Task OsSecretStoreProvider_LocalMachineScope_AppliesStrictWindowsAcls()
     {
-        if (!OperatingSystem.IsWindows())
-            return;
-
         var root = Path.Combine(Path.GetTempPath(), $"etl-secret-store-machine-{Guid.NewGuid():N}");
         var provider = new OsSecretStoreProvider(root, LocalVaultProtectionScope.LocalMachine);
 

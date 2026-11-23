@@ -134,10 +134,10 @@ public class SpillRootLifecycleTests : IDisposable
         Assert.True(SpillRootOwnership.IsAbandoned(root));
     }
 
-    [Fact]
+    [UnixFact] // Unix permission bits; Windows ACLs are not modelled here.
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
     public void Sweep_IgnoresMarkersInASpillDirectoryOtherUsersCanWrite()
     {
-        if (OperatingSystem.IsWindows()) return; // Unix permission bits; Windows ACLs are not modelled here.
         File.SetUnixFileMode(_parent, File.GetUnixFileMode(_parent) | UnixFileMode.OtherWrite);
         var crashed = Path.Combine(_parent, "crashed");
         Directory.CreateDirectory(crashed);

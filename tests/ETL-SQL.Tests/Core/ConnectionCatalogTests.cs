@@ -96,12 +96,10 @@ public class ConnectionCatalogTests
         }
     }
 
-    [Fact]
+    [WindowsFact]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public async Task LocalProvider_LocalMachineScope_AppliesStrictWindowsAcls()
     {
-        if (!OperatingSystem.IsWindows())
-            return;
-
         var root = TempRoot();
         var provider = new LocalConnectionCatalogProvider(root, LocalVaultProtectionScope.LocalMachine);
 
