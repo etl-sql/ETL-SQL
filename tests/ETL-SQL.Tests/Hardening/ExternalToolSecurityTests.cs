@@ -572,6 +572,46 @@ public sealed class ExternalToolSecurityTests : IDisposable
         Assert.Equal([fixedScriptPath, "--format", "csv", "--", @"C:\work\data.csv"], built);
     }
 
+    // Windows PowerShell and cmd take '/'-prefixed switches of any length, and PowerShell runs its
+    // first positional argument as a command, so a long '/' switch is not a fixed script.
+    [Theory]
+    [InlineData("powershell", "/NoProfile {CODE}")]
+    [InlineData("powershell", "/NoProfile /NonInteractive {CODE}")]
+    [InlineData("powershell", "/Command {CODE}")]
+    [InlineData("cmd", "/V:ON {CODE}")]
+    [InlineData("pwsh", "/nologo {CODE}")]
+    public void XT05_LongSlashSwitchesDoNotCountAsAFixedScript(string exe, string args)
+    {
+        var command = OperatingSystem.IsWindows() ? $@"C:\Tools\{exe}.exe" : $"/usr/bin/{exe}";
+        var handler = new ExecuteToolStatementHandler(new Mock<ILogger>().Object);
+        var def = new ToolDefinition("slash_switch", "EXECUTABLE", new Dictionary<string, string>
+        {
+            ["COMMAND"] = command,
+            ["ARGS"] = args
+        }, false);
+
+        var ex = Assert.Throws<ExecutionException>(() => handler.ValidateAndBuildArguments(
+            def, command, args, new Dictionary<string, string> { ["CODE"] = "Remove-Item -Recurse C:\\" }));
+        Assert.Contains("ALLOW_CALLER_CODE_ARGS", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void XT05_AbsoluteUnixScriptPathCountsAsAFixedScript()
+    {
+        const string command = "/usr/bin/python3";
+        const string args = "/opt/etlsql/tools/report.py {INFILE}";
+        var handler = new ExecuteToolStatementHandler(new Mock<ILogger>().Object);
+        var def = new ToolDefinition("py_abs", "EXECUTABLE", new Dictionary<string, string>
+        {
+            ["COMMAND"] = command,
+            ["ARGS"] = args
+        }, false);
+
+        var built = handler.ValidateAndBuildArguments(
+            def, command, args, new Dictionary<string, string> { ["INFILE"] = "data.csv" });
+        Assert.Equal(["/opt/etlsql/tools/report.py", "data.csv"], built);
+    }
+
     // ── XT06: Container resource limits & isolation profile checks ────────────
 
     [Fact]

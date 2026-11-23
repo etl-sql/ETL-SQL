@@ -778,7 +778,10 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
             var placeholders = PlaceholderRegex().Matches(token);
             if (placeholders.Count == 0)
             {
-                if (!token.StartsWith('-') && !DosSwitchRegex().IsMatch(token))
+                // A '/' token is a fixed script only when it is a multi-segment absolute path
+                // (/opt/tools/run.py). cmd and Windows PowerShell take '/' switches of any length
+                // (/NoProfile, /Command, /V:ON), and PowerShell runs its first positional argument.
+                if (!token.StartsWith('-') && !(token.StartsWith('/') && token.IndexOf('/', 1) < 0))
                     hasFixedScriptBeforeParam = true;
                 continue;
             }
