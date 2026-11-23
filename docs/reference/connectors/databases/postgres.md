@@ -43,6 +43,23 @@ CREATE CONNECTION pg_db AS POSTGRES(HOST='10.0.0.5', PORT=5432, DATABASE='invent
 CREATE CONNECTION pg_legacy AS POSTGRES('Host=localhost;Database=mydb;Username=etl;Password=pass');
 ```
 
+## PostgreSQL SQL dialect notes
+
+| Feature | Notes |
+| :--- | :--- |
+| Row capping | Uses `LIMIT` and `OFFSET` |
+| `DUAL` | Not required — `SELECT 1;` runs without a `FROM` clause |
+| Identifiers | Double-quoted (`"schema"."table"`); unquoted identifiers fold to lowercase. The connector leaves plain alphanumeric/underscore names unquoted and double-quotes names with special characters or explicit quotes |
+| `ILIKE` / `SIMILAR` | Case-insensitive `LIKE` and SQL regex matching |
+| `ON CONFLICT` / `RETURNING` | Native upsert (`DO NOTHING`, `DO UPDATE`) and DML row return clauses |
+| `LATERAL` / `TABLESAMPLE` / `FILTER` | Lateral joins, table sampling, and aggregate `FILTER` / `WITHIN GROUP` clauses |
+| `NOW()` / `DATE_TRUNC` / `DATE_PART` / `AGE` / `EXTRACT` | Native date/time functions |
+| `STRING_AGG` / `ARRAY_AGG` / `ARRAY_TO_STRING` / `GENERATE_SERIES` | Aggregation, array, and set-returning functions |
+| `JSON_BUILD_OBJECT` / `JSON_BUILD_ARRAY` / `JSONB_SET` / `JSON_ARRAY_ELEMENTS` | JSON and JSONB construction and extraction |
+| `NULLS FIRST` / `NULLS LAST` | Supported in `ORDER BY` pushdown |
+
+The linter's `DialectKeyword` rule warns on `TOP`, `PERCENT`, `ISNULL`, `CONVERT`, `ROWNUM`, `GETDATE`, and `SYSDATE` in PostgreSQL pushdown queries. Use `LIMIT`, `COALESCE`, `CAST`, and `NOW()` instead.
+
 ## Verified Gateway viewer context
 
 PostgreSQL is the first Gateway connector that can consume verified application viewer context.

@@ -59,6 +59,22 @@ BEGIN TRANSACTION;
 COMMIT;
 ```
 
+## SQL Server SQL dialect notes
+
+| Feature | Notes |
+| :--- | :--- |
+| Row capping | Uses `TOP (n)` (with optional `PERCENT` / `WITH TIES`) or `ORDER BY ... OFFSET n ROWS FETCH NEXT m ROWS ONLY` |
+| `DUAL` | Not used — omit `FROM DUAL` in native T-SQL (e.g., `SELECT GETDATE();`) |
+| Identifiers | Square-bracket quoted (`[schema].[table]`); closing brackets inside names are escaped as `]]` |
+| `NOLOCK` / `READUNCOMMITTED` / `ROWLOCK` / `TABLOCK` / `UPDLOCK` | Table locking hints |
+| `CROSS APPLY` / `OUTER APPLY` / `TABLESAMPLE` | Row-wise lateral evaluation and sampling |
+| `OUTPUT` / `INSERTED` / `DELETED` | DML row capture clauses |
+| `OPTION` / `RECOMPILE` / `MAXDOP` | Query execution hints |
+| `GETDATE` / `SYSDATETIME` / `DATEADD` / `DATENAME` / `EOMONTH` / `DATEFROMPARTS` | Native T-SQL date/time functions |
+| `ISNULL` / `CONVERT` / `CHARINDEX` / `LEN` / `HASHBYTES` | Null handling, conversion, string, and hashing functions |
+
+The linter's `DialectKeyword` rule warns on `LIMIT` and `ROWNUM` in SQL Server pushdown queries. Use `TOP` or `OFFSET ... FETCH NEXT` instead.
+
 ## Troubleshooting
 
 - **Login Failed for User**: Verify credentials, database existence, and whether SQL Server is configured for mixed-mode authentication.

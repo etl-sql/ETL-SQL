@@ -40,6 +40,23 @@ CREATE CONNECTION o_dev AS ORACLE(HOST='oradb.local', PORT=1521, SERVICE_NAME='O
 CREATE CONNECTION o_prod AS ORACLE('Data Source=MyTNS;User Id=app_user;Password=pwd;');
 ```
 
+## Oracle SQL dialect notes
+
+| Feature | Notes |
+| :--- | :--- |
+| Row capping | Uses `FETCH FIRST n ROWS ONLY` (Oracle 12c+) or `ROWNUM` |
+| `DUAL` | Required in native Oracle SQL for queries without a table (e.g., `SELECT SYSDATE FROM DUAL` inside `EXECUTE ... BEGIN ... END`) |
+| Identifiers | Double-quoted (`"SCHEMA"."TABLE"`); unquoted identifiers are uppercased by the connector to match Oracle's default uppercase storage, while already double-quoted names preserve case |
+| `ROWNUM` / `ROWID` / `SAMPLE` | Row numbering, physical row addresses, and table sampling |
+| `CONNECT BY` / `START WITH` / `PRIOR` / `NOCYCLE` / `LEVEL` / `SIBLINGS` | Hierarchical queries |
+| `NVL` / `NVL2` / `DECODE` | Null-substitution and conditional expressions |
+| `SYSDATE` / `TO_CHAR` / `TO_DATE` / `TO_NUMBER` / `TO_TIMESTAMP` | Date and type conversion functions |
+| `MONTHS_BETWEEN` / `ADD_MONTHS` / `LAST_DAY` / `TRUNC` | Date arithmetic and truncation |
+| `INSTR` / `SUBSTR` / `LPAD` / `RPAD` / `SYS_GUID` | String and identifier utility functions |
+| `NULLS FIRST` / `NULLS LAST` | Supported in `ORDER BY` pushdown; table aliases omit `AS` |
+
+The linter's `DialectKeyword` rule warns on `TOP`, `LIMIT`, and `ISNULL` in Oracle pushdown queries. Use `FETCH FIRST` (or `ROWNUM`) and `NVL` / `COALESCE` instead.
+
 ## Troubleshooting
 
 - **ORA-12154 (TNS could not resolve service name)**: Verify `SERVICE_NAME` or EZConnect string.

@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Documented SQL dialect notes (row capping, `DUAL`, identifier quoting, native SQL features, and linter `DialectKeyword` exclusions) for PostgreSQL, Oracle, and SQL Server (`DB06` in `docs/reference/connectors/databases/postgres.md`, `docs/reference/connectors/databases/oracle.md`, and `docs/reference/connectors/databases/mssql.md`).
+
 - Fixed `EXECUTE proc @var OUTPUT` on a local procedure ignoring `OUTPUT`: the caller's variable kept its old value. The parameter's final value is now written back, also after `RETURN`, for positional and named arguments; an `OUTPUT` argument that is not a variable is an error (`RV02`).
 
 - Fixed `Connectors:Retry:MaxAttempts` and `Connectors:Retry:BaseDelaySeconds` having no effect. Both were documented and shipped in `appsettings.json`, but the database connectors always used 3 attempts and a 1-second delay. Out-of-range values fall back to those defaults (`RV02`).

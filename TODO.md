@@ -97,7 +97,6 @@ back to its `ROADMAP.md` entry unchanged. Each row's boundaries are in its ROADM
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| DB06 | **Dialect notes for Postgres, Oracle, and MSSQL.** Snowflake, MySQL, and BigQuery list their supported native SQL; these three do not. Cover row capping (`LIMIT`, `FETCH FIRST`, `TOP`), `DUAL`, and identifier quoting, checked against the linter's dialect metadata. | — | S |
 | FO07 | **Document write-time `COMPRESS` and `ENCRYPT` on connectors.** Confirm which file connectors take both options (`FLATFILE`, `EXCEL`, `AVRO` list them; `JSON`, `XML`, and `PARQUET` call the encryption service), that compress runs before encrypt on write, and that read reverses it. Add the options and an "easy button" example to each connector page, with the mutually exclusive options called out. | — | S |
 | FN04 | **`PATH_ROOT`, `PATH_IS_ABSOLUTE`, `PATH_NORMALIZE`.** Pure string functions. `PATH_NORMALIZE` must match `CAST(... AS PATH)`; decide whether it is needed at all. | — | S |
 | FN05 | **`FILE_READONLY(path)` and `FILE_ACCESSED(path)`.** Read-only flag and last access time. Confirm the `DIRECTORY` connector columns and the functions agree. | — | S |
