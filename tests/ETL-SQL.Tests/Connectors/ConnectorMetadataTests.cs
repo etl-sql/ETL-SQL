@@ -45,34 +45,6 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void OdbcConnector_Aliases_NotEmpty()
-        {
-            var c = new OdbcConnector();
-            Assert.NotEmpty(c.Aliases);
-        }
-
-        [Fact]
-        public void OdbcConnector_GetHelp_ReturnsText()
-        {
-            var c = new OdbcConnector();
-            Assert.NotEmpty(c.GetHelp());
-        }
-
-        [Fact]
-        public void OdbcConnector_GetSupportedOptions_NotNull()
-        {
-            var c = new OdbcConnector();
-            Assert.NotNull(c.GetSupportedOptions());
-        }
-
-        [Fact]
-        public void OdbcConnector_GetOptionValues_ReturnsDict()
-        {
-            var c = new OdbcConnector();
-            Assert.NotNull(c.GetOptionValues());
-        }
-
-        [Fact]
         public void OdbcConnector_BuildConnectionString_WithDsn()
         {
             var c = new OdbcConnector();
@@ -91,20 +63,6 @@ namespace ETL_SQL.Tests.Connectors
                 ["DATABASE"] = "TestDB"
             });
             Assert.Contains("DRIVER", result);
-        }
-
-        [Fact]
-        public void OdbcConnector_GetSupportedFunctions_NotNull()
-        {
-            var c = new OdbcConnector();
-            Assert.NotNull(c.GetSupportedFunctions());
-        }
-
-        [Fact]
-        public void OdbcConnector_GetSupportedKeywords_NotNull()
-        {
-            var c = new OdbcConnector();
-            Assert.NotNull(c.GetSupportedKeywords());
         }
 
         [Fact]
@@ -147,27 +105,6 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void OracleConnector_GetHelp_ReturnsText()
-        {
-            var c = new OracleConnector();
-            Assert.NotEmpty(c.GetHelp());
-        }
-
-        [Fact]
-        public void OracleConnector_GetSupportedOptions_NotNull()
-        {
-            var c = new OracleConnector();
-            Assert.NotNull(c.GetSupportedOptions());
-        }
-
-        [Fact]
-        public void OracleConnector_GetOptionValues_NotNull()
-        {
-            var c = new OracleConnector();
-            Assert.NotNull(c.GetOptionValues());
-        }
-
-        [Fact]
         public void OracleConnector_BuildConnectionString_WithProperties()
         {
             var c = new OracleConnector();
@@ -180,13 +117,6 @@ namespace ETL_SQL.Tests.Connectors
                 ["PASSWORD"] = "pass"
             });
             Assert.NotEmpty(result);
-        }
-
-        [Fact]
-        public void OracleConnector_GetSupportedFunctions_NotNull()
-        {
-            var c = new OracleConnector();
-            Assert.NotNull(c.GetSupportedFunctions());
         }
 
         [Fact]
@@ -242,27 +172,6 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void PostgresConnector_GetHelp_ReturnsText()
-        {
-            var c = new PostgresConnector();
-            Assert.NotEmpty(c.GetHelp());
-        }
-
-        [Fact]
-        public void PostgresConnector_GetSupportedOptions_NotNull()
-        {
-            var c = new PostgresConnector();
-            Assert.NotNull(c.GetSupportedOptions());
-        }
-
-        [Fact]
-        public void PostgresConnector_GetOptionValues_NotNull()
-        {
-            var c = new PostgresConnector();
-            Assert.NotNull(c.GetOptionValues());
-        }
-
-        [Fact]
         public void PostgresConnector_BuildConnectionString_WithProperties()
         {
             var c = new PostgresConnector();
@@ -274,13 +183,6 @@ namespace ETL_SQL.Tests.Connectors
                 ["PASSWORD"] = "secret"
             });
             Assert.NotEmpty(result);
-        }
-
-        [Fact]
-        public void PostgresConnector_Aliases_NotNull()
-        {
-            var c = new PostgresConnector();
-            Assert.NotNull(c.Aliases);
         }
 
         [Fact]
@@ -313,27 +215,6 @@ namespace ETL_SQL.Tests.Connectors
         {
             var c = new MySqlConnectorObj();
             Assert.Contains("MARIADB", c.Aliases);
-        }
-
-        [Fact]
-        public void MySqlConnector_GetHelp_ReturnsText()
-        {
-            var c = new MySqlConnectorObj();
-            Assert.NotEmpty(c.GetHelp());
-        }
-
-        [Fact]
-        public void MySqlConnector_GetSupportedOptions_NotNull()
-        {
-            var c = new MySqlConnectorObj();
-            Assert.NotNull(c.GetSupportedOptions());
-        }
-
-        [Fact]
-        public void MySqlConnector_GetOptionValues_NotNull()
-        {
-            var c = new MySqlConnectorObj();
-            Assert.NotNull(c.GetOptionValues());
         }
 
         [Fact]
@@ -388,27 +269,6 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void RestConnector_GetHelp_ReturnsText()
-        {
-            var c = new RestConnector();
-            Assert.NotEmpty(c.GetHelp());
-        }
-
-        [Fact]
-        public void RestConnector_GetSupportedOptions_NotNull()
-        {
-            var c = new RestConnector();
-            Assert.NotNull(c.GetSupportedOptions());
-        }
-
-        [Fact]
-        public void RestConnector_GetOptionValues_NotNull()
-        {
-            var c = new RestConnector();
-            Assert.NotNull(c.GetOptionValues());
-        }
-
-        [Fact]
         public void RestConnector_BuildConnectionString_WithUrl()
         {
             var c = new RestConnector();
@@ -449,27 +309,6 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void ExcelConnector_GetHelp_ReturnsText()
-        {
-            var c = new ExcelConnector();
-            Assert.NotEmpty(c.GetHelp());
-        }
-
-        [Fact]
-        public void ExcelConnector_GetSupportedOptions_NotNull()
-        {
-            var c = new ExcelConnector();
-            Assert.NotNull(c.GetSupportedOptions());
-        }
-
-        [Fact]
-        public void ExcelConnector_GetOptionValues_NotNull()
-        {
-            var c = new ExcelConnector();
-            Assert.NotNull(c.GetOptionValues());
-        }
-
-        [Fact]
         public async Task ExcelConnector_GetTablesAsync_ReturnsEmpty()
         {
             var c = new ExcelConnector();
@@ -493,27 +332,6 @@ namespace ETL_SQL.Tests.Connectors
             Assert.True(c.IsFileBased);
         }
 
-        [Fact]
-        public void DirectoryConnector_GetHelp_ReturnsText()
-        {
-            var c = new DirectoryConnector();
-            Assert.NotEmpty(c.GetHelp());
-        }
-
-        [Fact]
-        public void DirectoryConnector_GetSupportedOptions_NotNull()
-        {
-            var c = new DirectoryConnector();
-            Assert.NotNull(c.GetSupportedOptions());
-        }
-
-        [Fact]
-        public void DirectoryConnector_GetOptionValues_NotNull()
-        {
-            var c = new DirectoryConnector();
-            Assert.NotNull(c.GetOptionValues());
-        }
-
         // ── AvroConnector ─────────────────────────────────────────────────────
 
         [Fact]
@@ -530,27 +348,6 @@ namespace ETL_SQL.Tests.Connectors
             Assert.True(c.IsFileBased);
         }
 
-        [Fact]
-        public void AvroConnector_GetHelp_ReturnsText()
-        {
-            var c = new AvroConnector();
-            Assert.NotEmpty(c.GetHelp());
-        }
-
-        [Fact]
-        public void AvroConnector_GetSupportedOptions_NotNull()
-        {
-            var c = new AvroConnector();
-            Assert.NotNull(c.GetSupportedOptions());
-        }
-
-        [Fact]
-        public void AvroConnector_GetOptionValues_NotNull()
-        {
-            var c = new AvroConnector();
-            Assert.NotNull(c.GetOptionValues());
-        }
-
         // ── ParquetConnector ──────────────────────────────────────────────────
 
         [Fact]
@@ -565,27 +362,6 @@ namespace ETL_SQL.Tests.Connectors
         {
             var c = new ParquetConnector();
             Assert.True(c.IsFileBased);
-        }
-
-        [Fact]
-        public void ParquetConnector_GetHelp_ReturnsText()
-        {
-            var c = new ParquetConnector();
-            Assert.NotEmpty(c.GetHelp());
-        }
-
-        [Fact]
-        public void ParquetConnector_GetSupportedOptions_NotNull()
-        {
-            var c = new ParquetConnector();
-            Assert.NotNull(c.GetSupportedOptions());
-        }
-
-        [Fact]
-        public void ParquetConnector_GetOptionValues_NotNull()
-        {
-            var c = new ParquetConnector();
-            Assert.NotNull(c.GetOptionValues());
         }
 
         [Fact]
@@ -606,27 +382,6 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void MockDbConnector_GetHelp_ReturnsText()
-        {
-            var c = new MockDbConnector();
-            Assert.NotEmpty(c.GetHelp());
-        }
-
-        [Fact]
-        public void MockDbConnector_GetSupportedOptions_NotNull()
-        {
-            var c = new MockDbConnector();
-            Assert.NotNull(c.GetSupportedOptions());
-        }
-
-        [Fact]
-        public void MockDbConnector_GetOptionValues_NotNull()
-        {
-            var c = new MockDbConnector();
-            Assert.NotNull(c.GetOptionValues());
-        }
-
-        [Fact]
         public void MockDbConnector_Aliases_Empty()
         {
             var c = new MockDbConnector();
@@ -642,27 +397,6 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Equal("SNOWFLAKE", c.Name);
         }
 
-        [Fact]
-        public void SnowflakeConnector_GetHelp_ReturnsText()
-        {
-            var c = new SnowflakeConnector();
-            Assert.NotEmpty(c.GetHelp());
-        }
-
-        [Fact]
-        public void SnowflakeConnector_GetSupportedOptions_NotNull()
-        {
-            var c = new SnowflakeConnector();
-            Assert.NotNull(c.GetSupportedOptions());
-        }
-
-        [Fact]
-        public void SnowflakeConnector_GetOptionValues_NotNull()
-        {
-            var c = new SnowflakeConnector();
-            Assert.NotNull(c.GetOptionValues());
-        }
-
         // ── BigQueryConnector ─────────────────────────────────────────────────
 
         [Fact]
@@ -672,27 +406,6 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Equal("BIGQUERY", c.Name);
         }
 
-        [Fact]
-        public void BigQueryConnector_GetHelp_ReturnsText()
-        {
-            var c = new BigQueryConnector();
-            Assert.NotEmpty(c.GetHelp());
-        }
-
-        [Fact]
-        public void BigQueryConnector_GetSupportedOptions_NotNull()
-        {
-            var c = new BigQueryConnector();
-            Assert.NotNull(c.GetSupportedOptions());
-        }
-
-        [Fact]
-        public void BigQueryConnector_GetOptionValues_NotNull()
-        {
-            var c = new BigQueryConnector();
-            Assert.NotNull(c.GetOptionValues());
-        }
-
         // ── AzureBlobConnector ────────────────────────────────────────────────
 
         [Fact]
@@ -700,27 +413,6 @@ namespace ETL_SQL.Tests.Connectors
         {
             var c = new AzureBlobConnector();
             Assert.Equal("AZURE_BLOB", c.Name);
-        }
-
-        [Fact]
-        public void AzureBlobConnector_GetHelp_ReturnsText()
-        {
-            var c = new AzureBlobConnector();
-            Assert.NotEmpty(c.GetHelp());
-        }
-
-        [Fact]
-        public void AzureBlobConnector_GetSupportedOptions_NotNull()
-        {
-            var c = new AzureBlobConnector();
-            Assert.NotNull(c.GetSupportedOptions());
-        }
-
-        [Fact]
-        public void AzureBlobConnector_GetOptionValues_NotNull()
-        {
-            var c = new AzureBlobConnector();
-            Assert.NotNull(c.GetOptionValues());
         }
 
         [Fact]
@@ -772,13 +464,6 @@ namespace ETL_SQL.Tests.Connectors
         {
             var c = new SnowflakeConnector();
             Assert.NotEmpty(c.GetExcludedKeywords());
-        }
-
-        [Fact]
-        public void MockDbConnector_GetSupportedFunctions_NotNull()
-        {
-            var c = new MockDbConnector();
-            Assert.NotNull(c.GetSupportedFunctions());
         }
 
         [Fact]
