@@ -206,8 +206,21 @@ public class PieDonutControlsTests
             new StyleToken("OTHER_LABEL", "Rest"));
 
         var renderable = PlotPlanTerminalRenderer.Render(plan, 80);
-        Assert.NotNull(renderable);
-        Assert.IsAssignableFrom<IRenderable>(renderable);
+        using var writer = new System.IO.StringWriter();
+        var console = Spectre.Console.AnsiConsole.Create(new Spectre.Console.AnsiConsoleSettings
+        {
+            Ansi = Spectre.Console.AnsiSupport.No,
+            ColorSystem = Spectre.Console.ColorSystemSupport.NoColors,
+            Out = new Spectre.Console.AnsiConsoleOutput(writer)
+        });
+        console.Write(renderable);
+        var text = writer.ToString();
+        var breakdownLines = text.Split('\n').Where(l => l.Contains('%')).ToList();
+        Assert.Equal(3, breakdownLines.Count);
+        Assert.Contains(breakdownLines, l => l.Contains("SegmentA", StringComparison.Ordinal) && l.Contains("(100)", StringComparison.Ordinal));
+        Assert.Contains(breakdownLines, l => l.Contains("SegmentB", StringComparison.Ordinal) && l.Contains("(80)", StringComparison.Ordinal));
+        Assert.Contains(breakdownLines, l => l.Contains("Rest", StringComparison.Ordinal) && l.Contains("(5)", StringComparison.Ordinal));
+        Assert.DoesNotContain(breakdownLines, l => l.Contains("TinyA", StringComparison.Ordinal) || l.Contains("TinyB", StringComparison.Ordinal));
     }
 
     // ── 3. Slice Explosion Tests ────────────────────────────────────────────

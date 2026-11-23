@@ -981,7 +981,7 @@ internal static class PlotPlanTerminalRenderer
                 ? plan.Series.FirstOrDefault(candidate => candidate.Key == datumLabel)
                 : plan.Series.FirstOrDefault(candidate => candidate.Key == item.Layer.SeriesKey);
             var label = layers.Count > 1 && item.Data.Count == 1 ? series?.Label ?? datumLabel : datumLabel;
-            return (Datum: datum, Label: label, Color: series?.Color ?? "#808080", Value: Math.Max(0m, Value(datum) ?? 0m));
+            return (Datum: datum, Label: label, Color: series?.Color ?? "#808080", Value: Math.Max(0m, Value(datum) ?? 0m), IsOther: false);
         })).ToList();
 
         // 1. Sort order
@@ -1004,7 +1004,7 @@ internal static class PlotPlanTerminalRenderer
             minPct > 0m)
         {
             var thresholdRatio = minPct >= 1m ? minPct / 100m : minPct;
-            var kept = new List<(ResolvedDatum Datum, string Label, string Color, decimal Value)>();
+            var kept = new List<(ResolvedDatum Datum, string Label, string Color, decimal Value, bool IsOther)>();
             decimal otherVal = 0m;
             ResolvedDatum? sampleDatum = null;
             foreach (var c in components)
@@ -1021,7 +1021,7 @@ internal static class PlotPlanTerminalRenderer
             }
             if (otherVal > 0m && kept.Count > 0)
             {
-                kept.Add((sampleDatum ?? components[0].Datum, otherLabel, "#9ca3af", otherVal));
+                kept.Add((sampleDatum ?? components[0].Datum, otherLabel, "#9ca3af", otherVal, true));
                 components = kept;
             }
         }
@@ -1030,7 +1030,10 @@ internal static class PlotPlanTerminalRenderer
         var rows = components.Select(component =>
         {
             var proportion = total == 0m ? 0m : component.Value / total;
-            return (IRenderable)new Markup($"{Markup.Escape(Truncate(component.Label, 18).PadRight(18))} [#{component.Color.TrimStart('#')}]{FractionalBar(proportion, componentWidth)}[/] {proportion:P1} ({Markup.Escape(DisplayValue(component.Datum))})");
+            var displayVal = component.IsOther
+                ? component.Value.ToString("0.##", CultureInfo.InvariantCulture)
+                : DisplayValue(component.Datum);
+            return (IRenderable)new Markup($"{Markup.Escape(Truncate(component.Label, 18).PadRight(18))} [#{component.Color.TrimStart('#')}]{FractionalBar(proportion, componentWidth)}[/] {proportion:P1} ({Markup.Escape(displayVal)})");
         });
         return new Rows(new[] { (IRenderable)new Markup("[bold]Proportional breakdown[/] [grey](proportional components)[/]") }.Concat(rows));
     }
