@@ -5,6 +5,34 @@ namespace ETL_SQL.Tests.Reporting;
 
 public class AsyncEncryptionOptionsTests
 {
+    // A mistyped key source used to leave Enabled = false, so ENCRYPT = 'MACHIN' wrote plaintext
+    // while the script read as if it encrypted.
+    [Theory]
+    [InlineData("MACHIN")]
+    [InlineData("YES")]
+    [InlineData("AES256")]
+    [InlineData("")]
+    public void UnknownEncryptValue_IsRejectedRatherThanTreatedAsOff(string mode)
+    {
+        var ex = Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => new EncryptionOptions(
+            new Dictionary<string, string> { ["ENCRYPT"] = mode, ["PASSWORD"] = "test-password" }));
+        Assert.Contains("ENCRYPT", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("MACHINE", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("off", false)]
+    [InlineData("FALSE", false)]
+    [InlineData("on", true)]
+    [InlineData("True", true)]
+    [InlineData("password", true)]
+    public void KnownEncryptValues_SetEnabled(string mode, bool enabled)
+    {
+        var options = new EncryptionOptions(
+            new Dictionary<string, string> { ["ENCRYPT"] = mode, ["PASSWORD"] = "test-password" });
+        Assert.Equal(enabled, options.Enabled);
+    }
+
     [Theory]
     [InlineData("OFF", false)]
     [InlineData("OFF", true)]

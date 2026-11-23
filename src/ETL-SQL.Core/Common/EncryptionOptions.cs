@@ -36,7 +36,11 @@ public class EncryptionOptions
 
         if (options.TryGetValue("ENCRYPT", out var enc))
         {
-            var mode = enc.ToUpperInvariant();
+            var mode = enc.Trim().ToUpperInvariant();
+            // Fail closed: an unrecognized value used to mean "off", so a typo wrote plaintext.
+            if (mode is not ("ON" or "TRUE" or "OFF" or "FALSE" or "MACHINE" or "PASSWORD" or "KEYFILE" or "PORTAL"))
+                throw new ExecutionException(
+                    $"Unsupported ENCRYPT value '{enc}'. Use ON, OFF, MACHINE, PASSWORD, KEYFILE or PORTAL.");
             IsMachineBound = mode == "MACHINE";
             Enabled = mode is "ON" or "TRUE" or "MACHINE" or "PASSWORD" or "KEYFILE" or "PORTAL";
 
