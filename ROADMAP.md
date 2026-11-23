@@ -227,7 +227,7 @@ install). Pick it up again if a real MSI runner loss recurs.
 
 ### Data Preparation — `TRANSFORM` Reliability, Schema/Lineage Integration, and Analyst Operations
 
-**Status:** Incremental; TR01–TR04 shipped in v0.23.0, TR05–TR09 open for future scheduling  
+**Status:** Incremental; TR01–TR04 and TR06 shipped in v0.23.0, TR05 in progress (`TODO.md` 2.3), TR07–TR09 open for future scheduling  
 **Horizon:** Next (v0.23.0)  
 **Scheduling:** Backlog for prioritization after v0.22.0 ships.  
 **Authoritative design:** [TRANSFORM Statement Reference](docs/reference/statements/dml/transform.md),
@@ -364,7 +364,7 @@ tested and matches its neighbors; and the docs-versus-registry check passes.
 
 ### File Operations — `ENCRYPT FILE` / `DECRYPT FILE` Match Their Documentation
 
-**Status:** Accepted  
+**Status:** In Progress (v0.23.0: FO05 and FO08 decisions in `TODO.md` 2.3)  
 **Horizon:** Next  
 **Authoritative design:** none yet; [ENCRYPT / DECRYPT FILE](docs/reference/file-operations/encrypt-file.md)
 is the reference page, and [`ExtensionParser.cs`](src/ETL-SQL.Core/Parser/Components/ExtensionParser.cs)
@@ -959,7 +959,7 @@ must complete before the unified beginner experience can be accepted.
 
 ### Security — External Tool Permissions, Artifact Identity, and Launch Contracts
 
-**Status:** Accepted
+**Status:** In Progress (v0.23.0: XT09 in `TODO.md` 2.3)
 
 **Horizon:** Next
 

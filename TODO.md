@@ -13,7 +13,7 @@ Each task's design, boundaries and acceptance evidence stay in its linked `ROADM
 | Tier | What is in it |
 | :--- | :--- |
 | [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Nightly streak, release tooling, merge-gate proofs, the script and test review |
-| [Tier 2 — next](#tier-2--next) | PR regression lane proof; bugs and hardening found in the reviews (RF01–RF05) |
+| [Tier 2 — next](#tier-2--next) | PR regression lane proof; bugs and hardening found in the reviews (RF01–RF05); FO05, FO08, XT09, TR05 from ROADMAP |
 | [Tier 3 — if time allows](#tier-3--if-time-allows) | Allocation-noise watch |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -100,6 +100,19 @@ looks wrong, report it rather than writing an assertion that accepts it.
 | RF04 | **`ExternalToolSecurityTests` depend on the host's `%TEMP%` ACL.** On a host whose temp folder grants write access to an extra principal (Claude Code's sandbox adds AppContainer capability SIDs `S-1-15-3-…`), 16 tests (`XT01_LocalCatalogRejectsEscapeAliasesAcrossAllOperations`, the `XT02` what-if tests) fail because `ToolPathGuard` correctly rejects the tool root. **Finish line:** the tests create their root with an explicit protected ACL (owner, SYSTEM, Administrators) so they pass under such a temp folder, without loosening the guard. | — | S |
 | RF05 | **`BufferManager_FifoOrder_Memory` hangs instead of failing.** If reservations stopped being first-in-first-out, `await task2` would wait forever. **Finish line:** bounded waits (`WaitAsync` with a timeout) so an ordering break fails with a message. | — | XS |
 
+### 2.3 Selected from ROADMAP (2026-11-23)
+
+Selected by the owner for this week; each lands on `release/v0.23.0` and ships in v0.23.0 only if it
+is finished and green before the final candidate. Design, boundaries and acceptance stay in the
+linked `ROADMAP.md` entry. For a `D` (decision) item, write the recommendation with its evidence in
+the item's ROADMAP entry and get the owner's answer before writing code.
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| FO05 | **`ENCRYPT FILE` `ALGORITHM` decision** ([ROADMAP](ROADMAP.md#file-operations--encrypt-file--decrypt-file-match-their-documentation)). `CryptoUtils.EncryptFile` and `DecryptFile` take an optional `HashAlgorithmName` the statement never passes. Recommend exposing it (and what it controls) or leaving it out of the language; the method already follows from the clause, so the documented `ALGORITHM = 'AES256' \| 'PGP'` is not needed. **Finish line:** owner decision recorded; `encrypt-file.md`, grammar, help and tests match it. | — | D |
+| FO08 | **`TO DIRECTORY` for `ENCRYPT`/`DECRYPT` and `COMPRESS`/`DECOMPRESS`** ([ROADMAP](ROADMAP.md#file-operations--encrypt-file--decrypt-file-match-their-documentation)). `TO DIRECTORY` and `DATE_SUFFIX` throw for anything but copy, move and rename. **Finish line:** owner decision recorded; either they work for these operations (tests for each) or the reference pages say they are rejected and the error names the operation. | — | D |
+| XT09 | **External tools: separate working directory, approved assets and disposable scratch** ([ROADMAP](ROADMAP.md#security--external-tool-permissions-artifact-identity-and-launch-contracts)). The documented `WORKING_DIR` is overwritten for native tools. Honor a validated administrator-owned directory or retire the option with migration guidance; define relative-script resolution and argument-template quoting, including paths with spaces. Scratch stays separately owned and only that generated directory is cleaned up, never the configured working directory. **Finish line:** tests for success, timeout and cancellation; executable examples and `create-tool.md` match. Security-sensitive: Claude reviews before push. | XT04, XT05 (shipped) | M |
+| TR05 | **`CLEAN_TEXT` / `STANDARDIZE` in `SELECT` and `TRANSFORM ... USING CLEAN`** ([ROADMAP](ROADMAP.md#data-preparation--transform-reliability-schemalineage-integration-and-analyst-operations)). Scalar `CLEAN_TEXT(value [, rules])` and `STANDARDIZE(value, format)` usable in `SELECT`, `WHERE`, `JOIN` and `GROUP BY` (`TRIM`, `COLLAPSE_WHITESPACE`, `STRIP_CONTROL`, `NULL_IF_EMPTY`, case folding, `PHONE`, `EMAIL`, `POSTAL_CODE`), and `TRANSFORM #target [FROM #source] USING CLEAN (COLS = '*' \| 'col1,col2', RULES = '...')` on the same engine. **Finish line:** reference pages linked from `docs/syntax-index.md`, help text, language-server completion, unit tests and an SLT file (run with `ETL_SQL_RUN_SLT=1`). | TR02, TR03 (shipped) | M |
 
 ## Tier 3 — if time allows
 
