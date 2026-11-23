@@ -227,7 +227,7 @@ install). Pick it up again if a real MSI runner loss recurs.
 
 ### Data Preparation — `TRANSFORM` Reliability, Schema/Lineage Integration, and Analyst Operations
 
-**Status:** Incremental; TR01–TR06 shipped in v0.23.0, TR07–TR09 open for future scheduling  
+**Status:** In Progress; TR01–TR06 shipped in v0.23.0, TR07–TR09 selected for v0.23.0  
 **Horizon:** Next (v0.23.0)  
 **Scheduling:** Backlog for prioritization after v0.22.0 ships.  
 **Authoritative design:** [TRANSFORM Statement Reference](docs/reference/statements/dml/transform.md),
@@ -304,14 +304,7 @@ Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](T
 
 #### New analyst `TRANSFORM` algorithms and shared `SELECT` functions
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| TR05 | **Shared scalar `CLEAN_TEXT` / `STANDARDIZE` functions in `SELECT` and multi-column `TRANSFORM ... USING CLEAN`.** Register scalar standard-library functions `CLEAN_TEXT(value [, rules])` and `STANDARDIZE(value, format)` (usable inline in `SELECT`, `WHERE`, `JOIN`, and `GROUP BY` for `TRIM`, `COLLAPSE_WHITESPACE`, `STRIP_CONTROL`, `NULL_IF_EMPTY`, case folding, `PHONE`, `EMAIL`, `POSTAL_CODE`), and wire `TRANSFORM #target [FROM #source] USING CLEAN (COLS = '*' \| 'col1,col2', RULES = '...')` to apply the same engine across multiple or all string columns in one statement. | TR02, TR03 | M |
-| TR07 | **Add `TRANSFORM ... USING BIN` (`BUCKETIZE`) and `USING OUTLIERS`.** Implement `BIN` (`VALUE_COL`, `BINS`, `METHOD = 'EQUAL_WIDTH' \| 'QUANTILE' \| 'THRESHOLDS'`, `BY_GROUP`) emitting `Bin_Start`, `Bin_End`, and `Bin_Label` columns directly consumable by GoG ranged-rect histograms; implement `OUTLIERS` (`METHOD = 'IQR' \| 'Z_SCORE' \| 'PERCENTILE'`, `ACTION = 'CLIP' \| 'FLAG' \| 'FILTER' \| 'NULL'`, `BY_GROUP`). | TR01, TR03 | M |
-| TR08 | **Add `TRANSFORM ... USING IMPUTE` and `USING SPLIT` (`EXPLODE`).** Implement multi-column missing-value replacement (`IMPUTE` with `METHOD = 'MEAN' \| 'MEDIAN' \| 'MODE' \| 'CONSTANT'`, `BY_GROUP`) and delimited string / nested JSON array row and column expansion (`SPLIT` with `MODE = 'ROWS' \| 'COLUMNS'`, `DELIMITER` or `JSON_PATH`, optional 1-based `INDEX_COL`, and preserved parent key columns so webhook/REST payloads with nested object arrays can be flattened without external scripts). | TR01, TR03 | M |
-| TR09 | **Add `TRANSFORM ... USING MASK_PII` and `USING SCD2`.** Provide declarative column masking (`REDACT_EMAIL`, `MASK_LAST_4`, `HASH_SHA256`, `PERTURB_DATE`) and Type-2 Slowly Changing Dimension merging (`KEY_COLS`, `TRACK_COLS`, `EFFECTIVE_DATE` managing `EffectiveFrom`, `EffectiveTo`, `IsCurrent`). | TR02, TR03 | M |
-
-Selected for v0.23.0 (owner, 2026-11-23): TR06 moved to [`TODO.md`](TODO.md).
+TR05 and TR06 shipped in v0.23.0. Selected for v0.23.0 (owner, 2026-11-23): TR07, TR08 and TR09 moved to [`TODO.md`](TODO.md) 2.4.
 
 **Acceptance evidence:** All `TRANSFORM` algorithms preserve `NULL` semantics, column data types,
 `SET WHAT_IF ON` non-mutation, and lineage/LSP scope schemas; `CLEAN_TEXT`/`STANDARDIZE` work both
@@ -364,7 +357,7 @@ tested and matches its neighbors; and the docs-versus-registry check passes.
 
 ### File Operations — `ENCRYPT FILE` / `DECRYPT FILE` Match Their Documentation
 
-**Status:** In Progress (v0.23.0: FO05, FO07, and FO08 closed; FO12 open for future scheduling)  
+**Status:** In Progress (v0.23.0: FO05, FO07, and FO08 closed; FO12 and FO13 selected in `TODO.md`)  
 **Horizon:** Next  
 **Authoritative design:** none yet; [ENCRYPT / DECRYPT FILE](docs/reference/file-operations/encrypt-file.md)
 is the reference page, and [`ExtensionParser.cs`](src/ETL-SQL.Core/Parser/Components/ExtensionParser.cs)
@@ -390,15 +383,7 @@ has the options users expect and every connector page says how to encrypt on wri
 
 **Dependencies:** none.
 
-**Backlog (select IDs, not the family):**
-
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| FO05 | **`ALGORITHM` decision.** `CryptoUtils.EncryptFile` and `DecryptFile` take an optional `HashAlgorithmName` the statement never passes. Decide whether to expose it (and what it controls) or leave it out of the language. The method already follows from the clause given, so `ALGORITHM = 'AES256' \| 'PGP'` as documented is not needed. | — | D |
-| FO12 | **Detached `SIGN FILE` / `VERIFY FILE SIGNATURE`.** A `.sig` without encryption, left out of FO11 (encrypt-and-sign and decrypt-and-verify shipped in v0.22.0). PGP only, through PgpCore; reference page, grammar, help text, `LanguageMetadata`, and tests for a good signature, a wrong signer, a tampered file and a missing signature. Never echo key material in errors. | — | S |
-| FO08 | **`TO DIRECTORY` for `ENCRYPT`/`DECRYPT` and `COMPRESS`/`DECOMPRESS`.** Today `TO DIRECTORY` and `DATE_SUFFIX` throw for anything but copy, move and rename. Decide whether to allow them; if not, the reference states it. | — | D |
-
-Selected for v0.23.0 (owner, 2026-11-23): FO05, FO07, and FO08 closed in v0.23.0:
+Selected for v0.23.0 (owner, 2026-11-23): FO12 moved to [`TODO.md`](TODO.md) 2.4. FO05, FO07, and FO08 closed in v0.23.0:
 
 - **FO05 decision (approved 2026-11-23, closed in v0.23.0):** Leave `ALGORITHM` out of `ENCRYPT FILE` / `DECRYPT FILE`. The method is selected by `PASSWORD` / `KEYFILE` / `PGP_KEY` with fixed modern primitives (AES-256-CBC + PBKDF2-SHA256 600k + HMAC-SHA256, RSA-OAEP-SHA256, OpenPGP), and the v2 file header does not record a KDF hash; `encrypt-file.md` and `FileOperationWithOptionTests` match.
 
@@ -443,20 +428,22 @@ defects shipped as fixes in v0.22.0. What is left is feature work with working a
   [documentation standard and templates](docs/templates/statement-reference-template.md).
 
 **Dependencies:** none. `REMOTE_FILE_SIZE`, `REMOTE_FILE_MODIFIED` and `REMOTE_DIRECTORY_EXISTS`
-(v0.22.0) read the same listing metadata RF05 extends.
+(v0.22.0) read the same listing metadata RT05 extends.
+
+**IDs:** this family was `RF` until 2026-11-23; it became `RT` so it does not clash with the v0.23.0 review follow-ups `RF01`–`RF05` in `CHANGELOG.md`. `RF10` in the v0.22.0 notes is the old name of a shipped task.
 
 **Backlog (select IDs, not the family):**
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| RF03 | **Verify SFTP and FTP listings.** SSH.NET `ListDirectory` normally returns `.` and `..`; the SFTP listing does not filter them. Add a test over a recorded or containerized server, drop the dot entries from `REMOTE_FILE_LIST`, `SELECT` over the connection, and `IsDirectory` handling, and confirm FTP matches. | — | S |
-| RF04 | **Remote `COPY FILE`.** Same-connection copy (`COPY FILE a TO b AT conn`) by download to a bounded temp stream and upload, or a server-side copy where the protocol has one (S3, Azure Blob, SharePoint). Cross-connection copy follows the same path. Overwrite follows `OVERWRITE`; default `ON` as locally. | — | M |
-| RF05 | **Richer remote metadata.** Extend `FileMetaData` with creation time (where reported), permissions, owner, and a symlink flag; `NULL` where the protocol cannot supply it. `REMOTE_FILE_LIST` and the connection `SELECT` expose the new columns and the lineage and LSP column lists follow. | — | M |
-| RF06 | **Recursive listing and receive.** `REMOTE_FILE_LIST` and `RECEIVE FILE` take a recursive option bounded by `SET ALLOW_RECURSIVE_LAYERS` (five levels by default). Define what a non-empty directory delete does on every connector (SSH.NET and FluentFTP differ today) and make it identical, with an explicit option to delete recursively. | RF03 | M |
-| RF07 | **Remote directory rename, move, and copy.** `RENAME DIRECTORY`, `MOVE DIRECTORY`, and `COPY DIRECTORY` with `AT conn`. Rename and move use the server rename; copy is built on RF04 and RF06. | RF04, RF06 | M |
-| RF08 | **Remote `SYNC DIRECTORY`.** Mirror local to remote and remote to local by size and modified time, with `WHAT_IF` showing the plan. Deletions on the destination need an explicit option and pass the same guard as `DELETE FILE`. | RF05, RF06 | M |
-| RF09 | **Verify a transfer.** An option on `SEND FILE`/`RECEIVE FILE` (and the `VERIFY FILE INTEGRITY` counterpart) that compares size and, where the server offers it, a checksum after the transfer, and removes a partial local file on failure. Decide whether to support resume of large downloads here or leave it out. | RF05 | M |
-| RF11 | **Decision: remote command execution.** Whether a connection type that runs a single approved command over SSH belongs in the product, and under what allow-list and audit rules. Output is a proposal and an estimate only. | — | D |
+| RT03 | **Verify SFTP and FTP listings.** SSH.NET `ListDirectory` normally returns `.` and `..`; the SFTP listing does not filter them. Add a test over a recorded or containerized server, drop the dot entries from `REMOTE_FILE_LIST`, `SELECT` over the connection, and `IsDirectory` handling, and confirm FTP matches. | — | S |
+| RT04 | **Remote `COPY FILE`.** Same-connection copy (`COPY FILE a TO b AT conn`) by download to a bounded temp stream and upload, or a server-side copy where the protocol has one (S3, Azure Blob, SharePoint). Cross-connection copy follows the same path. Overwrite follows `OVERWRITE`; default `ON` as locally. | — | M |
+| RT05 | **Richer remote metadata.** Extend `FileMetaData` with creation time (where reported), permissions, owner, and a symlink flag; `NULL` where the protocol cannot supply it. `REMOTE_FILE_LIST` and the connection `SELECT` expose the new columns and the lineage and LSP column lists follow. | — | M |
+| RT06 | **Recursive listing and receive.** `REMOTE_FILE_LIST` and `RECEIVE FILE` take a recursive option bounded by `SET ALLOW_RECURSIVE_LAYERS` (five levels by default). Define what a non-empty directory delete does on every connector (SSH.NET and FluentFTP differ today) and make it identical, with an explicit option to delete recursively. | RT03 | M |
+| RT07 | **Remote directory rename, move, and copy.** `RENAME DIRECTORY`, `MOVE DIRECTORY`, and `COPY DIRECTORY` with `AT conn`. Rename and move use the server rename; copy is built on RT04 and RT06. | RT04, RT06 | M |
+| RT08 | **Remote `SYNC DIRECTORY`.** Mirror local to remote and remote to local by size and modified time, with `WHAT_IF` showing the plan. Deletions on the destination need an explicit option and pass the same guard as `DELETE FILE`. | RT05, RT06 | M |
+| RT09 | **Verify a transfer.** An option on `SEND FILE`/`RECEIVE FILE` (and the `VERIFY FILE INTEGRITY` counterpart) that compares size and, where the server offers it, a checksum after the transfer, and removes a partial local file on failure. Decide whether to support resume of large downloads here or leave it out. | RT05 | M |
+| RT11 | **Decision: remote command execution.** Whether a connection type that runs a single approved command over SSH belongs in the product, and under what allow-list and audit rules. Output is a proposal and an estimate only. | — | D |
 
 **Acceptance evidence:** An SFTP and an FTP listing contain only real entries, proven against a test server; `COPY FILE`
 and the directory operations work with `AT conn` on SFTP, FTP, and one cloud connection; a remote
@@ -512,12 +499,7 @@ improvements for finance/accounting workbooks.
 **Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
 Select individual IDs into `TODO.md` when scheduling.
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| XL01 | **Multi-sheet preservation on write and `xl_conn.<SheetName>` table routing.** Update `ExcelDataSource.WithTable(tableName)` to bind the target worksheet name so `SELECT * FROM xl_conn.Sheet2` and `INSERT INTO xl_conn.Sheet2` address individual sheets on a single connection; update `ExcelDataSource.WriteBatchesCore` so writing to a named sheet in an existing `.xlsx` file preserves other worksheets (with an explicit `OVERWRITE_WORKBOOK = ON \| OFF` or `OVERWRITE_SHEET = ON \| OFF` control). | — | M |
-| XL03 | **Workbook sheet discovery (`EXCEL_SHEET_LIST`).** Expose the worksheet enumeration already implemented in `ExcelDataSource.GetTablesAsync()` as a script-callable `EXCEL_SHEET_LIST(path)` function (and/or `SELECT * FROM xl_conn._sheets`) returning `SheetIndex` and `SheetName` so `FOREACH` loops can ingest workbooks with unknown tab names. | XL01 | S |
-
-Selected for v0.23.0 (owner, 2026-11-23): XL02 moved to [`TODO.md`](TODO.md).
+Selected for v0.23.0 (owner, 2026-11-23): XL02 shipped; XL01 and XL03 moved to [`TODO.md`](TODO.md) 2.4.
 
 **Acceptance evidence:** Writing two tables to `xl_conn.Summary` and `xl_conn.Detail` produces a
 single `.xlsx` file containing both worksheets; `START_ROW = 5` and `SHEET_INDEX = 2` read messy
@@ -526,7 +508,7 @@ from a multi-sheet fixture.
 
 ### Database Connectors — Documentation Parity, Write-Path Clarity, and Credential Gaps
 
-**Status:** Accepted; DB01–DB03 shipped in v0.23.0  
+**Status:** In Progress; DB01–DB03 and DB06 shipped in v0.23.0, DB04, DB05, DB09, DB10 and DB12–DB15 selected  
 **Horizon:** Next (DB01–DB03), Later (the rest)  
 **Authoritative design:** none yet; [Database connectors](docs/reference/connectors/databases/README.md)
 are the references and [Connector Standards](docs/architecture/standards/connectors-standards.md)
@@ -565,19 +547,11 @@ new package.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| DB04 | **Write-path reference per connector.** For each database connector, state the bulk path (`SqlBulkCopy`, Oracle array binding, `MySqlBulkCopy`, row batches for the rest), what `MERGE` pushes down versus what the engine emulates, transaction support, `WHAT_IF` behavior, and the idempotent-load pattern to use. Verify each statement against the data source class before writing it. | DB01 | M |
-| DB05 | **Capability matrix.** One table on the databases README: transactions, pushdown, bulk load, schema introspection, `WHAT_IF`, default timeout, and auth modes, one row per connector. BigQuery has no transactions and SQLite is single-writer; Neo4j enlists transactions in its own way. Built from DB04 so it stays accurate. | DB04 | S |
 | DB07 | **Postgres bulk load.** The Postgres data source has no binary `COPY` import, unlike MSSQL, Oracle, and MySQL. Add one behind the existing write path, with the same transaction and `WHAT_IF` behavior, and measure it against the current batch insert on a fixture before claiming a speedup. | DB04 | M |
 | DB08 | **Decision: credential providers.** No source references Azure Key Vault or AWS Secrets Manager; secrets come from `ENC:`, `SECRET:`, and allow-listed environment variables. Decide whether a vault-backed `SECRET:` source belongs in the product and under which trust rules. Output is a proposal and an estimate only. | — | D |
-| DB09 | **Decision: cloud identity authentication.** `SqlServerConnector` reads no Entra or managed-identity option, and the review did not check Postgres, MySQL, or Oracle for IAM or Entra token auth. BigQuery already uses Application Default Credentials. Verify the current state for each connector, then propose the options (for example Entra access tokens for MSSQL, IAM tokens for Postgres and MySQL) and an estimate. | — | D |
-| DB10 | **Snowflake `ROLE` and key passphrase.** Either add `ROLE` and `PRIVATE_KEY_PASSPHRASE` to the connector (encrypted keys are common in production) or confirm they are out of scope and keep them off the page. An encrypted private key currently has no passphrase option. | DB01 | S |
 | DB11 | **Decision: native warehouse connectors.** Whether Databricks or Redshift justify a native connector over `ODBC`, given that `ODBC` needs a vendor driver installed on the host. Gather evidence (install friction, feature loss through the bridge, type fidelity) and propose or reject. | — | D |
-| DB12 | **Decision: connector resilience options.** The review found no connector-level retry, isolation-level, or session-setup option (`search_path`, time zone). Confirm that against source, then decide which belong on `CREATE CONNECTION` and which belong in script. Output is a proposal and an estimate only. | — | D |
-| DB13 | **Document native-to-engine type mapping.** Per connector, how native types land in the engine (Oracle `NUMBER`, Postgres arrays and `jsonb`, Snowflake `VARIANT`, MSSQL `datetimeoffset`, BigQuery `STRUCT`), including that integer types store as `decimal`. Confirm whether this already exists elsewhere in the docs before writing. | DB04 | M |
-| DB14 | **Incremental-load examples.** Confirm whether the ETL Cookbook already shows a watermark pull per source; if not, add runnable lifecycle recipes (MSSQL `rowversion`, Postgres `xmin` or a timestamp column, Oracle `SCN`) following the Extract → Stage → Validate → Merge → Cleanup → Notify shape. | DB04 | M |
-| DB15 | **MongoDB and SQLite parity.** MongoDB has no pipeline or filter pass-through like Neo4j's `EXECUTE ... BEGIN ... END` and no upsert key like Neo4j's `KEY_COLUMNS`. SQLite has no journal-mode or pragma option. Decide per item whether to add or document the workaround. | DB04 | D |
 
-Selected for v0.23.0 (owner, 2026-11-23): DB06 moved to [`TODO.md`](TODO.md).
+Selected for v0.23.0 (owner, 2026-11-23): DB06 shipped; DB04, DB05, DB09, DB10, DB12, DB13, DB14 and DB15 moved to [`TODO.md`](TODO.md) 2.4.
 
 **Acceptance evidence:** A test fails when any database page's option table differs from the matching
 connector allowlist; each page lists `TIMEOUT_SECONDS` with its default and the mutually exclusive
@@ -963,7 +937,7 @@ must complete before the unified beginner experience can be accepted.
 
 ### Security — External Tool Permissions, Artifact Identity, and Launch Contracts
 
-**Status:** In Progress (v0.23.0: XT09 shipped; XT07–XT08 open for future scheduling)
+**Status:** Accepted (XT09 shipped in v0.23.0; XT07–XT08 open for future scheduling)
 
 **Horizon:** Next
 
@@ -999,7 +973,6 @@ propagation work; decide catalog storage and grant representation before impleme
 | :--- | :--- | :--- | :--- |
 | XT07 | **Per-tool use permissions.** Define grants for users/groups/service identities on shared hosts; keep administration separate from invocation. Resolve under the verified effective caller, deny missing/unauthorized identities for restricted tools, and audit denial/revocation. Document the explicit owner-account model for standalone catalogs. Prove two callers can use different approved tools and that scheduled/spawned runs retain the intended principal. | XT01, XT04; host identity propagation | M |
 | XT08 | **Pin reviewed native artifacts and control updates.** Bind approval to executable and fixed script content/version, including interpreter identity where applicable. Validate changes before launch, fail closed on mismatch, and define administrator reapproval/rotation. Address replacement between verification and execution through protected artifact storage or an equivalent enforceable launch contract; hash checking alone is insufficient. Test changed binaries/scripts and approved upgrades. | XT04, XT05 | M |
-| XT09 | **Separate working directory, approved assets and disposable scratch.** Resolve the documented `WORKING_DIR` behavior currently overwritten for native tools. Either honor a validated administrator-owned directory or explicitly retire that option with migration guidance; define relative-script resolution and argument-template quoting, including paths with spaces. Keep scratch separately owned and clean up only that generated directory, never the configured working directory. Test success, timeout and cancellation and update executable examples to match. | XT04, XT05 | M |
 
 **Acceptance evidence:** Restricted tools deny ungranted callers even when the alias is known;
 revocation takes effect on subsequent invocations; changed native artifacts require reapproval;
