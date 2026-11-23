@@ -32,6 +32,7 @@ namespace ETL_SQL.Connectors.Excel
             { "ENCRYPT", new[] { "ON", "OFF", "MACHINE", "PASSWORD", "KEYFILE", "PORTAL" } },
             { "PASSWORD", Array.Empty<string>() },
             { "TRANSACTIONAL", new[] { "ON", "OFF", "TRUE", "FALSE" } },
+            { "OVERWRITE_WORKBOOK", new[] { "ON", "OFF", "TRUE", "FALSE" } },
             { "IGNORE_EXTRA_COLUMNS", new[] { "ON", "OFF", "TRUE", "FALSE" } },
             { "NULL_MISSING_COLUMNS", new[] { "ON", "OFF", "TRUE", "FALSE" } },
             { "MAP_BY_HEADER_NAME", new[] { "ON", "OFF", "TRUE", "FALSE" } }
@@ -42,6 +43,7 @@ namespace ETL_SQL.Connectors.Excel
             { "HEADER", new[] { "ON", "OFF" } },
             { "COMPRESS", new[] { "ON", "OFF" } },
             { "ENCRYPT", new[] { "ON", "OFF", "MACHINE", "PASSWORD", "KEYFILE", "PORTAL" } },
+            { "OVERWRITE_WORKBOOK", new[] { "ON", "OFF" } },
             { "IGNORE_EXTRA_COLUMNS", new[] { "ON", "OFF" } },
             { "NULL_MISSING_COLUMNS", new[] { "ON", "OFF" } },
             { "MAP_BY_HEADER_NAME", new[] { "ON", "OFF" } }
@@ -58,6 +60,7 @@ namespace ETL_SQL.Connectors.Excel
             "  COMPRESS: ON | OFF (ZIP archive; adds .zip to the path)\n" +
             "  ENCRYPT: ON | OFF | MACHINE | PASSWORD | KEYFILE | PORTAL (AES encryption for the file)\n" +
             "  PASSWORD: Password for encryption/decryption\n" +
+            "  OVERWRITE_WORKBOOK: ON | OFF (default: OFF — preserve other sheets on write; ON replaces entire workbook)\n" +
             "  TRANSACTIONAL: ON | OFF (Stage write locally and rename atomically)";
 
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)

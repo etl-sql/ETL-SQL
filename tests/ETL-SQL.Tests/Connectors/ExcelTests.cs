@@ -397,5 +397,74 @@ namespace ETL_SQL.Tests.Connectors
             }
             finally { if (File.Exists(outPath)) File.Delete(outPath); }
         }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task TestExcelWithTable_PreservesOtherSheetsAndSupportsOverwriteWorkbook()
+        {
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_MultiSheet_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                var baseDs = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "HEADER", "ON" }
+                });
+
+                // Write Summary and Detail through a single connection via WithTable (xl_conn.Summary / xl_conn.Detail)
+                var summaryDt = new DataTable();
+                summaryDt.SetColumns(new[] { "Region", "Total" });
+                var sr1 = summaryDt.NewRow(); sr1["Region"] = "North"; sr1["Total"] = 100m; await summaryDt.AddRowAsync(sr1);
+                var sr2 = summaryDt.NewRow(); sr2["Region"] = "South"; sr2["Total"] = 200m; await summaryDt.AddRowAsync(sr2);
+
+                var detailDt = new DataTable();
+                detailDt.SetColumns(new[] { "OrderId", "Item" });
+                var dr1 = detailDt.NewRow(); dr1["OrderId"] = 1m; dr1["Item"] = "Widget"; await detailDt.AddRowAsync(dr1);
+
+                await baseDs.WithTable("Summary").WriteBatches(new[] { summaryDt }.ToAsyncEnumerable(), append: false);
+                await baseDs.WithTable("Detail").WriteBatches(new[] { detailDt }.ToAsyncEnumerable(), append: false);
+
+                var tables = (await baseDs.GetTablesAsync()).ToList();
+                Assert.Equal(new[] { "Summary", "Detail" }, tables);
+
+                // Read each sheet independently via WithTable
+                var summaryRead = await baseDs.WithTable("Summary").ReadBatches().ToListAsync();
+                Assert.Single(summaryRead);
+                Assert.Equal(2, summaryRead[0].Rows.Count);
+                Assert.Equal("North", summaryRead[0].Rows[0]["Region"]?.ToString());
+                Assert.Equal("100", summaryRead[0].Rows[0]["Total"]?.ToString());
+
+                var detailRead = await baseDs.WithTable("Detail").ReadBatches().ToListAsync();
+                Assert.Single(detailRead);
+                Assert.Single(detailRead[0].Rows);
+                Assert.Equal("Widget", detailRead[0].Rows[0]["Item"]?.ToString());
+
+                // WithTable("FILE") keeps the connection's default sheet binding
+                Assert.Same(baseDs, baseDs.WithTable("FILE"));
+
+                // Replacing Summary with OVERWRITE_WORKBOOK = OFF (default) preserves Detail
+                var summaryV2 = new DataTable();
+                summaryV2.SetColumns(new[] { "Region", "Total" });
+                var sr3 = summaryV2.NewRow(); sr3["Region"] = "West"; sr3["Total"] = 300m; await summaryV2.AddRowAsync(sr3);
+                await baseDs.WithTable("Summary").WriteBatches(new[] { summaryV2 }.ToAsyncEnumerable(), append: false);
+
+                Assert.Equal(new[] { "Summary", "Detail" }, (await baseDs.GetTablesAsync()).ToList());
+                var summaryV2Read = await baseDs.WithTable("Summary").ReadBatches().ToListAsync();
+                Assert.Single(summaryV2Read[0].Rows);
+                Assert.Equal("West", summaryV2Read[0].Rows[0]["Region"]?.ToString());
+                var detailStillThere = await baseDs.WithTable("Detail").ReadBatches().ToListAsync();
+                Assert.Single(detailStillThere[0].Rows);
+                Assert.Equal("Widget", detailStillThere[0].Rows[0]["Item"]?.ToString());
+
+                // OVERWRITE_WORKBOOK = ON replaces the entire workbook with only the written sheet
+                var overwriteDs = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "HEADER", "ON" },
+                    { "OVERWRITE_WORKBOOK", "ON" }
+                });
+                await overwriteDs.WithTable("OnlySheet").WriteBatches(new[] { detailDt }.ToAsyncEnumerable(), append: false);
+                Assert.Equal(new[] { "OnlySheet" }, (await overwriteDs.GetTablesAsync()).ToList());
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
     }
 }

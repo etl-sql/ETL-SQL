@@ -499,7 +499,7 @@ improvements for finance/accounting workbooks.
 **Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
 Select individual IDs into `TODO.md` when scheduling.
 
-Selected for v0.23.0 (owner, 2026-11-23): XL02 shipped; XL01 and XL03 moved to [`TODO.md`](TODO.md) 2.4.
+Selected for v0.23.0 (owner, 2026-11-23): XL01 and XL02 shipped; XL03 moved to [`TODO.md`](TODO.md) 2.4.
 
 **Acceptance evidence:** Writing two tables to `xl_conn.Summary` and `xl_conn.Detail` produces a
 single `.xlsx` file containing both worksheets; `START_ROW = 5` and `SHEET_INDEX = 2` read messy

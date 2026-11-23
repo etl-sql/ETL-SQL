@@ -35,10 +35,25 @@ namespace ETL_SQL.Connectors.Excel
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private readonly bool _transactional = false;
+        private readonly bool _overwriteWorkbook = false;
 
         public string Path => _filePath;
         public Dictionary<string, string>? Options => _options;
-        public IDataSource WithTable(string tableName) => this;
+        public IDataSource WithTable(string tableName)
+        {
+            if (string.IsNullOrWhiteSpace(tableName)
+                || tableName.Equals("FILE", StringComparison.OrdinalIgnoreCase))
+            {
+                return this;
+            }
+
+            var derived = _options != null
+                ? new Dictionary<string, string>(_options, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            derived["SHEET"] = tableName;
+            derived.Remove("SHEET_INDEX");
+            return new ExcelDataSource(_context!, _filePath, derived, _templateSchema);
+        }
         public string ConnectorType => "EXCEL";
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
@@ -77,6 +92,7 @@ namespace ETL_SQL.Connectors.Excel
                 if (options.TryGetValue("NULL_MISSING_COLUMNS", out var nmc)) _nullMissingColumns = nmc.ToUpperInvariant() == "ON" || nmc.ToUpperInvariant() == "TRUE";
                 if (options.TryGetValue("MAP_BY_HEADER_NAME", out var mbh)) _mapByHeaderName = mbh.ToUpperInvariant() == "ON" || mbh.ToUpperInvariant() == "TRUE";
                 if (options.TryGetValue("TRANSACTIONAL", out var tx)) _transactional = tx.ToUpperInvariant() == "ON" || tx.ToUpperInvariant() == "TRUE";
+                if (options.TryGetValue("OVERWRITE_WORKBOOK", out var ow)) _overwriteWorkbook = ow.ToUpperInvariant() == "ON" || ow.ToUpperInvariant() == "TRUE";
             }
 
             _encryption = new EncryptionOptions(options);
@@ -443,11 +459,15 @@ namespace ETL_SQL.Connectors.Excel
             bool append,
             CancellationToken effectiveCancellationToken)
         {
+            string sheetName = string.IsNullOrWhiteSpace(_sheetName) ? "Sheet1" : _sheetName;
+            sheetName = SanitizeSheetName(sheetName);
 
             var existingRows = new List<Dictionary<string, object?>>();
             var existingColumns = new List<string>();
+            var book = new Dictionary<string, object>();
+            bool targetInserted = false;
 
-            if (append && System.IO.File.Exists(_filePath))
+            if ((append || !_overwriteWorkbook) && System.IO.File.Exists(_filePath))
             {
                 try
                 {
@@ -462,67 +482,41 @@ namespace ETL_SQL.Connectors.Excel
                         });
                         effectiveCancellationToken.ThrowIfCancellationRequested();
 
-                        // Match the sheet we would have written to (the writer sanitizes the name);
-                        // ResolveSheet tries the raw then sanitized name so append preserves rows.
-                        System.Data.DataTable? sheet = ResolveSheet(result);
+                        System.Data.DataTable? targetSheet = ResolveSheet(result);
 
-                        if (sheet != null)
+                        foreach (System.Data.DataTable table in result.Tables)
                         {
-                            var range = ExcelRange.Parse(_range, sheet.Rows.Count, sheet.Columns.Count);
-                            int startRow = Math.Min(range.StartRow, sheet.Rows.Count - 1);
-                            int endRow = Math.Min(range.EndRow, sheet.Rows.Count - 1);
-                            int startCol = Math.Min(range.StartCol, sheet.Columns.Count - 1);
-                            int endCol = Math.Min(range.EndCol, sheet.Columns.Count - 1);
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
+                            bool isTarget = targetSheet != null && ReferenceEquals(table, targetSheet);
 
-                            if (startCol >= 0 && startCol <= endCol && startRow >= 0)
+                            if (isTarget)
                             {
-                                int dataStartRow = startRow;
-                                if (_hasHeader && startRow < sheet.Rows.Count)
+                                if (append)
                                 {
-                                    var headerRow = sheet.Rows[startRow];
-                                    for (int c = startCol; c <= endCol; c++)
-                                    {
-                                        existingColumns.Add(headerRow[c]?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
-                                    }
-                                    dataStartRow++;
+                                    ExtractSheetRows(table, existingColumns, existingRows, effectiveCancellationToken);
                                 }
-                                else
-                                {
-                                    for (int c = startCol; c <= endCol; c++)
-                                    {
-                                        existingColumns.Add($"Column{c - startCol + 1}");
-                                    }
-                                }
-
-                                for (int r = dataStartRow; r <= endRow; r++)
-                                {
-                                    effectiveCancellationToken.ThrowIfCancellationRequested();
-                                    var row = sheet.Rows[r];
-                                    var rowDict = new Dictionary<string, object?>();
-                                    for (int c = startCol; c <= endCol; c++)
-                                    {
-                                        string colName = existingColumns[c - startCol];
-                                        rowDict[colName] = row[c] == DBNull.Value ? null : row[c];
-                                    }
-                                    existingRows.Add(rowDict);
-                                }
+                                book[sheetName] = SheetRows(existingRows, existingColumns, batches, effectiveCancellationToken);
+                                targetInserted = true;
+                            }
+                            else if (!_overwriteWorkbook)
+                            {
+                                book[table.TableName] = BuildPreservedSheetTable(table, _hasHeader, effectiveCancellationToken);
                             }
                         }
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    _logger.Debug("[ExcelDataSource.WriteBatches] Failed to read existing Excel file for append: {Message}", ex.Message);
+                    _logger.Debug("[ExcelDataSource.WriteBatches] Failed to read existing Excel file: {Message}", ex.Message);
                 }
             }
 
-            string sheetName = string.IsNullOrWhiteSpace(_sheetName) ? "Sheet1" : _sheetName;
-            sheetName = SanitizeSheetName(sheetName);
-
-            // New rows go to the workbook as they arrive. Only an append holds rows in memory, and
-            // only the sheet it has to rewrite.
-            var book = new Dictionary<string, object>();
-            book[sheetName] = SheetRows(existingRows, existingColumns, batches, effectiveCancellationToken);
+            if (!targetInserted)
+            {
+                // New rows go to the workbook as they arrive. Only an append holds rows in memory, and
+                // only the sheet it has to rewrite.
+                book[sheetName] = SheetRows(existingRows, existingColumns, batches, effectiveCancellationToken);
+            }
             string tempFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
             string? publicationFile = null;
             string? zippedTemp = null;
@@ -578,6 +572,102 @@ namespace ETL_SQL.Connectors.Excel
                     try { System.IO.File.Delete(tempFile); } catch { /* best effort */ }
                 }
             }
+        }
+
+        private void ExtractSheetRows(
+            System.Data.DataTable sheet,
+            List<string> existingColumns,
+            List<Dictionary<string, object?>> existingRows,
+            CancellationToken effectiveCancellationToken)
+        {
+            var range = ExcelRange.Parse(_range, sheet.Rows.Count, sheet.Columns.Count);
+            int startRow = Math.Min(range.StartRow, sheet.Rows.Count - 1);
+            int endRow = Math.Min(range.EndRow, sheet.Rows.Count - 1);
+            int startCol = Math.Min(range.StartCol, sheet.Columns.Count - 1);
+            int endCol = Math.Min(range.EndCol, sheet.Columns.Count - 1);
+
+            if (startCol < 0 || startCol > endCol || startRow < 0) return;
+
+            int dataStartRow = startRow;
+            if (_hasHeader && startRow < sheet.Rows.Count)
+            {
+                var headerRow = sheet.Rows[startRow];
+                for (int c = startCol; c <= endCol; c++)
+                {
+                    existingColumns.Add(headerRow[c]?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
+                }
+                dataStartRow++;
+            }
+            else
+            {
+                for (int c = startCol; c <= endCol; c++)
+                {
+                    existingColumns.Add($"Column{c - startCol + 1}");
+                }
+            }
+
+            for (int r = dataStartRow; r <= endRow; r++)
+            {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
+                var row = sheet.Rows[r];
+                var rowDict = new Dictionary<string, object?>();
+                for (int c = startCol; c <= endCol; c++)
+                {
+                    string colName = existingColumns[c - startCol];
+                    rowDict[colName] = row[c] == DBNull.Value ? null : row[c];
+                }
+                existingRows.Add(rowDict);
+            }
+        }
+
+        private static System.Data.DataTable BuildPreservedSheetTable(
+            System.Data.DataTable source,
+            bool hasHeader,
+            CancellationToken effectiveCancellationToken)
+        {
+            var preserved = new System.Data.DataTable(source.TableName);
+            int colCount = source.Columns.Count;
+            int dataStartRow = 0;
+            var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (hasHeader && source.Rows.Count > 0)
+            {
+                var headerRow = source.Rows[0];
+                for (int c = 0; c < colCount; c++)
+                {
+                    var baseName = headerRow[c]?.ToString()?.Trim();
+                    if (string.IsNullOrEmpty(baseName)) baseName = $"Column{c + 1}";
+                    var name = baseName;
+                    int suffix = 2;
+                    while (!usedNames.Add(name))
+                    {
+                        name = $"{baseName}_{suffix++}";
+                    }
+                    preserved.Columns.Add(name, typeof(object));
+                }
+                dataStartRow = 1;
+            }
+            else
+            {
+                for (int c = 0; c < colCount; c++)
+                {
+                    preserved.Columns.Add($"Column{c + 1}", typeof(object));
+                }
+            }
+
+            for (int r = dataStartRow; r < source.Rows.Count; r++)
+            {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
+                var srcRow = source.Rows[r];
+                var destRow = preserved.NewRow();
+                for (int c = 0; c < colCount; c++)
+                {
+                    destRow[c] = srcRow[c] == DBNull.Value ? DBNull.Value : CoerceValue(srcRow[c]) ?? DBNull.Value;
+                }
+                preserved.Rows.Add(destRow);
+            }
+
+            return preserved;
         }
 
         private static object? CoerceValue(object? raw)

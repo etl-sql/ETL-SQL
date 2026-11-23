@@ -1,8 +1,10 @@
 # EXCEL
 
-Reads and writes Microsoft Excel workbooks (`.xlsx`, `.xls`, `.xlsb`). When querying an `EXCEL`
-connection via `SELECT`, the table name is `FILE` and columns are named from the header row, or
-`Column1`, `Column2`, … when there is no header.
+Reads and writes Microsoft Excel workbooks (`.xlsx`, `.xls`, `.xlsb`). Query or write the
+connection's configured sheet using `xl_conn.FILE`, or target any specific worksheet by name on a
+single connection using `xl_conn.<SheetName>` (for example, `SELECT * FROM xl_conn.Summary` or
+`INSERT INTO xl_conn.Detail`). Columns are named from the header row, or `Column1`, `Column2`, …
+when there is no header.
 
 Aliases: `XLSX`, `XLS`
 
@@ -26,6 +28,7 @@ Aliases: `XLSX`, `XLS`
 | `ALGORITHM` | Key-derivation hash for password encryption: `SHA2_256`/`SHA256` (default) or `SHA2_512`/`SHA512` (`MD5` and `SHA1` are rejected) | No |
 | `KEYFILE` | Path to SSH key file for key-pair encryption/decryption | Conditional |
 | `PASSPHRASE` | Passphrase for an encrypted `KEYFILE` | Conditional |
+| `OVERWRITE_WORKBOOK` | `ON`/`OFF` — `OFF` (default) preserves other worksheets when writing to a named sheet in an existing `.xlsx` workbook; `ON` replaces the entire workbook with only the written sheet | No |
 | `TRANSACTIONAL` | `ON`/`OFF` — stage the complete output beside the target and publish with one replacement rename (default: `OFF`) | No |
 
 > [!NOTE]

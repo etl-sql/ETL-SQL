@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Implemented `EXCEL` multi-sheet write preservation and `xl_conn.<SheetName>` worksheet routing: `ExcelDataSource.WithTable(tableName)` now binds named worksheets on a single connection (preserving `xl_conn.FILE` for default sheet behavior), and `WriteBatchesCore` preserves other worksheets in existing `.xlsx` workbooks by default with an opt-in `OVERWRITE_WORKBOOK = ON | OFF` option (`XL01` in `ExcelConnector.cs`, `ExcelDataSource.cs`, `docs/reference/connectors/files/excel.md`, and `ExcelTests.cs`).
+
 - Closed `FO05` (`ENCRYPT FILE` / `DECRYPT FILE` `ALGORITHM` decision): left `ALGORITHM` out of the language (the encryption method is already selected by `PASSWORD` / `KEYFILE` / `PGP_KEY` with fixed AES-256 + PBKDF2-SHA256 + HMAC-SHA256 / RSA-OAEP-SHA256 / OpenPGP formats), documented the decision in `docs/reference/file-operations/encrypt-file.md`, and pinned rejection of `WITH (ALGORITHM = ...)` in `FileOperationWithOptionTests.cs`, plus added `TO my_dir` and remote fail-closed regression tests in `FileOperationToDirectoryTests.cs`.
 
 - Enabled `TO DIRECTORY` for `ENCRYPT FILE`, `DECRYPT FILE`, `COMPRESS FILE`, and `DECOMPRESS FILE` using each operation's default derived filename/extraction rules inside the target directory while keeping `DATE_SUFFIX` restricted to `COPY`, `MOVE`, and `RENAME` with operation-specific errors (`FO08` in `FileOperationStatementHandler.cs`, `docs/reference/file-operations/encrypt-file.md`, `docs/reference/file-operations/compress-file.md`, and `FileOperationToDirectoryTests.cs`).
