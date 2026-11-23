@@ -68,7 +68,7 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
   `collect-release-evidence.mjs` from v0.22.0 candidate `0a1507282` (`43786591392` / `43888292114` /
   `43893010630`) in `scripts/checks/test-real-release-output.mjs`. **Left:** the native Windows and
   macOS collectors and the draft-manifest check (about 1 GB of packages per platform).
-- [ ] **W9 Spill Certification group 1 is red (engine; owner: Gemini).** Found 2026-11-22 while
+- [x] **W9 Spill Certification group 1 is red (engine; owner: Gemini).** Found 2026-11-22 while
   certifying MI01; blocks the Merge Gate, and the Supervisor then cancels the MSI run. Fixed
   locally 2026-11-22:
   1. **Wrong result on the spill path (`join.test:175`).** `ExternalJoinEngine` now captures the
@@ -85,7 +85,9 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
      `UnifiedMemoryCoordinatorTests`). Disabled the ambient `SystemMemoryFloorMB` in the sharded
      `engine` and `spill` lanes of `scripts/test-lane.ps1` so transient CI runner RAM dips do not
      reject unrelated unit tests.
-  **Left:** confirm Spill 1/3 (and Engine Coverage shards) green without retries in CI.
+  **Done 2026-11-23:** the fix landed in 2330800ed. In the six CI runs after it (6667e8700, f6a2c3bb4,
+  ddda02942, 208ad5cd2, 3f48588f2, 1763c1e2d) Spill 1/3–3/3 and Engine Coverage 1/3–3/3 passed on the first
+  attempt, and no job log shows a test retry (`TestRetry.Helpers.ps1` prints one when it reruns).
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
