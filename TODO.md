@@ -97,7 +97,6 @@ back to its `ROADMAP.md` entry unchanged. Each row's boundaries are in its ROADM
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| FN06 | **`DIRECTORY_SIZE` and `DIRECTORY_FILE_COUNT`.** Optional `recursive` flag like `FILE_LIST`. Honors the file-operation and recursion limits in the Zero-Trust guardrails. | — | S |
 | XL02 | **Implement `START_ROW` and `SHEET_INDEX` options.** Add `START_ROW` (1-based row number where the header or data begins, skipping banner rows without requiring an explicit `RANGE` end cell) and `SHEET_INDEX` (1-based worksheet position when tab names vary) to `ExcelConnector.AllowedOptions` and `ExcelDataSource`, bringing code into parity with `docs/reference/connectors/files/excel.md`. | — | S |
 | TR06 | **Add `TRANSFORM ... USING UNPIVOT` (`MELT`).** Reshape wide columns (`ID_COLS`, `VALUE_COLS`, `NAME_COL`, `VALUE_COL`, `INCLUDE_NULLS = OFF \| ON`) into normalized key/value rows with preserved schema types and SLT coverage. | TR02, TR03 | S |
 

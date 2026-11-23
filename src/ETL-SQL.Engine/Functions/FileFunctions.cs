@@ -33,6 +33,8 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("DIRECTORY", FileList, "DIRECTORY(path, [recursive]): Alias for FILE_LIST.");
             registry.RegisterWithHelp("FILE_EXISTS", FileExists, "FILE_EXISTS(path): Returns true if the file exists.");
             registry.RegisterWithHelp("DIRECTORY_EXISTS", DirectoryExists, "DIRECTORY_EXISTS(path): Returns true if the directory exists.");
+            registry.RegisterWithHelp("DIRECTORY_SIZE", DirectorySize, "DIRECTORY_SIZE(path [, recursive]): Returns the total size in bytes of files in a local directory.");
+            registry.RegisterWithHelp("DIRECTORY_FILE_COUNT", DirectoryFileCount, "DIRECTORY_FILE_COUNT(path [, recursive]): Returns the number of files in a local directory.");
 
             registry.RegisterWithHelp("FILE_HASH", FileHash, "FILE_HASH(path [, algorithm]): Computes the cryptographic hash of a file (MD5, SHA1, SHA256, SHA512).");
             registry.RegisterWithHelp("FILE_SIZE", FileSize, "FILE_SIZE(path): Returns the size of a local file in bytes.");
@@ -330,6 +332,86 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 1 || args[0] == null) return Task.FromResult<object?>(null);
             var res = Directory.Exists(AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Read));
             return Task.FromResult<object?>((object?)(res ? 1m : 0m));
+        }
+
+        private static object? DirectorySize(List<object?> args, IExecutionContext context)
+        {
+            var stats = MeasureDirectory(args, context, "DIRECTORY_SIZE");
+            return stats.HasValue ? (decimal)stats.Value.TotalBytes : null;
+        }
+
+        private static object? DirectoryFileCount(List<object?> args, IExecutionContext context)
+        {
+            var stats = MeasureDirectory(args, context, "DIRECTORY_FILE_COUNT");
+            return stats.HasValue ? (decimal)stats.Value.FileCount : null;
+        }
+
+        private static (long FileCount, long TotalBytes)? MeasureDirectory(List<object?> args, IExecutionContext context, string functionName)
+        {
+            if (args.Count > 2)
+                throw new ExecutionException($"{functionName} accepts at most 2 arguments: path and optional recursive flag.");
+            if (args.Count < 1 || args[0] == null) return null;
+
+            bool recursive = false;
+            if (args.Count == 2)
+            {
+                if (args[1] == null) return null;
+                recursive = args[1] is bool b
+                    ? b
+                    : (args[1] is string s
+                        ? s.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || s.Equals("ON", StringComparison.OrdinalIgnoreCase) || s == "1"
+                        : Convert.ToBoolean(args[1]));
+            }
+
+            string resolvedPath = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Enumerate);
+            if (!Directory.Exists(resolvedPath)) return null;
+
+            long fileCount = 0;
+            long totalBytes = 0;
+            AccumulateDirectoryStats(resolvedPath, recursive, depth: 0, context, ref fileCount, ref totalBytes);
+            return (fileCount, totalBytes);
+        }
+
+        private static void AccumulateDirectoryStats(
+            string currentDir,
+            bool recursive,
+            int depth,
+            IExecutionContext context,
+            ref long fileCount,
+            ref long totalBytes)
+        {
+            context.CancellationToken.ThrowIfCancellationRequested();
+            foreach (var file in Directory.EnumerateFiles(currentDir))
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                context.IncrementOperationCount(OperationType.FileSystem, file);
+                fileCount++;
+                totalBytes += new FileInfo(file).Length;
+            }
+
+            if (!recursive) return;
+
+            foreach (var subDir in Directory.EnumerateDirectories(currentDir))
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                int nextDepth = depth + 1;
+                context.SecurityService.CheckRunawayProtection(
+                    OperationType.FileSystem,
+                    0,
+                    nextDepth,
+                    allowLargeCount: context.AllowLargeFileOperationCount,
+                    allowDeepRecursion: context.AllowDeepRecursion,
+                    path: subDir);
+                if (context.ExecutionPolicy?.IsEnrolled ?? EnterprisePolicyRuntime.Current.IsEnrolled)
+                {
+                    OperationPolicyBoundary.EnforceCeiling(
+                        context,
+                        "Security:MaxRecursiveNestingDepth",
+                        nextDepth,
+                        "<recursive-nesting-depth>");
+                }
+                AccumulateDirectoryStats(subDir, recursive: true, nextDepth, context, ref fileCount, ref totalBytes);
+            }
         }
 
         private static async Task<object?> FileList(List<object?> args, IExecutionContext context)

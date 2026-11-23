@@ -7,6 +7,8 @@
 | [ARCHIVE_LIST](archive_list.md) | Lists entries inside a `.zip`, `.tar`, `.tar.gz`, or `.gz` archive without extracting to disk. |
 | [DIRECTORY](directory.md) | Returns directory contents as rows. `DIRECTORY` is an alias for `FILE_LIST`. |
 | [DIRECTORY_EXISTS](directory_exists.md) | Returns whether a local directory exists inside the active execution context's allowed path boundaries. |
+| [DIRECTORY_FILE_COUNT](directory_file_count.md) | Returns the number of files inside a local directory (optionally recursive). |
+| [DIRECTORY_SIZE](directory_size.md) | Returns the total size in bytes of files inside a local directory (optionally recursive). |
 | [FILE_ACCESSED](file_accessed.md) | Returns the last access timestamp of a local file. |
 | [FILE_CREATED](file_created.md) | Returns the creation timestamp of a local file. |
 | [FILE_EXISTS](file_exists.md) | Returns whether a local file exists inside the active execution context's allowed path boundaries. |

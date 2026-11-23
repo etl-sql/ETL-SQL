@@ -502,6 +502,8 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `FILE_LINE_COUNT(path, [header_rows])` | File | [FILE_LINE_COUNT.md](reference/functions/file-path/file_line_count.md) | Counts lines in a local file with optional header exclusion |
 | `FILE_HASH(path, [algorithm])` | File | [FILE_HASH.md](reference/functions/file-path/file_hash.md) | Computes cryptographic hash of a file |
 | `DIRECTORY_EXISTS(path)` | File | [DIRECTORY_EXISTS.md](reference/functions/file-path/directory_exists.md) | 1 if directory exists, 0 otherwise |
+| `DIRECTORY_SIZE(path, [recursive])` | File | [DIRECTORY_SIZE.md](reference/functions/file-path/directory_size.md) | Total size in bytes of files in a local directory |
+| `DIRECTORY_FILE_COUNT(path, [recursive])` | File | [DIRECTORY_FILE_COUNT.md](reference/functions/file-path/directory_file_count.md) | Number of files in a local directory |
 | `FILE_LIST(path, [mask])` | File | [FILE_LIST.md](reference/functions/file-path/file_list.md) | Returns table of files in path |
 | `ARCHIVE_LIST(path)` | File | [ARCHIVE_LIST.md](reference/functions/file-path/archive_list.md) | Lists archive entries without extracting |
 | `REMOTE_FILE_LIST(connection, path)` | File | [REMOTE_FILE_LIST.md](reference/functions/file-path/remote_file_list.md) | Table of files on remote connection |
@@ -2462,6 +2464,8 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `DENSE_RANK` | Function | Canonical built-in function |
 | `DIFFERENCE` | Function | Canonical built-in function |
 | `DIRECTORY_EXISTS` | Function | Canonical built-in function |
+| `DIRECTORY_FILE_COUNT` | Function | Canonical built-in function |
+| `DIRECTORY_SIZE` | Function | Canonical built-in function |
 | `DMETAPHONE` | Function | Canonical built-in function |
 | `DMETAPHONE_ALT` | Function | Canonical built-in function |
 | `END_OF_MONTH` | Function | Canonical built-in function |

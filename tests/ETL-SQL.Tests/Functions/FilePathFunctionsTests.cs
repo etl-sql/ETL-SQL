@@ -188,6 +188,84 @@ public sealed class FilePathFunctionsTests : IDisposable
     }
 
     [Fact]
+    public async Task DirectorySizeAndFileCount_NonRecursiveRecursiveEmptyMissingAndNull()
+    {
+        var root = PathFor("dir_metrics");
+        var sub = Path.Combine(root, "sub");
+        var emptyDir = PathFor("dir_empty");
+        Directory.CreateDirectory(sub);
+        Directory.CreateDirectory(emptyDir);
+
+        await File.WriteAllBytesAsync(Path.Combine(root, "a.bin"), new byte[10]);
+        await File.WriteAllBytesAsync(Path.Combine(root, "b.bin"), new byte[25]);
+        await File.WriteAllBytesAsync(Path.Combine(sub, "c.bin"), new byte[40]);
+
+        Assert.Equal(35m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(root)}');"));
+        Assert.Equal(35m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(root)}', FALSE);"));
+        Assert.Equal(75m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(root)}', TRUE);"));
+
+        Assert.Equal(2m, await EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(root)}');"));
+        Assert.Equal(2m, await EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(root)}', FALSE);"));
+        Assert.Equal(3m, await EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(root)}', TRUE);"));
+
+        Assert.Equal(0m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(emptyDir)}');"));
+        Assert.Equal(0m, await EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(emptyDir)}');"));
+
+        Assert.Null(await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(PathFor("no_such_dir"))}');"));
+        Assert.Null(await EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(PathFor("no_such_dir"))}');"));
+        Assert.Null(await EvalScalarAsync("DECLARE @res DECIMAL = DIRECTORY_SIZE(NULL);"));
+        Assert.Null(await EvalScalarAsync("DECLARE @res INT = DIRECTORY_FILE_COUNT(NULL);"));
+        Assert.Null(await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(root)}', NULL);"));
+        Assert.Null(await EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(root)}', NULL);"));
+
+        await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+            EvalScalarAsync("DECLARE @res DECIMAL = DIRECTORY_SIZE('/etc');"));
+        await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+            EvalScalarAsync("DECLARE @res INT = DIRECTORY_FILE_COUNT('/etc');"));
+    }
+
+    [Fact]
+    public async Task DirectorySizeAndFileCount_HonorsRecursionAndFileOperationLimits()
+    {
+        var deepRoot = PathFor("dir_deep");
+        var current = deepRoot;
+        for (int i = 1; i <= 6; i++)
+        {
+            current = Path.Combine(current, $"l{i}");
+            Directory.CreateDirectory(current);
+        }
+        await File.WriteAllBytesAsync(Path.Combine(current, "leaf.bin"), new byte[12]);
+
+        await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+            EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(deepRoot)}', TRUE);"));
+
+        var allowDepthEvaluator = CreateEvaluator();
+        allowDepthEvaluator.SecurityService.ApprovedSafeZones.Add(_dir);
+        allowDepthEvaluator.AllowDeepRecursion = true;
+        var allowDepthCount = await EvalScalarAsync(
+            $"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(deepRoot)}', TRUE);", allowDepthEvaluator);
+        Assert.Equal(1m, allowDepthCount);
+
+        var manyDir = PathFor("dir_many");
+        Directory.CreateDirectory(manyDir);
+        for (int i = 0; i < 5; i++)
+            await File.WriteAllBytesAsync(Path.Combine(manyDir, $"f{i}.bin"), new byte[4]);
+
+        var limitedEvaluator = CreateEvaluator();
+        limitedEvaluator.SecurityService.MaxFileOperations = 3;
+        await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+            EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(manyDir)}');", limitedEvaluator));
+
+        var allowedOpsEvaluator = CreateEvaluator();
+        allowedOpsEvaluator.SecurityService.MaxFileOperations = 3;
+        allowedOpsEvaluator.SecurityService.ApprovedSafeZones.Add(_dir);
+        allowedOpsEvaluator.AllowLargeFileOperationCount = true;
+        var allowedSize = await EvalScalarAsync(
+            $"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(manyDir)}');", allowedOpsEvaluator);
+        Assert.Equal(20m, allowedSize);
+    }
+
+    [Fact]
     public async Task FileLineCount_HandlesEmptyAndLineEndingsAndHeaderRows()
     {
         var empty = PathFor("empty.txt");
