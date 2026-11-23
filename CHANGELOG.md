@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Hardened local directory functions (`DIRECTORY_SIZE`, `DIRECTORY_FILE_COUNT`, `FILE_LIST` / `DIRECTORY`) to skip symbolic links and directory junctions during enumeration and recursion so traversal cannot leave the authorized root; unified `FILE_LIST` onto the same runaway/depth ceilings and `TRUE`/`ON`/`1` recursive flag spellings, added Windows junction and Unix symlink tests, and documented link behavior in `docs/reference/functions/file-path/` (`RF01` in `FileFunctions.cs`, `FilePathFunctionsTests.cs`, `directory_size.md`, `directory_file_count.md`, and `file_list.md`).
+
 - Made every chart type in `TerminalRenderer` (`PIE`, `DONUT`, `HEATMAP`, `WATERFALL`, `FUNNEL`, `GANTT`, plus the already-guarded bar/line/scatter/box/bubble/candlestick paths) and the pie path in `PlotPlanTerminalRenderer` render `"No data available for this chart."` when rows exist but fail to parse, and removed 2-decimal rounding on rolled-up pie `Other` totals so they match other slices' precision (`RF03` in `TerminalRenderer.cs`, `PlotPlanTerminalRenderer.cs`, `TerminalRendererTests.cs`, and `PieDonutControlsTests.cs`).
 
 - Advertised all supported `ENCRYPT` modes (`ON`, `OFF`, `MACHINE`, `PASSWORD`, `KEYFILE`, `PORTAL`) in `GetSupportedOptions`, `GetOptionValues`, and `GetHelp` across all six file connectors (`AvroConnector`, `ExcelConnector`, `FlatFileConnector`, `JsonConnector`, `ParquetConnector`, `XmlConnector`) and pinned acceptance in `ConnectorMetadataContractTests` (`RF02`).

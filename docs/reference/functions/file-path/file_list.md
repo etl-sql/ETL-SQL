@@ -12,7 +12,7 @@ FILE_LIST(path, recursive)
 ## Parameters
 
 - **path** - Directory path to list.
-- **recursive** - Optional flag. Use `TRUE` to include subdirectories recursively. Defaults to `FALSE`.
+- **recursive** - Optional flag (`TRUE`, `ON`, or `1`). When enabled, includes subdirectories recursively. Defaults to `FALSE`.
 
 ## Returns
 
@@ -25,6 +25,8 @@ Returns no rows when `path` is `NULL` or the directory cannot be listed.
 ## Remarks
 
 - `path` must pass the engine path-resolution guardrails.
+- Symbolic links and directory junctions are skipped during enumeration and recursion so traversal never leaves the authorized root.
+- Each enumerated file counts toward the script's file-operation limit (`SET ALLOW_FILE_OPERATIONS`), and recursive traversal honors the recursion depth limit (`SET ALLOW_RECURSIVE_LAYERS`, default 5 levels).
 - Use `WHERE EXTENSION = '.csv'` to filter by file type.
 
 ## Examples

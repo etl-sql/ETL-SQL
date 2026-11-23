@@ -346,6 +346,18 @@ namespace ETL_SQL.Engine.Functions
             return stats.HasValue ? (decimal)stats.Value.FileCount : null;
         }
 
+        private static bool ParseRecursiveFlag(object? arg) =>
+            arg is bool b
+                ? b
+                : (arg is string s
+                    ? s.Equals("TRUE", StringComparison.OrdinalIgnoreCase)
+                        || s.Equals("ON", StringComparison.OrdinalIgnoreCase)
+                        || s == "1"
+                    : Convert.ToBoolean(arg));
+
+        private static bool IsReparseOrLink(FileSystemInfo entry) =>
+            (entry.Attributes & FileAttributes.ReparsePoint) != 0 || entry.LinkTarget != null;
+
         private static (long FileCount, long TotalBytes)? MeasureDirectory(List<object?> args, IExecutionContext context, string functionName)
         {
             if (args.Count > 2)
@@ -356,11 +368,7 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count == 2)
             {
                 if (args[1] == null) return null;
-                recursive = args[1] is bool b
-                    ? b
-                    : (args[1] is string s
-                        ? s.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || s.Equals("ON", StringComparison.OrdinalIgnoreCase) || s == "1"
-                        : Convert.ToBoolean(args[1]));
+                recursive = ParseRecursiveFlag(args[1]);
             }
 
             string resolvedPath = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Enumerate);
@@ -368,32 +376,40 @@ namespace ETL_SQL.Engine.Functions
 
             long fileCount = 0;
             long totalBytes = 0;
-            AccumulateDirectoryStats(resolvedPath, recursive, depth: 0, context, ref fileCount, ref totalBytes);
+            foreach (var fi in EnumerateAuthorizedDirectoryFiles(resolvedPath, recursive, depth: 0, context))
+            {
+                fileCount++;
+                totalBytes += fi.Length;
+            }
             return (fileCount, totalBytes);
         }
 
-        private static void AccumulateDirectoryStats(
+        private static IEnumerable<FileInfo> EnumerateAuthorizedDirectoryFiles(
             string currentDir,
             bool recursive,
             int depth,
-            IExecutionContext context,
-            ref long fileCount,
-            ref long totalBytes)
+            IExecutionContext context)
         {
             context.CancellationToken.ThrowIfCancellationRequested();
-            foreach (var file in Directory.EnumerateFiles(currentDir))
+            var dirInfo = new DirectoryInfo(currentDir);
+
+            foreach (var fi in dirInfo.EnumerateFiles())
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
-                context.IncrementOperationCount(OperationType.FileSystem, file);
-                fileCount++;
-                totalBytes += new FileInfo(file).Length;
+                // Skip symlink/reparse file entries so traversal never escapes the authorized root.
+                if (IsReparseOrLink(fi)) continue;
+                context.IncrementOperationCount(OperationType.FileSystem, fi.FullName);
+                yield return fi;
             }
 
-            if (!recursive) return;
+            if (!recursive) yield break;
 
-            foreach (var subDir in Directory.EnumerateDirectories(currentDir))
+            foreach (var subDir in dirInfo.EnumerateDirectories())
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
+                // Never follow directory junctions or symlinks out of the authorized root.
+                if (IsReparseOrLink(subDir)) continue;
+
                 int nextDepth = depth + 1;
                 context.SecurityService.CheckRunawayProtection(
                     OperationType.FileSystem,
@@ -401,7 +417,7 @@ namespace ETL_SQL.Engine.Functions
                     nextDepth,
                     allowLargeCount: context.AllowLargeFileOperationCount,
                     allowDeepRecursion: context.AllowDeepRecursion,
-                    path: subDir);
+                    path: subDir.FullName);
                 if (context.ExecutionPolicy?.IsEnrolled ?? EnterprisePolicyRuntime.Current.IsEnrolled)
                 {
                     OperationPolicyBoundary.EnforceCeiling(
@@ -410,7 +426,9 @@ namespace ETL_SQL.Engine.Functions
                         nextDepth,
                         "<recursive-nesting-depth>");
                 }
-                AccumulateDirectoryStats(subDir, recursive: true, nextDepth, context, ref fileCount, ref totalBytes);
+
+                foreach (var child in EnumerateAuthorizedDirectoryFiles(subDir.FullName, recursive: true, nextDepth, context))
+                    yield return child;
             }
         }
 
@@ -421,14 +439,13 @@ namespace ETL_SQL.Engine.Functions
 
             if (args.Count < 1 || args[0] == null) return table;
             string path = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Enumerate);
-            bool recursive = args.Count >= 2 && args[1] != null && (args[1] is bool b ? b : (args[1] is string s ? s.Equals("TRUE", StringComparison.OrdinalIgnoreCase) : Convert.ToBoolean(args[1])));
+            bool recursive = args.Count >= 2 && args[1] != null && ParseRecursiveFlag(args[1]);
 
             if (!Directory.Exists(path)) return table;
 
-            foreach (var fPath in Directory.EnumerateFiles(path, "*", (recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)))
+            foreach (var fi in EnumerateAuthorizedDirectoryFiles(path, recursive, depth: 0, context))
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
-                var fi = new FileInfo(fPath);
                 await table.AddRowAsync(new Row
                 {
                     ["Name"] = fi.Name,

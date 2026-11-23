@@ -24,6 +24,7 @@ Returns `NULL` when `path` is `NULL`, `recursive` is `NULL`, or the directory do
 ## Remarks
 
 - The path is resolved and authorized through the engine path boundary before enumeration.
+- Symbolic links and directory junctions are skipped during enumeration and recursion so traversal never leaves the authorized root.
 - Each enumerated file counts toward the script's file-operation limit (`SET ALLOW_FILE_OPERATIONS`), and recursive traversal honors the recursion depth limit (`SET ALLOW_RECURSIVE_LAYERS`, default 5 levels).
 
 ## Example

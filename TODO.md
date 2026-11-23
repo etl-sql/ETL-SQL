@@ -89,12 +89,7 @@ All five slices are done (`RV01` lane/orphan audit, `RV02` engine/language/conne
 
 ### 2.2 Bugs and hardening found in the v0.23.0 reviews
 
-Each was checked against the code on 2026-11-23. Write the failing test first; if what the code does
-looks wrong, report it rather than writing an assertion that accepts it.
-
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| RF01 | **Local directory functions follow links out of the authorized root.** In `src/ETL-SQL.Engine/Functions/FileFunctions.cs`, `DIRECTORY_SIZE` and `DIRECTORY_FILE_COUNT` (`AccumulateDirectoryStats`) authorize only the root through `AuthorizeLocalPath`, then recurse into every subdirectory, junctions and symlinks included. `FILE_LIST`/`DIRECTORY` uses `SearchOption.AllDirectories` with none of the runaway/depth checks the other two apply, and accepts only `TRUE` for its recursive flag where the others also take `ON` and `1`. **Finish line:** tests with a Windows junction and a Unix symlink pointing outside an allowed root show that recursion does not leave the root (skip link entries, or authorize each directory), `FILE_LIST` gets the same runaway/depth ceilings and flag spellings, and `docs/reference` states the link behavior. | — | M |
+All five items (`RF01`–`RF05`) have shipped on `release/v0.23.0` (see `CHANGELOG.md`).
 
 ### 2.3 Selected from ROADMAP (2026-11-23)
 

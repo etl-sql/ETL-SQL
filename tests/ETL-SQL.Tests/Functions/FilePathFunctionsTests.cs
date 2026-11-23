@@ -377,6 +377,104 @@ public sealed class FilePathFunctionsTests : IDisposable
             EvalScalarAsync("DECLARE @res INT = REMOTE_DIRECTORY_EXISTS('UNKNOWN_CONN', 'inbox');", evaluator));
     }
 
+    [WindowsFact]
+    [Trait("Platform", "Windows")]
+    public async Task DirectoryFunctions_DoNotFollowWindowsJunctionOutsideAuthorizedRoot()
+    {
+        var allowedRoot = PathFor("allowed_win");
+        var outsideDir = PathFor("outside_win");
+        Directory.CreateDirectory(allowedRoot);
+        Directory.CreateDirectory(outsideDir);
+        await File.WriteAllBytesAsync(Path.Combine(allowedRoot, "inside.txt"), new byte[5]);
+        await File.WriteAllBytesAsync(Path.Combine(outsideDir, "secret.txt"), new byte[100]);
+
+        var junction = Path.Combine(allowedRoot, "escape_junction");
+        using var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+            "cmd.exe", $"/c mklink /J \"{junction}\" \"{outsideDir}\"")
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        });
+        Assert.NotNull(mklink);
+        Assert.True(mklink!.WaitForExit(5000), "mklink /J timed out");
+        Assert.Equal(0, mklink.ExitCode);
+        Assert.True(Directory.Exists(junction));
+
+        try
+        {
+            var eval = CreateEvaluator();
+            Assert.Equal(1m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_FILE_COUNT('{Esc(allowedRoot)}', TRUE);", eval));
+            Assert.Equal(5m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(allowedRoot)}', TRUE);", eval));
+
+            await eval.Evaluate(new Parser(new Lexer($"SELECT Name FROM FILE_LIST('{Esc(allowedRoot)}', TRUE);").Tokenize()).Parse());
+            var names = eval.LastResult!.Rows.Select(r => r["Name"]?.ToString()).ToList();
+            Assert.Equal(new[] { "inside.txt" }, names);
+        }
+        finally
+        {
+            try { if (Directory.Exists(junction)) Directory.Delete(junction); } catch { }
+        }
+    }
+
+    [UnixFact]
+    [Trait("Platform", "Unix")]
+    public async Task DirectoryFunctions_DoNotFollowUnixSymlinkOutsideAuthorizedRoot()
+    {
+        var allowedRoot = PathFor("allowed_unix");
+        var outsideDir = PathFor("outside_unix");
+        Directory.CreateDirectory(allowedRoot);
+        Directory.CreateDirectory(outsideDir);
+        await File.WriteAllBytesAsync(Path.Combine(allowedRoot, "inside.txt"), new byte[5]);
+        var secretFile = Path.Combine(outsideDir, "secret.txt");
+        await File.WriteAllBytesAsync(secretFile, new byte[100]);
+
+        Directory.CreateSymbolicLink(Path.Combine(allowedRoot, "escape_dir"), outsideDir);
+        File.CreateSymbolicLink(Path.Combine(allowedRoot, "escape_file.txt"), secretFile);
+
+        var eval = CreateEvaluator();
+        Assert.Equal(1m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_FILE_COUNT('{Esc(allowedRoot)}', TRUE);", eval));
+        Assert.Equal(5m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(allowedRoot)}', TRUE);", eval));
+
+        await eval.Evaluate(new Parser(new Lexer($"SELECT Name FROM FILE_LIST('{Esc(allowedRoot)}', TRUE);").Tokenize()).Parse());
+        var names = eval.LastResult!.Rows.Select(r => r["Name"]?.ToString()).ToList();
+        Assert.Equal(new[] { "inside.txt" }, names);
+    }
+
+    [Fact]
+    public async Task FileList_HonorsRecursiveFlagSpellingsAndDepthCeiling()
+    {
+        var root = PathFor("filelist_flags");
+        var nested = Path.Combine(root, "sub");
+        Directory.CreateDirectory(nested);
+        await File.WriteAllTextAsync(Path.Combine(root, "top.txt"), "a");
+        await File.WriteAllTextAsync(Path.Combine(nested, "child.txt"), "b");
+
+        foreach (var flag in new[] { "TRUE", "'ON'", "'1'", "1" })
+        {
+            var eval = CreateEvaluator();
+            await eval.Evaluate(new Parser(new Lexer($"SELECT Name FROM FILE_LIST('{Esc(root)}', {flag});").Tokenize()).Parse());
+            var names = eval.LastResult!.Rows.Select(r => r["Name"]?.ToString()).OrderBy(x => x).ToList();
+            Assert.Equal(new[] { "child.txt", "top.txt" }, names);
+        }
+
+        // Depth > 5 must be blocked unless SET ALLOW_RECURSIVE_LAYERS ON is declared.
+        var deep = root;
+        for (int i = 1; i <= 6; i++)
+            deep = Path.Combine(deep, $"d{i}");
+        Directory.CreateDirectory(deep);
+        await File.WriteAllTextAsync(Path.Combine(deep, "leaf.txt"), "z");
+
+        var blockedEval = CreateEvaluator();
+        await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+            blockedEval.Evaluate(new Parser(new Lexer($"SELECT Name FROM FILE_LIST('{Esc(root)}', TRUE);").Tokenize()).Parse()));
+
+        var allowedEval = CreateEvaluator();
+        await allowedEval.Evaluate(new Parser(new Lexer($"SET ALLOW_RECURSIVE_GREATER_THAN_10_LAYERS ON; SELECT Name FROM FILE_LIST('{Esc(root)}', TRUE);").Tokenize()).Parse());
+        Assert.Contains(allowedEval.LastResult!.Rows, r => r["Name"]?.ToString() == "leaf.txt");
+    }
+
     private static async IAsyncEnumerable<FileMetaData> AsyncEnum(IEnumerable<FileMetaData> items)
     {
         foreach (var item in items)
