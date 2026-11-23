@@ -312,6 +312,10 @@ public class DataSourceManager(
         {
             return new ConnectionConfigDataSource(_evaluator);
         }
+        else if (IsEngineVirtualTable(table, "datasets"))
+        {
+            return new DatasetsDataSource(_evaluator);
+        }
         else if (IsEngineVirtualTable(table, "jobs"))
         {
             return new JobsDataSource(_jobHistoryStore);

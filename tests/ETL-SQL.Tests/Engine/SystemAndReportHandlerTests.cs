@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core.Common.Exceptions;
@@ -36,21 +37,26 @@ namespace ETL_SQL.Tests.Engine
             return eval;
         }
 
+        private static decimal Scalar(Evaluator eval, string column) =>
+            Convert.ToDecimal(eval.LastResult!.Rows[0][column]);
+
+        private static ETL_SQL.Common.MinMaxValue MinMax(Evaluator eval) =>
+            Assert.IsType<ETL_SQL.Common.MinMaxValue>(eval.GetVariable("@range"));
+
         // ── System Variables (@@) ─────────────────────────────────────────────
 
         [Fact]
         public async Task SystemVar_TranCount_IsZeroBeforeTransaction()
         {
             var eval = await RunAndGet("SELECT @@TRANCOUNT AS tc;");
-            Assert.NotNull(eval.LastResult);
+            Assert.Equal(0m, Scalar(eval, "tc"));
         }
 
         [Fact]
         public async Task SystemVar_Version_ReturnsString()
         {
             var eval = await RunAndGet("SELECT @@VERSION AS ver;");
-            Assert.NotNull(eval.LastResult);
-            Assert.True(eval.LastResult!.Rows.Count > 0);
+            Assert.False(string.IsNullOrWhiteSpace(eval.LastResult!.Rows[0]["ver"]?.ToString()));
         }
 
         [Fact]
@@ -59,14 +65,14 @@ namespace ETL_SQL.Tests.Engine
             var eval = await RunAndGet(
                 "SELECT 1 AS n UNION ALL SELECT 2 AS n;" +
                 "SELECT @@ROWCOUNT AS rc;");
-            Assert.NotNull(eval.LastResult);
+            Assert.Equal(2m, Scalar(eval, "rc"));
         }
 
         [Fact]
         public async Task SystemVar_Error_DefaultZero()
         {
             var eval = await RunAndGet("SELECT @@ERROR AS err;");
-            Assert.NotNull(eval.LastResult);
+            Assert.Equal(0m, Scalar(eval, "err"));
         }
 
         [Fact]
@@ -126,39 +132,41 @@ namespace ETL_SQL.Tests.Engine
         public async Task SystemVar_AfterRaiseError_ErrorSet()
         {
             var eval = await RunAndGet(
-                "BEGIN TRY RAISERROR('oops', 16, 1); END TRY BEGIN CATCH SELECT @@ERROR AS err; END CATCH");
-            Assert.NotNull(eval.LastResult);
+                "BEGIN TRY RAISERROR('oops', 16, 1); END TRY BEGIN CATCH SELECT @@ERROR AS err, ERROR_MESSAGE() AS msg; END CATCH");
+            Assert.NotEqual(0m, Scalar(eval, "err"));
+            Assert.Equal("oops", eval.LastResult!.Rows[0]["msg"]?.ToString());
         }
 
         // ── SET @var MinMax member access ─────────────────────────────────────
 
         [Fact]
-        public async Task SetVariable_MinMax_SetMinProperty()
+        public async Task SetVariable_MinMax_SetsMin()
         {
             var eval = await RunAndGet(
                 "DECLARE @range MINMAX = 0;" +
                 "SET @range.MIN = 5;");
-            Assert.NotNull(eval.GetVariable("@range"));
+            Assert.Equal(5m, Convert.ToDecimal(MinMax(eval).Min));
         }
 
         [Fact]
-        public async Task SetVariable_MinMax_SetMaxProperty()
+        public async Task SetVariable_MinMax_SetsMax()
         {
             var eval = await RunAndGet(
                 "DECLARE @range MINMAX = 0;" +
                 "SET @range.MAX = 100;");
-            Assert.NotNull(eval.GetVariable("@range"));
+            Assert.Equal(100m, Convert.ToDecimal(MinMax(eval).Max));
         }
 
         [Fact]
-        public async Task SetVariable_MinMax_SetBothProperties()
+        public async Task SetVariable_MinMax_SetsBoth()
         {
             var eval = await RunAndGet(
                 "DECLARE @range MINMAX = 0;" +
                 "SET @range.MIN = 10;" +
                 "SET @range.MAX = 20;");
-            var rangeVal = eval.GetVariable("@range");
-            Assert.NotNull(rangeVal);
+            var range = MinMax(eval);
+            Assert.Equal(10m, Convert.ToDecimal(range.Min));
+            Assert.Equal(20m, Convert.ToDecimal(range.Max));
         }
 
         [Fact]
@@ -178,22 +186,34 @@ namespace ETL_SQL.Tests.Engine
         // ── CREATE PROCEDURE + EXECUTE ────────────────────────────────────────
 
         [Fact]
-        public async Task ExecuteProcedure_Basic_Executes()
+        public async Task ExecuteProcedure_ReturnsItsResult()
         {
             var eval = await RunAndGet(
                 "CREATE PROCEDURE do_select AS BEGIN SELECT 42 AS result; END;" +
                 "EXECUTE do_select;");
-            Assert.NotNull(eval.LastResult);
+            Assert.Equal(42m, Scalar(eval, "result"));
         }
 
         [Fact]
-        public async Task ExecuteProcedure_WithOutputParam_ExecutesWithoutError()
+        public async Task ExecuteProcedure_WithOutputParam_WritesTheCallerVariable()
         {
-            // Verify that EXECUTE with OUTPUT keyword doesn't throw
-            await Run(
+            var eval = await RunAndGet(
                 "CREATE PROCEDURE get_val (@n INT) AS BEGIN SET @n = 99; END;" +
                 "DECLARE @out INT = 0;" +
                 "EXECUTE get_val @out OUTPUT;");
+            Assert.Equal(99m, Convert.ToDecimal(eval.GetVariable("@out")));
+        }
+
+        [Fact]
+        public async Task ExecuteProcedure_NamedOutputParam_WritesTheCallerVariable_AndInputsStayPut()
+        {
+            var eval = await RunAndGet(
+                "CREATE PROCEDURE add_one (@x INT, @n INT) AS BEGIN SET @x = 0; SET @n = @x + 1; RETURN; END;" +
+                "DECLARE @in INT = 5;" +
+                "DECLARE @out INT = 0;" +
+                "EXECUTE add_one @x = @in, @n = @out OUTPUT;");
+            Assert.Equal(1m, Convert.ToDecimal(eval.GetVariable("@out")));
+            Assert.Equal(5m, Convert.ToDecimal(eval.GetVariable("@in")));
         }
 
         [Fact]
@@ -247,9 +267,10 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task AlterContainer_AfterCreate_UpdatesTitle()
         {
-            await Run(
+            var eval = await RunAndGet(
                 "CREATE CONTAINER mycontainer AS BOX ();" +
                 "ALTER CONTAINER mycontainer (TITLE = 'My Container');");
+            Assert.Contains("My Container", eval.ReportContext.ContainerDefinitions["mycontainer"].Title!.ToSql());
         }
 
         [Fact]
@@ -264,9 +285,11 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task AlterTemplate_AfterCreate_PatchesOptions()
         {
-            await Run(
+            var eval = await RunAndGet(
                 "CREATE TEMPLATE mytempl AS (TYPE = 'table');" +
                 "ALTER TEMPLATE mytempl (OPTIONS (TYPE = 'card'));");
+            var options = eval.ReportContext.TemplateDefinitions["mytempl"].Options;
+            Assert.Contains("card", options.First(o => o.Key.Equals("TYPE", StringComparison.OrdinalIgnoreCase)).Value);
         }
 
         /// <summary>
@@ -295,9 +318,10 @@ namespace ETL_SQL.Tests.Engine
         // ── DROP DATASET ──────────────────────────────────────────────────────
 
         [Fact]
-        public async Task DropDataset_IfExists_NoThrow()
+        public async Task DropDataset_IfExists_OnAMissingDataset_DoesNotThrow()
         {
-            await Run("DROP DATASET IF EXISTS &nonexistent_ds;");
+            var eval = await RunAndGet("DROP DATASET IF EXISTS &nonexistent_ds;");
+            Assert.Empty(eval.ReportContext.DatasetDefinitions);
         }
 
         [Fact]
@@ -308,12 +332,13 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task DropDataset_AfterCreate_RemovesConnection()
+        public async Task DropDataset_AfterCreate_RemovesTheDataset()
         {
             var eval = await RunAndGet(
                 "CREATE DATASET &myds AS (SELECT 1 AS v);" +
                 "DROP DATASET IF EXISTS &myds;");
-            Assert.NotNull(eval);
+            Assert.Empty(eval.ReportContext.DatasetDefinitions);
+            await Assert.ThrowsAsync<ExecutionException>(() => eval.Evaluate(Parse("SELECT * FROM &myds;")));
         }
 
         // ── EXECUTE SCRIPT ────────────────────────────────────────────────────
@@ -326,7 +351,7 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task ExecuteScript_ValidTempFile_Executes()
+        public async Task ExecuteScript_ValidTempFile_ReturnsItsResult()
         {
             var tmpFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".etlsql");
             File.WriteAllText(tmpFile, "SELECT 42 AS result;");
@@ -334,7 +359,7 @@ namespace ETL_SQL.Tests.Engine
             {
                 var path = tmpFile.Replace("\\", "\\\\");
                 var eval = await RunAndGet($"EXECUTE '{path}';");
-                Assert.NotNull(eval.LastResult);
+                Assert.Equal(42m, Scalar(eval, "result"));
             }
             finally { if (File.Exists(tmpFile)) File.Delete(tmpFile); }
         }
@@ -393,53 +418,57 @@ namespace ETL_SQL.Tests.Engine
             }
         }
 
-        // ── ShowDatasets with report context ──────────────────────────────────
+        // ── eng.datasets ──────────────────────────────────────────────────────
 
         [Fact]
-        public async Task ShowDatasets_AfterCreateDataset_ShowsEntry()
+        public async Task EngDatasets_AfterCreateDataset_ListsIt()
         {
             var eval = await RunAndGet(
                 "CREATE DATASET &myds AS (SELECT 1 AS v);" +
-                "SELECT * FROM eng.tables;");
-            Assert.NotNull(eval.LastResult);
+                "SELECT * FROM eng.datasets;");
+            Assert.Contains(eval.LastResult!.Rows, r => r["name"]?.ToString()?.Contains("myds", StringComparison.OrdinalIgnoreCase) == true);
         }
 
         [Fact]
-        public async Task ShowDatasets_IntoTempTable_AfterCreate_ShowsEntry()
+        public async Task EngDatasets_IntoTempTable_ListsIt()
         {
             var eval = await RunAndGet(
                 "CREATE DATASET &myds AS (SELECT 1 AS v);" +
-                "SELECT * INTO #dsList FROM eng.tables;" +
+                "SELECT * INTO #dsList FROM eng.datasets;" +
                 "SELECT * FROM #dsList;");
-            Assert.NotNull(eval.LastResult);
+            Assert.Contains(eval.LastResult!.Rows, r => r["name"]?.ToString()?.Contains("myds", StringComparison.OrdinalIgnoreCase) == true);
         }
 
         // ── UsePasswordStatementHandler ───────────────────────────────────────
 
         [Fact]
-        public async Task UsePassword_LiteralString_NoError()
+        public async Task UsePassword_LiteralString_SetsTheScriptPassword()
         {
-            await Run("USE PASSWORD = 'ENC:test_password';");
+            var eval = await RunAndGet("USE PASSWORD = 'test_password';");
+            Assert.Equal("test_password", eval.ScriptPassword);
         }
 
         // ── SetThresholdStatementHandler ──────────────────────────────────────
 
         [Fact]
-        public async Task SetThreshold_BatchSize_NoError()
+        public async Task SetThreshold_BatchSize_SetsIt()
         {
-            await Run("SET BATCHSIZE = 500;");
+            var eval = await RunAndGet("SET BATCHSIZE = 500;");
+            Assert.Equal(500, eval.BatchSize);
         }
 
         [Fact]
-        public async Task SetThreshold_JoinSpill_NoError()
+        public async Task SetThreshold_JoinSpill_SetsIt()
         {
-            await Run("SET JOIN_SPILL_THRESHOLD = 100000;");
+            var eval = await RunAndGet("SET JOIN_SPILL_THRESHOLD = 100000;");
+            Assert.Equal(100000, eval.JoinSpillThreshold);
         }
 
         [Fact]
-        public async Task SetThreshold_WindowSpill_NoError()
+        public async Task SetThreshold_WindowSpill_SetsIt()
         {
-            await Run("SET WINDOW_SPILL_THRESHOLD = 50000;");
+            var eval = await RunAndGet("SET WINDOW_SPILL_THRESHOLD = 50000;");
+            Assert.Equal(50000, eval.WindowSpillThreshold);
         }
 
         [Fact]
@@ -462,49 +491,53 @@ namespace ETL_SQL.Tests.Engine
         // ── ShowSafeZones ─────────────────────────────────────────────────────
 
         [Fact]
-        public async Task ShowSafeZones_ReturnsResult()
+        public async Task SafeZones_HasThePublishedColumns()
         {
             var eval = await RunAndGet("SELECT * FROM eng.safe_zones;");
-            Assert.NotNull(eval.LastResult);
+            Assert.Equal(["path", "is_system_path", "resolution"], eval.LastResult!.ColumnNames);
         }
 
         // ── ShowJobHistory ────────────────────────────────────────────────────
 
         [Fact]
-        public async Task ShowJobHistory_ReturnsResult()
+        public async Task JobHistory_HasAStatusColumn()
         {
             var eval = await RunAndGet("SELECT * FROM eng.job_history;");
-            Assert.NotNull(eval.LastResult);
+            Assert.Contains("status", eval.LastResult!.ColumnNames);
         }
 
         // ── DROP FUNCTION / PROCEDURE ─────────────────────────────────────────
 
         [Fact]
-        public async Task DropFunction_AfterCreate_Succeeds()
+        public async Task DropFunction_AfterCreate_RemovesIt()
         {
-            await Run(
+            var eval = await RunAndGet(
                 "CREATE FUNCTION myfunc (@x INT) RETURNS INT AS BEGIN RETURN @x + 1; END;" +
                 "DROP FUNCTION myfunc;");
+            Assert.False(eval.TryGetFunction("myfunc", out _));
         }
 
         [Fact]
-        public async Task DropProcedure_AfterCreate_Succeeds()
+        public async Task DropProcedure_AfterCreate_RemovesIt()
         {
-            await Run(
+            var eval = await RunAndGet(
                 "CREATE PROCEDURE myproc AS BEGIN SELECT 1 AS n; END;" +
                 "DROP PROCEDURE myproc;");
+            Assert.False(eval.TryGetProcedure("myproc", out _));
         }
 
         [Fact]
-        public async Task DropFunction_IfExists_NotExists_NoThrow()
+        public async Task DropFunction_IfExists_OnAMissingFunction_DoesNotThrow()
         {
-            await Run("DROP FUNCTION IF EXISTS nonexistent_func_xyz;");
+            var eval = await RunAndGet("DROP FUNCTION IF EXISTS nonexistent_func_xyz;");
+            Assert.False(eval.TryGetFunction("nonexistent_func_xyz", out _));
         }
 
         [Fact]
-        public async Task DropProcedure_IfExists_NotExists_NoThrow()
+        public async Task DropProcedure_IfExists_OnAMissingProcedure_DoesNotThrow()
         {
-            await Run("DROP PROCEDURE IF EXISTS nonexistent_proc_xyz;");
+            var eval = await RunAndGet("DROP PROCEDURE IF EXISTS nonexistent_proc_xyz;");
+            Assert.False(eval.TryGetProcedure("nonexistent_proc_xyz", out _));
         }
 
         // ── eng.columns ───────────────────────────────────────────────────────
@@ -515,36 +548,36 @@ namespace ETL_SQL.Tests.Engine
             var eval = await RunAndGet(
                 "CREATE TABLE #t (Id INT, Name VARCHAR);" +
                 "SELECT * FROM eng.columns WHERE table_name = '#t';");
-            Assert.NotNull(eval.LastResult);
+            Assert.Equal(["Id", "Name"], eval.LastResult!.Rows.Select(r => r["column_name"]?.ToString()).Order(StringComparer.Ordinal));
         }
 
         // ── SHOW SESSIONS ─────────────────────────────────────────────────────
 
         [Fact]
-        public async Task ShowSessions_ReturnsResult()
+        public async Task Sessions_HasASessionIdColumn()
         {
             var eval = await RunAndGet("SELECT * FROM eng.sessions;");
-            Assert.NotNull(eval.LastResult);
+            Assert.Contains("session_id", eval.LastResult!.ColumnNames);
         }
 
         // ── SHOW LOCKS ────────────────────────────────────────────────────────
 
         [Fact]
-        public async Task ShowLocks_ReturnsResult()
+        public async Task Locks_HasAJobNameColumn()
         {
             var eval = await RunAndGet("SELECT * FROM eng.locks;");
-            Assert.NotNull(eval.LastResult);
+            Assert.Contains("job_name", eval.LastResult!.ColumnNames);
         }
 
         // ── SHOW PROFILE ──────────────────────────────────────────────────────
 
         [Fact]
-        public async Task ShowProfile_AfterSelect_ReturnsResult()
+        public async Task Profile_AfterSelect_HasRows()
         {
             var eval = await RunAndGet(
                 "SELECT 1 AS n;" +
                 "SELECT * FROM eng.profile;");
-            Assert.NotNull(eval.LastResult);
+            Assert.NotEmpty(eval.LastResult!.Rows);
         }
 
         // ── SHOW VARIABLES ────────────────────────────────────────────────────
@@ -555,35 +588,40 @@ namespace ETL_SQL.Tests.Engine
             var eval = await RunAndGet(
                 "DECLARE @x INT = 42;" +
                 "SELECT * FROM eng.variables;");
-            Assert.NotNull(eval.LastResult);
+            var row = Assert.Single(eval.LastResult!.Rows, r => r["variable_name"]?.ToString()?.TrimStart('@') == "x");
+            Assert.Equal("42", row["value"]?.ToString());
         }
 
         // ── SET SECURITY_OVERRIDE ─────────────────────────────────────────────
 
         [Fact]
-        public async Task SetSecurityOverride_LargeStringResults_On_NoError()
+        public async Task SetSecurityOverride_LargeStringResults_On_SetsIt()
         {
-            await Run("SET ALLOW_LARGE_STRING_RESULTS ON;");
+            var eval = await RunAndGet("SET ALLOW_LARGE_STRING_RESULTS ON;");
+            Assert.True(eval.AllowLargeStringResults);
         }
 
         [Fact]
-        public async Task SetSecurityOverride_LargeStringResults_Off_NoError()
+        public async Task SetSecurityOverride_LargeStringResults_Off_ClearsIt()
         {
-            await Run("SET ALLOW_LARGE_STRING_RESULTS OFF;");
+            var eval = await RunAndGet("SET ALLOW_LARGE_STRING_RESULTS ON; SET ALLOW_LARGE_STRING_RESULTS OFF;");
+            Assert.False(eval.AllowLargeStringResults);
         }
 
         [Fact]
-        public async Task SetSecurityOverride_FileTypeAccess_On_NoError()
+        public async Task SetSecurityOverride_FileTypeAccess_On_SetsIt()
         {
-            await Run("SET ALLOW_FILE_TYPE_ACCESS ON;");
+            var eval = await RunAndGet("SET ALLOW_FILE_TYPE_ACCESS ON;");
+            Assert.True(eval.AllowUnknownFileTypes);
         }
 
         // ── WAIT FOR ──────────────────────────────────────────────────────────
 
         [Fact]
-        public async Task WaitFor_ZeroDelay_NoError()
+        public async Task WaitFor_ZeroDelay_ContinuesTheScript()
         {
-            await Run("WAITFOR DELAY '00:00:00';");
+            var eval = await RunAndGet("WAITFOR DELAY '00:00:00'; SELECT 1 AS after_wait;");
+            Assert.Equal(1m, Scalar(eval, "after_wait"));
         }
 
         // ── THROW statement ───────────────────────────────────────────────────
@@ -598,11 +636,13 @@ namespace ETL_SQL.Tests.Engine
         // ── TRUNCATE TABLE ────────────────────────────────────────────────────
 
         [Fact]
-        public async Task TruncateTable_EmptyTable_NoError()
+        public async Task TruncateTable_EmptyTable_StaysEmpty()
         {
-            await Run(
+            var eval = await RunAndGet(
                 "CREATE TABLE #t (Id INT);" +
-                "TRUNCATE TABLE #t;");
+                "TRUNCATE TABLE #t;" +
+                "SELECT COUNT(*) AS n FROM #t;");
+            Assert.Equal(0m, Scalar(eval, "n"));
         }
 
         // ── ClearSession ──────────────────────────────────────────────────────
@@ -614,7 +654,7 @@ namespace ETL_SQL.Tests.Engine
                 "DECLARE @x INT = 5;" +
                 "CLEAR SESSION;" +
                 "SELECT * FROM eng.variables;");
-            Assert.NotNull(eval.LastResult);
+            Assert.DoesNotContain(eval.LastResult!.Rows, r => r["variable_name"]?.ToString()?.TrimStart('@') == "x");
         }
     }
 }

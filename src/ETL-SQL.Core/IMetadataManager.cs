@@ -80,7 +80,7 @@ public static class EngineCatalog
     public static readonly List<string> Tables = new()
     {
         "connections", "tables", "views", "columns", "variables", "version", "safe_zones",
-        "profile", "connection_config", "jobs", "job_history", "job_state", "host_metrics",
+        "profile", "connection_config", "datasets", "jobs", "job_history", "job_state", "host_metrics",
         "bundles", "bundle_files", "bundle_dependencies", "tags",
         "lineage", "locks", "sessions", "lineage_history", "missing_tags",
         "protected_data", "protected_data_suggestions", "data_quality_rules", "stewardship_score", "stewardship_gaps",
@@ -97,6 +97,7 @@ public static class EngineCatalog
         ["version"] = new() { new("component", "VARCHAR"), new("version", "VARCHAR"), new("metadata", "VARCHAR") },
         ["safe_zones"] = new() { new("path", "VARCHAR"), new("is_system_path", "VARCHAR"), new("resolution", "VARCHAR") },
         ["connection_config"] = new() { new("connection_name", "VARCHAR"), new("option", "VARCHAR"), new("value", "VARCHAR") },
+        ["datasets"] = new() { new("name", "VARCHAR"), new("folder_path", "VARCHAR"), new("access_level", "VARCHAR"), new("row_count", "VARCHAR"), new("last_refresh", "VARCHAR"), new("is_stale", "VARCHAR"), new("refresh_interval", "VARCHAR"), new("ttl", "VARCHAR") },
         ["jobs"] = new() { new("name", "VARCHAR"), new("schedule", "VARCHAR"), new("last_run", "VARCHAR"), new("next_run", "VARCHAR"), new("script", "VARCHAR"), new("enabled", "VARCHAR") },
         ["job_history"] = new() { new("id", "VARCHAR"), new("job_name", "VARCHAR"), new("start_time", "VARCHAR"), new("end_time", "VARCHAR"), new("status", "VARCHAR"), new("rows_processed", "VARCHAR"), new("rows_warned", "VARCHAR"), new("rows_quarantined", "VARCHAR"), new("failed_rule_counts", "VARCHAR"), new("peak_ram_mb", "VARCHAR"), new("cpu_time_s", "VARCHAR"), new("error_message", "VARCHAR") },
         ["job_state"] = new() { new("job_name", "VARCHAR"), new("state_key", "VARCHAR"), new("state_value", "VARCHAR"), new("updated_at", "VARCHAR") },

@@ -585,7 +585,7 @@ public class SystemParser : ParserComponent
             throw new SyntaxException("SHOW PORTAL, SHOW USAGE, and SHOW ACTIVE commands have been retired. Use SELECT * FROM <conn>.eng.usage_metrics, eng.operational_metrics, eng.audit, or eng.active_sessions.", startToken.Line, startToken.Column);
 
         if (Match(TokenType.DATASET) || Match(TokenType.DATASETS) || MatchIdentifier("DATASETS"))
-            throw new SyntaxException("SHOW DATASETS has been retired. Use SELECT * FROM eng.tables.", startToken.Line, startToken.Column);
+            throw new SyntaxException("SHOW DATASETS has been retired. Use SELECT * FROM eng.datasets.", startToken.Line, startToken.Column);
 
         throw new SyntaxException("Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, VARIABLES, SCRIPT TAGS, TAGS, VERSION, LINEAGE, LINEAGE HISTORY, or DATASETS after SHOW", startToken.Line, startToken.Column);
     }

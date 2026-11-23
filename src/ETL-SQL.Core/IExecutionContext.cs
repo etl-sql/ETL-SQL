@@ -356,7 +356,7 @@ public interface IEngineContext
     Task EvaluateStatement(Statement statement, System.Threading.CancellationToken cancellationToken = default);
     Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default);
     IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt);
-    Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args);
+    Task EvaluateProcedure(string name, List<(string? Name, object? Value, string? OutputVariable)> args);
     string ResolvePath(string path);
     int MaxRecursiveDepth { get; set; }
     int CurrentRecursiveDepth { get; set; }

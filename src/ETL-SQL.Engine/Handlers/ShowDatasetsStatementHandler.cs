@@ -86,7 +86,7 @@ public class ShowDatasetsStatementHandler : IStatementHandler
         }
     }
 
-    private static bool IsStale(DatasetMetadata ds)
+    internal static bool IsStale(DatasetMetadata ds)
     {
         if (!ds.LastRefresh.HasValue) return true;
         if (string.IsNullOrWhiteSpace(ds.Ttl)) return false;

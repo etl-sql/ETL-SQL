@@ -568,6 +568,87 @@ public sealed class ConnectionConfigDataSource : IDataSource
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
+/// <summary>
+/// eng.datasets: the datasets the caller can see, from the Portal registry when one is attached and
+/// otherwise the datasets created in this session. It replaces the retired SHOW DATASETS.
+/// </summary>
+public sealed class DatasetsDataSource : IDataSource
+{
+    private readonly Evaluator _evaluator;
+    private static readonly string[] Columns =
+        ["name", "folder_path", "access_level", "row_count", "last_refresh", "is_stale", "refresh_interval", "ttl"];
+
+    public DatasetsDataSource(Evaluator evaluator)
+    {
+        _evaluator = evaluator;
+    }
+
+    public string Path => "eng.datasets";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+        ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(
+        int batchSize,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        if (_evaluator.DatasetRegistry is { } registry)
+        {
+            foreach (var ds in await registry.ListAll(_evaluator.DatasetCallerContext ?? ""))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(new Row
+                {
+                    ["name"] = ds.Name,
+                    ["folder_path"] = ds.FolderPath,
+                    ["access_level"] = ds.AccessLevel.ToString(),
+                    ["row_count"] = ds.RowCount,
+                    ["last_refresh"] = ds.LastRefresh?.ToString("o"),
+                    ["is_stale"] = ShowDatasetsStatementHandler.IsStale(ds) ? "1" : "0",
+                    ["refresh_interval"] = ds.RefreshInterval,
+                    ["ttl"] = ds.Ttl
+                });
+            }
+        }
+        else
+        {
+            var folder = System.IO.Path.GetDirectoryName(_evaluator.CurrentScriptPath) ?? "";
+            foreach (var (name, definition) in _evaluator.ReportContext.DatasetDefinitions.OrderBy(d => d.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(new Row
+                {
+                    ["name"] = name,
+                    ["folder_path"] = folder,
+                    ["access_level"] = DatasetAccessLevel.Private.ToString(),
+                    ["row_count"] = null,
+                    ["last_refresh"] = null,
+                    ["is_stale"] = "0",
+                    ["refresh_interval"] = definition.RefreshInterval,
+                    ["ttl"] = definition.Ttl
+                });
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+        WriteBatches(batches, append, CancellationToken.None);
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("eng.datasets is read-only.");
+
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
 public sealed class JobsDataSource : IDataSource
 {
     private readonly IJobHistoryStore? _store;

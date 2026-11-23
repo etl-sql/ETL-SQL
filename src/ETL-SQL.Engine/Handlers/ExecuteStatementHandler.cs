@@ -37,11 +37,15 @@ public class ExecuteStatementHandler : IStatementHandler
         }
 
         _logger.Debug("Executing procedure {ProcedureName}", stmt.ProcedureName);
-        var args = new List<(string? Name, object? Value)>();
+        var args = new List<(string? Name, object? Value, string? OutputVariable)>();
         foreach (var param in stmt.Parameters)
         {
             var val = await context.EvaluateValue(param.Expression, new Row());
-            args.Add((param.Name, val));
+            // @arg OUTPUT names the caller's variable that receives the parameter's final value.
+            var output = param.IsOutput && param.Expression is VariableExpression target ? target.Name : null;
+            if (param.IsOutput && output is null)
+                throw new ExecutionException($"An OUTPUT argument to {stmt.ProcedureName} must be a variable.");
+            args.Add((param.Name, val, output));
         }
 
         await context.EvaluateProcedure(stmt.ProcedureName, args);

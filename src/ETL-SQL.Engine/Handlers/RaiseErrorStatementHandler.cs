@@ -28,6 +28,8 @@ public class RaiseErrorStatementHandler : IStatementHandler
         if (decimal.TryParse((await context.EvaluateValue(stmt.Severity, new Row()))?.ToString(), out var s)) severity = (int)s;
         var fullMsg = $"[{(severity >= 4 ? "ERROR" : "INFO")}] {msg}";
         _logger.WriteLine(fullMsg, severity >= 4 ? ConsoleColor.Red : ConsoleColor.White);
-        if (severity >= 4) throw new ExecutionException(fullMsg);
+        // The thrown error carries the bare text, as THROW's does: ERROR_MESSAGE() in a CATCH block
+        // returns what the script raised, not the console line's [ERROR] prefix.
+        if (severity >= 4) throw new ExecutionException(msg, severity: severity);
     }
 }

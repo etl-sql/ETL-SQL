@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Fixed `EXECUTE proc @var OUTPUT` on a local procedure ignoring `OUTPUT`: the caller's variable kept its old value. The parameter's final value is now written back, also after `RETURN`, for positional and named arguments; an `OUTPUT` argument that is not a variable is an error (`RV02`).
+
+- Fixed `ERROR_MESSAGE()` after `RAISERROR` returning the console prefix (`[ERROR] oops`) instead of the message raised. The console line keeps the prefix (`RV02`).
+
+- Added `eng.datasets`, the datasets visible to the caller. `SHOW DATASETS` was retired in favour of `eng.tables`, which never listed datasets; the retirement message now points at `eng.datasets` (`RV02`).
+
+- Changed `eng.jobs`, `SHOW JOBS` and the Orchestrator job listing to show a job with no schedule as `MANUAL` with no next run, instead of `EVERY 1 HOUR` (`RV02`).
+
 - Changed `CREATE JOB` without a linked schedule to run only when triggered. It used to fire on the next scheduler tick and then every hour, although `eng.jobs` and the grammar never offered an interval. Link a schedule (`CREATE SCHEDULE`, `ALTER JOB ... ADD SCHEDULE`) to run a job on a timetable; subscription jobs keep their own schedules (`RV02`).
 
 - Fixed Studio practice runs on a sandboxed Orchestrator running as the pipeline's owner instead of the learner who submitted the text (`SC05` regression). Text submitted for a revision run now carries the submitter's identity, inside the job's tenant; a manual trigger still runs as the owner (`RV02`).
