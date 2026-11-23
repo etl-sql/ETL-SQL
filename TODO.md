@@ -33,7 +33,7 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
   local run counts.
 - [ ] A green Release Evidence dispatch on the final candidate, then a green release dry run on it.
 - [ ] Tag Release on the candidate with the `release-approval` review completed; Release publishes
-  the GitHub Release and calls `publish-marketplace.yml` (see "After publication").
+  the GitHub Release and calls `publish-marketplace.yml`.
 - [ ] Run every delivery path on the final candidate, as the v0.21.0 delivery matrix did.
 - [ ] Build the deployment-profile claim matrix from evidence; promote no unfinished Shared SaaS or
   hosted-production outcome.
@@ -44,9 +44,6 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 
 After publication:
 
-- [ ] **Marketplace trusted publisher.** v0.23.0 is the first Release that calls
-  `publish-marketplace.yml`. Once it has published, delete the Marketplace trusted-publisher entry
-  (for `release.yml` or `publish-marketplace.yml`) that the OIDC token did not use.
 - [ ] **DOC10 Manual check of the VS Code Get Started walkthrough (owner).** Run
   `etlsql.getStarted` on a fresh VS Code install from the Marketplace build and confirm each step
   (open sample, run, preview dashboard, cookbooks). S
