@@ -8,14 +8,14 @@ signature checked while it is decrypted.
 
 ```sql
 -- Files
-ENCRYPT FILE '<source>' [TO '<destination>']
+ENCRYPT FILE '<source>' [TO [DIRECTORY] '<destination>']
     { PASSWORD '<passphrase>'
     | KEYFILE '<rsa_public_key.pem>'
     | PGP_KEY '<recipient_public_key.asc>'
         [SIGNING_KEY '<your_private_key.asc>' [SIGNING_PASSWORD '<key_passphrase>']] }
     [WITH (OVERWRITE = ON | OFF, DELETE_SOURCE = ON | OFF)];
 
-DECRYPT FILE '<source>' [TO '<destination>']
+DECRYPT FILE '<source>' [TO [DIRECTORY] '<destination>']
     { PASSWORD '<passphrase>'
     | KEYFILE '<rsa_private_key.pem>' [PASSWORD '<key_passphrase>']
     | PGP_KEY '<your_private_key.asc>' [PASSWORD '<key_passphrase>']
@@ -45,8 +45,10 @@ DECRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' 
 - `TO` is optional on `ENCRYPT FILE` and `DECRYPT FILE` (and never encrypts in place). When omitted
   on `ENCRYPT FILE`, it writes next to the source with `.pgp` appended for `PGP_KEY`, or `.enc`
   appended for `PASSWORD` and `KEYFILE`. When omitted on `DECRYPT FILE`, it removes a `.pgp` or
-  `.enc` suffix and errors on any other file name rather than guessing. Existing destinations follow
-  `OVERWRITE`.
+  `.enc` suffix and errors on any other file name rather than guessing. `TO DIRECTORY '<dir>'`
+  writes that same derived filename inside `<dir>` (creating `<dir>` if needed). Existing
+  destinations follow `OVERWRITE`. `DATE_SUFFIX` is not supported on `ENCRYPT FILE` or
+  `DECRYPT FILE` (only `COPY`, `MOVE`, and `RENAME`).
 - The source file is left in place unless `DELETE_SOURCE = ON` (see the vendor-drop example).
 - `ENCRYPT DIRECTORY` encrypts every file, subfolders included, and writes each one as `<name>.enc`
   under the destination with the same folder layout. `DECRYPT DIRECTORY` decrypts only `.enc` files

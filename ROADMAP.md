@@ -364,7 +364,7 @@ tested and matches its neighbors; and the docs-versus-registry check passes.
 
 ### File Operations — `ENCRYPT FILE` / `DECRYPT FILE` Match Their Documentation
 
-**Status:** In Progress (v0.23.0: FO05 and FO08 decisions in `TODO.md` 2.3)  
+**Status:** In Progress (v0.23.0: FO07 and FO08 shipped; FO05 decision in `TODO.md` 2.3)  
 **Horizon:** Next  
 **Authoritative design:** none yet; [ENCRYPT / DECRYPT FILE](docs/reference/file-operations/encrypt-file.md)
 is the reference page, and [`ExtensionParser.cs`](src/ETL-SQL.Core/Parser/Components/ExtensionParser.cs)
@@ -404,9 +404,7 @@ Selected for v0.23.0 (owner, 2026-11-23): FO07 shipped; FO05 and FO08 decisions 
   - *Evidence:* `CryptoUtils.EncryptFile` / `DecryptFile` (`src/ETL-SQL.Core/Common/CryptoUtils.cs`) only pass `HashAlgorithmName? algo` into `DeriveFileKeys` (PBKDF2 PRF hash; default `SHA256`, 600,000 iterations). It does not change the cipher (always AES-256-CBC), does not change the MAC (always `HMACSHA256`), and does not apply to `KEYFILE` (RSA-OAEP-SHA256 + AES-256) or `PGP_KEY` (OpenPGP). Crucially, the v2 file header (`FileMagicV2` + salt + IV) does not record which PBKDF2 hash was used, so exposing a non-default KDF hash would force callers to remember and repeat it on `DECRYPT FILE` or get a generic wrong-password failure. The encryption method is already unambiguously chosen by the `PASSWORD` / `KEYFILE` / `PGP_KEY` clause, and `encrypt-file.md` already matches.
   - *If approved:* close `FO05` with a brief note in `encrypt-file.md` and a negative test pinning that `WITH (ALGORITHM = ...)` is rejected.
 
-- **FO08 recommendation (`TO DIRECTORY` and `DATE_SUFFIX` on `ENCRYPT`/`DECRYPT` and `COMPRESS`/`DECOMPRESS`): support `TO DIRECTORY` for all four, and keep `DATE_SUFFIX` restricted to `COPY`, `MOVE`, and `RENAME`.**
-  - *Evidence:* `docs/reference/file-operations/compress-file.md` already documents `DECOMPRESS FILE '<source>' [TO [DIRECTORY] '<dest>']`, and `ExtensionParser.cs` already parses `TO DIRECTORY` on every `FileOperationStatement`, but `FileOperationStatementHandler.ApplyDestinationNamingOptionsAsync` throws a blanket error for anything outside `COPY`/`MOVE`/`RENAME`. Each of the four operations already has an unambiguous default output filename rule when `TO` is omitted (`ENCRYPT`: `+.pgp`/`.enc`; `DECRYPT`: strip `.pgp`/`.enc`; `COMPRESS`: `+.zip`/`.gz`/`.tar`/`.tar.gz`; `DECOMPRESS`: extract into directory for archives or strip `.gz` for single-file gzip), so `TO DIRECTORY '<dir>'` cleanly places that default output inside `<dir>`. By contrast, `DATE_SUFFIX` has ambiguous double-extension placement on `.csv.enc` / `.tar.gz` and is already scoped to `COPY`/`MOVE`/`RENAME` in `ExtensionParser.cs`.
-  - *If approved:* allow `TO DIRECTORY` on `ENCRYPT FILE`, `DECRYPT FILE`, `COMPRESS FILE`, and `DECOMPRESS FILE` with tests for each, update `encrypt-file.md` and `compress-file.md`, and keep `DATE_SUFFIX` rejected with an operation-specific error.
+- **FO08 decision (approved 2026-11-23, shipped in v0.23.0):** Support `TO DIRECTORY` for `ENCRYPT FILE`, `DECRYPT FILE`, `COMPRESS FILE`, and `DECOMPRESS FILE` using each operation's default filename/extraction semantics; keep `DATE_SUFFIX` restricted to `COPY`, `MOVE`, and `RENAME` with operation-specific errors.
 
 **Acceptance evidence:** `ALGORITHM` and `TO DIRECTORY` each have a recorded decision and the
 reference states it; every file connector page that takes `COMPRESS`/`ENCRYPT` documents both with a

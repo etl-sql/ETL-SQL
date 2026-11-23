@@ -101,7 +101,6 @@ the item's ROADMAP entry and get the owner's answer before writing code.
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
 | FO05 | **`ENCRYPT FILE` `ALGORITHM` decision** ([ROADMAP](ROADMAP.md#file-operations--encrypt-file--decrypt-file-match-their-documentation)). `CryptoUtils.EncryptFile` and `DecryptFile` take an optional `HashAlgorithmName` the statement never passes. Recommend exposing it (and what it controls) or leaving it out of the language; the method already follows from the clause, so the documented `ALGORITHM = 'AES256' \| 'PGP'` is not needed. **Finish line:** owner decision recorded; `encrypt-file.md`, grammar, help and tests match it. | — | D |
-| FO08 | **`TO DIRECTORY` for `ENCRYPT`/`DECRYPT` and `COMPRESS`/`DECOMPRESS`** ([ROADMAP](ROADMAP.md#file-operations--encrypt-file--decrypt-file-match-their-documentation)). `TO DIRECTORY` and `DATE_SUFFIX` throw for anything but copy, move and rename. **Finish line:** owner decision recorded; either they work for these operations (tests for each) or the reference pages say they are rejected and the error names the operation. | — | D |
 
 ## Tier 3 — if time allows
 

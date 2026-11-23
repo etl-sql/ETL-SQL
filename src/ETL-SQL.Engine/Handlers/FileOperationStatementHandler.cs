@@ -151,6 +151,7 @@ public class FileOperationStatementHandler(
 
         string sourceVal = sourceOperand.RawValue;
         string source = sourceOperand.ResolvedPath;
+        bool destIsDirectory = stmt.DestinationIsDirectory || destOperand.IsDirectory;
         string? destVal = destOperand.RawValue != null ? destOperand.ResolvedPath : null;
         destVal = await ApplyDestinationNamingOptionsAsync(stmt, context, source, destVal, remote: false, isDestinationDirectory: destOperand.IsDirectory);
         string? dest = destVal != null ? context.ResolvePath(destVal) : null;
@@ -160,16 +161,29 @@ public class FileOperationStatementHandler(
             : FileSystemAccessKind.Read;
         source = pathAuthorizer.Authorize(context, source, sourceAccess,
             validateFileType: stmt.Type != FileOpType.Compress || !Directory.Exists(source)).CanonicalPath;
-        if (dest == null && stmt.Destination == null && stmt.Type is FileOpType.Encrypt or FileOpType.Decrypt)
+        if (stmt.Type is FileOpType.Encrypt or FileOpType.Decrypt)
         {
-            dest = DeriveDefaultCryptoDestination(stmt, source, sourceVal);
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = DeriveDefaultCryptoDestination(stmt, source, sourceVal, viaToDirectory: false);
+            }
+            else if (dest != null && destIsDirectory)
+            {
+                var defaultFileName = Path.GetFileName(DeriveDefaultCryptoDestination(stmt, source, sourceVal, viaToDirectory: true));
+                dest = Path.Combine(dest, defaultFileName);
+            }
         }
         else if (stmt.Type == FileOpType.Compress)
         {
-            archiveFormat = SafeArchiveService.ResolveFormat(formatOpt, dest, defaultToZipIfUnknown: true);
+            archiveFormat = SafeArchiveService.ResolveFormat(formatOpt, destIsDirectory ? null : dest, defaultToZipIfUnknown: true);
             if (dest == null && stmt.Destination == null)
             {
                 dest = SafeArchiveService.DeriveDefaultCompressDestination(source, archiveFormat.Value, Directory.Exists(source));
+            }
+            else if (dest != null && destIsDirectory)
+            {
+                var defaultFileName = Path.GetFileName(SafeArchiveService.DeriveDefaultCompressDestination(source, archiveFormat.Value, Directory.Exists(source)));
+                dest = Path.Combine(dest, defaultFileName);
             }
         }
         else if (stmt.Type == FileOpType.Decompress)
@@ -181,7 +195,7 @@ public class FileOperationStatementHandler(
             }
             if (archiveFormat == ArchiveFormat.Gzip && dest != null)
             {
-                bool looksLikeDir = stmt.DestinationIsDirectory
+                bool looksLikeDir = destIsDirectory
                     || (destVal != null && (destVal.EndsWith('/') || destVal.EndsWith('\\')))
                     || Directory.Exists(dest);
                 decompressGzipToFile = !looksLikeDir;
@@ -345,6 +359,10 @@ public class FileOperationStatementHandler(
                             throw new ExecutionException($"Source for COMPRESS FILE does not exist: {source}");
                         }
 
+                        var compressParent = Path.GetDirectoryName(compressDest.CanonicalPath);
+                        if (!string.IsNullOrEmpty(compressParent))
+                            Directory.CreateDirectory(compressParent);
+
                         await using var destStream = pathAuthorizer.OpenValidatedWrite(context, compressDest,
                             truncate: true, failIfExists: true);
                         if (Directory.Exists(source))
@@ -390,6 +408,9 @@ public class FileOperationStatementHandler(
                         // Security Hardening: Block writing to script files and dangerous types
                         context.SecurityService.ValidateWriteAccess(dest);
                         context.SecurityService.ValidateFileType(dest);
+                        var encryptParent = Path.GetDirectoryName(dest);
+                        if (!string.IsNullOrEmpty(encryptParent))
+                            Directory.CreateDirectory(encryptParent);
 
                         if (stmt.PgpKey != null)
                         {
@@ -425,6 +446,9 @@ public class FileOperationStatementHandler(
                         // Security Hardening: Block writing to script files and dangerous types
                         context.SecurityService.ValidateWriteAccess(dest);
                         context.SecurityService.ValidateFileType(dest);
+                        var decryptParent = Path.GetDirectoryName(dest);
+                        if (!string.IsNullOrEmpty(decryptParent))
+                            Directory.CreateDirectory(decryptParent);
 
                         if (stmt.PgpKey != null)
                         {
@@ -476,7 +500,11 @@ public class FileOperationStatementHandler(
         await Task.CompletedTask;
     }
 
-    private static string DeriveDefaultCryptoDestination(FileOperationStatement stmt, string source, string sourceDisplay)
+    private static string DeriveDefaultCryptoDestination(
+        FileOperationStatement stmt,
+        string source,
+        string sourceDisplay,
+        bool viaToDirectory)
     {
         if (stmt.Type == FileOpType.Encrypt)
         {
@@ -493,8 +521,9 @@ public class FileOperationStatementHandler(
 
         if (string.IsNullOrEmpty(derived) || string.IsNullOrEmpty(Path.GetFileName(derived)))
         {
+            var form = viaToDirectory ? "with TO DIRECTORY" : "without TO";
             throw new ExecutionException(
-                $"DECRYPT FILE without TO requires a '.pgp' or '.enc' file extension on '{sourceDisplay}', or specify TO '<destination>'.",
+                $"DECRYPT FILE {form} requires a '.pgp' or '.enc' file extension on '{sourceDisplay}', or specify TO '<destination>'.",
                 null, stmt.Line, stmt.Column);
         }
 
@@ -783,11 +812,23 @@ public class FileOperationStatementHandler(
         if (stmt.DateSuffix == null && !destIsDir)
             return destination;
 
-        if (stmt.Type is not (FileOpType.Copy or FileOpType.Move or FileOpType.Rename))
-            throw new ExecutionException("DATE_SUFFIX and TO DIRECTORY are only supported for COPY FILE, MOVE FILE, and RENAME FILE.", null, stmt.Line, stmt.Column);
+        var opName = $"{stmt.Type.ToString().ToUpperInvariant()} FILE";
+        if (stmt.DateSuffix != null && stmt.Type is not (FileOpType.Copy or FileOpType.Move or FileOpType.Rename))
+            throw new ExecutionException($"DATE_SUFFIX is not supported for {opName}. It is only supported for COPY FILE, MOVE FILE, and RENAME FILE.", null, stmt.Line, stmt.Column);
+
+        if (destIsDir && stmt.Type is not (FileOpType.Copy or FileOpType.Move or FileOpType.Rename
+            or FileOpType.Encrypt or FileOpType.Decrypt or FileOpType.Compress or FileOpType.Decompress))
+        {
+            throw new ExecutionException($"TO DIRECTORY is not supported for {opName}.", null, stmt.Line, stmt.Column);
+        }
 
         if (string.IsNullOrWhiteSpace(destination))
-            throw new ExecutionException($"{stmt.Type}_FILE requires a destination when using DATE_SUFFIX or TO DIRECTORY.", null, stmt.Line, stmt.Column);
+            throw new ExecutionException($"{opName} requires a destination when using DATE_SUFFIX or TO DIRECTORY.", null, stmt.Line, stmt.Column);
+
+        // Encrypt, Decrypt, Compress, and Decompress resolve TO DIRECTORY using each operation's
+        // default filename/extraction semantics in Execute().
+        if (stmt.Type is FileOpType.Encrypt or FileOpType.Decrypt or FileOpType.Compress or FileOpType.Decompress)
+            return destination;
 
         var finalDestination = destination;
         if (destIsDir)

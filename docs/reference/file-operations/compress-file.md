@@ -8,7 +8,7 @@ Compresses a file or directory tree into an archive (`.zip`, `.gz`, `.tar`, or `
 
 ### 1. File Compression
 ```sql
-COMPRESS FILE '<source_file_path>' [TO '<target_archive_path>']
+COMPRESS FILE '<source_file_path>' [TO [DIRECTORY] '<target_path>']
 [WITH (OVERWRITE = ON | OFF, DELETE_SOURCE = ON | OFF, FORMAT = 'ZIP' | 'GZIP' | 'TAR' | 'TAR_GZ')];
 ```
 
@@ -47,6 +47,7 @@ When `TO` is omitted:
 - `DECOMPRESS FILE` / `DECOMPRESS DIRECTORY` strips `.tar.gz`, `.tgz`, `.zip`, `.tar`, or `.gz` in the same directory (for example, `'x.csv.gz'` -> `'x.csv'`, `'x.zip'` -> `'x'`).
 
 - `COMPRESS DIRECTORY` always includes subfolders.
+- `TO DIRECTORY '<dir>'` on `COMPRESS FILE` writes the derived archive name (`<source>.zip`, `.gz`, `.tar`, or `.tar.gz` per `FORMAT`) inside `<dir>`. On `DECOMPRESS FILE`, `TO DIRECTORY '<dir>'` extracts archives (or the decompressed single `.gz` file) into `<dir>`. `DATE_SUFFIX` is not supported on `COMPRESS` or `DECOMPRESS` (only `COPY`, `MOVE`, and `RENAME`).
 - Inspect archive entries without extracting to disk using [`ARCHIVE_LIST`](../functions/file-path/archive_list.md).
 - Any other `WITH` option is a syntax error that lists the accepted options.
 
