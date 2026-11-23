@@ -13,8 +13,8 @@ Each task's design, boundaries and acceptance evidence stay in its linked `ROADM
 | Tier | What is in it |
 | :--- | :--- |
 | [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Nightly streak, release tooling, merge-gate proofs, the script and test review |
-| [Tier 2 — next](#tier-2--next) | PR regression lane proof |
-| [Tier 3 — if time allows](#tier-3--if-time-allows) | 100M external join CPU regression |
+| [Tier 2 — next](#tier-2--next) | PR regression lane proof; bugs and hardening found in the reviews (RF01–RF05) |
+| [Tier 3 — if time allows](#tier-3--if-time-allows) | Allocation-noise watch |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
 outcome in `CHANGELOG.md` (or the record doc for its section) and delete it. Deferred initiatives
@@ -86,6 +86,19 @@ All five slices are done (`RV01` lane/orphan audit, `RV02` engine/language/conne
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
 | RG02 | **PR regression lane for ordinary tests.** Added `testProjects` / `testProjectRules` and narrow `.cs` test rules in `scripts/ci-impact.json` and `scripts/select-ci-lanes.mjs`, enabled `-ResultsDirectory` on `-Lane portal` in `scripts/test-lane.ps1`, and wired conditional PR regression steps into `build-verification` (`engine`, `language-server`) and `portal-smoke` (`portal`) in `.github/workflows/ci.yml` while keeping push sharding in `engine-coverage` (`test-ci-impact.mjs`, `test-engine-coverage.mjs`, `test-hosted-release-evidence.mjs`, `test-merge-gate.mjs`, and workflow checks pass). **Left:** prove with a PR whose only change is a failing new test outside the smoke filters. | RG01 | M |
+
+### 2.2 Bugs and hardening found in the v0.23.0 reviews
+
+Each was checked against the code on 2026-11-23. Write the failing test first; if what the code does
+looks wrong, report it rather than writing an assertion that accepts it.
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| RF01 | **Local directory functions follow links out of the authorized root.** In `src/ETL-SQL.Engine/Functions/FileFunctions.cs`, `DIRECTORY_SIZE` and `DIRECTORY_FILE_COUNT` (`AccumulateDirectoryStats`) authorize only the root through `AuthorizeLocalPath`, then recurse into every subdirectory, junctions and symlinks included. `FILE_LIST`/`DIRECTORY` uses `SearchOption.AllDirectories` with none of the runaway/depth checks the other two apply, and accepts only `TRUE` for its recursive flag where the others also take `ON` and `1`. **Finish line:** tests with a Windows junction and a Unix symlink pointing outside an allowed root show that recursion does not leave the root (skip link entries, or authorize each directory), `FILE_LIST` gets the same runaway/depth ceilings and flag spellings, and `docs/reference` states the link behavior. | — | M |
+| RF02 | **File connectors advertise `ENCRYPT` as `ON`/`OFF` only.** Six file connectors (`AvroConnector`, `ExcelConnector` and the flat-file, JSON, Parquet and XML connectors; `git grep '"ENCRYPT", new\[\] { "ON", "OFF" }'`) list only `ON`/`OFF` in `GetOptionValues`, so completion and help hide the key sources their reference pages document (`MACHINE`, `KEYFILE`, `PASSWORD`, `PORTAL`). **Finish line:** each connector lists the values it accepts, and `ConnectorMetadataContractTests` proves every listed `ENCRYPT` value is accepted by that connector. | — | S |
+| RF03 | **Terminal charts with rows but nothing plottable.** e1dfbe7d8 made empty supported charts show "No data available for this chart." and fixed a box plot whose rows were all too short drawing an empty untitled frame. **Finish line:** for every chart type in `TerminalRenderer` (and the pie path in `PlotPlanTerminalRenderer`), a test with rows that all fail to parse shows the no-data panel, not an empty frame or a blank chart. Also make the rolled-up pie `Other` value print with the same precision as the other slices (it is rounded to two decimals today). | — | S |
+| RF04 | **`ExternalToolSecurityTests` depend on the host's `%TEMP%` ACL.** On a host whose temp folder grants write access to an extra principal (Claude Code's sandbox adds AppContainer capability SIDs `S-1-15-3-…`), 16 tests (`XT01_LocalCatalogRejectsEscapeAliasesAcrossAllOperations`, the `XT02` what-if tests) fail because `ToolPathGuard` correctly rejects the tool root. **Finish line:** the tests create their root with an explicit protected ACL (owner, SYSTEM, Administrators) so they pass under such a temp folder, without loosening the guard. | — | S |
+| RF05 | **`BufferManager_FifoOrder_Memory` hangs instead of failing.** If reservations stopped being first-in-first-out, `await task2` would wait forever. **Finish line:** bounded waits (`WaitAsync` with a timeout) so an ordering break fails with a message. | — | XS |
 
 
 ## Tier 3 — if time allows
