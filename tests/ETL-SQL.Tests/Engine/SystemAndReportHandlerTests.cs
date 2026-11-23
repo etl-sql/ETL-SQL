@@ -75,46 +75,43 @@ namespace ETL_SQL.Tests.Engine
             Assert.Equal(0m, Scalar(eval, "err"));
         }
 
-        [Fact]
-        public async Task SystemVar_TotalSpilledBytes_Accessible()
+        // A fresh session has spilled nothing and cached nothing. The expansion ratio is 1 until a
+        // GROUPING SETS aggregation expands its input.
+        [Theory]
+        [InlineData("@@TOTAL_SPILLED_BYTES", 0)]
+        [InlineData("@@PARTITIONS_COUNT", 0)]
+        [InlineData("@@AGGREGATE_GROUPS_COUNT", 0)]
+        [InlineData("@@AGGREGATE_EXPANSION_RATIO", 1)]
+        [InlineData("@@SUBQUERY_CACHE_HITS", 0)]
+        [InlineData("@@SUBQUERY_CACHE_MISSES", 0)]
+        public async Task SystemVar_FreshSessionTelemetry(string variable, int expected)
         {
-            var eval = await RunAndGet("SELECT @@TOTAL_SPILLED_BYTES AS spilled;");
-            Assert.NotNull(eval.LastResult);
+            var eval = await RunAndGet($"SELECT {variable} AS v;");
+            Assert.Equal(expected, Scalar(eval, "v"));
         }
 
+        /// <summary>docs: 0 partitions and 0 bytes mean the operation fit in memory.</summary>
         [Fact]
-        public async Task SystemVar_PartitionsCount_Accessible()
+        public async Task SystemVar_InMemoryGroupBy_ReportsNoSpill()
         {
-            var eval = await RunAndGet("SELECT @@PARTITIONS_COUNT AS parts;");
-            Assert.NotNull(eval.LastResult);
+            var eval = await RunAndGet(
+                "CREATE TABLE #T (k INT, v INT); INSERT INTO #T VALUES (1, 1), (1, 2), (2, 3), (3, 4);" +
+                "SELECT k, SUM(v) AS t FROM #T GROUP BY k;" +
+                "SELECT @@PARTITIONS_COUNT AS parts, @@TOTAL_SPILLED_BYTES AS spilled;");
+            Assert.Equal(0m, Scalar(eval, "parts"));
+            Assert.Equal(0m, Scalar(eval, "spilled"));
         }
 
+        /// <summary>An uncorrelated scalar subquery runs once and is served from the cache after.</summary>
         [Fact]
-        public async Task SystemVar_AggregateGroupsCount_Accessible()
+        public async Task SystemVar_SubqueryCache_CountsOneMissThenHits()
         {
-            var eval = await RunAndGet("SELECT @@AGGREGATE_GROUPS_COUNT AS agg;");
-            Assert.NotNull(eval.LastResult);
-        }
-
-        [Fact]
-        public async Task SystemVar_AggregateExpansionRatio_Accessible()
-        {
-            var eval = await RunAndGet("SELECT @@AGGREGATE_EXPANSION_RATIO AS ratio;");
-            Assert.NotNull(eval.LastResult);
-        }
-
-        [Fact]
-        public async Task SystemVar_SubqueryCacheHits_Accessible()
-        {
-            var eval = await RunAndGet("SELECT @@SUBQUERY_CACHE_HITS AS hits;");
-            Assert.NotNull(eval.LastResult);
-        }
-
-        [Fact]
-        public async Task SystemVar_SubqueryCacheMisses_Accessible()
-        {
-            var eval = await RunAndGet("SELECT @@SUBQUERY_CACHE_MISSES AS misses;");
-            Assert.NotNull(eval.LastResult);
+            var eval = await RunAndGet(
+                "CREATE TABLE #T (k INT, v INT); INSERT INTO #T VALUES (1, 1), (1, 2), (2, 3), (3, 4);" +
+                "SELECT k, (SELECT MAX(v) FROM #T) AS mx FROM #T;" +
+                "SELECT @@SUBQUERY_CACHE_MISSES AS misses, @@SUBQUERY_CACHE_HITS AS hits;");
+            Assert.Equal(1m, Scalar(eval, "misses"));
+            Assert.Equal(3m, Scalar(eval, "hits"));
         }
 
         [Fact]
@@ -572,12 +569,14 @@ namespace ETL_SQL.Tests.Engine
         // ── SHOW PROFILE ──────────────────────────────────────────────────────
 
         [Fact]
-        public async Task Profile_AfterSelect_HasRows()
+        public async Task Profile_AfterSelect_RecordsTheStatementAndItsRows()
         {
             var eval = await RunAndGet(
-                "SELECT 1 AS n;" +
+                "SELECT 7 AS profiled_value UNION ALL SELECT 8 AS profiled_value;" +
                 "SELECT * FROM eng.profile;");
-            Assert.NotEmpty(eval.LastResult!.Rows);
+            var row = Assert.Single(eval.LastResult!.Rows,
+                r => r["statement"]?.ToString()?.Contains("profiled_value", StringComparison.Ordinal) == true);
+            Assert.Equal(2m, Convert.ToDecimal(row["rows_processed"]));
         }
 
         // ── SHOW VARIABLES ────────────────────────────────────────────────────

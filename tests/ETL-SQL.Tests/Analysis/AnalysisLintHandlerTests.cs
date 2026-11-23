@@ -136,9 +136,10 @@ namespace ETL_SQL.Tests.Analysis.Analysis
             var eval = NewEval();
             await eval.Evaluate(TestHelpers.Parse($"LINT '{path}';"));
 
-            Assert.NotNull(eval.LastResult);
-            Assert.True(eval.LastResult!.Rows.Count >= 2,
-                $"Expected at least 2 findings, got {eval.LastResult.Rows.Count}");
+            // Each unfiltered DELETE and UPDATE is both fully materializing and unsafe.
+            Assert.Equal(
+                new[] { "FullyMaterializingDml/Warning", "FullyMaterializingDml/Warning", "SafeDeleteUpdate/Error", "SafeDeleteUpdate/Error" },
+                eval.LastResult!.Rows.Select(r => $"{r["Rule"]}/{r["Severity"]}").OrderBy(s => s, StringComparer.Ordinal));
         }
 
         // ── Error paths ────────────────────────────────────────────────────────
@@ -182,8 +183,8 @@ namespace ETL_SQL.Tests.Analysis.Analysis
         [Fact]
         public async Task Lint_FindingsAreSortedByLineNumber()
         {
-            // Two violations: line 3 and line 1
-            var script = "SELECT * FROM A;\nDECLARE @x INT;\nDELETE FROM B;";
+            // Each rule reports lines 1 and 3, so the rules' output concatenated is 1, 3, 1, 3.
+            var script = "DELETE FROM A;\nSELECT 1;\nUPDATE C SET x=1;";
             var path = WriteScript("sorted.sql", script);
 
             var eval = NewEval();
@@ -194,9 +195,7 @@ namespace ETL_SQL.Tests.Analysis.Analysis
                 .Select(r => Convert.ToInt32(r["Line"]))
                 .ToList();
 
-            // Verify sorted ascending
-            for (int i = 1; i < lines.Count; i++)
-                Assert.True(lines[i] >= lines[i - 1], "Findings should be sorted by line number ascending");
+            Assert.Equal(new[] { 1, 1, 3, 3 }, lines);
         }
 
         // ── Connection rules ───────────────────────────────────────────────────
