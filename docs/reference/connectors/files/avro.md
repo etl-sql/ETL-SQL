@@ -19,8 +19,8 @@ schema file.
 > **Write-time encryption:** `AVRO` does not support the `COMPRESS` ZIP wrapper option. When
 > `ENCRYPT=ON` is set, writes stage the Avro file and then encrypt it (appending `.pgp`); reads
 > decrypt first and then decode Avro. `PASSWORD`, `KEYFILE` (+ optional `PASSPHRASE`),
-> `ENCRYPT=MACHINE`, and `ENCRYPT=PORTAL` are mutually exclusive key sources (`MACHINE` takes
-> precedence over `KEYFILE`, and `KEYFILE` takes precedence over `PASSWORD`). Enabling encryption
+> `ENCRYPT=MACHINE`, and `ENCRYPT=PORTAL` are alternative key sources: set one. If several are set, `MACHINE` wins over `KEYFILE`,
+> `KEYFILE` over `PASSWORD`, and a `PASSWORD` option replaces the `ENCRYPT=PORTAL` key. Enabling encryption
 > without a key source fails closed.
 
 ## Authentication

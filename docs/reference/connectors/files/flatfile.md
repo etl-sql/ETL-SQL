@@ -42,8 +42,8 @@ Aliases: `CSV`, `TSV`
 > **Write-time compression and encryption:** When both `COMPRESS=ON` and `ENCRYPT=ON` are set,
 > writes always compress (ZIP) first and then encrypt; reads reverse the order (decrypt, then
 > unzip). `PASSWORD`, `KEYFILE` (+ optional `PASSPHRASE`), `ENCRYPT=MACHINE`, and `ENCRYPT=PORTAL`
-> are mutually exclusive key sources (`MACHINE` takes precedence over `KEYFILE`, and `KEYFILE` takes
-> precedence over `PASSWORD`). Enabling encryption without a key source fails closed.
+> are alternative key sources: set one. If several are set, `MACHINE` wins over `KEYFILE`,
+> `KEYFILE` over `PASSWORD`, and a `PASSWORD` option replaces the `ENCRYPT=PORTAL` key. Enabling encryption without a key source fails closed.
 
 Schema-resilient reads require a destination/template schema (such as the destination table schema
 supplied during `BULK INSERT`). `STRICT_SCHEMA=ON` still fails on drift unless a resilience option

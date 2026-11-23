@@ -21,8 +21,8 @@ Hive, and data-lake systems — it compresses well and supports efficient column
 > (`COMPRESSION`, default `SNAPPY`) rather than the `COMPRESS` ZIP wrapper. When `ENCRYPT=ON` is
 > set, Parquet writes the compressed `.parquet` file first and then encrypts it (appending `.pgp`);
 > reads decrypt first and then decode Parquet. `PASSWORD`, `KEYFILE` (+ optional `PASSPHRASE`),
-> `ENCRYPT=MACHINE`, and `ENCRYPT=PORTAL` are mutually exclusive key sources (`MACHINE` takes
-> precedence over `KEYFILE`, and `KEYFILE` takes precedence over `PASSWORD`). Enabling encryption
+> `ENCRYPT=MACHINE`, and `ENCRYPT=PORTAL` are alternative key sources: set one. If several are set, `MACHINE` wins over `KEYFILE`,
+> `KEYFILE` over `PASSWORD`, and a `PASSWORD` option replaces the `ENCRYPT=PORTAL` key. Enabling encryption
 > without a key source fails closed.
 
 ## Authentication

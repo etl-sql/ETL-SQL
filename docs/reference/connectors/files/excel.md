@@ -12,8 +12,8 @@ Aliases: `XLSX`, `XLS`
 | :--- | :--- | :---: |
 | `PATH` | Absolute path to the workbook | Yes (structured) |
 | `SHEET` | Target sheet name (default: first sheet; mutually exclusive with `SHEET_INDEX`) | No |
-| `SHEET_INDEX` | 1-based worksheet position (mutually exclusive with `SHEET`) | No |
-| `START_ROW` | 1-based row number where the header or data begins, skipping banner rows without needing an explicit `RANGE` end cell | No |
+| `SHEET_INDEX` | 1-based worksheet position (mutually exclusive with `SHEET`). Reads only: a write with it fails; use `SHEET` to name the sheet to write | No |
+| `START_ROW` | 1-based row number where the header or data begins, skipping banner rows without needing an explicit `RANGE` end cell. Reads only: a write with it fails | No |
 | `HEADER` | `ON`/`OFF` — treat first row as column names (default: `ON`) | No |
 | `RANGE` | Explicit cell range to read (e.g. `'A1:F500'`) | No |
 | `STRICT_SCHEMA` | `ON`/`OFF` — enforce column count matching when a template schema is supplied (default: `OFF`) | No |
@@ -32,8 +32,8 @@ Aliases: `XLSX`, `XLS`
 > **Write-time compression and encryption:** When both `COMPRESS=ON` and `ENCRYPT=ON` are set,
 > writes always compress (ZIP) first and then encrypt; reads reverse the order (decrypt, then
 > unzip). `PASSWORD`, `KEYFILE` (+ optional `PASSPHRASE`), `ENCRYPT=MACHINE`, and `ENCRYPT=PORTAL`
-> are mutually exclusive key sources (`MACHINE` takes precedence over `KEYFILE`, and `KEYFILE` takes
-> precedence over `PASSWORD`). Enabling encryption without a key source fails closed.
+> are alternative key sources: set one. If several are set, `MACHINE` wins over `KEYFILE`,
+> `KEYFILE` over `PASSWORD`, and a `PASSWORD` option replaces the `ENCRYPT=PORTAL` key. Enabling encryption without a key source fails closed.
 
 Excel uses the same schema-resilience contract as [FLATFILE](flatfile.md): `STRICT_SCHEMA=ON` fails on
 unaccepted drift, `IGNORE_EXTRA_COLUMNS=ON` accepts surplus columns, `NULL_MISSING_COLUMNS=ON` fills

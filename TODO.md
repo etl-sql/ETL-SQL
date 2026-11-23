@@ -12,7 +12,7 @@ Each task's design, boundaries and acceptance evidence stay in its linked `ROADM
 
 | Tier | What is in it |
 | :--- | :--- |
-| [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Nightly streak, release tooling, merge-gate proofs, the script and test review, small features and docs |
+| [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Nightly streak, release tooling, merge-gate proofs, the script and test review |
 | [Tier 2 — next](#tier-2--next) | PR regression lane proof |
 | [Tier 3 — if time allows](#tier-3--if-time-allows) | 100M external join CPU regression |
 
@@ -90,15 +90,6 @@ RV01 (lane-membership and orphan audit) is done; its findings are in the plan.
   `Scale.Tests`, `PerfTests`, `Benchmarks`). M
 - [ ] **RV05 Portal and browser suites** (`Portal.Tests` 226 and `Portal.BrowserTests` 98 `.cs`
   files). M
-
-
-### 1.4 Small features and docs (selected 2026-11-23)
-
-Land by Thursday 2026-11-26 so Friday is free for release evidence; anything unfinished then goes
-back to its `ROADMAP.md` entry unchanged. Each row's boundaries are in its ROADMAP entry.
-
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
 
 
 ## Tier 2 — next
