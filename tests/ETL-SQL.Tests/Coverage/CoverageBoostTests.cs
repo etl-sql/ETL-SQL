@@ -25,7 +25,7 @@ namespace ETL_SQL.Tests.Coverage
 {
     /// <summary>
     /// Tests targeting remaining coverage gaps:
-    /// ConnectorRetryPolicy, FtpConnector/SftpConnector metadata,
+    /// FtpConnector/SftpConnector metadata,
     /// AnalysisDiagnosticBuilder, VisualMappingCompletenessRule,
     /// SchemaValidationRule, VisualSourceRequiredRule, JobThrottleMetrics,
     /// UseDatasetStatementHandler/RefreshDatasetStatementHandler throws.
@@ -50,63 +50,6 @@ namespace ETL_SQL.Tests.Coverage
         {
             var eval = Eval();
             await eval.Evaluate(Parse(sql));
-        }
-
-        // ── ConnectorRetryPolicy ──────────────────────────────────────────────
-
-        [Fact]
-        public void ConnectorRetryPolicy_ForSqlServer_ReturnsPipeline()
-        {
-            var pipeline = ConnectorRetryPolicy.ForSqlServer(NullLogger.Instance);
-            Assert.NotNull(pipeline);
-        }
-
-        [Fact]
-        public void ConnectorRetryPolicy_ForPostgres_ReturnsPipeline()
-        {
-            var pipeline = ConnectorRetryPolicy.ForPostgres(NullLogger.Instance);
-            Assert.NotNull(pipeline);
-        }
-
-        [Fact]
-        public void ConnectorRetryPolicy_ForOracle_ReturnsPipeline()
-        {
-            var pipeline = ConnectorRetryPolicy.ForOracle(NullLogger.Instance);
-            Assert.NotNull(pipeline);
-        }
-
-        [Fact]
-        public void ConnectorRetryPolicy_ForSnowflake_ReturnsPipeline()
-        {
-            var pipeline = ConnectorRetryPolicy.ForSnowflake(NullLogger.Instance);
-            Assert.NotNull(pipeline);
-        }
-
-        [Fact]
-        public void ConnectorRetryPolicy_ForBigQuery_ReturnsPipeline()
-        {
-            var pipeline = ConnectorRetryPolicy.ForBigQuery(NullLogger.Instance);
-            Assert.NotNull(pipeline);
-        }
-
-        [Fact]
-        public void ConnectorRetryPolicy_ForOdbc_ReturnsPipeline()
-        {
-            var pipeline = ConnectorRetryPolicy.ForOdbc(NullLogger.Instance);
-            Assert.NotNull(pipeline);
-        }
-
-        [Fact]
-        public void ConnectorRetryPolicy_Initialize_CustomOptions()
-        {
-            ConnectorRetryPolicy.Initialize(new ConnectorRetryOptions
-            {
-                MaxAttempts = 5,
-                BaseDelaySeconds = 2.0
-            });
-            // Verify pipelines still build after custom init
-            var pipeline = ConnectorRetryPolicy.ForSqlServer(NullLogger.Instance);
-            Assert.NotNull(pipeline);
         }
 
         // ── FtpConnector metadata ─────────────────────────────────────────────

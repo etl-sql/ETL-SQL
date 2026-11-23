@@ -168,6 +168,9 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IConnector, MongodbConnector>();
             services.AddSingleton<IConnector, Neo4jConnector>();
             services.AddSingleton<IConnector, KafkaConnector>();
+            // The database connectors' retry policy is process-wide; Connectors:Retry configures it.
+            ETL_SQL.Connectors.Shared.ConnectorRetryPolicy.Initialize(
+                ETL_SQL.Connectors.Shared.ConnectorRetryPolicy.OptionsFrom(configuration));
 
             services.AddSingleton<IConnector>(sp => new FtpConnector(
                 configuration["Connectors:Ftp:Host"] ?? "localhost",

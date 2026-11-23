@@ -169,6 +169,9 @@ namespace ETL_SQL.TUI
             services.AddSingleton<IConnector, ETL_SQL.Connectors.BigQuery.BigQueryConnector>();
             services.AddSingleton<IConnector, ETL_SQL.Connectors.Snowflake.SnowflakeConnector>();
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
+            // The database connectors' retry policy is process-wide; Connectors:Retry configures it.
+            ETL_SQL.Connectors.Shared.ConnectorRetryPolicy.Initialize(
+                ETL_SQL.Connectors.Shared.ConnectorRetryPolicy.OptionsFrom(configuration));
 
             // ── Evaluator + execution ──────────────────────────────────────────
             services.AddTransient<ExecutionSession>();

@@ -14,6 +14,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 - Fixed `EXECUTE proc @var OUTPUT` on a local procedure ignoring `OUTPUT`: the caller's variable kept its old value. The parameter's final value is now written back, also after `RETURN`, for positional and named arguments; an `OUTPUT` argument that is not a variable is an error (`RV02`).
 
+- Fixed `Connectors:Retry:MaxAttempts` and `Connectors:Retry:BaseDelaySeconds` having no effect. Both were documented and shipped in `appsettings.json`, but the database connectors always used 3 attempts and a 1-second delay. Out-of-range values fall back to those defaults (`RV02`).
 - Hardened sandbox writable mounts. They are now shared with the orchestrator through its own group (setgid `2770`, `--group-add`, umask `0007`) instead of being world-writable. A Windows host, or an orchestrator running under root's group, keeps the previous `0777` and umask `0000` (`RV02`).
 - Fixed a job firing every hour after its last schedule was detached with `ALTER JOB … REMOVE SCHEDULE`. A job with no schedule now returns to running only when triggered (`RV02`).
 - Fixed `SELECT *` from an empty temp table or CTE returning no columns, so an empty result lost its header and `ALTER TABLE` changes on an empty table could not be seen (`RV02`).
