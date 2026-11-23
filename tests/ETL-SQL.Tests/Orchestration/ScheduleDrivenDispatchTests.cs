@@ -164,6 +164,53 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.DoesNotContain(await _store.GetJobsDueByScheduleAsync(DateTime.UtcNow.AddDays(2)), job => job.Name == "ManualOnly");
         }
 
+        /// <summary>
+        /// After a linked run the job's NextRun holds the link's next occurrence. Detaching the last
+        /// schedule must not leave that date behind: the legacy interval path would pick the job up
+        /// when it passed and then re-arm it every hour.
+        /// </summary>
+        [Fact]
+        public async Task RemovingTheLastSchedule_ReturnsTheJobToManualOnly()
+        {
+            var services = ETL_SQL.App.DependencyInjectionSetup.BuildServiceProvider(
+                new Dictionary<string, string?> { ["Orchestrator:DatabasePath"] = _dbPath });
+            async Task Run(string sql) =>
+                await services.GetRequiredService<ETL_SQL.Engine.Evaluator>().Evaluate(
+                    new ETL_SQL.Core.Parser.Parser(new ETL_SQL.Core.Parser.Lexer(sql).Tokenize()).Parse());
+
+            await Run("CREATE JOB Nightly FOR SCRIPT 'jobs/nightly.etlsql';" +
+                      "CREATE SCHEDULE Night ON '0 2 * * *' AT TIME ZONE 'UTC';" +
+                      "ALTER JOB Nightly ADD SCHEDULE Night;");
+            var job = await _store.GetJobAsync((string?)null, "Nightly");
+            // What the scheduler records after a linked run: the link's next occurrence.
+            await _store.UpdateJobLastRunAsync(job!.Id, DateTime.Now, DateTime.Now.AddHours(1));
+
+            await Run("ALTER JOB Nightly REMOVE SCHEDULE Night;");
+
+            Assert.True((await _store.GetJobAsync((string?)null, "Nightly"))!.IsManualOnly);
+            Assert.DoesNotContain(await _store.GetDueJobsAsync(DateTime.Now.AddDays(2)), j => j.Name == "Nightly");
+        }
+
+        /// <summary>A job that still has another schedule keeps the schedule-derived NextRun.</summary>
+        [Fact]
+        public async Task RemovingOneOfTwoSchedules_KeepsTheJobScheduled()
+        {
+            await SaveJobAsync("Nightly");
+            await _store.SaveScheduleAsync(new ScheduleDefinition("A", "0 2 * * *", "UTC"));
+            await _store.SaveScheduleAsync(new ScheduleDefinition("B", "0 3 * * *", "UTC"));
+            var jobId = await JobIdOf("Nightly");
+            await _store.AddJobScheduleAsync(jobId, await ScheduleIdOf("A"), Now.AddHours(1));
+            await _store.AddJobScheduleAsync(jobId, await ScheduleIdOf("B"), Now.AddHours(2));
+            var next = Now.AddHours(1);
+            await _store.UpdateJobLastRunAsync(jobId, Now, next);
+
+            Assert.True(await _store.RemoveJobScheduleAsync(jobId, await ScheduleIdOf("A")));
+
+            var job = (await _store.GetJobAsync((string?)null, "Nightly"))!;
+            Assert.False(job.IsManualOnly);
+            Assert.Single(await _store.GetJobSchedulesAsync(jobId));
+        }
+
         // ── Attachment arms the link ──────────────────────────────────────────────
 
         [Fact]

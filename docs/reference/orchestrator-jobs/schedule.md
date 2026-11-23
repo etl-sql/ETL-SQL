@@ -30,6 +30,7 @@ ALTER JOB JobName ADD|REMOVE NOTIFICATION NotificationName
 - **RETRY_DELAY** — Initial retry delay in seconds; default `30`.
 - **CREATE OR ALTER** — Updates the definition and preserves existing links.
 - **CREATE OR REPLACE** — Fully redefines the job and removes its schedule and notification links.
+- **REMOVE SCHEDULE** — Detaches one schedule. A job left with no schedule runs only when triggered.
 
 ## Examples
 

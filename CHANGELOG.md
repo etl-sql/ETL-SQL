@@ -14,6 +14,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 - Fixed `EXECUTE proc @var OUTPUT` on a local procedure ignoring `OUTPUT`: the caller's variable kept its old value. The parameter's final value is now written back, also after `RETURN`, for positional and named arguments; an `OUTPUT` argument that is not a variable is an error (`RV02`).
 
+- Fixed a job firing every hour after its last schedule was detached with `ALTER JOB … REMOVE SCHEDULE`. A job with no schedule now returns to running only when triggered (`RV02`).
 - Fixed `SELECT *` from an empty temp table or CTE returning no columns, so an empty result lost its header and `ALTER TABLE` changes on an empty table could not be seen (`RV02`).
 - Fixed `ERROR_MESSAGE()` after `RAISERROR` returning the console prefix (`[ERROR] oops`) instead of the message raised. The console line keeps the prefix (`RV02`).
 
