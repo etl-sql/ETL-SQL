@@ -76,10 +76,7 @@ After publication:
 ### 1.3 Full script and test review
 
 Plan and findings: [v0.23.0 script and test review plan](docs/releases/v0.23.0-script-and-test-review-plan.md).
-RV01 (lane-membership and orphan audit), RV02 (engine, language, connector and corpus tests; 29 findings), RV03 (reporting, UI, Language Server and browser checks; 6 findings), and RV04 (orchestration, governance, hardening, security and scale tests; 4 findings) are done; their findings are in the plan.
-
-- [ ] **RV05 Portal and browser suites** (`Portal.Tests` 226 and `Portal.BrowserTests` 98 `.cs`
-  files). M
+All five slices are done (`RV01` lane/orphan audit, `RV02` engine/language/connectors/corpora, `RV03` reporting/UI/LSP/browser checks, `RV04` orchestration/governance/hardening/security/scale, and `RV05` Portal/browser suites); their findings are in the plan.
 
 
 ## Tier 2 — next

@@ -42,7 +42,7 @@ public sealed class AdminPanelFailureStateTests(PortalAdminFixture fixture)
 
         await page.GotoWithDiagnosticsAsync("/admin.html");
         await page.ClickAsync("[data-tab='folders']");
-        await page.WaitForTimeoutAsync(600);
+        await page.Locator($"tr:has-text('{first}')").First.WaitForAsync();
 
         await OpenAclAsync(page, first);
         var firstMarkup = await page.Locator("#aclTableWrap").InnerHTMLAsync();
@@ -51,7 +51,7 @@ public sealed class AdminPanelFailureStateTests(PortalAdminFixture fixture)
         // the versioned catalog; a glob for the bare /acl route would leave that read working.
         await page.RouteAsync("**/api/folders/*/acl/catalog", route => route.AbortAsync());
         await OpenAclAsync(page, second);
-        await page.WaitForTimeoutAsync(600);
+        await Expect(page.Locator("#aclTableWrap [data-portal-state='failed']")).ToBeVisibleAsync();
 
         await Expect(page.Locator("#aclFolderName")).ToContainTextAsync(second);
         var afterMarkup = await page.Locator("#aclTableWrap").InnerHTMLAsync();
@@ -84,14 +84,14 @@ public sealed class AdminPanelFailureStateTests(PortalAdminFixture fixture)
 
         await page.GotoWithDiagnosticsAsync("/admin.html");
         await page.ClickAsync("[data-tab='groups']");
-        await page.WaitForTimeoutAsync(800);
+        await page.Locator($"tr:has-text('{group}')").First.WaitForAsync();
 
         // `*` does not cross a '/' in a Playwright glob, so `members*` never matches
         // `members/catalog` — the first version of this aborted nothing and asserted against a
         // successful empty read.
         await page.RouteAsync("**/api/admin/groups/*/members/catalog*", route => route.AbortAsync());
         await page.Locator($"tr:has-text('{group}') [data-action='members']").First.ClickAsync();
-        await page.WaitForTimeoutAsync(600);
+        await Expect(page.Locator("#memberTableWrap [data-portal-state='failed']")).ToBeVisibleAsync();
 
         var markup = await page.Locator("#memberTableWrap").InnerHTMLAsync();
 
@@ -126,7 +126,7 @@ public sealed class AdminPanelFailureStateTests(PortalAdminFixture fixture)
     private static async Task OpenAclAsync(IPage page, string folderName)
     {
         await page.Locator($"tr:has-text('{folderName}') [data-action='acl']").First.ClickAsync();
-        await page.WaitForTimeoutAsync(500);
+        await Expect(page.Locator("#aclFolderName")).ToContainTextAsync(folderName);
     }
 
     private static async Task<Dictionary<string, string>> BearerAsync(IPage page)

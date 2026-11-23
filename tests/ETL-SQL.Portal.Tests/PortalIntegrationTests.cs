@@ -367,6 +367,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     {
         var token = await GetAdminTokenAsync();
         Assert.False(string.IsNullOrWhiteSpace(token), "Expected a JWT token");
+        Assert.Equal(3, token.Split('.').Length);
     }
 
     [Fact]
