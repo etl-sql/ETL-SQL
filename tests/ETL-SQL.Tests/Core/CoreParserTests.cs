@@ -244,9 +244,13 @@ namespace ETL_SQL.Tests.Core
             var parser = new Parser(tokens);
             var script = parser.Parse();
 
-            var select = (SelectStatement)script.Statements[0];
-            Assert.NotNull(select.QualifyClause);
-            Assert.IsType<BinaryExpression>(select.QualifyClause);
+            var select = Assert.IsType<SelectStatement>(Assert.Single(script.Statements));
+            var qualify = Assert.IsType<BinaryExpression>(select.QualifyClause);
+            Assert.Equal(TokenType.EQUALS, qualify.Operator);
+            var rowNum = Assert.IsType<FunctionCallExpression>(qualify.Left);
+            Assert.Equal("ROW_NUMBER", rowNum.FunctionName);
+            Assert.NotNull(rowNum.Window);
+            Assert.Equal(1m, Assert.IsType<LiteralExpression>(qualify.Right).Value);
         }
 
         [Fact]
@@ -258,11 +262,14 @@ namespace ETL_SQL.Tests.Core
             var parser = new Parser(tokens);
             var script = parser.Parse();
 
-            var select = (SelectStatement)script.Statements[0];
-            var col = select.Columns[0];
-            var fce = (FunctionCallExpression)col.Expression;
-            Assert.NotNull(fce.Filter);
-            Assert.IsType<BinaryExpression>(fce.Filter);
+            var select = Assert.IsType<SelectStatement>(Assert.Single(script.Statements));
+            var fce = Assert.IsType<FunctionCallExpression>(select.Columns[0].Expression);
+            Assert.Equal("SUM", fce.FunctionName);
+            Assert.NotNull(fce.Window);
+            var filter = Assert.IsType<BinaryExpression>(fce.Filter);
+            Assert.Equal(TokenType.GREATER_THAN, filter.Operator);
+            Assert.Equal("Val", Assert.IsType<IdentifierExpression>(filter.Left).Name);
+            Assert.Equal(10m, Assert.IsType<LiteralExpression>(filter.Right).Value);
         }
 
         [Fact]

@@ -678,10 +678,11 @@ namespace ETL_SQL.Tests.Coverage
         // ── LinterFactory ─────────────────────────────────────────────────────
 
         [Fact]
-        public void LinterFactory_CreateWithAllRules_WithoutProvider_ReturnsLinterWithRules()
+        public async Task LinterFactory_CreateWithAllRules_WithoutProvider_ReturnsLinterWithRules()
         {
             var linter = LinterFactory.CreateWithAllRules();
-            Assert.NotNull(linter);
+            var results = await linter.AnalyzeAsync(Parse("DELETE FROM #t;"), new DefaultLintContext());
+            Assert.Contains(results, r => r.RuleName == "SafeDeleteUpdate");
         }
 
         [Fact]
@@ -715,11 +716,12 @@ namespace ETL_SQL.Tests.Coverage
         }
 
         [Fact]
-        public void LinterFactory_CreateWithAllRules_WithServiceProvider_ReturnsLinterWithRules()
+        public async Task LinterFactory_CreateWithAllRules_WithServiceProvider_ReturnsLinterWithRules()
         {
             var sp = DependencyInjectionSetup.BuildServiceProvider();
             var linter = LinterFactory.CreateWithAllRules(sp);
-            Assert.NotNull(linter);
+            var results = await linter.AnalyzeAsync(Parse("DELETE FROM #t;"), new DefaultLintContext());
+            Assert.Contains(results, r => r.RuleName == "SafeDeleteUpdate");
         }
 
         // ── Additional AggregateWithoutGroupByRule edge cases ─────────────────

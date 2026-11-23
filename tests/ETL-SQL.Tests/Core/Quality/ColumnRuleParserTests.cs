@@ -173,8 +173,9 @@ namespace ETL_SQL.Tests.Core.Quality
             // between them is always the separator and never a boolean operator.
             var rule = Assert.IsType<BetweenRule>(ParseRule("BETWEEN IIF(1 = 1 AND 2 = 2, 5, 10) AND 100"));
 
-            Assert.NotNull(rule.Lower);
-            Assert.NotNull(rule.Upper);
+            var lower = Assert.IsType<CaseExpression>(rule.Lower);
+            Assert.Single(lower.WhenClauses);
+            Assert.Equal(100m, Assert.IsType<LiteralExpression>(rule.Upper).Value);
         }
 
         [Fact]
@@ -392,7 +393,10 @@ namespace ETL_SQL.Tests.Core.Quality
             // A predicate that consumed the AND would swallow the rule after it. Parenthesize to
             // put AND/OR inside one predicate.
             var compound = Assert.IsType<ExprRule>(ParseRule("EXPR (StartDate <= EndDate AND Qty > 0)"));
-            Assert.NotNull(compound.Predicate);
+            var and = Assert.IsType<BinaryExpression>(compound.Predicate);
+            Assert.Equal(TokenType.AND, and.Operator);
+            Assert.Equal(TokenType.LESS_EQUALS, Assert.IsType<BinaryExpression>(and.Left).Operator);
+            Assert.Equal(TokenType.GREATER_THAN, Assert.IsType<BinaryExpression>(and.Right).Operator);
         }
 
         [Fact]

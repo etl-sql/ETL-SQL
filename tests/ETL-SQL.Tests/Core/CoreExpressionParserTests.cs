@@ -22,8 +22,13 @@ namespace ETL_SQL.Tests.Core
         public void ParseArithmetic()
         {
             var expr = Parse("1 + 2 * 3 - 4 / 2");
-            Assert.NotNull(expr);
-            Assert.IsType<BinaryExpression>(expr);
+            var minus = Assert.IsType<BinaryExpression>(expr);
+            Assert.Equal(TokenType.MINUS, minus.Operator);
+            var plus = Assert.IsType<BinaryExpression>(minus.Left);
+            Assert.Equal(TokenType.PLUS, plus.Operator);
+            Assert.Equal(1m, Assert.IsType<LiteralExpression>(plus.Left).Value);
+            Assert.Equal(TokenType.STAR, Assert.IsType<BinaryExpression>(plus.Right).Operator);
+            Assert.Equal(TokenType.SLASH, Assert.IsType<BinaryExpression>(minus.Right).Operator);
         }
 
         [Theory]
@@ -60,8 +65,14 @@ namespace ETL_SQL.Tests.Core
         public void ParseComparison()
         {
             var expr = Parse("@val > 10 AND @val <= 20");
-            Assert.NotNull(expr);
-            Assert.IsType<BinaryExpression>(expr);
+            var and = Assert.IsType<BinaryExpression>(expr);
+            Assert.Equal(TokenType.AND, and.Operator);
+            var gt = Assert.IsType<BinaryExpression>(and.Left);
+            Assert.Equal(TokenType.GREATER_THAN, gt.Operator);
+            Assert.Equal(10m, Assert.IsType<LiteralExpression>(gt.Right).Value);
+            var lte = Assert.IsType<BinaryExpression>(and.Right);
+            Assert.Equal(TokenType.LESS_EQUALS, lte.Operator);
+            Assert.Equal(20m, Assert.IsType<LiteralExpression>(lte.Right).Value);
         }
 
         [Fact]

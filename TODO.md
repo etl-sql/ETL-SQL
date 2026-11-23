@@ -76,7 +76,7 @@ After publication:
 ### 1.3 Full script and test review
 
 Plan and findings: [v0.23.0 script and test review plan](docs/releases/v0.23.0-script-and-test-review-plan.md).
-RV01 (lane-membership and orphan audit) and RV02 (engine, language, connector and corpus tests; 28 findings) are done; their findings are in the plan.
+RV01 (lane-membership and orphan audit) and RV02 (engine, language, connector and corpus tests; 29 findings) are done; their findings are in the plan.
 
 - [ ] **RV03 Reporting, UI, Language Server and browser checks** (235 + 14 `.cs` files,
   198 `scripts/checks/test-*` files). M

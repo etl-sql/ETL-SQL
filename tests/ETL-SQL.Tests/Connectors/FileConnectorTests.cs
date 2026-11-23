@@ -1039,8 +1039,9 @@ namespace ETL_SQL.Tests.Connectors
             var props = new Dictionary<string, string> { ["SERVER"] = "myserver", ["DATABASE"] = "db" };
             var cs1 = DatabaseConnectionStringBuilder.Build("MSSQL", props);
             var cs2 = DatabaseConnectionStringBuilder.Build("SQLSERVER", props);
-            Assert.False(string.IsNullOrEmpty(cs1));
-            Assert.False(string.IsNullOrEmpty(cs2));
+            Assert.Equal(cs1, cs2);
+            Assert.Contains("Data Source=myserver", cs1, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Initial Catalog=db", cs1, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]

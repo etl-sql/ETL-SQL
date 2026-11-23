@@ -56,7 +56,8 @@ namespace ETL_SQL.Tests.Engine
         public async Task SystemVar_Version_ReturnsString()
         {
             var eval = await RunAndGet("SELECT @@VERSION AS ver;");
-            Assert.False(string.IsNullOrWhiteSpace(eval.LastResult!.Rows[0]["ver"]?.ToString()));
+            var ver = Assert.IsType<string>(eval.LastResult!.Rows[0]["ver"]);
+            Assert.StartsWith("ETL-SQL ", ver, StringComparison.Ordinal);
         }
 
         [Fact]

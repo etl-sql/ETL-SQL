@@ -419,9 +419,8 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task KillJob_NoJobManager_ReportsThatNothingWasKilled()
         {
-            // No IJobManager is registered in the default test DI; the handler says so and returns.
             var eval = await RunAndGet("KILL JOB 999;");
-            Assert.NotEmpty(Output(eval));
+            Assert.Contains("Job 999 was not found or is not currently running.", Output(eval), StringComparison.Ordinal);
         }
 
         [Fact]
