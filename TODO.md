@@ -69,20 +69,23 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
   `43893010630`) in `scripts/checks/test-real-release-output.mjs`. **Left:** the native Windows and
   macOS collectors and the draft-manifest check (about 1 GB of packages per platform).
 - [ ] **W9 Spill Certification group 1 is red (engine; owner: Gemini).** Found 2026-11-22 while
-  certifying MI01; blocks the Merge Gate, and the Supervisor then cancels the MSI run. Two causes,
-  neither in MI01's code (MI01's new test classes reshuffled the shards):
-  1. **Wrong result on the spill path.** SLT `join.test` line 175 returned `3` where `NULL` was
-     expected, and again on retry (run 45021159314, Spill Certification 1/3).
-  2. **Memory-floor refusals read as governor ceilings.** In the app DI the engine's grants come
-     from `BufferManager`, which refuses every grant while machine RAM is below
-     `SystemMemoryFloorMB` (512 MB). A 2-row join then fails "exceeded the memory governor ceiling"
-     (`JoinSemanticsTests`, `MockDbQuerySemanticsTests`, `IntegrationScriptTests`, `WhatIfTests`,
-     doc samples). The lane's retry clears these; the cause is host RAM in the group-1 shards.
-     `MemoryGrantArbiter.Shared` is not the cause: the leak trace added for this
-     (`arbiter-leaks-<pid>.log` in the engine and spill lane evidence) shows about 50 KB of
-     leaked reservations against a 6.8 GB budget.
-  **Finish line:** `join.test:175` fixed with a regression test; the governor errors name the RAM
-  floor when that is the cause; Spill 1/3 green without retries.
+  certifying MI01; blocks the Merge Gate, and the Supervisor then cancels the MSI run. Fixed
+  locally 2026-11-22:
+  1. **Wrong result on the spill path (`join.test:175`).** `ExternalJoinEngine` now captures the
+     right side's schema/aliases from the initial sample (and left's from the first left row) so
+     unmatched rows in partitions with an empty opposite side still emit the combined layout
+     instead of falling back to `Shape.Unmatched`, preventing downstream Arrow spill sorting from
+     mapping left's bare `id` into `o.id`. Regression test in `OpExternalJoinTests` and full SLT
+     spill corpus pass.
+  2. **Memory-floor refusals read as governor ceilings.** Added
+     `IMemoryGrantArbiter.CurrentSystemMemoryFloorPressure` (implemented by `BufferManager` and
+     forwarded through `Evaluator.SessionScopedMemoryArbiter`) so `MemoryGovernor.EnforcePolicy`
+     (including `ExternalAggregateEngine` GROUP BY) names `SystemMemoryFloorMB`, observed available
+     RAM, and floor MB when host RAM pressure is the cause (regression test in
+     `UnifiedMemoryCoordinatorTests`). Disabled the ambient `SystemMemoryFloorMB` in the sharded
+     `engine` and `spill` lanes of `scripts/test-lane.ps1` so transient CI runner RAM dips do not
+     reject unrelated unit tests.
+  **Left:** confirm Spill 1/3 (and Engine Coverage shards) green without retries in CI.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |

@@ -668,5 +668,52 @@ namespace ETL_SQL.Tests.Operations.Operations
             var pairs = results.Select(r => $"{r["lval"]}:{r["rval"]}").OrderBy(x => x, StringComparer.Ordinal).ToList();
             Assert.Equal(new[] { "L_case:R_case", "L_match:R_match" }, pairs);
         }
+
+        [Fact]
+        public async Task FullOuterJoin_WithCollidingIdColumnAndSpilledOrderBy_PreservesNullRightIdInEmptyRightPartition()
+        {
+            // Regression for W9 (SLT join.test:175 on the spill path): when an unmatched left row
+            // (Charlie, u.id = 3) hashes into a partition whose right side is empty, it must still
+            // use the combined layout so downstream Arrow spill sorting maps o.id to NULL rather
+            // than reading left's bare `id` (3).
+            await using var provider = (ServiceProvider)DependencyInjectionSetup.BuildServiceProvider(new Dictionary<string, string?>
+            {
+                ["Engine:BatchSize"] = "3",
+                ["Engine:JoinSpillThreshold"] = "1",
+                ["Engine:ExternalSortChunkSize"] = "2",
+                ["Engine:TempTableSpillThresholdRows"] = "2",
+                ["Engine:MaxInMemoryBatches"] = "1",
+                ["Orchestration:ResourceManagement:SystemMemoryFloorMB"] = "0"
+            });
+            await using var eval = provider.GetRequiredService<Evaluator>();
+            eval.ExternalHashPartitions = 8;
+
+            const string sql = """
+                CREATE TABLE #users (id INT, name STRING);
+                INSERT INTO #users VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');
+                CREATE TABLE #orders (id INT, user_id INT, amount INT);
+                INSERT INTO #orders VALUES (10, 1, 100), (11, 1, 50), (12, 2, 200), (13, 4, 300);
+
+                SELECT u.name, o.id, o.amount
+                FROM #users u
+                FULL OUTER JOIN #orders o ON u.id = o.user_id
+                ORDER BY u.name, o.id;
+                """;
+
+            var parser = new Parser(new Lexer(sql).Tokenize(), sql);
+            await eval.Evaluate(parser.Parse());
+
+            var rows = eval.LastResult?.Rows;
+            Assert.NotNull(rows);
+            Assert.Equal(5, rows!.Count);
+
+            var charlie = Assert.Single(rows, r => Equals(r["name"], "Charlie"));
+            Assert.Null(charlie["id"]);
+            Assert.Null(charlie["amount"]);
+
+            var unmatchedOrder = Assert.Single(rows, r => r["name"] == null);
+            Assert.Equal(13m, unmatchedOrder["id"]);
+            Assert.Equal(300m, unmatchedOrder["amount"]);
+        }
     }
 }

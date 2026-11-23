@@ -2118,6 +2118,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     {
         public long TotalBudgetBytes => innerArbiter.TotalBudgetBytes;
         public long ReservedBytes => innerArbiter.ReservedBytes;
+        public SystemMemoryFloorPressure? CurrentSystemMemoryFloorPressure => innerArbiter.CurrentSystemMemoryFloorPressure;
 
         public IMemoryGrantLease AcquireLease()
             => bufferManager.AcquireMemoryLease(sessionIdAccessor());

@@ -38,6 +38,10 @@ public class ExternalJoinEngine
 
 
     private readonly IBufferManager? _bufferManager;
+    private List<string>? _knownRightColumns;
+    private List<IReadOnlyList<string>?>? _knownRightColumnAliases;
+    private TableSchema? _knownRightSchema;
+    private TableSchema? _knownLeftSchema;
 
     public ExternalJoinEngine(IExecutionContext context, ILogger logger)
     {
@@ -70,6 +74,10 @@ public class ExternalJoinEngine
             _context.SessionId ?? "DEFAULT",
             effectiveCancellationToken,
             owner: this);
+        _knownRightColumns = null;
+        _knownRightColumnAliases = null;
+        _knownRightSchema = null;
+        _knownLeftSchema = null;
         var tempFiles = new List<string>();
         try
         {
@@ -84,7 +92,11 @@ public class ExternalJoinEngine
                 rightSample.Add(row);
                 sampledBytes = checked(sampledBytes + row.EstimateHeapBytes());
             }
-            if (rightSample.Count > 0) Shape.SeeRight(rightSample[0]);
+            if (rightSample.Count > 0)
+            {
+                Shape.SeeRight(rightSample[0]);
+                CaptureKnownRightSchema(rightSample[0]);
+            }
             ConfigurePartitionCount(rightSample, rightKeys, knownBuildRowCount, knownBuildBytes);
             PlanDecisionRecorder.Record(_context, "external-join", "ExternalJoin",
                 PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
@@ -497,10 +509,12 @@ public class ExternalJoinEngine
                         for (int k = 0; k < keyCount; k++)
                             keyOrdinals[k] = cachedBatchSchema.GetOrdinal(leftKeys[k]);
                         leftRowLayout = RowPacker.LayoutFor(cachedBatchSchema);
-                        if (table.RowCount > 0)
+                        IReadOnlyList<string>? rightCols = table.Columns.Count > 0 ? table.Columns : _knownRightColumns;
+                        IReadOnlyList<IReadOnlyList<string>?>? rightAliases = table.Columns.Count > 0 ? table.ColumnAliases : _knownRightColumnAliases;
+                        if (rightCols is { Count: > 0 })
                         {
-                            batchCombinedLayout = BatchCombinedLayout.Create(cachedBatchSchema, table.Columns, table.ColumnAliases);
-                            if (leftOnly && compiledCondition != null)
+                            batchCombinedLayout = BatchCombinedLayout.Create(cachedBatchSchema, rightCols, rightAliases);
+                            if (table.RowCount > 0 && leftOnly && compiledCondition != null)
                             {
                                 scratchCombinedValues = new object?[batchCombinedLayout.Schema.ColumnCount];
                                 scratchCombinedRow = new Row(batchCombinedLayout.Schema, scratchCombinedValues);
@@ -637,7 +651,7 @@ public class ExternalJoinEngine
                 else if (!producedMatch && isLeftJoin)
                 {
                     if (table.RowCount > 0) unmatchedRightSchema ??= table.UnpackRow(0).Schema;
-                    yield return UnmatchedLeft(left, unmatchedRightSchema);
+                    yield return UnmatchedLeft(left, unmatchedRightSchema ?? _knownRightSchema);
                 }
             }
         }
@@ -647,11 +661,7 @@ public class ExternalJoinEngine
             for (int idx = 0; idx < table.RowCount; idx++)
             {
                 if (!matched[idx])
-                {
-                    var unmatched = CombineRows(null, table.UnpackRow(idx));
-                    Shape.Complete(unmatched);
-                    yield return unmatched;
-                }
+                    yield return UnmatchedRight(table.UnpackRow(idx));
             }
         }
     }
@@ -789,7 +799,12 @@ public class ExternalJoinEngine
 
             await foreach (var row in stream)
             {
-                if (isLeftInput) Shape.SeeLeft(row);
+                if (isLeftInput)
+                {
+                    Shape.SeeLeft(row);
+                    if (_knownLeftSchema == null)
+                        CaptureKnownLeftSchema(row);
+                }
                 int pIdx = GetPartitionIndex(row, keys, keySlots, ref cachedSchema, extraKeyBuffer, depth, caseSensitive);
                 counts[pIdx]++;
                 await writers[pIdx].WriteRowAsync(row);
@@ -1107,6 +1122,87 @@ public class ExternalJoinEngine
     /// including a bare name the right side would overwrite in a matched row, which keeps the
     /// left value there as the by-name padding did.
     /// </summary>
+    private void CaptureKnownRightSchema(Row firstRight)
+    {
+        var cols = new List<string>();
+        var aliasesList = new List<IReadOnlyList<string>?>();
+        var rightSchema = firstRight.Schema;
+        foreach (var colName in firstRight.GetColumnNames())
+        {
+            cols.Add(colName);
+            IReadOnlyList<string>? aliases = rightSchema != null
+                ? rightSchema.EnumerateAliasesOf(colName).ToArray()
+                : null;
+            aliasesList.Add(aliases is { Count: > 0 } ? aliases : null);
+        }
+
+        if (cols.Count == 0) return;
+        _knownRightColumns = cols;
+        _knownRightColumnAliases = aliasesList;
+        if (rightSchema != null && !firstRight.HasDynamicColumns)
+        {
+            _knownRightSchema = rightSchema;
+        }
+        else
+        {
+            var built = new TableSchema(cols);
+            for (int i = 0; i < aliasesList.Count; i++)
+            {
+                if (aliasesList[i] is { } aliases)
+                {
+                    for (int a = 0; a < aliases.Count; a++)
+                        built.AddAlias(aliases[a], i);
+                }
+            }
+            _knownRightSchema = built;
+        }
+    }
+
+    private void CaptureKnownLeftSchema(Row firstLeft)
+    {
+        if (firstLeft.Schema != null && !firstLeft.HasDynamicColumns)
+        {
+            _knownLeftSchema = firstLeft.Schema;
+            return;
+        }
+
+        var cols = firstLeft.GetColumnNames().ToList();
+        if (cols.Count == 0) return;
+        var built = new TableSchema(cols);
+        if (firstLeft.Schema != null)
+        {
+            for (int i = 0; i < cols.Count; i++)
+            {
+                foreach (var alias in firstLeft.Schema.EnumerateAliasesOf(cols[i]))
+                    built.AddAlias(alias, i);
+            }
+        }
+        _knownLeftSchema = built;
+    }
+
+    private Row UnmatchedRight(Row right)
+    {
+        var rightSchema = right.Schema;
+        if (_knownLeftSchema == null || rightSchema == null || right.HasDynamicColumns)
+        {
+            var fallback = CombineRows(null, right);
+            Shape.Complete(fallback);
+            return fallback;
+        }
+
+        var layout = _combinedLayout;
+        if (layout == null || !ReferenceEquals(layout.Left, _knownLeftSchema) || !ReferenceEquals(layout.Right, rightSchema))
+            _combinedLayout = layout = CombinedLayout.Create(_knownLeftSchema, rightSchema);
+        var values = new object?[layout.Schema.ColumnCount];
+        for (var i = 0; i < layout.RightSlots.Length; i++) values[layout.RightSlots[i]] = right[i];
+        var row = new Row(layout.Schema, values)
+        {
+            MayLackColumns = right.MayLackColumns,
+        };
+        Shape.Complete(row);
+        return row;
+    }
+
     private Row UnmatchedLeftFromBatch(
         ColumnBatch batch,
         RowPacker.BatchColumnPlan packPlan,

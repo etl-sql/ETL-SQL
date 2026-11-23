@@ -460,12 +460,10 @@ public class ExternalAggregateEngine
                 ? "execution-error"
                 : "spill-only-churn"));
 
-        if (_context.MemoryGovernorPolicy == MemoryGovernorPolicy.SpillOrFail)
-        {
-            throw new ExecutionException(
-                "GROUP BY exceeded the memory governor ceiling (Engine:TotalMemoryGrantMB) and could not be reduced further by repartitioning. " +
-                "Increase Engine:TotalMemoryGrantMB, reduce grouping cardinality, or set Engine:MemoryGovernorPolicy = SpillOnly to churn to completion.");
-        }
+        MemoryGovernor.EnforcePolicy(
+            _context,
+            "GROUP BY exceeded the memory governor ceiling (Engine:TotalMemoryGrantMB) and could not be reduced further by repartitioning. " +
+            "Increase Engine:TotalMemoryGrantMB, reduce grouping cardinality, or set Engine:MemoryGovernorPolicy = SpillOnly to churn to completion.");
 
         _logger.Warning("[MEMORY_GOVERNOR] Aggregate partition could not be reduced under the memory ceiling; churning to completion (MemoryGovernorPolicy=SpillOnly).");
         await using var churnReader = await _context.SpillStore.CreateReaderAsync(name);

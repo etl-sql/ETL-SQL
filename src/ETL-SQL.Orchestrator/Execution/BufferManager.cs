@@ -52,6 +52,12 @@ namespace ETL_SQL.Orchestrator.Execution
         /// <summary>Currently reserved bytes across active async reservations and synchronous operator leases.</summary>
         public long ReservedBytes => Interlocked.Read(ref _currentMemoryBytes);
 
+        /// <summary>Active system-memory floor refusal state, if host available RAM is below <c>SystemMemoryFloorMB</c>.</summary>
+        public SystemMemoryFloorPressure? CurrentSystemMemoryFloorPressure
+            => Volatile.Read(ref _isSystemMemoryExhausted) == 1
+                ? new SystemMemoryFloorPressure(Interlocked.Read(ref _cachedSystemAvailableBytes), _options.SystemMemoryFloorMB)
+                : null;
+
         /// <summary>Tracks active reservations per session to prevent 'Zombie References'.</summary>
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, IResourceReservation>> _sessionReservations = new();
 

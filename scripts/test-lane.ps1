@@ -500,11 +500,19 @@ switch ($Lane) {
                 Join-Path $repoRoot ("release-validation\engine-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
             }
             # Name tests that leave MemoryGrantArbiter.Shared reservations behind (see the spill lane).
+            # Disable the ambient host RAM floor so transient CI runner memory dips do not reject tiny
+            # operator grants in unrelated unit tests; dedicated BufferManager tests verify the floor
+            # deterministically with explicit options and a mock ISystemResources.
             $previousArbiterTrace = $env:ETLSQL_ARBITER_TRACE_DIR
+            $previousSystemFloor = $env:Orchestration__ResourceManagement__SystemMemoryFloorMB
             $env:ETLSQL_ARBITER_TRACE_DIR = $evidenceDir
+            $env:Orchestration__ResourceManagement__SystemMemoryFloorMB = "0"
             try {
                 Invoke-ShardedTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $evidenceDir engine -Group $EngineShardGroup -GroupCount $EngineShardGroupCount
-            } finally { $env:ETLSQL_ARBITER_TRACE_DIR = $previousArbiterTrace }
+            } finally {
+                $env:ETLSQL_ARBITER_TRACE_DIR = $previousArbiterTrace
+                $env:Orchestration__ResourceManagement__SystemMemoryFloorMB = $previousSystemFloor
+            }
         } else {
             Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter
         }
@@ -593,12 +601,15 @@ switch ($Lane) {
         $spillSessionRoot = Join-Path ([IO.Path]::GetTempPath()) ("etl-sql-spill-lane-" + [Guid]::NewGuid().ToString("N"))
         New-Item -ItemType Directory -Path $spillSessionRoot | Out-Null
         $overrides = @{
-            "Engine__BatchSize"                   = "7"
-            "Engine__JoinSpillThreshold"          = "10"
-            "Engine__ExternalSortChunkSize"       = "10"
-            "Engine__WindowSpillThreshold"        = "10"
-            "Engine__TempTableSpillThresholdRows" = "25"
-            "Engine__MaxInMemoryBatches"          = "2"
+            "Engine__BatchSize"                                         = "7"
+            "Engine__JoinSpillThreshold"                                = "10"
+            "Engine__ExternalSortChunkSize"                             = "10"
+            "Engine__WindowSpillThreshold"                              = "10"
+            "Engine__TempTableSpillThresholdRows"                       = "25"
+            "Engine__MaxInMemoryBatches"                                = "2"
+            # Disable ambient host RAM floor during sharded spill runs (dedicated BufferManager tests
+            # cover SystemMemoryFloorMB with explicit options and a mock ISystemResources).
+            "Orchestration__ResourceManagement__SystemMemoryFloorMB"    = "0"
         }
         # BatchSize is deliberately not a round number and not a multiple of the row counts in the
         # corpus: batch boundaries that always land between logical groups hide exactly the

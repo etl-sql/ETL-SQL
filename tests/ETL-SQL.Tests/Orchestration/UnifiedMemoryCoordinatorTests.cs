@@ -438,6 +438,80 @@ public class UnifiedMemoryCoordinatorTests
         Assert.NotNull(postCheck);
     }
 
+    [Fact]
+    public async Task SystemMemoryFloorRefusal_NamesRamFloorInGovernorErrors_WhileBudgetCeilingNamesCeiling()
+    {
+        long availableHeadroom = 128L * 1024 * 1024; // 128 MB < 512 MB floor
+        var mockSys = new Mock<ISystemResources>();
+        mockSys.Setup(r => r.GetAvailableMemoryBytes()).Returns(() => Volatile.Read(ref availableHeadroom));
+        mockSys.Setup(r => r.GetTotalMemoryBytes()).Returns(16L * 1024 * 1024 * 1024);
+
+        var cfg = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Engine:TotalMemoryGrantMB"] = "2",
+                ["Engine:OperatorMemoryGrantMB"] = "256",
+                ["Orchestration:ResourceManagement:MaxGlobalMemoryMB"] = "2048"
+            })
+            .Build();
+
+        using var bm = CreateControlledBufferManager(mockSys.Object, maxGlobalMB: 2048, hysteresisMB: 0, systemFloorMB: 512, timeoutSec: 2, config: cfg);
+        bm.SystemCheckIntervalOverride = TimeSpan.Zero;
+
+        // 1. Host RAM below SystemMemoryFloorMB -> join failure explicitly names SystemMemoryFloorMB + available/floor MB.
+        await using (var floorEval = CreateStandaloneEvaluator(bm, cfg))
+        {
+            floorEval.JoinSpillThreshold = 1;
+            var left = new List<Row> { new() { ["id"] = 1m }, new() { ["id"] = 2m } };
+            var right = new List<Row> { new() { ["rid"] = 1m }, new() { ["rid"] = 2m } };
+            var extJoin = new ExternalJoinEngine(floorEval, ETL_SQL.Common.NullLogger.Instance);
+            var joinClause = new JoinClause("INNER", new TableReference("#r"), new LiteralExpression(true, TokenType.NUMBER));
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
+            {
+                await foreach (var _ in extJoin.ApplyHashJoinExternal(
+                    left.ToAsyncEnumerable(),
+                    right.ToAsyncEnumerable(),
+                    joinClause,
+                    ["id"],
+                    ["rid"]))
+                {
+                }
+            });
+
+            Assert.Contains("SystemMemoryFloorMB", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("128 MB", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("512 MB", ex.Message, StringComparison.Ordinal);
+        }
+
+        // 2. Host RAM above floor, global budget saturated -> error blames the governor ceiling, not the RAM floor.
+        Volatile.Write(ref availableHeadroom, 8L * 1024 * 1024 * 1024);
+        using (var saturate = await bm.ReserveMemoryAsync("saturate_ceiling", 2L * 1024 * 1024))
+        {
+            await using var ceilingEval = CreateStandaloneEvaluator(bm, cfg);
+            ceilingEval.JoinSpillThreshold = 1;
+            var left = Enumerable.Range(1, 3).Select(_ => new Row { ["id"] = 1m }).ToList();
+            var right = Enumerable.Range(1, 5).Select(_ => new Row { ["rid"] = 1m, ["pad"] = new string('x', 1024) }).ToList();
+            var extJoin = new ExternalJoinEngine(ceilingEval, ETL_SQL.Common.NullLogger.Instance);
+            var joinClause = new JoinClause("INNER", new TableReference("#r"), new LiteralExpression(true, TokenType.NUMBER));
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
+            {
+                await foreach (var _ in extJoin.ApplyHashJoinExternal(
+                    left.ToAsyncEnumerable(),
+                    right.ToAsyncEnumerable(),
+                    joinClause,
+                    ["id"],
+                    ["rid"]))
+                {
+                }
+            });
+
+            Assert.Contains("memory governor ceiling", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("SystemMemoryFloorMB", ex.Message, StringComparison.Ordinal);
+        }
+    }
+
     private sealed class InMemoryRowsSource(IEnumerable<Row> rows) : IDataSource
     {
         private readonly List<Row> _rows = rows.ToList();

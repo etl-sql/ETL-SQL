@@ -25,6 +25,14 @@ public enum MemoryGovernorPolicy
 }
 
 /// <summary>
+/// Diagnostic snapshot reported by an <see cref="IMemoryGrantArbiter"/> when grants are currently
+/// refused because host/container available RAM is below <c>SystemMemoryFloorMB</c>.
+/// </summary>
+public readonly record struct SystemMemoryFloorPressure(
+    long AvailableMemoryBytes,
+    int SystemMemoryFloorMB);
+
+/// <summary>
 /// Process-wide arbiter that bounds the <em>total</em> committed in-memory buffer footprint
 /// of concurrently executing queries. Each query acquires an <see cref="IMemoryGrantLease"/>
 /// and reports its peak buffered size; when the summed footprint of all active leases would
@@ -40,6 +48,12 @@ public interface IMemoryGrantArbiter
 
     /// <summary>Currently reserved bytes summed across all active leases.</summary>
     long ReservedBytes { get; }
+
+    /// <summary>
+    /// Active system-memory floor pressure when grants are being refused because machine/container
+    /// available RAM is below <c>SystemMemoryFloorMB</c>, or <c>null</c> otherwise.
+    /// </summary>
+    SystemMemoryFloorPressure? CurrentSystemMemoryFloorPressure => null;
 
     /// <summary>Begins a per-query lease. Dispose releases the query's reserved footprint.</summary>
     IMemoryGrantLease AcquireLease();
