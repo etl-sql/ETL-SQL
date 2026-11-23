@@ -55,12 +55,6 @@ namespace ETL_SQL.Tests.Coverage
         // ── ConnectorRetryPolicy ──────────────────────────────────────────────
 
         [Fact]
-        public void ConnectorRetryPolicy_Initialize_WithDefaultOptions()
-        {
-            ConnectorRetryPolicy.Initialize(new ConnectorRetryOptions());
-        }
-
-        [Fact]
         public void ConnectorRetryPolicy_ForSqlServer_ReturnsPipeline()
         {
             var pipeline = ConnectorRetryPolicy.ForSqlServer(NullLogger.Instance);

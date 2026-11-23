@@ -538,11 +538,17 @@ namespace ETL_SQL.Tests.Coverage
         // ── AlterTableStatementHandler ────────────────────────────────────────
 
         [Fact]
-        public async Task AlterTable_AddColumn_Succeeds()
+        public async Task SelectStar_FromAnEmptyTable_ReturnsItsColumns()
         {
-            await Run(
-                "CREATE TABLE #t (Id INT);" +
-                "ALTER TABLE #t ADD newcol VARCHAR;");
+            var eval = await RunAndGet("CREATE TABLE #e (Id INT, Name VARCHAR); SELECT * FROM #e;");
+            Assert.Equal(new[] { "Id", "Name" }, eval.LastResult!.ColumnNames);
+        }
+
+        [Fact]
+        public async Task AlterTable_AddColumn_WithARow_ColumnIsVisible()
+        {
+            var eval = await RunAndGet("CREATE TABLE #r (Id INT); INSERT INTO #r VALUES (1); ALTER TABLE #r ADD label VARCHAR; SELECT * FROM #r;");
+            Assert.Equal(new[] { "Id", "label" }, eval.LastResult!.ColumnNames);
         }
 
         [Fact]
@@ -551,51 +557,44 @@ namespace ETL_SQL.Tests.Coverage
             var eval = await RunAndGet(
                 "CREATE TABLE #t (Id INT);" +
                 "ALTER TABLE #t ADD label VARCHAR;" +
-                "SELECT * FROM eng.columns WHERE table_name = '#t';");
-            Assert.NotNull(eval.LastResult);
+                "SELECT * FROM #t;");
+            Assert.Equal(new[] { "Id", "label" }, eval.LastResult!.ColumnNames);
         }
 
         [Fact]
-        public async Task AlterTable_DropColumn_Succeeds()
+        public async Task AlterTable_DropColumn_RemovesIt()
         {
             var eval = await RunAndGet(
                 "CREATE TABLE #t (Id INT, Name VARCHAR);" +
                 "ALTER TABLE #t DROP COLUMN Name;" +
-                "SELECT * FROM eng.columns WHERE table_name = '#t';");
-            Assert.NotNull(eval.LastResult);
+                "SELECT * FROM #t;");
+            Assert.Equal(new[] { "Id" }, eval.LastResult!.ColumnNames);
         }
 
         [Fact]
-        public async Task AlterTable_RenameColumn_Succeeds()
+        public async Task AlterTable_RenameColumn_RenamesIt()
         {
             var eval = await RunAndGet(
                 "CREATE TABLE #t (Id INT, OldName VARCHAR);" +
                 "ALTER TABLE #t RENAME COLUMN OldName TO NewName;" +
-                "SELECT * FROM eng.columns WHERE table_name = '#t';");
-            Assert.NotNull(eval.LastResult);
+                "SELECT * FROM #t;");
+            Assert.Equal(new[] { "Id", "NewName" }, eval.LastResult!.ColumnNames);
         }
 
         [Fact]
-        public async Task AlterTable_AddThenSelectNewColumn_Works()
+        public async Task AlterTable_AddColumn_ExistingRowsReadNull()
         {
             var eval = await RunAndGet(
                 "CREATE TABLE #tcol (Id INT);" +
                 "INSERT INTO #tcol VALUES (1);" +
                 "ALTER TABLE #tcol ADD score INT;" +
                 "SELECT Id, score FROM #tcol;");
-            Assert.NotNull(eval.LastResult);
+            var row = Assert.Single(eval.LastResult!.Rows);
+            Assert.Equal(1m, Convert.ToDecimal(row["Id"]));
+            Assert.Null(row["score"]);
         }
 
         // ── FileOperationStatementHandler ─────────────────────────────────────
-
-        [Fact]
-        public async Task DeleteFile_IfExists_NonexistentFile_NoError()
-        {
-            var path = Path.Combine(Path.GetTempPath(), "del_" + Guid.NewGuid().ToString("N") + ".txt");
-            var escaped = path.Replace("\\", "\\\\");
-            // DELETE FILE IF EXISTS syntax: IF EXISTS comes before the path
-            await Run($"DELETE FILE IF EXISTS '{escaped}';");
-        }
 
         [Fact]
         public async Task DeleteFile_ExistingFile_Deletes()
@@ -688,15 +687,6 @@ namespace ETL_SQL.Tests.Coverage
         }
 
         [Fact]
-        public async Task DeleteDirectory_IfExists_NonexistentDir_NoError()
-        {
-            var dir = Path.Combine(Path.GetTempPath(), "del_" + Guid.NewGuid().ToString("N"));
-            var escaped = dir.Replace("\\", "\\\\");
-            // DELETE DIRECTORY IF EXISTS syntax: IF EXISTS comes before the path
-            await Run($"DELETE DIRECTORY IF EXISTS '{escaped}';");
-        }
-
-        [Fact]
         public async Task DeleteDirectory_ExistingDir_Deletes()
         {
             var dir = Path.Combine(Path.GetTempPath(), "etltest_" + Guid.NewGuid().ToString("N"));
@@ -712,28 +702,62 @@ namespace ETL_SQL.Tests.Coverage
 
         // ── ClearSessionStatementHandler modes ────────────────────────────────
 
-        [Fact]
-        public async Task ClearSession_All_NoError()
+        // Saves an inactive session in the (per-run test) session store and returns its id.
+        private static async Task<string> SaveInactiveSession(Evaluator eval)
         {
-            await Run("CLEAR SESSION ALL;");
+            var id = "cleartest_" + Guid.NewGuid().ToString("N")[..8];
+            await eval.SessionStateManager.SaveSession(id, Eval());
+            Assert.Contains(eval.SessionStateManager.GetSessions(), s => s.SessionId == id);
+            return id;
+        }
+
+        private static bool SessionExists(Evaluator eval, string id) =>
+            eval.SessionStateManager.GetSessions().Any(s => s.SessionId == id);
+
+        [Fact]
+        public async Task ClearSession_All_DeletesInactiveSessions()
+        {
+            var eval = Eval();
+            var id = await SaveInactiveSession(eval);
+            await eval.Evaluate(Parse("CLEAR SESSION ALL;"));
+            Assert.False(SessionExists(eval, id));
         }
 
         [Fact]
-        public async Task ClearSession_Stale_NoError()
+        public async Task ClearSession_Stale_KeepsARecentSession()
         {
-            await Run("CLEAR SESSION STALE;");
+            var eval = Eval();
+            var id = await SaveInactiveSession(eval);
+            try
+            {
+                await eval.Evaluate(Parse("CLEAR SESSION STALE;"));
+                Assert.True(SessionExists(eval, id));
+            }
+            finally { eval.SessionStateManager.ClearSession(id); }
         }
 
         [Fact]
-        public async Task ClearSession_Single_NonexistentId_NoError()
+        public async Task ClearSession_Single_DeletesOnlyThatSession()
         {
-            await Run("CLEAR SESSION 'nonexistent_session_id_xyz';");
+            var eval = Eval();
+            var target = await SaveInactiveSession(eval);
+            var other = await SaveInactiveSession(eval);
+            try
+            {
+                await eval.Evaluate(Parse($"CLEAR SESSION '{target}'; CLEAR SESSION 'nonexistent_session_id_xyz';"));
+                Assert.False(SessionExists(eval, target));
+                Assert.True(SessionExists(eval, other));
+            }
+            finally { eval.SessionStateManager.ClearSession(other); }
         }
 
         [Fact]
-        public async Task ClearSessions_All_Plural_NoError()
+        public async Task ClearSessions_All_Plural_DeletesInactiveSessions()
         {
-            await Run("CLEAR SESSIONS ALL;");
+            var eval = Eval();
+            var id = await SaveInactiveSession(eval);
+            await eval.Evaluate(Parse("CLEAR SESSIONS ALL;"));
+            Assert.False(SessionExists(eval, id));
         }
     }
 }

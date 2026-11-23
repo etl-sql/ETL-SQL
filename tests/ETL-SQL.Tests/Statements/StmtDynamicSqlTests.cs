@@ -18,8 +18,10 @@ namespace ETL_SQL.Tests.Statements
         public async Task TestBasicExec()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            ev.RedirectOutput = true;
             string script = "DECLARE @sql VARCHAR(100) = 'PRINT ''Hello from Dynamic SQL'''; EXEC (@sql);";
             await ev.Evaluate(Parse(script));
+            Assert.Contains(ev.Messages, m => m.Message.Contains("Hello from Dynamic SQL"));
         }
 
         [Fact]

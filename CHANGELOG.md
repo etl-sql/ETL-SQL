@@ -14,6 +14,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 - Fixed `EXECUTE proc @var OUTPUT` on a local procedure ignoring `OUTPUT`: the caller's variable kept its old value. The parameter's final value is now written back, also after `RETURN`, for positional and named arguments; an `OUTPUT` argument that is not a variable is an error (`RV02`).
 
+- Fixed `SELECT *` from an empty temp table or CTE returning no columns, so an empty result lost its header and `ALTER TABLE` changes on an empty table could not be seen (`RV02`).
 - Fixed `ERROR_MESSAGE()` after `RAISERROR` returning the console prefix (`[ERROR] oops`) instead of the message raised. The console line keeps the prefix (`RV02`).
 
 - Added `eng.datasets`, the datasets visible to the caller. `SHOW DATASETS` was retired in favour of `eng.tables`, which never listed datasets; the retirement message now points at `eng.datasets` (`RV02`).

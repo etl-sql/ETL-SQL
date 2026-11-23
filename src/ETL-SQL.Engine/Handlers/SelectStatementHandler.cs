@@ -734,12 +734,15 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         catch { await enumerator.DisposeAsync(); throw; }
 
         var effectiveBatches = streamingEngine.ReplayBatches(firstBatch, enumerator);
-        var (finalColumns, colNames) = await metadataHelper.ExpandColumns(stmt, firstBatch?.ColumnNames ?? new List<string>());
+        var batchColumns = firstBatch is { ColumnNames.Count: > 0 }
+            ? firstBatch.ColumnNames
+            : await DeclaredInMemoryColumnsAsync(stmt, context) ?? new List<string>();
+        var (finalColumns, colNames) = await metadataHelper.ExpandColumns(stmt, batchColumns);
 
         // Lateral column aliases: let a SELECT item reference an alias defined earlier in the same
         // list (e.g. SELECT a+b AS total, total*2 AS dt). Resolved by inlining the earlier alias's
         // expression; a real source column always wins over an alias of the same name.
-        finalColumns = ApplyLateralColumnAliases(finalColumns, firstBatch?.ColumnNames ?? new List<string>());
+        finalColumns = ApplyLateralColumnAliases(finalColumns, batchColumns);
 
         // GROUP BY ALL: now that output columns are fully expanded, group by every non-aggregate, non-window column.
         if (stmt.GroupByAll)
@@ -1245,6 +1248,27 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                 seen[col.Alias] = col.Expression;
         }
         return false;
+    }
+
+    /// <summary>
+    /// The declared columns of an empty temp table or CTE, which yields no batch to take them from;
+    /// without them <c>SELECT *</c> returned no columns at all. Null for any other source: asking a
+    /// file or database for its schema costs a read, and those name their columns in an empty batch.
+    /// </summary>
+    private static async Task<List<string>?> DeclaredInMemoryColumnsAsync(SelectStatement stmt, IExecutionContext context)
+    {
+        var table = stmt.FromTable;
+        if (table == null || table.Subquery != null || table.FunctionCall != null || table.TableOperators.Count > 0
+            || (stmt.Joins != null && stmt.Joins.Count > 0)
+            || table.ConnectionName != null || table.DatabaseName != null || table.SchemaName != null
+            || string.IsNullOrEmpty(table.TableName))
+            return null;
+        if (!(context.LocalSources.TryGetValue(table.TableName, out var source)
+              || context.Connections.TryGetValue(table.TableName, out source))
+            || source is not InMemoryDataSource)
+            return null;
+        var declared = (await source.GetColumnsAsync(context.CancellationToken)).ToList();
+        return declared.Count == 0 ? null : declared;
     }
 
     private static List<SelectColumn> ApplyLateralColumnAliases(List<SelectColumn> columns, List<string> sourceColumns)

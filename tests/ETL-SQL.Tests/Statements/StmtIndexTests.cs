@@ -110,6 +110,10 @@ namespace ETL_SQL.Tests.Statements
             ");
 
             await Execute(eval, "EXPLAIN SELECT * FROM #t1 JOIN #t2 ON #t1.A = #t2.B");
+            var plan = string.Join("\n", eval.LastResult!.Rows.Select(r => string.Join(" ", r.Columns.Values)));
+            Assert.Contains("#t1", plan);
+            Assert.Contains("#t2", plan);
+            Assert.Contains("JOIN", plan, StringComparison.OrdinalIgnoreCase);
         }
     }
 }
