@@ -32,6 +32,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `ROLLING_AGGREGATE` | Transform | [Transform](reference/transform/rolling_aggregate.md) | [rolling_aggregate.md](reference/transform/rolling_aggregate.md) |
 | `SHARE_OF_TOTAL` | Transform | [Transform](reference/transform/share_of_total.md) | [share_of_total.md](reference/transform/share_of_total.md) |
 | `TOP_N_OTHERS` | Transform | [Transform](reference/transform/top_n_others.md) | [top_n_others.md](reference/transform/top_n_others.md) |
+| `UNPIVOT` | Transform | [Transform](reference/transform/unpivot.md) | [unpivot.md](reference/transform/unpivot.md) |
 | `COMPARE DATASETS` | Data Prep / CDC | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md#compare-datasets](reference/statements/data-prep.md#compare-datasets) |
 | `CREATE CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
 | `ALTER CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |
