@@ -117,16 +117,16 @@ back to its `ROADMAP.md` entry unchanged. Each row's boundaries are in its ROADM
 
 ## Tier 3 — if time allows
 
-### 3.1 Allocation churn in the external sort, window and join
+### 3.1 External join CPU regression at 100M rows
 
-**Design:** [ROADMAP: Engine & Security](ROADMAP.md#engine--security--encrypted-spill-framing-byte-budgeted-scale-and-plaintext-memory-hygiene).
-
-- [ ] **Prove the allocation-churn cut at 100M rows** (SP08/SP09). Baseline: Scale Measurement
-  43504065542 (ubuntu-latest, 100M rows, 4096/2048 MB): sort 593 GB allocated, window 621 GB,
-  join 335 GB; the join spent 337 s of 896 s in GC pauses. Six slices landed 2026-11-18 to 11-21
-  (`CHANGELOG.md` SP07–SP09; hosted baselines recalibrated at acb6a33a6, run 44941117546). Same-host
-  500k-row profile: sort 2,697 → 1,117 B/row, window 6,257 → 1,131, join 5,156 → 1,741.
-  **Left:** Scale Measurement 45226912017 (same settings) shows lower allocated bytes and GC time
-  with identical checksums. **Watch:** Smoke join/aggregate allocations jump about 2–3 MB between
-  runs (cause not found; can trip the 2% warning, never the 5% failure); Standard cube allocation
-  is bimodal per sample (about 1,150 or 2,010 MB).
+- [ ] **Bring the 100M external join back to its baseline elapsed time.** Scale Measurement
+  45226912017 (ubuntu-latest, 100M rows, 4096/2048 MB) cut join allocations 335 → 107 GB and GC
+  pause 337 → 185 s, but elapsed went 896 → 1,889 s and CPU 966 → 1,929 s against baseline
+  43504065542, with the same spill bytes (9.6 GB), partitions (128) and checksum. So mutator time
+  roughly tripled (about 560 → 1,700 s). Sort and window got faster in the same run. Suspects: the
+  SP09 pooled build table (`ArrayPool` slabs, `RowSlot[]` bucket chains, `Unpack` slices) and the
+  cached-layout combined rows in `ExternalJoinEngine`. **Finish line:** a same-settings Scale
+  Measurement with join elapsed ≤ 896 s, allocations still ≤ 107 GB, same checksum.
+  **Watch:** Smoke join/aggregate allocations jump about 2–3 MB between runs (cause not found; can
+  trip the 2% warning, never the 5% failure); Standard cube allocation is bimodal per sample (about
+  1,150 or 2,010 MB).

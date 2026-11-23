@@ -318,38 +318,6 @@ Selected for v0.23.0 (owner, 2026-11-23): TR06 moved to [`TODO.md`](TODO.md).
 in `SELECT` expressions and table-wide `TRANSFORM ... USING CLEAN`; and positive + `statement error`
 SLT tests in `tests/slt_data/transform.test` pass.
 
-### Engine & Security — Encrypted Spill Framing, Byte-Budgeted Scale, and Plaintext Memory Hygiene
-
-**Status:** In Progress (v0.23.0, last task in `TODO.md` 3.1)  
-**Horizon:** Next (v0.23.0)  
-**Authoritative design:** [Engine Architecture](docs/architecture/engine.md),
-[Orchestrator Architecture](docs/architecture/orchestrator.md) and
-[v0.21.0 Performance Results](docs/releases/v0.21.0-performance-results.md).
-
-**Implemented in v0.23.0:** `SP02`–`SP16` (see `CHANGELOG.md`): plaintext buffer hygiene,
-single-pass framed authenticated spill encryption (`ETLSPL03`), assessed and adaptive compression
-levels, byte-budgeted batches and smaller spill files, eager deletion of consumed join partitions,
-storage guardrails and host-wide admission with short-job progress, and the Top-N, window, cursor,
-aggregate and memory-coordination bypasses closed.
-
-**Remaining:** prove the allocation-churn reduction at 100M rows. Six slices cut same-host
-allocations per row in the external sort, window and join; the hosted 100M Scale Measurement must
-show lower total allocated bytes and GC pause time than run 43504065542 (sort 593 GB, window
-621 GB, join 335 GB, join GC 337 s) with identical checksums under the 4 GB cap.
-
-**Boundaries:**
-
-- Encryption remains on by default and compress-before-encrypt stays mandatory; never write an
-  unauthenticated or unencrypted intermediate spill file when encryption is enabled.
-- No new third-party cryptography or compression dependencies without following the third-party
-  dependency policy (§11).
-- Preserve exact SQL scalar semantics (`decimal` scale, `NULL` ordering, collation, and
-  cancellation) across all external operators.
-- Unsupported large operator shapes fail explicitly within configured bounds, never silently
-  truncate output or fall back to an unbounded materialization.
-
-**Acceptance evidence:** the 100M comparison above; the entry then retires.
-
 ### Standard Library — File and Path Function Completeness
 
 **Status:** Exploring  
