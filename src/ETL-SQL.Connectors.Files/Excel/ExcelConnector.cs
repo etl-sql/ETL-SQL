@@ -24,6 +24,8 @@ namespace ETL_SQL.Connectors.Excel
         {
             { "PATH", Array.Empty<string>() },
             { "SHEET", Array.Empty<string>() },
+            { "SHEET_INDEX", Array.Empty<string>() },
+            { "START_ROW", Array.Empty<string>() },
             { "HEADER", new[] { "ON", "OFF" } },
             { "RANGE", Array.Empty<string>() },
             { "COMPRESS", new[] { "ON", "OFF" } },
@@ -48,9 +50,12 @@ namespace ETL_SQL.Connectors.Excel
         public string GetHelp() =>
             "EXCEL Connector: Connects to Excel workbooks (.xlsx, .xls, .xlsb).\n" +
             "Options:\n" +
-            "  SHEET: Name of the sheet to read (default: first sheet)\n" +
+            "  SHEET: Name of the sheet to read (default: first sheet; mutually exclusive with SHEET_INDEX)\n" +
+            "  SHEET_INDEX: 1-based worksheet position (mutually exclusive with SHEET)\n" +
+            "  START_ROW: 1-based row number where the header or data begins (skips banner rows)\n" +
             "  HEADER: ON (default) | OFF (First row is column names)\n" +
             "  RANGE: Cell range to read (e.g. 'A1:D100')\n" +
+            "  COMPRESS: ON | OFF (ZIP archive; adds .zip to the path)\n" +
             "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
             "  PASSWORD: Password for encryption/decryption\n" +
             "  TRANSACTIONAL: ON | OFF (Stage write locally and rename atomically)";

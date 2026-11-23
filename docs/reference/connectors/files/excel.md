@@ -11,7 +11,9 @@ Aliases: `XLSX`, `XLS`
 | Option | Description | Mandatory |
 | :--- | :--- | :---: |
 | `PATH` | Absolute path to the workbook | Yes (structured) |
-| `SHEET` | Target sheet name (default: first sheet) | No |
+| `SHEET` | Target sheet name (default: first sheet; mutually exclusive with `SHEET_INDEX`) | No |
+| `SHEET_INDEX` | 1-based worksheet position (mutually exclusive with `SHEET`) | No |
+| `START_ROW` | 1-based row number where the header or data begins, skipping banner rows without needing an explicit `RANGE` end cell | No |
 | `HEADER` | `ON`/`OFF` — treat first row as column names (default: `ON`) | No |
 | `RANGE` | Explicit cell range to read (e.g. `'A1:F500'`) | No |
 | `STRICT_SCHEMA` | `ON`/`OFF` — enforce column count matching when a template schema is supplied (default: `OFF`) | No |
@@ -48,6 +50,9 @@ Excel file operations use local file system permissions or storage connector cre
 -- Specific sheet and range
 CREATE CONNECTION xl_src AS EXCEL('C:\Reports\Q4.xlsx', SHEET='Summary', HEADER=ON, RANGE='A1:F500');
 
+-- Second worksheet, skipping 4 banner rows so row 5 is the header
+CREATE CONNECTION xl_messy AS EXCEL('C:\Reports\Monthly.xlsx', SHEET_INDEX=2, START_ROW=5, HEADER=ON);
+
 -- Easy button: compress (ZIP) then encrypt on write, decrypt then unzip on read
 CREATE CONNECTION xl_out AS EXCEL(PATH='C:\Secure\payroll.xlsx', COMPRESS=ON, ENCRYPT=ON, PASSWORD='SECRET:payroll/file_key');
 INSERT INTO xl_out.FILE SELECT * FROM #payroll;
@@ -56,8 +61,8 @@ SELECT * FROM xl_out.FILE;
 
 ## Troubleshooting
 
-- **Sheet Not Found**: Verify `SHEET_NAME` or 1-based `SHEET_INDEX`.
-- **Header Row Detection**: Set `HAS_HEADER=TRUE` and optional `START_ROW` to skip metadata headers.
+- **Sheet Not Found**: Verify `SHEET` or 1-based `SHEET_INDEX` (they are mutually exclusive).
+- **Header Row Detection**: Set `HEADER=ON` and optional 1-based `START_ROW` to skip banner rows above the header.
 
 ## References
 

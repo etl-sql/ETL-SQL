@@ -21,6 +21,8 @@ namespace ETL_SQL.Connectors.Excel
     {
         private readonly string _filePath;
         private readonly string? _sheetName;
+        private readonly int? _sheetIndex;
+        private readonly int? _startRow;
         private readonly bool _hasHeader;
         private readonly bool _compress;
         private readonly EncryptionOptions _encryption;
@@ -53,6 +55,21 @@ namespace ETL_SQL.Connectors.Excel
             if (options != null)
             {
                 if (options.TryGetValue("SHEET", out var s)) _sheetName = s;
+                if (options.TryGetValue("SHEET_INDEX", out var si) && !string.IsNullOrWhiteSpace(si))
+                {
+                    if (!int.TryParse(si.Trim(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsedSheetIndex) || parsedSheetIndex < 1)
+                        throw new ExecutionException($"EXCEL option SHEET_INDEX must be a positive 1-based integer, not '{si}'.");
+                    _sheetIndex = parsedSheetIndex;
+                }
+                if (!string.IsNullOrEmpty(_sheetName) && _sheetIndex.HasValue)
+                    throw new ExecutionException("EXCEL options SHEET and SHEET_INDEX are mutually exclusive.");
+
+                if (options.TryGetValue("START_ROW", out var sr) && !string.IsNullOrWhiteSpace(sr))
+                {
+                    if (!int.TryParse(sr.Trim(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsedStartRow) || parsedStartRow < 1)
+                        throw new ExecutionException($"EXCEL option START_ROW must be a positive 1-based integer, not '{sr}'.");
+                    _startRow = parsedStartRow;
+                }
                 if (options.TryGetValue("HEADER", out var h)) _hasHeader = h.ToUpperInvariant() == "ON";
                 if (options.TryGetValue("RANGE", out var r)) _range = r;
                 if (options.TryGetValue("COMPRESS", out var comp)) _compress = comp.ToUpperInvariant() == "ON";
@@ -100,12 +117,15 @@ namespace ETL_SQL.Connectors.Excel
             if (!PrepareSelectedSheet(reader, effectiveCancellationToken, out var rowCount)) yield break;
             var range = ExcelRange.Parse(_range, rowCount, reader.FieldCount);
 
-            int startRow = Math.Min(range.StartRow, rowCount - 1);
+            int requestedStartRow = _startRow.HasValue
+                ? Math.Max(range.StartRow, _startRow.Value - 1)
+                : range.StartRow;
             int endRow = Math.Min(range.EndRow, rowCount - 1);
+            int startRow = _startRow.HasValue ? requestedStartRow : Math.Min(requestedStartRow, rowCount - 1);
             int startCol = Math.Min(range.StartCol, reader.FieldCount - 1);
             int endCol = Math.Min(range.EndCol, reader.FieldCount - 1);
 
-            if (startRow < 0 || startRow > endRow || startCol < 0 || startCol > endCol) yield break;
+            if (startRow < 0 || startRow > endRow || startRow >= rowCount || startCol < 0 || startCol > endCol) yield break;
 
             var excelCols = new List<string>();
             int dataStartRow = startRow;
@@ -292,6 +312,18 @@ namespace ETL_SQL.Connectors.Excel
 
         private bool MoveToSelectedSheet(IExcelDataReader reader, CancellationToken cancellationToken)
         {
+            if (_sheetIndex.HasValue)
+            {
+                int current = 1;
+                while (current < _sheetIndex.Value)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!reader.NextResult()) return false;
+                    current++;
+                }
+                return true;
+            }
+
             if (string.IsNullOrEmpty(_sheetName)) return true;
             var sanitizedName = SanitizeSheetName(_sheetName);
             do
@@ -561,6 +593,11 @@ namespace ETL_SQL.Connectors.Excel
         // merge an unrelated sheet on append. A null/empty name means "the first sheet".
         private System.Data.DataTable? ResolveSheet(System.Data.DataSet result)
         {
+            if (_sheetIndex.HasValue)
+            {
+                int idx = _sheetIndex.Value - 1;
+                return idx >= 0 && idx < result.Tables.Count ? result.Tables[idx] : null;
+            }
             if (!string.IsNullOrEmpty(_sheetName))
                 return result.Tables[_sheetName] ?? result.Tables[SanitizeSheetName(_sheetName)];
             return result.Tables.Count > 0 ? result.Tables[0] : null;
@@ -595,9 +632,13 @@ namespace ETL_SQL.Connectors.Excel
                     var range = ExcelRange.Parse(_range, rowCount, reader.FieldCount);
                     int startCol = Math.Min(range.StartCol, reader.FieldCount - 1);
                     int endCol = Math.Min(range.EndCol, reader.FieldCount - 1);
-                    int startRow = Math.Min(range.StartRow, rowCount - 1);
+                    int requestedStartRow = _startRow.HasValue
+                        ? Math.Max(range.StartRow, _startRow.Value - 1)
+                        : range.StartRow;
+                    int endRow = Math.Min(range.EndRow, rowCount - 1);
+                    int startRow = _startRow.HasValue ? requestedStartRow : Math.Min(requestedStartRow, rowCount - 1);
 
-                    if (startCol < 0 || startCol > endCol || startRow < 0) return Enumerable.Empty<string>();
+                    if (startCol < 0 || startCol > endCol || startRow < 0 || startRow > endRow || startRow >= rowCount) return Enumerable.Empty<string>();
 
                     if (!_hasHeader)
                     {
@@ -681,6 +722,7 @@ namespace ETL_SQL.Connectors.Excel
                 ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, string>(_options, StringComparer.OrdinalIgnoreCase);
             options["SHEET"] = sheet;
+            options.Remove("SHEET_INDEX");
             options.Remove("RANGE");
             return await new ExcelDataSource(_context, _filePath, options, _templateSchema).GetColumnsAsync(cancellationToken);
         }

@@ -234,5 +234,131 @@ namespace ETL_SQL.Tests.Connectors
             }
             finally { if (File.Exists(outPath)) File.Delete(outPath); }
         }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task TestExcelStartRow_SkipsBannerRowsWithAndWithoutHeader()
+        {
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_StartRow_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                var sheets = new Dictionary<string, object>
+                {
+                    ["Report"] = new[]
+                    {
+                        new Dictionary<string, object?> { ["C1"] = "Quarterly Finance Report", ["C2"] = null },
+                        new Dictionary<string, object?> { ["C1"] = "Confidential", ["C2"] = null },
+                        new Dictionary<string, object?> { ["C1"] = "Generated 2026-11-23", ["C2"] = null },
+                        new Dictionary<string, object?> { ["C1"] = "Id", ["C2"] = "Name" },
+                        new Dictionary<string, object?> { ["C1"] = 10, ["C2"] = "Alpha" },
+                        new Dictionary<string, object?> { ["C1"] = 20, ["C2"] = "Beta" }
+                    }
+                };
+                MiniExcelLibs.MiniExcel.SaveAs(outPath, sheets, printHeader: false);
+
+                var withHeader = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "START_ROW", "4" },
+                    { "HEADER", "ON" }
+                });
+                Assert.Equal(new[] { "Id", "Name" }, (await withHeader.GetColumnsAsync()).ToArray());
+                var batches = await withHeader.ReadBatches().ToListAsync();
+                Assert.Single(batches);
+                Assert.Equal(new[] { "Id", "Name" }, batches[0].ColumnNames);
+                Assert.Equal(2, batches[0].Rows.Count);
+                Assert.Equal("10", batches[0].Rows[0]["Id"]?.ToString());
+                Assert.Equal("Alpha", batches[0].Rows[0]["Name"]?.ToString());
+                Assert.Equal("20", batches[0].Rows[1]["Id"]?.ToString());
+                Assert.Equal("Beta", batches[0].Rows[1]["Name"]?.ToString());
+
+                var withoutHeader = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "START_ROW", "5" },
+                    { "HEADER", "OFF" }
+                });
+                var noHeaderBatches = await withoutHeader.ReadBatches().ToListAsync();
+                Assert.Single(noHeaderBatches);
+                Assert.Equal(new[] { "Column1", "Column2" }, noHeaderBatches[0].ColumnNames);
+                Assert.Equal(2, noHeaderBatches[0].Rows.Count);
+                Assert.Equal("10", noHeaderBatches[0].Rows[0]["Column1"]?.ToString());
+                Assert.Equal("Alpha", noHeaderBatches[0].Rows[0]["Column2"]?.ToString());
+
+                var pastEnd = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "START_ROW", "99" },
+                    { "HEADER", "ON" }
+                });
+                Assert.Empty(await pastEnd.GetColumnsAsync());
+                Assert.Empty(await pastEnd.ReadBatches().ToListAsync());
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task TestExcelSheetIndex_ReadsTargetWorksheetAndValidatesOptions()
+        {
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_SheetIndex_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                var sheets = new Dictionary<string, object>
+                {
+                    ["FirstTab"] = new[]
+                    {
+                        new Dictionary<string, object?> { ["C1"] = "Key", ["C2"] = "Val" },
+                        new Dictionary<string, object?> { ["C1"] = "K1", ["C2"] = 1 }
+                    },
+                    ["SecondTab"] = new[]
+                    {
+                        new Dictionary<string, object?> { ["C1"] = "Title Banner", ["C2"] = null },
+                        new Dictionary<string, object?> { ["C1"] = "Code", ["C2"] = "Amount" },
+                        new Dictionary<string, object?> { ["C1"] = "X1", ["C2"] = 99 },
+                        new Dictionary<string, object?> { ["C1"] = "X2", ["C2"] = 150 }
+                    }
+                };
+                MiniExcelLibs.MiniExcel.SaveAs(outPath, sheets, printHeader: false);
+
+                var connector = new ExcelConnector();
+                var supported = connector.GetSupportedOptions();
+                Assert.True(supported.ContainsKey("SHEET_INDEX"));
+                Assert.True(supported.ContainsKey("START_ROW"));
+
+                var secondSheet = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "SHEET_INDEX", "2" },
+                    { "START_ROW", "2" },
+                    { "HEADER", "ON" }
+                });
+                Assert.Equal(new[] { "Code", "Amount" }, (await secondSheet.GetColumnsAsync()).ToArray());
+                var batches = await secondSheet.ReadBatches().ToListAsync();
+                Assert.Single(batches);
+                Assert.Equal(2, batches[0].Rows.Count);
+                Assert.Equal("X1", batches[0].Rows[0]["Code"]?.ToString());
+                Assert.Equal("99", batches[0].Rows[0]["Amount"]?.ToString());
+                Assert.Equal("X2", batches[0].Rows[1]["Code"]?.ToString());
+                Assert.Equal("150", batches[0].Rows[1]["Amount"]?.ToString());
+
+                var outOfBounds = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "SHEET_INDEX", "3" }
+                });
+                Assert.Empty(await outOfBounds.ReadBatches().ToListAsync());
+
+                Assert.Throws<ExecutionException>(() => new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "SHEET_INDEX", "0" }
+                }));
+                Assert.Throws<ExecutionException>(() => new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "START_ROW", "0" }
+                }));
+                Assert.Throws<ExecutionException>(() => new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "SHEET", "FirstTab" },
+                    { "SHEET_INDEX", "2" }
+                }));
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
     }
 }
