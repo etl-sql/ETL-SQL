@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
@@ -30,6 +31,16 @@ namespace ETL_SQL.Tests.Engine
             var eval = Eval();
             await eval.Evaluate(Parse(sql));
         }
+
+        private static async Task<Evaluator> RunAndGet(string sql)
+        {
+            var eval = Eval();
+            eval.RedirectOutput = true;
+            await eval.Evaluate(Parse(sql));
+            return eval;
+        }
+
+        private static string Output(Evaluator eval) => string.Join("\n", eval.Messages.Select(m => m.Message));
 
         // ── IF / ELSE IF / ELSE ───────────────────────────────────────────────
 
@@ -146,7 +157,9 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task RaiseError_Severity1_LogsWithoutThrowing()
         {
-            await Run("RAISERROR('Info message', 1);");
+            var eval = await RunAndGet("RAISERROR('Info message', 1); SELECT 1 AS after_raise;");
+            Assert.Contains("Info message", Output(eval));
+            Assert.Equal(1m, Convert.ToDecimal(eval.LastResult!.Rows[0]["after_raise"]));
         }
 
         [Fact]
@@ -162,9 +175,9 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task RaiseError_CaughtInTryCatch_DoesNotBubble()
+        public async Task RaiseError_CaughtInTryCatch_RunsTheCatchBlock()
         {
-            await Run(@"
+            var eval = await RunAndGet(@"
                 BEGIN TRY
                     RAISERROR('Test', 5);
                 END
@@ -172,20 +185,23 @@ namespace ETL_SQL.Tests.Engine
                     PRINT 'Caught raiserror';
                 END
             ");
+            Assert.Contains("Caught raiserror", Output(eval));
         }
 
         [Fact]
         public async Task RaiseError_InfoSeverity_MessageContainsINFO()
         {
-            await Run("RAISERROR('Low severity', 2);");
+            var eval = await RunAndGet("RAISERROR('Low severity', 2);");
+            Assert.Contains("[INFO] Low severity", Output(eval));
         }
 
         // ── WAITFOR DELAY ─────────────────────────────────────────────────────
 
         [Fact]
-        public async Task WaitFor_ZeroDelay_CompletesImmediately()
+        public async Task WaitFor_ZeroDelay_ContinuesTheScript()
         {
-            await Run("WAITFOR DELAY '00:00:00';");
+            var eval = await RunAndGet("WAITFOR DELAY '00:00:00'; SELECT 1 AS after_wait;");
+            Assert.Equal(1m, Convert.ToDecimal(eval.LastResult!.Rows[0]["after_wait"]));
         }
 
         [Fact]
@@ -273,10 +289,12 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task DeleteDirectory_IfExists_NonExistent_NoError()
+        public async Task DeleteDirectory_IfExists_NonExistent_ContinuesTheScript()
         {
             var dir = Path.Combine(Path.GetTempPath(), "etlsql_test_nonexistent_" + Guid.NewGuid().ToString("N"));
-            await Run($"DELETE DIRECTORY IF EXISTS '{dir}';");
+            var eval = await RunAndGet($"DELETE DIRECTORY IF EXISTS '{dir}'; SELECT 1 AS after_delete;");
+            Assert.Equal(1m, Convert.ToDecimal(eval.LastResult!.Rows[0]["after_delete"]));
+            Assert.False(Directory.Exists(dir));
         }
 
         [Fact]
@@ -317,10 +335,12 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task DeleteFile_IfExists_NonExistent_NoError()
+        public async Task DeleteFile_IfExists_NonExistent_ContinuesTheScript()
         {
             var f = Path.Combine(Path.GetTempPath(), "nonexistent_" + Guid.NewGuid().ToString("N") + ".txt");
-            await Run($"DELETE FILE IF EXISTS '{f}';");
+            var eval = await RunAndGet($"DELETE FILE IF EXISTS '{f}'; SELECT 1 AS after_delete;");
+            Assert.Equal(1m, Convert.ToDecimal(eval.LastResult!.Rows[0]["after_delete"]));
+            Assert.False(File.Exists(f));
         }
 
         [Fact]
@@ -436,42 +456,44 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task Return_WithValue_SetsReturnCode()
+        public async Task Return_WithValue_EndsTheProcedure()
         {
-            await Run(@"
+            var eval = await RunAndGet(@"
+                DECLARE @r INT = 0;
                 CREATE PROCEDURE ReturnCode AS BEGIN
                     RETURN 5;
+                    SET @r = 99;
                 END;
                 EXEC ReturnCode;
             ");
+            Assert.Equal(0m, Convert.ToDecimal(eval.GetVariable("@r")));
         }
 
         // ── EXEC / CALL procedure ─────────────────────────────────────────────
 
         [Fact]
-        public async Task Exec_SimpleProc_Runs()
+        public async Task Exec_SimpleProc_RunsItsBody()
         {
-            var eval = Eval();
-            await eval.Evaluate(Parse(@"
+            var eval = await RunAndGet(@"
                 CREATE PROCEDURE Greet AS BEGIN
                     PRINT 'Hello';
                 END;
                 EXEC Greet;
-            "));
+            ");
+            Assert.Contains("Hello", Output(eval));
         }
 
         [Fact]
         public async Task Exec_ProcWithParam_PassesValue()
         {
-            var eval = Eval();
-            await eval.Evaluate(Parse(@"
+            var eval = await RunAndGet(@"
                 CREATE PROCEDURE Double(@n INT) AS BEGIN
                     SELECT @n * 2 AS Result INTO #Out;
                 END;
                 EXEC Double 5;
                 SELECT * FROM #Out;
-            "));
-            Assert.NotNull(eval.LastResult);
+            ");
+            Assert.Equal(10m, Convert.ToDecimal(eval.LastResult!.Rows[0]["Result"]));
         }
 
         // ── SET WHAT_IF ───────────────────────────────────────────────────────
@@ -479,21 +501,26 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task SetWhatIf_On_EnablesWhatIfMode()
         {
-            await Run("SET WHAT_IF ON;");
+            var eval = await RunAndGet("SET WHAT_IF ON;");
+            Assert.True(eval.IsWhatIf);
         }
 
         [Fact]
         public async Task SetWhatIf_Off_DisablesWhatIfMode()
         {
-            await Run("SET WHAT_IF OFF;");
+            var eval = await RunAndGet("SET WHAT_IF ON; SET WHAT_IF OFF;");
+            Assert.False(eval.IsWhatIf);
         }
 
         // ── SET WEEK_START ────────────────────────────────────────────────────
 
         [Fact]
-        public async Task SetWeekStart_Monday_Succeeds()
+        public async Task SetWeekStart_SetsTheFirstDayOfTheWeek()
         {
-            await Run("SET WEEK_START_DAY = 'MONDAY';");
+            var eval = await RunAndGet("SET WEEK_START_DAY = 'SUNDAY';");
+            Assert.Equal(DayOfWeek.Sunday, eval.WeekStartDay);
+            await eval.Evaluate(Parse("SET WEEK_START_DAY = 'MONDAY';"));
+            Assert.Equal(DayOfWeek.Monday, eval.WeekStartDay);
         }
 
         // ── eng.columns ───────────────────────────────────────────────────────
@@ -600,23 +627,24 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task SetProfiling_On_EnablesProfiling()
         {
-            await Run("SET PROFILING ON;");
+            var eval = await RunAndGet("SET PROFILING OFF; SET PROFILING ON;");
+            Assert.True(eval.IsProfiling);
         }
 
         [Fact]
         public async Task SetProfiling_Off_DisablesProfiling()
         {
-            await Run("SET PROFILING OFF;");
+            var eval = await RunAndGet("SET PROFILING OFF;");
+            Assert.False(eval.IsProfiling);
         }
 
         // ── SHOW JOB HISTORY ──────────────────────────────────────────────────
 
         [Fact]
-        public async Task ShowJobHistory_ProducesResult()
+        public async Task JobHistory_HasAStatusColumn()
         {
-            var eval = Eval();
-            await eval.Evaluate(Parse("SELECT * FROM eng.job_history;"));
-            Assert.NotNull(eval.LastResult);
+            var eval = await RunAndGet("SELECT * FROM eng.job_history;");
+            Assert.Contains("status", eval.LastResult!.ColumnNames);
         }
 
         // ── eng.tags script metadata ──────────────────────────────────────────
@@ -636,7 +664,8 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task UsePassword_SetsActivePassword()
         {
-            await Run("USE PASSWORD = 'mypassword';");
+            var eval = await RunAndGet("USE PASSWORD = 'mypassword';");
+            Assert.Equal("mypassword", eval.ScriptPassword);
         }
 
         [Fact]
