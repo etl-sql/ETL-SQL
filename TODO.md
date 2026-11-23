@@ -14,7 +14,7 @@ Each task's design, boundaries and acceptance evidence stay in its linked `ROADM
 | :--- | :--- |
 | [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Nightly streak, release tooling, merge-gate proofs, the script and test review, small features and docs |
 | [Tier 2 — next](#tier-2--next) | PR regression lane proof |
-| [Tier 3 — if time allows](#tier-3--if-time-allows) | 100M allocation-churn proof, MSI isolated certification |
+| [Tier 3 — if time allows](#tier-3--if-time-allows) | 100M external join CPU regression |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
 outcome in `CHANGELOG.md` (or the record doc for its section) and delete it. Deferred initiatives
