@@ -592,9 +592,9 @@ public sealed class JobsDataSource : IDataSource
                 rows.Add(new Row
                 {
                     ["name"] = job.Name,
-                    ["schedule"] = $"EVERY {job.Interval} {job.Unit}" + (job.AtTime != null ? $" AT {job.AtTime}" : ""),
+                    ["schedule"] = job.ScheduleLabel,
                     ["last_run"] = job.LastRun,
-                    ["next_run"] = job.NextRun,
+                    ["next_run"] = job.DisplayNextRun,
                     ["script"] = job.Script,
                     ["enabled"] = job.IsEnabled ? 1 : 0
                 });

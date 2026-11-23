@@ -129,6 +129,17 @@ public record JobDefinition(
     /// means "due now" to the interval path, so such a job is parked here instead.
     /// </summary>
     public static readonly DateTime ManualOnlyNextRun = new(9000, 1, 1, 0, 0, 0, DateTimeKind.Local);
+
+    /// <summary>True when the job runs only on request (see <see cref="ManualOnlyNextRun"/>).</summary>
+    public bool IsManualOnly => NextRun >= ManualOnlyNextRun;
+
+    /// <summary>Next run to show a person: none for a manual-only job, not the parking date.</summary>
+    public DateTime? DisplayNextRun => IsManualOnly ? null : NextRun;
+
+    /// <summary>The schedule as listings show it: <c>MANUAL</c>, or the legacy interval.</summary>
+    public string ScheduleLabel => IsManualOnly
+        ? "MANUAL"
+        : $"EVERY {Interval} {Unit}" + (AtTime != null ? $" AT {AtTime}" : "");
 }
 
 public record JobHistoryEntry(

@@ -698,9 +698,9 @@ namespace ETL_SQL.Connectors.Orchestrator
             {
                 var row = new Row();
                 row["Name"] = job.Name;
-                row["Schedule"] = $"EVERY {job.Interval} {job.Unit}" + (job.AtTime != null ? $" AT {job.AtTime}" : "");
+                row["Schedule"] = job.ScheduleLabel;
                 row["LastRun"] = job.LastRun;
-                row["NextRun"] = job.NextRun;
+                row["NextRun"] = job.DisplayNextRun;
                 row["Script"] = job.Script;
                 row["Enable"] = job.IsEnabled ? 1 : 0;
                 await table.AddRowAsync(row);
