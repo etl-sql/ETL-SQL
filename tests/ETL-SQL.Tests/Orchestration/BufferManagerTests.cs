@@ -61,7 +61,8 @@ namespace ETL_SQL.Tests.Orchestration
         [Fact]
         public async Task BufferManager_FifoOrder_Memory()
         {
-            var bm = CreateBufferManager(maxMemMB: 10);
+            using var bm = CreateBufferManager(maxMemMB: 10, timeoutSec: 5);
+            var waitBudget = TimeSpan.FromSeconds(2);
 
             // Hold all memory
             var res1 = await bm.ReserveMemoryAsync("session1", 10 * 1024 * 1024);
@@ -73,13 +74,17 @@ namespace ETL_SQL.Tests.Orchestration
             // Release session 1
             res1.Dispose();
 
-            // Task 2 must complete first (FIFO) while task 3 waits for 6MB to free up
-            var res2 = await task2;
+            // Task 2 must complete first (FIFO) while task 3 waits for 6MB to free up.
+            // Bounded waits ensure an ordering regression fails quickly instead of hanging.
+            var firstCompleted = await Task.WhenAny(task2, task3).WaitAsync(waitBudget);
+            Assert.True(ReferenceEquals(firstCompleted, task2),
+                "Expected session2 (queued first) to acquire memory before session3 (FIFO order broke).");
+            var res2 = await task2.WaitAsync(waitBudget);
             Assert.NotNull(res2);
             Assert.False(task3.IsCompleted, "task3 should wait until task2 releases its 6MB reservation");
 
             res2.Dispose();
-            using var res3 = await task3;
+            using var res3 = await task3.WaitAsync(waitBudget);
             Assert.NotNull(res3);
         }
 

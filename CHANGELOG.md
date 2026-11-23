@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Bounded `BufferManager_FifoOrder_Memory` waits with `WaitAsync` and `Task.WhenAny` so a FIFO ordering regression fails immediately with a clear message instead of hanging (`RF05` in `tests/ETL-SQL.Tests/Orchestration/BufferManagerTests.cs`).
+
 - Closed `RV05` Portal and browser test review (findings 1–4): strengthened `ConfigurationExportTests.ExportPortalConfigurationStatement_Parses`, `PortalConsumerUxTests.RequestDataRefresh_StaleReport_ReturnsRequestedOrStarted`, and `PortalIntegrationTests.Login_WithDefaultAdminCredentials_ReturnsJwt`, replaced five fixed `WaitForTimeoutAsync` sleeps in `AdminPanelFailureStateTests` with deterministic Playwright waits, and verified `PortalWebFactory`/`OrchestratorWebFactory` temp-directory isolation across all 336 `Portal.Tests` and `Portal.BrowserTests` files.
 
 - Closed `RV04` orchestration, governance, hardening, security, scale, and integration test review (findings 1–4): converted two Windows-only early-return tests in `ExternalToolSecurityTests` to `[WindowsFact]` + `[Trait("Platform", "Windows")]` with strict `mklink /J` assertions, fixed `OrchestratorStoreFactoryTests.DefaultProvider_IsSqlite` to assert `SQLiteJobHistoryStore` with temp-file cleanup, fixed `BufferManagerTests.BufferManager_FifoOrder_Memory` to actually contend (`6 MB + 6 MB > 10 MB`) and verify FIFO waiting, and strengthened `CliOrchestratorTests` and `BigQueryIntegrationTests`.
