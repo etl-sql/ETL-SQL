@@ -1210,37 +1210,39 @@ export function createConnectionWizard(options: ConnectionWizardOptions = {}): C
                 <div class="etlsql-cw-body">
                     <!-- Left Sidebar: Category & Connector Presets -->
                     <div class="etlsql-cw-sidebar">
-                        <div class="etlsql-cw-preset-group">
+                        <div class="etlsql-cw-preset-group etlsql-cw-cat-group">
                             <div class="etlsql-cw-preset-label">CATEGORY</div>
-                            <button type="button" class="etlsql-cw-cat-btn ${state.selectedCategory === 'all' && !state.isSharedReference ? 'active' : ''}" data-cat="all">
-                                🌐 All Connectors (${state.schemas.length})
-                            </button>
-                            <button type="button" class="etlsql-cw-cat-btn ${state.selectedCategory === 'database' && !state.isSharedReference ? 'active' : ''}" data-cat="database">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
-                                Relational / DW
-                            </button>
-                            <button type="button" class="etlsql-cw-cat-btn ${state.selectedCategory === 'files' && !state.isSharedReference ? 'active' : ''}" data-cat="files">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                                Flat Files
-                            </button>
-                            <button type="button" class="etlsql-cw-cat-btn ${state.selectedCategory === 'remote' && !state.isSharedReference ? 'active' : ''}" data-cat="remote">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
-                                Cloud & Remote
-                            </button>
-                            <button type="button" class="etlsql-cw-cat-btn ${state.selectedCategory === 'testdata' && !state.isSharedReference ? 'active' : ''}" data-cat="testdata">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6"></path><path d="M10 3v6l-5 9a2 2 0 0 0 1.75 3h10.5A2 2 0 0 0 19 18l-5-9V3"></path><path d="M8 15h8"></path></svg>
-                                Test Data
-                            </button>
-                            <button type="button" class="etlsql-cw-cat-btn ${state.isSharedReference ? 'active' : ''}" data-cat="shared">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
-                                Shared Catalog
-                            </button>
+                            <div class="etlsql-cw-cat-list">
+                                <button type="button" class="etlsql-cw-cat-btn ${state.selectedCategory === 'all' && !state.isSharedReference ? 'active' : ''}" data-cat="all">
+                                    🌐 All Connectors (${state.schemas.length})
+                                </button>
+                                <button type="button" class="etlsql-cw-cat-btn ${state.selectedCategory === 'database' && !state.isSharedReference ? 'active' : ''}" data-cat="database">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+                                    Relational / DW
+                                </button>
+                                <button type="button" class="etlsql-cw-cat-btn ${state.selectedCategory === 'files' && !state.isSharedReference ? 'active' : ''}" data-cat="files">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                    Flat Files
+                                </button>
+                                <button type="button" class="etlsql-cw-cat-btn ${state.selectedCategory === 'remote' && !state.isSharedReference ? 'active' : ''}" data-cat="remote">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+                                    Cloud & Remote
+                                </button>
+                                <button type="button" class="etlsql-cw-cat-btn ${state.selectedCategory === 'testdata' && !state.isSharedReference ? 'active' : ''}" data-cat="testdata">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6"></path><path d="M10 3v6l-5 9a2 2 0 0 0 1.75 3h10.5A2 2 0 0 0 19 18l-5-9V3"></path><path d="M8 15h8"></path></svg>
+                                    Test Data
+                                </button>
+                                <button type="button" class="etlsql-cw-cat-btn ${state.isSharedReference ? 'active' : ''}" data-cat="shared">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                                    Shared Catalog
+                                </button>
+                            </div>
                         </div>
 
-                        <div class="etlsql-cw-preset-group" style="flex:1;min-height:0;display:flex;flex-direction:column;">
+                        <div class="etlsql-cw-preset-group etlsql-cw-connector-group">
                             <div class="etlsql-cw-preset-label">CONNECTOR</div>
                             <input type="text" id="etlsql-cw-type-filter" class="form-control etlsql-cw-search-input" placeholder="Search connectors…" value="${_attr(state.typeFilter || '')}" autocomplete="off" />
-                            <div class="etlsql-cw-type-list" style="flex:1;overflow-y:auto;">
+                            <div class="etlsql-cw-type-list">
                                 ${renderConnectorTypeList()}
                             </div>
                         </div>
@@ -1309,15 +1311,15 @@ export function createConnectionWizard(options: ConnectionWizardOptions = {}): C
                             </div>
                             ${renderDiagnosticReport()}
                         </div>
-
-                        <div class="etlsql-cw-footer-actions">
-                            ${state.saveError ? `<div class="etlsql-cw-save-error alert alert-danger" role="alert">${_h(state.saveError)}</div>` : ''}
-                            <button type="button" class="btn btn-outline" id="etlsql-cw-cancel-btn">Cancel</button>
-                            <button type="button" class="btn btn-primary" id="etlsql-cw-submit-btn" ${(securityViolation || state.isSaving || aliasProblem) ? 'disabled' : ''} ${securityViolation ? 'title="Resolve security violation before saving"' : (aliasProblem ? `title="${_attr(aliasProblem)}"` : '')}>
-                                ${state.isSaving ? 'Saving…' : (state.mode === 'admin' ? 'Save to Catalog' : 'Insert Connection')}
-                            </button>
-                        </div>
                     </div>
+                </div>
+
+                <div class="etlsql-cw-footer-actions">
+                    ${state.saveError ? `<div class="etlsql-cw-save-error alert alert-danger" role="alert">${_h(state.saveError)}</div>` : ''}
+                    <button type="button" class="btn btn-outline" id="etlsql-cw-cancel-btn">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="etlsql-cw-submit-btn" ${(securityViolation || state.isSaving || aliasProblem) ? 'disabled' : ''} ${securityViolation ? 'title="Resolve security violation before saving"' : (aliasProblem ? `title="${_attr(aliasProblem)}"` : '')}>
+                        ${state.isSaving ? 'Saving…' : (state.mode === 'admin' ? 'Save to Catalog' : 'Insert Connection')}
+                    </button>
                 </div>
 
                 <!-- Paste Connection String Modal Overlay -->

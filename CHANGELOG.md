@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Fixed VS Code Connection Wizard spacing and narrow-panel layout: stacked `.etlsql-cw-body` into a single scroll container below 960px, turned `CATEGORY` into a wrapping pill bar and `CONNECTOR` into a visible bounded multi-column grid, gave `.etlsql-cw-sql-box` a non-shrinking `min-height` so SQL preview is never crushed to one line, pinned `.etlsql-cw-footer-actions` (`Cancel` / `Insert Connection`) at the modal bottom, and added scoped form/button utility defaults for VS Code webviews (`TODO 3.2` in `src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/connection-wizard.ts`, `src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.css`, and `scripts/checks/test-connection-wizard.mjs`).
+
 - Closed `RV02` weak-assertion audit (finding 28): strengthened 18 remaining single-file assertions across `FileConnectorTests`, `MoreHandlerTests` (fixing `ShowTables_ReturnsTableList`, which previously got 0 rows from `eng.tables` for temp tables and passed on `NotNull`), `UtilityCoverageTests`, `FuncFuzzyJoinTests`, `TestDataFilesTests`, `FlatFileReproTests`, `StmtGoldenTests`, and `OpAliasTests`.
 
 - Strengthened 37 weak/redundant assertions across `SnowflakeConnectorTests`, `BigQueryConnectorTests`, `ConnectorMetadataTests`, `DialectSyntaxTests`, `FileConnectorTests`, `FuncFuzzyTests`, `StmtShowTests`, `RemoteExecuteTests`, and `CoverageBoostTests` (`RV02` finding 27).

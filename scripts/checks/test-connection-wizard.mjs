@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
     encryptClientPassword,
     validatePathSecurity,
@@ -106,6 +107,30 @@ assert.equal(typeof wizard.validatePathSecurity, 'function');
 const generatedSql = wizard.getGeneratedSql();
 assert.ok(generatedSql.includes('CREATE CONNECTION'), 'Generated SQL has CREATE CONNECTION clause');
 assert.ok(generatedSql.includes('POSTGRES'), 'Generated SQL uses specified connector');
+
+// ── 4. Responsive narrow-panel layout & spacing contract ────────────────────
+const overlayEl = appendedElements[0];
+assert.ok(overlayEl && overlayEl.innerHTML, 'Wizard rendered modal markup');
+assert.ok(overlayEl.innerHTML.includes('etlsql-cw-cat-list'), 'Categories wrapped in etlsql-cw-cat-list for narrow pill layout');
+assert.ok(overlayEl.innerHTML.includes('etlsql-cw-connector-group'), 'Connector picker uses etlsql-cw-connector-group class');
+const previewIdx = overlayEl.innerHTML.indexOf('class="etlsql-cw-preview-pane"');
+const footerIdx = overlayEl.innerHTML.indexOf('class="etlsql-cw-footer-actions"');
+const bodyCloseIdx = overlayEl.innerHTML.lastIndexOf('</div>', footerIdx);
+assert.ok(previewIdx > 0 && footerIdx > previewIdx && bodyCloseIdx > previewIdx,
+    'Footer actions render after etlsql-cw-body so Insert/Cancel stay pinned');
+
+const designerCss = fs.readFileSync(
+    new URL('../../src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.css', import.meta.url),
+    'utf8'
+);
+assert.match(designerCss, /\.etlsql-cw-sql-box\s*\{[^}]*flex:\s*0 0 auto;[^}]*min-height:\s*\d+px;/s,
+    'SQL preview box must not shrink to a single line');
+assert.match(designerCss, /@media\s*\(max-width:\s*960px\)\s*\{[^@]*\.etlsql-cw-body\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/s,
+    'Narrow viewport must stack etlsql-cw-body as a single scroll column');
+assert.match(designerCss, /@media\s*\(max-width:\s*960px\)\s*\{[^@]*\.etlsql-cw-cat-list\s*\{[^}]*flex-direction:\s*row;[^}]*flex-wrap:\s*wrap;/s,
+    'Narrow viewport must render categories as a wrapping pill row');
+assert.match(designerCss, /@media\s*\(max-width:\s*960px\)\s*\{[^@]*\.etlsql-cw-type-list\s*\{[^}]*display:\s*grid;[^}]*max-height:\s*\d+px;/s,
+    'Narrow viewport must show connector list in a bounded grid');
 
 wizard.close();
 

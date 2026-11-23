@@ -102,6 +102,3 @@ RV01 (lane-membership and orphan audit) and RV02 (engine, language, connector an
 - [ ] **Unexplained allocation noise.** Smoke join/aggregate allocations jump about 2–3 MB between
   runs (cause not found; can trip the 2% warning, never the 5% failure); Standard cube allocation
   is bimodal per sample (about 1,150 or 2,010 MB).
-
-### 3.2 Bugs
-- [ ] **VS Code Connection Wizard has bad spacing**  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-11-23 134301.png"  the SQL section is barley visible.  You choose the connection type at the top but then there is no way to select MSSQL, Oracle, Postgres, ...  Review with Frontend developer skill and make changes to make this work better.
