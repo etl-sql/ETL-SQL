@@ -45,6 +45,8 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("PATH_EXTENSION", PathExtension, "PATH_EXTENSION(path): Extracts the extension from a path.");
             registry.RegisterWithHelp("PATH_CHANGE_EXTENSION", PathChangeExtension, "PATH_CHANGE_EXTENSION(path, ext): Replaces or removes the extension of a path (accepts '.bak', 'bak', or '' to remove).");
             registry.RegisterWithHelp("PATH_DIRECTORY", PathDirectory, "PATH_DIRECTORY(path): Extracts the directory information from a path.");
+            registry.RegisterWithHelp("PATH_ROOT", PathRoot, "PATH_ROOT(path): Extracts the root directory information from a path.");
+            registry.RegisterWithHelp("PATH_IS_ABSOLUTE", PathIsAbsolute, "PATH_IS_ABSOLUTE(path): Returns 1 if the path is fully qualified (absolute), or 0 otherwise.");
         }
 
         /// <summary>
@@ -261,6 +263,18 @@ namespace ETL_SQL.Engine.Functions
         {
             if (args.Count < 1 || args[0] == null) return null;
             return Path.GetDirectoryName(args[0]?.ToString() ?? "");
+        }
+
+        private static object? PathRoot(List<object?> args, IExecutionContext context)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            return Path.GetPathRoot(args[0]?.ToString() ?? "") ?? "";
+        }
+
+        private static object? PathIsAbsolute(List<object?> args, IExecutionContext context)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            return Path.IsPathFullyQualified(args[0]?.ToString() ?? "") ? 1m : 0m;
         }
 
         private static async Task<object?> RemoteFileList(List<object?> args, IExecutionContext context)

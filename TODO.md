@@ -97,7 +97,6 @@ back to its `ROADMAP.md` entry unchanged. Each row's boundaries are in its ROADM
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| FN04 | **`PATH_ROOT`, `PATH_IS_ABSOLUTE`, `PATH_NORMALIZE`.** Pure string functions. `PATH_NORMALIZE` must match `CAST(... AS PATH)`; decide whether it is needed at all. | — | S |
 | FN05 | **`FILE_READONLY(path)` and `FILE_ACCESSED(path)`.** Read-only flag and last access time. Confirm the `DIRECTORY` connector columns and the functions agree. | — | S |
 | FN06 | **`DIRECTORY_SIZE` and `DIRECTORY_FILE_COUNT`.** Optional `recursive` flag like `FILE_LIST`. Honors the file-operation and recursion limits in the Zero-Trust guardrails. | — | S |
 | XL02 | **Implement `START_ROW` and `SHEET_INDEX` options.** Add `START_ROW` (1-based row number where the header or data begins, skipping banner rows without requiring an explicit `RANGE` end cell) and `SHEET_INDEX` (1-based worksheet position when tab names vary) to `ExcelConnector.AllowedOptions` and `ExcelDataSource`, bringing code into parity with `docs/reference/connectors/files/excel.md`. | — | S |

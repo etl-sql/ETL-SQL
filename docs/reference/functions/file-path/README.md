@@ -20,6 +20,8 @@
 | [PATH_EXTENSION](path_extension.md) | Extracts the extension portion of a path (including the period `.`). |
 | [PATH_FILENAME](path_filename.md) | Extracts the filename and extension portion of a path. |
 | [PATH_FILENAME_NO_EXT](path_filename_no_ext.md) | Extracts the filename without its extension from a path. |
+| [PATH_IS_ABSOLUTE](path_is_absolute.md) | Returns `1` when a path is fully qualified (absolute), or `0` otherwise. |
+| [PATH_ROOT](path_root.md) | Extracts the root directory portion of a path. |
 | [REMOTE_DIRECTORY_EXISTS](remote_directory_exists.md) | Checks whether a directory exists on a remote connection. |
 | [REMOTE_FILE_EXISTS](remote_file_exists.md) | Checks whether a file (or directory) exists on a remote connection. |
 | [REMOTE_FILE_LIST](remote_file_list.md) | Returns a table of files on a remote connection (SFTP, FTP, or Azure Blob). |

@@ -514,6 +514,8 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `PATH_FILENAME(path)` | File | [PATH_FILENAME.md](reference/functions/file-path/path_filename.md) | Extracts filename from a full path |
 | `PATH_FILENAME_NO_EXT(path)` | File | [PATH_FILENAME_NO_EXT.md](reference/functions/file-path/path_filename_no_ext.md) | Extracts filename without its extension |
 | `PATH_CHANGE_EXTENSION(path, extension)` | File | [PATH_CHANGE_EXTENSION.md](reference/functions/file-path/path_change_extension.md) | Replaces or removes the file extension in a path |
+| `PATH_ROOT(path)` | File | [PATH_ROOT.md](reference/functions/file-path/path_root.md) | Extracts the root directory portion of a path |
+| `PATH_IS_ABSOLUTE(path)` | File | [PATH_IS_ABSOLUTE.md](reference/functions/file-path/path_is_absolute.md) | Returns 1 if a path is fully qualified (absolute), 0 otherwise |
 | `SUM(expression)` | Aggregate | [SUM.md](reference/functions/aggregate/sum.md) | Sum of values |
 | `COUNT(expression)` | Aggregate | [COUNT.md](reference/functions/aggregate/count.md) | Count of non-null values |
 | `AVG(expression)` | Aggregate | [AVG.md](reference/functions/aggregate/avg.md) | Average of values |
@@ -2530,6 +2532,8 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `PATH_EXTENSION` | Function | Canonical built-in function |
 | `PATH_FILENAME` | Function | Canonical built-in function |
 | `PATH_FILENAME_NO_EXT` | Function | Canonical built-in function |
+| `PATH_IS_ABSOLUTE` | Function | Canonical built-in function |
+| `PATH_ROOT` | Function | Canonical built-in function |
 | `PATINDEX` | Function | Canonical built-in function |
 | `PERCENT_RANK` | Function | Canonical built-in function |
 | `PERCENTILE_CONT` | Function | Canonical built-in function |

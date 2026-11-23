@@ -66,6 +66,47 @@ public sealed class FilePathFunctionsTests : IDisposable
     }
 
     [Fact]
+    public async Task PathRoot_ExtractsRootAndHandlesRelativeAndNull()
+    {
+        Assert.Equal(string.Empty, await EvalScalarAsync("DECLARE @res VARCHAR = PATH_ROOT('relative/orders.csv');"));
+        Assert.Equal(string.Empty, await EvalScalarAsync("DECLARE @res VARCHAR = PATH_ROOT('orders.csv');"));
+        Assert.Equal(string.Empty, await EvalScalarAsync("DECLARE @res VARCHAR = PATH_ROOT('');"));
+        Assert.Null(await EvalScalarAsync("DECLARE @res VARCHAR = PATH_ROOT(NULL);"));
+
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal(@"C:\", await EvalScalarAsync(@"DECLARE @res VARCHAR = PATH_ROOT('C:\Data\orders.csv');"));
+            Assert.Equal(@"\\server\share", await EvalScalarAsync(@"DECLARE @res VARCHAR = PATH_ROOT('\\server\share\orders.csv');"));
+            Assert.Equal(@"\", await EvalScalarAsync("DECLARE @res VARCHAR = PATH_ROOT('/var/data/orders.csv');"));
+        }
+        else
+        {
+            Assert.Equal("/", await EvalScalarAsync("DECLARE @res VARCHAR = PATH_ROOT('/var/data/orders.csv');"));
+        }
+    }
+
+    [Fact]
+    public async Task PathIsAbsolute_DistinguishesFullyQualifiedFromRelativeAndNull()
+    {
+        Assert.Equal(0m, await EvalScalarAsync("DECLARE @res INT = PATH_IS_ABSOLUTE('relative/orders.csv');"));
+        Assert.Equal(0m, await EvalScalarAsync("DECLARE @res INT = PATH_IS_ABSOLUTE('orders.csv');"));
+        Assert.Equal(0m, await EvalScalarAsync("DECLARE @res INT = PATH_IS_ABSOLUTE('');"));
+        Assert.Null(await EvalScalarAsync("DECLARE @res INT = PATH_IS_ABSOLUTE(NULL);"));
+
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal(1m, await EvalScalarAsync(@"DECLARE @res INT = PATH_IS_ABSOLUTE('C:\Data\orders.csv');"));
+            Assert.Equal(1m, await EvalScalarAsync(@"DECLARE @res INT = PATH_IS_ABSOLUTE('\\server\share\orders.csv');"));
+            Assert.Equal(0m, await EvalScalarAsync(@"DECLARE @res INT = PATH_IS_ABSOLUTE('\drive-relative\orders.csv');"));
+            Assert.Equal(0m, await EvalScalarAsync("DECLARE @res INT = PATH_IS_ABSOLUTE('C:drive-relative.csv');"));
+        }
+        else
+        {
+            Assert.Equal(1m, await EvalScalarAsync("DECLARE @res INT = PATH_IS_ABSOLUTE('/var/data/orders.csv');"));
+        }
+    }
+
+    [Fact]
     public async Task FileCreated_ReturnsTimestampForExistingAndNullForMissing()
     {
         var path = PathFor("created.txt");
