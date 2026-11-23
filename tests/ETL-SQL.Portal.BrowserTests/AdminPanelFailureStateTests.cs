@@ -45,6 +45,9 @@ public sealed class AdminPanelFailureStateTests(PortalAdminFixture fixture)
         await page.Locator($"tr:has-text('{first}')").First.WaitForAsync();
 
         await OpenAclAsync(page, first);
+        // The heading changes on click, before the read lands; wait for the table, or firstMarkup
+        // is the loading state and the cross-folder check below can never fail.
+        await Expect(page.Locator("#aclTableWrap")).ToHaveAttributeAsync("data-acl-state", "ready");
         var firstMarkup = await page.Locator("#aclTableWrap").InnerHTMLAsync();
 
         // Now break only the ACL read, and open the other folder's permissions. The panel reads
