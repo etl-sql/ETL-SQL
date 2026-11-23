@@ -163,7 +163,13 @@ public class DataParser : ParserComponent
         {
             var keyTok = ConsumeIdentifier("Expected parameter name");
             Consume(TokenType.EQUALS, "Expected '='");
-            var valTok = ParseExpression();
+            Expression valTok;
+            if (Match(TokenType.ON))
+                valTok = new IdentifierExpression("ON") { Line = keyTok.Line, Column = keyTok.Column };
+            else if (Match(TokenType.OFF))
+                valTok = new IdentifierExpression("OFF") { Line = keyTok.Line, Column = keyTok.Column };
+            else
+                valTok = ParseExpression();
             options[keyTok.Value] = valTok;
             if (!Match(TokenType.COMMA))
             {

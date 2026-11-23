@@ -13,3 +13,4 @@
 | [ROLLING_AGGREGATE](rolling_aggregate.md) | Smooths noisy data trends (e.g. 7-day moving average) or tracks running/cumulative metrics. |
 | [SHARE_OF_TOTAL](share_of_total.md) | Computes the percentage contribution of a row's numeric value relative to the group or grand total. |
 | [TOP_N_OTHERS](top_n_others.md) | Reduces high-cardinality values by aggregating low-volume categories into a single row. Useful for keeping pie and bar charts clean. |
+| [UNPIVOT](unpivot.md) | Reshapes wide columns into normalized key/value rows (`MELT` synonym). |

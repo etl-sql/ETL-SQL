@@ -34,6 +34,20 @@ public static class TransformSchemaProjection
                 .ToList();
         }
 
+        if (algorithm is "UNPIVOT" or "MELT")
+        {
+            var idCols = GetOptionColumnList(statement.Options, "ID_COLS");
+            var valueCols = GetOptionColumnList(statement.Options, "VALUE_COLS");
+            var nameCol = TryGetOptionString(statement.Options, "NAME_COL") ?? "Name";
+            var valueCol = TryGetOptionString(statement.Options, "VALUE_COL") ?? "Value";
+            var projected = idCols
+                .Select(name => new ColumnMetadata(name, sourceByName.TryGetValue(name, out var t) ? t : "ANY"))
+                .ToList();
+            projected.Add(new ColumnMetadata(nameCol, "VARCHAR"));
+            projected.Add(new ColumnMetadata(valueCol, InferUnpivotValueType(valueCols, sourceByName)));
+            return projected;
+        }
+
         var result = new List<ColumnMetadata>(sourceColumns.Count + 4);
         var indexByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
@@ -153,6 +167,16 @@ public static class TransformSchemaProjection
                     }
                     break;
                 }
+            case "UNPIVOT":
+            case "MELT":
+                {
+                    var valueCols = GetOptionColumnList(options, "VALUE_COLS");
+                    var nameCol = TryGetOptionString(options, "NAME_COL") ?? "Name";
+                    var valueCol = TryGetOptionString(options, "VALUE_COL") ?? "Value";
+                    specs.Add(new ComputedColumnSpec(nameCol, "VARCHAR", valueCols, ReplacesExisting: false));
+                    specs.Add(new ComputedColumnSpec(valueCol, InferUnpivotValueType(valueCols, sourceTypes), valueCols, ReplacesExisting: false));
+                    break;
+                }
         }
 
         return specs;
@@ -189,7 +213,7 @@ public static class TransformSchemaProjection
         foreach (var key in new[]
                  {
                      "DATE_COL", "VALUE_COL", "VALUE_COLS", "ORDER_COL", "BY_GROUP",
-                     "KEY_COLS", "ROW_FIELDS", "PIVOT_FIELD", "VALUE_FIELD", "CATEGORY_COL"
+                     "KEY_COLS", "ID_COLS", "ROW_FIELDS", "PIVOT_FIELD", "VALUE_FIELD", "CATEGORY_COL"
                  })
         {
             AddRange(GetOptionColumnList(statement.Options, key));
@@ -229,6 +253,48 @@ public static class TransformSchemaProjection
         if (string.IsNullOrWhiteSpace(dataType)) return false;
         var baseType = dataType.Split('(')[0].Trim().ToUpperInvariant();
         return baseType is "INT" or "INTEGER" or "BIGINT" or "SMALLINT" or "TINYINT";
+    }
+
+    public static string InferUnpivotValueType(
+        IReadOnlyList<string> valueCols,
+        IReadOnlyDictionary<string, string>? sourceTypes)
+    {
+        if (sourceTypes == null || valueCols.Count == 0)
+            return "ANY";
+
+        var resolvedTypes = new List<string>();
+        foreach (var col in valueCols)
+        {
+            if (sourceTypes.TryGetValue(col, out var t)
+                && !string.IsNullOrWhiteSpace(t)
+                && !t.Equals("UNKNOWN", StringComparison.OrdinalIgnoreCase)
+                && !t.Equals("ANY", StringComparison.OrdinalIgnoreCase))
+            {
+                resolvedTypes.Add(t);
+            }
+        }
+
+        if (resolvedTypes.Count == 0)
+            return "ANY";
+
+        if (resolvedTypes.All(t => t.Equals(resolvedTypes[0], StringComparison.OrdinalIgnoreCase)))
+            return resolvedTypes[0];
+
+        var baseTypes = resolvedTypes.Select(t => t.Split('(')[0].Trim().ToUpperInvariant()).ToList();
+        if (baseTypes.All(b => b == baseTypes[0]))
+            return baseTypes[0];
+
+        static bool IsNumeric(string b) =>
+            b is "INT" or "INTEGER" or "BIGINT" or "SMALLINT" or "TINYINT" or "DECIMAL" or "NUMERIC" or "MONEY" or "FLOAT" or "DOUBLE" or "REAL";
+
+        if (baseTypes.All(IsNumeric))
+        {
+            if (baseTypes.Any(b => b is "FLOAT" or "DOUBLE" or "REAL"))
+                return "DOUBLE";
+            return "DECIMAL";
+        }
+
+        return "VARCHAR";
     }
 
     public static string? TryGetOptionString(IReadOnlyDictionary<string, Expression> options, string key)

@@ -97,7 +97,6 @@ back to its `ROADMAP.md` entry unchanged. Each row's boundaries are in its ROADM
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| TR06 | **Add `TRANSFORM ... USING UNPIVOT` (`MELT`).** Reshape wide columns (`ID_COLS`, `VALUE_COLS`, `NAME_COL`, `VALUE_COL`, `INCLUDE_NULLS = OFF \| ON`) into normalized key/value rows with preserved schema types and SLT coverage. | TR02, TR03 | S |
 
 
 ## Tier 2 — next

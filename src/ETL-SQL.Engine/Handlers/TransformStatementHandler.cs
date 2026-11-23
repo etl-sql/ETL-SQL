@@ -44,6 +44,10 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             case "PIVOT":
                 await ExecutePivot(stmt, context);
                 break;
+            case "UNPIVOT":
+            case "MELT":
+                await ExecuteUnpivot(stmt, context);
+                break;
             case "TOP_N_OTHERS":
                 await ExecuteTopNOthers(stmt, context);
                 break;
@@ -670,6 +674,92 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             }
 
             await sink.WriteRowAsync(outRow);
+        }
+
+        await sink.CompleteAsync();
+    }
+
+    private async Task ExecuteUnpivot(TransformStatement stmt, IExecutionContext context)
+    {
+        var algoName = stmt.Algorithm.ToUpperInvariant();
+        ValidateAllowedOptions(stmt, algoName, "ID_COLS", "VALUE_COLS", "NAME_COL", "VALUE_COL", "INCLUDE_NULLS");
+
+        var idCols = GetOptionalColumnList(stmt.Options, "ID_COLS");
+        if (!stmt.Options.TryGetValue("VALUE_COLS", out var vcExpr))
+        {
+            throw new ExecutionException($"{algoName} algorithm requires VALUE_COLS parameter");
+        }
+        var valueCols = GetGroupColumns(vcExpr);
+        if (valueCols.Count == 0)
+        {
+            throw new ExecutionException($"{algoName} VALUE_COLS must specify at least one column.");
+        }
+
+        var distinctValueCols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var vc in valueCols)
+        {
+            if (!distinctValueCols.Add(vc))
+                throw new ExecutionException($"{algoName} VALUE_COLS contains duplicate column '{vc}'.");
+        }
+
+        var nameCol = stmt.Options.ContainsKey("NAME_COL")
+            ? GetStringOption(stmt.Options, "NAME_COL", algoName)
+            : "Name";
+        var valueCol = stmt.Options.ContainsKey("VALUE_COL")
+            ? GetStringOption(stmt.Options, "VALUE_COL", algoName)
+            : "Value";
+
+        bool includeNulls = false;
+        if (stmt.Options.ContainsKey("INCLUDE_NULLS"))
+        {
+            var rawNulls = GetStringOption(stmt.Options, "INCLUDE_NULLS", algoName).Trim().ToUpperInvariant();
+            if (rawNulls == "ON")
+                includeNulls = true;
+            else if (rawNulls == "OFF")
+                includeNulls = false;
+            else
+                throw new ExecutionException($"{algoName} INCLUDE_NULLS must be ON or OFF, got '{rawNulls}'.");
+        }
+
+        using var staged = await StageSourceRows(stmt, context, algoName);
+        var (rows, columns, sourceSchema, sourceName) = (staged.Rows, staged.Columns, staged.SourceSchema, staged.SourceName);
+        ValidateColumnsExist(sourceName, columns, algoName,
+            ("ID_COLS", idCols),
+            ("VALUE_COLS", valueCols));
+
+        var seenCols = new HashSet<string>(idCols, StringComparer.OrdinalIgnoreCase);
+        if (!seenCols.Add(nameCol))
+            throw new ExecutionException($"{algoName} output column NAME_COL '{nameCol}' collides with ID_COLS.");
+        if (!seenCols.Add(valueCol))
+            throw new ExecutionException($"{algoName} output column VALUE_COL '{valueCol}' collides with ID_COLS or NAME_COL.");
+
+        var sourceTypeMap = sourceSchema.ToDictionary(kv => kv.Key, kv => kv.Value.DataType, StringComparer.OrdinalIgnoreCase);
+        var valueColType = TransformSchemaProjection.InferUnpivotValueType(valueCols, sourceTypeMap);
+
+        var targetSchemaDefs = CopySourceSchemaDefinitions(idCols, sourceSchema);
+        targetSchemaDefs.Add(new ColumnDefinition(nameCol, "VARCHAR", false) { IsNullable = false });
+        targetSchemaDefs.Add(new ColumnDefinition(valueCol, valueColType, false) { IsNullable = true });
+
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetSchemaDefs, _logger);
+
+        foreach (var row in rows)
+        {
+            context.CancellationToken.ThrowIfCancellationRequested();
+            foreach (var vc in valueCols)
+            {
+                var cellValue = GetValue(row[vc]);
+                if (cellValue == null && !includeNulls)
+                    continue;
+
+                var outRow = new Row(sink.Schema);
+                foreach (var idCol in idCols)
+                {
+                    outRow[idCol] = row[idCol];
+                }
+                outRow[nameCol] = vc;
+                outRow[valueCol] = cellValue;
+                await sink.WriteRowAsync(outRow);
+            }
         }
 
         await sink.CompleteAsync();

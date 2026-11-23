@@ -694,7 +694,9 @@ public class LineageAnalyzer
 
         var passThroughCols = algorithm == "PIVOT"
             ? TransformSchemaProjection.GetOptionColumnList(stmt.Options, "ROW_FIELDS")
-            : knownSourceCols.Where(c => !replacedCols.Contains(c)).ToList();
+            : algorithm is "UNPIVOT" or "MELT"
+                ? TransformSchemaProjection.GetOptionColumnList(stmt.Options, "ID_COLS")
+                : knownSourceCols.Where(c => !replacedCols.Contains(c)).ToList();
 
         foreach (var col in passThroughCols)
         {

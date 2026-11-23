@@ -677,4 +677,113 @@ USING DEDUPLICATE (
         Assert.Equal(4, rejectedUnique.Count);
         Assert.Equal(["b1", "b2", "c1", "c2"], rejectedUnique.Select(r => r["Tag"]?.ToString()).OrderBy(x => x));
     }
+
+    [Fact]
+    public async Task Unpivot_ReshapesWideToLong_PreservesSchemaTypes_SupportsMeltAndIncludeNulls()
+    {
+        var evaluator = await RunScriptAsync(@"
+CREATE TABLE #wide (Id INT, Region VARCHAR(20), Q1 INT, Q2 INT, Q3 INT);
+INSERT INTO #wide VALUES
+  (1, 'North', 100, NULL, 300),
+  (2, 'South', 200, 250, NULL);
+
+TRANSFORM #long_nonull
+FROM #wide
+USING UNPIVOT (
+  ID_COLS = 'Id, Region',
+  VALUE_COLS = 'Q1, Q2, Q3',
+  NAME_COL = 'Quarter',
+  VALUE_COL = 'Sales',
+  INCLUDE_NULLS = OFF
+);
+
+TRANSFORM #long_withnull
+FROM #wide
+USING MELT (
+  ID_COLS = 'Id, Region',
+  VALUE_COLS = 'Q1, Q2, Q3',
+  NAME_COL = 'Quarter',
+  VALUE_COL = 'Sales',
+  INCLUDE_NULLS = ON
+);
+");
+        var noNullRows = await ReadRowsAsync(evaluator, "#long_nonull");
+        Assert.Equal(4, noNullRows.Count);
+        Assert.Equal(1m, Convert.ToDecimal(noNullRows[0]["Id"]));
+        Assert.Equal("North", noNullRows[0]["Region"]);
+        Assert.Equal("Q1", noNullRows[0]["Quarter"]);
+        Assert.Equal(100m, Convert.ToDecimal(noNullRows[0]["Sales"]));
+        Assert.Equal("Q3", noNullRows[1]["Quarter"]);
+        Assert.Equal(300m, Convert.ToDecimal(noNullRows[1]["Sales"]));
+
+        var withNullRows = await ReadRowsAsync(evaluator, "#long_withnull");
+        Assert.Equal(6, withNullRows.Count);
+        Assert.Null(withNullRows[1]["Sales"]);
+        Assert.Null(withNullRows[5]["Sales"]);
+
+        var unpivoted = Assert.IsType<InMemoryDataSource>(evaluator.Connections["#long_nonull"]);
+        Assert.Equal("INT", unpivoted.Schema["Id"].DataType, ignoreCase: true);
+        Assert.Equal("VARCHAR(20)", unpivoted.Schema["Region"].DataType, ignoreCase: true);
+        Assert.Equal("VARCHAR", unpivoted.Schema["Quarter"].DataType, ignoreCase: true);
+        Assert.Equal("INT", unpivoted.Schema["Sales"].DataType, ignoreCase: true);
+
+        // Verify WHAT_IF non-mutation
+        var wiEval = await RunScriptAsync(@"
+CREATE TABLE #wi_src (Id INT, A INT, B INT);
+INSERT INTO #wi_src VALUES (1, 10, 20);
+CREATE TABLE #wi_tgt (Sentinel INT);
+INSERT INTO #wi_tgt VALUES (99);
+SET WHAT_IF ON;
+TRANSFORM #wi_tgt
+FROM #wi_src
+USING UNPIVOT (
+  ID_COLS = 'Id',
+  VALUE_COLS = 'A, B'
+);
+SET WHAT_IF OFF;
+");
+        var wiRows = await ReadRowsAsync(wiEval, "#wi_tgt");
+        var wiRow = Assert.Single(wiRows);
+        Assert.Equal(99m, Convert.ToDecimal(wiRow["Sentinel"]));
+    }
+
+    [Fact]
+    public async Task Unpivot_ValidationAndSchemaProjection()
+    {
+        // Unknown option rejected
+        await Assert.ThrowsAsync<ExecutionException>(() => RunScriptAsync(@"
+CREATE TABLE #s (Id INT, A INT, B INT);
+INSERT INTO #s VALUES (1, 10, 20);
+TRANSFORM #t FROM #s USING UNPIVOT (ID_COLS = 'Id', VALUE_COLS = 'A, B', BOGUS = 1);
+"));
+
+        // Invalid INCLUDE_NULLS rejected
+        await Assert.ThrowsAsync<ExecutionException>(() => RunScriptAsync(@"
+CREATE TABLE #s (Id INT, A INT, B INT);
+INSERT INTO #s VALUES (1, 10, 20);
+TRANSFORM #t FROM #s USING UNPIVOT (ID_COLS = 'Id', VALUE_COLS = 'A, B', INCLUDE_NULLS = 'MAYBE');
+"));
+
+        // Output column collision with ID_COLS rejected
+        await Assert.ThrowsAsync<ExecutionException>(() => RunScriptAsync(@"
+CREATE TABLE #s (Id INT, A INT, B INT);
+INSERT INTO #s VALUES (1, 10, 20);
+TRANSFORM #t FROM #s USING UNPIVOT (ID_COLS = 'Id', VALUE_COLS = 'A, B', NAME_COL = 'Id');
+"));
+
+        // Schema projection preserves types and widens INT + DECIMAL -> DECIMAL
+        const string sql = @"
+CREATE TABLE #w (Id INT, A INT, B DECIMAL(10,2));
+TRANSFORM #out FROM #w USING UNPIVOT (ID_COLS = 'Id', VALUE_COLS = 'A, B', NAME_COL = 'Metric', VALUE_COL = 'Amt');
+";
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        var transformStmt = Assert.IsType<TransformStatement>(script.Statements[1]);
+        var projected = ETL_SQL.Core.Services.TransformSchemaProjection.ProjectColumns(
+            transformStmt,
+            [new ColumnMetadata("Id", "INT"), new ColumnMetadata("A", "INT"), new ColumnMetadata("B", "DECIMAL(10,2)")]);
+        Assert.Equal(3, projected.Count);
+        Assert.Equal(("Id", "INT"), (projected[0].Name, projected[0].DataType));
+        Assert.Equal(("Metric", "VARCHAR"), (projected[1].Name, projected[1].DataType));
+        Assert.Equal(("Amt", "DECIMAL"), (projected[2].Name, projected[2].DataType));
+    }
 }

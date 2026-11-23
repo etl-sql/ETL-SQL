@@ -527,3 +527,86 @@ USING ROLLING_AGGREGATE (
   ORDER_COL = 'Seq',
   WINDOW_SIZE = 0
 );
+
+# 10. UNPIVOT / MELT
+statement ok
+CREATE TABLE #t_wide (Id INT, Region STRING, Q1 INT, Q2 INT, Q3 INT);
+
+statement ok
+INSERT INTO #t_wide VALUES
+  (1, 'North', 10, NULL, 30),
+  (2, 'South', 20, 25, NULL);
+
+statement ok
+TRANSFORM #t_unpivot_default
+FROM #t_wide
+USING UNPIVOT (
+  ID_COLS = 'Id, Region',
+  VALUE_COLS = 'Q1, Q2, Q3',
+  NAME_COL = 'Quarter',
+  VALUE_COL = 'Sales'
+);
+
+query ITTI
+SELECT Id, Region, Quarter, Sales FROM #t_unpivot_default ORDER BY Id, Quarter;
+----
+1
+North
+Q1
+10
+1
+North
+Q3
+30
+2
+South
+Q1
+20
+2
+South
+Q2
+25
+
+statement ok
+TRANSFORM #t_melt_nulls
+FROM #t_wide
+USING MELT (
+  ID_COLS = 'Id',
+  VALUE_COLS = 'Q1, Q2',
+  NAME_COL = 'Quarter',
+  VALUE_COL = 'Sales',
+  INCLUDE_NULLS = ON
+);
+
+query ITT
+SELECT Id, Quarter, COALESCE(CAST(Sales AS STRING), 'NULL') FROM #t_melt_nulls ORDER BY Id, Quarter;
+----
+1
+Q1
+10
+1
+Q2
+NULL
+2
+Q1
+20
+2
+Q2
+25
+
+statement error
+TRANSFORM #err_unpivot_opt
+FROM #t_wide
+USING UNPIVOT (
+  ID_COLS = 'Id',
+  VALUE_COLS = 'Q1, Q2',
+  INCLUDE_NULLS = 'BAD'
+);
+
+statement error
+TRANSFORM #err_unpivot_col
+FROM #t_wide
+USING UNPIVOT (
+  ID_COLS = 'Id',
+  VALUE_COLS = 'Q1, MissingCol'
+);
