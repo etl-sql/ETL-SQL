@@ -144,6 +144,26 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("Interval", Assert.Single(legacyDue).Name);
         }
 
+        /// <summary>
+        /// docs/reference/orchestrator-jobs/schedule.md: jobs and schedules are separate objects linked
+        /// with ALTER JOB. A job created with no schedule link must therefore never come due on its
+        /// own; CREATE JOB stores NextRun = NULL, which the legacy interval path reads as "due now".
+        /// </summary>
+        [Fact]
+        public async Task CreateJobWithoutAScheduleLink_IsNeverDue()
+        {
+            var services = ETL_SQL.App.DependencyInjectionSetup.BuildServiceProvider(
+                new Dictionary<string, string?> { ["Orchestrator:DatabasePath"] = _dbPath });
+            var eval = services.GetRequiredService<ETL_SQL.Engine.Evaluator>();
+            await eval.Evaluate(new ETL_SQL.Core.Parser.Parser(new ETL_SQL.Core.Parser.Lexer(
+                "CREATE JOB ManualOnly FOR SCRIPT 'jobs/manual.etlsql';").Tokenize()).Parse());
+
+            Assert.NotNull(await _store.GetJobAsync((string?)null, "ManualOnly"));
+            Assert.DoesNotContain(await _store.GetDueJobsAsync(DateTime.Now), job => job.Name == "ManualOnly");
+            Assert.DoesNotContain(await _store.GetDueJobsAsync(DateTime.Now.AddDays(2)), job => job.Name == "ManualOnly");
+            Assert.DoesNotContain(await _store.GetJobsDueByScheduleAsync(DateTime.UtcNow.AddDays(2)), job => job.Name == "ManualOnly");
+        }
+
         // ── Attachment arms the link ──────────────────────────────────────────────
 
         [Fact]

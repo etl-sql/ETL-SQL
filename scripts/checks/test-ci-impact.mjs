@@ -168,7 +168,8 @@ for (const selection of [selectLanes(msiOnlyPaths), selectLanes(['src/etl-sql-vs
 }
 
 const buildJob = ciSource.split(/^  build-verification:\r?\n/m)[1].split(/^  [\w-]+:\r?\n/m)[0];
-const portalJob = ciSource.split(/^  portal-smoke:\r?\n/m)[1].split(/^  [\w-]+:\r?\n/m)[0];
+const portalRegressionJob = ciSource.split(/^  portal-regression:\r?\n/m)[1].split(/^  [\w-]+:\r?\n/m)[0];
+const jobIf = jobBlock => jobBlock.match(/^    if: (.+)$/m)[1].replaceAll('needs.source-preflight', 'needs.source');
 const stepIf = (jobBlock, stepName) => {
   const stepBlock = jobBlock.split(`      - name: ${stepName}`)[1]?.split(/^      - /m)[0];
   assert.ok(stepBlock, `Missing workflow step: ${stepName}`);
@@ -178,16 +179,17 @@ const stepIf = (jobBlock, stepName) => {
 };
 // Engine Coverage shards the engine lane on every push, so its regression step is for pull requests
 // only. Release work is pushed directly, so the Portal and Language Server steps run on pushes too.
+// Portal regression is its own three-worker job, so its condition is the job's.
 const regressionSteps = [
   [stepIf(buildJob, 'Run engine regression tests (Pull Requests)'), 'engine', ['pull_request']],
   [stepIf(buildJob, 'Run language server tests'), 'language-server', ['pull_request', 'push', 'workflow_dispatch']],
-  [stepIf(portalJob, 'Run Portal regression tests'), 'portal', ['pull_request', 'push', 'workflow_dispatch']],
+  [jobIf(portalRegressionJob), 'portal', ['pull_request', 'push', 'workflow_dispatch']],
 ];
 for (const [expression, project, events] of regressionSteps) {
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const selectedProjects of ['', '[]', '["language-server"]', '["portal"]', '["engine"]', '["engine","portal","language-server"]']) {
       const actual = runInNewContext(expression, {
-        needs: { source: { outputs: { test_projects: selectedProjects } } },
+        needs: { source: { outputs: { lanes: '["build-and-test"]', test_projects: selectedProjects } } },
         github: { event_name: event },
         fromJSON: JSON.parse,
         contains: (items, value) => items.includes(value),

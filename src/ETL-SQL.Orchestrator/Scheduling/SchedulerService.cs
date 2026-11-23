@@ -143,7 +143,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// its interval and a null next run means "due now", so a run slot is parked here instead;
         /// a disabled job would not do, because the execution lease refuses one.
         /// </summary>
-        public static readonly DateTime ManualOnlyNextRun = new(9000, 1, 1, 0, 0, 0, DateTimeKind.Local);
+        public static readonly DateTime ManualOnlyNextRun = JobDefinition.ManualOnlyNextRun;
 
         /// <summary>Name prefix of a run slot, the only kind of job that accepts submitted text.</summary>
         public const string RunSlotNamePrefix = "PIPELINE:";
@@ -850,8 +850,18 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
         internal static ExecutionIdentity? ResolveJobExecutionIdentity(
             JobDefinition job,
-            ExecutionIdentity? explicitIdentity = null)
+            ExecutionIdentity? explicitIdentity = null,
+            ExecutionIdentity? submitterIdentity = null)
         {
+            // Submitted revision text is the submitter's, not the owner's: running it as the owner
+            // would give the submitter the owner's rights (ST21b). The run stays in the job's tenant.
+            if (submitterIdentity is not null)
+            {
+                return string.IsNullOrWhiteSpace(job.TenantId)
+                    ? submitterIdentity
+                    : submitterIdentity with { TenantId = job.TenantId };
+            }
+
             if (!string.IsNullOrWhiteSpace(job.CreatedBy))
             {
                 if (explicitIdentity is not null &&
@@ -1001,7 +1011,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         if (attemptCts is not null)
                             attemptCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds!.Value));
                         var attemptToken = (attemptCts ?? cycleCts).Token;
-                        var effectiveIdentity = ResolveJobExecutionIdentity(job, revision?.Identity ?? callerIdentity);
+                        var effectiveIdentity = ResolveJobExecutionIdentity(job, callerIdentity, revision?.Identity);
                         var sandboxExecutor = scope.ServiceProvider.GetService<ISandboxScheduledJobExecutor>();
                         if (sandboxExecutor is not null)
                         {
@@ -1439,6 +1449,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
         // Do not switch this to UTC piecemeal — persisted rows would be reinterpreted at upgrade.
         private DateTime CalculateNextRun(JobDefinition job)
         {
+            // A manual-only job stays manual after a run; the interval must not re-arm it.
+            if (job.NextRun >= ManualOnlyNextRun) return ManualOnlyNextRun;
             var now = DateTime.Now;
             var interval = job.Interval;
             var unit = job.Unit.ToUpper();

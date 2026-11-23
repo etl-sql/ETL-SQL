@@ -122,7 +122,14 @@ public record JobDefinition(
     /// watermarks. <see cref="JobId.None"/> on a definition that has not been persisted yet.
     /// </summary>
     JobId Id = default
-);
+)
+{
+    /// <summary>
+    /// Next run of a job that runs only on request: one with no schedule link. A null next run
+    /// means "due now" to the interval path, so such a job is parked here instead.
+    /// </summary>
+    public static readonly DateTime ManualOnlyNextRun = new(9000, 1, 1, 0, 0, 0, DateTimeKind.Local);
+}
 
 public record JobHistoryEntry(
     long Id,

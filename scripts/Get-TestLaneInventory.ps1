@@ -31,7 +31,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-# Get-Item expands an 8.3 short path (C:\Users\RUNNER~1\...) to the long form Get-ChildItem
+# Get-Item expands an 8.3 short path (RUNNER~1 style) to the long form Get-ChildItem
 # returns, so the prefix strips below line up. CI's temp directory is a short path.
 $RepoRoot = (Get-Item -LiteralPath (Resolve-Path $RepoRoot).Path).FullName
 $TestsRoot = Join-Path $RepoRoot "tests"

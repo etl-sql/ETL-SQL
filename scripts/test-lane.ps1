@@ -46,6 +46,13 @@ param(
     [ValidateRange(1, 32)]
     [int]$EngineShardGroupCount = 1,
 
+    # The same split for the Portal lane: its twelve shards take longer in sequence than one CI
+    # job's budget. The HostedServices process runs in group 1 only.
+    [ValidateRange(1, 32)]
+    [int]$PortalShardGroup = 1,
+    [ValidateRange(1, 32)]
+    [int]$PortalShardGroupCount = 1,
+
     # The integration and timing lanes check the machine first (scripts/Test-Environment.ps1)
     # and stop in seconds when Docker, the ODBC driver, free memory or an idle processor is
     # missing, instead of failing minutes in. CI provisions its runners itself and skips it.
@@ -59,6 +66,12 @@ if ($EngineShardGroup -gt $EngineShardGroupCount -or $EngineShardGroupCount -gt 
 }
 if ($EngineShardGroupCount -gt 1 -and $Lane -notin @('engine', 'spill')) {
     throw 'Engine shard groups are only valid for the engine and spill lanes.'
+}
+if ($PortalShardGroup -gt $PortalShardGroupCount -or $PortalShardGroupCount -gt $PortalShardCount) {
+    throw 'Portal shard groups must partition the configured shard count.'
+}
+if ($PortalShardGroupCount -gt 1 -and $Lane -ne 'portal') {
+    throw 'Portal shard groups are only valid for the portal lane.'
 }
 
 if ($MemoryLimitGB -gt 0) {
@@ -503,14 +516,16 @@ switch ($Lane) {
             } else {
                 Join-Path $repoRoot ("release-validation\portal-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
             }
-            Invoke-ShardedTests "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter $PortalShardCount $evidenceDir portal
+            Invoke-ShardedTests "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter $PortalShardCount $evidenceDir portal -Group $PortalShardGroup -GroupCount $PortalShardGroupCount
         } else {
             Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter
         }
-        # The real IHostedService pipeline gets its own process so unrelated Portal classes cannot
-        # consume its startup/shutdown budget or share its background-service state.
-        Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"
-        Invoke-LineageUiSmoke
+        if ($PortalShardGroup -eq 1) {
+            # The real IHostedService pipeline gets its own process so unrelated Portal classes cannot
+            # consume its startup/shutdown budget or share its background-service state.
+            Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"
+            Invoke-LineageUiSmoke
+        }
     }
     "portal-hosted" {
         Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"

@@ -950,6 +950,31 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public void SubmittedRevisionText_RunsAsItsSubmitterNotTheJobOwner()
+        {
+            // Studio practice text is the learner's, not the operator's: running it as the job owner
+            // would hand the learner the owner's rights (ST21b). The tenant stays the job's.
+            var job = new JobDefinition(
+                "PIPELINE:7", "SELECT 1;", 1, "DAY", null, null, null,
+                CreatedBy: "user:operator", TenantId: "tenant-a", Id: JobId.From("job-pipeline-7"));
+            var learner = new ETL_SQL.Core.Governance.ExecutionIdentity
+            {
+                EffectiveUser = "user:learner",
+                RealUser = "user:learner",
+                TenantId = "tenant-b",
+                IsAdmin = false
+            };
+
+            var identity = SchedulerService.ResolveJobExecutionIdentity(job, submitterIdentity: learner);
+
+            Assert.NotNull(identity);
+            Assert.Equal("user:learner", identity!.EffectiveUser);
+            Assert.Equal("user:learner", identity.RealUser);
+            Assert.Equal("tenant-a", identity.TenantId);
+            Assert.False(identity.IsAdmin);
+        }
+
+        [Fact]
         public async Task OwnedScheduledTriggeredAndResumedJobs_BindOwningExecutionIdentity()
         {
             var scheduledJob = new JobDefinition(

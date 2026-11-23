@@ -122,17 +122,26 @@ try {
   const statusCheck = job('build-and-test').split('      - name: Require all selected build and test workers')[1]
     .split('      - uses:')[0].split('        run: |')[1].trim().replace(/^          /gm, '');
   const statusScript = path.join(root, 'check-status.ps1'); put(root, 'check-status.ps1', statusCheck);
-  for (const [event, build, portal, engine, expected] of [
+  // Portal regression must succeed when the Portal project is selected (an empty selection means
+  // every project) and must be skipped when it is not.
+  for (const [event, build, portal, engine, expected, regression = 'success', projects = ''] of [
     ['push', 'success', 'success', 'success', true], ['pull_request', 'success', 'success', 'skipped', true],
     ['workflow_dispatch', 'success', 'success', 'success', true],
     ['push', 'failure', 'success', 'success', false], ['push', 'success', 'cancelled', 'success', false],
     ['push', 'success', 'success', 'skipped', false], ['pull_request', 'skipped', 'success', 'skipped', false],
     ['pull_request', 'success', 'failure', 'skipped', false], ['pull_request', 'success', 'success', 'success', false],
+    ['push', 'success', 'success', 'success', false, 'failure'], ['push', 'success', 'success', 'success', false, 'skipped'],
+    ['push', 'success', 'success', 'success', true, 'success', '["portal"]'], ['push', 'success', 'success', 'success', true, 'skipped', '["engine"]'],
+    ['push', 'success', 'success', 'success', false, 'success', '["engine"]'], ['push', 'success', 'success', 'success', false, 'cancelled', '["portal","engine"]'],
   ]) {
     const result = spawnSync('pwsh', ['-NoProfile', '-File', statusScript], { encoding: 'utf8', windowsHide: true, timeout: 15000,
-      env: { ...process.env, CI_EVENT: event, BUILD_RESULT: build, PORTAL_RESULT: portal, ENGINE_RESULT: engine } });
-    assert.ifError(result.error); assert.equal(result.status === 0, expected, `${event}/${build}/${portal}/${engine}: ${result.stdout}${result.stderr}`);
+      env: { ...process.env, CI_EVENT: event, BUILD_RESULT: build, PORTAL_RESULT: portal, ENGINE_RESULT: engine,
+        PORTAL_REGRESSION_RESULT: regression, TEST_PROJECTS: projects } });
+    assert.ifError(result.error); assert.equal(result.status === 0, expected, `${event}/${build}/${portal}/${engine}/${regression}/${projects}: ${result.stdout}${result.stderr}`);
   }
+  assert.match(job('portal-regression'), /fail-fast: false/);
+  assert.match(job('portal-regression'), /group: \[1, 2, 3\]/);
+  assert.match(job('portal-regression'), /'-PortalShardGroupCount', '3'/);
   const policy = JSON.parse(readFileSync(new URL('../hosted-release-policy.json', import.meta.url), 'utf8'));
   for (const name of ['Build & Test', 'Build Verification', 'Portal Smoke & Security', 'Engine Coverage (1/3)', 'Engine Coverage (2/3)', 'Engine Coverage (3/3)'])
     assert.ok(policy.workflows[0].jobs.includes(name), `Release policy omitted ${name}`);

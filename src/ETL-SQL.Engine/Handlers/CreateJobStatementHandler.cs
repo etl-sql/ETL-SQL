@@ -79,7 +79,9 @@ public class CreateJobStatementHandler : IStatementHandler
             "HOUR",
             null,
             existing?.LastRun,
-            null,
+            // No schedule link means manual-only: park the job so the interval path never fires it.
+            // A linked schedule's next occurrence replaces this when the job is advanced.
+            JobDefinition.ManualOnlyNextRun,
             existing?.IsEnabled ?? true,
             stmt.MaxRetries ?? (patches ? existing!.MaxRetries : 0),
             stmt.RetryDelaySeconds ?? (patches ? existing!.RetryDelaySeconds : 30),
