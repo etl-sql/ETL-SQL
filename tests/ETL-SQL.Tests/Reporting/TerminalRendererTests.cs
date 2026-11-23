@@ -797,6 +797,35 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("MyVisualName", RenderToText(TerminalRenderer.RenderVisual(v)));
         }
 
+        [Theory]
+        [InlineData("BAR")]
+        [InlineData("HBAR")]
+        [InlineData("HORIZONTALBAR")]
+        [InlineData("PIE")]
+        [InlineData("DONUT")]
+        [InlineData("BOXPLOT")]
+        [InlineData("WATERFALL")]
+        [InlineData("LINE")]
+        [InlineData("SCATTER")]
+        [InlineData("HEATMAP")]
+        [InlineData("BUBBLE")]
+        [InlineData("FUNNEL")]
+        [InlineData("GANTT")]
+        [InlineData("CANDLESTICK")]
+        public void RenderVisual_UnparseableRows_ShowsNoDataPanel(string visualType)
+        {
+            var v = V("UnparseableChart", visualType,
+                new[] { "C0", "C1", "C2", "C3", "C4", "C5" },
+                new[]
+                {
+                    new[] { "Row1", "bad", "bad", "bad", "bad", "bad" },
+                    new[] { "Row2", "nope", "nope", "nope", "nope", "nope" }
+                });
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("UnparseableChart", text);
+            Assert.Contains("No data available for this chart.", text);
+        }
+
         // ── Numeric cell formatting (Card / Table rounding) ──────────────────
 
         [Theory]

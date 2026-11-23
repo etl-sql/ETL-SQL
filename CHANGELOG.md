@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Made every chart type in `TerminalRenderer` (`PIE`, `DONUT`, `HEATMAP`, `WATERFALL`, `FUNNEL`, `GANTT`, plus the already-guarded bar/line/scatter/box/bubble/candlestick paths) and the pie path in `PlotPlanTerminalRenderer` render `"No data available for this chart."` when rows exist but fail to parse, and removed 2-decimal rounding on rolled-up pie `Other` totals so they match other slices' precision (`RF03` in `TerminalRenderer.cs`, `PlotPlanTerminalRenderer.cs`, `TerminalRendererTests.cs`, and `PieDonutControlsTests.cs`).
+
 - Advertised all supported `ENCRYPT` modes (`ON`, `OFF`, `MACHINE`, `PASSWORD`, `KEYFILE`, `PORTAL`) in `GetSupportedOptions`, `GetOptionValues`, and `GetHelp` across all six file connectors (`AvroConnector`, `ExcelConnector`, `FlatFileConnector`, `JsonConnector`, `ParquetConnector`, `XmlConnector`) and pinned acceptance in `ConnectorMetadataContractTests` (`RF02`).
 
 - Hardened `ExternalToolSecurityTests` temp-root setup on Windows with an explicit protected ACL (current owner, SYSTEM, Administrators, inheritance disabled) so tests pass on hosts whose `%TEMP%` grants write access to extra principals such as AppContainer capability SIDs without loosening `ToolPathGuard` (`RF04` in `tests/ETL-SQL.Tests/Hardening/ExternalToolSecurityTests.cs`).

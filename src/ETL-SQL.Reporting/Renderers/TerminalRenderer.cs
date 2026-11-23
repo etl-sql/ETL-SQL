@@ -337,13 +337,19 @@ namespace ETL_SQL.Reporting.Renderers
             }
 
             double maxVal = 0;
+            bool hasNumeric = false;
             foreach (var row in rows)
             {
                 for (int i = 1; i < row.Count; i++)
                 {
-                    if (double.TryParse(row[i], NumberStyles.Any, CultureInfo.InvariantCulture, out var v)) maxVal = Math.Max(maxVal, v);
+                    if (double.TryParse(row[i], NumberStyles.Any, CultureInfo.InvariantCulture, out var v))
+                    {
+                        maxVal = Math.Max(maxVal, v);
+                        hasNumeric = true;
+                    }
                 }
             }
+            if (!hasNumeric) return RenderNoData(visual);
             if (maxVal == 0) maxVal = 1;
 
             foreach (var row in rows)
@@ -500,14 +506,17 @@ namespace ETL_SQL.Reporting.Renderers
             // Recalculate max properly (removed dead maxVal calculation and LINQ)
             double rolling = 0;
             double absoluteMax = 0;
+            bool hasNumeric = false;
             foreach (var r in rows)
             {
                 double v = 0;
-                if (r.Count > 1) double.TryParse(r[1], NumberStyles.Any, CultureInfo.InvariantCulture, out v);
+                if (r.Count > 1 && double.TryParse(r[1], NumberStyles.Any, CultureInfo.InvariantCulture, out v))
+                    hasNumeric = true;
                 rolling += v;
                 absoluteMax = Math.Max(absoluteMax, Math.Abs(rolling));
                 absoluteMax = Math.Max(absoluteMax, Math.Abs(rolling - v));
             }
+            if (!hasNumeric) return RenderNoData(visual);
             if (absoluteMax == 0) absoluteMax = 1;
 
             int fullWidth = 50;
@@ -610,6 +619,7 @@ namespace ETL_SQL.Reporting.Renderers
             if (rows.Count == 0) return RenderNoData(visual);
 
             var chart = new BreakdownChart() { Width = 60 };
+            bool hasItems = false;
             for (int i = 0; i < rows.Count; i++)
             {
                 var row = rows[i];
@@ -617,8 +627,11 @@ namespace ETL_SQL.Reporting.Renderers
                 if (row.Count > 1 && double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var val))
                 {
                     chart.AddItem(label, val, GetColorForIndex(i));
+                    hasItems = true;
                 }
             }
+
+            if (!hasItems) return RenderNoData(visual);
 
             return new Panel(chart)
             {
@@ -941,14 +954,19 @@ namespace ETL_SQL.Reporting.Renderers
             double maxVal = 0;
             var stages = new List<(string label, double value)>();
 
+            bool hasNumeric = false;
             foreach (var row in rows)
             {
                 var label = row.Count > 0 ? row[0] ?? "Stage" : "Stage";
-                double val = 0;
-                if (row.Count > 1) double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out val);
-                stages.Add((label, val));
-                maxVal = Math.Max(maxVal, val);
+                if (row.Count > 1 && double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var val))
+                {
+                    hasNumeric = true;
+                    stages.Add((label, val));
+                    maxVal = Math.Max(maxVal, val);
+                }
             }
+
+            if (!hasNumeric) return RenderNoData(visual);
 
             if (maxVal == 0) maxVal = 1;
             int maxWidth = 40;
@@ -991,14 +1009,17 @@ namespace ETL_SQL.Reporting.Renderers
             foreach (var row in rows)
             {
                 var name = row.Count > 0 ? row[0] ?? "Task" : "Task";
-                double start = 0, end = 0;
-                if (row.Count > 1) double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out start);
-                if (row.Count > 2) double.TryParse(row[2], NumberStyles.Any, CultureInfo.InvariantCulture, out end);
-
-                tasks.Add((name, start, end));
-                minTime = Math.Min(minTime, start);
-                maxTime = Math.Max(maxTime, end);
+                if (row.Count > 2 &&
+                    double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var start) &&
+                    double.TryParse(row[2], NumberStyles.Any, CultureInfo.InvariantCulture, out var end))
+                {
+                    tasks.Add((name, start, end));
+                    minTime = Math.Min(minTime, start);
+                    maxTime = Math.Max(maxTime, end);
+                }
             }
+
+            if (tasks.Count == 0) return RenderNoData(visual);
 
             if (maxTime == minTime) maxTime += 1;
             int timelineWidth = 30;

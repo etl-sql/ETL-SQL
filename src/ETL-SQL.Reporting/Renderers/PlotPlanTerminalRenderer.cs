@@ -976,13 +976,18 @@ internal static class PlotPlanTerminalRenderer
                 (item.Layer.SeriesKey ?? item.Layer.Id) + " — " + RadialStackResolver.Description(datum))))));
         var rawComponents = layers.SelectMany(item => item.Data.Select(datum =>
         {
+            var numeric = Value(datum);
+            if (!numeric.HasValue) return ((ResolvedDatum Datum, string Label, string Color, decimal Value, bool IsOther)?)null;
             var datumLabel = Label(datum);
             var series = layers.Count == 1
                 ? plan.Series.FirstOrDefault(candidate => candidate.Key == datumLabel)
                 : plan.Series.FirstOrDefault(candidate => candidate.Key == item.Layer.SeriesKey);
             var label = layers.Count > 1 && item.Data.Count == 1 ? series?.Label ?? datumLabel : datumLabel;
-            return (Datum: datum, Label: label, Color: series?.Color ?? "#808080", Value: Math.Max(0m, Value(datum) ?? 0m), IsOther: false);
-        })).ToList();
+            return (Datum: datum, Label: label, Color: series?.Color ?? "#808080", Value: Math.Max(0m, numeric.Value), IsOther: false);
+        })).Where(c => c.HasValue).Select(c => c!.Value).ToList();
+
+        if (rawComponents.Count == 0)
+            return new Markup("[grey]No data available for this chart.[/]");
 
         // 1. Sort order
         var sort = (Style(plan, "SORT") ?? Style(plan, "AXIS_SORT"))?.ToUpperInvariant();
@@ -1031,7 +1036,7 @@ internal static class PlotPlanTerminalRenderer
         {
             var proportion = total == 0m ? 0m : component.Value / total;
             var displayVal = component.IsOther
-                ? component.Value.ToString("0.##", CultureInfo.InvariantCulture)
+                ? component.Value.ToString(CultureInfo.InvariantCulture)
                 : DisplayValue(component.Datum);
             return (IRenderable)new Markup($"{Markup.Escape(Truncate(component.Label, 18).PadRight(18))} [#{component.Color.TrimStart('#')}]{FractionalBar(proportion, componentWidth)}[/] {proportion:P1} ({Markup.Escape(displayVal)})");
         });
