@@ -136,6 +136,10 @@ namespace ETL_SQL.Tests.Connectors
         private async Task<List<ETL_SQL.Data.DataTable>> Read(FlatFileDataSource ds) =>
             await ds.ReadBatches().ToListAsync();
 
+        // The values of one column across every batch, as text (null stays null).
+        private static List<string?> Column(List<ETL_SQL.Data.DataTable> batches, string name) =>
+            batches.SelectMany(b => b.Rows).Select(r => r[name]?.ToString()).ToList();
+
         // ── FlatFileDataSource ─────────────────────────────────────────────────
 
         [Fact]
@@ -315,17 +319,17 @@ namespace ETL_SQL.Tests.Connectors
             var opts = new Dictionary<string, string> { ["NULL_AS"] = "NULL" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches[0].Rows);
+            Assert.Equal(new string?[] { null, "hello" }, Column(batches, "val"));
         }
 
         [Fact]
         public async Task FlatFile_NullAsBackslashN_ParsesCorrectly()
         {
-            var path = Write("nullasbn.csv", "id,val\n1,\\n");
+            var path = Write("nullasbn.csv", "id,val\n1,\\n\n2,hello");
             var opts = new Dictionary<string, string> { ["NULL_AS"] = "BACKSLASH_N" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches[0]);
+            Assert.Equal(new string?[] { null, "hello" }, Column(batches, "val"));
         }
 
         [Fact]
@@ -363,11 +367,12 @@ namespace ETL_SQL.Tests.Connectors
         [Fact]
         public async Task FlatFile_EncodingUtf16_ParsesCorrectly()
         {
-            var path = Write("utf16.csv", "id,name\n1,Alice");
+            var path = Path.Combine(_dir, "utf16.csv");
+            File.WriteAllText(path, "id,name\n1,Zoë", Encoding.Unicode);
             var opts = new Dictionary<string, string> { ["ENCODING"] = "UTF16" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches);
+            Assert.Equal(new string?[] { "Zoë" }, Column(batches, "name"));
         }
 
         [Fact]
@@ -387,7 +392,7 @@ namespace ETL_SQL.Tests.Connectors
             var opts = new Dictionary<string, string> { ["CULTURE"] = "xx-INVALID" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches);
+            Assert.Equal(new string?[] { "Alice" }, Column(batches, "name"));
         }
 
         [Fact]
@@ -407,7 +412,7 @@ namespace ETL_SQL.Tests.Connectors
             var opts = new Dictionary<string, string> { ["ESCAPE_CHAR"] = "\\" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches[0].Rows);
+            Assert.Equal(new string?[] { "Alice,Smith" }, Column(batches, "name"));
         }
 
         [Fact]
@@ -417,7 +422,7 @@ namespace ETL_SQL.Tests.Connectors
             var opts = new Dictionary<string, string> { ["ROW_DELIMITER"] = "CRLF" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches);
+            Assert.Equal(new string?[] { "Alice", "Bob" }, Column(batches, "name"));
         }
 
         [Fact]
@@ -427,7 +432,7 @@ namespace ETL_SQL.Tests.Connectors
             var opts = new Dictionary<string, string> { ["ROW_DELIMITER"] = "TILDE" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches);
+            Assert.Equal(new string?[] { "Alice", "Bob" }, Column(batches, "name"));
         }
 
         [Fact]
@@ -446,7 +451,7 @@ namespace ETL_SQL.Tests.Connectors
             var path = Write("empty.csv", "");
             var ds = new FlatFileDataSource(Ctx, path);
             var batches = await Read(ds);
-            Assert.NotNull(batches);
+            Assert.Empty(batches.SelectMany(b => b.Rows));
         }
 
         [Fact]

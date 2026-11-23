@@ -168,7 +168,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task Str_FormatsNumber()
         {
             var result = await EvalExpr("STR(3.14)");
-            Assert.NotNull(result);
+            Assert.Equal("3", result?.ToString()?.Trim());
         }
 
         [Fact]
@@ -344,7 +344,7 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = Eval();
             await eval.Evaluate(Parse("DECLARE @d DATETIME = DATEADD('YEAR', 1, '2025-01-01');"));
-            Assert.NotNull(eval.GetVariable("@d"));
+            Assert.Equal(new DateTime(2026, 1, 1), Convert.ToDateTime(eval.GetVariable("@d")));
         }
 
         [Fact]
@@ -369,16 +369,18 @@ namespace ETL_SQL.Tests.Engine
         public async Task GetDate_ReturnsDateTime()
         {
             var eval = Eval();
+            var before = DateTime.Now;
             await eval.Evaluate(Parse("DECLARE @d DATETIME = GETDATE();"));
-            Assert.NotNull(eval.GetVariable("@d"));
+            Assert.InRange(Convert.ToDateTime(eval.GetVariable("@d")), before.AddSeconds(-1), DateTime.Now.AddSeconds(1));
         }
 
         [Fact]
         public async Task Now_ReturnsDateTime()
         {
             var eval = Eval();
+            var before = DateTime.Now;
             await eval.Evaluate(Parse("DECLARE @d DATETIME = NOW();"));
-            Assert.NotNull(eval.GetVariable("@d"));
+            Assert.InRange(Convert.ToDateTime(eval.GetVariable("@d")), before.AddSeconds(-1), DateTime.Now.AddSeconds(1));
         }
 
         [Fact]
@@ -386,7 +388,7 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = Eval();
             await eval.Evaluate(Parse("DECLARE @d DATETIME = EOMONTH('2025-06-15');"));
-            Assert.NotNull(eval.GetVariable("@d"));
+            Assert.Equal(new DateTime(2025, 6, 30), Convert.ToDateTime(eval.GetVariable("@d")).Date);
         }
 
         [Fact]
@@ -511,7 +513,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task NewId_ReturnsGuid()
         {
             var result = await EvalExpr("NEWID()");
-            Assert.NotNull(result);
+            Assert.True(Guid.TryParse(result?.ToString(), out _), $"Not a GUID: {result}");
         }
 
         [Fact]
@@ -519,20 +521,22 @@ namespace ETL_SQL.Tests.Engine
         {
             var result = await EvalNum("CHECKSUM('a', 'b')");
             Assert.NotNull(result);
+            Assert.Equal(result, await EvalNum("CHECKSUM('a', 'b')"));
+            Assert.NotEqual(result, await EvalNum("CHECKSUM('a', 'c')"));
         }
 
         [Fact]
         public async Task HashBytes_Md5_ReturnsHash()
         {
             var result = await EvalExpr("HASHBYTES('MD5', 'hello')");
-            Assert.NotNull(result);
+            Assert.Contains("5d41402abc4b2a76b9719d911017c592", result?.ToString(), StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
         public async Task HashBytes_Sha256_ReturnsHash()
         {
             var result = await EvalExpr("HASHBYTES('SHA256', 'hello')");
-            Assert.NotNull(result);
+            Assert.Contains("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", result?.ToString(), StringComparison.OrdinalIgnoreCase);
         }
 
         // ── Aggregate functions (via SELECT) ──────────────────────────────────
@@ -602,7 +606,8 @@ namespace ETL_SQL.Tests.Engine
                 INSERT INTO #T VALUES (2), (3);
                 SELECT STDDEV(N) AS SD FROM #T;
             "));
-            Assert.NotNull(eval.LastResult?.Rows[0]["SD"]);
+            // Sample standard deviation of 1, 2, 3.
+            Assert.Equal(1.0, Convert.ToDouble(eval.LastResult!.Rows[0]["SD"]), 9);
         }
 
         // ── Incremental (Welford) algebraic stats ─────────────────────────────
