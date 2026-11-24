@@ -1046,8 +1046,12 @@ public class ExtensionParser : ParserComponent
     {
         Consume(TokenType.DIRECTORY, "Expected DIRECTORY after SYNC");
         var source = ParseExpression();
+        string? sourceConn = null;
+        if (Match(TokenType.AT)) sourceConn = ConsumeIdentifier("Expected connection name after AT").Value;
         Consume(TokenType.TO, "Expected TO after source directory path");
         var destination = ParseExpression();
+        string? destConn = null;
+        if (Match(TokenType.AT)) destConn = ConsumeIdentifier("Expected connection name after AT").Value;
 
         Expression? deleteExtra = null;
         Expression? overwrite = null;
@@ -1061,8 +1065,11 @@ public class ExtensionParser : ParserComponent
             recursive = options.GetValueOrDefault("RECURSIVE");
         }
 
+        if (destConn == null && sourceConn == null && Match(TokenType.AT))
+            destConn = ConsumeIdentifier("Expected connection name after AT").Value;
+
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-        return new SyncDirectoryStatement(source, destination, deleteExtra, overwrite, recursive) { Line = startToken.Line, Column = startToken.Column };
+        return new SyncDirectoryStatement(source, destination, deleteExtra, overwrite, recursive, sourceConn, destConn) { Line = startToken.Line, Column = startToken.Column };
     }
 
     public Statement ParseVerifyFile(Token startToken)

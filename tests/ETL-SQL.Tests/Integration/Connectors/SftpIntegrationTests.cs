@@ -639,5 +639,55 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Assert.True(await connector.FileExistsAsync($"{movedDir}/a.txt"));
             Assert.True(await connector.FileExistsAsync($"{movedDir}/sub/b.txt"));
         }
+
+        [Fact]
+        public async Task SyncDirectory_BothDirections_NoChangeSecondRun_AndDeleteExtraOffByDefault()
+        {
+            var localSrc = Path.Combine(_tmpDir, "sync_src");
+            var localMirror = Path.Combine(_tmpDir, "sync_mirror");
+            Directory.CreateDirectory(Path.Combine(localSrc, "sub"));
+            Directory.CreateDirectory(localMirror);
+
+            File.WriteAllText(Path.Combine(localSrc, "a.txt"), "alpha-v1");
+            File.WriteAllText(Path.Combine(localSrc, "sub", "b.txt"), "beta-v1");
+            File.WriteAllText(Path.Combine(localMirror, "stale_local.txt"), "stale");
+
+            var remoteDir = RemotePath($"rt08_{Guid.NewGuid():N}");
+            await using var connector = PasswordConnector();
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            ((IExecutionContext)evaluator).Connections["sftp_rt08"] = connector;
+
+            // 1. Local -> Remote (first run copies 2 files)
+            var l2rSql = $"SYNC DIRECTORY '{localSrc.Replace("\\", "/")}' TO '{remoteDir}' AT sftp_rt08 WITH (RECURSIVE = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(l2rSql).Tokenize(), l2rSql).Parse());
+            Assert.True(await connector.FileExistsAsync($"{remoteDir}/a.txt"));
+            Assert.True(await connector.FileExistsAsync($"{remoteDir}/sub/b.txt"));
+
+            // Add an extra file on remote, then run Local -> Remote again WITHOUT DELETE_EXTRA (default OFF)
+            var extraLocal = LocalPath("extra.txt");
+            File.WriteAllText(extraLocal, "keep-me");
+            await connector.UploadFileAsync(extraLocal, $"{remoteDir}/extra_remote.txt", overwrite: true);
+
+            // Second run (no changes in source, DELETE_EXTRA off by default): extra_remote.txt stays
+            await evaluator.Evaluate(new Parser(new Lexer(l2rSql).Tokenize(), l2rSql).Parse());
+            Assert.True(await connector.FileExistsAsync($"{remoteDir}/extra_remote.txt"));
+
+            // 2. Local -> Remote with DELETE_EXTRA = ON removes extra_remote.txt
+            var l2rDelSql = $"SYNC DIRECTORY '{localSrc.Replace("\\", "/")}' TO '{remoteDir}' AT sftp_rt08 WITH (RECURSIVE = ON, DELETE_EXTRA = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(l2rDelSql).Tokenize(), l2rDelSql).Parse());
+            Assert.False(await connector.FileExistsAsync($"{remoteDir}/extra_remote.txt"));
+
+            // 3. Remote -> Local (default DELETE_EXTRA = OFF keeps stale_local.txt)
+            var r2lSql = $"SYNC DIRECTORY '{remoteDir}' AT sftp_rt08 TO '{localMirror.Replace("\\", "/")}' WITH (RECURSIVE = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(r2lSql).Tokenize(), r2lSql).Parse());
+            Assert.Equal("alpha-v1", File.ReadAllText(Path.Combine(localMirror, "a.txt")));
+            Assert.Equal("beta-v1", File.ReadAllText(Path.Combine(localMirror, "sub", "b.txt")));
+            Assert.True(File.Exists(Path.Combine(localMirror, "stale_local.txt")));
+
+            // 4. Remote -> Local with DELETE_EXTRA = ON removes stale_local.txt
+            var r2lDelSql = $"SYNC DIRECTORY '{remoteDir}' AT sftp_rt08 TO '{localMirror.Replace("\\", "/")}' WITH (RECURSIVE = ON, DELETE_EXTRA = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(r2lDelSql).Tokenize(), r2lDelSql).Parse());
+            Assert.False(File.Exists(Path.Combine(localMirror, "stale_local.txt")));
+        }
     }
 }

@@ -1531,7 +1531,7 @@ public sealed record SplitFileStatement(Expression Source, Expression Destinatio
 
 public sealed record MergeFilesStatement(Expression Source, Expression Destination, Expression? Header = null, Expression? Overwrite = null) : Statement;
 
-public sealed record SyncDirectoryStatement(Expression Source, Expression Destination, Expression? DeleteExtra = null, Expression? Overwrite = null, Expression? Recursive = null) : Statement;
+public sealed record SyncDirectoryStatement(Expression Source, Expression Destination, Expression? DeleteExtra = null, Expression? Overwrite = null, Expression? Recursive = null, string? SourceConnectionName = null, string? DestinationConnectionName = null) : Statement;
 
 public sealed record VerifyFileIntegrityStatement(Expression Source, Expression? HashFile = null, Expression? ExpectedHash = null, Expression? Algorithm = null) : Statement;
 
