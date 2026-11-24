@@ -118,7 +118,6 @@ All four items (`DB04`, `DB05`, `DB13`, `DB14`) have shipped on `release/v0.23.0
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
 | DB15a | **MongoDB `EXECUTE` pass-through.** `EXECUTE mongo BEGIN ... END` accepts a JSON command naming the collection and either a `filter` (find) or a `pipeline` (aggregate), returning rows like a read. `SupportsSqlPushdown` stays false (pattern: `Neo4jDataSource`). **Rules:** reads only — write stages (`$out`, `$merge`) and write commands are refused; under `SET WHAT_IF ON` the command is logged, not run; invalid JSON fails with the parse position and no echo of the whole body. **Done when:** Testcontainers tests cover filter, pipeline, refused `$out`/`$merge`, and `WHAT_IF`; `mongodb.md` gets a section and example. | — | M |
-| DB15b | **MongoDB `KEY_COLUMNS` upsert.** With `KEY_COLUMNS` on the connection, `INSERT`/`COPY INTO` use `BulkWriteAsync` with `ReplaceOneModel(IsUpsert = true)` filtered on the key columns; without it, behavior is unchanged. A row with a NULL key fails the batch with the row ordinal. `APPEND=FALSE` still drops first. **Done when:** Testcontainers tests show re-running the same load leaves one document per key; `mongodb.md` Write Path section and capability matrix (DB05) updated. | — | S |
 
 If the MongoDB pass-through (DB15a) is not green by Thursday, it moves back to `ROADMAP.md` on its own; the other rows do not wait for it.
 

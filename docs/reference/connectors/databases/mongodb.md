@@ -14,6 +14,7 @@ Aliases: `MONGO`
 | `CONNECTION_STRING` | Full MongoDB connection URI (e.g. `mongodb://localhost:27017`) | Yes (if host/port not provided) |
 | `DATABASE` | Target database name | Yes |
 | `COLLECTION` | Target collection name context | No |
+| `KEY_COLUMNS` | Comma-separated key column names that switch `INSERT`/`COPY INTO` to idempotent `BulkWriteAsync` upsert (`ReplaceOneModel(IsUpsert = true)`) | No |
 | `HOST` | MongoDB hostname (alternative to connection string) | No |
 | `PORT` | MongoDB port (alternative to connection string, default: `27017`) | No |
 | `USER` | Username for authentication | No |
@@ -52,15 +53,19 @@ SELECT name, price, category FROM mongo_uri;
 
 -- Insert a new document
 INSERT INTO mongo_uri (name, price, category) VALUES ('Wireless Mouse', 29.99, 'Electronics');
+
+-- Idempotent upsert by key column(s)
+CREATE CONNECTION mongo_upsert AS MONGODB('mongodb://localhost:27017', DATABASE='inventory', COLLECTION='products', KEY_COLUMNS='sku');
+INSERT INTO mongo_upsert SELECT sku, name, price FROM #products;
 ```
 
 ## Write Path & Transactions
 
-- **Bulk / write path** — `INSERT INTO` and `COPY INTO` convert each batch of rows to `BsonDocument` instances and write them with `InsertManyAsync`. `COPY INTO ... APPEND=FALSE` drops the target collection (`DropCollectionAsync`) before inserting. There is no SQL pushdown (`MongodbDataSource` implements `IDataSource`, not `IDatabaseSource`).
-- **`MERGE` behavior** — Engine-emulated. `MERGE` reads the full collection and source into bounded engine memory, computes the merged result, drops the collection (`DropCollectionAsync`), and inserts the merged documents via `InsertManyAsync`. Keep `MERGE` scoped to collections that fit comfortably within `Engine:OperatorMemoryGrantMB`.
-- **Transactions** — **Not supported** (`MongodbDataSource` does not implement `ITransactionalDataSource`). `BEGIN TRANSACTION` / `COMMIT` / `ROLLBACK` has no effect on MongoDB writes; each `InsertManyAsync` batch is independent.
-- **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` returns without connecting or dropping/inserting documents. `MERGE` and `INSERT` log the dry-run action or row count without mutating MongoDB.
-- **Idempotent-load pattern** — Stage and deduplicate in a `#temp` table first, then load into a dedicated staging collection or replace a small target collection with `COPY INTO mongo_uri FROM #clean APPEND=FALSE` after running a `SET WHAT_IF ON` dry run.
+- **Bulk / write path** — Without `KEY_COLUMNS`, `INSERT INTO` and `COPY INTO` convert each batch of rows to `BsonDocument` instances and write them with `InsertManyAsync`. With `KEY_COLUMNS` set on the connection, each batch runs `BulkWriteAsync` with `ReplaceOneModel(IsUpsert = true)` filtered on the configured key columns; any row with a `NULL` key fails the batch with the 1-based row ordinal before writing. `COPY INTO ... APPEND=FALSE` drops the target collection (`DropCollectionAsync`) first in both modes.
+- **`MERGE` behavior** — Engine-emulated. `MERGE` reads the full collection and source into bounded engine memory, computes the merged result, drops the collection (`DropCollectionAsync`), and writes the merged documents. Keep `MERGE` scoped to collections that fit comfortably within `Engine:OperatorMemoryGrantMB`.
+- **Transactions** — **Not supported** (`MongodbDataSource` does not implement `ITransactionalDataSource`). `BEGIN TRANSACTION` / `COMMIT` / `ROLLBACK` has no effect on MongoDB writes; each `InsertManyAsync` / `BulkWriteAsync` batch is independent.
+- **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` returns without connecting or dropping/inserting/upserting documents. `MERGE` and `INSERT` log the dry-run action or row count without mutating MongoDB.
+- **Idempotent-load pattern** — Set `KEY_COLUMNS` on the connection (e.g., `KEY_COLUMNS='sku'` or composite `KEY_COLUMNS='tenant_id, order_id'`) and load with `INSERT INTO` or `COPY INTO ... APPEND=TRUE` so re-running the same load replaces matching documents in place without duplicates.
 
 ## Troubleshooting
 

@@ -19,9 +19,32 @@ namespace ETL_SQL.Connectors.Mongodb
         private readonly string _databaseName;
         private readonly string? _tableName;
         private readonly Dictionary<string, string>? _options;
+        private readonly IReadOnlyList<string> _keyColumns;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private IMongoClient? _client;
+
+        internal static IReadOnlyList<string> ParseKeyColumns(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                throw new ExecutionException("MONGODB KEY_COLUMNS must be a non-empty comma-separated list of column names.");
+
+            var parts = raw.Split(',');
+            var result = new List<string>(parts.Length);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var part in parts)
+            {
+                var trimmed = part.Trim();
+                if (string.IsNullOrEmpty(trimmed))
+                    throw new ExecutionException("MONGODB KEY_COLUMNS contains an empty column name.");
+
+                if (seen.Add(trimmed))
+                    result.Add(trimmed);
+            }
+
+            return result;
+        }
 
         public MongodbDataSource(IExecutionContext context, string connectionString, string databaseName, string? tableName = null, Dictionary<string, string>? options = null, IMongoClient? client = null)
         {
@@ -29,6 +52,9 @@ namespace ETL_SQL.Connectors.Mongodb
             _logger = context.Logger;
             _tableName = tableName;
             _options = options;
+            _keyColumns = options != null && options.TryGetValue("KEY_COLUMNS", out var rawKeys)
+                ? ParseKeyColumns(rawKeys)
+                : Array.Empty<string>();
             _client = client;
             _databaseName = databaseName;
 
@@ -176,23 +202,55 @@ namespace ETL_SQL.Connectors.Mongodb
                     await db.DropCollectionAsync(_tableName, effectiveCancellationToken);
                 }
 
+                long rowOrdinal = 0;
                 await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                 {
                     if (batch.Rows.Count == 0) continue;
 
-                    var docs = new List<BsonDocument>();
-                    foreach (var row in batch.Rows)
+                    if (_keyColumns.Count == 0)
                     {
-                        var doc = new BsonDocument();
-                        foreach (var col in batch.ColumnNames)
+                        var docs = new List<BsonDocument>(batch.Rows.Count);
+                        foreach (var row in batch.Rows)
                         {
-                            var val = row[col];
-                            doc[col] = ConvertToBsonValue(val);
+                            var doc = new BsonDocument();
+                            foreach (var col in batch.ColumnNames)
+                            {
+                                doc[col] = ConvertToBsonValue(row[col]);
+                            }
+                            docs.Add(doc);
                         }
-                        docs.Add(doc);
-                    }
 
-                    await coll.InsertManyAsync(docs, options: null, cancellationToken: effectiveCancellationToken);
+                        await coll.InsertManyAsync(docs, options: null, cancellationToken: effectiveCancellationToken);
+                    }
+                    else
+                    {
+                        var resolvedKeys = ResolveBatchKeyColumns(batch.ColumnNames, _keyColumns);
+                        var writes = new List<WriteModel<BsonDocument>>(batch.Rows.Count);
+
+                        foreach (var row in batch.Rows)
+                        {
+                            rowOrdinal++;
+                            var filter = new BsonDocument();
+                            foreach (var keyCol in resolvedKeys)
+                            {
+                                var keyVal = row[keyCol];
+                                if (keyVal == null || keyVal == DBNull.Value)
+                                    throw new ExecutionException($"MongoDB upsert failed at row {rowOrdinal}: key column '{keyCol}' is NULL.");
+
+                                filter[keyCol] = ConvertToBsonValue(keyVal);
+                            }
+
+                            var doc = new BsonDocument();
+                            foreach (var col in batch.ColumnNames)
+                            {
+                                doc[col] = ConvertToBsonValue(row[col]);
+                            }
+
+                            writes.Add(new ReplaceOneModel<BsonDocument>(filter, doc) { IsUpsert = true });
+                        }
+
+                        await coll.BulkWriteAsync(writes, options: null, cancellationToken: effectiveCancellationToken);
+                    }
                 }
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
@@ -300,6 +358,19 @@ namespace ETL_SQL.Connectors.Mongodb
                 }
             }
             return BsonValue.Create(val);
+        }
+
+        private static IReadOnlyList<string> ResolveBatchKeyColumns(IReadOnlyList<string> batchColumns, IReadOnlyList<string> configuredKeys)
+        {
+            var resolved = new List<string>(configuredKeys.Count);
+            foreach (var key in configuredKeys)
+            {
+                var match = batchColumns.FirstOrDefault(c => string.Equals(c, key, StringComparison.OrdinalIgnoreCase));
+                if (match == null)
+                    throw new ExecutionException($"MongoDB upsert failed: KEY_COLUMNS entry '{key}' was not found in the source batch columns.");
+                resolved.Add(match);
+            }
+            return resolved;
         }
 
         private static bool ShouldWrapProviderException(Exception ex) =>
