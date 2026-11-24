@@ -107,9 +107,7 @@ All four items (`FO12`, `XL01`, `XL03`, `DB10`) have shipped on `release/v0.23.0
 
 **`TRANSFORM` algorithms**
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| TR09 | **Add `TRANSFORM ... USING MASK_PII` and `USING SCD2`.** Provide declarative column masking (`REDACT_EMAIL`, `MASK_LAST_4`, `HASH_SHA256`, `PERTURB_DATE`) and Type-2 Slowly Changing Dimension merging (`KEY_COLS`, `TRACK_COLS`, `EFFECTIVE_DATE` managing `EffectiveFrom`, `EffectiveTo`, `IsCurrent`). Same SLT, `NULL`, type, `WHAT_IF` and lineage bar as TR07. `MASK_PII` must not leak unmasked values to logs, errors or lineage; Claude reviews before push. | TR02, TR03 | M |
+All three items (`TR07`, `TR08`, `TR09`) have shipped on `release/v0.23.0` (see `CHANGELOG.md`).
 
 **Documentation** (verify every statement against the data source class)
 

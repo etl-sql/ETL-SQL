@@ -65,6 +65,12 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             case "EXPLODE":
                 await ExecuteSplit(stmt, context);
                 break;
+            case "MASK_PII":
+                await ExecuteMaskPii(stmt, context);
+                break;
+            case "SCD2":
+                await ExecuteScd2(stmt, context);
+                break;
             case "TOP_N_OTHERS":
                 await ExecuteTopNOthers(stmt, context);
                 break;
@@ -2668,6 +2674,332 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         System.Text.Json.JsonValueKind.False => false,
         _ => elem.GetRawText()
     };
+
+    private async Task ExecuteMaskPii(TransformStatement stmt, IExecutionContext context)
+    {
+        const string algoName = "MASK_PII";
+        ValidateAllowedOptions(stmt, algoName, "COLS", "VALUE_COLS", "VALUE_COL", "METHOD", "SALT", "MASK_CHAR", "MAX_DAYS", "SEED");
+
+        var cols = GetOptionalColumnList(stmt.Options, "COLS");
+        if (cols.Count == 0) cols = GetOptionalColumnList(stmt.Options, "VALUE_COLS");
+        if (cols.Count == 0 && stmt.Options.ContainsKey("VALUE_COL"))
+            cols = [GetStringOption(stmt.Options, "VALUE_COL", algoName)];
+        if (cols.Count == 0)
+            throw new ExecutionException($"{algoName} requires COLS specifying at least one column.");
+
+        var method = GetStringOption(stmt.Options, "METHOD", algoName).Trim().ToUpperInvariant();
+        if (method is not ("REDACT_EMAIL" or "MASK_LAST_4" or "HASH_SHA256" or "PERTURB_DATE"))
+            throw new ExecutionException($"{algoName} METHOD must be REDACT_EMAIL, MASK_LAST_4, HASH_SHA256, or PERTURB_DATE, got '{method}'.");
+
+        string? salt = null;
+        if (stmt.Options.TryGetValue("SALT", out var saltExpr))
+        {
+            var evaluated = GetValue(await context.EvaluationContext.EvaluateValue(saltExpr, Row.Empty, decryptSensitive: true));
+            salt = evaluated?.ToString();
+        }
+
+        char maskChar = '*';
+        if (stmt.Options.ContainsKey("MASK_CHAR"))
+        {
+            var rawChar = GetStringOption(stmt.Options, "MASK_CHAR", algoName);
+            if (rawChar.Length != 1)
+                throw new ExecutionException($"{algoName} MASK_CHAR must be a single character.");
+            maskChar = rawChar[0];
+        }
+
+        int maxDays = 15;
+        if (stmt.Options.ContainsKey("MAX_DAYS"))
+        {
+            maxDays = await EvaluateIntOption(stmt.Options, "MAX_DAYS", algoName, 15, context);
+            if (maxDays < 1)
+                throw new ExecutionException($"{algoName} MAX_DAYS must be a positive integer, got {maxDays}.");
+        }
+
+        Random? seededRandom = null;
+        if (stmt.Options.ContainsKey("SEED"))
+        {
+            int seed = await EvaluateIntOption(stmt.Options, "SEED", algoName, 0, context);
+            seededRandom = new Random(seed);
+        }
+
+        using var staged = await StageSourceRows(stmt, context, algoName);
+        ValidateColumnsExist(staged.SourceName, staged.Columns, algoName, ("COLS", cols));
+
+        // Pre-validate dates before opening the sink so a bad row never truncates the target,
+        // and never echo raw unmasked PII values in the error message.
+        if (method == "PERTURB_DATE")
+        {
+            foreach (var col in cols)
+            {
+                foreach (var row in staged.Rows)
+                {
+                    var raw = GetValue(row[col]);
+                    if (raw == null) continue;
+                    if (!TryGetDateTime(raw, out _))
+                        throw new ExecutionException($"{algoName} PERTURB_DATE could not parse a date value in column '{col}'.");
+                }
+            }
+        }
+
+        var targetCols = new HashSet<string>(cols, StringComparer.OrdinalIgnoreCase);
+        var targetColumnDefs = CopySourceSchemaDefinitions(staged.Columns, staged.SourceSchema);
+        if (method != "PERTURB_DATE")
+        {
+            foreach (var col in cols)
+                AddOrUpdateColumnDef(targetColumnDefs, col, "VARCHAR", isNullable: true);
+        }
+
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
+
+        foreach (var row in staged.Rows)
+        {
+            context.CancellationToken.ThrowIfCancellationRequested();
+            var outRow = new Row(sink.Schema);
+            foreach (var col in staged.Columns)
+            {
+                var raw = GetValue(row[col]);
+                if (raw == null || !targetCols.Contains(col))
+                {
+                    outRow[col] = raw;
+                    continue;
+                }
+
+                outRow[col] = method switch
+                {
+                    "REDACT_EMAIL" => RedactEmailValue(TypeConverter.ToInvariantText(raw) ?? string.Empty, maskChar),
+                    "MASK_LAST_4" => MaskLast4Value(TypeConverter.ToInvariantText(raw) ?? string.Empty, maskChar),
+                    "HASH_SHA256" => HashSha256Value(TypeConverter.ToInvariantText(raw) ?? string.Empty, salt),
+                    "PERTURB_DATE" => PerturbDateValue(raw, maxDays, seededRandom, col),
+                    _ => throw new ExecutionException($"{algoName} unsupported method '{method}'.")
+                };
+            }
+            await sink.WriteRowAsync(outRow);
+        }
+
+        await sink.CompleteAsync();
+    }
+
+    private static string RedactEmailValue(string text, char maskChar)
+    {
+        var trimmed = text.Trim();
+        var atIdx = trimmed.IndexOf('@');
+        var mask = new string(maskChar, 3);
+        if (atIdx <= 0 || atIdx == trimmed.Length - 1)
+            return mask;
+
+        var domain = trimmed[(atIdx + 1)..];
+        return $"{trimmed[0]}{mask}@{domain}";
+    }
+
+    private static string MaskLast4Value(string text, char maskChar)
+    {
+        if (text.Length <= 4)
+            return new string(maskChar, Math.Max(4, text.Length));
+        return new string(maskChar, text.Length - 4) + text[^4..];
+    }
+
+    private static string HashSha256Value(string text, string? salt)
+    {
+        var input = string.IsNullOrEmpty(salt) ? text : salt + text;
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static object PerturbDateValue(object raw, int maxDays, Random? seededRandom, string col)
+    {
+        if (!TryGetDateTime(raw, out var dt))
+            throw new ExecutionException($"MASK_PII PERTURB_DATE could not parse a date value in column '{col}'.");
+
+        int offset = seededRandom != null
+            ? seededRandom.Next(-maxDays, maxDays + 1)
+            : System.Security.Cryptography.RandomNumberGenerator.GetInt32(-maxDays, maxDays + 1);
+        if (offset == 0) offset = 1;
+
+        var shifted = dt.AddDays(offset);
+        return raw is DateOnly ? DateOnly.FromDateTime(shifted) : shifted;
+    }
+
+    private async Task ExecuteScd2(TransformStatement stmt, IExecutionContext context)
+    {
+        const string algoName = "SCD2";
+        ValidateAllowedOptions(stmt, algoName,
+            "KEY_COLS", "TRACK_COLS", "EFFECTIVE_DATE", "EFFECTIVE_FROM_COL", "EFFECTIVE_TO_COL", "IS_CURRENT_COL");
+
+        if (stmt.SourceTable == null)
+            throw new ExecutionException($"{algoName} requires a FROM <source_table> distinct from target '{stmt.TargetTable.TableName}'.");
+        if (string.Equals(stmt.SourceTable.TableName, stmt.TargetTable.TableName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(stmt.SourceTable.ConnectionName, stmt.TargetTable.ConnectionName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ExecutionException($"{algoName} FROM source table must be distinct from target table '{stmt.TargetTable.TableName}'.");
+        }
+
+        var keyCols = GetOptionalColumnList(stmt.Options, "KEY_COLS");
+        if (keyCols.Count == 0)
+            throw new ExecutionException($"{algoName} requires KEY_COLS specifying at least one business key column.");
+
+        var trackCols = GetOptionalColumnList(stmt.Options, "TRACK_COLS");
+        if (trackCols.Count == 0)
+            throw new ExecutionException($"{algoName} requires TRACK_COLS specifying at least one tracked attribute column.");
+
+        var fromCol = stmt.Options.ContainsKey("EFFECTIVE_FROM_COL") ? GetStringOption(stmt.Options, "EFFECTIVE_FROM_COL", algoName) : "EffectiveFrom";
+        var toCol = stmt.Options.ContainsKey("EFFECTIVE_TO_COL") ? GetStringOption(stmt.Options, "EFFECTIVE_TO_COL", algoName) : "EffectiveTo";
+        var curCol = stmt.Options.ContainsKey("IS_CURRENT_COL") ? GetStringOption(stmt.Options, "IS_CURRENT_COL", algoName) : "IsCurrent";
+
+        DateTime effectiveDate = DateTime.UtcNow.Date;
+        if (stmt.Options.TryGetValue("EFFECTIVE_DATE", out var effExpr))
+        {
+            var rawDate = GetValue(await context.EvaluationContext.EvaluateValue(effExpr, Row.Empty));
+            if (rawDate == null || !TryGetDateTime(rawDate, out var parsedDate))
+                throw new ExecutionException($"{algoName} EFFECTIVE_DATE could not be converted to a date.");
+            effectiveDate = parsedDate.Date;
+        }
+
+        using var stagedSource = await StageSourceRows(stmt, context, algoName);
+        ValidateColumnsExist(stagedSource.SourceName, stagedSource.Columns, algoName,
+            ("KEY_COLS", keyCols),
+            ("TRACK_COLS", trackCols));
+
+        // Verify incoming snapshot has unique business keys before touching the target.
+        var incomingByKey = new Dictionary<string, Row>(StringComparer.Ordinal);
+        var incomingOrder = new List<string>(stagedSource.Rows.Count);
+        foreach (var srcRow in stagedSource.Rows)
+        {
+            var key = BuildGroupKey(srcRow, keyCols);
+            if (!incomingByKey.TryAdd(key, srcRow))
+                throw new ExecutionException($"{algoName} incoming source '{stagedSource.SourceName}' contains duplicate KEY_COLS row.");
+            incomingOrder.Add(key);
+        }
+
+        // Read existing target history (if target already exists) before creating the sink so WHAT_IF is non-mutating.
+        var existingRows = new List<Row>();
+        var targetExists = stmt.TargetTable.TableName.StartsWith("#", StringComparison.Ordinal)
+            ? context.Connections.ContainsKey(stmt.TargetTable.TableName)
+            : await context.ResolveReadSourceAsync(stmt.TargetTable) != null;
+
+        if (targetExists)
+        {
+            var existingTarget = await context.ResolveReadSourceAsync(stmt.TargetTable);
+            if (existingTarget != null)
+            {
+                await foreach (var batch in existingTarget.ReadBatches(context.EffectiveBatchSize, context.CancellationToken))
+                {
+                    foreach (var r in batch.Rows)
+                        existingRows.Add(r.Clone());
+                }
+            }
+        }
+
+        var targetColumnDefs = CopySourceSchemaDefinitions(stagedSource.Columns, stagedSource.SourceSchema);
+        AddOrUpdateColumnDef(targetColumnDefs, fromCol, "DATE", isNullable: false);
+        AddOrUpdateColumnDef(targetColumnDefs, toCol, "DATE", isNullable: true);
+        AddOrUpdateColumnDef(targetColumnDefs, curCol, "INT", isNullable: false);
+
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
+
+        var matchedKeys = new HashSet<string>(StringComparer.Ordinal);
+
+        // Emit existing historical and current rows, closing changed current rows and appending new versions.
+        foreach (var existing in existingRows)
+        {
+            context.CancellationToken.ThrowIfCancellationRequested();
+            bool isCurrent = IsScd2CurrentRow(existing, curCol);
+
+            if (!isCurrent)
+            {
+                var histRow = CopyScd2Row(existing, stagedSource.Columns, fromCol, toCol, curCol, sink.Schema);
+                await sink.WriteRowAsync(histRow);
+                continue;
+            }
+
+            var key = BuildGroupKey(existing, keyCols);
+            if (!incomingByKey.TryGetValue(key, out var incoming))
+            {
+                var unchangedMissing = CopyScd2Row(existing, stagedSource.Columns, fromCol, toCol, curCol, sink.Schema);
+                await sink.WriteRowAsync(unchangedMissing);
+                continue;
+            }
+
+            matchedKeys.Add(key);
+            bool changed = trackCols.Any(tc => CompareValues(GetValue(existing[tc]), GetValue(incoming[tc])) != 0);
+
+            if (!changed)
+            {
+                var unchanged = CopyScd2Row(existing, stagedSource.Columns, fromCol, toCol, curCol, sink.Schema);
+                await sink.WriteRowAsync(unchanged);
+            }
+            else
+            {
+                // Close prior version
+                var closed = CopyScd2Row(existing, stagedSource.Columns, fromCol, toCol, curCol, sink.Schema);
+                closed[toCol] = effectiveDate;
+                closed[curCol] = 0m;
+                await sink.WriteRowAsync(closed);
+
+                // Insert new current version
+                var opened = BuildNewScd2Row(incoming, stagedSource.Columns, fromCol, toCol, curCol, effectiveDate, sink.Schema);
+                await sink.WriteRowAsync(opened);
+            }
+        }
+
+        // Insert brand-new keys from incoming snapshot
+        foreach (var key in incomingOrder)
+        {
+            if (matchedKeys.Contains(key)) continue;
+            context.CancellationToken.ThrowIfCancellationRequested();
+            var opened = BuildNewScd2Row(incomingByKey[key], stagedSource.Columns, fromCol, toCol, curCol, effectiveDate, sink.Schema);
+            await sink.WriteRowAsync(opened);
+        }
+
+        await sink.CompleteAsync();
+    }
+
+    private static bool IsScd2CurrentRow(Row row, string curCol)
+    {
+        if (!row.TryGetValue(curCol, out var raw)) return true;
+        var val = GetValue(raw);
+        if (val == null) return false;
+        if (val is bool b) return b;
+        if (val is decimal d) return d != 0m;
+        if (val is int i) return i != 0;
+        if (val is long l) return l != 0;
+        return string.Equals(val.ToString(), "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(val.ToString(), "TRUE", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static Row CopyScd2Row(
+        Row source,
+        IReadOnlyList<string> businessCols,
+        string fromCol,
+        string toCol,
+        string curCol,
+        TableSchema schema)
+    {
+        var outRow = new Row(schema);
+        foreach (var col in businessCols)
+            outRow[col] = source.TryGetValue(col, out var v) ? GetValue(v) : null;
+        outRow[fromCol] = source.TryGetValue(fromCol, out var ef) ? GetValue(ef) : null;
+        outRow[toCol] = source.TryGetValue(toCol, out var et) ? GetValue(et) : null;
+        outRow[curCol] = source.TryGetValue(curCol, out var ic) ? GetValue(ic) : 1m;
+        return outRow;
+    }
+
+    private static Row BuildNewScd2Row(
+        Row incoming,
+        IReadOnlyList<string> businessCols,
+        string fromCol,
+        string toCol,
+        string curCol,
+        DateTime effectiveDate,
+        TableSchema schema)
+    {
+        var outRow = new Row(schema);
+        foreach (var col in businessCols)
+            outRow[col] = GetValue(incoming[col]);
+        outRow[fromCol] = effectiveDate;
+        outRow[toCol] = null;
+        outRow[curCol] = 1m;
+        return outRow;
+    }
 
     private sealed class TransformOutputSink : IAsyncDisposable
     {

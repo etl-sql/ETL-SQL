@@ -996,3 +996,112 @@ USING SPLIT (
   DELIMITER = ',',
   JSON_PATH = '$.items'
 );
+
+# 14. TRANSFORM ... USING MASK_PII and SCD2 (TR09)
+statement ok
+CREATE TABLE #t_pii_src (Id INT, Email STRING, Ssn STRING);
+
+statement ok
+INSERT INTO #t_pii_src VALUES
+  (1, 'alice@example.com', '123-45-6789'),
+  (2, NULL, '9999');
+
+statement ok
+TRANSFORM #t_pii_out
+FROM #t_pii_src
+USING MASK_PII (
+  COLS = 'Email',
+  METHOD = 'REDACT_EMAIL'
+);
+
+statement ok
+TRANSFORM #t_pii_out
+USING MASK_PII (
+  COLS = 'Ssn',
+  METHOD = 'MASK_LAST_4'
+);
+
+query ITT rowsort
+SELECT Id, COALESCE(Email, 'NULL'), Ssn FROM #t_pii_out;
+----
+1
+a***@example.com
+*******6789
+2
+NULL
+****
+
+statement ok
+CREATE TABLE #t_scd_d1 (CustomerId INT, Tier STRING, City STRING);
+
+statement ok
+INSERT INTO #t_scd_d1 VALUES
+  (1, 'Silver', 'Austin'),
+  (2, 'Gold', 'Denver');
+
+statement ok
+TRANSFORM #t_dim_cust
+FROM #t_scd_d1
+USING SCD2 (
+  KEY_COLS = 'CustomerId',
+  TRACK_COLS = 'Tier, City',
+  EFFECTIVE_DATE = '2026-01-01'
+);
+
+statement ok
+CREATE TABLE #t_scd_d2 (CustomerId INT, Tier STRING, City STRING);
+
+statement ok
+INSERT INTO #t_scd_d2 VALUES
+  (1, 'Gold', 'Austin'),
+  (2, 'Gold', 'Denver'),
+  (3, 'Bronze', 'Seattle');
+
+statement ok
+TRANSFORM #t_dim_cust
+FROM #t_scd_d2
+USING SCD2 (
+  KEY_COLS = 'CustomerId',
+  TRACK_COLS = 'Tier, City',
+  EFFECTIVE_DATE = '2026-02-01'
+);
+
+query ITTTII rowsort
+SELECT CustomerId, Tier, CAST(EffectiveFrom AS STRING), COALESCE(CAST(EffectiveTo AS STRING), 'NULL'), IsCurrent
+FROM #t_dim_cust;
+----
+1
+Gold
+2026-02-01
+NULL
+1
+1
+Silver
+2026-01-01
+2026-02-01
+0
+2
+Gold
+2026-01-01
+NULL
+1
+3
+Bronze
+2026-02-01
+NULL
+1
+
+statement error
+TRANSFORM #err_pii_method
+FROM #t_pii_src
+USING MASK_PII (
+  COLS = 'Email',
+  METHOD = 'NO_SUCH_MASK'
+);
+
+statement error
+TRANSFORM #err_scd_self
+USING SCD2 (
+  KEY_COLS = 'CustomerId',
+  TRACK_COLS = 'Tier'
+);

@@ -38,6 +38,8 @@ Statements are the top-level actions in an ETL-SQL script.
 | `OUTLIERS` | Transform | [Transform](reference/transform/outliers.md) | [outliers.md](reference/transform/outliers.md) |
 | `IMPUTE` | Transform | [Transform](reference/transform/impute.md) | [impute.md](reference/transform/impute.md) |
 | `SPLIT` | Transform | [Transform](reference/transform/split.md) | [split.md](reference/transform/split.md) |
+| `MASK_PII` | Transform | [Transform](reference/transform/mask_pii.md) | [mask_pii.md](reference/transform/mask_pii.md) |
+| `SCD2` | Transform | [Transform](reference/transform/scd2.md) | [scd2.md](reference/transform/scd2.md) |
 | `COMPARE DATASETS` | Data Prep / CDC | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md#compare-datasets](reference/statements/data-prep.md#compare-datasets) |
 | `CREATE CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
 | `ALTER CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |

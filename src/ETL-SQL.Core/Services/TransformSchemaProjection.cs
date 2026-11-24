@@ -261,6 +261,30 @@ public static class TransformSchemaProjection
                     }
                     break;
                 }
+            case "MASK_PII":
+                {
+                    var method = (TryGetOptionString(options, "METHOD") ?? "MASK_LAST_4").ToUpperInvariant();
+                    var cols = GetOptionColumnList(options, "COLS");
+                    if (cols.Count == 0) cols = GetValueColumns(options);
+                    foreach (var col in cols)
+                    {
+                        var srcType = sourceTypes != null && sourceTypes.TryGetValue(col, out var t) ? t : "VARCHAR";
+                        var outType = method == "PERTURB_DATE" ? srcType : "VARCHAR";
+                        specs.Add(new ComputedColumnSpec(col, outType, [col], ReplacesExisting: true));
+                    }
+                    break;
+                }
+            case "SCD2":
+                {
+                    var fromCol = TryGetOptionString(options, "EFFECTIVE_FROM_COL") ?? "EffectiveFrom";
+                    var toCol = TryGetOptionString(options, "EFFECTIVE_TO_COL") ?? "EffectiveTo";
+                    var curCol = TryGetOptionString(options, "IS_CURRENT_COL") ?? "IsCurrent";
+                    var trackCols = GetOptionColumnList(options, "TRACK_COLS");
+                    specs.Add(new ComputedColumnSpec(fromCol, "DATE", trackCols, ReplacesExisting: false));
+                    specs.Add(new ComputedColumnSpec(toCol, "DATE", trackCols, ReplacesExisting: false));
+                    specs.Add(new ComputedColumnSpec(curCol, "INT", trackCols, ReplacesExisting: false));
+                    break;
+                }
         }
 
         return specs;
@@ -297,7 +321,7 @@ public static class TransformSchemaProjection
         foreach (var key in new[]
                  {
                      "DATE_COL", "VALUE_COL", "VALUE_COLS", "COLS", "SOURCE_COL", "ORDER_COL", "BY_GROUP",
-                     "KEY_COLS", "ID_COLS", "ROW_FIELDS", "PIVOT_FIELD", "VALUE_FIELD", "CATEGORY_COL"
+                     "KEY_COLS", "TRACK_COLS", "ID_COLS", "ROW_FIELDS", "PIVOT_FIELD", "VALUE_FIELD", "CATEGORY_COL"
                  })
         {
             AddRange(GetOptionColumnList(statement.Options, key));
