@@ -12,8 +12,8 @@ Each task's design, boundaries and acceptance evidence stay in its linked `ROADM
 
 | Tier | What is in it |
 | :--- | :--- |
-| [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Nightly streak, release tooling, merge-gate proofs, the script and test review |
-| [Tier 2 — next](#tier-2--next) | PR regression lane proof; review follow-ups (RF01–RF05, shipped); first ROADMAP pickup (FO05, FO08, XT09, TR05, shipped); second ROADMAP pickup (FO12, XL01, XL03, DB10, TR07–TR09, DB04/DB05/DB13/DB14 docs, DB09/DB12/DB15 decisions) |
+| [Tier 1 — must ship in v0.23.0](#tier-1--must-ship-in-v0230) | Merge-gate proofs and the script and test review |
+| [Tier 2 — next](#tier-2--next) | PR regression lane proof; review follow-ups (RF01–RF05, shipped); first ROADMAP pickup (FO05, FO08, XT09, TR05, shipped); second ROADMAP pickup (FO12, XL01, XL03, DB10, TR07–TR09, DB04/DB05/DB13/DB14, DB09/DB12/DB15a–c, shipped); third pickup (RT03–RT09 shipped, DB07 measured/not adopted, DB08/DB11/RT11 decisions in `ROADMAP.md`) |
 | [Tier 3 — if time allows](#tier-3--if-time-allows) | Allocation-noise watch |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -56,17 +56,6 @@ After publication:
 **Plan:** [release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md);
 [ROADMAP: Enforced Merge Gates](ROADMAP.md#release-engineering--enforced-merge-gates-and-a-github-first-contributor-workflow).
 
-- [ ] **W1 Five green nights running.** Not met for v0.22.0: 2 of the last 5 nights were green;
-  2 failures were our own pushes mid-rehearsal ("release/v0.22.0 moved"), 1 was the certification
-  wait step (43247226793). Updated `nightly-rehearsal.mjs`, `nightly-release.yml`, and
-  `release.yml` so rehearsals adopt a newer release-branch tip during `start` and validate an
-  ancestor `candidate_sha` on `dry-run`. **Left:** confirm the five-night green streak on
-  `release/v0.23.0`.
-- [ ] **W4 Release tooling tested on real output.** Added real-output replay for
-  `collect-release-evidence.mjs` from v0.22.0 candidate `0a1507282` (`43786591392` / `43888292114` /
-  `43893010630`) in `scripts/checks/test-real-release-output.mjs`. **Left:** the native Windows and
-  macOS collectors and the draft-manifest check (about 1 GB of packages per platform).
-
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
 | RG01 | **Always-running merge gate.** Added `merge-gate` (`Merge Gate`, `if: always()`) in `.github/workflows/ci.yml` backed by `scripts/verify-merge-gate.mjs` and `scripts/checks/test-merge-gate.mjs` (`test-merge-gate.mjs`, `check-workflows.mjs`, `check-workflow-timeouts.mjs`, `test-workflows.mjs`, and `test-release-preflight.mjs` pass). Manual diagnostic runs use a separate `Diagnostic Gate` check. **Left:** require `Merge Gate` on `main` and `release/*` through a GitHub ruleset, drop the per-job required checks it replaces, and prove with a PR that skips a selected lane and is blocked. | — | S |
@@ -97,9 +86,9 @@ All four items (`FO05`, `FO08`, `XT09`, `TR05`) have shipped on `release/v0.23.0
 
 ### 2.4 Second ROADMAP pickup (2026-11-23)
 
-Selected by the owner on 2026-11-23. **Land by Thu 11-26**, or the item goes back to `ROADMAP.md`;
-later merges put the W1 nightly streak at risk. Gemini and Codex build; Claude reviews. Each item
-ships with its reference page, help text, `LanguageMetadata` entry and tests in the same change.
+Selected by the owner on 2026-11-23. All selected implementation and documentation items below have
+shipped on `release/v0.23.0` (ahead of the Thu 11-26 cutoff). Only the separate `DB08`, `DB11`, and
+`RT11` decision proposals in `ROADMAP.md` remain awaiting owner approval.
 
 **Features**
 

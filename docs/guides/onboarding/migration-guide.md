@@ -23,6 +23,17 @@ For current syntax, prefer [Getting Started](getting-started.md), the [Syntax In
 
 ---
 
+## v0.23.0 Upgrade Notes
+
+- **Windows MSI configuration (`appsettings.defaults.json`):** The MSI no longer runs script custom actions (`configure-portal-jwt.ps1` and `installer-actions.js` are removed) and no longer overwrites `appsettings.json`. Release defaults live in `appsettings.defaults.json` (do not edit); `appsettings.json` holds only operator overrides, and the services bootstrap `appsettings.secrets.json` on first start. Upgrades from v0.22.0 strip values equal to v0.22.0 defaults from `appsettings.json` once. Uninstall keeps runtime data; use `etl-sql admin restore --in-place` for rollback and `etl-sql admin purge-data --confirm` for cleanup.
+- **Portal `ScriptIngress` and Studio permissions:** `POST /api/reports` (`PUBLISH REPORT` / script-path publish in `SourceControlled` mode) now requires `ScriptIngress` in addition to `ReportPublish` and folder Manage. Provisioning Orchestrator jobs from Studio pipelines requires read access to the Studio document.
+- **Cached report snapshot ACLs:** Refresh older cached snapshots that use `SHARED:` connections so runtime connection dependencies are persisted, and grant connection `Use` permission to readers.
+- **Remote orchestration & Gateway bindings:** Re-synchronize remote Orchestrator Gateway connections previously exported without their Gateway binding; tenant-scoped callers must use their own run IDs.
+- **Remote file listing schema:** Select columns explicitly from `REMOTE_FILE_LIST` and remote file connections if a downstream consumer expects the previous five-column result.
+- **Script and connector behavior:** Add `WITH (RECURSIVE = ON)` to `DELETE DIRECTORY ... AT conn` for non-empty remote folders; run `ENCRYPT`/`DECRYPT`/`COMPRESS`/`DECOMPRESS` locally before transferring; remove `USER`/`PASSWORD` from `MSSQL` connections using `TRUSTED_CONNECTION=TRUE`; attach an explicit schedule to `CREATE JOB` for recurring runs; and run `LocalMachine` vault administration elevated (or use `CurrentUser`).
+
+---
+
 ## v0.14.0 Baseline Notes
 
 ### Temp File Extension Policy (.tmp Blocked)

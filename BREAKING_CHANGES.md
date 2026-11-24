@@ -45,6 +45,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 - **Diagnostic**: Foreign run identifiers return HTTP 404.
 - **Earliest removal**: N/A
 
+### v0.23.0 — Connector: remote file listings return four more columns
+- **What changed**: `REMOTE_FILE_LIST` and remote file connection queries add `CreationTime`, `Permissions`, `Owner`, and `IsSymlink`. Connectors return `NULL` for metadata they cannot supply.
+- **Who is affected**: Scripts or downstream consumers that expect the previous five-column result from a remote file listing.
+- **Migration**: Select the columns you need explicitly, or update the consumer to accept the additional columns.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.23.0 — Runtime: first-batch grouped aggregation fallback retains its input
 - **What changed**: Native grouped aggregation can fall back to row execution when its first batch exceeds the memory grant. Previously the fallback received an already-disposed batch.
 - **Who is affected**: Native columnar grouped queries with small memory grants or large first batches.

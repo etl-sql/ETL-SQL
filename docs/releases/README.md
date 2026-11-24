@@ -4,7 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
-| [ETL-SQL v0.23.0 — Draft](v0.23.0.md) | Planned scope and migration notes; certification and publication are pending. |
+| [ETL-SQL v0.23.0](v0.23.0.md) | Windows service configuration, spill performance, Studio pipelines, and remote file operations. **Released:** 2026-11-29 |
 | [v0.23.0 Script and Test Review Plan](v0.23.0-script-and-test-review-plan.md) | Inventory, finding criteria, ownership, and slice estimates for `scripts/` and `tests/`. |
 | [v0.23.0 W6 Performance Gates Design](v0.23.0-w6-performance-gates-design.md) | Deterministic performance gates, paired A/B timing and hosted baselines (approved). |
 | [v0.23.0 MI01 Services Own Their Configuration](v0.23.0-mi01-services-own-configuration-design.md) | MSI runs no script custom actions; operator-owned `appsettings.json` and late removal (approved). |

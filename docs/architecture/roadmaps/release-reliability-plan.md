@@ -117,6 +117,9 @@ last job starts the item 3 dry run on the same candidate once the collectors pas
 First real rehearsal: nightly 42477960507 on `c136127e5` passed (all four runs and all six
 collectors), 2026-11-08.
 
+**Complete for v0.23.0:** The owner confirmed five consecutive green rehearsals before the later
+feature additions. The final candidate still requires its own release evidence and dry run.
+
 ### W2. Reuse evidence when inputs did not change
 Each lane declares its input paths. Its result is reused when the fingerprint of those inputs is
 unchanged since a passing run. Release drivers and the supervisor accept reused evidence.
@@ -146,6 +149,12 @@ collector has a real-output test. Status 2026-11-10: hosted, DEB and MSI selecti
 package-origin check replay real recordings from dry run 42699535102
 (`scripts/checks/test-real-release-output.mjs`); the native and draft-manifest collectors remain
 (package bytes too large to keep) and the release-evidence collector (no real dispatch yet).
+
+**Complete for v0.23.0:** Release Evidence replays the v0.22.0 candidate `0a1507282`. Native Windows
+and both macOS architectures replay run `45227143269` for candidate `906128b33`, and the draft
+manifest replays dry run `45240642685`. The replay uses recorded digests for large files and hashes
+the retained evidence and metadata files directly. The replay, both native collectors, both package
+checks, and the draft-manifest check passed with Node 22.23.5 and PowerShell 7.7.0.
 
 ### W4b. Remove the workstation from the release path (owner decided 2026-11-04)
 **Status 2026-11-09: done, unpushed.** The hosted Engine Certification job in `ci.yml` runs the

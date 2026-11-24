@@ -86,7 +86,8 @@ that does not schedule their proposed implementation.
 
 ### Release Engineering — Routine, GitHub-Built Releases
 
-**Status:** In Progress (v0.23.0: W1 and W4 in `TODO.md` 1.2)  
+**Status:** Completed for v0.23.0 (W1 and W4 complete)
+
 **Horizon:** Next (v0.23.0)  
 **Authoritative design:** [Release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md)
 
@@ -142,7 +143,9 @@ v0.22.0 was tagged, released and published to the Marketplace from GitHub (timel
 [v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md)). The post-release fixes are on
 `main`: Release calls `publish-marketplace.yml` (vsce 4.1.1), every release-branch push certifies
 MSI, native and DEB packages, and dispatch-only workflows are registered on `main` when created.
-W1 (five green nights) and W4 (native collectors, recorded replay) carry to v0.23.0 in `TODO.md`.
+W1 and W4 carried into v0.23.0. The owner confirmed that the nightly rehearsal passed five nights
+in a row before the later feature additions. The W4 replay now covers the native Windows and macOS
+collectors and the draft manifest using recorded GitHub outputs.
 W6 (performance certification redesign) shipped in v0.23.0: hosted baselines gate correctness,
 exact work counters and allocations (+5%); the *Paired timing* Release Evidence job gates elapsed
 time (10% against the previous release, 15% against the release before last); GC and peak memory
@@ -229,7 +232,8 @@ install). Pick it up again if a real MSI runner loss recurs.
 
 **Status:** Completed in v0.23.0 (TR01–TR09 all shipped)  
 **Horizon:** Next (v0.23.0)  
-**Scheduling:** Backlog for prioritization after v0.22.0 ships.  
+**Scheduling:** Completed in v0.23.0.
+
 **Authoritative design:** [TRANSFORM Statement Reference](docs/reference/statements/dml/transform.md),
 [Data Prep Helpers](docs/reference/statements/data-prep.md),
 [Standard Library Functions](docs/reference/functions/README.md), and
@@ -304,7 +308,7 @@ Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](T
 
 #### New analyst `TRANSFORM` algorithms and shared `SELECT` functions
 
-TR05 and TR06 shipped in v0.23.0. Selected for v0.23.0 (owner, 2026-11-23): TR07, TR08 and TR09 moved to [`TODO.md`](TODO.md) 2.4.
+TR05–TR09 all shipped in v0.23.0 (see `CHANGELOG.md`).
 
 **Acceptance evidence:** All `TRANSFORM` algorithms preserve `NULL` semantics, column data types,
 `SET WHAT_IF ON` non-mutation, and lineage/LSP scope schemas; `CLEAN_TEXT`/`STANDARDIZE` work both
@@ -313,7 +317,8 @@ SLT tests in `tests/slt_data/transform.test` pass.
 
 ### Standard Library — File and Path Function Completeness
 
-**Status:** Exploring  
+**Status:** Completed in v0.23.0 (FN01–FN03, FN07–FN10 shipped in v0.22.0; FN04–FN06 shipped in v0.23.0)
+
 **Horizon:** Later  
 **Authoritative design:** none yet; [File and path functions](docs/reference/functions/file-path/README.md)
 is the reference contract.
@@ -348,7 +353,7 @@ a script author finds the obvious file function without writing string surgery.
 `IRemoteFileSystem.ListFilesAsync`; a remote creation time needs a new metadata field and is
 out of this entry unless a connector exposes it.
 
-Backlog: FN04, FN05 and FN06 were selected for v0.23.0 (owner, 2026-11-23) and moved to [`TODO.md`](TODO.md).
+Backlog: FN04, FN05, and FN06 shipped in v0.23.0 (`PATH_NORMALIZE` was dropped because `CAST(... AS PATH)` is a plain `ToString()` pass-through).
 
 **Acceptance evidence:** Each function has a reference page that follows the function reference
 template (signature, parameters, return type, `NULL` behavior, a copy-pasteable example,
@@ -383,7 +388,7 @@ has the options users expect and every connector page says how to encrypt on wri
 
 **Dependencies:** none.
 
-Selected for v0.23.0 (owner, 2026-11-23): FO12 moved to [`TODO.md`](TODO.md) 2.4. FO05, FO07, and FO08 closed in v0.23.0:
+FO05, FO07, FO08, and FO12 all shipped in v0.23.0:
 
 - **FO05 decision (approved 2026-11-23, closed in v0.23.0):** Leave `ALGORITHM` out of `ENCRYPT FILE` / `DECRYPT FILE`. The method is selected by `PASSWORD` / `KEYFILE` / `PGP_KEY` with fixed modern primitives (AES-256-CBC + PBKDF2-SHA256 600k + HMAC-SHA256, RSA-OAEP-SHA256, OpenPGP), and the v2 file header does not record a KDF hash; `encrypt-file.md` and `FileOperationWithOptionTests` match.
 
@@ -396,7 +401,8 @@ signature each fail with no key material in the error.
 
 ### File Operations — Managing Remote File Trees over SFTP, FTP, and Cloud Connections
 
-**Status:** In Progress (RT03–RT09 and the RT11 decision selected for v0.23.0 in `TODO.md` §2.4, 2026-11-23)  
+**Status:** In Progress (RT03–RT09 shipped in v0.23.0; RT11 decision proposal awaiting owner approval)
+
 **Horizon:** Later  
 **Authoritative design:** none yet; [SFTP](docs/reference/connectors/services/sftp.md),
 [FTP](docs/reference/connectors/services/ftp.md), and [TRANSFER](docs/reference/file-operations/transfer.md)
@@ -432,17 +438,12 @@ defects shipped as fixes in v0.22.0. What is left is feature work with working a
 
 **IDs:** this family was `RF` until 2026-11-23; it became `RT` so it does not clash with the v0.23.0 review follow-ups `RF01`–`RF05` in `CHANGELOG.md`. `RF10` in the v0.22.0 notes is the old name of a shipped task.
 
+**Shipped in v0.23.0:** `RT03`–`RT09` (SFTP/FTP dot-entry filtering, remote `COPY FILE`, extended `FileMetaData`, recursive `REMOTE_FILE_LIST`/`RECEIVE FILE` and uniform non-empty `DELETE DIRECTORY`, remote `RENAME`/`MOVE`/`COPY DIRECTORY`, remote `SYNC DIRECTORY`, and `VERIFY = ON` transfer verification; resume of large downloads was recorded out of scope on 2026-11-24).
+
 **Backlog (select IDs, not the family):**
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| RT03 | **Verify SFTP and FTP listings.** SSH.NET `ListDirectory` normally returns `.` and `..`; the SFTP listing does not filter them. Add a test over a recorded or containerized server, drop the dot entries from `REMOTE_FILE_LIST`, `SELECT` over the connection, and `IsDirectory` handling, and confirm FTP matches. | — | S |
-| RT04 | **Remote `COPY FILE`.** Same-connection copy (`COPY FILE a TO b AT conn`) by download to a bounded temp stream and upload, or a server-side copy where the protocol has one (S3, Azure Blob, SharePoint). Cross-connection copy follows the same path. Overwrite follows `OVERWRITE`; default `ON` as locally. | — | M |
-| RT05 | **Richer remote metadata.** Extend `FileMetaData` with creation time (where reported), permissions, owner, and a symlink flag; `NULL` where the protocol cannot supply it. `REMOTE_FILE_LIST` and the connection `SELECT` expose the new columns and the lineage and LSP column lists follow. | — | M |
-| RT06 | **Recursive listing and receive.** `REMOTE_FILE_LIST` and `RECEIVE FILE` take a recursive option bounded by `SET ALLOW_RECURSIVE_LAYERS` (five levels by default). Define what a non-empty directory delete does on every connector (SSH.NET and FluentFTP differ today) and make it identical, with an explicit option to delete recursively. | RT03 | M |
-| RT07 | **Remote directory rename, move, and copy.** `RENAME DIRECTORY`, `MOVE DIRECTORY`, and `COPY DIRECTORY` with `AT conn`. Rename and move use the server rename; copy is built on RT04 and RT06. | RT04, RT06 | M |
-| RT08 | **Remote `SYNC DIRECTORY`.** Mirror local to remote and remote to local by size and modified time, with `WHAT_IF` showing the plan. Deletions on the destination need an explicit option and pass the same guard as `DELETE FILE`. | RT05, RT06 | M |
-| RT09 | **Verify a transfer.** An option on `SEND FILE`/`RECEIVE FILE` (and the `VERIFY FILE INTEGRITY` counterpart) that compares size and, where the server offers it, a checksum after the transfer, and removes a partial local file on failure. Decide whether to support resume of large downloads here or leave it out. *(Decision, 2026-11-24: resume of large downloads is out of scope — `VERIFY = ON` compares size and, where the server offers one such as S3 single-part ETag or Azure Content-MD5, MD5 checksum, failing and removing the partial local file on mismatch.)* | RT05 | M |
 | RT11 | **Decision: remote command execution.** Whether a connection type that runs a single approved command over SSH belongs in the product, and under what allow-list and audit rules. Output is a proposal and an estimate only. | — | D |
 
 **Decision proposal — RT11 (2026-11-23, awaiting owner decision):**
@@ -457,7 +458,8 @@ option fails a truncated download.
 
 ### File Connectors — Multi-Sheet Excel Workbooks, Sheet Discovery, and Banner-Row Skipping
 
-**Status:** Accepted  
+**Status:** Completed in v0.23.0 (XL01–XL03 all shipped)
+
 **Horizon:** Later  
 **Authoritative design:** [Excel Connector Reference](docs/reference/connectors/files/excel.md),
 [`ExcelConnector.cs`](src/ETL-SQL.Connectors.Files/Excel/ExcelConnector.cs), and
@@ -513,7 +515,9 @@ from a multi-sheet fixture.
 
 ### Database Connectors — Documentation Parity, Write-Path Clarity, and Credential Gaps
 
-**Status:** In Progress; DB01–DB06, DB10, DB13, and DB14 shipped in v0.23.0; DB09, DB12, and DB15 shipped; DB07 measured and not adopted (2026-11-24); DB08/DB11 decisions selected in `TODO.md` §2.4 (2026-11-23)  
+**Status:** In Progress. DB01–DB06, DB09, DB10, DB12, DB13, DB14, and DB15a–c shipped in v0.23.0.
+DB07 was measured and not adopted (2026-11-24). DB08 and DB11 await an owner decision.
+
 **Horizon:** Next (DB01–DB03), Later (the rest)  
 **Authoritative design:** none yet; [Database connectors](docs/reference/connectors/databases/README.md)
 are the references and [Connector Standards](docs/architecture/standards/connectors-standards.md)
@@ -556,9 +560,9 @@ new package.
 | DB08 | **Decision: credential providers.** No source references Azure Key Vault or AWS Secrets Manager; secrets come from `ENC:`, `SECRET:`, and allow-listed environment variables. Decide whether a vault-backed `SECRET:` source belongs in the product and under which trust rules. Output is a proposal and an estimate only. | — | D |
 | DB11 | **Decision: native warehouse connectors.** Whether Databricks or Redshift justify a native connector over `ODBC`, given that `ODBC` needs a vendor driver installed on the host. Gather evidence (install friction, feature loss through the bridge, type fidelity) and propose or reject. | — | D |
 
-Selected for v0.23.0 (owner, 2026-11-23): DB04–DB06, DB10, DB13, and DB14 shipped; DB09, DB12, and DB15 decision proposals recorded below. Owner approved all three on 2026-11-23 (DB09 option 1, DB12 as recommended, DB15 items 1–3); build rows are in `TODO.md` §2.4.
+Shipped in v0.23.0: DB01–DB06, DB09, DB10, DB12, DB13, DB14, and DB15a–c. Decision proposals for DB08 and DB11 remain awaiting owner approval below; DB09, DB12, and DB15 were approved on 2026-11-23 and shipped in v0.23.0.
 
-**Decision proposals (2026-11-23; approved by the owner the same day):**
+**Decision proposals (2026-11-23):**
 
 - **DB08 — Vault-backed `SECRET:` credential providers (2026-11-23, awaiting owner decision):**
   - *Verified current state:* `ISecretProvider` (`SecretProviders.cs`) already abstracts `SECRET:<name>` resolution across `EnvironmentSecretProvider`, `OsSecretStoreProvider`, and HTTP vault providers; `Directory.Packages.props` already includes `Azure.Core`/`Azure.Identity` (via `Microsoft.Data.SqlClient.Extensions.Azure`) and `AWSSDK.Core` (via `AWSSDK.S3`), but neither `Azure.Security.KeyVault.Secrets` nor `AWSSDK.SecretsManager` is referenced.
