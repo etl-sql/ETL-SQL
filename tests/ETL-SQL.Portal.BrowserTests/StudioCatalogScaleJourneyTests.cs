@@ -173,7 +173,10 @@ public sealed class StudioCatalogScaleJourneyTests(StudioAuthoringFixture fixtur
         var searchInput = page.GetByRole(Microsoft.Playwright.AriaRole.Textbox, new() { Name = "Search catalog", Exact = true });
         await searchInput.FocusAsync();
         await searchInput.FillAsync(prefix);
-        await page.Keyboard.PressAsync("Enter");
+        await page.RunAndWaitForResponseAsync(
+            async () => await page.Keyboard.PressAsync("Enter"),
+            response => response.Url.Contains("/api/studio/catalog", StringComparison.Ordinal)
+                && response.Url.Contains($"query={Uri.EscapeDataString(prefix)}", StringComparison.Ordinal));
         await Expect(page.Locator("[data-catalog-status]")).ToContainTextAsync("Showing 1–50 of 120 (Page 1 of 3).");
         Assert.Equal("query", await page.EvaluateAsync<string?>("() => document.activeElement?.getAttribute('name')"));
         Assert.True(await page.EvaluateAsync<bool>("prefix => window.__STUDIO__.state.catalogReports.every(r => r.name.startsWith(prefix + '-Visible-'))", prefix));
@@ -237,6 +240,130 @@ public sealed class StudioCatalogScaleJourneyTests(StudioAuthoringFixture fixtur
         Assert.True(await page.EvaluateAsync<bool>("q => window.__STUDIO__.state.catalogReports.every(r => r.name.includes(q))", fastSearchQuery));
 
         await page.UnrouteAsync("**/api/studio/catalog?*");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task HomeCatalogRefreshAndStaleOpenRecovery_CoversCreateRenameMoveDeleteWithoutDisturbingDirtyBuffer()
+    {
+        // ST46 fixture: 51 documents (2 pages at pageSize=50: 50 on page 1, 1 on page 2)
+        // plus an external create, in-place rename, move, and delete of the page-2 item
+        // while an unsaved dirty document stays open in the editor.
+        using var workspace = new StudioTempWorkspace();
+        await using var session = await fixture.NewSessionAsync();
+        await using var host = await new StudioExecutionScopeJourneyTests(fixture).OpenAsync(session.Page, workspace, false);
+        var page = session.Page;
+
+        const string dirtyText = "-- ST46 unsaved buffer must survive stale opens and refreshes\nSELECT 'keep-me';";
+        await StudioExecutionScopeJourneyTests.ReplaceAsync(page, dirtyText);
+
+        var prefix = "St46" + Guid.NewGuid().ToString("N")[..8];
+        int folderAId;
+        int folderBId;
+        int page2ReportId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var admin = await db.Users.SingleAsync(user => user.UserName == PortalBrowserFixture.AdminUsername);
+            var folderA = new Folder { Name = $"{prefix}-A", Path = $"/{prefix}-A", OwnerId = admin.Id };
+            var folderB = new Folder { Name = $"{prefix}-B", Path = $"/{prefix}-B", OwnerId = admin.Id };
+            db.Folders.AddRange(folderA, folderB);
+            await db.SaveChangesAsync();
+            folderAId = folderA.Id;
+            folderBId = folderB.Id;
+
+            var seeded = Enumerable.Range(0, 51).Select(index => new Report
+            {
+                Name = $"{prefix}-{index:D3}",
+                FolderId = folderAId,
+                CreatedBy = admin.Id,
+                ScriptPath = $"fixture/{prefix}-{index:D3}.rptsql"
+            }).ToList();
+            db.Reports.AddRange(seeded);
+            await db.SaveChangesAsync();
+            page2ReportId = seeded[50].Id;
+        }
+
+        // Open Home, search for prefix, navigate to Page 2 (1 item: St46...-050).
+        await page.GetByRole(Microsoft.Playwright.AriaRole.Tab, new() { Name = "Home", Exact = true }).ClickAsync();
+        var searchInput = page.GetByRole(Microsoft.Playwright.AriaRole.Textbox, new() { Name = "Search catalog", Exact = true });
+        await searchInput.FillAsync(prefix);
+        await page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Search", Exact = true }).ClickAsync();
+        await Expect(page.Locator("[data-catalog-status]")).ToContainTextAsync("Showing 1–50 of 51 (Page 1 of 2).");
+        await page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Next page", Exact = true }).ClickAsync();
+        await Expect(page.Locator("[data-catalog-status]")).ToContainTextAsync("Showing 51–51 of 51 (Page 2 of 2).");
+
+        // 1. External create: appears on Page 2 after Refresh catalog.
+        int createdId;
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var admin = await db.Users.SingleAsync(user => user.UserName == PortalBrowserFixture.AdminUsername);
+            var created = new Report
+            {
+                Name = $"{prefix}-051-Created",
+                FolderId = folderAId,
+                CreatedBy = admin.Id,
+                ScriptPath = $"fixture/{prefix}-051-created.rptsql"
+            };
+            db.Reports.Add(created);
+            await db.SaveChangesAsync();
+            createdId = created.Id;
+        }
+        await page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Refresh catalog", Exact = true }).ClickAsync();
+        await Expect(page.Locator("[data-catalog-status]")).ToContainTextAsync("Showing 51–52 of 52 (Page 2 of 2).");
+        Assert.Contains(createdId, await page.EvaluateAsync<int[]>("() => window.__STUDIO__.state.catalogReports.map(r => r.id)"));
+
+        // 2. External in-place rename: stale open fails clearly and shows inline alert; Refresh catalog updates name.
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var report = await db.Reports.SingleAsync(r => r.Id == page2ReportId);
+            report.Name = $"{prefix}-050-Renamed";
+            await db.SaveChangesAsync();
+        }
+        await page.Locator($"[data-open-report='{page2ReportId}']").First.ClickAsync();
+        await Expect(page.Locator("[data-catalog-alert]")).ToContainTextAsync("renamed since the catalog was loaded");
+        await page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Refresh catalog", Exact = true }).ClickAsync();
+        await Expect(page.Locator("[data-catalog-alert]")).ToHaveCountAsync(0);
+        Assert.Equal($"{prefix}-050-Renamed", await page.EvaluateAsync<string?>(
+            "id => window.__STUDIO__.state.catalogReports.find(r => r.id === id)?.name ?? null", page2ReportId));
+
+        // 3. External move to folder B: stale open fails clearly; Refresh catalog shows updated folder.
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var report = await db.Reports.SingleAsync(r => r.Id == page2ReportId);
+            report.FolderId = folderBId;
+            await db.SaveChangesAsync();
+        }
+        await page.Locator($"[data-open-report='{page2ReportId}']").First.ClickAsync();
+        await Expect(page.Locator("[data-catalog-alert]")).ToContainTextAsync("moved since the catalog was loaded");
+        await page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Refresh catalog", Exact = true }).ClickAsync();
+        await Expect(page.Locator("[data-catalog-alert]")).ToHaveCountAsync(0);
+        Assert.Equal(folderBId, await page.EvaluateAsync<int?>(
+            "id => window.__STUDIO__.state.catalogReports.find(r => r.id === id)?.folderId ?? null", page2ReportId));
+
+        // 4. External delete of both Page-2 items: stale open fails clearly; Refresh catalog clamps cleanly back to Page 1 of 1.
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            foreach (var report in await db.Reports.Where(r => r.Id == page2ReportId || r.Id == createdId).ToListAsync())
+                report.IsDeleted = true;
+            await db.SaveChangesAsync();
+        }
+        await page.Locator($"[data-open-report='{page2ReportId}']").First.ClickAsync();
+        await Expect(page.Locator("[data-catalog-alert]")).ToContainTextAsync("unavailable or outside your catalog permissions");
+        await page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Refresh catalog", Exact = true }).ClickAsync();
+        await Expect(page.Locator("[data-catalog-alert]")).ToHaveCountAsync(0);
+        await Expect(page.Locator("[data-catalog-status]")).ToContainTextAsync("Showing 1–50 of 50 (Page 1 of 1).");
+
+        // 5. Switch back to the dirty editor tab and confirm unsaved text is intact.
+        var dirtyTabId = await page.EvaluateAsync<string>("() => window.__STUDIO__.state.documents[0].id");
+        await page.Locator($"#etlsql-tab-{dirtyTabId}").ClickAsync();
+        Assert.Equal(dirtyText, await page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()"));
+        Assert.True(await page.EvaluateAsync<bool>("() => window.__STUDIO__.state.documents[0].isDirty"));
         Assert.Empty(session.PageErrors);
     }
 }

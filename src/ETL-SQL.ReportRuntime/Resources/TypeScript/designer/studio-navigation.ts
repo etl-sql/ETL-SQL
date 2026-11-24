@@ -21,7 +21,7 @@ export interface StudioNavigationContext {
     readonly hasWorkspaceHost: boolean;
     readonly homeStage: StudioDomElement;
     readonly inspector: StudioDomElement;
-    readonly openCatalogReport: (report: StudioDynamic, proj?: string) => Promise<any>;
+    readonly openCatalogReport: (report: StudioDynamic, proj?: string, options?: { onError?: (message: string) => void }) => Promise<any>;
     readonly openPrivateDraft: (summary: StudioPrivateDraftSummary, proj?: string) => Promise<any>;
     readonly deletePrivateDraft: (summary: StudioPrivateDraftSummary) => Promise<boolean>;
     readonly openWorkspaceFile: (filePath: string, proj?: string) => Promise<boolean>;
@@ -61,6 +61,7 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
         ?? (catalogTotal === 0 ? 0 : Math.ceil(catalogTotal / catalogPageSize));
     let catalogRequestSeq = 0;
     let catalogAbort: AbortController | null = null;
+    let catalogNotice: string | null = null;
 
     function captureCatalogFocus(): CatalogFocusSnapshot | null {
         const active = document.activeElement;
@@ -118,11 +119,16 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
             catalogPageSize = result.pageSize;
             catalogTotal = result.total;
             catalogTotalPages = result.totalPages;
+            catalogNotice = null;
             renderStudioHome();
             restoreCatalogFocus(focusSnapshot);
         } catch (error) {
             if (requestSeq !== catalogRequestSeq || abortController.signal.aborted) return;
-            _feedback.notify(errorMessage(error), { title: 'Catalog refresh failed', tone: 'warning' });
+            const message = errorMessage(error);
+            catalogNotice = message;
+            renderStudioHome();
+            restoreCatalogFocus(focusSnapshot);
+            _feedback.notify(message, { title: 'Catalog refresh failed', tone: 'warning' });
         } finally {
             if (catalogAbort === abortController) catalogAbort = null;
         }
@@ -554,6 +560,7 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
                         <button type="button" data-catalog-previous ${catalogPage > 1 ? '' : 'disabled'}>Previous page</button>
                         <button type="button" data-catalog-next ${catalogPage < catalogTotalPages ? '' : 'disabled'}>Next page</button>
                         <p role="status" data-catalog-status>${statusText}</p>
+                        ${catalogNotice ? `<p role="alert" data-catalog-alert style="margin:6px 0 0; color:var(--portal-danger,#f85149);">${_escapeHtml(catalogNotice)}</p>` : ''}
                     </form>`;
                     })() : ''}
                     ${files.length === 0 ? `
@@ -640,7 +647,20 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
         queryElements(hostContext.homeStage, '[data-open-report]').forEach(b => {
             b.addEventListener('click', async () => {
                 const report = hostContext.state.catalogReports.find((item: StudioDynamic) => String(item.id) === b.dataset.openReport);
-                if (report) await hostContext.openCatalogReport(report, b.dataset.openProj || 'split');
+                if (!report) return;
+                let failedMessage: string | null = null;
+                const opened = await hostContext.openCatalogReport(report, b.dataset.openProj || 'split', {
+                    onError: message => { failedMessage = message; }
+                });
+                if (failedMessage) {
+                    catalogNotice = failedMessage;
+                    if (hostContext.state.activeDocId === '__home__') {
+                        renderStudioHome();
+                        restoreCatalogFocus({ kind: 'refresh' });
+                    }
+                } else if (opened && catalogNotice) {
+                    catalogNotice = null;
+                }
             });
         });
 

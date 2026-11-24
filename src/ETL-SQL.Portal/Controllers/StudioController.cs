@@ -161,7 +161,7 @@ public sealed partial class StudioController(
         var report = await CatalogScope.Documents.AsNoTracking().Include(report => report.Folder)
             .FirstOrDefaultAsync(report => report.Id == id && !report.IsDeleted, ct);
         if (report is null || !(await folderPermissions.GetEffectiveReportPermissionAsync(report, User)).AtLeast(FolderPermission.Author))
-            return NotFound(new { error = "The document is unavailable or outside your catalog permissions. Refresh Studio Home." });
+            return NotFound(new { error = "The document is unavailable or outside your catalog permissions. Refresh Studio Home. Your open drafts are unchanged." });
         return Ok(ToDto(report));
     }
 

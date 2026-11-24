@@ -104,6 +104,13 @@ try {
     assert.deepEqual(requests.slice(before).map(request => request.url), ['/api/studio/reports/7/summary', '/api/reports/7/script-content'],
         'A read-only author validates discovery and reads text without requesting an edit lease.');
     await assert.rejects(host.onOpenDocument({ ...report, folderId: 99 }), /moved since the catalog was loaded/);
+    await assert.rejects(host.onOpenDocument({ ...report, name: 'RenamedReport' }), /renamed since the catalog was loaded/);
+    const missingHost = hostModule.module.createPortalStudioHost(session, async url =>
+        url.endsWith('/summary')
+            ? Response.json({ error: 'The document is unavailable or outside your catalog permissions. Refresh Studio Home. Your open drafts are unchanged.' }, { status: 404 })
+            : fetch(url),
+    async () => report);
+    await assert.rejects(missingHost.onOpenDocument(report), /unavailable or outside your catalog permissions/);
     assert.equal('onLoadDraft' in readOnlyHost, false);
     await assert.rejects(host.onCreateDocument({ folderId: 'bad', name: 'Report', scriptText: '' }), /Invalid/);
     assert.equal((await host.onCreateDocument({ folderId: '3', name: 'New', scriptText: 'SELECT 1;' })).name, 'New');
