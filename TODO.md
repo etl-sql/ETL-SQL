@@ -119,7 +119,7 @@ All five items (`DB09`, `DB12`, `DB15a`, `DB15b`, `DB15c`) have shipped on `rele
 
 **Third pickup** (owner, 2026-11-23, same Thursday rule).
 
-All eight build items (`RT03`–`RT09`, `DB07`) have shipped on `release/v0.23.0` (see `CHANGELOG.md`). Decision proposals recorded in `ROADMAP.md` on 2026-11-23 (`DB08`, `DB11`, `RT11`, awaiting owner approval).
+All seven remote-file items (`RT03`–`RT09`) have shipped on `release/v0.23.0` (see `CHANGELOG.md`). `DB07` binary `COPY` was built, measured slower than text `COPY` (104 ms vs 92 ms on 25,000 rows), and reverted by owner decision on 2026-11-24; the result is recorded in `ROADMAP.md`. Decision proposals recorded in `ROADMAP.md` on 2026-11-23 (`DB08`, `DB11`, `RT11`, awaiting owner approval).
 
 ## Tier 3 — if time allows
 

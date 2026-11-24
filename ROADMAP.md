@@ -513,7 +513,7 @@ from a multi-sheet fixture.
 
 ### Database Connectors — Documentation Parity, Write-Path Clarity, and Credential Gaps
 
-**Status:** In Progress; DB01–DB06, DB10, DB13, and DB14 shipped in v0.23.0; DB09, DB12, and DB15 shipped; DB07 and the DB08/DB11 decisions selected in `TODO.md` §2.4 (2026-11-23)  
+**Status:** In Progress; DB01–DB06, DB10, DB13, and DB14 shipped in v0.23.0; DB09, DB12, and DB15 shipped; DB07 measured and not adopted (2026-11-24); DB08/DB11 decisions selected in `TODO.md` §2.4 (2026-11-23)  
 **Horizon:** Next (DB01–DB03), Later (the rest)  
 **Authoritative design:** none yet; [Database connectors](docs/reference/connectors/databases/README.md)
 are the references and [Connector Standards](docs/architecture/standards/connectors-standards.md)
@@ -552,7 +552,7 @@ new package.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| DB07 | **Postgres bulk load.** The Postgres data source has no binary `COPY` import, unlike MSSQL, Oracle, and MySQL. Add one behind the existing write path, with the same transaction and `WHAT_IF` behavior, and measure it against the current batch insert on a fixture before claiming a speedup. | DB04 | M |
+| DB07 | **Postgres bulk load.** The Postgres data source has no binary `COPY` import, unlike MSSQL, Oracle, and MySQL. Add one behind the existing write path, with the same transaction and `WHAT_IF` behavior, and measure it against the current batch insert on a fixture before claiming a speedup. **Measured and not adopted (2026-11-24):** on a 25,000-row, 5-column fixture binary `COPY` took 104 ms and the text `COPY` loader 92 ms. Binary also typed string values (every flat-file value is a string) with .NET parsers instead of PostgreSQL's input functions, and refused enum, `inet`, array and other unmapped column types that text `COPY` loads. The owner kept text `COPY`; reopen only with a fixture that shows a real speedup. | DB04 | M |
 | DB08 | **Decision: credential providers.** No source references Azure Key Vault or AWS Secrets Manager; secrets come from `ENC:`, `SECRET:`, and allow-listed environment variables. Decide whether a vault-backed `SECRET:` source belongs in the product and under which trust rules. Output is a proposal and an estimate only. | — | D |
 | DB11 | **Decision: native warehouse connectors.** Whether Databricks or Redshift justify a native connector over `ODBC`, given that `ODBC` needs a vendor driver installed on the host. Gather evidence (install friction, feature loss through the bridge, type fidelity) and propose or reject. | — | D |
 
