@@ -89,11 +89,16 @@ proposed later as an opt-in, server-gated mode for `CatalogOnly` hosts if operat
 
 ### 2.1 Execution target and trusted server selection
 
-- The client always displays the active execution target before submission — in VS Code's status bar
-  and results header (for example, `ETL-SQL: Local (Offline)` or
-  `ETL-SQL: Hosted — portal.corp.example (tenant-alpha)`).
-- **Trusted server registry** lives in **user-level** settings (`etlsql.hosted.servers`: alias,
-  canonical `https://` origin, optional default label). Plain `http://` is refused except for
+- Every client **defaults to `Local (Offline)` on startup** so hosted connections are always
+  deliberate — reopening VS Code, TUI, or desktop Studio never silently reconnects to `Prod` from a
+  prior day's session.
+- The client always displays the active execution target before submission — in VS Code's bottom
+  status bar and results header (for example, `ETL-SQL: Local (Offline)` or
+  `ETL-SQL: Hosted — Prod (portal.corp.example / tenant-alpha)`). Clicking the status bar item or
+  running **Connect** opens the picker of saved environments (`Dev`, `Test`, `Prod`, or separate
+  tenants).
+- **Saved server list** lives in **user-level** settings (`etlsql.hosted.servers`: friendly label,
+  canonical `https://` origin, optional environment tag). Plain `http://` is refused except for
   explicit `localhost` / `127.0.0.1` development hosts.
 - Workspace settings (`.vscode/settings.json`) may reference a server **alias** or catalog document
   ID, never register a new URL or auto-trust a host. Opening an untrusted workspace that names an
@@ -140,12 +145,14 @@ sequenceDiagram
   than the extension host, VS Code may optionally use `vscode.env.asExternalUri` to tunnel the
   loopback port.
 
-### 2.3 Session reuse, run, results, Stop, and sign-out
+### 2.3 Session reuse, run, results, Stop, and disconnect
 
-1. **Session reuse:** Before any hosted call, the client reads the stored session for
-   `(clientId, normalizedOrigin)`. If the access token is valid with at least 60 s remaining, it
-   reuses it immediately with no browser prompt. If expired, the client runs a single-flight
-   `POST /api/auth/refresh`, stores the rotated pair, and continues.
+1. **Session reuse while open:** Once connected to a hosted environment, the client keeps the
+   access and refresh tokens **in process memory only** for the lifetime of the app window/process.
+   If the access token is valid with at least 60 s remaining, subsequent runs reuse it immediately
+   with no browser prompt. If expired, the client runs a single-flight `POST /api/auth/refresh`,
+   replaces the in-memory pair, and stays connected across the work session until the server
+   revokes/changes security, the user disconnects, or the app closes.
 2. **Run:** The client checks that the linked pipeline document is saved (or prompts **Save to
    Portal & Run** / **Run Last Saved Revision**), mints a UUIDv4 `Idempotency-Key`, and posts
    `POST /api/studio/pipelines/{id}/runs` with `{ version }` and header `Idempotency-Key`.
@@ -161,10 +168,15 @@ sequenceDiagram
      `FAILED` if it finished first).
    - `409 run_already_finished`: UI refreshes final status and does not claim cancellation.
    - `403 cancel_denied`: UI displays the server refusal and leaves `runId` visible.
-5. **Sign out:** `ETL-SQL: Sign Out of Hosted Server` removes the stored tokens from protected client
-   storage first, then calls `POST /api/auth/client/logout` with the refresh token so only that
-   client session is revoked (leaving browser tabs signed in). A separate **Sign Out All Devices**
-   action calls existing `POST /api/auth/logout`.
+5. **Disconnect / Sign out / App close:**
+   - Explicit **Disconnect / Sign Out** clears the in-memory tokens first, calls
+     `POST /api/auth/client/logout` to revoke only that client's refresh token (leaving browser tabs
+     signed in), and returns the target to `Local (Offline)`.
+   - Closing VS Code, TUI, or desktop Studio drops the in-memory session and sends a best-effort
+     `POST /api/auth/client/logout` on clean shutdown. Reopening the app starts back on
+     `Local (Offline)` and reconnects deliberately through the status bar (one click when Entra ID
+     SSO is already active in the browser).
+   - A separate **Sign Out All Devices** action calls existing `POST /api/auth/logout`.
 
 ### 2.4 Expired sessions, unavailable hosts, and offline/local execution
 
@@ -188,19 +200,20 @@ sequenceDiagram
 - **Obtained:** Via browser authentication + PKCE (`S256`) one-time authorization code (60 s TTL,
   single-use, bound to `client_id`, `redirect_uri`, `code_challenge`, `userId`, `tenantId`). Tokens
   never appear in URLs, query strings, browser history, or shell arguments.
-- **Stored:**
-  - **VS Code:** `vscode.SecretStorage` (OS keychain / Windows Credential Manager / Linux
-    `libsecret`), keyed by `etlsql.hosted.session.<clientId>.<originHash>`.
-  - **TUI & Desktop Studio:** OS-protected credential store (Windows DPAPI CurrentUser / macOS
-    Keychain / Linux Secret Service) via a shared .NET helper.
-  - Never written to `.etlsql`/`.rptsql` files, `.vscode/settings.json`, `globalState`, output
-    channels, crash reports, or diagnostic logs.
-- **Refreshed:** Single-flight `POST /api/auth/refresh`. Concurrent requests share one refresh
-  promise so two calls never present the same single-use refresh token and trip
-  `REFRESH_TOKEN_REUSE`.
-- **Cleared:** Deleted locally on sign-out, account disable, or unrecoverable `401`, and revoked on
-  the server via `POST /api/auth/client/logout` (single token) or `POST /api/auth/logout` (all
-  sessions).
+- **Stored (in-memory session only):**
+  - Access and refresh tokens live strictly **in process memory** inside the VS Code extension host,
+    TUI process, or desktop Studio `.NET` host process (never in browser `localStorage` /
+    `sessionStorage`).
+  - Nothing is written to disk across restarts — no persisted refresh tokens in `SecretStorage`, OS
+    keychains, `.etlsql`/`.rptsql` files, `.vscode/settings.json`, `globalState`, output channels,
+    crash reports, or diagnostic logs. Only the non-secret saved server list (label + HTTPS URL)
+    persists in user settings.
+- **Refreshed:** Single-flight `POST /api/auth/refresh` keeps the active session connected while the
+  app stays open. Concurrent requests share one refresh promise so two calls never present the same
+  single-use refresh token and trip `REFRESH_TOKEN_REUSE`.
+- **Cleared:** Zeroed/dropped from memory on disconnect, app close, account disable, or
+  unrecoverable `401`, and revoked on the server via `POST /api/auth/client/logout` (single token)
+  or `POST /api/auth/logout` (all sessions).
 
 ### 3.2 Server verification (caller, tenant, audience, scopes)
 
@@ -287,14 +300,14 @@ receives `202 Accepted`:
 
 | Step | Action | APIs exercised | Expected result |
 | :--- | :--- | :--- | :--- |
-| 1. First sign-in | Empty `SecretStorage`, select Hosted target, sign in via loopback browser OIDC as `alice` | `GET /api/auth/providers`, `GET /api/auth/client/authorize`, `POST /api/auth/client/exchange`, `GET /api/studio/session` | Session stored in `SecretStorage` only; status bar shows host + `tenant-alpha` + `alice`; zero tokens in settings/logs |
+| 1. First sign-in | Start on `Local (Offline)`, click Connect, pick Hosted target, sign in via loopback browser OIDC as `alice` | `GET /api/auth/providers`, `GET /api/auth/client/authorize`, `POST /api/auth/client/exchange`, `GET /api/studio/session` | Session held in process memory only; status bar shows host + `tenant-alpha` + `alice`; zero tokens on disk, in settings, or in logs |
 | 2. Authorized run | Run `FinanceCheck.etlsql` (`version = 1`) | `POST /api/studio/pipelines/{id}/runs` (`Idempotency-Key`), `GET .../runs/{runId}` | `202` with `runId`; polls to `SUCCESS`; statement metrics rendered; `PIPELINE_RUN_SUBMITTED` audited |
-| 3. Session reuse | Run `FinanceCheck.etlsql` a second time | `POST /api/studio/pipelines/{id}/runs`, `GET .../runs/{runId}` | Zero browser launches; same stored session reused; second distinct `runId` completes |
+| 3. Session reuse | Run `FinanceCheck.etlsql` a second time | `POST /api/studio/pipelines/{id}/runs`, `GET .../runs/{runId}` | Zero browser launches; same in-memory session reused; second distinct `runId` completes |
 | 4. Denied run | Sign in as `bob`, attempt to run `FinanceCheck.etlsql` | `POST /api/studio/pipelines/{id}/runs` | `403 run_grant_denied`; zero Orchestrator execution; clear explanation of missing job grant |
 | 5. Session expiry | (a) Expire `alice`'s access token -> run; (b) revoke `alice`'s refresh token -> run | `POST /api/auth/refresh`, `POST /api/studio/pipelines/{id}/runs` | (a) Silent single-flight refresh succeeds; (b) `401` leaves run pending, prompts **Sign In Again**, preserves dirty buffer, does **not** run locally |
 | 6. Stop | Run `SlowWait.etlsql` as `alice`, invoke `etlsql.stopScript` | `POST .../runs`, `POST .../runs/{runId}/cancel`, `GET .../runs/{runId}` | `202` cancel accepted; polls to terminal `CANCELLED`; `runId` retained; `PIPELINE_RUN_CANCEL_REQUESTED` audited |
 | 7. Lost response | Drop `202` response after Portal accepts `Idempotency-Key: K1`, recover | `POST .../runs` (dropped), `GET .../runs/by-request/K1`, `GET .../runs/{runId}` | Client recovers exact `runId`; Orchestrator history contains exactly **one** run for `K1` |
-| 8. Sign out & offline | Sign out `alice`, switch explicitly to `Local (Offline)`, stop Portal, run local script | `POST /api/auth/client/logout`, local `ReplManager` | `SecretStorage` cleared; server refresh token revoked; local run succeeds offline under OS account |
+| 8. Disconnect & offline | Disconnect `alice` (and verify clean restart defaults to `Local`), stop Portal, run local script | `POST /api/auth/client/logout`, local `ReplManager` | In-memory session cleared; server refresh token revoked; fresh startup defaults to `Local (Offline)` and runs locally offline under OS account |
 
 - **Evidence to retain:** Automated Portal + Orchestrator + VS Code test run logs, sanitized HTTP
   transcript of steps 1–8, Portal audit rows (`CLIENT_LOGIN`, `PIPELINE_RUN_SUBMITTED`,
@@ -310,10 +323,10 @@ receives `202 Accepted`:
   `/api/studio/pipelines/{id}/runs/by-request/{key}`, `/api/studio/pipelines/{id}/runs/{runId}`, and
   `/api/studio/pipelines/{id}/runs/{runId}/cancel`.
 - **Shared .NET client library for ST57 + ST58:** TUI (`ETL-SQL.TUI`) and Desktop Studio
-  (`ETL-SQL.WorkstationEditor`) can share one small .NET `HostedClientSessionService` (loopback
-  `HttpListener`, PKCE `S256`, OS-protected credential store, single-flight refresh, and
-  `Idempotency-Key` run client). Only the UI affordances (TUI status bar/picker vs. Desktop Studio
-  workbench target bar) differ.
+  (`ETL-SQL.WorkstationEditor`) can share one small .NET `HostedClientSessionService` (saved server
+  list, loopback `HttpListener`, PKCE `S256`, in-memory session state cleared on close,
+  single-flight refresh, and `Idempotency-Key` run client). Only the UI affordances (TUI status
+  bar/picker vs. Desktop Studio workbench target bar) differ.
 
 ---
 
@@ -325,7 +338,7 @@ receives `202 Accepted`:
 | :--- | :--- | :--- |
 | 1. Portal native-client auth handoff | `GET /api/auth/client/authorize`, `POST /api/auth/client/exchange`, `POST /api/auth/client/logout`, PKCE `S256` + loopback validation, bounded client scopes, audit events, Portal unit/integration tests | 2–3 engineering days |
 | 2. Idempotent run submission & recovery | `Idempotency-Key` support on `POST /api/studio/pipelines/{id}/runs`, `StudioRunIdempotency` persistence (SQLite + Postgres migration), `GET .../by-request/{key}`, Portal + Orchestrator tests | 1–2 engineering days |
-| 3. VS Code hosted execution & fixture | Trusted server registry, `SecretStorage` session manager, loopback browser sign-in, target selector, saved-revision link/save-and-run prompt, `ResultsPanel` polling + Stop, full ST56 acceptance fixture | 2–3 engineering days |
+| 3. VS Code hosted execution & fixture | Saved server list, in-memory session manager (defaulting to Local on startup and revoking on close), loopback browser sign-in, status-bar target picker, saved-revision link/save-and-run prompt, `ResultsPanel` polling + Stop, full ST56 acceptance fixture | 2–3 engineering days |
 | **Total (ST56)** | End-to-end VS Code hosted sign-in, execution, Stop, lost-response recovery, and offline local path | **5–8 engineering days** |
 
 ### Decisions requiring owner approval before coding
