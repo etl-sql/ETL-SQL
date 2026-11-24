@@ -36,6 +36,8 @@ COPY FILE '/incoming/daily.csv' TO '/archive/daily.csv' AT sftp_conn WITH (OVERW
 COPY DIRECTORY 'output/' TO 'archive/2024/';
 
 COPY DIRECTORY 'reports/' TO 'archive/reports/' WITH (OVERWRITE = ON);
+
+COPY DIRECTORY '/incoming/batch' TO '/archive/batch' AT sftp_conn WITH (OVERWRITE = OFF);
 ```
 
 ## Options

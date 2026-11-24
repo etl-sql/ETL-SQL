@@ -249,5 +249,48 @@ namespace ETL_SQL.Tests.Integration.Connectors
             await evaluator.Evaluate(new Parser(new Lexer(delRec).Tokenize(), delRec).Parse());
             Assert.False(await connector.DirectoryExistsAsync(root));
         });
+
+        [Fact]
+        public Task DirectoryRenameMoveAndCopyAt_AllThreeSucceed() => Diagnosed(async () =>
+        {
+            var baseDir = $"rt07_{Guid.NewGuid():N}";
+            var srcDir = $"{baseDir}/src";
+            var copiedDir = $"{baseDir}/copied";
+            var renamedDir = $"{baseDir}/renamed";
+            var movedDir = $"{baseDir}/archive/moved";
+            var localSeed = LocalPath("rt07_seed.txt");
+            File.WriteAllText(localSeed, "rt07-ftp-payload");
+
+            await using var connector = ValidConnector();
+            await connector.CreateDirectoryAsync(baseDir);
+            await connector.CreateDirectoryAsync($"{baseDir}/archive");
+            await connector.CreateDirectoryAsync(srcDir);
+            await connector.CreateDirectoryAsync($"{srcDir}/sub");
+            await connector.UploadFileAsync(localSeed, $"{srcDir}/a.txt", overwrite: true);
+            await connector.UploadFileAsync(localSeed, $"{srcDir}/sub/b.txt", overwrite: true);
+
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            ((IExecutionContext)evaluator).Connections["ftp_rt07"] = connector;
+
+            // 1. COPY DIRECTORY
+            var copySql = $"COPY DIRECTORY '{srcDir}' TO '{copiedDir}' AT ftp_rt07;";
+            await evaluator.Evaluate(new Parser(new Lexer(copySql).Tokenize(), copySql).Parse());
+            Assert.True(await connector.FileExistsAsync($"{copiedDir}/a.txt"));
+            Assert.True(await connector.FileExistsAsync($"{copiedDir}/sub/b.txt"));
+            Assert.True(await connector.FileExistsAsync($"{srcDir}/a.txt"));
+
+            // 2. RENAME DIRECTORY
+            var renameSql = $"RENAME DIRECTORY '{copiedDir}' TO 'renamed' AT ftp_rt07;";
+            await evaluator.Evaluate(new Parser(new Lexer(renameSql).Tokenize(), renameSql).Parse());
+            Assert.False(await connector.DirectoryExistsAsync(copiedDir));
+            Assert.True(await connector.FileExistsAsync($"{renamedDir}/sub/b.txt"));
+
+            // 3. MOVE DIRECTORY
+            var moveSql = $"MOVE DIRECTORY '{renamedDir}' TO '{movedDir}' AT ftp_rt07;";
+            await evaluator.Evaluate(new Parser(new Lexer(moveSql).Tokenize(), moveSql).Parse());
+            Assert.False(await connector.DirectoryExistsAsync(renamedDir));
+            Assert.True(await connector.FileExistsAsync($"{movedDir}/a.txt"));
+            Assert.True(await connector.FileExistsAsync($"{movedDir}/sub/b.txt"));
+        });
     }
 }

@@ -40,6 +40,20 @@ public class DirectoryOperationStatementHandler(
             }
 
             string remotePath = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "";
+            string? remoteDest = stmt.Destination != null ? (await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() : null;
+
+            bool remoteOverwrite = true;
+            if (stmt.Overwrite != null)
+            {
+                var ovVal = await context.EvaluateValue(stmt.Overwrite, new Row());
+                if (ovVal is bool ob) remoteOverwrite = ob;
+                else if (ovVal != null)
+                {
+                    var s = ovVal.ToString()?.Trim();
+                    if (string.Equals(s, "ON", StringComparison.OrdinalIgnoreCase) || string.Equals(s, "TRUE", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = true;
+                    else if (string.Equals(s, "OFF", StringComparison.OrdinalIgnoreCase) || string.Equals(s, "FALSE", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = false;
+                }
+            }
 
             bool remoteRecursive = false;
             if (stmt.Recursive != null)
@@ -60,7 +74,8 @@ public class DirectoryOperationStatementHandler(
 
             if (context.IsWhatIf)
             {
-                _logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_DIRECTORY on connection '{stmt.ConnectionName}': {remotePath}{(remoteRecursive ? " (RECURSIVE=ON)" : "")}", ConsoleColor.Yellow);
+                var destInfo = remoteDest != null ? $" -> {remoteDest}" : "";
+                _logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_DIRECTORY on connection '{stmt.ConnectionName}': {remotePath}{destInfo}{(remoteRecursive ? " (RECURSIVE=ON)" : "")}", ConsoleColor.Yellow);
                 return;
             }
 
@@ -132,6 +147,88 @@ public class DirectoryOperationStatementHandler(
                         }
 
                         _logger.WriteLine($"Remote directory deleted: {stmt.ConnectionName}:{remotePath}", ConsoleColor.Green);
+                        break;
+                    case DirectoryOpType.Rename:
+                    case DirectoryOpType.Move:
+                        if (string.IsNullOrWhiteSpace(remoteDest))
+                            throw new ExecutionException($"{stmt.Type.ToString().ToUpperInvariant()} DIRECTORY requires a destination path.");
+
+                        string finalDirDest = remoteDest;
+                        if (stmt.Type == DirectoryOpType.Rename && !remoteDest.Contains('/') && !remoteDest.Contains('\\'))
+                        {
+                            var normalizedSrc = RemoteDirectoryWalker.NormalizeRemoteDir(remotePath);
+                            var lastSlash = normalizedSrc.LastIndexOf('/');
+                            if (lastSlash >= 0)
+                            {
+                                finalDirDest = normalizedSrc[..(lastSlash + 1)] + remoteDest;
+                            }
+                        }
+
+                        try
+                        {
+                            await remoteFs.RenameDirectoryAsync(remotePath, finalDirDest, remoteOverwrite, context.CancellationToken);
+                        }
+                        catch (NotSupportedException)
+                        {
+                            throw new ExecutionException(
+                                $"Remote {stmt.Type.ToString().ToUpperInvariant()} DIRECTORY is not supported on {ds.ConnectorType}.");
+                        }
+                        _logger.WriteLine($"Remote directory {(stmt.Type == DirectoryOpType.Move ? "moved" : "renamed")}: {stmt.ConnectionName}:{remotePath} -> {finalDirDest}", ConsoleColor.Green);
+                        break;
+                    case DirectoryOpType.Copy:
+                        if (string.IsNullOrWhiteSpace(remoteDest))
+                            throw new ExecutionException("COPY DIRECTORY requires a destination path.");
+
+                        var walked = new List<RemoteWalkEntry>();
+                        await foreach (var entry in RemoteDirectoryWalker.WalkAsync(
+                            remoteFs, remotePath, recursive: true, context, context.CancellationToken))
+                        {
+                            walked.Add(entry);
+                        }
+
+                        await remoteFs.CreateDirectoryAsync(remoteDest);
+                        foreach (var dirEntry in walked)
+                        {
+                            if (dirEntry.Meta.IsDirectory && dirEntry.Meta.IsSymlink != true)
+                            {
+                                var targetSubDir = RemoteDirectoryWalker.CombineRemotePath(remoteDest, dirEntry.RelativePath);
+                                context.IncrementOperationCount(OperationType.FileSystem, targetSubDir);
+                                await remoteFs.CreateDirectoryAsync(targetSubDir);
+                            }
+                        }
+
+                        var copiedFiles = new List<string>();
+                        foreach (var fileEntry in walked)
+                        {
+                            if (fileEntry.Meta.IsDirectory || fileEntry.Meta.IsSymlink == true)
+                                continue;
+
+                            var targetFile = RemoteDirectoryWalker.CombineRemotePath(remoteDest, fileEntry.RelativePath);
+                            context.IncrementOperationCount(OperationType.FileSystem, targetFile);
+                            try
+                            {
+                                await FileOperationStatementHandler.CopyRemoteFileAsync(
+                                    remoteFs,
+                                    fileEntry.Meta.FullPath,
+                                    remoteFs,
+                                    targetFile,
+                                    remoteOverwrite,
+                                    FileOperationStatementHandler.DefaultRemoteTempRoot,
+                                    context.CancellationToken);
+                                copiedFiles.Add(targetFile);
+                            }
+                            catch (Exception copyEx)
+                            {
+                                var summary = copiedFiles.Count > 0
+                                    ? $" Already copied ({copiedFiles.Count}): [{string.Join(", ", copiedFiles)}]. Partially copied files were not deleted."
+                                    : " No files had been copied yet.";
+                                throw new ExecutionException(
+                                    $"Remote COPY DIRECTORY failed on '{fileEntry.Meta.FullPath}': {copyEx.Message}.{summary}",
+                                    copyEx, null, stmt.Line, stmt.Column);
+                            }
+                        }
+
+                        _logger.WriteLine($"Remote directory copied ({copiedFiles.Count} file(s)): {stmt.ConnectionName}:{remotePath} -> {remoteDest}", ConsoleColor.Green);
                         break;
                     default:
                         throw new ExecutionException($"Directory operation '{stmt.Type}' is not supported on remote systems.");

@@ -96,19 +96,22 @@ internal static class RemoteDirectoryWalker
                 relPath = relativePrefix + "/" + item.Name;
             }
 
-            // Object stores (S3 / Azure Blob) may return flat keys containing nested '/' segments
-            // even at depth 0. Enforce the recursive depth bound against those nested segments too.
-            if (recursive && !item.IsDirectory && !string.IsNullOrEmpty(item.FullPath))
+            // Object stores (S3 / Azure Blob) return flat keys without a leading '/' containing
+            // nested '/' segments even at depth 0. Enforce the recursive depth bound against those
+            // nested segments without misclassifying absolute POSIX SFTP/FTP paths.
+            if (recursive && depth == 0 && !item.IsDirectory
+                && !string.IsNullOrEmpty(item.FullPath)
+                && !item.FullPath.StartsWith('/')
+                && !item.FullPath.StartsWith('\\'))
             {
-                var normalizedRoot = NormalizeRemoteDir(currentDir);
-                var normalizedFull = item.FullPath.Replace('\\', '/').TrimStart('/');
-                var trimmedRoot = normalizedRoot.TrimStart('/');
-                string keyRel = !string.IsNullOrEmpty(trimmedRoot) && normalizedFull.StartsWith(trimmedRoot + "/", StringComparison.Ordinal)
-                    ? normalizedFull[(trimmedRoot.Length + 1)..]
+                var normalizedRoot = NormalizeRemoteDir(currentDir).TrimStart('/');
+                var normalizedFull = item.FullPath.Replace('\\', '/');
+                string keyRel = !string.IsNullOrEmpty(normalizedRoot) && normalizedFull.StartsWith(normalizedRoot + "/", StringComparison.Ordinal)
+                    ? normalizedFull[(normalizedRoot.Length + 1)..]
                     : normalizedFull;
 
                 int slashDepth = keyRel.Count(c => c == '/');
-                if (slashDepth > 0 && depth == 0)
+                if (slashDepth > 0)
                 {
                     EnforceDepthLimit(context, slashDepth, item.FullPath);
                     relPath = keyRel;

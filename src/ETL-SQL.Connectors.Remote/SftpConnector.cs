@@ -634,6 +634,28 @@ namespace ETL_SQL.Connectors
             }
         }
 
+        public async Task RenameDirectoryAsync(string remoteSource, string remoteDest, bool overwrite = true, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                remoteSource = NormalizeRemotePath(remoteSource);
+                remoteDest = NormalizeRemotePath(remoteDest);
+                await RunClientOperationAsync(client =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!overwrite && client.Exists(remoteDest))
+                        throw new ExecutionException($"Remote destination directory already exists (OVERWRITE=OFF): {remoteDest}");
+                    client.RenameFile(remoteSource, remoteDest);
+                    return Task.CompletedTask;
+                }, cancellationToken);
+            }
+            catch (ExecutionException) { throw; }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SFTP", ex);
+            }
+        }
+
         public async Task CreateDirectoryAsync(string remotePath)
         {
             try

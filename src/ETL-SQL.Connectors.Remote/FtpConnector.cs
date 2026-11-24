@@ -293,6 +293,26 @@ namespace ETL_SQL.Connectors
             }
         }
 
+        public async Task RenameDirectoryAsync(string remoteSource, string remoteDest, bool overwrite = true, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var client = await EnsureConnectedAsync();
+                if (!overwrite && await client.DirectoryExists(remoteDest, cancellationToken))
+                    throw new ExecutionException($"Remote destination directory already exists (OVERWRITE=OFF): {remoteDest}");
+
+                var existsMode = overwrite ? FtpRemoteExists.Overwrite : FtpRemoteExists.Skip;
+                var moved = await client.MoveDirectory(remoteSource, remoteDest, existsMode, cancellationToken);
+                if (!moved)
+                    throw new ExecutionException($"Failed to rename/move FTP directory '{remoteSource}' to '{remoteDest}'.");
+            }
+            catch (ExecutionException) { throw; }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("FTP", ex);
+            }
+        }
+
         public async Task CreateDirectoryAsync(string remotePath)
         {
             try
