@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace ETL_SQL.TestSupport;
@@ -101,13 +102,25 @@ public static class LoadAwareWait
     }
 
     private static Calibration MeasureLoad()
+        => MeasureLoad(callback => ThreadPool.QueueUserWorkItem(callback), TimeSpan.FromSeconds(5));
+
+    internal static Calibration MeasureLoad(Action<WaitCallback> queue, TimeSpan timeout)
     {
+        // On a starved pool the probes run after the wait gives up, so nothing they touch may be
+        // disposed: a late Signal() on a disposed CountdownEvent threw on a pool thread and crashed
+        // the test host. The event is deliberately left undisposed (this runs once per process),
+        // so a late Set() is harmless.
         const int probes = 8;
-        using var completed = new CountdownEvent(probes);
+        var remaining = new StrongBox<int>(probes);
+        var completed = new ManualResetEventSlim();
         var stopwatch = Stopwatch.StartNew();
         for (var i = 0; i < probes; i++)
-            ThreadPool.QueueUserWorkItem(_ => completed.Signal());
-        var allDispatched = completed.Wait(TimeSpan.FromSeconds(5));
+            queue(_ =>
+            {
+                if (Interlocked.Decrement(ref remaining.Value) == 0)
+                    completed.Set();
+            });
+        var allDispatched = completed.Wait(timeout);
         stopwatch.Stop();
 
         var probeMs = allDispatched ? stopwatch.Elapsed.TotalMilliseconds : 5000;
@@ -152,5 +165,5 @@ public static class LoadAwareWait
         }
     }
 
-    private sealed record Calibration(double Scale, double ProbeMilliseconds);
+    internal sealed record Calibration(double Scale, double ProbeMilliseconds);
 }
