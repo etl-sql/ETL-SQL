@@ -1095,14 +1095,16 @@ their existing allow-list. A lost interactive response is displayed as `Unknown`
 kept in the original document and the Portal audit. Bounded host evidence:
 [Studio execution scope](decisions/studio-execution-scope-evidence.md).
 
-Studio Home uses `GET /api/studio/catalog?query=...&afterId=...`. Each request inspects at most 50
-tenant-scoped candidate documents plus one lookahead row. Permissions are resolved in batches with
-the same ownership, authorship, and ranked ACL rules as a single report check. The response returns
-only visible summaries and a cursor past the inspected rows; pages can be empty when candidates
-are inaccessible. Search, Next/Previous, and explicit Refresh update discovery without replacing
-open documents. Direct links and new opens recheck `/api/studio/reports/{id}/summary`; deleted or
-moved selections fail with an explanation. The older report-list endpoint remains available to its
-other callers. This is request-driven discovery, not live catalog synchronization.
+Studio Home uses `GET /api/studio/catalog?query=...&page=...&pageSize=...` (default and capped at
+50 items per page). Tenant scope and effective Author-or-higher permissions (folder ownership,
+ranked folder/report ACLs, and authorship upgrade) are applied in SQL before counting and paging,
+so hidden documents never affect page results or totals. Results are ordered stably by folder path,
+name, and document ID. Studio Home tracks request generations with `AbortController` so slow
+responses to older searches cannot overwrite newer results, and preserves keyboard focus across
+search and page navigation. Search, Next/Previous, and explicit Refresh update discovery without
+replacing open documents. Direct links and new opens recheck `/api/studio/reports/{id}/summary`;
+deleted or moved selections fail with an explanation. The older report-list endpoint remains
+available to its other callers. This is request-driven discovery, not live catalog synchronization.
 
 The session response advertises `maxScriptCharacters` from the designer configuration. Shared
 Studio editor services pause above that UTF-16 character count while keeping the buffer editable;

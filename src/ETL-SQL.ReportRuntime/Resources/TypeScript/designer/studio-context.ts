@@ -316,8 +316,17 @@ export interface StudioPrivateDraftHost {
 export interface StudioOptions extends StudioStateOptions {
     maxScriptCharacters?: number;
     catalogDiscovery?: {
-        nextAfterId: number | null;
-        search(query: string, afterId: number): Promise<{ items: StudioCatalogReport[]; nextAfterId: number | null }>;
+        page: number;
+        pageSize: number;
+        total: number;
+        totalPages: number;
+        search(query: string, page: number, pageSize: number, signal?: AbortSignal): Promise<{
+            items: StudioCatalogReport[];
+            total: number;
+            page: number;
+            pageSize: number;
+            totalPages: number;
+        }>;
     };
     initialSnapshot?: any;
     previewUrl?: string;

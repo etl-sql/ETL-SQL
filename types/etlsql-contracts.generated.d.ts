@@ -2659,7 +2659,10 @@ interface StewardshipSummaryDto {
 
 interface StudioCatalogPageDto {
     items: StudioReportDto[];
-    nextAfterId?: number | null;
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
 }
 
 interface StudioFolderDto {

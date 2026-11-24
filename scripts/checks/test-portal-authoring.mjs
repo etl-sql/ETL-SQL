@@ -21,9 +21,12 @@ try {
         columns: { Revenue: ['Region', 'Revenue'] }, metadata: { isSampled: false, rlsEnforced: false, totalRows: 2, returnedRows: 2 } };
     assert.deepEqual(responses.readStudioSession(session), { ...session, privateDrafts: false, maxScriptCharacters: 200_000 });
     assert.equal(responses.readStudioSession({ ...session, maxScriptCharacters: 10_000 }).maxScriptCharacters, 10_000);
-    assert.deepEqual(responses.readStudioCatalogPage({ items: [report], nextAfterId: 7 }), { items: [report], nextAfterId: 7 });
-    assert.throws(() => responses.readStudioCatalogPage({ items: Array(51).fill(report), nextAfterId: null }), /exceeded/);
-    assert.throws(() => responses.readStudioCatalogPage({ items: [report], nextAfterId: 'bad' }), /Invalid/);
+    assert.deepEqual(responses.readStudioCatalogPage({ items: [report], total: 1, page: 1, pageSize: 50, totalPages: 1 }),
+        { items: [report], total: 1, page: 1, pageSize: 50, totalPages: 1 });
+    assert.throws(() => responses.readStudioCatalogPage({ items: Array(51).fill(report), total: 51, page: 1, pageSize: 50, totalPages: 2 }), /exceeded/);
+    assert.throws(() => responses.readStudioCatalogPage({ items: [report], total: 1, page: 1, pageSize: 51, totalPages: 1 }), /Invalid/);
+    assert.throws(() => responses.readStudioCatalogPage({ items: [report], total: 0, page: 1, pageSize: 50, totalPages: 0 }), /Invalid/);
+    assert.throws(() => responses.readStudioCatalogPage({ items: [report], total: 1, page: 1, pageSize: 50, totalPages: 2 }), /Invalid/);
     assert.equal(responses.readStudioSession({ ...session, privateDrafts: true }).privateDrafts, true);
     assert.deepEqual(responses.readStudioReports([report]), [report]);
     assert.deepEqual(responses.readStudioFolders([{ id: 3, path: '/Authors', name: 'Authors' }]), [{ id: 3, path: '/Authors', name: 'Authors' }]);
