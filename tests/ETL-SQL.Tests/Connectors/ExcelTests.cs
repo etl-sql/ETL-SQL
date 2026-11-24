@@ -3,13 +3,17 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Excel;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using Xunit;
 
@@ -463,6 +467,72 @@ namespace ETL_SQL.Tests.Connectors
                 });
                 await overwriteDs.WithTable("OnlySheet").WriteBatches(new[] { detailDt }.ToAsyncEnumerable(), append: false);
                 Assert.Equal(new[] { "OnlySheet" }, (await overwriteDs.GetTablesAsync()).ToList());
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task TestExcelSheetDiscovery_FunctionMetadataViewAndForeachIngest()
+        {
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_SheetList_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                var sheets = new Dictionary<string, object>
+                {
+                    ["Jan"] = new[]
+                    {
+                        new Dictionary<string, object?> { ["Item"] = "A", ["Qty"] = 10 }
+                    },
+                    ["Feb"] = new[]
+                    {
+                        new Dictionary<string, object?> { ["Item"] = "B", ["Qty"] = 20 },
+                        new Dictionary<string, object?> { ["Item"] = "C", ["Qty"] = 30 }
+                    }
+                };
+                MiniExcelLibs.MiniExcel.SaveAs(outPath, sheets);
+
+                var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                var sql = $"""
+                    SELECT SheetIndex, SheetName FROM EXCEL_SHEET_LIST('{outPath}') ORDER BY SheetIndex;
+                    """;
+                await eval.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
+
+                Assert.NotNull(eval.LastResult);
+                Assert.Equal(2, eval.LastResult!.Rows.Count);
+                Assert.Equal(1m, Convert.ToDecimal(eval.LastResult.Rows[0]["SheetIndex"]));
+                Assert.Equal("Jan", eval.LastResult.Rows[0]["SheetName"]);
+                Assert.Equal(2m, Convert.ToDecimal(eval.LastResult.Rows[1]["SheetIndex"]));
+                Assert.Equal("Feb", eval.LastResult.Rows[1]["SheetName"]);
+
+                // Query _sheets metadata view and ingest all sheets in a FOREACH loop
+                var ingestSql = $"""
+                    CREATE CONNECTION xl_book AS EXCEL(PATH = '{outPath}', HEADER = ON);
+                    CREATE TABLE #all_items (SheetName VARCHAR, Item VARCHAR, Qty INT);
+                    SELECT SheetIndex, SheetName INTO #tabs FROM xl_book._sheets ORDER BY SheetIndex;
+
+                    FOREACH @tab IN (SELECT SheetName FROM #tabs)
+                    BEGIN
+                        ALTER CONNECTION xl_book WITH (SHEET = @tab.SheetName);
+                        INSERT INTO #all_items (SheetName, Item, Qty)
+                        SELECT @tab.SheetName, Item, Qty FROM xl_book.FILE;
+                    END;
+
+                    SELECT SheetName, Item, Qty FROM #all_items ORDER BY Item;
+                    """;
+                await eval.Evaluate(new Parser(new Lexer(ingestSql).Tokenize()).Parse());
+
+                Assert.NotNull(eval.LastResult);
+                Assert.Equal(3, eval.LastResult!.Rows.Count);
+                Assert.Equal("Jan", eval.LastResult.Rows[0]["SheetName"]);
+                Assert.Equal("A", eval.LastResult.Rows[0]["Item"]);
+                Assert.Equal(10m, Convert.ToDecimal(eval.LastResult.Rows[0]["Qty"]));
+                Assert.Equal("Feb", eval.LastResult.Rows[1]["SheetName"]);
+                Assert.Equal("B", eval.LastResult.Rows[1]["Item"]);
+                Assert.Equal("Feb", eval.LastResult.Rows[2]["SheetName"]);
+                Assert.Equal("C", eval.LastResult.Rows[2]["Item"]);
+
+                Assert.Contains("EXCEL_SHEET_LIST", LanguageMetadata.Functions);
             }
             finally { if (File.Exists(outPath)) File.Delete(outPath); }
         }

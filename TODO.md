@@ -106,7 +106,6 @@ ships with its reference page, help text, `LanguageMetadata` entry and tests in 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
 | FO12 | **Detached `SIGN FILE` / `VERIFY FILE SIGNATURE`.** A `.sig` without encryption, left out of FO11 (encrypt-and-sign and decrypt-and-verify shipped in v0.22.0). PGP only, through PgpCore; reference page, grammar, help text, `LanguageMetadata`, and tests for a good signature, a wrong signer, a tampered file and a missing signature. Never echo key material in errors. Security-sensitive: Claude reviews before push. | — | S |
-| XL03 | **Workbook sheet discovery (`EXCEL_SHEET_LIST`).** Expose the worksheet enumeration already implemented in `ExcelDataSource.GetTablesAsync()` as a script-callable `EXCEL_SHEET_LIST(path)` function (and/or `SELECT * FROM xl_conn._sheets`) returning `SheetIndex` and `SheetName` so `FOREACH` loops can ingest workbooks with unknown tab names. | XL01 | S |
 | DB10 | **Snowflake `ROLE` and key passphrase.** Either add `ROLE` and `PRIVATE_KEY_PASSPHRASE` to the connector (encrypted keys are common in production) or confirm they are out of scope and keep them off the page. An encrypted private key currently has no passphrase option. | DB01 | S |
 
 **`TRANSFORM` algorithms**

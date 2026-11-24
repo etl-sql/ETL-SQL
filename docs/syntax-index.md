@@ -510,6 +510,7 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `DIRECTORY_FILE_COUNT(path, [recursive])` | File | [DIRECTORY_FILE_COUNT.md](reference/functions/file-path/directory_file_count.md) | Number of files in a local directory |
 | `FILE_LIST(path, [mask])` | File | [FILE_LIST.md](reference/functions/file-path/file_list.md) | Returns table of files in path |
 | `ARCHIVE_LIST(path)` | File | [ARCHIVE_LIST.md](reference/functions/file-path/archive_list.md) | Lists archive entries without extracting |
+| `EXCEL_SHEET_LIST(path_or_connection)` | File | [EXCEL_SHEET_LIST.md](reference/functions/file-path/excel_sheet_list.md) | Lists worksheets (`SheetIndex`, `SheetName`) in an Excel workbook |
 | `REMOTE_FILE_LIST(connection, path)` | File | [REMOTE_FILE_LIST.md](reference/functions/file-path/remote_file_list.md) | Table of files on remote connection |
 | `REMOTE_FILE_EXISTS(connection, path)` | File | [REMOTE_FILE_EXISTS.md](reference/functions/file-path/remote_file_exists.md) | 1 if remote file exists, 0 otherwise |
 | `REMOTE_DIRECTORY_EXISTS(connection, path)` | File | [REMOTE_DIRECTORY_EXISTS.md](reference/functions/file-path/remote_directory_exists.md) | 1 if remote directory exists, 0 otherwise |
@@ -2426,6 +2427,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `AGE_BUCKET` | Function | Canonical built-in function |
 | `APPEND_TO_LIST` | Function | Canonical built-in function |
 | `ARCHIVE_LIST` | Function | Canonical built-in function |
+| `EXCEL_SHEET_LIST` | Function | Canonical built-in function |
 | `ASCII` | Function | Canonical built-in function |
 | `ASIN` | Function | Canonical built-in function |
 | `ATAN` | Function | Canonical built-in function |

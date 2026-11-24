@@ -47,6 +47,11 @@ namespace ETL_SQL.Connectors.Excel
                 return this;
             }
 
+            if (tableName.Equals("_sheets", StringComparison.OrdinalIgnoreCase))
+            {
+                return new ExcelSheetsMetadataDataSource(this);
+            }
+
             var derived = _options != null
                 ? new Dictionary<string, string>(_options, StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -934,6 +939,54 @@ namespace ETL_SQL.Connectors.Excel
             }
             ms.Position = 0;
             return new ChainedStream(ms, stream);
+        }
+
+        private sealed class ExcelSheetsMetadataDataSource(ExcelDataSource parent) : IDataSource
+        {
+            public string ConnectorType => "EXCEL";
+            public string Path => parent.Path;
+            public Dictionary<string, string>? Options => parent.Options;
+            public IDataSource WithTable(string tableName) => parent.WithTable(tableName);
+            public object? Snapshot() => null;
+            public void Restore(object? snapshot) { }
+
+            public IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatches(int batchSize = 10000) =>
+                ReadBatches(batchSize, CancellationToken.None);
+
+            public async IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatches(
+                int batchSize,
+                [EnumeratorCancellation] CancellationToken cancellationToken)
+            {
+                var sheets = (await parent.GetTablesAsync(cancellationToken)).ToList();
+                var table = new ETL_SQL.Data.DataTable();
+                table.SetColumns(new[] { "SheetIndex", "SheetName" });
+                for (int i = 0; i < sheets.Count; i++)
+                {
+                    var row = table.NewRow();
+                    row["SheetIndex"] = (decimal)(i + 1);
+                    row["SheetName"] = sheets[i];
+                    await table.AddRowAsync(row);
+                }
+                yield return table;
+            }
+
+            public Task WriteBatches(IAsyncEnumerable<ETL_SQL.Data.DataTable> batches, bool append = false) =>
+                WriteBatches(batches, append, CancellationToken.None);
+
+            public Task WriteBatches(IAsyncEnumerable<ETL_SQL.Data.DataTable> batches, bool append, CancellationToken cancellationToken) =>
+                throw new ExecutionException("EXCEL metadata view '_sheets' is read-only.");
+
+            public Task<IEnumerable<string>> GetColumnsAsync() =>
+                Task.FromResult<IEnumerable<string>>(new[] { "SheetIndex", "SheetName" });
+
+            public Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken) =>
+                GetColumnsAsync();
+
+            public Task<IEnumerable<string>> GetTablesAsync() => parent.GetTablesAsync();
+            public Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken) => parent.GetTablesAsync(cancellationToken);
+            public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
+            public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => parent.GetColumnsAsync(tableName);
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
     }
 }

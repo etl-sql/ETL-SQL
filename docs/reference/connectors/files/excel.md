@@ -70,6 +70,7 @@ SELECT * FROM xl_out.FILE;
 ## References
 
 - [File Connectors](README.md)
+- [EXCEL_SHEET_LIST](../../functions/file-path/excel_sheet_list.md)
 - [Connectors](../README.md)
 - [FLATFILE](flatfile.md)
 - [Transactional File Writes](transactional-writes.md)

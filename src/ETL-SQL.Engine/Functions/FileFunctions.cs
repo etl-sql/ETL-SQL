@@ -30,6 +30,7 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("REMOTE_FILE_MODIFIED", RemoteFileModified, "REMOTE_FILE_MODIFIED(connection, path): Returns the last modified timestamp of a remote file as a DATETIME, or NULL if not found or unavailable.");
             registry.RegisterWithHelp("FILE_LIST", FileList, "FILE_LIST(path, [recursive]): Returns a table of files in a local directory.");
             registry.RegisterWithHelp("ARCHIVE_LIST", ArchiveList, "ARCHIVE_LIST(path): Returns a table of archive entries (Name, FullPath, Size, CompressedSize, LastModified, IsDirectory) for .zip, .tar, .tar.gz, .tgz, or .gz files without extracting to disk.");
+            registry.RegisterWithHelp("EXCEL_SHEET_LIST", ExcelSheetList, "EXCEL_SHEET_LIST(path_or_connection): Returns a table of worksheets (SheetIndex, SheetName) in an Excel workbook (.xlsx, .xls, .xlsb) or EXCEL connection.");
             registry.RegisterWithHelp("DIRECTORY", FileList, "DIRECTORY(path, [recursive]): Alias for FILE_LIST.");
             registry.RegisterWithHelp("FILE_EXISTS", FileExists, "FILE_EXISTS(path): Returns true if the file exists.");
             registry.RegisterWithHelp("DIRECTORY_EXISTS", DirectoryExists, "DIRECTORY_EXISTS(path): Returns true if the directory exists.");
@@ -592,6 +593,45 @@ namespace ETL_SQL.Engine.Functions
             {
                 throw new ExecutionException($"{functionName} failed for '{path}' on '{connName}': {ex.Message}", ex);
             }
+        }
+
+        private static async Task<object?> ExcelSheetList(List<object?> args, IExecutionContext context)
+        {
+            if (args.Count < 1 || args[0] == null)
+                throw new ExecutionException("EXCEL_SHEET_LIST requires a workbook path or EXCEL connection name.");
+
+            string target = args[0]!.ToString()?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(target))
+                throw new ExecutionException("EXCEL_SHEET_LIST requires a non-empty workbook path or EXCEL connection name.");
+
+            IDataSource ds;
+            if (context.Connections.TryGetValue(target, out var existing)
+                && existing.ConnectorType.Equals("EXCEL", StringComparison.OrdinalIgnoreCase))
+            {
+                ds = existing;
+            }
+            else
+            {
+                string authorizedPath = AuthorizeLocalPath(context, target, FileSystemAccessKind.Read);
+                if (!File.Exists(authorizedPath))
+                    throw new ExecutionException($"EXCEL_SHEET_LIST workbook not found: {target}");
+
+                var connector = ConnectorRegistry.Instance?.GetConnector("EXCEL")
+                    ?? throw new ExecutionException("EXCEL connector is not registered.");
+                ds = connector.CreateDataSource(context, authorizedPath);
+            }
+
+            var sheets = (await ds.GetTablesAsync(context.CancellationToken)).ToList();
+            var table = new DataTable();
+            table.SetColumns(new[] { "SheetIndex", "SheetName" });
+            for (int i = 0; i < sheets.Count; i++)
+            {
+                var row = table.NewRow();
+                row["SheetIndex"] = (decimal)(i + 1);
+                row["SheetName"] = sheets[i];
+                await table.AddRowAsync(row);
+            }
+            return table;
         }
 
         private static IRemoteFileSystem GetRemoteFileSystem(IExecutionContext context, string connName)

@@ -9,6 +9,7 @@
 | [DIRECTORY_EXISTS](directory_exists.md) | Returns whether a local directory exists inside the active execution context's allowed path boundaries. |
 | [DIRECTORY_FILE_COUNT](directory_file_count.md) | Returns the number of files inside a local directory (optionally recursive). |
 | [DIRECTORY_SIZE](directory_size.md) | Returns the total size in bytes of files inside a local directory (optionally recursive). |
+| [EXCEL_SHEET_LIST](excel_sheet_list.md) | Lists worksheets (`SheetIndex`, `SheetName`) in an Excel workbook or `EXCEL` connection. |
 | [FILE_ACCESSED](file_accessed.md) | Returns the last access timestamp of a local file. |
 | [FILE_CREATED](file_created.md) | Returns the creation timestamp of a local file. |
 | [FILE_EXISTS](file_exists.md) | Returns whether a local file exists inside the active execution context's allowed path boundaries. |
