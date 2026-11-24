@@ -117,13 +117,9 @@ All four items (`DB04`, `DB05`, `DB13`, `DB14`) have shipped on `release/v0.23.0
 
 All five items (`DB09`, `DB12`, `DB15a`, `DB15b`, `DB15c`) have shipped on `release/v0.23.0` (see `CHANGELOG.md`).
 
-**Third pickup** (owner, 2026-11-23, same Thursday rule). Remote-file rules for every RT row: works on `SFTP`, `FTP`, `S3`, `AZUREBLOB` and `SHAREPOINT` or fails with a clear "not supported on <type>" message; local paths still go through `AuthorizeLocalPath`; `WHAT_IF` reports the plan and touches nothing; new `IRemoteFileSystem` members get default implementations that throw `NotSupportedException` so no connector breaks; SFTP/FTP behavior is proven by Testcontainers tests (pattern: `MongodbIntegrationTests`). Row detail and scope: [`ROADMAP.md`](ROADMAP.md#file-operations--managing-remote-file-trees-over-sftp-ftp-and-cloud-connections).
+**Third pickup** (owner, 2026-11-23, same Thursday rule).
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| DB07 | **Postgres binary `COPY`.** Replace the text `COPY` loader with `BeginBinaryImportAsync`, typing each column from the target's catalog types; an unmappable type or bad value fails before `Complete()` so nothing is committed, with the column and row ordinal in the message. Same transaction and `WHAT_IF` behavior. The baseline is today's text `COPY`, not a batch insert. **Done when:** a Testcontainers round-trip covers text with tabs, newlines and backslashes, a literal backslash-N string, numeric, timestamptz, date, uuid, bool, bytea and NULLs; a measured comparison against text `COPY` on a fixed fixture is in the commit message, and no speedup is claimed without it. | — | M |
-
-Decision proposals recorded in `ROADMAP.md` on 2026-11-23 (`DB08`, `DB11`, `RT11`, awaiting owner approval).
+All eight build items (`RT03`–`RT09`, `DB07`) have shipped on `release/v0.23.0` (see `CHANGELOG.md`). Decision proposals recorded in `ROADMAP.md` on 2026-11-23 (`DB08`, `DB11`, `RT11`, awaiting owner approval).
 
 ## Tier 3 — if time allows
 
