@@ -10,6 +10,8 @@ Aliases: `SQLITE3`
 | Option | Description | Mandatory |
 | :--- | :--- | :---: |
 | `DATABASE` | File path to the SQLite database or `:memory:` | Yes (structured form) |
+| `JOURNAL_MODE` | SQLite journal mode applied on every connection open (`DELETE`, `TRUNCATE`, `PERSIST`, `WAL`, `MEMORY`, `OFF`) | No |
+| `BUSY_TIMEOUT_MS` | Non-negative lock wait timeout in milliseconds (`PRAGMA busy_timeout`) applied on every connection open | No |
 | `TIMEOUT_SECONDS` | Command/query execution timeout in seconds (default: `30`) | No |
 | `TABLE` | Default table context for unqualified operations | No |
 
@@ -35,7 +37,7 @@ SQLite is an embedded, file-based database with no username/password authenticat
 CREATE CONNECTION local_mem AS SQLITE(DATABASE=':memory:');
 
 -- Standard unencrypted file-based database using an allow-listed environment variable (Security:AllowedEnvVars)
-CREATE CONNECTION local_db AS SQLITE(DATABASE='${SQLITE_DB_PATH}', TIMEOUT_SECONDS=30);
+CREATE CONNECTION local_db AS SQLITE(DATABASE='${SQLITE_DB_PATH}', JOURNAL_MODE='WAL', BUSY_TIMEOUT_MS=5000, TIMEOUT_SECONDS=30);
 
 -- Traditional connection string form (read-only mode)
 CREATE CONNECTION legacy_db AS SQLITE('Data Source=C:\Data\legacy.db;Mode=ReadOnly;');
@@ -51,7 +53,7 @@ CREATE CONNECTION legacy_db AS SQLITE('Data Source=C:\Data\legacy.db;Mode=ReadOn
 
 ## Troubleshooting
 
-- **Database Locked (SQLITE_BUSY)**: Multiple processes writing concurrently. Keep writes serialized or shorten transaction scopes; SQLite is single-writer.
+- **Database Locked (SQLITE_BUSY)**: Multiple processes or connections writing concurrently. Set `BUSY_TIMEOUT_MS` (e.g., `5000`) and `JOURNAL_MODE='WAL'` on `CREATE CONNECTION` so writers wait instead of failing immediately, and keep write transactions short.
 - **File Not Found**: Verify path with `IExecutionContext.ResolvePath()`. Relative paths resolve against script root.
 - **Permissions Error**: Ensure write access to directory for WAL journal files.
 

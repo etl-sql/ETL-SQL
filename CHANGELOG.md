@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added `JOURNAL_MODE` (`DELETE`, `TRUNCATE`, `PERSIST`, `WAL`, `MEMORY`, `OFF`) and `BUSY_TIMEOUT_MS` (non-negative integer) options to `SQLITE`, validated at `CREATE CONNECTION` time and applied on every connection open (including transactional connections) without adding a generic `PRAGMA` option (`DB15c` in `SqliteDataSource.cs`, `SqliteConnector.cs`, `LanguageMetadata.cs`, `sqlite.md`, and `SqlitePragmaOptionsTests.cs`).
+
 - Added `SEARCH_PATH` option to `POSTGRES` (validated as a comma-separated list of unquoted or double-quoted SQL identifiers at `CREATE CONNECTION` time and applied via `NpgsqlConnectionStringBuilder.SearchPath`) and documented global `Connectors:Retry` configuration (`MaxAttempts`, `BaseDelaySeconds`, and connector coverage) in `docs/reference/connectors/databases/README.md` (`DB12` in `DatabaseConnectionStringBuilder.cs`, `PostgresConnector.cs`, `PostgresDataSource.cs`, `LanguageMetadata.cs`, `postgres.md`, `databases/README.md`, and `PostgresSearchPathTests.cs`).
 
 - Added source-specific full-lifecycle (Extract → Stage → Validate → Merge → Cleanup → Notify) incremental-load watermark recipes for SQL Server (`rowversion`), PostgreSQL (`updated_at` / `xmin`), and Oracle (`ORA_ROWSCN` / SCN) to `docs/cookbooks/etl/incremental-load-with-high-water-mark.md` (`DB14`).
