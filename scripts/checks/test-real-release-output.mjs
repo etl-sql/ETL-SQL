@@ -185,6 +185,8 @@ const replay = responses => endpoint => {
     // Mismatch cases on real recorded native inputs:
     const win = recorded.platforms['win-x64'];
     const winDir = path.join(root, 'win-x64');
+    // The production path hashes the staged bytes and rejects the replay placeholders.
+    await assert.rejects(verifyWindowsDraft(path.join(root, 'draft-win-x64'), win.expected), /Package hashes mismatch/);
     await assert.rejects(collectCertifiedWindows(recorded.repository, recorded.sha, recorded.version, {
       query: replay(recorded.responses),
       readArtifact: () => winDir,
@@ -246,7 +248,9 @@ const replay = responses => endpoint => {
   const expectedDraft = JSON.parse(expectedDraftBytes.toString('utf8'));
   const expectedDigest = native.source.draftArtifact.sha256;
   const verbatimAssets = new Map();
+  const nativePackageHashes = new Map();
   for (const data of Object.values(native.platforms)) {
+    for (const [name, sha256] of Object.entries(data.packageHashes)) nativePackageHashes.set(name, sha256);
     verbatimAssets.set(data.selectionName, data.selectionRaw);
     verbatimAssets.set(data.manifestName, data.manifestText);
   }
@@ -257,11 +261,19 @@ const replay = responses => endpoint => {
     for (const name of Object.keys(expectedDraft.assets)) {
       writeFileSync(path.join(assetsDir, name), verbatimAssets.get(name) ?? `recorded:${name}\n`);
     }
-    const hashAsset = (_, name) => verbatimAssets.has(name) ? undefined : expectedDraft.assets[name];
+    // Reuse the producer's recorded hashes for native packages. The draft recording
+    // supplies asset sizes and hashes for packages without a retained producer record.
+    const hashAsset = (_, name) => {
+      if (verbatimAssets.has(name)) return undefined;
+      const recorded = expectedDraft.assets[name];
+      return { size: recorded.size, sha256: nativePackageHashes.get(name) ?? recorded.sha256 };
+    };
     const createdManifest = path.join(root, 'verified-draft.json');
     const createdDigest = await draftManifest('create', assetsDir, createdManifest, expectedDraft.sourceSha, expectedDraft.tag, undefined, { hashAsset });
     assert.equal(createdDigest, expectedDigest);
     assert.deepEqual(readFileSync(createdManifest), expectedDraftBytes);
+    await assert.rejects(draftManifest('verify', assetsDir, createdManifest, expectedDraft.sourceSha, expectedDraft.tag, expectedDigest),
+      /Draft asset inventory or hashes changed/);
 
     const verifiedDigest = await draftManifest('verify', assetsDir, createdManifest, expectedDraft.sourceSha, expectedDraft.tag, expectedDigest, { hashAsset });
     assert.equal(verifiedDigest, expectedDigest);
@@ -276,14 +288,18 @@ const replay = responses => endpoint => {
 
     // 2. Mutate recorded asset size while keeping sha256 unchanged.
     await assert.rejects(draftManifest('verify', assetsDir, createdManifest, expectedDraft.sourceSha, expectedDraft.tag, expectedDigest, {
-      hashAsset: (_, name) => verbatimAssets.has(name) ? undefined
-        : name === 'ETL-SQL-v0.23.0-win-x64.zip' ? { ...expectedDraft.assets[name], size: expectedDraft.assets[name].size + 1 } : expectedDraft.assets[name],
+      hashAsset: (file, name) => {
+        const observed = hashAsset(file, name);
+        return name === 'ETL-SQL-v0.23.0-win-x64.zip' ? { ...observed, size: observed.size + 1 } : observed;
+      },
     }), /Draft asset inventory or hashes changed/);
 
     // 3. Mutate recorded DMG sha256.
     await assert.rejects(draftManifest('verify', assetsDir, createdManifest, expectedDraft.sourceSha, expectedDraft.tag, expectedDigest, {
-      hashAsset: (_, name) => verbatimAssets.has(name) ? undefined
-        : name === 'ETL-SQL_v0.23.0.dmg' ? { ...expectedDraft.assets[name], sha256: '0'.repeat(64) } : expectedDraft.assets[name],
+      hashAsset: (file, name) => {
+        const observed = hashAsset(file, name);
+        return name === 'ETL-SQL_v0.23.0.dmg' ? { ...observed, sha256: '0'.repeat(64) } : observed;
+      },
     }), /Draft asset inventory or hashes changed/);
 
     // 4. Wrong manifest digest and wrong candidate identity.
