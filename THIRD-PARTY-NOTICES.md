@@ -62,6 +62,7 @@ projects. License values are taken from local package metadata when available.
 | Microsoft.AspNetCore.Authentication.JwtBearer | MIT | Portal authentication. |
 | Microsoft.AspNetCore.Identity.EntityFrameworkCore | MIT | Portal identity storage. |
 | Microsoft.Data.SqlClient | MIT | SQL Server connector support. |
+| Microsoft.Data.SqlClient.Extensions.Azure | MIT | Microsoft Entra ID authentication providers for Microsoft.Data.SqlClient. |
 | Microsoft.Data.Sqlite | MIT | SQLite and local storage support. |
 | Microsoft.EntityFrameworkCore.Design | MIT | EF Core migrations/design-time tooling. |
 | Microsoft.EntityFrameworkCore.Sqlite | MIT | SQLite EF Core provider. |

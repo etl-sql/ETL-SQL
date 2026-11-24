@@ -66,18 +66,7 @@ namespace ETL_SQL.Connectors
             }
             if (props.TryGetValue("DATABASE", out var db)) builder.InitialCatalog = db;
 
-            bool trusted = props.ContainsKey("TRUSTED_CONNECTION") &&
-                          ConnectorOptionValues.IsTrue(props["TRUSTED_CONNECTION"]);
-
-            if (trusted)
-            {
-                builder.IntegratedSecurity = true;
-            }
-            else
-            {
-                if (props.TryGetValue("USER", out var user)) builder.UserID = user;
-                if (props.TryGetValue("PASSWORD", out var pass)) builder.Password = pass;
-            }
+            ApplySqlServerAuthentication(builder, props);
 
             // Production Options: Security
             if ((props.TryGetValue("USE_SSL", out var ssl) || props.TryGetValue("ENCRYPT", out ssl)) && ssl != null)
@@ -115,6 +104,90 @@ namespace ETL_SQL.Connectors
                 builder.ConnectTimeout = ct;
 
             return builder.ConnectionString;
+        }
+
+        private static void ApplySqlServerAuthentication(SqlConnectionStringBuilder builder, Dictionary<string, string> props)
+        {
+            bool hasAuthMode = props.TryGetValue("AUTH_MODE", out var rawAuthMode);
+            bool hasTrusted = props.TryGetValue("TRUSTED_CONNECTION", out var rawTrusted);
+            bool trustedTrue = hasTrusted && ConnectorOptionValues.IsTrue(rawTrusted);
+            bool hasUser = props.TryGetValue("USER", out var user) && !string.IsNullOrWhiteSpace(user);
+            bool hasPassword = props.TryGetValue("PASSWORD", out var password) && !string.IsNullOrWhiteSpace(password);
+            bool hasClientId = props.TryGetValue("CLIENT_ID", out var clientId) && !string.IsNullOrWhiteSpace(clientId);
+            bool hasTenantId = props.TryGetValue("TENANT_ID", out var tenantId) && !string.IsNullOrWhiteSpace(tenantId);
+
+            string mode;
+            if (hasAuthMode)
+            {
+                if (string.IsNullOrWhiteSpace(rawAuthMode))
+                    throw new ExecutionException("MSSQL AUTH_MODE must be one of: SQL, WINDOWS, ENTRA_DEFAULT, ENTRA_MANAGED_IDENTITY, ENTRA_SERVICE_PRINCIPAL.");
+
+                mode = rawAuthMode.Trim().ToUpperInvariant();
+            }
+            else
+            {
+                mode = trustedTrue ? "WINDOWS" : "SQL";
+            }
+
+            switch (mode)
+            {
+                case "SQL":
+                    if (trustedTrue)
+                        throw new ExecutionException("MSSQL AUTH_MODE='SQL' cannot be combined with TRUSTED_CONNECTION=TRUE.");
+                    if (hasClientId || hasTenantId)
+                        throw new ExecutionException("MSSQL CLIENT_ID and TENANT_ID are only valid with Entra AUTH_MODE values.");
+                    if (hasUser) builder.UserID = user!;
+                    if (hasPassword) builder.Password = password!;
+                    break;
+
+                case "WINDOWS":
+                    if (hasTrusted && !trustedTrue)
+                        throw new ExecutionException("MSSQL AUTH_MODE='WINDOWS' cannot be combined with TRUSTED_CONNECTION=FALSE.");
+                    if (hasUser || hasPassword)
+                        throw new ExecutionException("MSSQL Windows authentication cannot be combined with USER or PASSWORD.");
+                    if (hasClientId || hasTenantId)
+                        throw new ExecutionException("MSSQL Windows authentication cannot be combined with CLIENT_ID or TENANT_ID.");
+                    builder.IntegratedSecurity = true;
+                    break;
+
+                case "ENTRA_DEFAULT":
+                    if (hasTrusted)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_DEFAULT' cannot be combined with TRUSTED_CONNECTION.");
+                    if (hasUser || hasPassword || hasClientId || hasTenantId)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_DEFAULT' does not accept USER, PASSWORD, CLIENT_ID, or TENANT_ID.");
+                    builder.Authentication = SqlAuthenticationMethod.ActiveDirectoryDefault;
+                    break;
+
+                case "ENTRA_MANAGED_IDENTITY":
+                    if (hasTrusted)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_MANAGED_IDENTITY' cannot be combined with TRUSTED_CONNECTION.");
+                    if (hasUser || hasPassword || hasTenantId)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_MANAGED_IDENTITY' does not accept USER, PASSWORD, or TENANT_ID.");
+                    builder.Authentication = SqlAuthenticationMethod.ActiveDirectoryManagedIdentity;
+                    if (hasClientId)
+                        builder.UserID = clientId!;
+                    break;
+
+                case "ENTRA_SERVICE_PRINCIPAL":
+                    if (hasTrusted)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_SERVICE_PRINCIPAL' cannot be combined with TRUSTED_CONNECTION.");
+                    if (hasUser)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_SERVICE_PRINCIPAL' uses CLIENT_ID, not USER.");
+                    if (!hasClientId)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_SERVICE_PRINCIPAL' requires CLIENT_ID.");
+                    if (!hasPassword)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_SERVICE_PRINCIPAL' requires PASSWORD (the service principal client secret).");
+                    if (!hasTenantId)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_SERVICE_PRINCIPAL' requires TENANT_ID.");
+                    builder.Authentication = SqlAuthenticationMethod.ActiveDirectoryServicePrincipal;
+                    builder.UserID = clientId!;
+                    builder.Password = password!;
+                    break;
+
+                default:
+                    throw new ExecutionException(
+                        $"Invalid MSSQL AUTH_MODE '{rawAuthMode?.Trim()}'. Allowed values: SQL, WINDOWS, ENTRA_DEFAULT, ENTRA_MANAGED_IDENTITY, ENTRA_SERVICE_PRINCIPAL.");
+            }
         }
 
         private static string BuildPostgres(Dictionary<string, string> props)
