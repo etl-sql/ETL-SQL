@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added `docs/reference/connectors/type-mapping.md` documenting verified native-to-engine type mappings across all ten database connectors (including integer storage as `decimal`, Oracle `NUMBER`, Postgres `timestamptz`/`jsonb`/arrays, Snowflake `VARIANT`, MSSQL `datetimeoffset`, BigQuery `STRUCT`/`ARRAY`, SQLite storage classes, ODBC, MongoDB BSON, and Neo4j properties), linked from `docs/reference/connectors/README.md` and `docs/reference/connectors/databases/README.md` (`DB13`).
+
 - Added the database connector capability matrix (transactions, SQL pushdown, bulk/write path, schema introspection, `WHAT_IF`, default timeout, and auth modes across all ten database connectors) to `docs/reference/connectors/databases/README.md` (`DB05`).
 
 - Documented verified write paths, `MERGE` pushdown vs. engine emulation, transaction support, `WHAT_IF` behavior, and idempotent-load patterns across all ten database connector reference pages (`DB04` in `docs/reference/connectors/databases/*.md`, including fixing the stale Oracle transaction claim in `oracle.md`).

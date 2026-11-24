@@ -113,7 +113,6 @@ All three items (`TR07`, `TR08`, `TR09`) have shipped on `release/v0.23.0` (see 
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| DB13 | **Document native-to-engine type mapping.** Per connector, how native types land in the engine (Oracle `NUMBER`, Postgres arrays and `jsonb`, Snowflake `VARIANT`, MSSQL `datetimeoffset`, BigQuery `STRUCT`), including that integer types store as `decimal`. Confirm whether this already exists elsewhere in the docs before writing. | — | M |
 | DB14 | **Incremental-load examples.** Confirm whether the ETL Cookbook already shows a watermark pull per source; if not, add runnable lifecycle recipes (MSSQL `rowversion`, Postgres `xmin` or a timestamp column, Oracle `SCN`) following the Extract → Stage → Validate → Merge → Cleanup → Notify shape. | — | M |
 
 **Decisions** (output is a written proposal and estimate in the ROADMAP entry; the owner approves; no code)

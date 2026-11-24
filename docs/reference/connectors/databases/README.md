@@ -31,3 +31,7 @@ Every cell below is verified against the connector's `IDataSource` implementatio
 | [POSTGRES](postgres.md) | Yes (`NpgsqlTransaction`) | Yes (PostgreSQL) | Text-mode `COPY ... FROM STDIN` | Yes (catalog provider + `INFORMATION_SCHEMA`) | Skips writes, truncates & pushed DML | `30s` | Username/password (`USER`/`PASSWORD`), SSL (`SSL_MODE`) |
 | [SNOWFLAKE](snowflake.md) | Yes (shared session tx) | Yes (Snowflake SQL) | Parameterized row-by-row `INSERT` | Yes (`INFORMATION_SCHEMA`) | Skips writes, truncates & pushed DML | `1800s` | Username/password, RSA key-pair JWT (`PRIVATE_KEY_FILE` + optional `PRIVATE_KEY_PASSPHRASE`) |
 | [SQLITE](sqlite.md) | Yes (`SqliteTransaction`, single-writer) | Yes (SQLite SQL) | Parameterized row-by-row `INSERT` in tx (`DELETE` on `APPEND=FALSE`) | Yes (catalog provider + `PRAGMA table_info`) | Skips writes, truncates & pushed DML | `30s` | File-system permissions (no DB password; `Mode=ReadOnly` via conn string) |
+
+## Related References
+
+- [Database Native-to-Engine Type Mapping](../type-mapping.md) — how native types (`NUMBER`, `jsonb`, arrays, `VARIANT`, `datetimeoffset`, `STRUCT`, BSON, Cypher properties) land in the engine.
