@@ -38,6 +38,20 @@ Aliases: `XLSX`, `XLS`
 > are alternative key sources: set one. If several are set, `MACHINE` wins over `KEYFILE`,
 > `KEYFILE` over `PASSWORD`, and a `PASSWORD` option replaces the `ENCRYPT=PORTAL` key. Enabling encryption without a key source fails closed.
 
+> [!WARNING]
+> **What "preserve other worksheets" keeps.** The workbook is rewritten, not edited in place, so the
+> other worksheets keep their cell **values** only. Formulas become their last calculated values;
+> formatting, column widths, merged cells, charts, comments and defined names are dropped. With
+> `HEADER = ON`, a blank header cell on another sheet is rewritten as `ColumnN` and a repeated header
+> gets a `_2` suffix. If the existing workbook cannot be read (damaged, locked, or a different key),
+> the write fails and the file is left unchanged; set `OVERWRITE_WORKBOOK = ON` to replace it. A
+> write without `SHEET` replaces the first worksheet and keeps its name. Keep workbooks that people
+> edit by hand separate from the ones a pipeline writes.
+
+`xl_conn.FILE` always means the connection's configured sheet and `xl_conn._sheets` is the
+read-only sheet list, so a worksheet named `FILE` or `_sheets` can only be reached with
+`SHEET = '...'` on its own connection.
+
 Excel uses the same schema-resilience contract as [FLATFILE](flatfile.md): `STRICT_SCHEMA=ON` fails on
 unaccepted drift, `IGNORE_EXTRA_COLUMNS=ON` accepts surplus columns, `NULL_MISSING_COLUMNS=ON` fills
 absent template columns with `NULL`, and `MAP_BY_HEADER_NAME=ON` aligns by unique source header names.

@@ -17,7 +17,7 @@ password, and private-key JWT (recommended for production).
 | `PRIVATE_KEY_FILE` | Path to RSA private key PEM file (enables JWT auth; takes precedence over `PASSWORD`) | Cond. |
 | `PRIVATE_KEY_PASSPHRASE` | Passphrase for an encrypted PKCS#8 `PRIVATE_KEY_FILE` (requires `PRIVATE_KEY_FILE`; supports `'SECRET:...'`, `'ENC:...'`, or `'${ENV}'`) | No |
 | `WAREHOUSE` | Virtual warehouse for query execution (e.g. `COMPUTE_WH`) | No |
-| `ROLE` | Snowflake role to assume for the session (e.g. `ETL_LOADER_ROLE`) | No |
+| `ROLE` | Snowflake role to assume for the session (e.g. `ETL_LOADER_ROLE`); must not contain `;` or `=` | No |
 | `DATABASE` | Target database | No |
 | `SCHEMA` | Target schema (defaults to `PUBLIC`) | No |
 | `TIMEOUT_SECONDS` | Command/query execution timeout in seconds (default: `1800`, or `Connectors:DataWarehouse:DefaultCommandTimeoutSeconds`) | No |

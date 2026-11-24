@@ -164,6 +164,49 @@ public sealed class DatabaseConnectorReviewFixTests
         Assert.Equal(expected, SnowflakeDataSource.ReplaceConnectionStringValue(input, "private_key_file", "new"));
     }
 
+    [Fact]
+    public void Snowflake_ReplaceConnectionStringValue_QuotesValuesAndSkipsQuotedSemicolons()
+    {
+        // A quoted earlier value containing ';' and the key name must not be split or replaced.
+        var cs = "account=a;password=\"x;private_key_pwd=fake\";private_key_pwd=old";
+        var result = SnowflakeDataSource.ReplaceConnectionStringValue(cs, "private_key_pwd", "p;w=d\"q");
+        var parsed = new System.Data.Common.DbConnectionStringBuilder { ConnectionString = result };
+        Assert.Equal("x;private_key_pwd=fake", parsed["password"]);
+        Assert.Equal("p;w=d\"q", parsed["private_key_pwd"]);
+        Assert.Equal(3, parsed.Count);
+    }
+
+    [Fact]
+    public void Snowflake_BuildConnectionString_SecretsWithSeparatorsRoundTripAndRoleIsValidated()
+    {
+        var connector = new ETL_SQL.Connectors.Snowflake.SnowflakeConnector();
+        var cs = connector.BuildConnectionString(new Dictionary<string, string>
+        {
+            ["ACCOUNT"] = "acct",
+            ["USERNAME"] = "alice",
+            ["PRIVATE_KEY_FILE"] = "/keys/rsa;key.p8",
+            ["PRIVATE_KEY_PASSPHRASE"] = "pa;ss=host=evil",
+            ["ROLE"] = "ETL_LOADER_ROLE"
+        });
+        var parsed = new System.Data.Common.DbConnectionStringBuilder { ConnectionString = cs };
+        Assert.Equal("pa;ss=host=evil", parsed["private_key_pwd"]);
+        Assert.Equal("/keys/rsa;key.p8", parsed["private_key_file"]);
+        Assert.False(parsed.ContainsKey("host"));
+        Assert.DoesNotContain("pa;ss", ETL_SQL.Core.Common.SecretRedactor.Redact(cs));
+
+        var withPassword = connector.BuildConnectionString(new Dictionary<string, string>
+        {
+            ["ACCOUNT"] = "acct",
+            ["USERNAME"] = "alice",
+            ["PASSWORD"] = "a;b"
+        });
+        Assert.Equal("a;b", new System.Data.Common.DbConnectionStringBuilder { ConnectionString = withPassword }["password"]);
+
+        var ex = Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => connector.BuildConnectionString(
+            new Dictionary<string, string> { ["ACCOUNT"] = "acct", ["USERNAME"] = "alice", ["PASSWORD"] = "p", ["ROLE"] = "R;host=evil" }));
+        Assert.Contains("ROLE", ex.Message);
+    }
+
     // ── Oracle / SQL Server / Postgres connectors wrap provider failures; Oracle quoting ──
 
     [Fact]

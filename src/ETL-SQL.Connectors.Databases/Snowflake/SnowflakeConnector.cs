@@ -71,6 +71,24 @@ namespace ETL_SQL.Connectors.Snowflake
         public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString)
             => Task.FromResult<IEnumerable<string>>(Array.Empty<string>());
 
+        // Secrets and paths use ADO.NET quoting: Snowflake.Data parses the string with
+        // DbConnectionStringBuilder, so a ';' or '=' inside a password or passphrase stays part of it.
+        internal static string FormatPair(string key, string value)
+        {
+            var sb = new System.Text.StringBuilder();
+            System.Data.Common.DbConnectionStringBuilder.AppendKeyValuePair(sb, key, value);
+            return sb.ToString();
+        }
+
+        // Snowflake.Data re-reads ROLE (and DB, SCHEMA, WAREHOUSE) by splitting the raw string on ';' and
+        // '=', so these values cannot be quoted. Reject the characters instead of building a string that
+        // sets other keys.
+        internal static void ValidateRawValue(string option, string value)
+        {
+            if (value.IndexOfAny(new[] { ';', '=' }) >= 0)
+                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"SNOWFLAKE option {option} must not contain ';' or '='.");
+        }
+
         public string BuildConnectionString(Dictionary<string, string> properties)
         {
             var parts = new List<string>();
@@ -97,9 +115,9 @@ namespace ETL_SQL.Connectors.Snowflake
             if (properties.TryGetValue("PRIVATE_KEY_FILE", out var pkFile) && !string.IsNullOrWhiteSpace(pkFile))
             {
                 parts.Add("authenticator=snowflake_jwt");
-                parts.Add($"private_key_file={pkFile}");
+                parts.Add(FormatPair("private_key_file", pkFile));
                 if (properties.TryGetValue("PRIVATE_KEY_PASSPHRASE", out var pkPass) && !string.IsNullOrWhiteSpace(pkPass))
-                    parts.Add($"private_key_pwd={pkPass}");
+                    parts.Add(FormatPair("private_key_pwd", pkPass));
             }
             else
             {
@@ -108,14 +126,17 @@ namespace ETL_SQL.Connectors.Snowflake
 
                 if (properties.TryGetValue("PASSWORD", out var password))
                 {
-                    parts.Add($"password={password}");
+                    parts.Add(FormatPair("password", password));
                 }
             }
 
             if (properties.TryGetValue("WAREHOUSE", out var warehouse))
                 parts.Add($"warehouse={warehouse}");
             if (properties.TryGetValue("ROLE", out var role) && !string.IsNullOrWhiteSpace(role))
+            {
+                ValidateRawValue("ROLE", role);
                 parts.Add($"role={role}");
+            }
             if (properties.TryGetValue("DATABASE", out var db))
                 parts.Add($"db={db}");
             if (properties.TryGetValue("SCHEMA", out var schema))

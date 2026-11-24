@@ -604,34 +604,39 @@ namespace ETL_SQL.Engine.Functions
             if (string.IsNullOrWhiteSpace(target))
                 throw new ExecutionException("EXCEL_SHEET_LIST requires a non-empty workbook path or EXCEL connection name.");
 
-            IDataSource ds;
             if (context.Connections.TryGetValue(target, out var existing)
                 && existing.ConnectorType.Equals("EXCEL", StringComparison.OrdinalIgnoreCase))
             {
-                ds = existing;
-            }
-            else
-            {
-                string authorizedPath = AuthorizeLocalPath(context, target, FileSystemAccessKind.Read);
-                if (!File.Exists(authorizedPath))
-                    throw new ExecutionException($"EXCEL_SHEET_LIST workbook not found: {target}");
-
-                var connector = ConnectorRegistry.Instance?.GetConnector("EXCEL")
-                    ?? throw new ExecutionException("EXCEL connector is not registered.");
-                ds = connector.CreateDataSource(context, authorizedPath);
+                return await ReadSheetListAsync(existing, context);
             }
 
-            var sheets = (await ds.GetTablesAsync(context.CancellationToken)).ToList();
-            var table = new DataTable();
-            table.SetColumns(new[] { "SheetIndex", "SheetName" });
-            for (int i = 0; i < sheets.Count; i++)
+            string authorizedPath = AuthorizeLocalPath(context, target, FileSystemAccessKind.Read);
+            if (!File.Exists(authorizedPath))
+                throw new ExecutionException($"EXCEL_SHEET_LIST workbook not found: {target}");
+
+            var connector = ConnectorRegistry.Instance?.GetConnector("EXCEL")
+                ?? throw new ExecutionException("EXCEL connector is not registered.");
+            await using var ds = connector.CreateDataSource(context, authorizedPath);
+            return await ReadSheetListAsync(ds, context);
+        }
+
+        // The connection's `_sheets` view lists the sheets and errors on an unreadable workbook, so the
+        // function and `SELECT * FROM conn._sheets` share one path.
+        private static async Task<DataTable> ReadSheetListAsync(IDataSource workbook, IExecutionContext context)
+        {
+            var sheetsView = workbook.WithTable("_sheets");
+            DataTable? result = null;
+            await foreach (var batch in sheetsView.ReadBatches(10000, context.CancellationToken))
             {
-                var row = table.NewRow();
-                row["SheetIndex"] = (decimal)(i + 1);
-                row["SheetName"] = sheets[i];
-                await table.AddRowAsync(row);
+                if (result == null) { result = batch; continue; }
+                foreach (var row in batch.Rows) await result.AddRowAsync(row);
             }
-            return table;
+            if (result == null)
+            {
+                result = new DataTable();
+                result.SetColumns(new[] { "SheetIndex", "SheetName" });
+            }
+            return result;
         }
 
         private static IRemoteFileSystem GetRemoteFileSystem(IExecutionContext context, string connName)
