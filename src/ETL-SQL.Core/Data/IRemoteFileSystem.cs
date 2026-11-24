@@ -24,6 +24,8 @@ public record FileMetaData
     public bool? IsSymlink { get; init; }
 }
 
+public sealed record RemoteFileVerificationInfo(long Size, string? Md5Hex = null);
+
 public interface IRemoteFileSystem : IAsyncDisposable
 {
     IAsyncEnumerable<FileMetaData> ListFilesAsync(string path);
@@ -44,4 +46,6 @@ public interface IRemoteFileSystem : IAsyncDisposable
         throw new NotSupportedException($"Remote directory rename/move is not supported on {GetType().Name}.");
     Task CreateDirectoryAsync(string remotePath);
     Task DeleteDirectoryAsync(string remotePath);
+    Task<RemoteFileVerificationInfo?> GetFileVerificationInfoAsync(string remotePath, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException($"Transfer verification metadata is not supported on {GetType().Name}.");
 }

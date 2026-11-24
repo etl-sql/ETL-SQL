@@ -326,6 +326,20 @@ namespace ETL_SQL.Connectors
             }
         }
 
+        public async Task<RemoteFileVerificationInfo?> GetFileVerificationInfoAsync(string remotePath, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var client = await EnsureConnectedAsync();
+                var size = await client.GetFileSize(remotePath, -1, cancellationToken);
+                return size >= 0 ? new RemoteFileVerificationInfo(size, Md5Hex: null) : null;
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("FTP", ex);
+            }
+        }
+
         public async Task DeleteDirectoryAsync(string remotePath)
         {
             try

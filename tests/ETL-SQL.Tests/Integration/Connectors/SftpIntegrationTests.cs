@@ -689,5 +689,25 @@ namespace ETL_SQL.Tests.Integration.Connectors
             await evaluator.Evaluate(new Parser(new Lexer(r2lDelSql).Tokenize(), r2lDelSql).Parse());
             Assert.False(File.Exists(Path.Combine(localMirror, "stale_local.txt")));
         }
+
+        [Fact]
+        public async Task SendAndReceive_WithVerifyOn_SucceedsOverSftp()
+        {
+            var localSrc = LocalPath("rt09_src.txt");
+            var localDst = LocalPath("rt09_dst.txt");
+            var remote = RemotePath($"rt09_{Guid.NewGuid():N}.txt");
+            File.WriteAllText(localSrc, "verified-sftp-payload-12345");
+
+            await using var connector = PasswordConnector();
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            ((IExecutionContext)evaluator).Connections["sftp_rt09"] = connector;
+
+            var sql =
+                $"SEND FILE '{localSrc.Replace("\\", "/")}' TO '{remote}' AT sftp_rt09 WITH (OVERWRITE = ON, VERIFY = ON);\n" +
+                $"RECEIVE FILE FROM '{remote}' TO '{localDst.Replace("\\", "/")}' AT sftp_rt09 WITH (OVERWRITE = ON, VERIFY = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(sql).Tokenize(), sql).Parse());
+
+            Assert.Equal("verified-sftp-payload-12345", File.ReadAllText(localDst));
+        }
     }
 }

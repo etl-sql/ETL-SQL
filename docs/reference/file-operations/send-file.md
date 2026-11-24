@@ -24,6 +24,7 @@ SEND FILE('<local_path>', <connection_name>, '<remote_path>' [, <overwrite_boole
 - **`remote_path`** — Target destination path on the remote host.
 - **`connection_name`** — Active `SFTP`, `FTP`, or `AZURE_BLOB` connection identifier.
 - **`OVERWRITE = TRUE | FALSE`** — When `TRUE`, overwrites existing remote files. When `FALSE`, throws an error if the destination already exists (default: `TRUE`).
+- **`VERIFY = ON | OFF`** — When `ON`, verifies the remote file size after upload and compares MD5 checksum where the server provides one (S3 single-part ETag, Azure Blob Content-MD5) (default: `OFF`).
 
 ---
 

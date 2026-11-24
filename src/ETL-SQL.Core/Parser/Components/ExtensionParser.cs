@@ -131,6 +131,7 @@ public class ExtensionParser : ParserComponent
         Expression? remotePath = null;
         Expression? overwrite = null;
         Expression? recursive = null;
+        Expression? verify = null;
 
         if (!isSqlStyle && _parser.Current.Type != TokenType.LPAREN) isSqlStyle = true;
 
@@ -160,10 +161,11 @@ public class ExtensionParser : ParserComponent
                 else if (Match(TokenType.WITH))
                 {
                     var opts = type == FileTransferType.Send
-                        ? ParseWithOptions("SEND FILE", "OVERWRITE")
-                        : ParseWithOptions("RECEIVE FILE", "OVERWRITE", "RECURSIVE");
+                        ? ParseWithOptions("SEND FILE", "OVERWRITE", "VERIFY")
+                        : ParseWithOptions("RECEIVE FILE", "OVERWRITE", "RECURSIVE", "VERIFY");
                     overwrite = opts.GetValueOrDefault("OVERWRITE") ?? overwrite;
                     recursive = opts.GetValueOrDefault("RECURSIVE") ?? recursive;
+                    verify = opts.GetValueOrDefault("VERIFY") ?? verify;
                 }
                 else if (Match(TokenType.COMMA)) { continue; }
                 else if (localPath == null && type == FileTransferType.Send && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
@@ -212,6 +214,7 @@ public class ExtensionParser : ParserComponent
             RemotePath = remotePath!,
             Overwrite = overwrite,
             Recursive = recursive,
+            Verify = verify,
             IsSqlStyle = isSqlStyle,
             Line = startToken.Line,
             Column = startToken.Column

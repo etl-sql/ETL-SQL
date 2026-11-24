@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -49,6 +51,20 @@ public class FileTransferStatementHandler : IStatementHandler
             {
                 var s = recVal.ToString()?.Trim();
                 recursive = string.Equals(s, "ON", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(s, "TRUE", StringComparison.OrdinalIgnoreCase)
+                    || s == "1";
+            }
+        }
+
+        bool verify = false;
+        if (stmt.Verify != null)
+        {
+            var verVal = await context.EvaluateValue(stmt.Verify, new Row());
+            if (verVal is bool vb) verify = vb;
+            else if (verVal != null)
+            {
+                var s = verVal.ToString()?.Trim();
+                verify = string.Equals(s, "ON", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(s, "TRUE", StringComparison.OrdinalIgnoreCase)
                     || s == "1";
             }
@@ -109,6 +125,8 @@ public class FileTransferStatementHandler : IStatementHandler
 
                     _logger.WriteLine($"Sending: {localFile} -> {stmt.ConnectionName}:{remoteFile}", ConsoleColor.Cyan);
                     await remoteFs.UploadFileAsync(authorizedLocalFile, remoteFile, overwrite, context.CancellationToken);
+                    if (verify)
+                        await VerifyTransferAsync(remoteFs, remoteFile, authorizedLocalFile, deleteLocalOnMismatch: false, context.CancellationToken);
                 }
                 _logger.WriteLine("Upload complete.", ConsoleColor.Green);
             }
@@ -128,6 +146,8 @@ public class FileTransferStatementHandler : IStatementHandler
 
                 if (!File.Exists(localPath)) throw new ExecutionException($"Local file not found: {localPath}");
                 await remoteFs.UploadFileAsync(localPath, remotePath, overwrite, context.CancellationToken);
+                if (verify)
+                    await VerifyTransferAsync(remoteFs, remotePath, localPath, deleteLocalOnMismatch: false, context.CancellationToken);
                 _logger.WriteLine("Upload complete.", ConsoleColor.Green);
             }
         }
@@ -201,6 +221,8 @@ public class FileTransferStatementHandler : IStatementHandler
                     localFile = pathAuthorizer.Authorize(context, localFile,
                         FileSystemAccessKind.Write).CanonicalPath;
                     await remoteFs.DownloadFileAsync(remoteFile.FullPath, localFile, overwrite);
+                    if (verify)
+                        await VerifyTransferAsync(remoteFs, remoteFile.FullPath, localFile, deleteLocalOnMismatch: true, context.CancellationToken);
                 }
 
                 if (matchCount == 0)
@@ -232,8 +254,93 @@ public class FileTransferStatementHandler : IStatementHandler
                 var dir = Path.GetDirectoryName(localPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 await remoteFs.DownloadFileAsync(remotePath, localPath, overwrite);
+                if (verify)
+                    await VerifyTransferAsync(remoteFs, remotePath, localPath, deleteLocalOnMismatch: true, context.CancellationToken);
                 _logger.WriteLine("Download complete.", ConsoleColor.Green);
             }
+        }
+    }
+
+    internal static async Task VerifyTransferAsync(
+        IRemoteFileSystem remoteFs,
+        string remotePath,
+        string localPath,
+        bool deleteLocalOnMismatch,
+        CancellationToken cancellationToken)
+    {
+        RemoteFileVerificationInfo? remoteInfo;
+        try
+        {
+            remoteInfo = await remoteFs.GetFileVerificationInfoAsync(remotePath, cancellationToken);
+        }
+        catch (NotSupportedException)
+        {
+            // Fallback for connectors that do not implement GetFileVerificationInfoAsync:
+            // look up the entry in its parent directory listing.
+            remoteInfo = await LookupSizeFromListingAsync(remoteFs, remotePath, cancellationToken);
+        }
+
+        if (remoteInfo == null)
+        {
+            DeletePartialLocalFileIfNeeded(localPath, deleteLocalOnMismatch);
+            throw new ExecutionException($"Transfer verification failed for '{remotePath}': remote file metadata could not be retrieved.");
+        }
+
+        long localSize = File.Exists(localPath) ? new FileInfo(localPath).Length : -1;
+        if (localSize != remoteInfo.Size)
+        {
+            DeletePartialLocalFileIfNeeded(localPath, deleteLocalOnMismatch);
+            throw new ExecutionException(
+                $"Transfer verification failed for '{remotePath}': size mismatch (remote={remoteInfo.Size} bytes, local={localSize} bytes).");
+        }
+
+        if (!string.IsNullOrEmpty(remoteInfo.Md5Hex))
+        {
+            string localMd5;
+            await using (var stream = File.OpenRead(localPath))
+            {
+                var hash = await MD5.HashDataAsync(stream, cancellationToken);
+                localMd5 = Convert.ToHexString(hash).ToLowerInvariant();
+            }
+
+            if (!string.Equals(localMd5, remoteInfo.Md5Hex, StringComparison.OrdinalIgnoreCase))
+            {
+                DeletePartialLocalFileIfNeeded(localPath, deleteLocalOnMismatch);
+                throw new ExecutionException(
+                    $"Transfer verification failed for '{remotePath}': MD5 checksum mismatch (remote={remoteInfo.Md5Hex}, local={localMd5}).");
+            }
+        }
+    }
+
+    private static async Task<RemoteFileVerificationInfo?> LookupSizeFromListingAsync(
+        IRemoteFileSystem remoteFs,
+        string remotePath,
+        CancellationToken cancellationToken)
+    {
+        var normalized = remotePath.Replace('\\', '/');
+        var slash = normalized.LastIndexOf('/');
+        var parentDir = slash < 0 ? "" : normalized[..slash];
+        var fileName = slash < 0 ? normalized : normalized[(slash + 1)..];
+
+        await foreach (var entry in remoteFs.ListFilesAsync(parentDir).WithCancellation(cancellationToken))
+        {
+            if (!entry.IsDirectory && string.Equals(entry.Name, fileName, StringComparison.Ordinal))
+                return new RemoteFileVerificationInfo(entry.Size, Md5Hex: null);
+        }
+        return null;
+    }
+
+    private static void DeletePartialLocalFileIfNeeded(string localPath, bool deleteLocalOnMismatch)
+    {
+        if (!deleteLocalOnMismatch) return;
+        try
+        {
+            if (File.Exists(localPath))
+                File.Delete(localPath);
+        }
+        catch
+        {
+            // Best-effort removal of partial local file.
         }
     }
 }

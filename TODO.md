@@ -121,7 +121,6 @@ All five items (`DB09`, `DB12`, `DB15a`, `DB15b`, `DB15c`) have shipped on `rele
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| RT09 | **Verify a transfer.** `VERIFY = ON` on `SEND FILE`/`RECEIVE FILE` compares size and, where the server offers one (S3 ETag for single-part uploads, Azure Content-MD5), a checksum; a mismatch fails and removes the partial local file. Resume of large downloads is out of scope; record that in the ROADMAP entry. **Done when:** a test forces a size mismatch and finds no partial file left. | RT05 | M |
 | DB07 | **Postgres binary `COPY`.** Replace the text `COPY` loader with `BeginBinaryImportAsync`, typing each column from the target's catalog types; an unmappable type or bad value fails before `Complete()` so nothing is committed, with the column and row ordinal in the message. Same transaction and `WHAT_IF` behavior. The baseline is today's text `COPY`, not a batch insert. **Done when:** a Testcontainers round-trip covers text with tabs, newlines and backslashes, a literal backslash-N string, numeric, timestamptz, date, uuid, bool, bytea and NULLs; a measured comparison against text `COPY` on a fixed fixture is in the commit message, and no speedup is claimed without it. | — | M |
 
 Decision proposals recorded in `ROADMAP.md` on 2026-11-23 (`DB08`, `DB11`, `RT11`, awaiting owner approval).

@@ -411,6 +411,30 @@ namespace ETL_SQL.Connectors.S3
             }
         }
 
+        public async Task<RemoteFileVerificationInfo?> GetFileVerificationInfoAsync(string remotePath, CancellationToken cancellationToken = default)
+        {
+            var client = GetClient();
+            string key = remotePath.Replace('\\', '/').TrimStart('/');
+            try
+            {
+                var meta = await client.GetObjectMetadataAsync(_bucketName, key, cancellationToken);
+                string? etag = meta.ETag?.Trim('"');
+                // Single-part S3 uploads use the 32-char hex MD5 as ETag; multipart ETags include "-<parts>".
+                string? md5Hex = etag != null && etag.Length == 32 && !etag.Contains('-')
+                    ? etag.ToLowerInvariant()
+                    : null;
+                return new RemoteFileVerificationInfo(meta.ContentLength, md5Hex);
+            }
+            catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("S3", ex);
+            }
+        }
+
         public async Task CopyFileAsync(string remoteSource, string remoteDest, bool overwrite = true, CancellationToken cancellationToken = default)
         {
             var client = GetClient();

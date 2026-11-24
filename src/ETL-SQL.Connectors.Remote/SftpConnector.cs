@@ -669,6 +669,25 @@ namespace ETL_SQL.Connectors
             }
         }
 
+        public async Task<RemoteFileVerificationInfo?> GetFileVerificationInfoAsync(string remotePath, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                remotePath = NormalizeRemotePath(remotePath);
+                return await RunClientOperationAsync(client =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!client.Exists(remotePath)) return (RemoteFileVerificationInfo?)null;
+                    var attrs = client.GetAttributes(remotePath);
+                    return new RemoteFileVerificationInfo(attrs.Size, Md5Hex: null);
+                });
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SFTP", ex);
+            }
+        }
+
         public async Task DeleteDirectoryAsync(string remotePath)
         {
             try

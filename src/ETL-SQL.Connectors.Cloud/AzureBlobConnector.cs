@@ -304,6 +304,26 @@ namespace ETL_SQL.Connectors
             }
         }
 
+        public async Task<RemoteFileVerificationInfo?> GetFileVerificationInfoAsync(string remotePath, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var container = GetContainer();
+                var blobClient = container.GetBlobClient(remotePath);
+                if (!await blobClient.ExistsAsync(cancellationToken))
+                    return null;
+                var props = await blobClient.GetPropertiesAsync(cancellationToken: cancellationToken);
+                string? md5Hex = props.Value.ContentHash is { Length: 16 } hash
+                    ? Convert.ToHexString(hash).ToLowerInvariant()
+                    : null;
+                return new RemoteFileVerificationInfo(props.Value.ContentLength, md5Hex);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Azure Blob", ex);
+            }
+        }
+
         public async Task CopyFileAsync(string remoteSource, string remoteDest, bool overwrite = true, CancellationToken cancellationToken = default)
         {
             try

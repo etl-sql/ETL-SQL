@@ -339,5 +339,25 @@ namespace ETL_SQL.Tests.Integration.Connectors
             await evaluator.Evaluate(new Parser(new Lexer(r2lDelSql).Tokenize(), r2lDelSql).Parse());
             Assert.False(File.Exists(Path.Combine(localMirror, "stale_local.txt")));
         });
+
+        [Fact]
+        public Task SendAndReceive_WithVerifyOn_SucceedsOverFtp() => Diagnosed(async () =>
+        {
+            var localSrc = LocalPath("rt09_src.txt");
+            var localDst = LocalPath("rt09_dst.txt");
+            var remote = $"rt09_{Guid.NewGuid():N}.txt";
+            File.WriteAllText(localSrc, "verified-ftp-payload-67890");
+
+            await using var connector = ValidConnector();
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            ((IExecutionContext)evaluator).Connections["ftp_rt09"] = connector;
+
+            var sql =
+                $"SEND FILE '{localSrc.Replace("\\", "/")}' TO '{remote}' AT ftp_rt09 WITH (OVERWRITE = ON, VERIFY = ON);\n" +
+                $"RECEIVE FILE FROM '{remote}' TO '{localDst.Replace("\\", "/")}' AT ftp_rt09 WITH (OVERWRITE = ON, VERIFY = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(sql).Tokenize(), sql).Parse());
+
+            Assert.Equal("verified-ftp-payload-67890", File.ReadAllText(localDst));
+        });
     }
 }

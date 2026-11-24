@@ -899,6 +899,7 @@ public static class AstSerializer
         var withParts = new List<string>();
         if (s.Overwrite != null) withParts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
         if (s.Recursive != null) withParts.Add($"RECURSIVE={s.Recursive.ToSql()}");
+        if (s.Verify != null) withParts.Add($"VERIFY={s.Verify.ToSql()}");
         var opts = withParts.Count > 0 ? $" WITH({string.Join(", ", withParts)})" : "";
         return $"{op} {fromTo} AT {s.ConnectionName}{opts};";
     }
