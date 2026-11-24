@@ -113,10 +113,9 @@ All three items (`TR07`, `TR08`, `TR09`) have shipped on `release/v0.23.0` (see 
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| DB04 | **Write-path reference per connector.** For each database connector, state the bulk path (`SqlBulkCopy`, Oracle array binding, `MySqlBulkCopy`, row batches for the rest), what `MERGE` pushes down versus what the engine emulates, transaction support, `WHAT_IF` behavior, and the idempotent-load pattern to use. Verify each statement against the data source class before writing it. | DB01 | M |
-| DB05 | **Capability matrix.** One table on the databases README: transactions, pushdown, bulk load, schema introspection, `WHAT_IF`, default timeout, and auth modes, one row per connector. BigQuery has no transactions and SQLite is single-writer; Neo4j enlists transactions in its own way. Built from DB04 so it stays accurate. | DB04 | S |
-| DB13 | **Document native-to-engine type mapping.** Per connector, how native types land in the engine (Oracle `NUMBER`, Postgres arrays and `jsonb`, Snowflake `VARIANT`, MSSQL `datetimeoffset`, BigQuery `STRUCT`), including that integer types store as `decimal`. Confirm whether this already exists elsewhere in the docs before writing. | DB04 | M |
-| DB14 | **Incremental-load examples.** Confirm whether the ETL Cookbook already shows a watermark pull per source; if not, add runnable lifecycle recipes (MSSQL `rowversion`, Postgres `xmin` or a timestamp column, Oracle `SCN`) following the Extract → Stage → Validate → Merge → Cleanup → Notify shape. | DB04 | M |
+| DB05 | **Capability matrix.** One table on the databases README: transactions, pushdown, bulk load, schema introspection, `WHAT_IF`, default timeout, and auth modes, one row per connector. BigQuery has no transactions and SQLite is single-writer; Neo4j enlists transactions in its own way. Built from DB04 so it stays accurate. | — | S |
+| DB13 | **Document native-to-engine type mapping.** Per connector, how native types land in the engine (Oracle `NUMBER`, Postgres arrays and `jsonb`, Snowflake `VARIANT`, MSSQL `datetimeoffset`, BigQuery `STRUCT`), including that integer types store as `decimal`. Confirm whether this already exists elsewhere in the docs before writing. | — | M |
+| DB14 | **Incremental-load examples.** Confirm whether the ETL Cookbook already shows a watermark pull per source; if not, add runnable lifecycle recipes (MSSQL `rowversion`, Postgres `xmin` or a timestamp column, Oracle `SCN`) following the Extract → Stage → Validate → Merge → Cleanup → Notify shape. | — | M |
 
 **Decisions** (output is a written proposal and estimate in the ROADMAP entry; the owner approves; no code)
 

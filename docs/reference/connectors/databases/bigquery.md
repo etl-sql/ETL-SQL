@@ -73,13 +73,13 @@ SELECT * INTO #events FROM bq.events WHERE event_date >= '2024-01-01';
 T-SQL keywords `TOP`, `NOLOCK`, `ISNULL`, `GETDATE`, and `SYSDATE` are excluded. Use `LIMIT`, `IFNULL`,
 and `CURRENT_DATETIME()` respectively.
 
-**Write behavior:** `COPY INTO` uses BigQuery streaming inserts (low latency, no staging).
-`COPY INTO … APPEND=FALSE` truncates via `TRUNCATE TABLE` before inserting.
+## Write Path & Transactions
 
-- **Insert failures** — Streaming inserts are not automatically retried. A failed response can follow
-  partial acceptance; reconcile destination rows before retrying the operation. Insert IDs provide
-  best-effort deduplication, not an exactly-once guarantee.
-- **Numeric values** — Engine decimal values are sent as invariant numeric strings to preserve precision.
+- **Bulk / write path** — Cross-source `INSERT INTO` and `COPY INTO` use BigQuery streaming inserts (`BigQueryClient.InsertRowsAsync`), assigning a per-row `insertId` (`{batchId}-{ordinal}`) for best-effort deduplication and serializing engine `decimal` values as invariant numeric strings. SDK transport retries are disabled (`NumTries = 1`) so an ambiguous response fails rather than replaying partial writes. Same-connection `INSERT INTO ... SELECT` pushes down as Standard SQL. `COPY INTO ... APPEND=FALSE` runs `TRUNCATE TABLE` first.
+- **`MERGE` behavior** — Engine-emulated. `MERGE` against a `BIGQUERY` target evaluates in bounded engine memory and rewrites the target via `TRUNCATE TABLE` + streaming inserts. For large tables, load `#delta` into a BigQuery staging table and run BigQuery's native `MERGE` inside `EXECUTE bq BEGIN ... END`.
+- **Transactions** — **Not supported** (`BigQueryDataSource` does not implement `ITransactionalDataSource`). Every DML statement is auto-committed; `BEGIN TRANSACTION` / `COMMIT` / `ROLLBACK` has no effect on BigQuery.
+- **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` and `TruncateAsync` return without calling BigQuery. Pushed-down DML and `EXECUTE` blocks log the compiled SQL without executing it.
+- **Idempotent-load pattern** — Write `#delta` into a dated or run-scoped staging table (or truncate and reload a dedicated staging table), reconcile on error if a streaming insert fails, then run an atomic native BigQuery `MERGE` (or partition replace) inside `EXECUTE bq BEGIN ... END`.
 
 ## Troubleshooting
 

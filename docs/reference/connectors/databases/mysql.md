@@ -64,6 +64,14 @@ server.
 The keywords `TOP`, `ROWNUM`, and `PERCENT` are excluded. The T-SQL 2-argument `ISNULL` function is
 excluded (use MySQL's `IFNULL` or `COALESCE`).
 
+## Write Path & Transactions
+
+- **Bulk / write path** — Cross-source `INSERT INTO` and `COPY INTO` write through `MySqlBulkCopy` (`WriteToServerAsync`, using `TIMEOUT_SECONDS` as `BulkCopyTimeout`). Same-connection `INSERT INTO ... SELECT` pushes down as native MySQL SQL. `COPY INTO ... APPEND=FALSE` runs `TRUNCATE TABLE` first.
+- **`MERGE` behavior** — Engine-emulated. `MERGE` against a `MYSQL` target evaluates in bounded engine memory and rewrites the target via `TRUNCATE TABLE` + `MySqlBulkCopy`. For large tables, load `#delta` into a staging table on the same MySQL connection and run native `INSERT INTO target ... SELECT ... FROM stage ON DUPLICATE KEY UPDATE ...` inside `EXECUTE mysql_db BEGIN ... END`.
+- **Transactions** — Full `ITransactionalDataSource` support. `BEGIN TRANSACTION` enlists `MySqlBulkCopy`, pushed-down DML, and `EXECUTE ... BEGIN ... END` on the same `MySqlTransaction` (note that MySQL `TRUNCATE TABLE` causes an implicit commit on the server).
+- **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` and `TruncateAsync` are no-ops. Pushed-down DML and `EXECUTE` blocks log the compiled SQL without executing it.
+- **Idempotent-load pattern** — Load `#delta` into a staging table via `INSERT INTO mysql_db.stage_items SELECT * FROM #delta`, then run `INSERT ... ON DUPLICATE KEY UPDATE` inside `EXECUTE mysql_db BEGIN ... END` within a `BEGIN TRANSACTION ... COMMIT` block (using `DELETE FROM stage_items` rather than `TRUNCATE` if you need rollback across the whole unit).
+
 ## Troubleshooting
 
 - **Access Denied**: Confirm user grants include remote host wildcard or explicit IP permissions (`'user'@'%' or 'user'@'host'`).

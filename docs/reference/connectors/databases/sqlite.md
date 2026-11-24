@@ -41,6 +41,14 @@ CREATE CONNECTION local_db AS SQLITE(DATABASE='${SQLITE_DB_PATH}', TIMEOUT_SECON
 CREATE CONNECTION legacy_db AS SQLITE('Data Source=C:\Data\legacy.db;Mode=ReadOnly;');
 ```
 
+## Write Path & Transactions
+
+- **Bulk / write path** — Cross-source `INSERT INTO` and `COPY INTO` run a single prepared parameterized `INSERT INTO ... VALUES ($p0, ...)` per row inside one transaction (either the active engine transaction or a local `SqliteTransaction` created for the write call). Same-connection `INSERT INTO ... SELECT` pushes down as native SQLite SQL. `COPY INTO ... APPEND=FALSE` runs `DELETE FROM` (SQLite has no `TRUNCATE TABLE`) inside the same transaction before inserting.
+- **`MERGE` behavior** — Engine-emulated. `MERGE` against a `SQLITE` target evaluates in bounded engine memory and rewrites the target via `DELETE FROM` + parameterized `INSERT` inside a transaction. For larger tables, load `#delta` into a staging table and run SQLite's native `INSERT INTO ... ON CONFLICT (...) DO UPDATE SET ...` inside `EXECUTE local_db BEGIN ... END`.
+- **Transactions** — Full `ITransactionalDataSource` support (`BEGIN TRANSACTION` / `COMMIT` / `ROLLBACK`). SQLite is **single-writer**: only one writer transaction can hold the database lock at a time, so keep write transactions short to avoid `SQLITE_BUSY`.
+- **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` and `TruncateAsync` return without modifying the database file. Pushed-down DML and `EXECUTE` blocks log the compiled SQL without executing it.
+- **Idempotent-load pattern** — Wrap staging + native `INSERT ... ON CONFLICT DO UPDATE` (or `DELETE` + reload of a partition key) inside `BEGIN TRANSACTION ... COMMIT`.
+
 ## Troubleshooting
 
 - **Database Locked (SQLITE_BUSY)**: Multiple processes writing concurrently. Keep writes serialized or shorten transaction scopes; SQLite is single-writer.

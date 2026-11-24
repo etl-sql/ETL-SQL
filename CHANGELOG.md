@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Documented verified write paths, `MERGE` pushdown vs. engine emulation, transaction support, `WHAT_IF` behavior, and idempotent-load patterns across all ten database connector reference pages (`DB04` in `docs/reference/connectors/databases/*.md`, including fixing the stale Oracle transaction claim in `oracle.md`).
+
 - Added `TRANSFORM ... USING MASK_PII` (`REDACT_EMAIL`, `MASK_LAST_4`, `HASH_SHA256` with optional decrypted `SALT`, `PERTURB_DATE`, never echoing raw PII values in logs/errors) and `TRANSFORM ... USING SCD2` (`KEY_COLS`, `TRACK_COLS`, `EFFECTIVE_DATE`, managing `EffectiveFrom`, `EffectiveTo`, `IsCurrent`), with schema projection, `SET WHAT_IF ON` safety, reference pages, unit tests, and SLT coverage (`TR09` in `TransformStatementHandler.cs`, `TransformSchemaProjection.cs`, `docs/reference/transform/mask_pii.md`, `scd2.md`, `docs/syntax-index.md`, `TransformTr09Tests.cs`, and `tests/slt_data/transform.test`).
 
 - Added `TRANSFORM ... USING IMPUTE` (`MEAN`, `MEDIAN`, `MODE`, `CONSTANT`, `BY_GROUP`) and `TRANSFORM ... USING SPLIT` (`EXPLODE` synonym; `MODE = 'ROWS' | 'COLUMNS'`, `DELIMITER` or `JSON_PATH`, nested JSON object array flattening, optional 1-based `INDEX_COL`, `KEEP_EMPTY`, `TRIM`), preserving `NULL` semantics, schema projection, and `SET WHAT_IF ON` safety, with reference pages, unit tests, and SLT coverage (`TR08` in `TransformStatementHandler.cs`, `TransformSchemaProjection.cs`, `docs/reference/transform/impute.md`, `split.md`, `docs/syntax-index.md`, `TransformTr08Tests.cs`, and `tests/slt_data/transform.test`).

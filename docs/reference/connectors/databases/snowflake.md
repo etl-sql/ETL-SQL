@@ -80,6 +80,14 @@ SELECT * INTO #top_accounts FROM sf.ORDERS WHERE status = 'CLOSED';
 
 The keywords `TOP` and `NOLOCK` are excluded (T-SQL only). Use `LIMIT` for row capping.
 
+## Write Path & Transactions
+
+- **Bulk / write path** — Cross-source `INSERT INTO` and `COPY INTO` execute parameterized row-by-row `INSERT INTO ... VALUES (:0, :1, ...)` statements (there is no `PUT`/`COPY INTO` stage bulk loader in the connector). Same-connection `INSERT INTO ... SELECT` pushes down as native Snowflake SQL. `COPY INTO ... APPEND=FALSE` runs `TRUNCATE TABLE` first.
+- **`MERGE` behavior** — Engine-emulated. `MERGE` against a `SNOWFLAKE` target evaluates in bounded engine memory and rewrites the target via `TRUNCATE TABLE` + row-by-row `INSERT`. For large datasets, stage files to cloud storage and run Snowflake's native `COPY INTO` and `MERGE` inside `EXECUTE sf BEGIN ... END`.
+- **Transactions** — Full `ITransactionalDataSource` support. `BEGIN TRANSACTION` enlists `INSERT`, pushed-down DML, `TRUNCATE`, and `EXECUTE ... BEGIN ... END` on the shared Snowflake connection and transaction; `COMMIT` persists and `ROLLBACK` discards.
+- **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` and `TruncateAsync` are no-ops. Pushed-down DML and `EXECUTE` blocks log the compiled SQL without executing it.
+- **Idempotent-load pattern** — For small deltas, stage into a Snowflake staging table and run native Snowflake `MERGE` inside `EXECUTE sf BEGIN ... END` within `BEGIN TRANSACTION ... COMMIT`. For high-volume loads, export Parquet/CSV to an external stage and run `COPY INTO` + `MERGE` via `EXECUTE sf BEGIN ... END`.
+
 ## Troubleshooting
 
 - **JWT Token Expired / Invalid Key**: Verify private key format (PKCS#8 PEM) and matching public key registered on Snowflake user.

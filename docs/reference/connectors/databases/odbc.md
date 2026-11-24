@@ -103,6 +103,14 @@ CREATE CONNECTION dremio AS ODBC(DRIVER='{Dremio ODBC Driver 64-bit}',
 > analytical queries routinely take minutes. Without it, the default 30-second command timeout causes
 > premature cancellations on large scans.
 
+## Write Path & Transactions
+
+- **Bulk / write path** — Cross-source `INSERT INTO` and `COPY INTO` run a single prepared parameterized `INSERT INTO ... VALUES (?, ...)` per row inside one transaction (the active engine transaction, or a local `OdbcTransaction` started for the write). Same-connection `INSERT INTO ... SELECT` pushes down as SQL to the underlying ODBC driver. `COPY INTO ... APPEND=FALSE` runs `TRUNCATE TABLE` first.
+- **`MERGE` behavior** — Engine-emulated. `MERGE` against an `ODBC` target evaluates in bounded engine memory and rewrites the target via `TRUNCATE TABLE` + row-by-row parameterized `INSERT`. For large warehouse targets (Redshift, Databricks, Synapse), stage files to object storage and invoke the warehouse's native bulk-load and `MERGE` statements via `EXECUTE ... BEGIN ... END`.
+- **Transactions** — Implements `ITransactionalDataSource`. `BEGIN TRANSACTION` enlists writes, pushed-down DML, and `EXECUTE ... BEGIN ... END` on an `OdbcTransaction` — actual rollback guarantees depend on whether the target driver and database support transactions.
+- **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` and `TruncateAsync` return without touching the target. Pushed-down DML and `EXECUTE` blocks log the compiled SQL without executing it.
+- **Idempotent-load pattern** — Stage into a target staging table (or cloud object storage for warehouses), then run the target database's native upsert/merge inside `EXECUTE odbc_conn BEGIN ... END` within `BEGIN TRANSACTION ... COMMIT` when supported by the driver.
+
 ## Troubleshooting
 
 - **Driver Not Found**: Ensure 64-bit ODBC driver matching the ETL-SQL runtime architecture is installed.

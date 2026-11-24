@@ -53,19 +53,13 @@ Graph entities are mapped to virtual tables:
   `_from_label`, and `_to_label`. For portable ETL loads, provide `_from_key` and `_to_key` plus
   `FROM_LABEL`/`TO_LABEL` and optional key-column options.
 
-## Write behavior
+## Write Path & Transactions
 
-- Ingesting into `NODE_<LABEL>` or `EDGE_<TYPE>` uses parameterized `UNWIND` Cypher templates.
-- If `KEY_COLUMNS` is set, writes use `MERGE` for idempotent upserts; otherwise writes use `CREATE`.
-- Edge writes fail by default when endpoint columns are missing or endpoint matches are not found. Set
-  `SKIP_MISSING_ENDPOINTS=TRUE` only when intentionally dropping those edge rows.
-- `DBNull.Value` is written as `NULL`; dates/times and GUIDs are stored as strings; nested maps/rows are
-  stored as JSON text.
-- If `APPEND=FALSE` (the default), the delete-and-load operation runs inside a single Neo4j write
-  transaction so failures roll back the replacement.
-- Inside an engine `BEGIN TRANSACTION`, writes/truncates/native Cypher use the enlisted Neo4j
-  transaction instead of their own per-operation transaction.
-- In `SET WHAT_IF ON`, raw mutating Cypher in `EXECUTE` is skipped.
+- **Bulk / write path** — `INSERT INTO` and `COPY INTO` against `NODE_<LABEL>` or `EDGE_<TYPE>` send batched parameterized Cypher `UNWIND $rows AS row` templates (`CREATE` by default, or `MERGE` when `KEY_COLUMNS` is set). Edge writes fail by default on missing/unmatched endpoints unless `SKIP_MISSING_ENDPOINTS=TRUE`. `DBNull.Value` writes as `NULL`; dates/times and GUIDs write as strings; nested maps/rows write as JSON text. `COPY INTO ... APPEND=FALSE` deletes existing nodes (`MATCH (n:Label) DETACH DELETE n`) or relationships (`MATCH ()-[r:TYPE]->() DELETE r`) before inserting, inside the same write transaction.
+- **`MERGE` behavior** — SQL `MERGE` against a Neo4j virtual table runs in the engine's bounded in-memory merge and rewrites the virtual table via `WriteBatches`. For native graph upserts without reading the full label into engine memory, set `KEY_COLUMNS` on the `NEO4J` connection (which switches `INSERT INTO` to Cypher `UNWIND ... MERGE`) or write Cypher `MERGE` directly in `EXECUTE graph BEGIN ... END`.
+- **Transactions** — Full `ITransactionalDataSource` support. Outside `BEGIN TRANSACTION`, each write runs inside `session.ExecuteWriteAsync` so an `APPEND=FALSE` delete-and-load rolls back atomically on failure. Inside `BEGIN TRANSACTION`, writes, truncates, and `EXECUTE graph BEGIN ... END` share the enlisted Neo4j session transaction (`COMMIT` persists; `ROLLBACK` discards).
+- **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` and `TruncateAsync` are no-ops, and mutating Cypher inside `EXECUTE graph BEGIN ... END` is skipped.
+- **Idempotent-load pattern** — Set `KEY_COLUMNS` on the connection and load with `INSERT INTO graph.NODE_CUSTOMER ...` (which emits Cypher `UNWIND ... MERGE ... SET n += row`), or run parameterized Cypher `MERGE` inside `EXECUTE graph BEGIN ... END` wrapped in `BEGIN TRANSACTION ... COMMIT`.
 
 ## Authentication
 

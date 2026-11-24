@@ -75,6 +75,14 @@ COMMIT;
 
 The linter's `DialectKeyword` rule warns on `LIMIT` and `ROWNUM` in SQL Server pushdown queries. Use `TOP` or `OFFSET ... FETCH NEXT` instead.
 
+## Write Path & Transactions
+
+- **Bulk / write path** — Cross-source `INSERT INTO` and `COPY INTO` write through `SqlBulkCopy` (streaming each batch via `WriteToServerAsync`). Same-connection `INSERT INTO ... SELECT` pushes down as native T-SQL. `COPY INTO ... APPEND=FALSE` runs `TRUNCATE TABLE` before loading.
+- **`MERGE` behavior** — **Native SQL pushdown** when both source and target live on the same `MSSQL` connection. Cross-connection `MERGE` (for example from a `#temp` table) runs in the engine's bounded in-memory merge and rewrites the target via `TRUNCATE TABLE` + `SqlBulkCopy`. For large cross-source upserts, bulk-load into a staging table on the same `MSSQL` connection first, then run same-connection `MERGE`.
+- **Transactions** — Full `ITransactionalDataSource` support. `BEGIN TRANSACTION` enlists `SqlBulkCopy`, `INSERT`/`UPDATE`/`DELETE`, `MERGE`, `TRUNCATE`, and `EXECUTE ... BEGIN ... END` on the same `SqlTransaction`; `COMMIT` persists and `ROLLBACK` discards.
+- **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` and `TruncateAsync` return without touching SQL Server. Pushed-down `INSERT`, `UPDATE`, `DELETE`, `MERGE`, and `EXECUTE` log the compiled T-SQL without executing it.
+- **Idempotent-load pattern** — Bulk-load `#delta` into a staging table (`INSERT INTO m_sales.dbo.Stage_Orders SELECT * FROM #delta`), then run a same-connection `MERGE` (or `EXECUTE m_sales BEGIN MERGE ... END`) inside `BEGIN TRANSACTION ... COMMIT`.
+
 ## Troubleshooting
 
 - **Login Failed for User**: Verify credentials, database existence, and whether SQL Server is configured for mixed-mode authentication.
