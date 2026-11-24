@@ -103,9 +103,7 @@ ships with its reference page, help text, `LanguageMetadata` entry and tests in 
 
 **Features**
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| FO12 | **Detached `SIGN FILE` / `VERIFY FILE SIGNATURE`.** A `.sig` without encryption, left out of FO11 (encrypt-and-sign and decrypt-and-verify shipped in v0.22.0). PGP only, through PgpCore; reference page, grammar, help text, `LanguageMetadata`, and tests for a good signature, a wrong signer, a tampered file and a missing signature. Never echo key material in errors. Security-sensitive: Claude reviews before push. | — | S |
+All four items (`FO12`, `XL01`, `XL03`, `DB10`) have shipped on `release/v0.23.0` (see `CHANGELOG.md`).
 
 **`TRANSFORM` algorithms**
 

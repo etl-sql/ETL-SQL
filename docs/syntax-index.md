@@ -94,6 +94,8 @@ Statements are the top-level actions in an ETL-SQL script.
 | `MOVE FILE` | File IO | [File Operations](reference/file-operations/README.md) | [move-file.md](reference/file-operations/move-file.md) |
 | `DELETE FILE` | File IO | [File Operations](reference/file-operations/README.md) | [DELETE.md](reference/statements/dml/delete.md) |
 | `ENCRYPT FILE` | File IO | [File Operations](reference/file-operations/README.md) | [ENCRYPT.md](reference/file-operations/encrypt-file.md) |
+| `SIGN FILE` | File IO | [File Operations](reference/file-operations/README.md) | [SIGN FILE](reference/file-operations/sign-file.md) |
+| `VERIFY FILE SIGNATURE` | File IO | [File Operations](reference/file-operations/README.md) | [SIGN FILE](reference/file-operations/sign-file.md) |
 | `SEND FILE` | File IO / Conn | [File Operations](reference/file-operations/README.md) (see also [TRANSFER.md](reference/file-operations/transfer.md)) | [SEND/FILE.md](reference/file-operations/file.md) |
 | `RECEIVE FILE` | File IO / Conn | [File Operations](reference/file-operations/README.md) (see also [TRANSFER.md](reference/file-operations/transfer.md)) | [RECEIVE/FILE.md](reference/file-operations/file.md) |
 | `SEND EMAIL` | Notifications | [File Operations](reference/file-operations/README.md) | [SEND/EMAIL.md](reference/file-operations/send-email.md) |

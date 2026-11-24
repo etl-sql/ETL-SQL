@@ -227,7 +227,8 @@ file_operation_statement = ( "COPY" | "MOVE" | "RENAME" ) "FILE" expression [ "T
                            [ file_operation_options ] [ "AT" identifier ]
                          | ( "COMPRESS" | "DECOMPRESS" ) "FILE" expression [ "TO" [ "DIRECTORY" ] expression ] [ archive_options ] [ "AT" identifier ]
                          | "DELETE" "FILE" [ "IF" "EXISTS" ] expression [ "AT" identifier ]
-                         | "ENCRYPT" "FILE" expression [ "TO" expression ] [ encrypt_key_clause ] [ transform_options ] [ "AT" identifier ]
+                         | "ENCRYPT" "FILE" expression [ "TO" [ "DIRECTORY" ] expression ] [ encrypt_key_clause ] [ transform_options ] [ "AT" identifier ]
+                         | "SIGN" "FILE" expression [ "TO" [ "DIRECTORY" ] expression ] "PGP_KEY" expression [ password_clause ] [ "WITH" "(" "OVERWRITE" "=" expression ")" ]
                          | "DECRYPT" "FILE" expression [ "TO" expression ] [ decrypt_key_clause ] [ transform_options ] [ "AT" identifier ] ;
 archive_options = "WITH" "(" archive_option { "," archive_option } ")" ;
 archive_option = ( "OVERWRITE" | "DELETE_SOURCE" | "FORMAT" | "PATTERN" ) "=" expression ;
@@ -247,6 +248,7 @@ sync_directory_statement = "SYNC" "DIRECTORY" expression "TO" expression
                            [ "WITH" "(" sync_directory_option { "," sync_directory_option } ")" ] ;
 sync_directory_option = ( "DELETE_EXTRA" | "OVERWRITE" | "RECURSIVE" ) "=" expression ;
 verify_file_statement = "VERIFY" "FILE" "INTEGRITY" expression "WITH" "("
+                      | "VERIFY" "FILE" "SIGNATURE" expression [ "SIGNATURE" expression ] "PGP_KEY" expression ;
                         ( "EXPECTED_HASH" | "HASH_FILE" ) "=" expression { "," identifier "=" expression } ")" ;
 generate_statement = "GENERATE" expression "ROWS" "INTO" table_reference [ "WITH" object_options ]
                      "AS" "(" identifier "=" string_literal { "," identifier "=" string_literal } ")"

@@ -14,6 +14,7 @@
 | [DIRECTORY Operations](directory.md) | File-system directory management commands. These operate on the local or UNC file system without requiring a CREATE CONNECTION. |
 | [DOCKER Operations](docker.md) | Start, stop, pause, resume, and close Docker containers. Use these to spin up sidecar services for a script run and tear them down when done. |
 | [ENCRYPT / DECRYPT FILE](encrypt-file.md) | Encrypts or decrypts a local file with a password, an SSH RSA key or a PGP key, or every file in a directory tree with a password. |
+| [SIGN FILE / VERIFY FILE SIGNATURE](sign-file.md) | Creates or verifies a detached OpenPGP signature (`.sig`) for a local file without encrypting it. |
 | [FILE Operations](file.md) | File-level management commands for copying, moving, renaming, deleting, compressing, encrypting, and decrypting individual files. |
 | [MERGE FILES](merge-files.md) | Concatenates multiple files (supports wildcards or array inputs) into a single destination file. |
 | [MOVE FILE](move-file.md) | Moves a file from one location to another. Use `TO DIRECTORY` when the destination should keep the source file name and optionally add a date suffix. |

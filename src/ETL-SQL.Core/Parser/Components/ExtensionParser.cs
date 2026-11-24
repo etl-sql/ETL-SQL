@@ -223,6 +223,7 @@ public class ExtensionParser : ParserComponent
             TokenType.DECOMPRESS_FILE or TokenType.DECOMPRESS => FileOpType.Decompress,
             TokenType.ENCRYPT_FILE or TokenType.ENCRYPT => FileOpType.Encrypt,
             TokenType.DECRYPT_FILE or TokenType.DECRYPT => FileOpType.Decrypt,
+            TokenType.SIGN => FileOpType.Sign,
             _ => throw new SyntaxException($"Unexpected file operation: {startToken.Type}", startToken.Line, startToken.Column)
         };
 
@@ -292,6 +293,7 @@ public class ExtensionParser : ParserComponent
                     {
                         FileOpType.Copy or FileOpType.Move or FileOpType.Rename => ParseWithOptions(name, "OVERWRITE", "DATE_SUFFIX", "SUFFIX_SEPARATOR"),
                         FileOpType.Encrypt or FileOpType.Decrypt => ParseWithOptions(name, "OVERWRITE", "DELETE_SOURCE"),
+                        FileOpType.Sign => ParseWithOptions(name, "OVERWRITE"),
                         FileOpType.Compress => ParseWithOptions(name, "OVERWRITE", "DELETE_SOURCE", "FORMAT"),
                         FileOpType.Decompress => ParseWithOptions(name, "OVERWRITE", "DELETE_SOURCE", "FORMAT", "PATTERN"),
                         _ => ParseWithOptions(name, "OVERWRITE"),
@@ -311,9 +313,21 @@ public class ExtensionParser : ParserComponent
                 else break;
             }
             if (source == null) throw new SyntaxException($"Source path is mandatory for {startToken.Value}", _parser.Current.Line, _parser.Current.Column);
-            RejectIgnoredKeyClauses($"{type.ToString().ToUpperInvariant()} FILE", type is FileOpType.Encrypt or FileOpType.Decrypt,
-                type == FileOpType.Encrypt, password, keyFile, pgpKey, startToken);
-            RejectMisplacedSigningClauses(type, pgpKey, signingKey, signingPassword, verifyKey, startToken);
+            if (type == FileOpType.Sign)
+            {
+                if (keyFile != null)
+                    throw new SyntaxException("SIGN FILE supports OpenPGP keys only (PGP_KEY); KEYFILE is not supported.", startToken.Line, startToken.Column);
+                if (signingKey != null || signingPassword != null || verifyKey != null)
+                    throw new SyntaxException("SIGN FILE uses PGP_KEY and optional PASSWORD, not SIGNING_KEY, SIGNING_PASSWORD, or VERIFY_KEY.", startToken.Line, startToken.Column);
+                if (pgpKey == null)
+                    throw new SyntaxException("SIGN FILE requires a PGP_KEY clause pointing to your OpenPGP private key.", startToken.Line, startToken.Column);
+            }
+            else
+            {
+                RejectIgnoredKeyClauses($"{type.ToString().ToUpperInvariant()} FILE", type is FileOpType.Encrypt or FileOpType.Decrypt,
+                    type == FileOpType.Encrypt, password, keyFile, pgpKey, startToken);
+                RejectMisplacedSigningClauses(type, pgpKey, signingKey, signingPassword, verifyKey, startToken);
+            }
         }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
@@ -1042,10 +1056,74 @@ public class ExtensionParser : ParserComponent
         return new SyncDirectoryStatement(source, destination, deleteExtra, overwrite, recursive) { Line = startToken.Line, Column = startToken.Column };
     }
 
+    public Statement ParseVerifyFile(Token startToken)
+    {
+        Consume(TokenType.FILE, "Expected FILE after VERIFY");
+        if (Match(TokenType.INTEGRITY))
+            return ParseVerifyFileIntegrityBody(startToken);
+        if (MatchIdentifier("SIGNATURE"))
+            return ParseVerifyFileSignatureBody(startToken);
+
+        throw new SyntaxException("Expected INTEGRITY or SIGNATURE after VERIFY FILE", _parser.Current.Line, _parser.Current.Column);
+    }
+
+    private Statement ParseVerifyFileSignatureBody(Token startToken)
+    {
+        var source = ParseExpression();
+        Expression? signatureFile = null;
+        Expression? pgpKey = null;
+
+        while (true)
+        {
+            if (MatchIdentifier("SIGNATURE"))
+            {
+                signatureFile = ParseExpression();
+            }
+            else if (Match(TokenType.PGP_KEY))
+            {
+                pgpKey = ParseExpression();
+            }
+            else if (Match(TokenType.PASSWORD) || Match(TokenType.KEYFILE)
+                || MatchIdentifier("SIGNING_KEY") || MatchIdentifier("SIGNING_PASSWORD") || MatchIdentifier("VERIFY_KEY"))
+            {
+                throw new SyntaxException(
+                    $"VERIFY FILE SIGNATURE takes PGP_KEY (the sender's OpenPGP public key) and optional SIGNATURE '<path>', not {_parser.Previous.Value.ToUpperInvariant()}.",
+                    startToken.Line, startToken.Column);
+            }
+            else if (Match(TokenType.WITH))
+            {
+                throw new SyntaxException("VERIFY FILE SIGNATURE does not take a WITH clause.", startToken.Line, startToken.Column);
+            }
+            else if (Match(TokenType.LF) || Match(TokenType.CR) || Match(TokenType.CRLF))
+            {
+                continue;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        if (pgpKey == null)
+            throw new SyntaxException("VERIFY FILE SIGNATURE requires a PGP_KEY clause pointing to the sender's OpenPGP public key.", startToken.Line, startToken.Column);
+
+        if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+        return new FileOperationStatement(FileOpType.VerifySignature, source, destination: signatureFile, pgpKey: pgpKey)
+        {
+            Line = startToken.Line,
+            Column = startToken.Column
+        };
+    }
+
     public Statement ParseVerifyFileIntegrity(Token startToken)
     {
         Consume(TokenType.FILE, "Expected FILE after VERIFY");
         Consume(TokenType.INTEGRITY, "Expected INTEGRITY after VERIFY FILE");
+        return ParseVerifyFileIntegrityBody(startToken);
+    }
+
+    private Statement ParseVerifyFileIntegrityBody(Token startToken)
+    {
         var source = ParseExpression();
 
         Expression? hashFile = null;

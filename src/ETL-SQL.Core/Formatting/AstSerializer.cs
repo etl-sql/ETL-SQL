@@ -842,6 +842,13 @@ public static class AstSerializer
 
     private static string FormatFileOperation(FileOperationStatement s)
     {
+        if (s.Type == FileOpType.VerifySignature)
+        {
+            var sig = s.Destination != null ? " SIGNATURE " + s.Destination.ToSql() : "";
+            var key = s.PgpKey != null ? " PGP_KEY " + s.PgpKey.ToSql() : "";
+            return $"VERIFY FILE SIGNATURE {s.Source.ToSql()}{sig}{key};";
+        }
+
         var op = s.Type.ToString().ToUpper() + " FILE";
         var dest = s.Destination != null ? " TO " + (s.DestinationIsDirectory ? "DIRECTORY " : "") + s.Destination.ToSql() : "";
         // Keys are clauses, not WITH options: the parser rejects PASSWORD, KEYFILE and PGP_KEY inside WITH.

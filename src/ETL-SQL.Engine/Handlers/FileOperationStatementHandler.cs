@@ -201,11 +201,32 @@ public class FileOperationStatementHandler(
                 decompressGzipToFile = !looksLikeDir;
             }
         }
+        else if (stmt.Type == FileOpType.Sign)
+        {
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = source + ".sig";
+            }
+            else if (dest != null && destIsDirectory)
+            {
+                dest = Path.Combine(dest, Path.GetFileName(source) + ".sig");
+            }
+        }
+        else if (stmt.Type == FileOpType.VerifySignature)
+        {
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = source + ".sig";
+            }
+        }
         if (dest != null && stmt.Type != FileOpType.Rename)
         {
-            var destinationAccess = stmt.Type == FileOpType.Decompress && !decompressGzipToFile
-                ? FileSystemAccessKind.Extract
-                : FileSystemAccessKind.Write;
+            var destinationAccess = stmt.Type switch
+            {
+                FileOpType.VerifySignature => FileSystemAccessKind.Read,
+                FileOpType.Decompress when !decompressGzipToFile => FileSystemAccessKind.Extract,
+                _ => FileSystemAccessKind.Write
+            };
             dest = pathAuthorizer.Authorize(context, dest, destinationAccess,
                 validateFileType: destinationAccess != FileSystemAccessKind.Extract).CanonicalPath;
         }
@@ -477,6 +498,37 @@ public class FileOperationStatementHandler(
                                 throw new ExecutionException("DECRYPT FILE requires a PASSWORD, KEYFILE or PGP_KEY clause. The script's master password is not used for files.", null, stmt.Line, stmt.Column);
                             CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
                         }
+                    }
+                    break;
+                case FileOpType.Sign:
+                    if (dest != null)
+                    {
+                        context.SecurityService.ValidateWriteAccess(dest);
+                        context.SecurityService.ValidateFileType(dest);
+                        var signParent = Path.GetDirectoryName(dest);
+                        if (!string.IsNullOrEmpty(signParent))
+                            Directory.CreateDirectory(signParent);
+
+                        if (stmt.PgpKey == null)
+                            throw new ExecutionException("SIGN FILE requires a PGP_KEY clause.", null, stmt.Line, stmt.Column);
+
+                        string signKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
+                        signKeyPath = pathAuthorizer.Authorize(context, signKeyPath, FileSystemAccessKind.Read).CanonicalPath;
+                        var signPwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
+                        await CryptoUtils.SignFileWithPgpAsync(source, dest, signKeyPath, signPwd, overwrite);
+                        context.Log($"File signed: {source} -> {dest}", ConsoleColor.Green);
+                    }
+                    break;
+                case FileOpType.VerifySignature:
+                    if (dest != null)
+                    {
+                        if (stmt.PgpKey == null)
+                            throw new ExecutionException("VERIFY FILE SIGNATURE requires a PGP_KEY clause.", null, stmt.Line, stmt.Column);
+
+                        string verifyKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
+                        verifyKeyPath = pathAuthorizer.Authorize(context, verifyKeyPath, FileSystemAccessKind.Read).CanonicalPath;
+                        await CryptoUtils.VerifyFileSignatureWithPgpAsync(source, dest, verifyKeyPath);
+                        context.Log($"Signature verified: {source} ({dest})", ConsoleColor.Green);
                     }
                     break;
             }
@@ -827,7 +879,7 @@ public class FileOperationStatementHandler(
             throw new ExecutionException($"DATE_SUFFIX is not supported for {opName}. It is only supported for COPY FILE, MOVE FILE, and RENAME FILE.", null, stmt.Line, stmt.Column);
 
         if (destIsDir && stmt.Type is not (FileOpType.Copy or FileOpType.Move or FileOpType.Rename
-            or FileOpType.Encrypt or FileOpType.Decrypt or FileOpType.Compress or FileOpType.Decompress))
+            or FileOpType.Encrypt or FileOpType.Decrypt or FileOpType.Compress or FileOpType.Decompress or FileOpType.Sign))
         {
             throw new ExecutionException($"TO DIRECTORY is not supported for {opName}.", null, stmt.Line, stmt.Column);
         }
@@ -835,9 +887,9 @@ public class FileOperationStatementHandler(
         if (string.IsNullOrWhiteSpace(destination))
             throw new ExecutionException($"{opName} requires a destination when using DATE_SUFFIX or TO DIRECTORY.", null, stmt.Line, stmt.Column);
 
-        // Encrypt, Decrypt, Compress, and Decompress resolve TO DIRECTORY using each operation's
+        // Encrypt, Decrypt, Compress, Decompress, and Sign resolve TO DIRECTORY using each operation's
         // default filename/extraction semantics in Execute().
-        if (stmt.Type is FileOpType.Encrypt or FileOpType.Decrypt or FileOpType.Compress or FileOpType.Decompress)
+        if (stmt.Type is FileOpType.Encrypt or FileOpType.Decrypt or FileOpType.Compress or FileOpType.Decompress or FileOpType.Sign)
             return destination;
 
         var finalDestination = destination;

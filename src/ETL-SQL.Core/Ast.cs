@@ -2521,7 +2521,7 @@ public sealed record ExplainStatement : Statement
     }
 }
 
-public enum FileOpType { Copy, Move, Rename, Delete, Compress, Decompress, Encrypt, Decrypt }
+public enum FileOpType { Copy, Move, Rename, Delete, Compress, Decompress, Encrypt, Decrypt, Sign, VerifySignature }
 public enum DirectoryOpType { Create, Delete, Rename, Move, Copy, DeleteContents, Compress, Decompress, Encrypt, Decrypt }
 
 public enum FileTransferType { Send, Receive }
