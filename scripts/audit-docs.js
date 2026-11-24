@@ -301,7 +301,9 @@ const CONFORMANCE_RULES = [
   },
   {
     label: 'connectors',
-    match: f => rel(f).startsWith('docs/reference/connectors/') && !rel(f).endsWith('/README.md'),
+    // Connector pages live one folder down (databases/, files/, ...); top-level pages such as
+    // type-mapping.md are cross-connector references, not connectors.
+    match: f => /^docs\/reference\/connectors\/[^/]+\/.+\.md$/.test(rel(f)) && !rel(f).endsWith('/README.md'),
     required: [
       { key: '## syntax',         aliases: ['## connection syntax', '## create connection', '## connection string', '## options'] },
       { key: '## authentication', aliases: ['## authentication patterns', '## auth', '## credentials'] },
