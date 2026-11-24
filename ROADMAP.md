@@ -396,7 +396,7 @@ signature each fail with no key material in the error.
 
 ### File Operations — Managing Remote File Trees over SFTP, FTP, and Cloud Connections
 
-**Status:** Accepted  
+**Status:** In Progress (RT03–RT09 and the RT11 decision selected for v0.23.0 in `TODO.md` §2.4, 2026-11-23)  
 **Horizon:** Later  
 **Authoritative design:** none yet; [SFTP](docs/reference/connectors/services/sftp.md),
 [FTP](docs/reference/connectors/services/ftp.md), and [TRANSFER](docs/reference/file-operations/transfer.md)
@@ -508,7 +508,7 @@ from a multi-sheet fixture.
 
 ### Database Connectors — Documentation Parity, Write-Path Clarity, and Credential Gaps
 
-**Status:** In Progress; DB01–DB06, DB10, DB13, and DB14 shipped in v0.23.0; DB09, DB12, and DB15 approved 2026-11-23 and in build (TODO §2.4)  
+**Status:** In Progress; DB01–DB06, DB10, DB13, and DB14 shipped in v0.23.0; DB09, DB12, and DB15 shipped; DB07 and the DB08/DB11 decisions selected in `TODO.md` §2.4 (2026-11-23)  
 **Horizon:** Next (DB01–DB03), Later (the rest)  
 **Authoritative design:** none yet; [Database connectors](docs/reference/connectors/databases/README.md)
 are the references and [Connector Standards](docs/architecture/standards/connectors-standards.md)
