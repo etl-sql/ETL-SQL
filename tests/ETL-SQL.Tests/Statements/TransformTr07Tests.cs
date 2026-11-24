@@ -138,4 +138,29 @@ public sealed class TransformTr07Tests
             Assert.Contains("not numeric", ex.Message);
         }
     }
+
+    [Theory]
+    [InlineData("BIN (VALUE_COL = 'Val', BINS = 2, BY_GROUP = 'Grp')")]
+    [InlineData("OUTLIERS (VALUE_COL = 'Val', ACTION = 'FLAG', BY_GROUP = 'Grp')")]
+    [InlineData("NORMALIZE (VALUE_COL = 'Val', BY_GROUP = 'Grp')")]
+    [InlineData("SHARE_OF_TOTAL (VALUE_COL = 'Val', BY_GROUP = 'Grp')")]
+    public async Task Transform_NonNumericValueInLaterGroup_LeavesExistingTargetUntouched(string algorithm)
+    {
+        // The sink truncates the target when it opens, so the numeric check must run first.
+        var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await eval.Evaluate(new Parser(new Lexer("""
+            CREATE TABLE #s (Grp VARCHAR, Val VARCHAR);
+            INSERT INTO #s VALUES ('A', '1'), ('A', '2'), ('B', '3'), ('B', 'this is a long free-text value that should not be echoed');
+            CREATE TABLE #out (Keep INT);
+            INSERT INTO #out VALUES (42);
+            """).Tokenize()).Parse());
+
+        var ex = await Assert.ThrowsAsync<ExecutionException>(() => eval.Evaluate(
+            new Parser(new Lexer($"TRANSFORM #out FROM #s USING {algorithm};").Tokenize()).Parse()));
+        Assert.Contains("not numeric", ex.Message);
+        Assert.DoesNotContain("should not be echoed", ex.Message);
+
+        await eval.Evaluate(new Parser(new Lexer("SELECT Keep FROM #out;").Tokenize()).Parse());
+        Assert.Equal(42m, Convert.ToDecimal(Assert.Single(eval.LastResult!.Rows)["Keep"]));
+    }
 }

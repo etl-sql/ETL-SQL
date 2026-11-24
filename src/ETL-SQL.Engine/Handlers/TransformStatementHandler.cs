@@ -395,6 +395,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ("ORDER_COL", [orderCol]),
             ("BY_GROUP", groupColumns));
 
+        foreach (var numericCol in valueCols) ValidateNumericColumn(rows, numericCol, "INTERPOLATE");
         var targetSchemaDefs = BuildTargetSchemaDefinitions(stmt, columns, sourceSchema);
         await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "INTERPOLATE", targetSchemaDefs, _logger);
 
@@ -914,6 +915,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ("VALUE_COL", [valueCol]),
             ("BY_GROUP", groupColumns));
 
+        ValidateNumericColumn(rows, valueCol, "PERIOD_COMPARISON");
         var targetSchemaDefs = BuildTargetSchemaDefinitions(stmt, columns, sourceSchema);
         await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "PERIOD_COMPARISON", targetSchemaDefs, _logger);
 
@@ -1033,6 +1035,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ("VALUE_COL", [valueCol]),
             ("BY_GROUP", groupColumns));
 
+        ValidateNumericColumn(rows, valueCol, "SHARE_OF_TOTAL");
         var targetSchemaDefs = BuildTargetSchemaDefinitions(stmt, columns, sourceSchema);
         await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "SHARE_OF_TOTAL", targetSchemaDefs, _logger);
 
@@ -1103,6 +1106,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ("VALUE_COLS", valueCols),
             ("BY_GROUP", groupColumns));
 
+        foreach (var numericCol in valueCols) ValidateNumericColumn(rows, numericCol, "NORMALIZE");
         var targetSchemaDefs = BuildTargetSchemaDefinitions(stmt, columns, sourceSchema);
         await using var sink = await TransformOutputSink.CreateAsync(stmt, context, "NORMALIZE", targetSchemaDefs, _logger);
 
@@ -1571,7 +1575,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         }
         catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
         {
-            throw new ExecutionException($"{algorithm} column '{column}' value '{value}' is not numeric.", ex);
+            throw new ExecutionException($"{algorithm} column '{column}' value '{DescribeValue(value)}' is not numeric.", ex);
         }
     }
 
@@ -1583,7 +1587,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         }
         catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
         {
-            throw new ExecutionException($"{algorithm} column '{column}' value '{value}' is not numeric.", ex);
+            throw new ExecutionException($"{algorithm} column '{column}' value '{DescribeValue(value)}' is not numeric.", ex);
         }
     }
 
@@ -1804,6 +1808,8 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         ValidateColumnsExist(staged.SourceName, staged.Columns, algoName,
             ("VALUE_COL", [valueCol]),
             ("BY_GROUP", groupCols));
+        // Fail on a non-numeric VALUE_COL before the sink truncates the target, not mid-write.
+        ValidateNumericColumn(staged.Rows, valueCol, algoName);
 
         var targetColumnDefs = CopySourceSchemaDefinitions(staged.Columns, staged.SourceSchema);
         AddOrUpdateColumnDef(targetColumnDefs, startCol, "DECIMAL", isNullable: true);
@@ -1915,6 +1921,8 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         ValidateColumnsExist(staged.SourceName, staged.Columns, algoName,
             ("VALUE_COL", [valueCol]),
             ("BY_GROUP", groupCols));
+        // Fail on a non-numeric VALUE_COL before the sink truncates the target, not mid-write.
+        ValidateNumericColumn(staged.Rows, valueCol, algoName);
 
         var targetColumnDefs = CopySourceSchemaDefinitions(staged.Columns, staged.SourceSchema);
         if (action == "FLAG")
@@ -2057,6 +2065,20 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         return u is "INT" or "INTEGER" or "BIGINT" or "SMALLINT" or "TINYINT";
     }
 
+    // Error text quotes at most a short prefix of a bad value: enough to find the row, without copying
+    // a long free-text or PII field into logs and run history.
+    private static string DescribeValue(object? value)
+    {
+        var text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
+        return text.Length <= 24 ? text : $"{text[..24]}... ({text.Length} chars)";
+    }
+
+    private static void ValidateNumericColumn(List<Row> rows, string column, string algorithm)
+    {
+        foreach (var row in rows)
+            TryGetNumericDecimal(GetValue(row[column]), algorithm, column, out _);
+    }
+
     // NULL is "no value" (false); any other value must be numeric. A non-numeric value fails the
     // statement like the other algorithms' ToDecimal, instead of silently becoming NULL.
     private static bool TryGetNumericDecimal(object? val, string algorithm, string column, out decimal result)
@@ -2064,7 +2086,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         result = 0m;
         if (val == null) return false;
         if (val is double dbl && !double.IsFinite(dbl) || val is float flt && !float.IsFinite(flt))
-            throw new ExecutionException($"{algorithm} column '{column}' value '{val}' is not a finite number.");
+            throw new ExecutionException($"{algorithm} column '{column}' value '{DescribeValue(val)}' is not a finite number.");
         result = ToDecimal(val, algorithm, column);
         return true;
     }
