@@ -296,7 +296,7 @@ public sealed class HostWideAdmissionWorkloadTests : IAsyncDisposable
         foreach (var job in new[] { heavy1, heavy2, short1, short2 })
         {
             var entry = Assert.Single(await store.GetHistoryAsync(job.Id, 5));
-            Assert.Equal("SUCCESS", entry.Status);
+            Assert.True(entry.Status == "SUCCESS", $"{entry.JobName} ended {entry.Status}: {entry.ErrorMessage}");
         }
 
         Assert.Equal(0L, bufferManager.ReservedBytes);
