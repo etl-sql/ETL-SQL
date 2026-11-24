@@ -445,6 +445,11 @@ defects shipped as fixes in v0.22.0. What is left is feature work with working a
 | RT09 | **Verify a transfer.** An option on `SEND FILE`/`RECEIVE FILE` (and the `VERIFY FILE INTEGRITY` counterpart) that compares size and, where the server offers it, a checksum after the transfer, and removes a partial local file on failure. Decide whether to support resume of large downloads here or leave it out. | RT05 | M |
 | RT11 | **Decision: remote command execution.** Whether a connection type that runs a single approved command over SSH belongs in the product, and under what allow-list and audit rules. Output is a proposal and an estimate only. | — | D |
 
+**Decision proposal — RT11 (2026-11-23, awaiting owner decision):**
+- *Verified current state:* `SftpConnector` already uses `SSH.NET` (`Renci.SshNet`), and `CREATE TOOL ... EXECUTABLE` (`ToolCatalog.cs`, `ExecuteToolStatementHandler.cs`) models allow-listed local execution with timeouts and path guards.
+- *Risk & trust rules:* Arbitrary remote shell execution (`EXECUTE ssh BEGIN ... END`) conflicts with ETL-SQL's Zero-Trust model (shell injection, lateral movement, un-auditable side effects). If remote SSH command execution is ever shipped, it must enforce: (1) host-admin-only command templates in `appsettings.json` (template ID, fixed executable, typed argv slots, no `sh -c` shell interpolation); (2) mandatory pinned `HOST_KEY_FINGERPRINT` (no unpinned opt-out) and key-only auth; (3) hard timeout + bounded stdout/stderr capture; (4) `SET WHAT_IF ON` reporting template ID and redacted arguments without connecting; (5) structured audit logging (identity, host, template ID, exit code, duration); and (6) disabled in Shared SaaS / multi-tenant profiles.
+- *Recommendation & estimate:* **Reject / defer** unless a concrete enterprise deployment cannot use SFTP + API/Webhook/remote scheduler. If approved later: **`M–L` (~3–4 days)**, zero new NuGet dependencies (reuses `SSH.NET`).
+
 **Acceptance evidence:** An SFTP and an FTP listing contain only real entries, proven against a test server; `COPY FILE`
 and the directory operations work with `AT conn` on SFTP, FTP, and one cloud connection; a remote
 `SYNC DIRECTORY` plan under `WHAT_IF` matches what the real run does; and the transfer verification
@@ -554,6 +559,18 @@ new package.
 Selected for v0.23.0 (owner, 2026-11-23): DB04–DB06, DB10, DB13, and DB14 shipped; DB09, DB12, and DB15 decision proposals recorded below. Owner approved all three on 2026-11-23 (DB09 option 1, DB12 as recommended, DB15 items 1–3); build rows are in `TODO.md` §2.4.
 
 **Decision proposals (2026-11-23; approved by the owner the same day):**
+
+- **DB08 — Vault-backed `SECRET:` credential providers (2026-11-23, awaiting owner decision):**
+  - *Verified current state:* `ISecretProvider` (`SecretProviders.cs`) already abstracts `SECRET:<name>` resolution across `EnvironmentSecretProvider`, `OsSecretStoreProvider`, and HTTP vault providers; `Directory.Packages.props` already includes `Azure.Core`/`Azure.Identity` (via `Microsoft.Data.SqlClient.Extensions.Azure`) and `AWSSDK.Core` (via `AWSSDK.S3`), but neither `Azure.Security.KeyVault.Secrets` nor `AWSSDK.SecretsManager` is referenced.
+  - *Trust rules:* (1) **Host-configured only** via `appsettings.json` (`Governance:Secrets`), never script-selectable or per-connection (prevents SSRF/exfiltration to attacker vaults); (2) **Caching & rotation:** short TTL in-memory cache (default 5 min, zero disk/snapshot persistence) with refresh on auth failure; (3) **Audit & logging:** log secret name, provider, correlation ID, and outcome (`Resolved`/`NotFound`/`Denied`) — never secret values or raw payloads.
+  - *Dependency cost (§11):* `Azure.Security.KeyVault.Secrets` (MIT, reuses `Azure.Core`/`Azure.Identity`) and `AWSSDK.SecretsManager` (Apache-2.0, reuses `AWSSDK.Core`).
+  - *Recommendation & estimate:* **Approve** host-configured `AzureKeyVaultSecretProvider` (**`M`, ~2 days**) and `AwsSecretsManagerSecretProvider` (**`M`, ~2 days**) as `ISecretProvider` implementations when a target cloud deployment requests them (no script syntax changes).
+
+- **DB11 — Native Databricks / Redshift connectors vs `ODBC` (2026-11-23, awaiting owner decision):**
+  - *Evidence:*
+    - **Redshift:** Wire-compatible with PostgreSQL (`POSTGRES` connector works for queries and `EXECUTE ... BEGIN ... END`), whereas `ODBC` adds vendor driver install friction and falls back to row-by-row `INSERT`. Native bulk loading is already achievable via `S3` staging + `EXECUTE ... BEGIN COPY ... FROM 's3://...' END` over `POSTGRES`.
+    - **Databricks SQL:** `ODBC` requires installing and configuring the Simba/Databricks ODBC driver on every Windows/Linux host, flattens `STRUCT`/`ARRAY`/`MAP` types to strings, and only writes row-by-row `INSERT`. Databricks exposes the **SQL Statement Execution REST API v2** + Unity Catalog Volumes upload over plain `HttpClient` + `System.Text.Json` (zero new NuGet packages, zero native OS driver install).
+  - *Recommendation & estimate:* **Reject native `REDSHIFT` connector for now** (document the `POSTGRES` + `S3` `COPY` cookbook pattern instead, `S`, ~0.5 day if requested); **Propose native `DATABRICKS` connector (`L`, ~4–5 days)** over the REST Statement Execution API when a Databricks deployment is prioritized, keeping `ODBC` as the interim bridge.
 
 - **DB09 — Cloud identity authentication (Approved 2026-11-23):**
   - *Verified current state:* `BIGQUERY` already supports Application Default Credentials (ADC) when `CREDENTIAL_FILE` is omitted. `MSSQL` supports `USER`/`PASSWORD` and `TRUSTED_CONNECTION=TRUE` only; `POSTGRES`, `MYSQL`, and `ORACLE` support `USER`/`PASSWORD` only; `SNOWFLAKE` supports `PASSWORD` or RSA key-pair JWT (`PRIVATE_KEY_FILE` + `PRIVATE_KEY_PASSPHRASE`). Neither `Azure.Identity` nor `AWSSDK.RDS` is referenced in `Directory.Packages.props`.

@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Recorded written decision proposals and estimates in `ROADMAP.md` for vault-backed `SECRET:` providers (`DB08`), native Databricks/Redshift vs `ODBC` (`DB11`), and SSH remote command execution (`RT11`).
+
 - Filtered `.` and `..` pseudo-directory entries from `SFTP` and `FTP` listings (`ListFilesAsync`, `REMOTE_FILE_LIST`, connection `SELECT`, and directory walks) and verified both protocols against live Testcontainers servers (`RT03` in `SftpConnector.cs`, `FtpConnector.cs`, `SftpIntegrationTests.cs`, and `FtpIntegrationTests.cs`).
 
 - Added read-only JSON pass-through execution (`EXECUTE mongo [INTO #temp] BEGIN ... END`) to `MONGODB` via `IDatabaseSource` (`SupportsSqlPushdown => false`), supporting `collection` with either `filter` (plus optional `projection`, `sort`, `limit`, `skip`) or `pipeline` (aggregation), refusing `$out`/`$merge` (including nested stages) and write commands, reporting invalid JSON with line/column position without echoing the body, and honoring `SET WHAT_IF ON`, with unit tests, Testcontainers integration tests, and updated `mongodb.md` and capability matrix (`DB15a` in `MongodbDataSource.cs`, `mongodb.md`, `databases/README.md`, `MongodbExecuteTests.cs`, and `MongodbIntegrationTests.cs`).

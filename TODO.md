@@ -128,9 +128,8 @@ All five items (`DB09`, `DB12`, `DB15a`, `DB15b`, `DB15c`) have shipped on `rele
 | RT08 | **Remote `SYNC DIRECTORY`.** Local to remote and remote to local by size and modified time. `WHAT_IF` prints the copy/delete plan. Destination deletes need an explicit `DELETE_EXTRA = ON` and pass the same guard as `DELETE FILE`. **Done when:** container tests cover both directions, a no-change second run, and deletes off by default. | RT05, RT06 | M |
 | RT09 | **Verify a transfer.** `VERIFY = ON` on `SEND FILE`/`RECEIVE FILE` compares size and, where the server offers one (S3 ETag for single-part uploads, Azure Content-MD5), a checksum; a mismatch fails and removes the partial local file. Resume of large downloads is out of scope; record that in the ROADMAP entry. **Done when:** a test forces a size mismatch and finds no partial file left. | RT05 | M |
 | DB07 | **Postgres binary `COPY`.** Replace the text `COPY` loader with `BeginBinaryImportAsync`, typing each column from the target's catalog types; an unmappable type or bad value fails before `Complete()` so nothing is committed, with the column and row ordinal in the message. Same transaction and `WHAT_IF` behavior. The baseline is today's text `COPY`, not a batch insert. **Done when:** a Testcontainers round-trip covers text with tabs, newlines and backslashes, a literal backslash-N string, numeric, timestamptz, date, uuid, bool, bytea and NULLs; a measured comparison against text `COPY` on a fixed fixture is in the commit message, and no speedup is claimed without it. | — | M |
-| DB08 | **Decision: vault-backed `SECRET:`.** Proposal and estimate in the ROADMAP entry: Azure Key Vault and/or AWS Secrets Manager as a `SECRET:` source, the trust rules (who configures the vault, caching and rotation, what is logged), and the new-dependency cost. No code. | — | D |
-| DB11 | **Decision: native Databricks/Redshift vs `ODBC`.** Evidence in the ROADMAP entry: install friction, what is lost through ODBC, type fidelity; propose or reject. No code. | — | D |
-| RT11 | **Decision: SSH remote command execution.** Whether a connection that runs one approved command over SSH belongs in the product; allow-list, audit and sandbox rules; estimate. No code. | — | D |
+
+Decision proposals recorded in `ROADMAP.md` on 2026-11-23 (`DB08`, `DB11`, `RT11`, awaiting owner approval).
 
 ## Tier 3 — if time allows
 
