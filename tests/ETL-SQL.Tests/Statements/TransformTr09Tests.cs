@@ -104,4 +104,62 @@ public sealed class TransformTr09Tests
         Assert.Contains(scdCols, c => c.Name == "EffectiveTo" && c.DataType == "DATE");
         Assert.Contains(scdCols, c => c.Name == "IsCurrent" && c.DataType == "INT");
     }
+
+    [Fact]
+    public async Task TransformMaskPii_HashRequiresResolvedKeyAndIsKeyed()
+    {
+        // No key: an unkeyed SHA-256 of an SSN is reversible by hashing all SSNs.
+        var noKey = await Assert.ThrowsAsync<ExecutionException>(() => RunAsync("""
+            CREATE TABLE #p (Ssn VARCHAR);
+            INSERT INTO #p VALUES ('123-45-6789');
+            TRANSFORM #out FROM #p USING MASK_PII (COLS = 'Ssn', METHOD = 'HASH_SHA256');
+            """));
+        Assert.Contains("requires SALT", noKey.Message);
+
+        // SECRET: is not resolved in TRANSFORM options; it must not become a known literal key.
+        var unresolved = await Assert.ThrowsAsync<ExecutionException>(() => RunAsync("""
+            CREATE TABLE #p (Ssn VARCHAR);
+            INSERT INTO #p VALUES ('123-45-6789');
+            TRANSFORM #out FROM #p USING MASK_PII (COLS = 'Ssn', METHOD = 'HASH_SHA256', SALT = 'SECRET:pii/hash_key');
+            """));
+        Assert.Contains("unresolved secret reference", unresolved.Message);
+
+        var eval = await RunAsync("""
+            CREATE TABLE #p (Ssn VARCHAR);
+            INSERT INTO #p VALUES ('123-45-6789');
+            TRANSFORM #a FROM #p USING MASK_PII (COLS = 'Ssn', METHOD = 'HASH_SHA256', SALT = 'key-one');
+            TRANSFORM #b FROM #p USING MASK_PII (COLS = 'Ssn', METHOD = 'HASH_SHA256', SALT = 'key-two');
+            SELECT (SELECT Ssn FROM #a) AS a, (SELECT Ssn FROM #b) AS b;
+            """);
+        var row = Assert.Single(eval.LastResult!.Rows);
+        var expected = Convert.ToHexString(System.Security.Cryptography.HMACSHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes("key-one"), System.Text.Encoding.UTF8.GetBytes("123-45-6789"))).ToLowerInvariant();
+        Assert.Equal(expected, row["a"]);
+        Assert.NotEqual(row["a"], row["b"]);
+    }
+
+    [Fact]
+    public async Task TransformScd2_TargetColumnNotInSource_FailsAndKeepsHistory()
+    {
+        var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await eval.Evaluate(new Parser(new Lexer("""
+            CREATE TABLE #d1 (Id INT, Tier VARCHAR);
+            INSERT INTO #d1 VALUES (1, 'Silver');
+            TRANSFORM #dim FROM #d1 USING SCD2 (KEY_COLS = 'Id', TRACK_COLS = 'Tier', EFFECTIVE_DATE = '2026-01-01');
+            ALTER TABLE #dim ADD SurrogateKey INT;
+            UPDATE #dim SET SurrogateKey = 1001;
+            CREATE TABLE #d2 (Id INT, Tier VARCHAR);
+            INSERT INTO #d2 VALUES (1, 'Gold');
+            """).Tokenize()).Parse());
+
+        // Rewriting #dim from #d2 would drop SurrogateKey; it must refuse before emptying the target.
+        var ex = await Assert.ThrowsAsync<ExecutionException>(() => eval.Evaluate(new Parser(new Lexer(
+            "TRANSFORM #dim FROM #d2 USING SCD2 (KEY_COLS = 'Id', TRACK_COLS = 'Tier', EFFECTIVE_DATE = '2026-02-01');").Tokenize()).Parse()));
+        Assert.Contains("SurrogateKey", ex.Message);
+
+        await eval.Evaluate(new Parser(new Lexer("SELECT Tier, SurrogateKey FROM #dim;").Tokenize()).Parse());
+        var row = Assert.Single(eval.LastResult!.Rows);
+        Assert.Equal("Silver", row["Tier"]);
+        Assert.Equal(1001m, Convert.ToDecimal(row["SurrogateKey"]));
+    }
 }

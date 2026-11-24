@@ -102,4 +102,62 @@ public sealed class TransformTr08Tests
         Assert.Contains(splitCols, c => c.Name == "Tag" && c.DataType == "VARCHAR");
         Assert.Contains(splitCols, c => c.Name == "Pos" && c.DataType == "INT");
     }
+
+    [Fact]
+    public async Task TransformSplit_NeverDropsOrOverwritesValues()
+    {
+        // Delimited COLUMNS: parts beyond MAX_PARTS stay in the last column.
+        var eval = await RunAsync("""
+            CREATE TABLE #s (Id INT, Labels VARCHAR);
+            INSERT INTO #s VALUES (1, 'a,b,c');
+            TRANSFORM #cols FROM #s USING SPLIT (SOURCE_COL = 'Labels', MODE = 'COLUMNS', DELIMITER = ',', MAX_PARTS = 2);
+            SELECT Labels_1, Labels_2 FROM #cols;
+            """);
+        var row = Assert.Single(eval.LastResult!.Rows);
+        Assert.Equal("a", row["Labels_1"]);
+        Assert.Equal("b,c", row["Labels_2"]);
+
+        // JSON COLUMNS: an array longer than MAX_PARTS is refused.
+        var tooLong = await Assert.ThrowsAsync<ExecutionException>(() => RunAsync("""
+            CREATE TABLE #j (Id INT, Payload VARCHAR);
+            INSERT INTO #j VALUES (1, '[1,2,3]');
+            TRANSFORM #out FROM #j USING SPLIT (SOURCE_COL = 'Payload', MODE = 'COLUMNS', JSON_PATH = '$', MAX_PARTS = 2);
+            """));
+        Assert.Contains("MAX_PARTS", tooLong.Message);
+
+        // A JSON object key equal to a parent column would overwrite the parent key.
+        var clash = await Assert.ThrowsAsync<ExecutionException>(() => RunAsync("""
+            CREATE TABLE #j (Id INT, Payload VARCHAR);
+            INSERT INTO #j VALUES (1, '{"items":[{"Id":99,"Sku":"X"}]}');
+            TRANSFORM #out FROM #j USING SPLIT (SOURCE_COL = 'Payload', JSON_PATH = '$.items');
+            """));
+        Assert.Contains("'Id'", clash.Message);
+
+        // With PREFIX the parent key survives.
+        eval = await RunAsync("""
+            CREATE TABLE #j (Id INT, Payload VARCHAR);
+            INSERT INTO #j VALUES (1, '{"items":[{"Id":99,"Sku":"X"}]}');
+            TRANSFORM #out FROM #j USING SPLIT (SOURCE_COL = 'Payload', JSON_PATH = '$.items', PREFIX = 'item_');
+            SELECT Id, item_Id, item_Sku FROM #out;
+            """);
+        row = Assert.Single(eval.LastResult!.Rows);
+        Assert.Equal(1m, Convert.ToDecimal(row["Id"]));
+        Assert.Equal("X", row["item_Sku"]);
+
+        // Objects in one row and scalars in another would drop the scalars.
+        var mixed = await Assert.ThrowsAsync<ExecutionException>(() => RunAsync("""
+            CREATE TABLE #j (Id INT, Payload VARCHAR);
+            INSERT INTO #j VALUES (1, '[{"Sku":"X"}]'), (2, '["Y"]');
+            TRANSFORM #out FROM #j USING SPLIT (SOURCE_COL = 'Payload', JSON_PATH = '$');
+            """));
+        Assert.Contains("mixes JSON objects and scalar values", mixed.Message);
+
+        // INDEX_COL may not reuse a parent column name.
+        var indexClash = await Assert.ThrowsAsync<ExecutionException>(() => RunAsync("""
+            CREATE TABLE #s (Id INT, Labels VARCHAR);
+            INSERT INTO #s VALUES (1, 'a,b');
+            TRANSFORM #out FROM #s USING SPLIT (SOURCE_COL = 'Labels', DELIMITER = ',', INDEX_COL = 'Id');
+            """));
+        Assert.Contains("'Id'", indexClash.Message);
+    }
 }

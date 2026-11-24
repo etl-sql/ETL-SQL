@@ -2361,6 +2361,21 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         }
     }
 
+    // New SPLIT columns may replace only SOURCE_COL. Any other clash would overwrite a parent column
+    // (for example a JSON object's own "Id" replacing the parent key) without a word.
+    private static void EnsureSplitColumnsDoNotOverwrite(IReadOnlyList<string> sourceColumns, string sourceCol, IEnumerable<string?> newColumns, string algoName)
+    {
+        var clashes = newColumns
+            .Where(c => !string.IsNullOrEmpty(c) && !c!.Equals(sourceCol, StringComparison.OrdinalIgnoreCase)
+                        && sourceColumns.Contains(c, StringComparer.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (clashes.Count > 0)
+            throw new ExecutionException(
+                $"{algoName} output column(s) {string.Join(", ", clashes.Select(c => $"'{c}'"))} already exist in the source and would be overwritten; " +
+                "set PREFIX, OUTPUT_COL or INDEX_COL to a new name.");
+    }
+
     private static bool ParseOnOffOption(Dictionary<string, Expression> options, string key, string algoName)
     {
         var raw = GetStringOption(options, key, algoName).Trim().ToUpperInvariant();
@@ -2408,6 +2423,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         if (mode == "ROWS")
         {
             var targetCol = outputCol ?? sourceCol;
+            EnsureSplitColumnsDoNotOverwrite(staged.Columns, sourceCol, new[] { targetCol, indexCol }, algoName);
             AddOrUpdateColumnDef(targetColumnDefs, targetCol, "VARCHAR", isNullable: true);
             if (!string.IsNullOrEmpty(indexCol))
                 AddOrUpdateColumnDef(targetColumnDefs, indexCol, "INT", isNullable: true);
@@ -2444,6 +2460,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             int colCount = maxParts ?? Math.Max(1, observedMax);
             for (int i = 1; i <= colCount; i++)
                 AddOrUpdateColumnDef(targetColumnDefs, $"{colPrefix}{i}", "VARCHAR", isNullable: true);
+            EnsureSplitColumnsDoNotOverwrite(staged.Columns, sourceCol, Enumerable.Range(1, colCount).Select(i => $"{colPrefix}{i}"), algoName);
 
             await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
             foreach (var (row, parts) in parsedRows)
@@ -2453,6 +2470,9 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
                 foreach (var col in staged.Columns) outRow[col] = GetValue(row[col]);
                 for (int i = 0; i < colCount; i++)
                     outRow[$"{colPrefix}{i + 1}"] = parts != null && i < parts.Count ? parts[i] : null;
+                // More parts than columns: the last column keeps the rest, delimiter included, so nothing is dropped.
+                if (parts != null && parts.Count > colCount)
+                    outRow[$"{colPrefix}{colCount}"] = string.Join(delimiter, parts.Skip(colCount - 1));
                 await sink.WriteRowAsync(outRow);
             }
             await sink.CompleteAsync();
@@ -2549,6 +2569,13 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         var targetColumnDefs = CopySourceSchemaDefinitions(staged.Columns, staged.SourceSchema);
         if (mode == "ROWS")
         {
+            // Objects become columns and scalars become one value column; a mix would drop the scalars.
+            if (hasObjects && parsedRows.Any(p => p.Scalars is { Count: > 0 }))
+                throw new ExecutionException(
+                    $"{algoName} JSON_PATH '{jsonPath}' in column '{sourceCol}' mixes JSON objects and scalar values; " +
+                    "split them with separate statements so no value is dropped.");
+            EnsureSplitColumnsDoNotOverwrite(staged.Columns, sourceCol,
+                hasObjects ? objectKeys.Append(indexCol) : new[] { outputCol ?? sourceCol, indexCol }, algoName);
             if (hasObjects)
             {
                 foreach (var key in objectKeys)
@@ -2620,8 +2647,13 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         {
             var colPrefix = prefix ?? $"{sourceCol}_";
             int colCount = maxParts ?? Math.Max(1, observedMax);
+            if (observedMax > colCount)
+                throw new ExecutionException(
+                    $"{algoName} JSON_PATH '{jsonPath}' has an array with {observedMax} elements but MAX_PARTS is {colCount}; " +
+                    "raise MAX_PARTS or use MODE = 'ROWS' so no element is dropped.");
             for (int i = 1; i <= colCount; i++)
                 AddOrUpdateColumnDef(targetColumnDefs, $"{colPrefix}{i}", "VARCHAR", isNullable: true);
+            EnsureSplitColumnsDoNotOverwrite(staged.Columns, sourceCol, Enumerable.Range(1, colCount).Select(i => $"{colPrefix}{i}"), algoName);
 
             await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
             foreach (var (row, _, scalars) in parsedRows)
@@ -2697,6 +2729,19 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             var evaluated = GetValue(await context.EvaluationContext.EvaluateValue(saltExpr, Row.Empty, decryptSensitive: true));
             salt = evaluated?.ToString();
         }
+        // SSNs, phone numbers and most emails come from a space small enough to hash in full, so an
+        // unkeyed SHA-256 is reversible by lookup. Require a secret key.
+        // SECRET: and ${ENV} references are resolved only in connection options. Here they would reach
+        // the hash as their literal text, a key anyone reading the script knows.
+        if (salt != null && (salt.TrimStart().StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
+                             || salt.TrimStart().StartsWith("${", StringComparison.Ordinal)))
+            throw new ExecutionException(
+                $"{algoName} SALT is an unresolved secret reference; TRANSFORM options do not resolve SECRET: or ${{ENV}}. " +
+                "Pass an ENC: value or a sensitive variable instead.");
+        if (method == "HASH_SHA256" && string.IsNullOrEmpty(salt))
+            throw new ExecutionException(
+                $"{algoName} METHOD = 'HASH_SHA256' requires SALT (a secret key, given as an ENC: value or a sensitive variable): " +
+                "without one, hashed SSNs, phone numbers and emails can be reversed by hashing every possible value.");
 
         char maskChar = '*';
         if (stmt.Options.ContainsKey("MASK_CHAR"))
@@ -2798,10 +2843,12 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         return new string(maskChar, text.Length - 4) + text[^4..];
     }
 
+    // HMAC-SHA256 keyed by SALT: the same value and key always give the same token (joins still work
+    // across tables), and without the key the token cannot be recomputed from a guessed value.
     private static string HashSha256Value(string text, string? salt)
     {
-        var input = string.IsNullOrEmpty(salt) ? text : salt + text;
-        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input));
+        var key = System.Text.Encoding.UTF8.GetBytes(salt ?? string.Empty);
+        var bytes = System.Security.Cryptography.HMACSHA256.HashData(key, System.Text.Encoding.UTF8.GetBytes(text));
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
@@ -2876,9 +2923,10 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ? context.Connections.ContainsKey(stmt.TargetTable.TableName)
             : await context.ResolveReadSourceAsync(stmt.TargetTable) != null;
 
+        IDataSource? existingTarget = null;
         if (targetExists)
         {
-            var existingTarget = await context.ResolveReadSourceAsync(stmt.TargetTable);
+            existingTarget = await context.ResolveReadSourceAsync(stmt.TargetTable);
             if (existingTarget != null)
             {
                 await foreach (var batch in existingTarget.ReadBatches(context.EffectiveBatchSize, context.CancellationToken))
@@ -2894,60 +2942,73 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         AddOrUpdateColumnDef(targetColumnDefs, toCol, "DATE", isNullable: true);
         AddOrUpdateColumnDef(targetColumnDefs, curCol, "INT", isNullable: false);
 
-        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
+        // The target is the only copy of the dimension's history, and the sink empties it when it opens.
+        // So refuse a target column this rewrite would drop (for example a surrogate key), and compute
+        // every output row before the sink opens: a comparison or conversion error then leaves the
+        // existing history untouched.
+        if (existingTarget != null)
+        {
+            var outputNames = new HashSet<string>(targetColumnDefs.Select(c => c.ColumnName), StringComparer.OrdinalIgnoreCase);
+            var dropped = (await existingTarget.GetColumnsAsync(context.CancellationToken))
+                .Where(c => !outputNames.Contains(c))
+                .ToList();
+            if (dropped.Count > 0)
+                throw new ExecutionException(
+                    $"{algoName} target '{stmt.TargetTable.TableName}' has column(s) {string.Join(", ", dropped.Select(c => $"'{c}'"))} " +
+                    $"that are not in source '{stagedSource.SourceName}'; rewriting the dimension would drop them. " +
+                    "Add them to the source, or write the history to a new target.");
+        }
 
+        var output = new List<Dictionary<string, object?>>(existingRows.Count + incomingOrder.Count);
         var matchedKeys = new HashSet<string>(StringComparer.Ordinal);
 
-        // Emit existing historical and current rows, closing changed current rows and appending new versions.
+        // Existing historical and current rows, closing changed current rows and appending new versions.
         foreach (var existing in existingRows)
         {
             context.CancellationToken.ThrowIfCancellationRequested();
-            bool isCurrent = IsScd2CurrentRow(existing, curCol);
-
-            if (!isCurrent)
+            if (!IsScd2CurrentRow(existing, curCol))
             {
-                var histRow = CopyScd2Row(existing, stagedSource.Columns, fromCol, toCol, curCol, sink.Schema);
-                await sink.WriteRowAsync(histRow);
+                output.Add(CopyScd2Row(existing, stagedSource.Columns, fromCol, toCol, curCol));
                 continue;
             }
 
             var key = BuildGroupKey(existing, keyCols);
             if (!incomingByKey.TryGetValue(key, out var incoming))
             {
-                var unchangedMissing = CopyScd2Row(existing, stagedSource.Columns, fromCol, toCol, curCol, sink.Schema);
-                await sink.WriteRowAsync(unchangedMissing);
+                output.Add(CopyScd2Row(existing, stagedSource.Columns, fromCol, toCol, curCol));
                 continue;
             }
 
             matchedKeys.Add(key);
             bool changed = trackCols.Any(tc => CompareValues(GetValue(existing[tc]), GetValue(incoming[tc])) != 0);
-
             if (!changed)
             {
-                var unchanged = CopyScd2Row(existing, stagedSource.Columns, fromCol, toCol, curCol, sink.Schema);
-                await sink.WriteRowAsync(unchanged);
+                output.Add(CopyScd2Row(existing, stagedSource.Columns, fromCol, toCol, curCol));
+                continue;
             }
-            else
-            {
-                // Close prior version
-                var closed = CopyScd2Row(existing, stagedSource.Columns, fromCol, toCol, curCol, sink.Schema);
-                closed[toCol] = effectiveDate;
-                closed[curCol] = 0m;
-                await sink.WriteRowAsync(closed);
 
-                // Insert new current version
-                var opened = BuildNewScd2Row(incoming, stagedSource.Columns, fromCol, toCol, curCol, effectiveDate, sink.Schema);
-                await sink.WriteRowAsync(opened);
-            }
+            var closed = CopyScd2Row(existing, stagedSource.Columns, fromCol, toCol, curCol);
+            closed[toCol] = effectiveDate;
+            closed[curCol] = 0m;
+            output.Add(closed);
+            output.Add(BuildNewScd2Row(incoming, stagedSource.Columns, fromCol, toCol, curCol, effectiveDate));
         }
 
-        // Insert brand-new keys from incoming snapshot
+        // Brand-new keys from the incoming snapshot.
         foreach (var key in incomingOrder)
         {
             if (matchedKeys.Contains(key)) continue;
+            output.Add(BuildNewScd2Row(incomingByKey[key], stagedSource.Columns, fromCol, toCol, curCol, effectiveDate));
+        }
+
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
+        foreach (var values in output)
+        {
             context.CancellationToken.ThrowIfCancellationRequested();
-            var opened = BuildNewScd2Row(incomingByKey[key], stagedSource.Columns, fromCol, toCol, curCol, effectiveDate, sink.Schema);
-            await sink.WriteRowAsync(opened);
+            var outRow = new Row(sink.Schema);
+            foreach (var (col, value) in values)
+                outRow[col] = value;
+            await sink.WriteRowAsync(outRow);
         }
 
         await sink.CompleteAsync();
@@ -2966,39 +3027,37 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             || string.Equals(val.ToString(), "TRUE", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static Row CopyScd2Row(
+    private static Dictionary<string, object?> CopyScd2Row(
         Row source,
         IReadOnlyList<string> businessCols,
         string fromCol,
         string toCol,
-        string curCol,
-        TableSchema schema)
+        string curCol)
     {
-        var outRow = new Row(schema);
+        var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         foreach (var col in businessCols)
-            outRow[col] = source.TryGetValue(col, out var v) ? GetValue(v) : null;
-        outRow[fromCol] = source.TryGetValue(fromCol, out var ef) ? GetValue(ef) : null;
-        outRow[toCol] = source.TryGetValue(toCol, out var et) ? GetValue(et) : null;
-        outRow[curCol] = source.TryGetValue(curCol, out var ic) ? GetValue(ic) : 1m;
-        return outRow;
+            values[col] = source.TryGetValue(col, out var v) ? GetValue(v) : null;
+        values[fromCol] = source.TryGetValue(fromCol, out var ef) ? GetValue(ef) : null;
+        values[toCol] = source.TryGetValue(toCol, out var et) ? GetValue(et) : null;
+        values[curCol] = source.TryGetValue(curCol, out var ic) ? GetValue(ic) : 1m;
+        return values;
     }
 
-    private static Row BuildNewScd2Row(
+    private static Dictionary<string, object?> BuildNewScd2Row(
         Row incoming,
         IReadOnlyList<string> businessCols,
         string fromCol,
         string toCol,
         string curCol,
-        DateTime effectiveDate,
-        TableSchema schema)
+        DateTime effectiveDate)
     {
-        var outRow = new Row(schema);
+        var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         foreach (var col in businessCols)
-            outRow[col] = GetValue(incoming[col]);
-        outRow[fromCol] = effectiveDate;
-        outRow[toCol] = null;
-        outRow[curCol] = 1m;
-        return outRow;
+            values[col] = GetValue(incoming[col]);
+        values[fromCol] = effectiveDate;
+        values[toCol] = null;
+        values[curCol] = 1m;
+        return values;
     }
 
     private sealed class TransformOutputSink : IAsyncDisposable
