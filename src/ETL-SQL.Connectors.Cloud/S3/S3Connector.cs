@@ -420,7 +420,13 @@ namespace ETL_SQL.Connectors.S3
                 var meta = await client.GetObjectMetadataAsync(_bucketName, key, cancellationToken);
                 string? etag = meta.ETag?.Trim('"');
                 // Single-part S3 uploads use the 32-char hex MD5 as ETag; multipart ETags include "-<parts>".
-                string? md5Hex = etag != null && etag.Length == 32 && !etag.Contains('-')
+                // With SSE-KMS or SSE-C the ETag is not an MD5 even for a single part; treating it as
+                // one would fail a good transfer and delete the downloaded file. Verify size only then.
+                bool etagIsMd5 = meta.ServerSideEncryptionMethod != ServerSideEncryptionMethod.AWSKMS
+                    && meta.ServerSideEncryptionMethod != ServerSideEncryptionMethod.AWSKMSDSSE
+                    && (meta.ServerSideEncryptionCustomerMethod == null
+                        || meta.ServerSideEncryptionCustomerMethod == ServerSideEncryptionCustomerMethod.None);
+                string? md5Hex = etagIsMd5 && etag != null && etag.Length == 32 && !etag.Contains('-')
                     ? etag.ToLowerInvariant()
                     : null;
                 return new RemoteFileVerificationInfo(meta.ContentLength, md5Hex);

@@ -25,7 +25,7 @@ RECEIVE FILE('<remote_path>', <connection_name>, '<local_path>' [, <overwrite_bo
 - **`connection_name`** — Active `SFTP`, `FTP`, or `AZURE_BLOB` connection identifier.
 - **`OVERWRITE = TRUE | FALSE`** — When `TRUE`, overwrites existing local files. When `FALSE`, throws an exception if the local target file already exists (default: `TRUE`).
 - **`RECURSIVE = ON | OFF`** — When `ON`, downloads matching files recursively up to `SET ALLOW_RECURSIVE_LAYERS` (default: `5`), preserving relative directory layout and skipping symlinks (default: `OFF`).
-- **`VERIFY = ON | OFF`** — When `ON`, verifies the downloaded file size against the remote file and compares MD5 checksum where the server provides one (S3 single-part ETag, Azure Blob Content-MD5); on mismatch, removes the partial local file and fails (default: `OFF`).
+- **`VERIFY = ON | OFF`** — When `ON`, verifies the downloaded file size against the remote file and compares MD5 checksum where the server provides one (S3 single-part ETag on objects not encrypted with SSE-KMS or a customer key, Azure Blob Content-MD5; otherwise size only); on mismatch, removes the partial local file and fails (default: `OFF`).
 
 ---
 

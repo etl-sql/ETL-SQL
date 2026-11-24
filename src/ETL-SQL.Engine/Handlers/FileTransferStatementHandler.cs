@@ -8,6 +8,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
+using ETL_SQL.Services;
 using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -199,11 +200,12 @@ public class FileTransferStatementHandler : IStatementHandler
 
                     matchCount++;
                     string relTarget = recursive
-                        ? entry.RelativePath.Replace('/', Path.DirectorySeparatorChar)
+                        ? SafeRelativeLocalPath(entry.RelativePath, stmt.ConnectionName)
                         : fileNameOnly;
                     string localFile = pathAuthorizer.Authorize(context,
                         Path.Combine(localPath, relTarget),
                         FileSystemAccessKind.Write).CanonicalPath;
+                    EnsureUnderDirectory(localFile, localPath, stmt.ConnectionName);
 
                     // Security Hardening: Block writing to script files
                     context.SecurityService.ValidateWriteAccess(localFile);
@@ -328,6 +330,33 @@ public class FileTransferStatementHandler : IStatementHandler
                 return new RemoteFileVerificationInfo(entry.Size, Md5Hex: null);
         }
         return null;
+    }
+
+    // Remote names come from the server. On Windows a name such as "..\..\x" (legal on Linux)
+    // would act as separators, so each segment is checked and the result must stay under the target.
+    internal static string SafeRelativeLocalPath(string remoteRelativePath, string? connectionName)
+    {
+        var segments = remoteRelativePath.Split('/');
+        foreach (var segment in segments)
+        {
+            if (segment.Length == 0 || segment is "." or ".."
+                || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+                || segment.Contains('\\') || segment.Contains(':'))
+            {
+                throw new SecurityException(
+                    $"RECEIVE FILE refused remote entry '{remoteRelativePath}' from '{connectionName}': it is not a plain relative path.");
+            }
+        }
+        return Path.Combine(segments);
+    }
+
+    internal static void EnsureUnderDirectory(string localFile, string localRoot, string? connectionName)
+    {
+        var root = Path.GetFullPath(localRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var full = Path.GetFullPath(localFile);
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!full.StartsWith(root, comparison))
+            throw new SecurityException($"RECEIVE FILE refused a remote entry from '{connectionName}' that resolves outside the target directory.");
     }
 
     private static void DeletePartialLocalFileIfNeeded(string localPath, bool deleteLocalOnMismatch)

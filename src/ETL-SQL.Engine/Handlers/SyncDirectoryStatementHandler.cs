@@ -334,6 +334,11 @@ public class SyncDirectoryStatementHandler : IStatementHandler
                 FileSystemAccessKind.Write, validateFileType: false).CanonicalPath;
             context.SecurityService.ValidateWriteAccess(localDest);
 
+            // A missing or mistyped remote source lists nothing; with DELETE_EXTRA = ON that would
+            // empty the local destination. Fail instead, as the local-source branch does.
+            if (!await remoteFs.DirectoryExistsAsync(srcVal))
+                throw new ExecutionException($"Source directory not found: {connName}:{srcVal}", null, stmt.Line, stmt.Column);
+
             var remoteFiles = new List<(string Rel, FileMetaData Meta)>();
             await foreach (var entry in RemoteDirectoryWalker.WalkAsync(remoteFs, srcVal, recursive, context, context.CancellationToken))
             {

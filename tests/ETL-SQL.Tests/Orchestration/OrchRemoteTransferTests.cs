@@ -28,8 +28,13 @@ namespace ETL_SQL.Tests.Orchestration
             public async IAsyncEnumerable<FileMetaData> ListFilesAsync(string path)
             {
                 await Task.CompletedTask;
-                foreach (var k in RemoteFiles.Keys)
-                    yield return new FileMetaData { Name = k, FullPath = k, Size = 100, IsDirectory = false };
+                // Like a real server: list only entries under the requested folder (empty path = all).
+                var prefix = string.IsNullOrEmpty(path) ? "" : (path.EndsWith('/') ? path : path + "/");
+                foreach (var k in RemoteFiles.Keys.ToList())
+                {
+                    if (prefix.Length > 0 && !k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+                    yield return new FileMetaData { Name = k[prefix.Length..], FullPath = k, Size = 100, IsDirectory = false };
+                }
             }
 
             public Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
@@ -271,7 +276,12 @@ namespace ETL_SQL.Tests.Orchestration
             mockFs.RemoteFiles["some_dir/file2.txt"] = "content2";
             mockFs.RemoteFiles["other_dir/file3.txt"] = "content3";
 
-            await RunScriptAsync(evaluator, "DELETE DIRECTORY 'some_dir/' AT MYREMOTE;");
+            // A non-empty remote directory needs RECURSIVE = ON, the same rule on every connector.
+            await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() =>
+                RunScriptAsync(evaluator, "DELETE DIRECTORY 'some_dir/' AT MYREMOTE;"));
+            Assert.True(mockFs.RemoteFiles.ContainsKey("some_dir/file1.txt"));
+
+            await RunScriptAsync(evaluator, "DELETE DIRECTORY 'some_dir/' AT MYREMOTE WITH (RECURSIVE = ON);");
 
             Assert.False(mockFs.RemoteFiles.ContainsKey("some_dir/file1.txt"));
             Assert.False(mockFs.RemoteFiles.ContainsKey("some_dir/file2.txt"));
