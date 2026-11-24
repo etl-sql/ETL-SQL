@@ -941,9 +941,10 @@ namespace ETL_SQL.Tests.Docs
                 RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
             // Paths that look developer-specific but are not a dependency on anyone's machine:
-            // well-known OS locations, and deliberately synthetic identities in test fixtures.
+            // well-known OS locations, GitHub Actions hosted runner accounts in recorded release
+            // evidence (e.g. /Users/runner/ in dotnet --info logs), and synthetic test identities.
             var allowed = new Regex(
-                @"[\\/]Users[\\/](Public|Default|All Users)\b|[\\/](alice|bob|carol|dave|testuser|user)\b",
+                @"[\\/]Users[\\/](Public|Default|All Users)\b|[\\/](alice|bob|carol|dave|testuser|user|runner)\b",
                 RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
             // Only committed files matter: downloaded caches such as .vscode-test contain vendored
