@@ -406,6 +406,33 @@ namespace ETL_SQL.Connectors.S3
             }
         }
 
+        public async Task CopyFileAsync(string remoteSource, string remoteDest, bool overwrite = true, CancellationToken cancellationToken = default)
+        {
+            var client = GetClient();
+            string srcKey = remoteSource.Replace('\\', '/').TrimStart('/');
+            string destKey = remoteDest.Replace('\\', '/').TrimStart('/');
+
+            if (!overwrite && await FileExistsAsync(destKey))
+                throw new ExecutionException($"Remote destination file already exists (overwrite=OFF): {destKey}");
+
+            var copyRequest = new CopyObjectRequest
+            {
+                SourceBucket = _bucketName,
+                SourceKey = srcKey,
+                DestinationBucket = _bucketName,
+                DestinationKey = destKey
+            };
+
+            try
+            {
+                await client.CopyObjectAsync(copyRequest, cancellationToken);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("S3", ex);
+            }
+        }
+
         public async Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true)
         {
             var client = GetClient();

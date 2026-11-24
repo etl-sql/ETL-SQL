@@ -5,7 +5,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Engine;
 using ETL_SQL.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Xunit;
 using Xunit.Abstractions;
@@ -162,6 +165,35 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Assert.DoesNotContain(entries, e => e.Name is "." or "..");
             Assert.Contains(entries, e => e.Name == "one.txt" && !e.IsDirectory);
             Assert.Contains(entries, e => e.Name == "sub" && e.IsDirectory);
+        });
+
+        [Fact]
+        public Task CopyFileAt_Succeeds_AndRespectsOverwriteOff() => Diagnosed(async () =>
+        {
+            var srcRemote = $"rt04_src_{Guid.NewGuid():N}.txt";
+            var dstRemote = $"rt04_dst_{Guid.NewGuid():N}.txt";
+            var localSrc = LocalPath("rt04_src.txt");
+            var localDst = LocalPath("rt04_dst.txt");
+            File.WriteAllText(localSrc, "ftp copy payload v1");
+
+            await using var connector = ValidConnector();
+            await connector.UploadFileAsync(localSrc, srcRemote, overwrite: true);
+
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            ((IExecutionContext)evaluator).Connections["ftp_rt04"] = connector;
+
+            var copySql = $"COPY FILE '{srcRemote}' TO '{dstRemote}' AT ftp_rt04;";
+            await evaluator.Evaluate(new Parser(new Lexer(copySql).Tokenize(), copySql).Parse());
+
+            Assert.True(await connector.FileExistsAsync(srcRemote));
+            Assert.True(await connector.FileExistsAsync(dstRemote));
+            await connector.DownloadFileAsync(dstRemote, localDst, overwrite: true);
+            Assert.Equal("ftp copy payload v1", File.ReadAllText(localDst));
+
+            // OVERWRITE = OFF fails when destination already exists
+            var noOverwriteSql = $"COPY FILE '{srcRemote}' TO '{dstRemote}' AT ftp_rt04 WITH (OVERWRITE = OFF);";
+            await Assert.ThrowsAsync<ExecutionException>(() =>
+                evaluator.Evaluate(new Parser(new Lexer(noOverwriteSql).Tokenize(), noOverwriteSql).Parse()));
         });
     }
 }

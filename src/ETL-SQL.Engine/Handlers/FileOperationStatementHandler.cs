@@ -107,6 +107,13 @@ public class FileOperationStatementHandler(
                         await remoteFs.RenameFileAsync(remoteSource, finalDest, remoteOverwrite);
                         context.Log($"Remote file {(stmt.Type == FileOpType.Move ? "moved" : "renamed")}: {stmt.ConnectionName}:{remoteSource} -> {finalDest}", ConsoleColor.Green);
                         break;
+                    case FileOpType.Copy:
+                        if (string.IsNullOrWhiteSpace(remoteDest))
+                            throw new ExecutionException("COPY_FILE requires a destination path.");
+
+                        await CopyRemoteFileAsync(remoteFs, remoteSource, remoteFs, remoteDest, remoteOverwrite, DefaultRemoteTempRoot, context.CancellationToken);
+                        context.Log($"Remote file copied: {stmt.ConnectionName}:{remoteSource} -> {remoteDest}", ConsoleColor.Green);
+                        break;
                     default:
                         throw new ExecutionException($"File operation '{stmt.Type}' is not supported on remote systems.");
                 }
@@ -597,6 +604,64 @@ public class FileOperationStatementHandler(
         };
     }
 
+    internal static string DefaultRemoteTempRoot =>
+        Path.Combine(Path.GetTempPath(), "ETL-SQL-RemoteCopy");
+
+    /// <summary>
+    /// Copies a file between remote filesystems (same-connection or cross-connection).
+    /// When <paramref name="overwrite"/> is false, checks destination existence before any byte moves.
+    /// Uses server-side <see cref="IRemoteFileSystem.CopyFileAsync"/> on same-connection copies when
+    /// supported, otherwise downloads to a temp file under <paramref name="tempRoot"/> and uploads,
+    /// always deleting the temp file on success or failure.
+    /// </summary>
+    internal static async Task CopyRemoteFileAsync(
+        IRemoteFileSystem sourceFs,
+        string sourcePath,
+        IRemoteFileSystem destFs,
+        string destPath,
+        bool overwrite,
+        string tempRoot,
+        CancellationToken cancellationToken)
+    {
+        if (!overwrite && await destFs.FileExistsAsync(destPath))
+        {
+            throw new ExecutionException($"Remote destination file already exists (OVERWRITE=OFF): {destPath}");
+        }
+
+        if (ReferenceEquals(sourceFs, destFs))
+        {
+            try
+            {
+                await sourceFs.CopyFileAsync(sourcePath, destPath, overwrite, cancellationToken);
+                return;
+            }
+            catch (NotSupportedException)
+            {
+                // Protocol has no server-side copy (e.g. SFTP, FTP); fall through to temp-file copy.
+            }
+        }
+
+        Directory.CreateDirectory(tempRoot);
+        string tempFile = Path.Combine(tempRoot, $"copy_{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await sourceFs.DownloadFileAsync(sourcePath, tempFile, overwrite: true);
+            await destFs.UploadFileAsync(tempFile, destPath, overwrite, cancellationToken);
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(tempFile))
+                    File.Delete(tempFile);
+            }
+            catch
+            {
+                // Best-effort cleanup of temp file.
+            }
+        }
+    }
+
     private async Task ExecuteRemoteBridgedFileOperationAsync(
         FileOperationStatement stmt,
         IExecutionContext context,
@@ -650,36 +715,32 @@ public class FileOperationStatementHandler(
                                 await UpdateConnectionPathInPlaceAsync(context, sourceOperand.ConnectionName, sourceOperand.DataSource, destPath);
                             }
                             break;
+                        case FileOpType.Copy:
+                            await CopyRemoteFileAsync(remoteFs, sourceOperand.ResolvedPath, remoteFs, destPath, overwrite, DefaultRemoteTempRoot, context.CancellationToken);
+                            context.Log($"Remote file copied: {sourceOperand.ConnectionName}:{sourceOperand.ResolvedPath} -> {destPath}", ConsoleColor.Green);
+                            break;
                         default:
                             throw new ExecutionException($"File operation '{stmt.Type}' is not supported on remote connection '{sourceOperand.ConnectionName}'.");
                     }
                 }
                 else
                 {
-                    // Different remote filesystems: Download to temp local file, upload to target
-                    string tempLocal = Path.GetTempFileName();
-                    try
-                    {
-                        await sourceOperand.RemoteFs!.DownloadFileAsync(sourceOperand.ResolvedPath, tempLocal, overwrite: true);
-                        string destPath = destOperand.ResolvedPath;
-                        if (destOperand.IsDirectory)
-                            destPath = CombineRemotePath(destPath, GetRemoteFileName(sourceOperand.ResolvedPath));
-                        await destOperand.RemoteFs!.UploadFileAsync(tempLocal, destPath, overwrite, context.CancellationToken);
+                    // Different remote filesystems: Download to temp file under engine temp root, upload to target
+                    string destPath = destOperand.ResolvedPath;
+                    if (destOperand.IsDirectory)
+                        destPath = CombineRemotePath(destPath, GetRemoteFileName(sourceOperand.ResolvedPath));
 
-                        if (stmt.Type == FileOpType.Move)
-                        {
-                            await sourceOperand.RemoteFs!.DeleteFileAsync(sourceOperand.ResolvedPath);
-                            if (sourceOperand.IsConnection && sourceOperand.ConnectionName != null && sourceOperand.DataSource != null)
-                            {
-                                await UpdateConnectionPathInPlaceAsync(context, sourceOperand.ConnectionName, sourceOperand.DataSource, destPath);
-                            }
-                        }
-                        context.Log($"Remote file {(stmt.Type == FileOpType.Move ? "moved" : "copied")}: {sourceOperand.ConnectionName}:{sourceOperand.ResolvedPath} -> {destOperand.ConnectionName}:{destPath}", ConsoleColor.Green);
-                    }
-                    finally
+                    await CopyRemoteFileAsync(sourceOperand.RemoteFs!, sourceOperand.ResolvedPath, destOperand.RemoteFs!, destPath, overwrite, DefaultRemoteTempRoot, context.CancellationToken);
+
+                    if (stmt.Type == FileOpType.Move)
                     {
-                        if (File.Exists(tempLocal)) File.Delete(tempLocal);
+                        await sourceOperand.RemoteFs!.DeleteFileAsync(sourceOperand.ResolvedPath);
+                        if (sourceOperand.IsConnection && sourceOperand.ConnectionName != null && sourceOperand.DataSource != null)
+                        {
+                            await UpdateConnectionPathInPlaceAsync(context, sourceOperand.ConnectionName, sourceOperand.DataSource, destPath);
+                        }
                     }
+                    context.Log($"Remote file {(stmt.Type == FileOpType.Move ? "moved" : "copied")}: {sourceOperand.ConnectionName}:{sourceOperand.ResolvedPath} -> {destOperand.ConnectionName}:{destPath}", ConsoleColor.Green);
                 }
                 return;
             }

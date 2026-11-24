@@ -300,6 +300,26 @@ namespace ETL_SQL.Connectors
             }
         }
 
+        public async Task CopyFileAsync(string remoteSource, string remoteDest, bool overwrite = true, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var container = GetContainer();
+                var srcBlob = container.GetBlobClient(remoteSource);
+                var destBlob = container.GetBlobClient(remoteDest);
+
+                if (!overwrite && await destBlob.ExistsAsync(cancellationToken))
+                    throw new ExecutionException($"Destination blob already exists: {remoteDest}");
+
+                var operation = await destBlob.StartCopyFromUriAsync(srcBlob.Uri, cancellationToken: cancellationToken);
+                await operation.WaitForCompletionAsync(cancellationToken);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Azure Blob", ex);
+            }
+        }
+
         public async Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true)
         {
             try

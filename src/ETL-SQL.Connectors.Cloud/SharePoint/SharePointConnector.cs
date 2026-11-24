@@ -485,6 +485,28 @@ namespace ETL_SQL.Connectors
             return response.IsSuccessStatusCode;
         }
 
+        public Task CopyFileAsync(string remoteSource, string remoteDest, bool overwrite = true, CancellationToken cancellationToken = default) =>
+            Guard(() => CopyFileCoreAsync(remoteSource, remoteDest, overwrite, cancellationToken));
+
+        private async Task CopyFileCoreAsync(string remoteSource, string remoteDest, bool overwrite, CancellationToken cancellationToken)
+        {
+            if (_context != null && _context.IsWhatIf) return;
+            await AuthenticateAsync();
+            string srcUrl = GetServerRelativeUrl(remoteSource);
+            string destUrl = GetServerRelativeUrl(remoteDest);
+
+            if (!overwrite && await FileExistsCoreAsync(remoteDest))
+                throw new ExecutionException($"Remote destination file already exists (OVERWRITE=OFF): {remoteDest}");
+
+            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{Uri.EscapeDataString(srcUrl)}')/CopyTo(strnewurl='{Uri.EscapeDataString(destUrl)}', boverwrite={(overwrite ? "true" : "false")})";
+
+            using var response = await _httpClient.PostAsync(requestUrl, null, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new ExecutionException($"Failed to copy SharePoint file: {response.StatusCode}");
+            }
+        }
+
         public Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true) =>
             Guard(() => RenameFileCoreAsync(remoteSource, remoteDest, overwrite));
 

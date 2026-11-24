@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added remote `COPY FILE ... TO ... AT <conn>` support: uses server-side copy on `S3` (`CopyObjectAsync`), `AZURE_BLOB` (`StartCopyFromUriAsync`), and `SHAREPOINT` (`CopyTo`), and falls back to a temp file under the engine temp root (deleted on both success and failure) on `SFTP`, `FTP`, and cross-connection copies; `OVERWRITE = OFF` checks target existence before moving bytes, and `SET WHAT_IF ON` logs without touching the server (`RT04` in `IRemoteFileSystem.cs`, `S3Connector.cs`, `AzureBlobConnector.cs`, `SharePointConnector.cs`, `FileOperationStatementHandler.cs`, `copy-file.md`, `RemoteCopyFileTests.cs`, `SftpIntegrationTests.cs`, and `FtpIntegrationTests.cs`).
+
 - Recorded written decision proposals and estimates in `ROADMAP.md` for vault-backed `SECRET:` providers (`DB08`), native Databricks/Redshift vs `ODBC` (`DB11`), and SSH remote command execution (`RT11`).
 
 - Filtered `.` and `..` pseudo-directory entries from `SFTP` and `FTP` listings (`ListFilesAsync`, `REMOTE_FILE_LIST`, connection `SELECT`, and directory walks) and verified both protocols against live Testcontainers servers (`RT03` in `SftpConnector.cs`, `FtpConnector.cs`, `SftpIntegrationTests.cs`, and `FtpIntegrationTests.cs`).

@@ -28,6 +28,8 @@ public interface IRemoteFileSystem : IAsyncDisposable
     Task<bool> FileExistsAsync(string remotePath);
     Task<bool> DirectoryExistsAsync(string remotePath);
     Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true);
+    Task CopyFileAsync(string remoteSource, string remoteDest, bool overwrite = true, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException($"Server-side file copy is not supported on {GetType().Name}.");
     Task CreateDirectoryAsync(string remotePath);
     Task DeleteDirectoryAsync(string remotePath);
 }
