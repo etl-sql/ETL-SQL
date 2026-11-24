@@ -560,7 +560,30 @@ namespace ETL_SQL.Connectors
             try
             {
                 remotePath = NormalizeRemotePath(remotePath);
-                await RunClientOperationAsync(client => client.DeleteFile(remotePath));
+                await RunClientOperationAsync(client =>
+                {
+                    try
+                    {
+                        client.DeleteFile(remotePath);
+                    }
+                    catch (SshException)
+                    {
+                        // SSH.NET's DeleteFile resolves the target via RealPath; for a symlink
+                        // pointing at a directory that resolves to the directory and fails.
+                        // Unlink the symlink entry directly via its listing handle instead.
+                        var slash = remotePath.LastIndexOf('/');
+                        var parentDir = slash <= 0 ? "/" : remotePath[..slash];
+                        var name = slash < 0 ? remotePath : remotePath[(slash + 1)..];
+                        var link = client.ListDirectory(parentDir)
+                            .FirstOrDefault(e => e.IsSymbolicLink && string.Equals(e.Name, name, StringComparison.Ordinal));
+                        if (link != null)
+                        {
+                            link.Delete();
+                            return;
+                        }
+                        throw;
+                    }
+                });
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {

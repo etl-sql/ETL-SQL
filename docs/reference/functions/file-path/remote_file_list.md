@@ -7,12 +7,14 @@ Returns a table of files on a remote connection (SFTP, FTP, or Azure Blob).
 ```sql
 REMOTE_FILE_LIST(connection_name)
 REMOTE_FILE_LIST(connection_name, path)
+REMOTE_FILE_LIST(connection_name, path, recursive)
 ```
 
 ## Parameters
 
-- **connection_name** - Name of an SFTP, FTP, or Azure Blob connection.
+- **connection_name** - Name of an SFTP, FTP, S3, Azure Blob, or SharePoint connection.
 - **path** - Optional remote directory path to list. Defaults to the connection root.
+- **recursive** - Optional boolean (`TRUE`/`FALSE`, `'ON'`/`'OFF'`, `1`/`0`, default `FALSE`). When enabled, traverses subdirectories up to `SET ALLOW_RECURSIVE_LAYERS` (default `5`), failing instead of truncating if the tree is deeper, and never follows symlinked folders.
 
 ## Returns
 

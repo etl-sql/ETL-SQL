@@ -924,9 +924,15 @@ public class DataParser : ParserComponent
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS after IF"); ifExists = true; }
             var path = ParseExpression();
             string? connectionName = null;
-            if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
+            Expression? recursive = null;
+            while (true)
+            {
+                if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
+                else if (Match(TokenType.WITH)) { recursive = ParseWithOptions("DELETE DIRECTORY", "RECURSIVE").GetValueOrDefault("RECURSIVE") ?? recursive; }
+                else break;
+            }
             Match(TokenType.SEMICOLON);
-            return new DirectoryOperationStatement(DirectoryOpType.Delete, path, ifExists: ifExists, connectionName: connectionName) { Line = startToken.Line, Column = startToken.Column };
+            return new DirectoryOperationStatement(DirectoryOpType.Delete, path, recursive: recursive, ifExists: ifExists, connectionName: connectionName) { Line = startToken.Line, Column = startToken.Column };
         }
         if (Match(TokenType.DIRECTORY_CONTENTS))
         {

@@ -9,6 +9,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Services;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.Engine.Handlers;
 
@@ -40,12 +41,26 @@ public class DirectoryOperationStatementHandler(
 
             string remotePath = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "";
 
+            bool remoteRecursive = false;
+            if (stmt.Recursive != null)
+            {
+                var recVal = await context.EvaluateValue(stmt.Recursive, new Row());
+                if (recVal is bool rb) remoteRecursive = rb;
+                else if (recVal != null)
+                {
+                    var s = recVal.ToString()?.Trim();
+                    remoteRecursive = string.Equals(s, "ON", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(s, "TRUE", StringComparison.OrdinalIgnoreCase)
+                        || s == "1";
+                }
+            }
+
             // Security Hardening: Count this as a directory operation
             context.IncrementOperationCount(OperationType.FileSystem, remotePath);
 
             if (context.IsWhatIf)
             {
-                _logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_DIRECTORY on connection '{stmt.ConnectionName}': {remotePath}", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_DIRECTORY on connection '{stmt.ConnectionName}': {remotePath}{(remoteRecursive ? " (RECURSIVE=ON)" : "")}", ConsoleColor.Yellow);
                 return;
             }
 
@@ -58,7 +73,64 @@ public class DirectoryOperationStatementHandler(
                         _logger.WriteLine($"Remote directory created: {stmt.ConnectionName}:{remotePath}", ConsoleColor.Green);
                         break;
                     case DirectoryOpType.Delete:
-                        await remoteFs.DeleteDirectoryAsync(remotePath);
+                        if (stmt.IfExists && !await remoteFs.DirectoryExistsAsync(remotePath))
+                        {
+                            _logger.WriteLine($"Remote directory does not exist (IF EXISTS): {stmt.ConnectionName}:{remotePath}", ConsoleColor.Yellow);
+                            break;
+                        }
+
+                        if (!remoteRecursive)
+                        {
+                            bool hasChildren = false;
+                            await foreach (var child in remoteFs.ListFilesAsync(remotePath).WithCancellation(context.CancellationToken))
+                            {
+                                if (child.Name is "." or "..") continue;
+                                hasChildren = true;
+                                break;
+                            }
+
+                            if (hasChildren)
+                            {
+                                throw new ExecutionException(
+                                    $"Remote directory '{remotePath}' is not empty. Specify WITH (RECURSIVE = ON) to delete a non-empty directory.");
+                            }
+
+                            await remoteFs.DeleteDirectoryAsync(remotePath);
+                        }
+                        else
+                        {
+                            var filesToDelete = new List<string>();
+                            var dirsToDelete = new List<(string Path, int Depth)>();
+
+                            await foreach (var entry in RemoteDirectoryWalker.WalkAsync(
+                                remoteFs, remotePath, recursive: true, context, context.CancellationToken))
+                            {
+                                if (entry.Meta.IsDirectory && entry.Meta.IsSymlink != true)
+                                {
+                                    dirsToDelete.Add((entry.Meta.FullPath, entry.Depth));
+                                }
+                                else
+                                {
+                                    filesToDelete.Add(entry.Meta.FullPath);
+                                }
+                            }
+
+                            foreach (var file in filesToDelete)
+                            {
+                                context.IncrementOperationCount(OperationType.FileSystem, file);
+                                await remoteFs.DeleteFileAsync(file);
+                            }
+
+                            dirsToDelete.Sort((a, b) => b.Depth.CompareTo(a.Depth));
+                            foreach (var (dirPath, _) in dirsToDelete)
+                            {
+                                context.IncrementOperationCount(OperationType.FileSystem, dirPath);
+                                await remoteFs.DeleteDirectoryAsync(dirPath);
+                            }
+
+                            await remoteFs.DeleteDirectoryAsync(remotePath);
+                        }
+
                         _logger.WriteLine($"Remote directory deleted: {stmt.ConnectionName}:{remotePath}", ConsoleColor.Green);
                         break;
                     default:
@@ -66,6 +138,7 @@ public class DirectoryOperationStatementHandler(
                 }
             }
             catch (ExecutionException) { throw; }
+            catch (SecurityException) { throw; }
             catch (Exception ex)
             {
                 throw new ExecutionException($"Remote directory operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);

@@ -23,7 +23,7 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Registers file-related functions into the global function registry.</summary>
         public static void Register(IFunctionRegistry registry)
         {
-            registry.RegisterWithHelp("REMOTE_FILE_LIST", RemoteFileList, "REMOTE_FILE_LIST(conn_str, [path]): Returns a table of files from a remote connection (SFTP/FTP/Blob).");
+            registry.RegisterWithHelp("REMOTE_FILE_LIST", RemoteFileList, "REMOTE_FILE_LIST(conn_str, [path], [recursive]): Returns a table of files from a remote connection (SFTP/FTP/Blob/S3/SharePoint).");
             registry.RegisterWithHelp("REMOTE_FILE_EXISTS", RemoteFileExists, "REMOTE_FILE_EXISTS(connection, path): Returns 1 if the remote file (or directory, for backward compatibility) exists, or 0 otherwise. Prefer REMOTE_DIRECTORY_EXISTS for directories.");
             registry.RegisterWithHelp("REMOTE_DIRECTORY_EXISTS", RemoteDirectoryExists, "REMOTE_DIRECTORY_EXISTS(connection, path): Returns 1 if the remote directory exists, or 0 otherwise.");
             registry.RegisterWithHelp("REMOTE_FILE_SIZE", RemoteFileSize, "REMOTE_FILE_SIZE(connection, path): Returns the size in bytes of a remote file, or NULL if not found.");
@@ -301,26 +301,50 @@ namespace ETL_SQL.Engine.Functions
         private static async Task<object?> RemoteFileList(List<object?> args, IExecutionContext context)
         {
             if (args.Count < 1) throw new ExecutionException("REMOTE_FILE_LIST requires at least a connection name.");
+            if (args.Count > 3) throw new ExecutionException("REMOTE_FILE_LIST accepts at most 3 arguments: connection_name, optional path, and optional recursive flag.");
             string connName = args[0]?.ToString() ?? "";
             string path = args.Count > 1 ? args[1]?.ToString() ?? "" : "";
+            bool recursive = args.Count > 2 && args[2] != null && ParseRecursiveFlag(args[2]);
             var remoteFs = GetRemoteFileSystem(context, connName);
 
             var table = new DataTable();
             table.SetColumns(FileMetaData.StandardColumns);
-            await foreach (var fileMeta in remoteFs.ListFilesAsync(path))
+            if (recursive)
             {
-                await table.AddRowAsync(new Row
+                await foreach (var entry in RemoteDirectoryWalker.WalkAsync(remoteFs, path, recursive: true, context, context.CancellationToken))
                 {
-                    ["Name"] = fileMeta.Name,
-                    ["FullPath"] = fileMeta.FullPath,
-                    ["Size"] = fileMeta.Size,
-                    ["LastModified"] = fileMeta.LastModified,
-                    ["IsDirectory"] = fileMeta.IsDirectory,
-                    ["CreationTime"] = fileMeta.CreationTime,
-                    ["Permissions"] = fileMeta.Permissions,
-                    ["Owner"] = fileMeta.Owner,
-                    ["IsSymlink"] = fileMeta.IsSymlink
-                });
+                    var fileMeta = entry.Meta;
+                    await table.AddRowAsync(new Row
+                    {
+                        ["Name"] = fileMeta.Name,
+                        ["FullPath"] = fileMeta.FullPath,
+                        ["Size"] = fileMeta.Size,
+                        ["LastModified"] = fileMeta.LastModified,
+                        ["IsDirectory"] = fileMeta.IsDirectory,
+                        ["CreationTime"] = fileMeta.CreationTime,
+                        ["Permissions"] = fileMeta.Permissions,
+                        ["Owner"] = fileMeta.Owner,
+                        ["IsSymlink"] = fileMeta.IsSymlink
+                    });
+                }
+            }
+            else
+            {
+                await foreach (var fileMeta in remoteFs.ListFilesAsync(path))
+                {
+                    await table.AddRowAsync(new Row
+                    {
+                        ["Name"] = fileMeta.Name,
+                        ["FullPath"] = fileMeta.FullPath,
+                        ["Size"] = fileMeta.Size,
+                        ["LastModified"] = fileMeta.LastModified,
+                        ["IsDirectory"] = fileMeta.IsDirectory,
+                        ["CreationTime"] = fileMeta.CreationTime,
+                        ["Permissions"] = fileMeta.Permissions,
+                        ["Owner"] = fileMeta.Owner,
+                        ["IsSymlink"] = fileMeta.IsSymlink
+                    });
+                }
             }
             return table;
         }

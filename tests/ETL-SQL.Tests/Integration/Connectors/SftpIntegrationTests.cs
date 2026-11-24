@@ -532,5 +532,69 @@ namespace ETL_SQL.Tests.Integration.Connectors
             await Assert.ThrowsAsync<ExecutionException>(() =>
                 evaluator.Evaluate(new Parser(new Lexer(noOverwriteSql).Tokenize(), noOverwriteSql).Parse()));
         }
+
+        [Fact]
+        public async Task RecursiveListReceiveDeleteAndSymlinkLoop_EnforcesDepthAndNonEmptyRules()
+        {
+            var root = RemotePath($"rt06_{Guid.NewGuid():N}");
+            var localSeed = LocalPath("rt06_seed.txt");
+            File.WriteAllText(localSeed, "rt06-data");
+
+            await using var connector = PasswordConnector();
+            await connector.CreateDirectoryAsync(root);
+            await connector.CreateDirectoryAsync($"{root}/sub");
+            await connector.UploadFileAsync(localSeed, $"{root}/top.txt", overwrite: true);
+            await connector.UploadFileAsync(localSeed, $"{root}/sub/inner.txt", overwrite: true);
+
+            // Create a real symlink loop back to root via SSH.NET
+            using (var rawClient = new SftpClient(_sftp.Host, _sftp.Port, SftpFixture.TestUser, SftpFixture.TestPassword))
+            {
+                rawClient.Connect();
+                rawClient.SymbolicLink(root, $"{root}/loop");
+                rawClient.Disconnect();
+            }
+
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            ((IExecutionContext)evaluator).Connections["sftp_rt06"] = connector;
+
+            // 1. Recursive list terminates cleanly without following symlink loop
+            var listSql = $"SELECT * INTO #sftp_rec FROM REMOTE_FILE_LIST(sftp_rt06, '{root}', TRUE);";
+            await evaluator.Evaluate(new Parser(new Lexer(listSql).Tokenize(), listSql).Parse());
+            var listed = (await ((IExecutionContext)evaluator).Connections["#sftp_rec"].ReadBatches().ToListAsync())
+                .SelectMany(b => b.Rows).ToList();
+            Assert.Contains(listed, r => r["Name"]?.ToString() == "top.txt");
+            Assert.Contains(listed, r => r["Name"]?.ToString() == "inner.txt");
+            Assert.Contains(listed, r => r["Name"]?.ToString() == "loop" && Equals(r["IsSymlink"], true));
+
+            // 2. Recursive RECEIVE FILE downloads nested tree cleanly
+            var rxDir = Path.Combine(_tmpDir, "rx_tree");
+            var rxSql = $"RECEIVE FILE FROM '{root}' TO '{rxDir.Replace("\\", "/")}' AT sftp_rt06 WITH (RECURSIVE = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(rxSql).Tokenize(), rxSql).Parse());
+            Assert.Equal("rt06-data", File.ReadAllText(Path.Combine(rxDir, "top.txt")));
+            Assert.Equal("rt06-data", File.ReadAllText(Path.Combine(rxDir, "sub", "inner.txt")));
+
+            // 3. Depth > 5 fails instead of silently truncating
+            var deepRoot = RemotePath($"rt06_deep_{Guid.NewGuid():N}");
+            string cur = deepRoot;
+            await connector.CreateDirectoryAsync(cur);
+            for (int i = 1; i <= 6; i++)
+            {
+                cur += $"/d{i}";
+                await connector.CreateDirectoryAsync(cur);
+            }
+            var deepSql = $"SELECT * INTO #deep_fail FROM REMOTE_FILE_LIST(sftp_rt06, '{deepRoot}', TRUE);";
+            await Assert.ThrowsAsync<SecurityException>(() =>
+                evaluator.Evaluate(new Parser(new Lexer(deepSql).Tokenize(), deepSql).Parse()));
+
+            // 4. DELETE DIRECTORY without RECURSIVE fails on non-empty folder, succeeds with RECURSIVE = ON
+            var delNonRec = $"DELETE DIRECTORY '{root}' AT sftp_rt06;";
+            await Assert.ThrowsAsync<ExecutionException>(() =>
+                evaluator.Evaluate(new Parser(new Lexer(delNonRec).Tokenize(), delNonRec).Parse()));
+            Assert.True(await connector.DirectoryExistsAsync(root));
+
+            var delRec = $"DELETE DIRECTORY '{root}' AT sftp_rt06 WITH (RECURSIVE = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(delRec).Tokenize(), delRec).Parse());
+            Assert.False(await connector.DirectoryExistsAsync(root));
+        }
     }
 }

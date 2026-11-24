@@ -200,5 +200,54 @@ namespace ETL_SQL.Tests.Integration.Connectors
             await Assert.ThrowsAsync<ExecutionException>(() =>
                 evaluator.Evaluate(new Parser(new Lexer(noOverwriteSql).Tokenize(), noOverwriteSql).Parse()));
         });
+
+        [Fact]
+        public Task RecursiveListReceiveAndNonEmptyDelete_EnforcesDepthAndUniformDeleteRule() => Diagnosed(async () =>
+        {
+            var root = $"rt06_{Guid.NewGuid():N}";
+            var localSeed = LocalPath("rt06_seed.txt");
+            File.WriteAllText(localSeed, "ftp-rt06-data");
+
+            await using var connector = ValidConnector();
+            await connector.CreateDirectoryAsync(root);
+            await connector.CreateDirectoryAsync($"{root}/sub");
+            await connector.UploadFileAsync(localSeed, $"{root}/top.txt", overwrite: true);
+            await connector.UploadFileAsync(localSeed, $"{root}/sub/inner.txt", overwrite: true);
+
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            ((IExecutionContext)evaluator).Connections["ftp_rt06"] = connector;
+
+            // 1. Recursive list finds nested files
+            var listSql = $"SELECT * INTO #ftp_rec FROM REMOTE_FILE_LIST(ftp_rt06, '{root}', TRUE);";
+            await evaluator.Evaluate(new Parser(new Lexer(listSql).Tokenize(), listSql).Parse());
+            var listed = (await ((IExecutionContext)evaluator).Connections["#ftp_rec"].ReadBatches().ToListAsync())
+                .SelectMany(b => b.Rows).ToList();
+            Assert.Contains(listed, r => r["Name"]?.ToString() == "top.txt");
+            Assert.Contains(listed, r => r["Name"]?.ToString() == "inner.txt");
+
+            // 2. Depth > 5 fails instead of truncating
+            var deepRoot = $"rt06_deep_{Guid.NewGuid():N}";
+            string cur = deepRoot;
+            await connector.CreateDirectoryAsync(cur);
+            for (int i = 1; i <= 6; i++)
+            {
+                cur += $"/d{i}";
+                await connector.CreateDirectoryAsync(cur);
+            }
+            var deepSql = $"SELECT * INTO #ftp_deep_fail FROM REMOTE_FILE_LIST(ftp_rt06, '{deepRoot}', TRUE);";
+            await Assert.ThrowsAsync<SecurityException>(() =>
+                evaluator.Evaluate(new Parser(new Lexer(deepSql).Tokenize(), deepSql).Parse()));
+
+            // 3. DELETE DIRECTORY without RECURSIVE fails on non-empty FTP folder (uniform with SFTP!)
+            var delNonRec = $"DELETE DIRECTORY '{root}' AT ftp_rt06;";
+            await Assert.ThrowsAsync<ExecutionException>(() =>
+                evaluator.Evaluate(new Parser(new Lexer(delNonRec).Tokenize(), delNonRec).Parse()));
+            Assert.True(await connector.DirectoryExistsAsync(root));
+
+            // 4. DELETE DIRECTORY WITH (RECURSIVE = ON) deletes cleanly
+            var delRec = $"DELETE DIRECTORY '{root}' AT ftp_rt06 WITH (RECURSIVE = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(delRec).Tokenize(), delRec).Parse());
+            Assert.False(await connector.DirectoryExistsAsync(root));
+        });
     }
 }

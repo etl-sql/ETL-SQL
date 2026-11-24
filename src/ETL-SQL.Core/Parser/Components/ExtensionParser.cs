@@ -130,6 +130,7 @@ public class ExtensionParser : ParserComponent
         string? connectionName = null;
         Expression? remotePath = null;
         Expression? overwrite = null;
+        Expression? recursive = null;
 
         if (!isSqlStyle && _parser.Current.Type != TokenType.LPAREN) isSqlStyle = true;
 
@@ -156,7 +157,14 @@ public class ExtensionParser : ParserComponent
                     else localPath = ParseExpression();
                 }
                 else if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
-                else if (Match(TokenType.WITH)) { overwrite = ParseWithOptions(type == FileTransferType.Send ? "SEND FILE" : "RECEIVE FILE", "OVERWRITE").GetValueOrDefault("OVERWRITE"); }
+                else if (Match(TokenType.WITH))
+                {
+                    var opts = type == FileTransferType.Send
+                        ? ParseWithOptions("SEND FILE", "OVERWRITE")
+                        : ParseWithOptions("RECEIVE FILE", "OVERWRITE", "RECURSIVE");
+                    overwrite = opts.GetValueOrDefault("OVERWRITE") ?? overwrite;
+                    recursive = opts.GetValueOrDefault("RECURSIVE") ?? recursive;
+                }
                 else if (Match(TokenType.COMMA)) { continue; }
                 else if (localPath == null && type == FileTransferType.Send && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                     localPath = ParseExpression();
@@ -203,6 +211,7 @@ public class ExtensionParser : ParserComponent
             ConnectionName = connectionName!,
             RemotePath = remotePath!,
             Overwrite = overwrite,
+            Recursive = recursive,
             IsSqlStyle = isSqlStyle,
             Line = startToken.Line,
             Column = startToken.Column
@@ -463,7 +472,7 @@ public class ExtensionParser : ParserComponent
                     var dirStmtName = DirectoryStatementName(type);
                     var options = type switch
                     {
-                        DirectoryOpType.DeleteContents => ParseWithOptions(dirStmtName, "RECURSIVE"),
+                        DirectoryOpType.Delete or DirectoryOpType.DeleteContents => ParseWithOptions(dirStmtName, "RECURSIVE"),
                         DirectoryOpType.Compress => ParseWithOptions(dirStmtName, "OVERWRITE", "FORMAT"),
                         DirectoryOpType.Decompress => ParseWithOptions(dirStmtName, "OVERWRITE", "FORMAT", "PATTERN"),
                         _ => ParseWithOptions(dirStmtName, "OVERWRITE"),
@@ -486,8 +495,8 @@ public class ExtensionParser : ParserComponent
                 throw new SyntaxException($"{name} does not support KEYFILE or PGP_KEY. Directories are encrypted with PASSWORD only.", startToken.Line, startToken.Column);
             if (password != null && type is not (DirectoryOpType.Encrypt or DirectoryOpType.Decrypt))
                 throw new SyntaxException($"{name} does not take PASSWORD; only ENCRYPT DIRECTORY and DECRYPT DIRECTORY do.", startToken.Line, startToken.Column);
-            if (recursive != null && type != DirectoryOpType.DeleteContents)
-                throw new SyntaxException($"{name} does not take RECURSIVE; only DELETE DIRECTORY_CONTENTS does.", startToken.Line, startToken.Column);
+            if (recursive != null && type is not (DirectoryOpType.Delete or DirectoryOpType.DeleteContents))
+                throw new SyntaxException($"{name} does not take RECURSIVE; only DELETE DIRECTORY and DELETE DIRECTORY_CONTENTS do.", startToken.Line, startToken.Column);
         }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();

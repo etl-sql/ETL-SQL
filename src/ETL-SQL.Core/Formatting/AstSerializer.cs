@@ -896,7 +896,10 @@ public static class AstSerializer
         var fromTo = s.Type == FileTransferType.Send
             ? $"{s.LocalPath.ToSql()} TO {s.RemotePath.ToSql()}"
             : $"FROM {s.RemotePath.ToSql()} TO {s.LocalPath.ToSql()}";
-        var opts = s.Overwrite != null ? $" WITH(OVERWRITE={s.Overwrite.ToSql()})" : "";
+        var withParts = new List<string>();
+        if (s.Overwrite != null) withParts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
+        if (s.Recursive != null) withParts.Add($"RECURSIVE={s.Recursive.ToSql()}");
+        var opts = withParts.Count > 0 ? $" WITH({string.Join(", ", withParts)})" : "";
         return $"{op} {fromTo} AT {s.ConnectionName}{opts};";
     }
 

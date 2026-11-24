@@ -2533,6 +2533,7 @@ public sealed record FileTransferStatement : Statement
     public string ConnectionName { get; set; } = "";
     public Expression RemotePath { get; set; } = null!;
     public Expression? Overwrite { get; set; }
+    public Expression? Recursive { get; set; }
     public bool IsSqlStyle { get; set; }
 }
 
