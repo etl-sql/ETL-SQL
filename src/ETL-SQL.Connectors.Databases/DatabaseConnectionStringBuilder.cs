@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
 using Microsoft.Data.SqlClient;
 using Npgsql;
 using Oracle.ManagedDataAccess.Client;
@@ -147,7 +148,112 @@ namespace ETL_SQL.Connectors
             if (props.TryGetValue("TRUST_SERVER_CERTIFICATE", out var trustCert) && trustCert != null && ConnectorOptionValues.IsTrue(trustCert))
                 builder["Trust Server Certificate"] = true;
 
+            if (props.TryGetValue("SEARCH_PATH", out var searchPath))
+                builder.SearchPath = ValidateAndNormalizePostgresSearchPath(searchPath);
+
             return builder.ConnectionString;
+        }
+
+        /// <summary>
+        /// Validates a PostgreSQL <c>SEARCH_PATH</c> option as a comma-separated list of SQL identifiers
+        /// (unquoted identifiers or double-quoted identifiers with doubled-quote escapes) and returns
+        /// the normalized comma-separated string. Throws <see cref="ExecutionException"/> on any invalid value.
+        /// </summary>
+        internal static string ValidateAndNormalizePostgresSearchPath(string? rawSearchPath)
+        {
+            if (string.IsNullOrWhiteSpace(rawSearchPath))
+                throw new ExecutionException("POSTGRES SEARCH_PATH must be a non-empty comma-separated list of schema identifiers.");
+
+            var schemas = new List<string>();
+            int i = 0;
+            int len = rawSearchPath.Length;
+
+            while (true)
+            {
+                while (i < len && char.IsWhiteSpace(rawSearchPath[i])) i++;
+
+                if (i >= len)
+                    throw new ExecutionException("POSTGRES SEARCH_PATH contains an empty schema entry.");
+
+                string entry;
+                if (rawSearchPath[i] == '"')
+                {
+                    int start = i;
+                    i++; // skip opening quote
+                    bool closed = false;
+                    int contentLen = 0;
+
+                    while (i < len)
+                    {
+                        char c = rawSearchPath[i];
+                        if (c < 0x20 || c == 0x7F)
+                            throw new ExecutionException("POSTGRES SEARCH_PATH contains an invalid control character.");
+
+                        if (c == '"')
+                        {
+                            if (i + 1 < len && rawSearchPath[i + 1] == '"')
+                            {
+                                // Escaped double quote inside quoted identifier
+                                i += 2;
+                                contentLen++;
+                                continue;
+                            }
+
+                            i++; // consume closing quote
+                            closed = true;
+                            break;
+                        }
+
+                        i++;
+                        contentLen++;
+                    }
+
+                    if (!closed)
+                        throw new ExecutionException("POSTGRES SEARCH_PATH has an unclosed quoted schema identifier.");
+
+                    if (contentLen == 0)
+                        throw new ExecutionException("POSTGRES SEARCH_PATH contains an empty quoted schema identifier.");
+
+                    entry = rawSearchPath.Substring(start, i - start);
+                }
+                else
+                {
+                    int start = i;
+                    char first = rawSearchPath[i];
+                    if (!((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_'))
+                        throw new ExecutionException($"POSTGRES SEARCH_PATH contains an invalid schema identifier starting with '{first}'. Quote special identifiers with double quotes.");
+
+                    i++;
+                    while (i < len)
+                    {
+                        char c = rawSearchPath[i];
+                        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$')
+                        {
+                            i++;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+
+                    entry = rawSearchPath.Substring(start, i - start);
+                }
+
+                schemas.Add(entry);
+
+                while (i < len && char.IsWhiteSpace(rawSearchPath[i])) i++;
+
+                if (i >= len)
+                    break;
+
+                if (rawSearchPath[i] != ',')
+                    throw new ExecutionException($"POSTGRES SEARCH_PATH contains an invalid schema identifier near '{rawSearchPath[i]}'.");
+
+                i++; // skip comma and expect another identifier
+            }
+
+            return string.Join(", ", schemas);
         }
 
         private static string BuildMySql(Dictionary<string, string> props)

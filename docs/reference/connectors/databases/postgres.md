@@ -22,6 +22,7 @@ Aliases: `NPSQL`, `PG`
 | `CONNECTION_IDLE_LIFETIME` | Seconds before an idle connection is pruned | No |
 | `SSL_MODE` | `Disable`, `Prefer`, `Require`, `VerifyCA`, `VerifyFull` | No |
 | `TRUST_SERVER_CERTIFICATE` | Bypass certificate validation (`TRUE`/`FALSE`) | No |
+| `SEARCH_PATH` | Comma-separated PostgreSQL schema search path (e.g. `'analytics, public'` or `'"$user", public'`). Each entry must be a valid unquoted or double-quoted SQL identifier | No |
 
 > [!NOTE]
 > Use either structured options (`HOST`, `DATABASE`, `USER`, `PASSWORD`, ...) or a positional
@@ -38,6 +39,9 @@ PostgreSQL supports standard credentials and SSL authentication:
 ```sql
 -- Structured options using an allow-listed environment variable (Security:AllowedEnvVars)
 CREATE CONNECTION pg_db AS POSTGRES(HOST='10.0.0.5', PORT=5432, DATABASE='inventory', USER='admin', PASSWORD='${PG_PASSWORD}');
+
+-- Explicit schema search path (applied on every pooled connection)
+CREATE CONNECTION pg_analytics AS POSTGRES(HOST='10.0.0.5', DATABASE='warehouse', USER='etl', PASSWORD='${PG_PASSWORD}', SEARCH_PATH='analytics, public');
 
 -- Traditional string
 CREATE CONNECTION pg_legacy AS POSTGRES('Host=localhost;Database=mydb;Username=etl;Password=pass');

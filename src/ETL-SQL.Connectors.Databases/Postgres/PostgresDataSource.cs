@@ -38,6 +38,19 @@ namespace ETL_SQL.Connectors.Postgres
         {
             _context = context;
             _logger = context.Logger;
+            if (options != null && options.TryGetValue("SEARCH_PATH", out var searchPath))
+            {
+                var normalizedSearchPath = DatabaseConnectionStringBuilder.ValidateAndNormalizePostgresSearchPath(searchPath);
+                if (!string.IsNullOrWhiteSpace(connectionString))
+                {
+                    var builder = new NpgsqlConnectionStringBuilder(connectionString);
+                    if (string.IsNullOrEmpty(builder.SearchPath))
+                    {
+                        builder.SearchPath = normalizedSearchPath;
+                        connectionString = builder.ConnectionString;
+                    }
+                }
+            }
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;

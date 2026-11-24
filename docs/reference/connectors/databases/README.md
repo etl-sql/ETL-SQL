@@ -32,6 +32,28 @@ Every cell below is verified against the connector's `IDataSource` implementatio
 | [SNOWFLAKE](snowflake.md) | Yes (shared session tx) | Yes (Snowflake SQL) | Parameterized row-by-row `INSERT` | Yes (`INFORMATION_SCHEMA`) | Skips writes, truncates & pushed DML | `1800s` | Username/password, RSA key-pair JWT (`PRIVATE_KEY_FILE` + optional `PRIVATE_KEY_PASSPHRASE`) |
 | [SQLITE](sqlite.md) | Yes (`SqliteTransaction`, single-writer) | Yes (SQLite SQL) | Parameterized row-by-row `INSERT` in tx (`DELETE` on `APPEND=FALSE`) | Yes (catalog provider + `PRAGMA table_info`) | Skips writes, truncates & pushed DML | `30s` | File-system permissions (no DB password; `Mode=ReadOnly` via conn string) |
 
+## Transient Retries
+
+Database connectors use a global Polly retry policy configured in `appsettings.json` under `Connectors:Retry` (not per-connection options). Retries use exponential backoff with jitter on transient driver errors and timeouts.
+
+```json
+{
+  "Connectors": {
+    "Retry": {
+      "MaxAttempts": 3,
+      "BaseDelaySeconds": 1.0
+    }
+  }
+}
+```
+
+- **`MaxAttempts`** — Maximum retry attempts after the initial failure (default: `3`; values `< 1` fall back to `3`).
+- **`BaseDelaySeconds`** — Base delay in seconds for exponential backoff with jitter (default: `1.0`; negative values fall back to `1.0`).
+
+**Connector coverage:**
+- **Uses `Connectors:Retry`:** `BIGQUERY`, `MSSQL`, `MYSQL`, `ODBC`, `ORACLE`, `POSTGRES`, `SNOWFLAKE`.
+- **Does not use `Connectors:Retry`:** `MONGODB` (relies on MongoDB driver server selection / retryable reads), `NEO4J` (relies on Neo4j driver transaction retries), and `SQLITE` (local file database; use `BUSY_TIMEOUT_MS` for lock contention).
+
 ## Related References
 
 - [Database Native-to-Engine Type Mapping](../type-mapping.md) — how native types (`NUMBER`, `jsonb`, arrays, `VARIANT`, `datetimeoffset`, `STRUCT`, BSON, Cypher properties) land in the engine.
