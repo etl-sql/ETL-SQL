@@ -16,7 +16,17 @@ REMOTE_FILE_LIST(connection_name, path)
 
 ## Returns
 
-Returns a table with these columns: `NAME`, `FULLPATH`, `SIZE`, `LASTMODIFIED`, and `ISDIRECTORY`.
+Returns a table with these columns: `Name`, `FullPath`, `Size`, `LastModified`, `IsDirectory`, `CreationTime`, `Permissions`, `Owner`, and `IsSymlink`.
+
+### Connector Metadata Matrix
+
+| Connector | `CreationTime` | `Permissions` | `Owner` | `IsSymlink` |
+| :--- | :--- | :--- | :--- | :--- |
+| `SFTP` | `NULL` (SFTP v3 has no birth time) | POSIX mode string (e.g. `rwxr-x---`) | Numeric UID string | `TRUE` / `FALSE` |
+| `FTP` | Server `MLSD` `create` fact when reported, else `NULL` | POSIX mode string when reported, else `NULL` | Raw owner when reported, else `NULL` | `TRUE` / `FALSE` |
+| `S3` | `NULL` | `NULL` | Bucket owner display name or ID when returned, else `NULL` | `NULL` |
+| `AZURE_BLOB` | Blob `CreatedOn` timestamp | `NULL` | `NULL` | `NULL` |
+| `SHAREPOINT` | `TimeCreated` timestamp when returned, else `NULL` | `NULL` | `NULL` | `NULL` |
 
 ## Null Behavior
 

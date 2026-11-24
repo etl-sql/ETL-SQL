@@ -258,7 +258,12 @@ namespace ETL_SQL.Connectors.S3
                         FullPath = obj.Key,
                         Size = obj.Size ?? 0L,
                         LastModified = obj.LastModified,
-                        IsDirectory = false
+                        IsDirectory = false,
+                        CreationTime = null,
+                        Permissions = null,
+                        Owner = !string.IsNullOrWhiteSpace(obj.Owner?.DisplayName) ? obj.Owner.DisplayName
+                            : (!string.IsNullOrWhiteSpace(obj.Owner?.Id) ? obj.Owner.Id : null),
+                        IsSymlink = null
                     };
                 }
 
@@ -522,7 +527,7 @@ namespace ETL_SQL.Connectors.S3
                 _context?.CancellationToken ?? System.Threading.CancellationToken.None);
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Writing batches to S3 directly is not supported. Use SEND FILE.");
-        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)FileMetaData.StandardColumns);
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
         public IDataSource WithTable(string tableName) => this;

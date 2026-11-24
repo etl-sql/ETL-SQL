@@ -7,11 +7,21 @@ namespace ETL_SQL.Data;
 
 public record FileMetaData
 {
+    public static readonly string[] StandardColumns =
+    {
+        "Name", "FullPath", "Size", "LastModified", "IsDirectory",
+        "CreationTime", "Permissions", "Owner", "IsSymlink"
+    };
+
     public string Name { get; init; } = "";
     public string FullPath { get; init; } = "";
     public long Size { get; init; }
     public DateTime? LastModified { get; init; }
     public bool IsDirectory { get; init; }
+    public DateTime? CreationTime { get; init; }
+    public string? Permissions { get; init; }
+    public string? Owner { get; init; }
+    public bool? IsSymlink { get; init; }
 }
 
 public interface IRemoteFileSystem : IAsyncDisposable

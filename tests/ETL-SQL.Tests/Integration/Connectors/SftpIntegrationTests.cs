@@ -494,6 +494,14 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Assert.DoesNotContain(entries, e => e.Name is "." or "..");
             Assert.Contains(entries, e => e.Name == "one.txt" && !e.IsDirectory);
             Assert.Contains(entries, e => e.Name == "sub" && e.IsDirectory);
+
+            var fileEntry = entries.Single(e => e.Name == "one.txt");
+            Assert.Null(fileEntry.CreationTime);
+            Assert.NotNull(fileEntry.Permissions);
+            Assert.Equal(9, fileEntry.Permissions!.Length);
+            Assert.Matches("^[r-][w-][x-][r-][w-][x-][r-][w-][x-]$", fileEntry.Permissions);
+            Assert.False(string.IsNullOrWhiteSpace(fileEntry.Owner));
+            Assert.Equal(false, fileEntry.IsSymlink);
         }
 
         [Fact]

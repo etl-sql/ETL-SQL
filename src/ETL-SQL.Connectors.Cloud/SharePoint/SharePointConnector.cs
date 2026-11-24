@@ -368,13 +368,24 @@ namespace ETL_SQL.Connectors
                             DateTime.TryParse(modProp.GetString(), out modified);
                         }
 
+                        DateTime? created = null;
+                        if (item.TryGetProperty("TimeCreated", out var createdProp)
+                            && DateTime.TryParse(createdProp.GetString(), out var parsedCreated))
+                        {
+                            created = parsedCreated;
+                        }
+
                         yield return new FileMetaData
                         {
                             Name = name,
                             FullPath = relativeUrl,
                             Size = size,
                             LastModified = modified,
-                            IsDirectory = false
+                            IsDirectory = false,
+                            CreationTime = created,
+                            Permissions = null,
+                            Owner = null,
+                            IsSymlink = null
                         };
                     }
                 }

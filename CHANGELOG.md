@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Extended `FileMetaData` and `REMOTE_FILE_LIST` / remote connection `SELECT` schemas with `CreationTime`, `Permissions` (POSIX mode string), `Owner`, and `IsSymlink` (`NULL` where the protocol does not report them) across `SFTP`, `FTP`, `S3`, `AZURE_BLOB`, and `SHAREPOINT`, pinned the 9-column schema in `FileMetaData.StandardColumns` and `RemoteMetadataTests`, verified SFTP and FTP against live Testcontainers servers, and documented the per-connector metadata matrix in `docs/reference/functions/file-path/remote_file_list.md` (`RT05`).
+
 - Added remote `COPY FILE ... TO ... AT <conn>` support: uses server-side copy on `S3` (`CopyObjectAsync`), `AZURE_BLOB` (`StartCopyFromUriAsync`), and `SHAREPOINT` (`CopyTo`), and falls back to a temp file under the engine temp root (deleted on both success and failure) on `SFTP`, `FTP`, and cross-connection copies; `OVERWRITE = OFF` checks target existence before moving bytes, and `SET WHAT_IF ON` logs without touching the server (`RT04` in `IRemoteFileSystem.cs`, `S3Connector.cs`, `AzureBlobConnector.cs`, `SharePointConnector.cs`, `FileOperationStatementHandler.cs`, `copy-file.md`, `RemoteCopyFileTests.cs`, `SftpIntegrationTests.cs`, and `FtpIntegrationTests.cs`).
 
 - Recorded written decision proposals and estimates in `ROADMAP.md` for vault-backed `SECRET:` providers (`DB08`), native Databricks/Redshift vs `ODBC` (`DB11`), and SSH remote command execution (`RT11`).

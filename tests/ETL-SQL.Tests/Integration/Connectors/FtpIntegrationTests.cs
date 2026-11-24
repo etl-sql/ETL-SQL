@@ -165,6 +165,11 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Assert.DoesNotContain(entries, e => e.Name is "." or "..");
             Assert.Contains(entries, e => e.Name == "one.txt" && !e.IsDirectory);
             Assert.Contains(entries, e => e.Name == "sub" && e.IsDirectory);
+
+            var fileEntry = entries.Single(e => e.Name == "one.txt");
+            Assert.Equal(false, fileEntry.IsSymlink);
+            if (fileEntry.Permissions != null)
+                Assert.Matches("^[r-][w-][x-][r-][w-][x-][r-][w-][x-]$", fileEntry.Permissions);
         });
 
         [Fact]

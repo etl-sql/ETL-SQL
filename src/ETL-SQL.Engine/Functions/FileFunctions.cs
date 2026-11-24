@@ -306,7 +306,7 @@ namespace ETL_SQL.Engine.Functions
             var remoteFs = GetRemoteFileSystem(context, connName);
 
             var table = new DataTable();
-            table.SetColumns(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+            table.SetColumns(FileMetaData.StandardColumns);
             await foreach (var fileMeta in remoteFs.ListFilesAsync(path))
             {
                 await table.AddRowAsync(new Row
@@ -315,7 +315,11 @@ namespace ETL_SQL.Engine.Functions
                     ["FullPath"] = fileMeta.FullPath,
                     ["Size"] = fileMeta.Size,
                     ["LastModified"] = fileMeta.LastModified,
-                    ["IsDirectory"] = fileMeta.IsDirectory
+                    ["IsDirectory"] = fileMeta.IsDirectory,
+                    ["CreationTime"] = fileMeta.CreationTime,
+                    ["Permissions"] = fileMeta.Permissions,
+                    ["Owner"] = fileMeta.Owner,
+                    ["IsSymlink"] = fileMeta.IsSymlink
                 });
             }
             return table;

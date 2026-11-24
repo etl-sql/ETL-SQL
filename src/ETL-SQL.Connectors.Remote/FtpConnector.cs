@@ -172,9 +172,38 @@ namespace ETL_SQL.Connectors
                     FullPath = i.FullName,
                     Size = i.Size,
                     LastModified = i.Modified,
-                    IsDirectory = i.Type == FtpObjectType.Directory
+                    IsDirectory = i.Type == FtpObjectType.Directory,
+                    CreationTime = i.Created != DateTime.MinValue ? i.Created : null,
+                    Permissions = FormatFtpPermissions(i),
+                    Owner = string.IsNullOrWhiteSpace(i.RawOwner) ? null : i.RawOwner,
+                    IsSymlink = i.Type == FtpObjectType.Link
                 };
             }
+        }
+
+        private static string? FormatFtpPermissions(FtpListItem item)
+        {
+            if (string.IsNullOrWhiteSpace(item.RawPermissions)
+                && item.Chmod <= 0
+                && item.OwnerPermissions == FtpPermission.None
+                && item.GroupPermissions == FtpPermission.None
+                && item.OthersPermissions == FtpPermission.None)
+            {
+                return null;
+            }
+
+            static void AppendTriad(char[] buf, int offset, FtpPermission p)
+            {
+                buf[offset] = (p & FtpPermission.Read) != 0 ? 'r' : '-';
+                buf[offset + 1] = (p & FtpPermission.Write) != 0 ? 'w' : '-';
+                buf[offset + 2] = (p & FtpPermission.Execute) != 0 ? 'x' : '-';
+            }
+
+            var chars = new char[9];
+            AppendTriad(chars, 0, item.OwnerPermissions);
+            AppendTriad(chars, 3, item.GroupPermissions);
+            AppendTriad(chars, 6, item.OthersPermissions);
+            return new string(chars);
         }
 
         public async Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
@@ -296,7 +325,7 @@ namespace ETL_SQL.Connectors
         private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             var table = new DataTable();
-            table.SetColumns(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+            table.SetColumns(FileMetaData.StandardColumns);
             await foreach (var f in ListFilesAsync(""))
             {
                 await table.AddRowAsync(new Row
@@ -305,14 +334,18 @@ namespace ETL_SQL.Connectors
                     ["FullPath"] = f.FullPath,
                     ["Size"] = f.Size,
                     ["LastModified"] = f.LastModified,
-                    ["IsDirectory"] = f.IsDirectory
+                    ["IsDirectory"] = f.IsDirectory,
+                    ["CreationTime"] = f.CreationTime,
+                    ["Permissions"] = f.Permissions,
+                    ["Owner"] = f.Owner,
+                    ["IsSymlink"] = f.IsSymlink
                 });
             }
             yield return table;
         }
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Writing batches to FTP directly is not supported. Use SEND FILE.");
-        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)FileMetaData.StandardColumns);
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
         public IDataSource WithTable(string tableName) => this;

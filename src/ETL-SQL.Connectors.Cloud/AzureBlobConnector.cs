@@ -215,7 +215,11 @@ namespace ETL_SQL.Connectors
                     FullPath = blob.Name,
                     Size = blob.Properties?.ContentLength ?? 0,
                     LastModified = blob.Properties?.LastModified?.DateTime ?? DateTime.MinValue,
-                    IsDirectory = false
+                    IsDirectory = false,
+                    CreationTime = blob.Properties?.CreatedOn?.DateTime,
+                    Permissions = null,
+                    Owner = null,
+                    IsSymlink = null
                 };
             }
         }
@@ -374,7 +378,7 @@ namespace ETL_SQL.Connectors
                 _context?.CancellationToken ?? System.Threading.CancellationToken.None);
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Writing batches to Azure Blob directly is not supported. Use SEND FILE.");
-        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)FileMetaData.StandardColumns);
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
         public IDataSource WithTable(string tableName) => this;

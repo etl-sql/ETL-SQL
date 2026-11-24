@@ -419,13 +419,31 @@ namespace ETL_SQL.Connectors
                         FullPath = i.FullName,
                         Size = i.Attributes.Size,
                         LastModified = i.LastWriteTime,
-                        IsDirectory = i.IsDirectory
+                        IsDirectory = i.IsDirectory,
+                        CreationTime = null,
+                        Permissions = FormatPosixPermissions(i.Attributes),
+                        Owner = i.Attributes.UserId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        IsSymlink = i.IsSymbolicLink
                     })
                     .ToList());
 
             foreach (var file in files)
                 yield return file;
         }
+
+        private static string FormatPosixPermissions(Renci.SshNet.Sftp.SftpFileAttributes attrs) =>
+            new string(new[]
+            {
+                attrs.OwnerCanRead ? 'r' : '-',
+                attrs.OwnerCanWrite ? 'w' : '-',
+                attrs.OwnerCanExecute ? 'x' : '-',
+                attrs.GroupCanRead ? 'r' : '-',
+                attrs.GroupCanWrite ? 'w' : '-',
+                attrs.GroupCanExecute ? 'x' : '-',
+                attrs.OthersCanRead ? 'r' : '-',
+                attrs.OthersCanWrite ? 'w' : '-',
+                attrs.OthersCanExecute ? 'x' : '-'
+            });
 
         private bool RemoteFileExistsNormalized(SftpClient client, string remotePath) =>
             client.Exists(remotePath) && !client.Get(remotePath).IsDirectory;
@@ -625,7 +643,7 @@ namespace ETL_SQL.Connectors
         private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             var table = new DataTable();
-            table.SetColumns(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+            table.SetColumns(FileMetaData.StandardColumns);
             await foreach (var f in ListFilesAsync(""))
             {
                 await table.AddRowAsync(new Row
@@ -634,14 +652,18 @@ namespace ETL_SQL.Connectors
                     ["FullPath"] = f.FullPath,
                     ["Size"] = f.Size,
                     ["LastModified"] = f.LastModified,
-                    ["IsDirectory"] = f.IsDirectory
+                    ["IsDirectory"] = f.IsDirectory,
+                    ["CreationTime"] = f.CreationTime,
+                    ["Permissions"] = f.Permissions,
+                    ["Owner"] = f.Owner,
+                    ["IsSymlink"] = f.IsSymlink
                 });
             }
             yield return table;
         }
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Writing batches to SFTP directly is not supported. Use SEND FILE.");
-        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)FileMetaData.StandardColumns);
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
         public IDataSource WithTable(string tableName) => this;
