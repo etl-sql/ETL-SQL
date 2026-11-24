@@ -177,6 +177,16 @@ public sealed class DatabaseConnectorReviewFixTests
     }
 
     [Fact]
+    public void Snowflake_GetHost_IgnoresHostHiddenInQuotedPassword()
+    {
+        // The policy check must see the host the driver uses, not one smuggled inside a quoted value.
+        var cs = "password=\"x;host=allowed.example.com\";account=realacct;user=u";
+        Assert.Equal("realacct", SnowflakeConnector.GetHostStatic(cs, null));
+        Assert.Null(SnowflakeConnector.ParseValueFromConnectionString(cs, "host"));
+        Assert.Throws<ExecutionException>(() => SnowflakeConnector.ParseValueFromConnectionString("password=\"unterminated", "host"));
+    }
+
+    [Fact]
     public void Snowflake_BuildConnectionString_SecretsWithSeparatorsRoundTripAndRoleIsValidated()
     {
         var connector = new ETL_SQL.Connectors.Snowflake.SnowflakeConnector();

@@ -98,11 +98,8 @@ namespace ETL_SQL.Connectors.Snowflake
             }
         }
 
-        private static string? ParseValueFromConnectionString(string cs, string key)
-        {
-            var builder = new DbConnectionStringBuilder { ConnectionString = cs };
-            return builder.TryGetValue(key, out var value) ? value?.ToString() : null;
-        }
+        private static string? ParseValueFromConnectionString(string cs, string key) =>
+            SnowflakeConnector.ParseValueFromConnectionString(cs, key);
 
         // Sets key=newValue, appending it when the connection string does not carry the key yet: a
         // PRIVATE_KEY_FILE given only as an option was validated and then silently dropped. Values are
@@ -593,9 +590,10 @@ namespace ETL_SQL.Connectors.Snowflake
                 return true;
             }
 
-            return connectionString.Contains("port=", StringComparison.OrdinalIgnoreCase)
-                || connectionString.Contains("scheme=http", StringComparison.OrdinalIgnoreCase)
-                || connectionString.Contains("host=", StringComparison.OrdinalIgnoreCase);
+            var parsed = SnowflakeConnector.ParseConnectionString(connectionString);
+            return parsed.ContainsKey("port")
+                || (parsed.TryGetValue("scheme", out var scheme) && scheme?.ToString()?.StartsWith("http", StringComparison.OrdinalIgnoreCase) == true)
+                || parsed.ContainsKey("host");
         }
 
         private static bool IsSnowflakeProviderException(Exception ex)

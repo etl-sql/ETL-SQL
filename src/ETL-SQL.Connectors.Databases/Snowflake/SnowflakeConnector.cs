@@ -171,15 +171,22 @@ namespace ETL_SQL.Connectors.Snowflake
                 || host.Contains(':', StringComparison.Ordinal);
         }
 
-        private static string? ParseValueFromConnectionString(string cs, string key)
+        // Policy checks must read the connection string exactly as Snowflake.Data does
+        // (DbConnectionStringBuilder): a naive split on ';' would find a "host=" hidden inside a
+        // quoted password and check a different host from the one the driver connects to.
+        internal static System.Data.Common.DbConnectionStringBuilder ParseConnectionString(string cs)
         {
-            foreach (var part in cs.Split(';'))
+            try
             {
-                var kv = part.Trim().Split('=', 2);
-                if (kv.Length == 2 && kv[0].Equals(key, StringComparison.OrdinalIgnoreCase))
-                    return kv[1];
+                return new System.Data.Common.DbConnectionStringBuilder { ConnectionString = cs };
             }
-            return null;
+            catch (ArgumentException ex)
+            {
+                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"SNOWFLAKE connection string is malformed: {ex.Message}", ex);
+            }
         }
+
+        internal static string? ParseValueFromConnectionString(string cs, string key) =>
+            ParseConnectionString(cs).TryGetValue(key, out var value) ? value?.ToString() : null;
     }
 }
