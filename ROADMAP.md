@@ -357,7 +357,7 @@ tested and matches its neighbors; and the docs-versus-registry check passes.
 
 ### File Operations — `ENCRYPT FILE` / `DECRYPT FILE` Match Their Documentation
 
-**Status:** In Progress (v0.23.0: FO05, FO07, and FO08 closed; FO12 and FO13 selected in `TODO.md`)  
+**Status:** In Progress (v0.23.0: FO05, FO07, and FO08 closed; FO12 selected in `TODO.md`; remote `TO <connection>` stays refused by decision, encrypt or compress locally then transfer)  
 **Horizon:** Next  
 **Authoritative design:** none yet; [ENCRYPT / DECRYPT FILE](docs/reference/file-operations/encrypt-file.md)
 is the reference page, and [`ExtensionParser.cs`](src/ETL-SQL.Core/Parser/Components/ExtensionParser.cs)
