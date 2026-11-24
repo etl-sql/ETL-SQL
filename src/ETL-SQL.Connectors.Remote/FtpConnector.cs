@@ -164,6 +164,8 @@ namespace ETL_SQL.Connectors
         {
             var client = await EnsureConnectedAsync();
             foreach (var i in await client.GetListing(path, Cancellation))
+            {
+                if (i.Name is "." or "..") continue;
                 yield return new FileMetaData
                 {
                     Name = i.Name,
@@ -172,6 +174,7 @@ namespace ETL_SQL.Connectors
                     LastModified = i.Modified,
                     IsDirectory = i.Type == FtpObjectType.Directory
                 };
+            }
         }
 
         public async Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)

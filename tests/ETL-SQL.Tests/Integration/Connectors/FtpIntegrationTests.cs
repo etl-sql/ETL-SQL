@@ -141,5 +141,27 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Assert.Contains("FTP", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(FtpFixture.TestPassword, ex.Message, StringComparison.Ordinal);
         });
+
+        [Fact]
+        public Task ListFilesAsync_DropsDotAndDotDotEntries() => Diagnosed(async () =>
+        {
+            var folder = $"rt03_{Guid.NewGuid():N}";
+            var subFolder = $"{folder}/sub";
+            var remoteFile = $"{folder}/one.txt";
+            var localFile = LocalPath("rt03_one.txt");
+            File.WriteAllText(localFile, "hello");
+
+            await using var connector = ValidConnector();
+            await connector.CreateDirectoryAsync(folder);
+            await connector.CreateDirectoryAsync(subFolder);
+            await connector.UploadFileAsync(localFile, remoteFile, overwrite: true);
+
+            var entries = await connector.ListFilesAsync(folder).ToListAsync();
+
+            Assert.Equal(2, entries.Count);
+            Assert.DoesNotContain(entries, e => e.Name is "." or "..");
+            Assert.Contains(entries, e => e.Name == "one.txt" && !e.IsDirectory);
+            Assert.Contains(entries, e => e.Name == "sub" && e.IsDirectory);
+        });
     }
 }

@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Filtered `.` and `..` pseudo-directory entries from `SFTP` and `FTP` listings (`ListFilesAsync`, `REMOTE_FILE_LIST`, connection `SELECT`, and directory walks) and verified both protocols against live Testcontainers servers (`RT03` in `SftpConnector.cs`, `FtpConnector.cs`, `SftpIntegrationTests.cs`, and `FtpIntegrationTests.cs`).
+
 - Added read-only JSON pass-through execution (`EXECUTE mongo [INTO #temp] BEGIN ... END`) to `MONGODB` via `IDatabaseSource` (`SupportsSqlPushdown => false`), supporting `collection` with either `filter` (plus optional `projection`, `sort`, `limit`, `skip`) or `pipeline` (aggregation), refusing `$out`/`$merge` (including nested stages) and write commands, reporting invalid JSON with line/column position without echoing the body, and honoring `SET WHAT_IF ON`, with unit tests, Testcontainers integration tests, and updated `mongodb.md` and capability matrix (`DB15a` in `MongodbDataSource.cs`, `mongodb.md`, `databases/README.md`, `MongodbExecuteTests.cs`, and `MongodbIntegrationTests.cs`).
 
 - Added `KEY_COLUMNS` upsert option to `MONGODB`: when configured, `INSERT`/`COPY INTO` writes use `BulkWriteAsync` with `ReplaceOneModel(IsUpsert = true)` filtered on the configured key columns (failing the batch with the 1-based row ordinal if any key value is `NULL`, and still dropping first on `APPEND=FALSE`), with Testcontainers integration tests, unit tests, and updated `mongodb.md` and capability matrix (`DB15b` in `MongodbConnector.cs`, `MongodbDataSource.cs`, `LanguageMetadata.cs`, `mongodb.md`, `databases/README.md`, `MongodbUpsertTests.cs`, and `MongodbIntegrationTests.cs`).

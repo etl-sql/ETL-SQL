@@ -468,6 +468,29 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Assert.Contains("FullPath", batch.ColumnNames);
             Assert.Contains("Size", batch.ColumnNames);
             Assert.Contains("IsDirectory", batch.ColumnNames);
+            Assert.DoesNotContain(batch.Rows, r => r["Name"]?.ToString() is "." or "..");
+        }
+
+        [Fact]
+        public async Task ListFilesAsync_DropsDotAndDotDotEntries()
+        {
+            var folder = RemotePath($"rt03_{Guid.NewGuid():N}");
+            var subFolder = $"{folder}/sub";
+            var remoteFile = $"{folder}/one.txt";
+            var localFile = LocalPath("rt03_one.txt");
+            File.WriteAllText(localFile, "hello");
+
+            await using var connector = PasswordConnector();
+            await connector.CreateDirectoryAsync(folder);
+            await connector.CreateDirectoryAsync(subFolder);
+            await connector.UploadFileAsync(localFile, remoteFile, overwrite: true);
+
+            var entries = await connector.ListFilesAsync(folder).ToListAsync();
+
+            Assert.Equal(2, entries.Count);
+            Assert.DoesNotContain(entries, e => e.Name is "." or "..");
+            Assert.Contains(entries, e => e.Name == "one.txt" && !e.IsDirectory);
+            Assert.Contains(entries, e => e.Name == "sub" && e.IsDirectory);
         }
     }
 }

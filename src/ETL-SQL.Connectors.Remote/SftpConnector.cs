@@ -412,6 +412,7 @@ namespace ETL_SQL.Connectors
             path = NormalizeRemotePath(path);
             var files = await RunClientOperationAsync(client =>
                 client.ListDirectory(path)
+                    .Where(i => i.Name is not ("." or ".."))
                     .Select(i => new FileMetaData
                     {
                         Name = i.Name,
@@ -496,7 +497,8 @@ namespace ETL_SQL.Connectors
             {
                 foreach (var entry in client.ListDirectory(directory))
                 {
-                    if (entry.IsDirectory
+                    if (entry.Name is "." or ".."
+                        || entry.IsDirectory
                         || !entry.Name.StartsWith(prefix, StringComparison.Ordinal)
                         || entry.LastWriteTimeUtc > cutoff)
                     {
