@@ -24,7 +24,7 @@ namespace ETL_SQL.Connectors
         private static readonly HashSet<string> SensitiveKeys = new(StringComparer.OrdinalIgnoreCase)
         {
             "PASSWORD", "PWD", "TOKEN", "ACCESS_TOKEN", "REFRESH_TOKEN", "API_KEY", "CLIENT_SECRET",
-            "SECRET", "SASL_PASSWORD", "PASSPHRASE", "KEY", "PRIVATE_KEY"
+            "SECRET", "SASL_PASSWORD", "PASSPHRASE", "PRIVATE_KEY_PASSPHRASE", "KEY", "PRIVATE_KEY"
         };
 
         /// <summary>

@@ -34,23 +34,27 @@ namespace ETL_SQL.Connectors.Snowflake
             "  DATABASE: Target database.\n" +
             "  SCHEMA: Target schema (default: PUBLIC).\n" +
             "  WAREHOUSE: Virtual warehouse for query execution.\n" +
+            "  ROLE: Snowflake role to assume for the session.\n" +
             "  USERNAME: Snowflake user name.\n" +
             "  PASSWORD: Password (for username/password auth).\n" +
-            "  PRIVATE_KEY_FILE: Path to RSA private key PEM file (for key-pair JWT auth).";
+            "  PRIVATE_KEY_FILE: Path to RSA private key PEM file (for key-pair JWT auth).\n" +
+            "  PRIVATE_KEY_PASSPHRASE: Passphrase for an encrypted PRIVATE_KEY_FILE (requires PRIVATE_KEY_FILE).";
 
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
-            { "HOST",             Array.Empty<string>() },
-            { "ACCOUNT",          Array.Empty<string>() },
-            { "PORT",             Array.Empty<string>() },
-            { "PROTOCOL",         Array.Empty<string>() },
-            { "DATABASE",         Array.Empty<string>() },
-            { "SCHEMA",           Array.Empty<string>() },
-            { "WAREHOUSE",        Array.Empty<string>() },
-            { "USERNAME",         Array.Empty<string>() },
-            { "PASSWORD",         Array.Empty<string>() },
-            { "PRIVATE_KEY_FILE",   Array.Empty<string>() },
-            { "TIMEOUT_SECONDS",   Array.Empty<string>() },
+            { "HOST",                   Array.Empty<string>() },
+            { "ACCOUNT",                Array.Empty<string>() },
+            { "PORT",                   Array.Empty<string>() },
+            { "PROTOCOL",               Array.Empty<string>() },
+            { "DATABASE",               Array.Empty<string>() },
+            { "SCHEMA",                 Array.Empty<string>() },
+            { "WAREHOUSE",              Array.Empty<string>() },
+            { "ROLE",                   Array.Empty<string>() },
+            { "USERNAME",               Array.Empty<string>() },
+            { "PASSWORD",               Array.Empty<string>() },
+            { "PRIVATE_KEY_FILE",       Array.Empty<string>() },
+            { "PRIVATE_KEY_PASSPHRASE", Array.Empty<string>() },
+            { "TIMEOUT_SECONDS",        Array.Empty<string>() },
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new();
@@ -94,14 +98,24 @@ namespace ETL_SQL.Connectors.Snowflake
             {
                 parts.Add("authenticator=snowflake_jwt");
                 parts.Add($"private_key_file={pkFile}");
+                if (properties.TryGetValue("PRIVATE_KEY_PASSPHRASE", out var pkPass) && !string.IsNullOrWhiteSpace(pkPass))
+                    parts.Add($"private_key_pwd={pkPass}");
             }
-            else if (properties.TryGetValue("PASSWORD", out var password))
+            else
             {
-                parts.Add($"password={password}");
+                if (properties.TryGetValue("PRIVATE_KEY_PASSPHRASE", out var strayPass) && !string.IsNullOrWhiteSpace(strayPass))
+                    throw new ETL_SQL.Core.Common.Exceptions.ExecutionException("SNOWFLAKE option PRIVATE_KEY_PASSPHRASE requires PRIVATE_KEY_FILE.");
+
+                if (properties.TryGetValue("PASSWORD", out var password))
+                {
+                    parts.Add($"password={password}");
+                }
             }
 
             if (properties.TryGetValue("WAREHOUSE", out var warehouse))
                 parts.Add($"warehouse={warehouse}");
+            if (properties.TryGetValue("ROLE", out var role) && !string.IsNullOrWhiteSpace(role))
+                parts.Add($"role={role}");
             if (properties.TryGetValue("DATABASE", out var db))
                 parts.Add($"db={db}");
             if (properties.TryGetValue("SCHEMA", out var schema))

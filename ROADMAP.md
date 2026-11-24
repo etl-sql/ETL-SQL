@@ -508,7 +508,7 @@ from a multi-sheet fixture.
 
 ### Database Connectors — Documentation Parity, Write-Path Clarity, and Credential Gaps
 
-**Status:** In Progress; DB01–DB03 and DB06 shipped in v0.23.0, DB04, DB05, DB09, DB10 and DB12–DB15 selected  
+**Status:** In Progress; DB01–DB03, DB06, and DB10 shipped in v0.23.0; DB04, DB05, DB09, and DB12–DB15 selected  
 **Horizon:** Next (DB01–DB03), Later (the rest)  
 **Authoritative design:** none yet; [Database connectors](docs/reference/connectors/databases/README.md)
 are the references and [Connector Standards](docs/architecture/standards/connectors-standards.md)

@@ -118,6 +118,50 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
+        public void BuildConnectionString_RoleAndEncryptedPrivateKeyPassphrase_ProducesRoleAndPrivateKeyPwd()
+        {
+            var props = new Dictionary<string, string>
+            {
+                { "HOST",                   "myorg-myaccount" },
+                { "USERNAME",               "alice" },
+                { "PRIVATE_KEY_FILE",       "/etc/certs/rsa_key.p8" },
+                { "PRIVATE_KEY_PASSPHRASE", "key-secret-123" },
+                { "ROLE",                   "ETL_LOADER_ROLE" }
+            };
+
+            var cs = _connector.BuildConnectionString(props);
+
+            Assert.Contains("authenticator=snowflake_jwt", cs);
+            Assert.Contains("private_key_file=/etc/certs/rsa_key.p8", cs);
+            Assert.Contains("private_key_pwd=key-secret-123", cs);
+            Assert.Contains("role=ETL_LOADER_ROLE", cs);
+
+            var supported = _connector.GetSupportedOptions();
+            Assert.True(supported.ContainsKey("ROLE"));
+            Assert.True(supported.ContainsKey("PRIVATE_KEY_PASSPHRASE"));
+            Assert.True(ETL_SQL.Core.Governance.SecretResolvableFields.CredentialKeys.Contains("PRIVATE_KEY_PASSPHRASE"));
+
+            var redacted = ETL_SQL.Core.Common.SecretRedactor.Redact(cs);
+            Assert.DoesNotContain("key-secret-123", redacted);
+        }
+
+        [Fact]
+        public void BuildConnectionString_PrivateKeyPassphraseWithoutKeyFile_Throws()
+        {
+            var props = new Dictionary<string, string>
+            {
+                { "HOST",                   "myorg-myaccount" },
+                { "USERNAME",               "alice" },
+                { "PASSWORD",               "s3cr3t" },
+                { "PRIVATE_KEY_PASSPHRASE", "orphan-passphrase" }
+            };
+
+            var ex = Assert.Throws<ExecutionException>(() => _connector.BuildConnectionString(props));
+            Assert.Contains("PRIVATE_KEY_PASSPHRASE", ex.Message);
+            Assert.Contains("PRIVATE_KEY_FILE", ex.Message);
+        }
+
+        [Fact]
         public void BuildConnectionString_MinimalProperties_ProducesRequiredParts()
         {
             var props = new Dictionary<string, string>

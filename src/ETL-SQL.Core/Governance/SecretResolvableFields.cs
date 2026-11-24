@@ -36,6 +36,8 @@ public static class SecretResolvableFields
         "ACCOUNT_KEY",
         "ACCOUNTKEY",
         "PASSPHRASE",
+        "PRIVATE_KEY_PASSPHRASE",
+        "PRIVATE_KEY_PWD",
         "PRIVATE_KEY",
         "SASL_PASSWORD",
         "SASL_JAAS_CONFIG"

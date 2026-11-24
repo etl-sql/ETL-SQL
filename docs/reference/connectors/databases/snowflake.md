@@ -15,7 +15,9 @@ password, and private-key JWT (recommended for production).
 | `USERNAME` | Snowflake login name | Yes |
 | `PASSWORD` | Password (for username/password auth) | Cond. |
 | `PRIVATE_KEY_FILE` | Path to RSA private key PEM file (enables JWT auth; takes precedence over `PASSWORD`) | Cond. |
+| `PRIVATE_KEY_PASSPHRASE` | Passphrase for an encrypted PKCS#8 `PRIVATE_KEY_FILE` (requires `PRIVATE_KEY_FILE`; supports `'SECRET:...'`, `'ENC:...'`, or `'${ENV}'`) | No |
 | `WAREHOUSE` | Virtual warehouse for query execution (e.g. `COMPUTE_WH`) | No |
+| `ROLE` | Snowflake role to assume for the session (e.g. `ETL_LOADER_ROLE`) | No |
 | `DATABASE` | Target database | No |
 | `SCHEMA` | Target schema (defaults to `PUBLIC`) | No |
 | `TIMEOUT_SECONDS` | Command/query execution timeout in seconds (default: `1800`, or `Connectors:DataWarehouse:DefaultCommandTimeoutSeconds`) | No |
@@ -33,7 +35,7 @@ password, and private-key JWT (recommended for production).
 
 Snowflake supports two mutually exclusive authentication modes:
 - **Username / Password**: Supply `USERNAME` and `PASSWORD` (supports `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'` with `Security:AllowedEnvVars`).
-- **Key-Pair Authentication**: Supply `USERNAME` and `PRIVATE_KEY_FILE` (unencrypted PKCS#8 PEM private key path) for automated non-interactive pipelines.
+- **Key-Pair Authentication**: Supply `USERNAME` and `PRIVATE_KEY_FILE` (PKCS#8 PEM private key path), plus optional `PRIVATE_KEY_PASSPHRASE` for encrypted private keys, for automated non-interactive pipelines.
 
 ## Examples
 
@@ -42,10 +44,12 @@ Snowflake supports two mutually exclusive authentication modes:
 CREATE CONNECTION sf AS SNOWFLAKE(HOST='myorg-myaccount', USERNAME='etl_user', PASSWORD='SECRET:prod/snowflake/password',
          DATABASE='PROD', SCHEMA='STAGING', WAREHOUSE='LOAD_WH', TIMEOUT_SECONDS=1800);
 
--- Private-key JWT (recommended for production)
+-- Private-key JWT with encrypted key passphrase and explicit role (recommended for production)
 CREATE CONNECTION sf_jwt AS SNOWFLAKE(HOST='myorg-myaccount.snowflakecomputing.com',
          USERNAME='etl_user',
          PRIVATE_KEY_FILE='/etc/certs/snowflake_rsa_key.p8',
+         PRIVATE_KEY_PASSPHRASE='SECRET:prod/snowflake/key_passphrase',
+         ROLE='ETL_LOADER_ROLE',
          DATABASE='ANALYTICS', WAREHOUSE='TRANSFORM_WH');
 
 -- Query with full SQL pushdown

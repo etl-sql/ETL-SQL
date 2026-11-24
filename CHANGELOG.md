@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added `ROLE` (`role=...`) and `PRIVATE_KEY_PASSPHRASE` (`private_key_pwd=...`, requiring `PRIVATE_KEY_FILE`, registered in `SecretResolvableFields` and `SecretRedactor`) to the `SNOWFLAKE` connector and documented both in `docs/reference/connectors/databases/snowflake.md` (`DB10` in `SnowflakeConnector.cs`, `SnowflakeDataSource.cs`, `SecretResolvableFields.cs`, `SecretRedactor.cs`, `ConnectionStringBuilder.cs`, `snowflake.md`, and `SnowflakeConnectorTests.cs`).
+
 - Added Excel workbook sheet discovery via `EXCEL_SHEET_LIST(path_or_connection)` and `SELECT * FROM xl_conn._sheets` returning `SheetIndex` and `SheetName` for dynamic `FOREACH` ingestion, with help text, `LanguageMetadata`, `PushdownEngine`, signature help, reference page, and tests (`XL03` in `ExcelDataSource.cs`, `FileFunctions.cs`, `LanguageMetadata.cs`, `PushdownEngine.cs`, `SignatureHelpProvider.cs`, `docs/reference/functions/file-path/excel_sheet_list.md`, `docs/syntax-index.md`, and `ExcelTests.cs`).
 
 - Implemented `EXCEL` multi-sheet write preservation and `xl_conn.<SheetName>` worksheet routing: `ExcelDataSource.WithTable(tableName)` now binds named worksheets on a single connection (preserving `xl_conn.FILE` for default sheet behavior), and `WriteBatchesCore` preserves other worksheets in existing `.xlsx` workbooks by default with an opt-in `OVERWRITE_WORKBOOK = ON | OFF` option (`XL01` in `ExcelConnector.cs`, `ExcelDataSource.cs`, `docs/reference/connectors/files/excel.md`, and `ExcelTests.cs`).

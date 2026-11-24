@@ -79,7 +79,21 @@ namespace ETL_SQL.Connectors.Snowflake
                 // '.p8' is the documented Snowflake PKCS#8 private-key extension. Allow it only here,
                 // via the per-call override, so the global connector whitelist stays unchanged.
                 context.SecurityService.ValidateFileType(resolvedKeyPath, overrides: SnowflakePrivateKeyExtensions);
-                _connectionString = ReplaceConnectionStringValue(connectionString, "private_key_file", resolvedKeyPath);
+                _connectionString = ReplaceConnectionStringValue(_connectionString, "private_key_file", resolvedKeyPath);
+            }
+
+            string? pkPassphrase = options?.GetValueOrDefault("PRIVATE_KEY_PASSPHRASE");
+            if (!string.IsNullOrWhiteSpace(pkPassphrase))
+            {
+                if (string.IsNullOrWhiteSpace(pkFile))
+                    throw new ExecutionException("SNOWFLAKE option PRIVATE_KEY_PASSPHRASE requires PRIVATE_KEY_FILE.");
+                _connectionString = ReplaceConnectionStringValue(_connectionString, "private_key_pwd", pkPassphrase);
+            }
+
+            string? role = options?.GetValueOrDefault("ROLE");
+            if (!string.IsNullOrWhiteSpace(role))
+            {
+                _connectionString = ReplaceConnectionStringValue(_connectionString, "role", role);
             }
         }
 
