@@ -31,6 +31,12 @@ public sealed class SharePointListRegressionTests
     public void ListTitleIsAnODataStringLiteral(string title, string expected) =>
         Assert.Equal(expected, SharePointConnector.ODataTitle(title));
 
+    [Theory]
+    [InlineData("/sites/x/Shared Documents/O'Brien.csv", "%2Fsites%2Fx%2FShared%20Documents%2FO%27%27Brien.csv")]
+    [InlineData("/a/b.csv", "%2Fa%2Fb.csv")]
+    public void FilePathIsAnODataStringLiteral(string path, string expected) =>
+        Assert.Equal(expected, SharePointConnector.ODataPath(path));
+
     [Fact]
     public async Task VerbosePaginationMustIncludeAllRowsWithoutDuplicateBatches()
     {

@@ -325,7 +325,7 @@ namespace ETL_SQL.Connectors
             string folderUrl = GetServerRelativeUrl(path);
 
             // SharePoint list files REST call
-            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{Uri.EscapeDataString(folderUrl)}')/Files";
+            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{ODataPath(folderUrl)}')/Files";
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
@@ -370,7 +370,7 @@ namespace ETL_SQL.Connectors
 
                         DateTime? created = null;
                         if (item.TryGetProperty("TimeCreated", out var createdProp)
-                            && DateTime.TryParse(createdProp.GetString(), out var parsedCreated))
+                            && DateTime.TryParse(createdProp.GetString(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var parsedCreated))
                         {
                             created = parsedCreated;
                         }
@@ -409,7 +409,7 @@ namespace ETL_SQL.Connectors
             string folderPath = System.IO.Path.GetDirectoryName(relativeUrl)?.Replace('\\', '/') ?? "";
             string fileName = System.IO.Path.GetFileName(relativeUrl);
 
-            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{Uri.EscapeDataString(folderPath)}')/Files/Add(url='{Uri.EscapeDataString(fileName)}', overwrite={overwrite.ToString().ToLowerInvariant()})";
+            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{ODataPath(folderPath)}')/Files/Add(url='{ODataPath(fileName)}', overwrite={overwrite.ToString().ToLowerInvariant()})";
 
             using var fileStream = File.OpenRead(localPath);
             using var content = new StreamContent(fileStream);
@@ -435,7 +435,7 @@ namespace ETL_SQL.Connectors
             }
 
             string relativeUrl = GetServerRelativeUrl(remotePath);
-            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{Uri.EscapeDataString(relativeUrl)}')/$value";
+            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{ODataPath(relativeUrl)}')/$value";
             using var response = await _httpClient.GetAsync(requestUrl);
             if (!response.IsSuccessStatusCode)
             {
@@ -453,7 +453,7 @@ namespace ETL_SQL.Connectors
             if (_context != null && _context.IsWhatIf) return;
             await AuthenticateAsync();
             string relativeUrl = GetServerRelativeUrl(remotePath);
-            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{Uri.EscapeDataString(relativeUrl)}')";
+            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{ODataPath(relativeUrl)}')";
 
             using var req = new HttpRequestMessage(HttpMethod.Post, requestUrl);
             req.Headers.Add("X-HTTP-Method", "DELETE");
@@ -472,7 +472,7 @@ namespace ETL_SQL.Connectors
         {
             await AuthenticateAsync();
             string relativeUrl = GetServerRelativeUrl(remotePath);
-            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{Uri.EscapeDataString(relativeUrl)}')";
+            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{ODataPath(relativeUrl)}')";
 
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -487,7 +487,7 @@ namespace ETL_SQL.Connectors
         {
             await AuthenticateAsync();
             string relativeUrl = GetServerRelativeUrl(remotePath);
-            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{Uri.EscapeDataString(relativeUrl)}')";
+            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{ODataPath(relativeUrl)}')";
 
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -509,7 +509,7 @@ namespace ETL_SQL.Connectors
             if (!overwrite && await FileExistsCoreAsync(remoteDest))
                 throw new ExecutionException($"Remote destination file already exists (OVERWRITE=OFF): {remoteDest}");
 
-            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{Uri.EscapeDataString(srcUrl)}')/CopyTo(strnewurl='{Uri.EscapeDataString(destUrl)}', boverwrite={(overwrite ? "true" : "false")})";
+            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{ODataPath(srcUrl)}')/CopyTo(strnewurl='{ODataPath(destUrl)}', boverwrite={(overwrite ? "true" : "false")})";
 
             using var response = await _httpClient.PostAsync(requestUrl, null, cancellationToken);
             if (!response.IsSuccessStatusCode)
@@ -528,7 +528,7 @@ namespace ETL_SQL.Connectors
             string srcUrl = GetServerRelativeUrl(remoteSource);
             string destUrl = GetServerRelativeUrl(remoteDest);
 
-            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{Uri.EscapeDataString(srcUrl)}')/MoveTo(newUrl='{Uri.EscapeDataString(destUrl)}', flags={(overwrite ? 1 : 0)})";
+            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{ODataPath(srcUrl)}')/MoveTo(newUrl='{ODataPath(destUrl)}', flags={(overwrite ? 1 : 0)})";
 
             using var response = await _httpClient.PostAsync(requestUrl, null);
             if (!response.IsSuccessStatusCode)
@@ -547,7 +547,7 @@ namespace ETL_SQL.Connectors
             string parentPath = System.IO.Path.GetDirectoryName(relativeUrl)?.Replace('\\', '/') ?? "";
             string newFolderName = System.IO.Path.GetFileName(relativeUrl);
 
-            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{Uri.EscapeDataString(parentPath)}')/Folders";
+            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{ODataPath(parentPath)}')/Folders";
 
             var payload = new { ServerRelativeUrl = relativeUrl };
             using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
@@ -566,7 +566,7 @@ namespace ETL_SQL.Connectors
             if (_context != null && _context.IsWhatIf) return;
             await AuthenticateAsync();
             string relativeUrl = GetServerRelativeUrl(remotePath);
-            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{Uri.EscapeDataString(relativeUrl)}')";
+            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{ODataPath(relativeUrl)}')";
 
             using var req = new HttpRequestMessage(HttpMethod.Post, requestUrl);
             req.Headers.Add("X-HTTP-Method", "DELETE");
@@ -684,6 +684,10 @@ namespace ETL_SQL.Connectors
         };
 
         internal static string ODataTitle(string title) => Uri.EscapeDataString(title.Replace("'", "''"));
+
+        // A path inside an OData string literal: an apostrophe is doubled before URL-escaping, or a file
+        // such as O'Brien.csv ends the literal early and the request fails or names another file.
+        internal static string ODataPath(string path) => Uri.EscapeDataString(path.Replace("'", "''"));
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
             Guard(() => WriteBatchesCoreAsync(batches));
