@@ -835,3 +835,164 @@ USING OUTLIERS (
   VALUE_COL = 'Val',
   ACTION = 'NO_SUCH_ACTION'
 );
+
+# 13. TRANSFORM ... USING IMPUTE and SPLIT / EXPLODE (TR08)
+statement ok
+CREATE TABLE #t_imp_src (Id INT, Grp STRING, Val DECIMAL(18, 2), Cat STRING);
+
+statement ok
+INSERT INTO #t_imp_src VALUES
+  (1, 'A', 10, 'x'),
+  (2, 'A', NULL, 'x'),
+  (3, 'A', 30, NULL),
+  (4, 'B', NULL, 'y'),
+  (5, 'B', 50, 'y');
+
+statement ok
+TRANSFORM #t_imp_mean
+FROM #t_imp_src
+USING IMPUTE (
+  COLS = 'Val',
+  METHOD = 'MEAN',
+  BY_GROUP = 'Grp'
+);
+
+query IR rowsort
+SELECT Id, Val FROM #t_imp_mean;
+----
+1
+10.000
+2
+20.000
+3
+30.000
+4
+50.000
+5
+50.000
+
+statement ok
+TRANSFORM #t_imp_mode
+FROM #t_imp_src
+USING IMPUTE (
+  COLS = 'Cat',
+  METHOD = 'MODE',
+  BY_GROUP = 'Grp'
+);
+
+query IT rowsort
+SELECT Id, Cat FROM #t_imp_mode;
+----
+1
+x
+2
+x
+3
+x
+4
+y
+5
+y
+
+statement ok
+CREATE TABLE #t_split_src (Id INT, Colors STRING);
+
+statement ok
+INSERT INTO #t_split_src VALUES
+  (1, 'red, blue'),
+  (2, NULL);
+
+statement ok
+TRANSFORM #t_split_rows
+FROM #t_split_src
+USING SPLIT (
+  SOURCE_COL = 'Colors',
+  MODE = 'ROWS',
+  DELIMITER = ',',
+  OUTPUT_COL = 'Color',
+  INDEX_COL = 'Idx',
+  TRIM = 'ON'
+);
+
+query ITT rowsort
+SELECT Id, COALESCE(CAST(Idx AS STRING), 'NULL'), COALESCE(Color, 'NULL')
+FROM #t_split_rows;
+----
+1
+1
+red
+1
+2
+blue
+2
+NULL
+NULL
+
+statement ok
+TRANSFORM #t_split_cols
+FROM #t_split_src
+USING SPLIT (
+  SOURCE_COL = 'Colors',
+  MODE = 'COLUMNS',
+  DELIMITER = ',',
+  PREFIX = 'T',
+  MAX_PARTS = 2,
+  TRIM = 'ON'
+);
+
+query ITT rowsort
+SELECT Id, COALESCE(T1, 'NULL'), COALESCE(T2, 'NULL')
+FROM #t_split_cols;
+----
+1
+red
+blue
+2
+NULL
+NULL
+
+statement ok
+CREATE TABLE #t_json_src (OrderId INT, Payload STRING);
+
+statement ok
+INSERT INTO #t_json_src VALUES
+  (10, '{"items":[{"sku":"A1","qty":2},{"sku":"B2","qty":5}]}');
+
+statement ok
+TRANSFORM #t_json_flat
+FROM #t_json_src
+USING EXPLODE (
+  SOURCE_COL = 'Payload',
+  MODE = 'ROWS',
+  JSON_PATH = '$.items',
+  INDEX_COL = 'LineNo'
+);
+
+query IITI rowsort
+SELECT OrderId, LineNo, sku, qty FROM #t_json_flat;
+----
+10
+1
+A1
+2
+10
+2
+B2
+5
+
+statement error
+TRANSFORM #err_imp_const
+FROM #t_imp_src
+USING IMPUTE (
+  COLS = 'Val',
+  METHOD = 'CONSTANT'
+);
+
+statement error
+TRANSFORM #err_split_both
+FROM #t_split_src
+USING SPLIT (
+  SOURCE_COL = 'Colors',
+  DELIMITER = ',',
+  JSON_PATH = '$.items'
+);

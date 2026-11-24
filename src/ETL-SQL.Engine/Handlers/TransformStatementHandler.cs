@@ -58,6 +58,13 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             case "OUTLIERS":
                 await ExecuteOutliers(stmt, context);
                 break;
+            case "IMPUTE":
+                await ExecuteImpute(stmt, context);
+                break;
+            case "SPLIT":
+            case "EXPLODE":
+                await ExecuteSplit(stmt, context);
+                break;
             case "TOP_N_OTHERS":
                 await ExecuteTopNOthers(stmt, context);
                 break;
@@ -2169,6 +2176,498 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
 
     private static string FormatBinEdge(decimal d) =>
         (d / 1.00000000000000000000000000000m).ToString(CultureInfo.InvariantCulture);
+
+    private async Task ExecuteImpute(TransformStatement stmt, IExecutionContext context)
+    {
+        const string algoName = "IMPUTE";
+        ValidateAllowedOptions(stmt, algoName, "COLS", "VALUE_COLS", "VALUE_COL", "METHOD", "VALUE", "BY_GROUP");
+
+        var cols = GetOptionalColumnList(stmt.Options, "COLS");
+        if (cols.Count == 0) cols = GetOptionalColumnList(stmt.Options, "VALUE_COLS");
+        if (cols.Count == 0 && stmt.Options.ContainsKey("VALUE_COL"))
+            cols = [GetStringOption(stmt.Options, "VALUE_COL", algoName)];
+        if (cols.Count == 0)
+            throw new ExecutionException($"{algoName} requires COLS (or VALUE_COLS / VALUE_COL) specifying at least one column.");
+
+        var method = stmt.Options.ContainsKey("METHOD")
+            ? GetStringOption(stmt.Options, "METHOD", algoName).Trim().ToUpperInvariant()
+            : "MEAN";
+        if (method is not ("MEAN" or "MEDIAN" or "MODE" or "CONSTANT"))
+            throw new ExecutionException($"{algoName} METHOD must be MEAN, MEDIAN, MODE, or CONSTANT, got '{method}'.");
+
+        object? constantValue = null;
+        if (method == "CONSTANT")
+        {
+            if (!stmt.Options.TryGetValue("VALUE", out var valExpr))
+                throw new ExecutionException($"{algoName} with METHOD = 'CONSTANT' requires VALUE option.");
+            constantValue = GetValue(await context.EvaluationContext.EvaluateValue(valExpr, Row.Empty));
+        }
+
+        var groupCols = GetOptionalColumnList(stmt.Options, "BY_GROUP");
+
+        using var staged = await StageSourceRows(stmt, context, algoName);
+        ValidateColumnsExist(staged.SourceName, staged.Columns, algoName,
+            ("COLS", cols),
+            ("BY_GROUP", groupCols));
+
+        if (method is "MEAN" or "MEDIAN")
+        {
+            foreach (var col in cols)
+                ValidateNumericColumn(staged.Rows, col, algoName);
+        }
+
+        var targetColumnDefs = CopySourceSchemaDefinitions(staged.Columns, staged.SourceSchema);
+        if (method is "MEAN" or "MEDIAN")
+        {
+            foreach (var col in cols)
+            {
+                var idx = targetColumnDefs.FindIndex(c => c.ColumnName.Equals(col, StringComparison.OrdinalIgnoreCase));
+                if (idx >= 0 && IsIntegralDataType(targetColumnDefs[idx].DataType))
+                    targetColumnDefs[idx] = new ColumnDefinition(targetColumnDefs[idx].ColumnName, "DECIMAL", false) { IsNullable = true };
+            }
+        }
+
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
+
+        var groups = groupCols.Count > 0
+            ? staged.Rows.GroupBy(r => BuildGroupKey(r, groupCols)).Select(g => g.ToList()).ToList()
+            : staged.Rows.Count > 0 ? new List<List<Row>> { staged.Rows } : new List<List<Row>>();
+
+        foreach (var groupRows in groups)
+        {
+            var fillValues = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var col in cols)
+            {
+                fillValues[col] = ComputeImputeFillValue(groupRows, col, method, constantValue, algoName);
+            }
+
+            foreach (var row in groupRows)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                var outRow = new Row(sink.Schema);
+                foreach (var col in staged.Columns)
+                {
+                    var val = GetValue(row[col]);
+                    outRow[col] = val == null && fillValues.TryGetValue(col, out var fill) ? fill : val;
+                }
+                await sink.WriteRowAsync(outRow);
+            }
+        }
+
+        await sink.CompleteAsync();
+    }
+
+    private static object? ComputeImputeFillValue(
+        List<Row> groupRows,
+        string col,
+        string method,
+        object? constantValue,
+        string algoName)
+    {
+        if (method == "CONSTANT") return constantValue;
+
+        if (method is "MEAN" or "MEDIAN")
+        {
+            var nums = new List<decimal>();
+            foreach (var r in groupRows)
+            {
+                if (TryGetNumericDecimal(GetValue(r[col]), algoName, col, out var d))
+                    nums.Add(d);
+            }
+            if (nums.Count == 0) return null;
+            if (method == "MEAN") return nums.Average();
+            nums.Sort();
+            int mid = nums.Count / 2;
+            return nums.Count % 2 == 1 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2m;
+        }
+
+        // MODE: most frequent non-null value; ties broken by first appearance.
+        var counts = new Dictionary<string, (object Value, int Count, int FirstSeen)>(StringComparer.Ordinal);
+        int order = 0;
+        foreach (var r in groupRows)
+        {
+            var v = GetValue(r[col]);
+            if (v == null) continue;
+            var key = v is decimal dec
+                ? (dec / 1.00000000000000000000000000000m).ToString(CultureInfo.InvariantCulture)
+                : Convert.ToString(v, CultureInfo.InvariantCulture) ?? string.Empty;
+            if (counts.TryGetValue(key, out var entry))
+                counts[key] = (entry.Value, entry.Count + 1, entry.FirstSeen);
+            else
+                counts[key] = (v, 1, order++);
+        }
+
+        if (counts.Count == 0) return null;
+        return counts.Values
+            .OrderByDescending(e => e.Count)
+            .ThenBy(e => e.FirstSeen)
+            .First().Value;
+    }
+
+    private async Task ExecuteSplit(TransformStatement stmt, IExecutionContext context)
+    {
+        var algoName = stmt.Algorithm.ToUpperInvariant();
+        ValidateAllowedOptions(stmt, algoName,
+            "SOURCE_COL", "MODE", "DELIMITER", "JSON_PATH", "OUTPUT_COL", "PREFIX", "MAX_PARTS", "INDEX_COL", "TRIM", "KEEP_EMPTY");
+
+        var sourceCol = GetStringOption(stmt.Options, "SOURCE_COL", algoName);
+        var mode = stmt.Options.ContainsKey("MODE")
+            ? GetStringOption(stmt.Options, "MODE", algoName).Trim().ToUpperInvariant()
+            : "ROWS";
+        if (mode is not ("ROWS" or "COLUMNS"))
+            throw new ExecutionException($"{algoName} MODE must be ROWS or COLUMNS, got '{mode}'.");
+
+        var delimiter = stmt.Options.ContainsKey("DELIMITER") ? GetStringOption(stmt.Options, "DELIMITER", algoName) : null;
+        var jsonPath = stmt.Options.ContainsKey("JSON_PATH") ? GetStringOption(stmt.Options, "JSON_PATH", algoName) : null;
+        if (delimiter == null && jsonPath == null)
+            throw new ExecutionException($"{algoName} requires either DELIMITER or JSON_PATH.");
+        if (delimiter != null && jsonPath != null)
+            throw new ExecutionException($"{algoName} options DELIMITER and JSON_PATH are mutually exclusive.");
+        if (delimiter != null && delimiter.Length == 0)
+            throw new ExecutionException($"{algoName} DELIMITER cannot be empty.");
+
+        var outputCol = stmt.Options.ContainsKey("OUTPUT_COL") ? GetStringOption(stmt.Options, "OUTPUT_COL", algoName) : null;
+        var prefix = stmt.Options.ContainsKey("PREFIX") ? GetStringOption(stmt.Options, "PREFIX", algoName) : null;
+        var indexCol = stmt.Options.ContainsKey("INDEX_COL") ? GetStringOption(stmt.Options, "INDEX_COL", algoName) : null;
+        int? maxParts = null;
+        if (stmt.Options.ContainsKey("MAX_PARTS"))
+        {
+            var mp = await EvaluateIntOption(stmt.Options, "MAX_PARTS", algoName, 0, context);
+            if (mp < 1)
+                throw new ExecutionException($"{algoName} MAX_PARTS must be a positive integer, got {mp}.");
+            maxParts = mp;
+        }
+
+        bool trimParts = stmt.Options.ContainsKey("TRIM") && ParseOnOffOption(stmt.Options, "TRIM", algoName);
+        bool keepEmpty = !stmt.Options.ContainsKey("KEEP_EMPTY") || ParseOnOffOption(stmt.Options, "KEEP_EMPTY", algoName);
+
+        using var staged = await StageSourceRows(stmt, context, algoName);
+        ValidateColumnsExist(staged.SourceName, staged.Columns, algoName, ("SOURCE_COL", [sourceCol]));
+
+        // Pre-parse all rows before creating the output sink so invalid JSON never truncates the target.
+        if (jsonPath != null)
+        {
+            await ExecuteSplitJson(stmt, context, staged, algoName, sourceCol, mode, jsonPath, outputCol, prefix, maxParts, indexCol, keepEmpty);
+        }
+        else
+        {
+            await ExecuteSplitDelimited(stmt, context, staged, algoName, sourceCol, mode, delimiter!, outputCol, prefix, maxParts, indexCol, trimParts, keepEmpty);
+        }
+    }
+
+    private static bool ParseOnOffOption(Dictionary<string, Expression> options, string key, string algoName)
+    {
+        var raw = GetStringOption(options, key, algoName).Trim().ToUpperInvariant();
+        if (raw is "ON" or "TRUE") return true;
+        if (raw is "OFF" or "FALSE") return false;
+        throw new ExecutionException($"{algoName} {key} must be ON or OFF, got '{raw}'.");
+    }
+
+    private async Task ExecuteSplitDelimited(
+        TransformStatement stmt,
+        IExecutionContext context,
+        StagedTransformSource staged,
+        string algoName,
+        string sourceCol,
+        string mode,
+        string delimiter,
+        string? outputCol,
+        string? prefix,
+        int? maxParts,
+        string? indexCol,
+        bool trimParts,
+        bool keepEmpty)
+    {
+        var parsedRows = new List<(Row Source, List<string>? Parts)>(staged.Rows.Count);
+        int observedMax = 0;
+
+        foreach (var row in staged.Rows)
+        {
+            var raw = GetValue(row[sourceCol]);
+            if (raw == null)
+            {
+                parsedRows.Add((row, null));
+                continue;
+            }
+
+            var text = Convert.ToString(raw, CultureInfo.InvariantCulture) ?? string.Empty;
+            var split = text.Split(delimiter, StringSplitOptions.None)
+                .Select(p => trimParts ? p.Trim() : p)
+                .ToList();
+            if (split.Count > observedMax) observedMax = split.Count;
+            parsedRows.Add((row, split));
+        }
+
+        var targetColumnDefs = CopySourceSchemaDefinitions(staged.Columns, staged.SourceSchema);
+        if (mode == "ROWS")
+        {
+            var targetCol = outputCol ?? sourceCol;
+            AddOrUpdateColumnDef(targetColumnDefs, targetCol, "VARCHAR", isNullable: true);
+            if (!string.IsNullOrEmpty(indexCol))
+                AddOrUpdateColumnDef(targetColumnDefs, indexCol, "INT", isNullable: true);
+
+            await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
+            foreach (var (row, parts) in parsedRows)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                if (parts == null || parts.Count == 0)
+                {
+                    if (!keepEmpty) continue;
+                    var emptyRow = new Row(sink.Schema);
+                    foreach (var col in staged.Columns) emptyRow[col] = GetValue(row[col]);
+                    emptyRow[targetCol] = null;
+                    if (!string.IsNullOrEmpty(indexCol)) emptyRow[indexCol] = null;
+                    await sink.WriteRowAsync(emptyRow);
+                    continue;
+                }
+
+                for (int i = 0; i < parts.Count; i++)
+                {
+                    var outRow = new Row(sink.Schema);
+                    foreach (var col in staged.Columns) outRow[col] = GetValue(row[col]);
+                    outRow[targetCol] = parts[i];
+                    if (!string.IsNullOrEmpty(indexCol)) outRow[indexCol] = (decimal)(i + 1);
+                    await sink.WriteRowAsync(outRow);
+                }
+            }
+            await sink.CompleteAsync();
+        }
+        else
+        {
+            var colPrefix = prefix ?? $"{sourceCol}_";
+            int colCount = maxParts ?? Math.Max(1, observedMax);
+            for (int i = 1; i <= colCount; i++)
+                AddOrUpdateColumnDef(targetColumnDefs, $"{colPrefix}{i}", "VARCHAR", isNullable: true);
+
+            await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
+            foreach (var (row, parts) in parsedRows)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                var outRow = new Row(sink.Schema);
+                foreach (var col in staged.Columns) outRow[col] = GetValue(row[col]);
+                for (int i = 0; i < colCount; i++)
+                    outRow[$"{colPrefix}{i + 1}"] = parts != null && i < parts.Count ? parts[i] : null;
+                await sink.WriteRowAsync(outRow);
+            }
+            await sink.CompleteAsync();
+        }
+    }
+
+    private async Task ExecuteSplitJson(
+        TransformStatement stmt,
+        IExecutionContext context,
+        StagedTransformSource staged,
+        string algoName,
+        string sourceCol,
+        string mode,
+        string jsonPath,
+        string? outputCol,
+        string? prefix,
+        int? maxParts,
+        string? indexCol,
+        bool keepEmpty)
+    {
+        var parsedRows = new List<(Row Source, List<Dictionary<string, object?>>? Objects, List<object?>? Scalars)>(staged.Rows.Count);
+        var objectKeys = new List<string>();
+        var seenObjKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        bool hasObjects = false;
+        int observedMax = 0;
+
+        foreach (var row in staged.Rows)
+        {
+            var raw = GetValue(row[sourceCol]);
+            if (raw == null)
+            {
+                parsedRows.Add((row, null, null));
+                continue;
+            }
+
+            var jsonText = Convert.ToString(raw, CultureInfo.InvariantCulture);
+            if (string.IsNullOrWhiteSpace(jsonText))
+            {
+                parsedRows.Add((row, null, null));
+                continue;
+            }
+
+            System.Text.Json.JsonDocument doc;
+            try
+            {
+                doc = System.Text.Json.JsonDocument.Parse(jsonText);
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                throw new ExecutionException($"{algoName} invalid JSON in column '{sourceCol}': {ex.Message}", ex);
+            }
+
+            using (doc)
+            {
+                if (!TryNavigateJsonPath(doc.RootElement, jsonPath, out var target) || target.ValueKind == System.Text.Json.JsonValueKind.Null)
+                {
+                    parsedRows.Add((row, null, null));
+                    continue;
+                }
+
+                if (target.ValueKind != System.Text.Json.JsonValueKind.Array)
+                {
+                    throw new ExecutionException($"{algoName} JSON_PATH '{jsonPath}' in column '{sourceCol}' resolved to {target.ValueKind}, expected a JSON array.");
+                }
+
+                var objs = new List<Dictionary<string, object?>>();
+                var scalars = new List<object?>();
+                foreach (var elem in target.EnumerateArray())
+                {
+                    if (mode == "ROWS" && elem.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    {
+                        hasObjects = true;
+                        var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var prop in elem.EnumerateObject())
+                        {
+                            var colName = string.IsNullOrEmpty(prefix) ? prop.Name : $"{prefix}{prop.Name}";
+                            if (seenObjKeys.Add(colName)) objectKeys.Add(colName);
+                            dict[colName] = ExtractJsonScalar(prop.Value);
+                        }
+                        objs.Add(dict);
+                    }
+                    else
+                    {
+                        scalars.Add(ExtractJsonScalar(elem));
+                    }
+                }
+
+                int count = hasObjects ? objs.Count : scalars.Count;
+                if (count > observedMax) observedMax = count;
+                parsedRows.Add((row, objs.Count > 0 ? objs : null, scalars.Count > 0 ? scalars : null));
+            }
+        }
+
+        var targetColumnDefs = CopySourceSchemaDefinitions(staged.Columns, staged.SourceSchema);
+        if (mode == "ROWS")
+        {
+            if (hasObjects)
+            {
+                foreach (var key in objectKeys)
+                    AddOrUpdateColumnDef(targetColumnDefs, key, "VARCHAR", isNullable: true);
+            }
+            else
+            {
+                var targetCol = outputCol ?? sourceCol;
+                AddOrUpdateColumnDef(targetColumnDefs, targetCol, "VARCHAR", isNullable: true);
+            }
+            if (!string.IsNullOrEmpty(indexCol))
+                AddOrUpdateColumnDef(targetColumnDefs, indexCol, "INT", isNullable: true);
+
+            await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
+            var scalarTargetCol = outputCol ?? sourceCol;
+
+            foreach (var (row, objs, scalars) in parsedRows)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                if (hasObjects)
+                {
+                    if (objs == null || objs.Count == 0)
+                    {
+                        if (!keepEmpty) continue;
+                        var emptyRow = new Row(sink.Schema);
+                        foreach (var col in staged.Columns) emptyRow[col] = GetValue(row[col]);
+                        foreach (var key in objectKeys) emptyRow[key] = null;
+                        if (!string.IsNullOrEmpty(indexCol)) emptyRow[indexCol] = null;
+                        await sink.WriteRowAsync(emptyRow);
+                        continue;
+                    }
+
+                    for (int i = 0; i < objs.Count; i++)
+                    {
+                        var outRow = new Row(sink.Schema);
+                        foreach (var col in staged.Columns) outRow[col] = GetValue(row[col]);
+                        foreach (var key in objectKeys)
+                            outRow[key] = objs[i].TryGetValue(key, out var v) ? v : null;
+                        if (!string.IsNullOrEmpty(indexCol)) outRow[indexCol] = (decimal)(i + 1);
+                        await sink.WriteRowAsync(outRow);
+                    }
+                }
+                else
+                {
+                    if (scalars == null || scalars.Count == 0)
+                    {
+                        if (!keepEmpty) continue;
+                        var emptyRow = new Row(sink.Schema);
+                        foreach (var col in staged.Columns) emptyRow[col] = GetValue(row[col]);
+                        emptyRow[scalarTargetCol] = null;
+                        if (!string.IsNullOrEmpty(indexCol)) emptyRow[indexCol] = null;
+                        await sink.WriteRowAsync(emptyRow);
+                        continue;
+                    }
+
+                    for (int i = 0; i < scalars.Count; i++)
+                    {
+                        var outRow = new Row(sink.Schema);
+                        foreach (var col in staged.Columns) outRow[col] = GetValue(row[col]);
+                        outRow[scalarTargetCol] = scalars[i];
+                        if (!string.IsNullOrEmpty(indexCol)) outRow[indexCol] = (decimal)(i + 1);
+                        await sink.WriteRowAsync(outRow);
+                    }
+                }
+            }
+            await sink.CompleteAsync();
+        }
+        else
+        {
+            var colPrefix = prefix ?? $"{sourceCol}_";
+            int colCount = maxParts ?? Math.Max(1, observedMax);
+            for (int i = 1; i <= colCount; i++)
+                AddOrUpdateColumnDef(targetColumnDefs, $"{colPrefix}{i}", "VARCHAR", isNullable: true);
+
+            await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
+            foreach (var (row, _, scalars) in parsedRows)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                var outRow = new Row(sink.Schema);
+                foreach (var col in staged.Columns) outRow[col] = GetValue(row[col]);
+                for (int i = 0; i < colCount; i++)
+                    outRow[$"{colPrefix}{i + 1}"] = scalars != null && i < scalars.Count ? scalars[i] : null;
+                await sink.WriteRowAsync(outRow);
+            }
+            await sink.CompleteAsync();
+        }
+    }
+
+    private static bool TryNavigateJsonPath(System.Text.Json.JsonElement root, string path, out System.Text.Json.JsonElement result)
+    {
+        var trimmed = path.Trim();
+        if (trimmed == "$" || trimmed.Length == 0)
+        {
+            result = root;
+            return true;
+        }
+
+        if (trimmed.StartsWith("$.", StringComparison.Ordinal))
+            trimmed = trimmed[2..];
+        else if (trimmed.StartsWith("$", StringComparison.Ordinal))
+            trimmed = trimmed[1..];
+
+        var current = root;
+        foreach (var segment in trimmed.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (current.ValueKind != System.Text.Json.JsonValueKind.Object || !current.TryGetProperty(segment, out current))
+            {
+                result = default;
+                return false;
+            }
+        }
+
+        result = current;
+        return true;
+    }
+
+    private static object? ExtractJsonScalar(System.Text.Json.JsonElement elem) => elem.ValueKind switch
+    {
+        System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.Undefined => null,
+        System.Text.Json.JsonValueKind.String => elem.GetString(),
+        System.Text.Json.JsonValueKind.Number => elem.TryGetDecimal(out var d) ? d : elem.GetDouble(),
+        System.Text.Json.JsonValueKind.True => true,
+        System.Text.Json.JsonValueKind.False => false,
+        _ => elem.GetRawText()
+    };
 
     private sealed class TransformOutputSink : IAsyncDisposable
     {

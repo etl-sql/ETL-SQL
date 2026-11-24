@@ -161,7 +161,9 @@ public class DataParser : ParserComponent
         Consume(TokenType.LPAREN, $"Expected '(' after {algorithm}");
         while (!Match(TokenType.RPAREN))
         {
-            var keyTok = ConsumeIdentifier("Expected parameter name");
+            Token keyTok = _parser.Current.Type < TokenType.STAR
+                ? Advance()
+                : ConsumeIdentifier("Expected parameter name");
             Consume(TokenType.EQUALS, "Expected '='");
             Expression valTok;
             if (Match(TokenType.ON))

@@ -212,6 +212,55 @@ public static class TransformSchemaProjection
                     }
                     break;
                 }
+            case "IMPUTE":
+                {
+                    var method = (TryGetOptionString(options, "METHOD") ?? "MEAN").ToUpperInvariant();
+                    var cols = GetOptionColumnList(options, "COLS");
+                    if (cols.Count == 0) cols = GetValueColumns(options);
+                    foreach (var col in cols)
+                    {
+                        var srcType = sourceTypes != null && sourceTypes.TryGetValue(col, out var t) ? t : "DECIMAL";
+                        var outType = method is "MEAN" or "MEDIAN" && IsIntegralType(srcType) ? "DECIMAL" : srcType;
+                        specs.Add(new ComputedColumnSpec(col, outType, [col], ReplacesExisting: true));
+                    }
+                    break;
+                }
+            case "SPLIT":
+            case "EXPLODE":
+                {
+                    var sourceCol = TryGetOptionString(options, "SOURCE_COL");
+                    var mode = (TryGetOptionString(options, "MODE") ?? "ROWS").ToUpperInvariant();
+                    if (!string.IsNullOrEmpty(sourceCol))
+                    {
+                        if (mode == "ROWS")
+                        {
+                            var outputCol = TryGetOptionString(options, "OUTPUT_COL");
+                            if (!string.IsNullOrEmpty(outputCol))
+                            {
+                                specs.Add(new ComputedColumnSpec(outputCol, "VARCHAR", [sourceCol],
+                                    ReplacesExisting: outputCol.Equals(sourceCol, StringComparison.OrdinalIgnoreCase)));
+                            }
+                            var indexCol = TryGetOptionString(options, "INDEX_COL");
+                            if (!string.IsNullOrEmpty(indexCol))
+                            {
+                                specs.Add(new ComputedColumnSpec(indexCol, "INT", [sourceCol], ReplacesExisting: false));
+                            }
+                        }
+                        else if (mode == "COLUMNS")
+                        {
+                            var prefix = TryGetOptionString(options, "PREFIX") ?? $"{sourceCol}_";
+                            if (TryGetOptionString(options, "MAX_PARTS") is { Length: > 0 } rawMax
+                                && int.TryParse(rawMax, out var maxParts) && maxParts > 0)
+                            {
+                                for (int i = 1; i <= maxParts; i++)
+                                {
+                                    specs.Add(new ComputedColumnSpec($"{prefix}{i}", "VARCHAR", [sourceCol], ReplacesExisting: false));
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
         }
 
         return specs;
@@ -247,7 +296,7 @@ public static class TransformSchemaProjection
 
         foreach (var key in new[]
                  {
-                     "DATE_COL", "VALUE_COL", "VALUE_COLS", "ORDER_COL", "BY_GROUP",
+                     "DATE_COL", "VALUE_COL", "VALUE_COLS", "COLS", "SOURCE_COL", "ORDER_COL", "BY_GROUP",
                      "KEY_COLS", "ID_COLS", "ROW_FIELDS", "PIVOT_FIELD", "VALUE_FIELD", "CATEGORY_COL"
                  })
         {
