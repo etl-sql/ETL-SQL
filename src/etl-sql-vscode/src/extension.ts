@@ -926,7 +926,7 @@ async function launchReport(context: vscode.ExtensionContext, mode: 'file' | 'di
     activeTerminals.push(terminal);
     terminal.show();
 
-    const args = [...reportExe.baseArgs, 'serve'];
+    const args = [...reportExe.baseArgs, 'serve', '--port', '0'];
     const dir = path.dirname(targetPath);
 
     if (mode === 'dir') {
