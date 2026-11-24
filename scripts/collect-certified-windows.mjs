@@ -45,13 +45,13 @@ function nativePlatform(platform) {
     architecture: platform === 'osx-arm64' ? 'arm64' : 'x64' };
 }
 
-async function verifyPackages(directory, sha, version, platform, digest) {
-  if (platform === 'win-x64') return windowsPackages('verify', directory, sha, version, digest);
+async function verifyPackages(directory, sha, version, platform, digest, options) {
+  if (platform === 'win-x64') return windowsPackages('verify', directory, sha, version, digest, options);
   const { macosPackages } = await import('./macos-release-packages.mjs');
-  return macosPackages('verify', directory, sha, version, platform, digest);
+  return macosPackages('verify', directory, sha, version, platform, digest, options);
 }
 
-export async function verifyCertifiedNative(directory, sha, version, platform) {
+export async function verifyCertifiedNative(directory, sha, version, platform, { hashPackage, hashEvidence } = {}) {
   const descriptor = nativePlatform(platform);
   if (!/^[a-f0-9]{40}$/.test(sha) || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) throw new Error('Invalid native acceptance identity.');
   const evidence = `artifacts/native-packages/${platform}`;
@@ -63,7 +63,7 @@ export async function verifyCertifiedNative(directory, sha, version, platform) {
   const manifestFile = file(directory, `release/${descriptor.manifest}`), manifestSha256 = hash(readFileSync(manifestFile));
   const manifest = json(manifestFile);
   for (const name of [`ETL-SQL-v${version}-${platform}.zip`, `etl-sql-vscode-${version}-${descriptor.target}.vsix`]) file(directory, `release/${name}`);
-  await verifyPackages(path.join(directory, 'release'), sha, version, platform, manifestSha256);
+  await verifyPackages(path.join(directory, 'release'), sha, version, platform, manifestSha256, hashPackage ? { hashFile: hashPackage } : undefined);
   const webviewFile = file(directory, `${evidence}/packaged-webview.json`), webviews = json(webviewFile);
   // The CLI prints its start-up and security-policy lines before the version, as the native
   // workflow's own launch check allows; require the exact candidate version as one whole line.
@@ -91,13 +91,20 @@ export async function verifyCertifiedNative(directory, sha, version, platform) {
     file(directory, `release/${dmg}`);
     logs.push(file(directory, `${evidence}/dmg-acceptance.log`));
   }
-  return { summary, webviews, manifestSha256, evidenceSha256: hash(JSON.stringify([summaryFile, webviewFile, cliFile, ...logs]
-    .map(name => hash(readFileSync(name))))) };
+  const evidenceDigest = async name => {
+    if (hashEvidence) {
+      const recorded = await hashEvidence(name, path.relative(directory, name).replaceAll('\\', '/'));
+      if (recorded !== undefined) return recorded;
+    }
+    return hash(readFileSync(name));
+  };
+  const evidenceHashes = await Promise.all([summaryFile, webviewFile, cliFile, ...logs].map(evidenceDigest));
+  return { summary, webviews, manifestSha256, evidenceSha256: hash(JSON.stringify(evidenceHashes)) };
 }
 
-export const verifyCertifiedWindows = (directory, sha, version) => verifyCertifiedNative(directory, sha, version, 'win-x64');
+export const verifyCertifiedWindows = (directory, sha, version, options) => verifyCertifiedNative(directory, sha, version, 'win-x64', options);
 
-export async function collectCertifiedNative(repository, sha, version, platform, { query, readArtifact, now = Date.now(), expectedSelection } = {}) {
+export async function collectCertifiedNative(repository, sha, version, platform, { query, readArtifact, now = Date.now(), expectedSelection, hashPackage, hashEvidence } = {}) {
   nativePlatform(platform);
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version) || typeof query !== 'function' || typeof readArtifact !== 'function') throw new Error('Invalid certified native collection inputs.');
   const policy = structuredClone(certifiedWindowsPolicy);
@@ -117,7 +124,7 @@ export async function collectCertifiedNative(repository, sha, version, platform,
       artifact.expired !== false || artifact.workflow_run?.id !== run.id || artifact.workflow_run?.head_sha !== sha ||
       !/^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '') || !Number.isFinite(Date.parse(artifact.created_at)) ||
       Date.parse(artifact.created_at) < Date.parse(execution.started_at) || Date.parse(artifact.created_at) > upper(execution.completed_at)) throw new Error('Native artifact does not belong to its successful execution.');
-  const verified = await verifyCertifiedNative(await readArtifact(run, artifact), sha, version, platform);
+  const verified = await verifyCertifiedNative(await readArtifact(run, artifact), sha, version, platform, { hashPackage, hashEvidence });
   const timestamps = [verified.summary.startedAt, verified.summary.finishedAt, verified.webviews.startedAt,
     verified.webviews.finishedAt, verified.summary.releaseCandidateChecksPassedAt].map(Date.parse);
   if (timestamps.some(value => !Number.isFinite(value) || value < Date.parse(execution.started_at) || value > upper(execution.completed_at)) ||
@@ -145,17 +152,17 @@ export async function collectCertifiedNative(repository, sha, version, platform,
 
 export const collectCertifiedWindows = (repository, sha, version, options) => collectCertifiedNative(repository, sha, version, 'win-x64', options);
 
-export async function verifyNativeDraft(directory, selection, platform) {
+export async function verifyNativeDraft(directory, selection, platform, { hashPackage } = {}) {
   nativePlatform(platform);
   if (platform !== 'win-x64' && selection.platform !== platform) throw new Error('Draft native platform mismatch.');
   const attached = json(file(directory, platform === 'win-x64' ? 'certified-windows-selection.json' : `certified-${platform}-selection.json`));
   sameSelection(attached, selection);
   if (!Number.isSafeInteger(attached.runAttempt) || attached.runAttempt < selection.executionAttempt || attached.runAttempt > selection.runAttempt ||
       !Number.isFinite(Date.parse(attached.collectedAt)) || Date.parse(attached.collectedAt) > Date.parse(selection.collectedAt)) throw new Error('Draft Windows selection has an invalid attempt or collection time.');
-  await verifyPackages(directory, selection.sourceSha, selection.version, platform, selection.manifestSha256);
+  await verifyPackages(directory, selection.sourceSha, selection.version, platform, selection.manifestSha256, hashPackage ? { hashFile: hashPackage } : undefined);
 }
 
-export const verifyWindowsDraft = (directory, selection) => verifyNativeDraft(directory, selection, 'win-x64');
+export const verifyWindowsDraft = (directory, selection, options) => verifyNativeDraft(directory, selection, 'win-x64', options);
 
 function gh(args, timeout = 60000) {
   const result = spawnSync('gh', args, { encoding: 'utf8', windowsHide: true, timeout, maxBuffer: 32 * 1024 * 1024 });

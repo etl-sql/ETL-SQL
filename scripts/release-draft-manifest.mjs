@@ -4,7 +4,7 @@ import { lstat, open, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-async function inventory(directory) {
+async function inventory(directory, hashAsset) {
   const root = await lstat(directory);
   if (!root.isDirectory() || root.isSymbolicLink()) throw new Error('Draft assets need an ordinary directory.');
   const names = (await readdir(directory)).sort();
@@ -16,16 +16,21 @@ async function inventory(directory) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) throw new Error('Unsafe draft asset name.');
     const file = path.join(directory, name), info = await lstat(file);
     if (!info.isFile() || info.isSymbolicLink() || info.size === 0) throw new Error(`Invalid draft asset: ${name}`);
-    const hash = createHash('sha256');
-    for await (const chunk of createReadStream(file)) hash.update(chunk);
-    assets[name] = { size: info.size, sha256: hash.digest('hex') };
+    const recorded = hashAsset ? await hashAsset(file, name, info) : undefined;
+    if (recorded !== undefined) {
+      assets[name] = { size: recorded.size, sha256: recorded.sha256 };
+    } else {
+      const hash = createHash('sha256');
+      for await (const chunk of createReadStream(file)) hash.update(chunk);
+      assets[name] = { size: info.size, sha256: hash.digest('hex') };
+    }
   }
   return assets;
 }
 
 // This binds the final draft to bytes already checked by the platform gates. It
 // does not certify packages or replace their original build/installation evidence.
-export async function draftManifest(mode, directory, manifestPath, sourceSha, tag, expectedHash) {
+export async function draftManifest(mode, directory, manifestPath, sourceSha, tag, expectedHash, { hashAsset } = {}) {
   if (!['create', 'verify'].includes(mode) || !/^[a-f0-9]{40}$/.test(sourceSha) ||
       !/^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/.test(tag)) throw new Error('Invalid draft candidate identity.');
   const relative = path.relative(path.resolve(directory), path.resolve(manifestPath));
@@ -33,7 +38,7 @@ export async function draftManifest(mode, directory, manifestPath, sourceSha, ta
     throw new Error('Keep the draft manifest outside the asset directory.');
   }
   if (mode === 'create') {
-    const assets = await inventory(directory);
+    const assets = await inventory(directory, hashAsset);
     await writeFile(manifestPath, `${JSON.stringify({ schemaVersion: 1, sourceSha, tag, assets }, null, 2)}\n`, { flag: 'wx' });
   }
   const handle = await open(manifestPath, 'r');
@@ -49,7 +54,7 @@ export async function draftManifest(mode, directory, manifestPath, sourceSha, ta
     if (!/^[a-f0-9]{64}$/.test(expectedHash ?? '') || digest !== expectedHash) throw new Error('Draft manifest hash mismatch.');
     const manifest = JSON.parse(bytes);
     if (manifest.schemaVersion !== 1 || manifest.sourceSha !== sourceSha || manifest.tag !== tag) throw new Error('Draft candidate identity mismatch.');
-    const actual = await inventory(directory);
+    const actual = await inventory(directory, hashAsset);
     if (!manifest.assets || Array.isArray(manifest.assets) ||
         JSON.stringify(Object.keys(actual).sort()) !== JSON.stringify(Object.keys(manifest.assets).sort()) ||
         Object.entries(actual).some(([name, entry]) => manifest.assets[name]?.size !== entry.size || manifest.assets[name]?.sha256 !== entry.sha256)) {

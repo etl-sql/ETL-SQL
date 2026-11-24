@@ -3,11 +3,11 @@ import { fileURLToPath } from 'node:url';
 import { packageManifest } from './release-package-manifest.mjs';
 
 // This records build inputs and bytes, not installed-package certification.
-export async function windowsPackages(mode, directory, sourceSha, version, manifestSha256) {
+export async function windowsPackages(mode, directory, sourceSha, version, manifestSha256, options) {
   await packageManifest(mode, directory, sourceSha, version, {
     platform: 'win-x64', manifestName: 'windows-package-inputs.json',
     required: [`ETL-SQL-v${version}-win-x64.zip`, `etl-sql-vscode-${version}-win32-x64.vsix`],
-  }, manifestSha256);
+  }, manifestSha256, options);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

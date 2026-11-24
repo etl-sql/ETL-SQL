@@ -3,10 +3,14 @@ import { lstat, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 
-async function hashPackage(directory, name) {
+async function hashPackage(directory, name, hashFile) {
   const file = path.join(directory, name);
   const info = await lstat(file);
   if (!info.isFile() || info.size === 0) throw new Error(`Missing or empty package: ${name}`);
+  if (hashFile) {
+    const recorded = await hashFile(file, name, info);
+    if (recorded !== undefined) return recorded;
+  }
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(file)) hash.update(chunk);
   return hash.digest('hex');
@@ -14,7 +18,7 @@ async function hashPackage(directory, name) {
 
 // The caller owns the allowed filenames. Manifests cannot introduce paths or package types.
 export async function packageManifest(mode, directory, sourceSha, version,
-  { platform, manifestName, required, optional = [], includeOptional = false }, manifestSha256) {
+  { platform, manifestName, required, optional = [], includeOptional = false }, manifestSha256, { hashFile } = {}) {
   if (!['create', 'verify'].includes(mode) || !/^[a-f0-9]{40}$/.test(sourceSha) ||
       !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) throw new Error('Invalid package identity.');
   const manifestPath = path.join(directory, manifestName);
@@ -40,7 +44,7 @@ export async function packageManifest(mode, directory, sourceSha, version,
     });
     if (info) throw new Error(`Unrecorded optional package: ${name}`);
   }
-  const packages = Object.fromEntries(await Promise.all(names.map(async name => [name, await hashPackage(directory, name)])));
+  const packages = Object.fromEntries(await Promise.all(names.map(async name => [name, await hashPackage(directory, name, hashFile)])));
   if (mode === 'create') {
     await writeFile(manifestPath, `${JSON.stringify({ schemaVersion: 1, sourceSha, version, platform, packages }, null, 2)}\n`);
   } else if (names.some(name => actual.packages[name] !== packages[name])) {
