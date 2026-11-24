@@ -66,6 +66,9 @@ INSERT INTO mongo_upsert SELECT sku, name, price FROM #products;
 - **Find mode**: Specify `collection` and `filter` (JSON object), with optional `projection`, `sort`, `limit`, and `skip`.
 - **Aggregate mode**: Specify `collection` and `pipeline` (JSON array of aggregation stages).
 - **Read-only enforcement**: Write commands (`insert`, `update`, `delete`, `drop`, `bulkWrite`, etc.) and write pipeline stages (`$out`, `$merge`, including inside nested stages) are refused.
+- **No server-side JavaScript**: `$where`, `$function`, and `$accumulator` are refused anywhere in the command.
+- **Result shape**: Results come back as one table whose columns are every field seen in any document; a document without a field gets `NULL`. The whole result is held in memory, so bound large reads with `limit` or `$match`/`$project`/`$limit` stages.
+- **SQL statements**: `CREATE TABLE`, `DROP TABLE`, `ALTER TABLE`, and other SQL sent to a `MONGODB` connection fail with a message pointing to this JSON form.
 - **`SET WHAT_IF ON`**: Logs the command without running it against MongoDB.
 - **Invalid JSON**: Fails with the line and column position without echoing the raw command body.
 

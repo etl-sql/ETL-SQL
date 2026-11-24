@@ -66,6 +66,9 @@ public sealed class MongodbExecuteTests
     [InlineData("""{"collection":"c","delete":{"a":1}}""", "delete")]
     [InlineData("""{"collection":"c","drop":true}""", "drop")]
     [InlineData("""{"collection":"c","bulkWrite":[]}""", "bulkWrite")]
+    [InlineData("""{"collection":"c","filter":{"$where":"sleep(100000)"}}""", "$where")]
+    [InlineData("""{"collection":"c","filter":{"$expr":{"$function":{"body":"function(){}","args":[],"lang":"js"}}}}""", "$function")]
+    [InlineData("""{"collection":"c","pipeline":[{"$group":{"_id":1,"x":{"$accumulator":{}}}}]}""", "$accumulator")]
     public async Task ExecuteRawSql_WriteStagesAndCommands_AreRefused(string commandJson, string expectedMention)
     {
         var (ctx, _) = CreateContext();
@@ -78,6 +81,22 @@ public sealed class MongodbExecuteTests
 
         Assert.Contains("read-only", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(expectedMention, ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("DROP TABLE IF EXISTS products;")]
+    [InlineData("CREATE TABLE products (\n  id INT\n);")]
+    public async Task ExecuteRawSql_SqlText_FailsWithClearMessage(string sql)
+    {
+        var (ctx, _) = CreateContext();
+        var ds = CreateUnreachable(ctx);
+
+        var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
+        {
+            await foreach (var _ in ds.ExecuteRawSql(sql)) { }
+        });
+
+        Assert.Contains("do not run SQL", ex.Message, StringComparison.Ordinal);
     }
 
     [Theory]

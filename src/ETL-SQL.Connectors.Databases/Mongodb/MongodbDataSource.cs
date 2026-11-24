@@ -121,15 +121,24 @@ namespace ETL_SQL.Connectors.Mongodb
             "collection", "filter", "pipeline", "projection", "sort", "limit", "skip"
         };
 
-        private static readonly HashSet<string> ForbiddenPipelineStages = new(StringComparer.OrdinalIgnoreCase)
+        // $out and $merge write; $where, $function and $accumulator run server-side JavaScript.
+        // Checked anywhere in the command (filter, projection, sort, nested pipeline stages).
+        private static readonly HashSet<string> ForbiddenOperators = new(StringComparer.OrdinalIgnoreCase)
         {
-            "$out", "$merge"
+            "$out", "$merge", "$where", "$function", "$accumulator"
         };
 
         private ParsedMongoCommand ParseAndValidateCommand(string commandJson)
         {
             if (string.IsNullOrWhiteSpace(commandJson))
                 throw new ExecutionException("MongoDB EXECUTE command cannot be empty.");
+
+            // DROP TABLE, CREATE TABLE, ALTER TABLE and similar statements reach a MONGODB connection as
+            // generated SQL text. Say so plainly instead of reporting a JSON parse position.
+            if (commandJson.TrimStart()[0] != '{')
+                throw new ExecutionException(
+                    "MONGODB connections do not run SQL. Use EXECUTE <connection> BEGIN { ... } END with a JSON " +
+                    "find (collection + filter) or aggregate (collection + pipeline) command.");
 
             JsonDocument doc;
             try
@@ -147,6 +156,8 @@ namespace ETL_SQL.Connectors.Mongodb
             {
                 if (doc.RootElement.ValueKind != JsonValueKind.Object)
                     throw new ExecutionException("MongoDB EXECUTE command must be a JSON object.");
+
+                RejectForbiddenOperatorsRecursive(doc.RootElement);
 
                 string? collection = null;
                 JsonElement? filterElem = null;
@@ -232,7 +243,6 @@ namespace ETL_SQL.Connectors.Mongodb
                         if (stage.ValueKind != JsonValueKind.Object)
                             throw new ExecutionException("Each stage in MongoDB EXECUTE 'pipeline' must be a JSON object.");
 
-                        RejectWriteStagesRecursive(stage);
                         stages.Add(BsonDocument.Parse(stage.GetRawText()));
                     }
 
@@ -247,20 +257,20 @@ namespace ETL_SQL.Connectors.Mongodb
             }
         }
 
-        private static void RejectWriteStagesRecursive(JsonElement element)
+        private static void RejectForbiddenOperatorsRecursive(JsonElement element)
         {
             if (element.ValueKind == JsonValueKind.Object)
             {
                 foreach (var prop in element.EnumerateObject())
                 {
-                    if (ForbiddenPipelineStages.Contains(prop.Name))
+                    if (ForbiddenOperators.Contains(prop.Name))
                     {
                         throw new ExecutionException(
-                            $"MongoDB EXECUTE pass-through is read-only; pipeline stage '{prop.Name}' is not allowed.");
+                            $"MongoDB EXECUTE pass-through is read-only and runs no server-side JavaScript; '{prop.Name}' is not allowed.");
                     }
 
                     if (prop.Value.ValueKind == JsonValueKind.Object || prop.Value.ValueKind == JsonValueKind.Array)
-                        RejectWriteStagesRecursive(prop.Value);
+                        RejectForbiddenOperatorsRecursive(prop.Value);
                 }
             }
             else if (element.ValueKind == JsonValueKind.Array)
@@ -268,7 +278,7 @@ namespace ETL_SQL.Connectors.Mongodb
                 foreach (var item in element.EnumerateArray())
                 {
                     if (item.ValueKind == JsonValueKind.Object || item.ValueKind == JsonValueKind.Array)
-                        RejectWriteStagesRecursive(item);
+                        RejectForbiddenOperatorsRecursive(item);
                 }
             }
         }
@@ -309,8 +319,12 @@ namespace ETL_SQL.Connectors.Mongodb
                 cursor = await coll.FindAsync(parsed.Filter!, findOptions, effectiveCancellationToken);
             }
 
-            const int batchSize = 10000;
-            var docs = new List<BsonDocument>(Math.Min(batchSize, 256));
+            // One result table: documents are schemaless, and EXECUTE takes its columns from the first
+            // batch, so a field that first appears in a later batch would be dropped. The handler holds
+            // the whole result in memory anyway; use limit or a $match/$project stage to bound it.
+            var columns = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var rows = new List<Dictionary<string, object?>>();
 
             using (cursor)
             {
@@ -318,49 +332,30 @@ namespace ETL_SQL.Connectors.Mongodb
                 {
                     foreach (var doc in cursor.Current)
                     {
-                        docs.Add(doc);
-                        if (docs.Count >= batchSize)
+                        var values = new Dictionary<string, object?>(doc.ElementCount, StringComparer.Ordinal);
+                        foreach (var element in doc)
                         {
-                            yield return await BuildBatchFromDocumentsAsync(docs);
-                            docs.Clear();
+                            if (seen.Add(element.Name)) columns.Add(element.Name);
+                            values[element.Name] = ConvertBsonValue(element.Value);
                         }
+                        rows.Add(values);
                     }
                 }
             }
 
-            if (docs.Count > 0)
-            {
-                yield return await BuildBatchFromDocumentsAsync(docs);
-            }
-        }
+            if (rows.Count == 0) yield break;
 
-        private async Task<DataTable> BuildBatchFromDocumentsAsync(List<BsonDocument> docs)
-        {
-            var columns = new List<string>();
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var doc in docs)
+            var result = new DataTable();
+            result.SetColumns(columns);
+            foreach (var values in rows)
             {
-                foreach (var name in doc.Names)
-                {
-                    if (seen.Add(name))
-                        columns.Add(name);
-                }
-            }
-
-            var batch = new DataTable();
-            batch.SetColumns(columns);
-
-            foreach (var doc in docs)
-            {
-                var row = batch.NewRow();
+                var row = result.NewRow();
                 foreach (var col in columns)
-                {
-                    row[col] = doc.TryGetValue(col, out var val) ? ConvertBsonValue(val) : null;
-                }
-                await batch.AddRowAsync(row);
+                    row[col] = values.TryGetValue(col, out var val) ? val : null;
+                await result.AddRowAsync(row);
             }
 
-            return batch;
+            yield return result;
         }
 
         private IMongoClient GetClient()

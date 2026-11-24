@@ -36,7 +36,6 @@ namespace ETL_SQL.Connectors.SqlServer
             "  AUTH_MODE: SQL (default), WINDOWS, ENTRA_DEFAULT, ENTRA_MANAGED_IDENTITY, or ENTRA_SERVICE_PRINCIPAL.\n" +
             "  USER/PASSWORD: Standard SQL credentials (or client secret for ENTRA_SERVICE_PRINCIPAL).\n" +
             "  CLIENT_ID: Optional user-assigned identity client ID (ENTRA_MANAGED_IDENTITY) or app client ID (ENTRA_SERVICE_PRINCIPAL).\n" +
-            "  TENANT_ID: Microsoft Entra tenant ID (required for ENTRA_SERVICE_PRINCIPAL).\n" +
             "  TRUSTED_CONNECTION: Set to TRUE for Windows Auth.\n" +
             "  ENCRYPT / USE_SSL: Set to TRUE for encrypted transit.\n" +
             "  TRUST_SERVER_CERTIFICATE: Set to TRUE to skip cert validation.\n" +
@@ -57,7 +56,6 @@ namespace ETL_SQL.Connectors.SqlServer
             { "USER", Array.Empty<string>() },
             { "PASSWORD", Array.Empty<string>() },
             { "CLIENT_ID", Array.Empty<string>() },
-            { "TENANT_ID", Array.Empty<string>() },
             { "TRUSTED_CONNECTION", new[] { "TRUE", "FALSE" } },
             { "ENCRYPT", new[] { "TRUE", "FALSE" } },
             { "USE_SSL", new[] { "TRUE", "FALSE" } },

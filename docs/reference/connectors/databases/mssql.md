@@ -16,7 +16,6 @@ Aliases: `SQL`, `SQLSERVER`
 | `USER` | SQL authentication username (`AUTH_MODE=SQL`) | No |
 | `PASSWORD` | SQL authentication password (`AUTH_MODE=SQL`) or Entra service principal client secret (`AUTH_MODE=ENTRA_SERVICE_PRINCIPAL`) | No |
 | `CLIENT_ID` | Optional user-assigned managed identity client ID (`ENTRA_MANAGED_IDENTITY`) or required app registration client ID (`ENTRA_SERVICE_PRINCIPAL`) | No |
-| `TENANT_ID` | Microsoft Entra tenant ID (required for `ENTRA_SERVICE_PRINCIPAL`) | No |
 | `TRUSTED_CONNECTION` | Use Windows Integrated Security (`TRUE`/`FALSE`); equivalent to `AUTH_MODE=WINDOWS` | No |
 | `ENCRYPT` | Enable TLS encryption for the connection (`TRUE`/`FALSE`) | No |
 | `USE_SSL` | Enable SSL/TLS encryption for the connection (`TRUE`/`FALSE`) | No |
@@ -34,17 +33,17 @@ Aliases: `SQL`, `SQLSERVER`
 > [!NOTE]
 > Authentication modes and options are mutually exclusive and validated at `CREATE CONNECTION`:
 > do not combine `TRUSTED_CONNECTION` with Entra modes, `USER`/`PASSWORD` with `WINDOWS` or
-> `ENTRA_DEFAULT`/`ENTRA_MANAGED_IDENTITY`, or `CLIENT_ID`/`TENANT_ID` with `SQL`/`WINDOWS`.
+> `ENTRA_DEFAULT`/`ENTRA_MANAGED_IDENTITY`, or `CLIENT_ID` with `SQL`/`WINDOWS`.
 
 ## Authentication
 
-SQL Server and Azure SQL Database support five mutually exclusive authentication modes via `AUTH_MODE` (`PASSWORD`, `CLIENT_ID`, and `TENANT_ID` all accept `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'` with `Security:AllowedEnvVars`):
+SQL Server and Azure SQL Database support five mutually exclusive authentication modes via `AUTH_MODE` (`PASSWORD` and `CLIENT_ID` accept `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'` with `Security:AllowedEnvVars`):
 
-- **`SQL` (default)**: Set `USER` and `PASSWORD` (omit `TRUSTED_CONNECTION`, `CLIENT_ID`, `TENANT_ID`).
-- **`WINDOWS` (Integrated Security)**: Set `AUTH_MODE='WINDOWS'` or `TRUSTED_CONNECTION=TRUE` and omit `USER`, `PASSWORD`, `CLIENT_ID`, and `TENANT_ID`.
-- **`ENTRA_DEFAULT`**: Maps to SqlClient `Authentication=Active Directory Default` (`DefaultAzureCredential` via `Microsoft.Data.SqlClient.Extensions.Azure`). Omit `USER`, `PASSWORD`, `TRUSTED_CONNECTION`, `CLIENT_ID`, and `TENANT_ID`.
-- **`ENTRA_MANAGED_IDENTITY`**: Maps to SqlClient `Authentication=Active Directory Managed Identity`. Omit `CLIENT_ID` for a system-assigned identity, or set `CLIENT_ID` for a user-assigned managed identity. Omit `USER`, `PASSWORD`, `TRUSTED_CONNECTION`, and `TENANT_ID`.
-- **`ENTRA_SERVICE_PRINCIPAL`**: Maps to SqlClient `Authentication=Active Directory Service Principal`. Requires `CLIENT_ID`, `PASSWORD` (the client secret), and `TENANT_ID`. Omit `USER` and `TRUSTED_CONNECTION`.
+- **`SQL` (default)**: Set `USER` and `PASSWORD` (omit `TRUSTED_CONNECTION` and `CLIENT_ID`).
+- **`WINDOWS` (Integrated Security)**: Set `AUTH_MODE='WINDOWS'` or `TRUSTED_CONNECTION=TRUE` and omit `USER`, `PASSWORD`, and `CLIENT_ID`.
+- **`ENTRA_DEFAULT`**: Maps to SqlClient `Authentication=Active Directory Default` (`DefaultAzureCredential` via `Microsoft.Data.SqlClient.Extensions.Azure`). Omit `USER`, `PASSWORD`, `TRUSTED_CONNECTION`, and `CLIENT_ID`.
+- **`ENTRA_MANAGED_IDENTITY`**: Maps to SqlClient `Authentication=Active Directory Managed Identity`. Omit `CLIENT_ID` for a system-assigned identity, or set `CLIENT_ID` for a user-assigned managed identity. Omit `USER`, `PASSWORD`, and `TRUSTED_CONNECTION`.
+- **`ENTRA_SERVICE_PRINCIPAL`**: Maps to SqlClient `Authentication=Active Directory Service Principal`. Requires `CLIENT_ID` and `PASSWORD` (the client secret). Omit `USER` and `TRUSTED_CONNECTION`. There is no tenant option: SqlClient takes the tenant from the sign-in authority that Azure SQL returns, so the service principal must belong to the server's tenant.
 
 ## Examples
 
@@ -62,7 +61,7 @@ CREATE CONNECTION m_az_default AS MSSQL(SERVER='myserver.database.windows.net', 
 CREATE CONNECTION m_az_mi AS MSSQL(SERVER='myserver.database.windows.net', DATABASE='Analytics', AUTH_MODE='ENTRA_MANAGED_IDENTITY', CLIENT_ID='SECRET:prod/azure/uami_client_id', ENCRYPT=TRUE);
 
 -- Azure SQL with Entra Service Principal
-CREATE CONNECTION m_az_sp AS MSSQL(SERVER='myserver.database.windows.net', DATABASE='Analytics', AUTH_MODE='ENTRA_SERVICE_PRINCIPAL', CLIENT_ID='SECRET:prod/azure/sp_client_id', PASSWORD='SECRET:prod/azure/sp_client_secret', TENANT_ID='SECRET:prod/azure/tenant_id', ENCRYPT=TRUE);
+CREATE CONNECTION m_az_sp AS MSSQL(SERVER='myserver.database.windows.net', DATABASE='Analytics', AUTH_MODE='ENTRA_SERVICE_PRINCIPAL', CLIENT_ID='SECRET:prod/azure/sp_client_id', PASSWORD='SECRET:prod/azure/sp_client_secret', ENCRYPT=TRUE);
 
 -- Read-only replica with SSL
 CREATE CONNECTION m_ro AS MSSQL(SERVER='sql01', DATABASE='DW', TRUSTED_CONNECTION=TRUE,

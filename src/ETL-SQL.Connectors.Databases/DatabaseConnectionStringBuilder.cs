@@ -114,7 +114,6 @@ namespace ETL_SQL.Connectors
             bool hasUser = props.TryGetValue("USER", out var user) && !string.IsNullOrWhiteSpace(user);
             bool hasPassword = props.TryGetValue("PASSWORD", out var password) && !string.IsNullOrWhiteSpace(password);
             bool hasClientId = props.TryGetValue("CLIENT_ID", out var clientId) && !string.IsNullOrWhiteSpace(clientId);
-            bool hasTenantId = props.TryGetValue("TENANT_ID", out var tenantId) && !string.IsNullOrWhiteSpace(tenantId);
 
             string mode;
             if (hasAuthMode)
@@ -134,8 +133,8 @@ namespace ETL_SQL.Connectors
                 case "SQL":
                     if (trustedTrue)
                         throw new ExecutionException("MSSQL AUTH_MODE='SQL' cannot be combined with TRUSTED_CONNECTION=TRUE.");
-                    if (hasClientId || hasTenantId)
-                        throw new ExecutionException("MSSQL CLIENT_ID and TENANT_ID are only valid with Entra AUTH_MODE values.");
+                    if (hasClientId)
+                        throw new ExecutionException("MSSQL CLIENT_ID is only valid with Entra AUTH_MODE values.");
                     if (hasUser) builder.UserID = user!;
                     if (hasPassword) builder.Password = password!;
                     break;
@@ -145,24 +144,24 @@ namespace ETL_SQL.Connectors
                         throw new ExecutionException("MSSQL AUTH_MODE='WINDOWS' cannot be combined with TRUSTED_CONNECTION=FALSE.");
                     if (hasUser || hasPassword)
                         throw new ExecutionException("MSSQL Windows authentication cannot be combined with USER or PASSWORD.");
-                    if (hasClientId || hasTenantId)
-                        throw new ExecutionException("MSSQL Windows authentication cannot be combined with CLIENT_ID or TENANT_ID.");
+                    if (hasClientId)
+                        throw new ExecutionException("MSSQL Windows authentication cannot be combined with CLIENT_ID.");
                     builder.IntegratedSecurity = true;
                     break;
 
                 case "ENTRA_DEFAULT":
                     if (hasTrusted)
                         throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_DEFAULT' cannot be combined with TRUSTED_CONNECTION.");
-                    if (hasUser || hasPassword || hasClientId || hasTenantId)
-                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_DEFAULT' does not accept USER, PASSWORD, CLIENT_ID, or TENANT_ID.");
+                    if (hasUser || hasPassword || hasClientId)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_DEFAULT' does not accept USER, PASSWORD, or CLIENT_ID.");
                     builder.Authentication = SqlAuthenticationMethod.ActiveDirectoryDefault;
                     break;
 
                 case "ENTRA_MANAGED_IDENTITY":
                     if (hasTrusted)
                         throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_MANAGED_IDENTITY' cannot be combined with TRUSTED_CONNECTION.");
-                    if (hasUser || hasPassword || hasTenantId)
-                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_MANAGED_IDENTITY' does not accept USER, PASSWORD, or TENANT_ID.");
+                    if (hasUser || hasPassword)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_MANAGED_IDENTITY' does not accept USER or PASSWORD.");
                     builder.Authentication = SqlAuthenticationMethod.ActiveDirectoryManagedIdentity;
                     if (hasClientId)
                         builder.UserID = clientId!;
@@ -177,8 +176,6 @@ namespace ETL_SQL.Connectors
                         throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_SERVICE_PRINCIPAL' requires CLIENT_ID.");
                     if (!hasPassword)
                         throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_SERVICE_PRINCIPAL' requires PASSWORD (the service principal client secret).");
-                    if (!hasTenantId)
-                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_SERVICE_PRINCIPAL' requires TENANT_ID.");
                     builder.Authentication = SqlAuthenticationMethod.ActiveDirectoryServicePrincipal;
                     builder.UserID = clientId!;
                     builder.Password = password!;

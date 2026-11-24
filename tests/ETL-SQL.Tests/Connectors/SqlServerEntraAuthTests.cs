@@ -98,8 +98,7 @@ public sealed class SqlServerEntraAuthTests
         var cs = _connector.BuildConnectionString(BaseProps(
             ("AUTH_MODE", "ENTRA_SERVICE_PRINCIPAL"),
             ("CLIENT_ID", "11111111-2222-3333-4444-555555555555"),
-            ("PASSWORD", "sp-secret-value"),
-            ("TENANT_ID", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")));
+            ("PASSWORD", "sp-secret-value")));
         var b = new SqlConnectionStringBuilder(cs);
         Assert.Equal(SqlAuthenticationMethod.ActiveDirectoryServicePrincipal, b.Authentication);
         Assert.Equal("11111111-2222-3333-4444-555555555555", b.UserID);
@@ -112,7 +111,6 @@ public sealed class SqlServerEntraAuthTests
         // SQL mismatches
         { "SQL + TRUSTED_CONNECTION=TRUE", [("AUTH_MODE", "SQL"), ("TRUSTED_CONNECTION", "TRUE")] },
         { "SQL + CLIENT_ID", [("AUTH_MODE", "SQL"), ("CLIENT_ID", "cid")] },
-        { "SQL + TENANT_ID", [("AUTH_MODE", "SQL"), ("TENANT_ID", "tid")] },
         { "Default SQL + CLIENT_ID", [("CLIENT_ID", "cid")] },
         // WINDOWS mismatches
         { "WINDOWS + TRUSTED_CONNECTION=FALSE", [("AUTH_MODE", "WINDOWS"), ("TRUSTED_CONNECTION", "FALSE")] },
@@ -126,18 +124,15 @@ public sealed class SqlServerEntraAuthTests
         { "ENTRA_DEFAULT + USER", [("AUTH_MODE", "ENTRA_DEFAULT"), ("USER", "sa")] },
         { "ENTRA_DEFAULT + PASSWORD", [("AUTH_MODE", "ENTRA_DEFAULT"), ("PASSWORD", "super-secret-xyz")] },
         { "ENTRA_DEFAULT + CLIENT_ID", [("AUTH_MODE", "ENTRA_DEFAULT"), ("CLIENT_ID", "cid")] },
-        { "ENTRA_DEFAULT + TENANT_ID", [("AUTH_MODE", "ENTRA_DEFAULT"), ("TENANT_ID", "tid")] },
         // ENTRA_MANAGED_IDENTITY mismatches
         { "ENTRA_MANAGED_IDENTITY + TRUSTED_CONNECTION", [("AUTH_MODE", "ENTRA_MANAGED_IDENTITY"), ("TRUSTED_CONNECTION", "TRUE")] },
         { "ENTRA_MANAGED_IDENTITY + USER", [("AUTH_MODE", "ENTRA_MANAGED_IDENTITY"), ("USER", "sa")] },
         { "ENTRA_MANAGED_IDENTITY + PASSWORD", [("AUTH_MODE", "ENTRA_MANAGED_IDENTITY"), ("PASSWORD", "super-secret-xyz")] },
-        { "ENTRA_MANAGED_IDENTITY + TENANT_ID", [("AUTH_MODE", "ENTRA_MANAGED_IDENTITY"), ("TENANT_ID", "tid")] },
         // ENTRA_SERVICE_PRINCIPAL mismatches
-        { "ENTRA_SERVICE_PRINCIPAL + TRUSTED_CONNECTION", [("AUTH_MODE", "ENTRA_SERVICE_PRINCIPAL"), ("TRUSTED_CONNECTION", "TRUE"), ("CLIENT_ID", "cid"), ("PASSWORD", "super-secret-xyz"), ("TENANT_ID", "tid")] },
-        { "ENTRA_SERVICE_PRINCIPAL + USER", [("AUTH_MODE", "ENTRA_SERVICE_PRINCIPAL"), ("USER", "sa"), ("CLIENT_ID", "cid"), ("PASSWORD", "super-secret-xyz"), ("TENANT_ID", "tid")] },
-        { "ENTRA_SERVICE_PRINCIPAL missing CLIENT_ID", [("AUTH_MODE", "ENTRA_SERVICE_PRINCIPAL"), ("PASSWORD", "super-secret-xyz"), ("TENANT_ID", "tid")] },
-        { "ENTRA_SERVICE_PRINCIPAL missing PASSWORD", [("AUTH_MODE", "ENTRA_SERVICE_PRINCIPAL"), ("CLIENT_ID", "cid"), ("TENANT_ID", "tid")] },
-        { "ENTRA_SERVICE_PRINCIPAL missing TENANT_ID", [("AUTH_MODE", "ENTRA_SERVICE_PRINCIPAL"), ("CLIENT_ID", "cid"), ("PASSWORD", "super-secret-xyz")] },
+        { "ENTRA_SERVICE_PRINCIPAL + TRUSTED_CONNECTION", [("AUTH_MODE", "ENTRA_SERVICE_PRINCIPAL"), ("TRUSTED_CONNECTION", "TRUE"), ("CLIENT_ID", "cid"), ("PASSWORD", "super-secret-xyz")] },
+        { "ENTRA_SERVICE_PRINCIPAL + USER", [("AUTH_MODE", "ENTRA_SERVICE_PRINCIPAL"), ("USER", "sa"), ("CLIENT_ID", "cid"), ("PASSWORD", "super-secret-xyz")] },
+        { "ENTRA_SERVICE_PRINCIPAL missing CLIENT_ID", [("AUTH_MODE", "ENTRA_SERVICE_PRINCIPAL"), ("PASSWORD", "super-secret-xyz")] },
+        { "ENTRA_SERVICE_PRINCIPAL missing PASSWORD", [("AUTH_MODE", "ENTRA_SERVICE_PRINCIPAL"), ("CLIENT_ID", "cid")] },
         // Unknown / empty AUTH_MODE
         { "Empty AUTH_MODE", [("AUTH_MODE", "   ")] },
         { "Unknown AUTH_MODE", [("AUTH_MODE", "ACCESS_TOKEN")] },
@@ -164,7 +159,7 @@ public sealed class SqlServerEntraAuthTests
         Assert.Equal(SqlAuthenticationMethod.ActiveDirectoryDefault, new SqlConnectionStringBuilder(ds.ConnectionString).Authentication);
 
         const string badSql =
-            "CREATE CONNECTION az_bad AS MSSQL(SERVER='myserver.database.windows.net', DATABASE='Analytics', AUTH_MODE='ENTRA_SERVICE_PRINCIPAL', TENANT_ID='tid');";
+            "CREATE CONNECTION az_bad AS MSSQL(SERVER='myserver.database.windows.net', DATABASE='Analytics', AUTH_MODE='ENTRA_SERVICE_PRINCIPAL', CLIENT_ID='cid');";
         await Assert.ThrowsAsync<ExecutionException>(() =>
             evaluator.Evaluate(new Parser(new Lexer(badSql).Tokenize()).Parse()));
     }
@@ -172,30 +167,27 @@ public sealed class SqlServerEntraAuthTests
     [Fact]
     public void SecretResolutionAndMetadata_CoverEntraOptions_AndExcludeAccessToken()
     {
-        // PASSWORD, CLIENT_ID, and TENANT_ID are SECRET:-resolvable on MSSQL and its aliases.
+        // PASSWORD and CLIENT_ID are SECRET:-resolvable on MSSQL and its aliases.
         foreach (var alias in new[] { "MSSQL", "SQLSERVER", "SQL" })
         {
             Assert.True(SecretResolvableFields.IsResolvable("PASSWORD", alias));
             Assert.True(SecretResolvableFields.IsResolvable("CLIENT_ID", alias));
-            Assert.True(SecretResolvableFields.IsResolvable("TENANT_ID", alias));
         }
         Assert.True(SecretResolvableFields.IsCredential("PASSWORD"));
         Assert.False(SecretResolvableFields.IsCredential("CLIENT_ID"));
-        Assert.False(SecretResolvableFields.IsCredential("TENANT_ID"));
 
         var supported = _connector.GetSupportedOptions();
         Assert.Contains("AUTH_MODE", supported.Keys);
         Assert.Contains("CLIENT_ID", supported.Keys);
-        Assert.Contains("TENANT_ID", supported.Keys);
         Assert.DoesNotContain("ACCESS_TOKEN", supported.Keys);
 
         var help = _connector.GetHelp();
         Assert.Contains("AUTH_MODE", help, StringComparison.Ordinal);
         Assert.Contains("CLIENT_ID", help, StringComparison.Ordinal);
-        Assert.Contains("TENANT_ID", help, StringComparison.Ordinal);
 
         Assert.True(LanguageMetadata.IsKeyword("AUTH_MODE"));
         Assert.True(LanguageMetadata.IsKeyword("CLIENT_ID"));
-        Assert.True(LanguageMetadata.IsKeyword("TENANT_ID"));
+        // SqlClient takes the tenant from the server; a TENANT_ID option would be accepted and ignored.
+        Assert.DoesNotContain("TENANT_ID", supported.Keys);
     }
 }

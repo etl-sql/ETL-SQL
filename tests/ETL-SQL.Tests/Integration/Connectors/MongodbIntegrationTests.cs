@@ -195,6 +195,33 @@ namespace ETL_SQL.Tests.Integration.Connectors
         }
 
         [Fact]
+        public async Task MongodbDataSource_ExecutePassThrough_KeepsFieldsFirstSeenLate()
+        {
+            // A field that appears only after the first 10,000 documents must still be a column.
+            var ctx = MakeContext();
+            var collName = $"sparse_{Guid.NewGuid():N}";
+            var client = new MongoDB.Driver.MongoClient(_fixture.ConnectionString);
+            var coll = client.GetDatabase(_fixture.DatabaseName).GetCollection<MongoDB.Bson.BsonDocument>(collName);
+            var docs = Enumerable.Range(1, 10_001).Select(i =>
+            {
+                var d = new MongoDB.Bson.BsonDocument { ["n"] = i };
+                if (i == 10_001) d["late"] = "x";
+                return d;
+            });
+            await coll.InsertManyAsync(docs);
+
+            var ds = new MongodbDataSource(ctx, _fixture.ConnectionString, _fixture.DatabaseName, collName);
+            var batches = await ds.ExecuteRawSql(
+                $"{{\"collection\":\"{collName}\",\"filter\":{{}},\"projection\":{{\"_id\":0}},\"sort\":{{\"n\":1}}}}").ToListAsync();
+
+            var table = Assert.Single(batches);
+            Assert.Contains("late", table.ColumnNames);
+            Assert.Equal(10_001, table.Rows.Count);
+            Assert.Equal("x", table.Rows[^1]["late"]);
+            Assert.Null(table.Rows[0]["late"]);
+        }
+
+        [Fact]
         public async Task MongodbDataSource_ExecutePassThrough_FilterPipelineRefusedWritesAndWhatIf()
         {
             var ctx = MakeContext();
