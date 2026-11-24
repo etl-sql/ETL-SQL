@@ -59,6 +59,40 @@ CREATE CONNECTION mongo_upsert AS MONGODB('mongodb://localhost:27017', DATABASE=
 INSERT INTO mongo_upsert SELECT sku, name, price FROM #products;
 ```
 
+## Pass-Through Queries (`EXECUTE ... BEGIN ... END`)
+
+`MONGODB` does not push down SQL (`SupportsSqlPushdown` is `false`). To filter or aggregate inside MongoDB without scanning an entire collection into engine memory, run a read-only JSON command with `EXECUTE ... BEGIN ... END`:
+
+- **Find mode**: Specify `collection` and `filter` (JSON object), with optional `projection`, `sort`, `limit`, and `skip`.
+- **Aggregate mode**: Specify `collection` and `pipeline` (JSON array of aggregation stages).
+- **Read-only enforcement**: Write commands (`insert`, `update`, `delete`, `drop`, `bulkWrite`, etc.) and write pipeline stages (`$out`, `$merge`, including inside nested stages) are refused.
+- **`SET WHAT_IF ON`**: Logs the command without running it against MongoDB.
+- **Invalid JSON**: Fails with the line and column position without echoing the raw command body.
+
+```sql
+-- Server-side filtered find into a #temp table
+EXECUTE mongo_uri INTO #electronics BEGIN
+  {
+    "collection": "products",
+    "filter": { "category": "Electronics", "price": { "$gte": 25 } },
+    "projection": { "_id": 0, "sku": 1, "name": 1, "price": 1 },
+    "sort": { "price": -1 },
+    "limit": 100
+  }
+END;
+
+-- Server-side aggregation pipeline
+EXECUTE mongo_uri INTO #category_summary BEGIN
+  {
+    "collection": "products",
+    "pipeline": [
+      { "$match": { "category": "Electronics" } },
+      { "$group": { "_id": "$category", "avg_price": { "$avg": "$price" }, "count": { "$sum": 1 } } }
+    ]
+  }
+END;
+```
+
 ## Write Path & Transactions
 
 - **Bulk / write path** — Without `KEY_COLUMNS`, `INSERT INTO` and `COPY INTO` convert each batch of rows to `BsonDocument` instances and write them with `InsertManyAsync`. With `KEY_COLUMNS` set on the connection, each batch runs `BulkWriteAsync` with `ReplaceOneModel(IsUpsert = true)` filtered on the configured key columns; any row with a `NULL` key fails the batch with the 1-based row ordinal before writing. `COPY INTO ... APPEND=FALSE` drops the target collection (`DropCollectionAsync`) first in both modes.
