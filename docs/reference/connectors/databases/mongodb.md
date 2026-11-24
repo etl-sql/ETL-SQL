@@ -59,7 +59,7 @@ INSERT INTO mongo_uri (name, price, category) VALUES ('Wireless Mouse', 29.99, '
 - **Bulk / write path** — `INSERT INTO` and `COPY INTO` convert each batch of rows to `BsonDocument` instances and write them with `InsertManyAsync`. `COPY INTO ... APPEND=FALSE` drops the target collection (`DropCollectionAsync`) before inserting. There is no SQL pushdown (`MongodbDataSource` implements `IDataSource`, not `IDatabaseSource`).
 - **`MERGE` behavior** — Engine-emulated. `MERGE` reads the full collection and source into bounded engine memory, computes the merged result, drops the collection (`DropCollectionAsync`), and inserts the merged documents via `InsertManyAsync`. Keep `MERGE` scoped to collections that fit comfortably within `Engine:OperatorMemoryGrantMB`.
 - **Transactions** — **Not supported** (`MongodbDataSource` does not implement `ITransactionalDataSource`). `BEGIN TRANSACTION` / `COMMIT` / `ROLLBACK` has no effect on MongoDB writes; each `InsertManyAsync` batch is independent.
-- **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` returns without connecting or dropping/inserting documents. `MERGE` and `INSERT` log the planned action or row count without mutating MongoDB.
+- **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` returns without connecting or dropping/inserting documents. `MERGE` and `INSERT` log the dry-run action or row count without mutating MongoDB.
 - **Idempotent-load pattern** — Stage and deduplicate in a `#temp` table first, then load into a dedicated staging collection or replace a small target collection with `COPY INTO mongo_uri FROM #clean APPEND=FALSE` after running a `SET WHAT_IF ON` dry run.
 
 ## Troubleshooting

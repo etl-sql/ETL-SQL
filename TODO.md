@@ -109,11 +109,9 @@ All four items (`FO12`, `XL01`, `XL03`, `DB10`) have shipped on `release/v0.23.0
 
 All three items (`TR07`, `TR08`, `TR09`) have shipped on `release/v0.23.0` (see `CHANGELOG.md`).
 
-**Documentation** (verify every statement against the data source class)
+**Documentation**
 
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| DB14 | **Incremental-load examples.** Confirm whether the ETL Cookbook already shows a watermark pull per source; if not, add runnable lifecycle recipes (MSSQL `rowversion`, Postgres `xmin` or a timestamp column, Oracle `SCN`) following the Extract → Stage → Validate → Merge → Cleanup → Notify shape. | — | M |
+All four items (`DB04`, `DB05`, `DB13`, `DB14`) have shipped on `release/v0.23.0` (see `CHANGELOG.md`).
 
 **Decisions** (output is a written proposal and estimate in the ROADMAP entry; the owner approves; no code)
 

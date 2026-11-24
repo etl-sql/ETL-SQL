@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added source-specific full-lifecycle (Extract → Stage → Validate → Merge → Cleanup → Notify) incremental-load watermark recipes for SQL Server (`rowversion`), PostgreSQL (`updated_at` / `xmin`), and Oracle (`ORA_ROWSCN` / SCN) to `docs/cookbooks/etl/incremental-load-with-high-water-mark.md` (`DB14`).
+
 - Added `docs/reference/connectors/type-mapping.md` documenting verified native-to-engine type mappings across all ten database connectors (including integer storage as `decimal`, Oracle `NUMBER`, Postgres `timestamptz`/`jsonb`/arrays, Snowflake `VARIANT`, MSSQL `datetimeoffset`, BigQuery `STRUCT`/`ARRAY`, SQLite storage classes, ODBC, MongoDB BSON, and Neo4j properties), linked from `docs/reference/connectors/README.md` and `docs/reference/connectors/databases/README.md` (`DB13`).
 
 - Added the database connector capability matrix (transactions, SQL pushdown, bulk/write path, schema introspection, `WHAT_IF`, default timeout, and auth modes across all ten database connectors) to `docs/reference/connectors/databases/README.md` (`DB05`).
