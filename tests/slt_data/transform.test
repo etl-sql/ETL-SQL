@@ -698,3 +698,140 @@ USING CLEAN (
   COLS = 'DoesNotExist',
   RULES = 'TRIM'
 );
+
+# 12. TRANSFORM ... USING BIN / BUCKETIZE and OUTLIERS (TR07)
+statement ok
+CREATE TABLE #t_bin_src (Id INT, Val DECIMAL(18, 2));
+
+statement ok
+INSERT INTO #t_bin_src VALUES
+  (1, 0),
+  (2, 25),
+  (3, 50),
+  (4, 100),
+  (5, NULL);
+
+statement ok
+TRANSFORM #t_bin_ew
+FROM #t_bin_src
+USING BIN (
+  VALUE_COL = 'Val',
+  METHOD = 'EQUAL_WIDTH',
+  BINS = 2
+);
+
+query ITT rowsort
+SELECT Id, COALESCE(CAST(Bin_Start AS STRING), 'NULL'), COALESCE(Bin_Label, 'NULL')
+FROM #t_bin_ew;
+----
+1
+0.0
+[0, 50)
+2
+0.0
+[0, 50)
+3
+50.0
+[50, 100]
+4
+50.0
+[50, 100]
+5
+NULL
+NULL
+
+statement ok
+TRANSFORM #t_bin_thresh
+FROM #t_bin_src
+USING BUCKETIZE (
+  VALUE_COL = 'Val',
+  METHOD = 'THRESHOLDS',
+  THRESHOLDS = '0, 50, 100'
+);
+
+query IT rowsort
+SELECT Id, COALESCE(Bin_Label, 'NULL')
+FROM #t_bin_thresh;
+----
+1
+[0, 50)
+2
+[0, 50)
+3
+[50, 100]
+4
+[50, 100]
+5
+NULL
+
+statement ok
+CREATE TABLE #t_out_src (Id INT, Val DECIMAL(18, 2));
+
+statement ok
+INSERT INTO #t_out_src VALUES
+  (1, 10),
+  (2, 11),
+  (3, 12),
+  (4, 13),
+  (5, 100),
+  (6, NULL);
+
+statement ok
+TRANSFORM #t_out_flag
+FROM #t_out_src
+USING OUTLIERS (
+  VALUE_COL = 'Val',
+  METHOD = 'IQR',
+  ACTION = 'FLAG'
+);
+
+query IT rowsort
+SELECT Id, COALESCE(CAST(Val_IsOutlier AS STRING), 'NULL')
+FROM #t_out_flag;
+----
+1
+0
+2
+0
+3
+0
+4
+0
+5
+1
+6
+NULL
+
+statement ok
+TRANSFORM #t_out_filter
+FROM #t_out_src
+USING OUTLIERS (
+  VALUE_COL = 'Val',
+  METHOD = 'IQR',
+  ACTION = 'FILTER'
+);
+
+query I rowsort
+SELECT Id FROM #t_out_filter;
+----
+1
+2
+3
+4
+6
+
+statement error
+TRANSFORM #err_bin_method
+FROM #t_bin_src
+USING BIN (
+  VALUE_COL = 'Val',
+  METHOD = 'NO_SUCH_METHOD'
+);
+
+statement error
+TRANSFORM #err_out_action
+FROM #t_out_src
+USING OUTLIERS (
+  VALUE_COL = 'Val',
+  ACTION = 'NO_SUCH_ACTION'
+);

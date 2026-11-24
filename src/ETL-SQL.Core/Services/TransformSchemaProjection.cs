@@ -177,6 +177,41 @@ public static class TransformSchemaProjection
                     specs.Add(new ComputedColumnSpec(valueCol, InferUnpivotValueType(valueCols, sourceTypes), valueCols, ReplacesExisting: false));
                     break;
                 }
+            case "BIN":
+            case "BUCKETIZE":
+                {
+                    var valCol = TryGetOptionString(options, "VALUE_COL");
+                    if (!string.IsNullOrEmpty(valCol))
+                    {
+                        var startCol = TryGetOptionString(options, "BIN_START_COL") ?? "Bin_Start";
+                        var endCol = TryGetOptionString(options, "BIN_END_COL") ?? "Bin_End";
+                        var labelCol = TryGetOptionString(options, "BIN_LABEL_COL") ?? "Bin_Label";
+                        specs.Add(new ComputedColumnSpec(startCol, "DECIMAL", [valCol], ReplacesExisting: false));
+                        specs.Add(new ComputedColumnSpec(endCol, "DECIMAL", [valCol], ReplacesExisting: false));
+                        specs.Add(new ComputedColumnSpec(labelCol, "VARCHAR", [valCol], ReplacesExisting: false));
+                    }
+                    break;
+                }
+            case "OUTLIERS":
+                {
+                    var valCol = TryGetOptionString(options, "VALUE_COL");
+                    var action = (TryGetOptionString(options, "ACTION") ?? "CLIP").ToUpperInvariant();
+                    if (!string.IsNullOrEmpty(valCol))
+                    {
+                        if (action == "FLAG")
+                        {
+                            var flagCol = TryGetOptionString(options, "FLAG_COL") ?? $"{valCol}_IsOutlier";
+                            specs.Add(new ComputedColumnSpec(flagCol, "INT", [valCol], ReplacesExisting: false));
+                        }
+                        else if (action is "CLIP" or "NULL")
+                        {
+                            var srcType = sourceTypes != null && sourceTypes.TryGetValue(valCol, out var t) ? t : "DECIMAL";
+                            var outType = action == "CLIP" && IsIntegralType(srcType) ? "DECIMAL" : srcType;
+                            specs.Add(new ComputedColumnSpec(valCol, outType, [valCol], ReplacesExisting: true));
+                        }
+                    }
+                    break;
+                }
         }
 
         return specs;

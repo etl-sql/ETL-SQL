@@ -227,7 +227,7 @@ install). Pick it up again if a real MSI runner loss recurs.
 
 ### Data Preparation — `TRANSFORM` Reliability, Schema/Lineage Integration, and Analyst Operations
 
-**Status:** In Progress; TR01–TR06 shipped in v0.23.0, TR07–TR09 selected for v0.23.0  
+**Status:** In Progress; TR01–TR07 shipped in v0.23.0, TR08–TR09 selected for v0.23.0  
 **Horizon:** Next (v0.23.0)  
 **Scheduling:** Backlog for prioritization after v0.22.0 ships.  
 **Authoritative design:** [TRANSFORM Statement Reference](docs/reference/statements/dml/transform.md),

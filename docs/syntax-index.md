@@ -34,6 +34,8 @@ Statements are the top-level actions in an ETL-SQL script.
 | `TOP_N_OTHERS` | Transform | [Transform](reference/transform/top_n_others.md) | [top_n_others.md](reference/transform/top_n_others.md) |
 | `UNPIVOT` | Transform | [Transform](reference/transform/unpivot.md) | [unpivot.md](reference/transform/unpivot.md) |
 | `CLEAN` | Transform | [Transform](reference/transform/clean.md) | [clean.md](reference/transform/clean.md) |
+| `BIN` | Transform | [Transform](reference/transform/bin.md) | [bin.md](reference/transform/bin.md) |
+| `OUTLIERS` | Transform | [Transform](reference/transform/outliers.md) | [outliers.md](reference/transform/outliers.md) |
 | `COMPARE DATASETS` | Data Prep / CDC | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md#compare-datasets](reference/statements/data-prep.md#compare-datasets) |
 | `CREATE CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
 | `ALTER CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |

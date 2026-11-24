@@ -51,6 +51,13 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             case "CLEAN":
                 await ExecuteClean(stmt, context);
                 break;
+            case "BIN":
+            case "BUCKETIZE":
+                await ExecuteBin(stmt, context);
+                break;
+            case "OUTLIERS":
+                await ExecuteOutliers(stmt, context);
+                break;
             case "TOP_N_OTHERS":
                 await ExecuteTopNOthers(stmt, context);
                 break;
@@ -1756,6 +1763,387 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             || upper.StartsWith("CHAR(", StringComparison.Ordinal)
             || upper.StartsWith("NCHAR(", StringComparison.Ordinal);
     }
+
+    private async Task ExecuteBin(TransformStatement stmt, IExecutionContext context)
+    {
+        var algoName = stmt.Algorithm.ToUpperInvariant();
+        ValidateAllowedOptions(stmt, algoName,
+            "VALUE_COL", "BINS", "METHOD", "THRESHOLDS", "BY_GROUP", "BIN_START_COL", "BIN_END_COL", "BIN_LABEL_COL");
+
+        var valueCol = GetStringOption(stmt.Options, "VALUE_COL", algoName);
+        var method = stmt.Options.ContainsKey("METHOD")
+            ? GetStringOption(stmt.Options, "METHOD", algoName).Trim().ToUpperInvariant()
+            : "EQUAL_WIDTH";
+        if (method is not ("EQUAL_WIDTH" or "QUANTILE" or "THRESHOLDS"))
+            throw new ExecutionException($"{algoName} METHOD must be EQUAL_WIDTH, QUANTILE, or THRESHOLDS, got '{method}'.");
+
+        var startCol = stmt.Options.ContainsKey("BIN_START_COL") ? GetStringOption(stmt.Options, "BIN_START_COL", algoName) : "Bin_Start";
+        var endCol = stmt.Options.ContainsKey("BIN_END_COL") ? GetStringOption(stmt.Options, "BIN_END_COL", algoName) : "Bin_End";
+        var labelCol = stmt.Options.ContainsKey("BIN_LABEL_COL") ? GetStringOption(stmt.Options, "BIN_LABEL_COL", algoName) : "Bin_Label";
+        var groupCols = GetOptionalColumnList(stmt.Options, "BY_GROUP");
+
+        int binCount = 5;
+        List<decimal>? customThresholds = null;
+        if (method == "THRESHOLDS")
+        {
+            var rawSpec = stmt.Options.ContainsKey("THRESHOLDS")
+                ? GetStringOption(stmt.Options, "THRESHOLDS", algoName)
+                : stmt.Options.ContainsKey("BINS")
+                    ? GetStringOption(stmt.Options, "BINS", algoName)
+                    : throw new ExecutionException($"{algoName} with METHOD = 'THRESHOLDS' requires THRESHOLDS or BINS option.");
+            customThresholds = ParseThresholds(rawSpec, algoName);
+        }
+        else if (stmt.Options.ContainsKey("BINS"))
+        {
+            binCount = await EvaluateIntOption(stmt.Options, "BINS", algoName, 5, context);
+            if (binCount < 1)
+                throw new ExecutionException($"{algoName} BINS must be a positive integer, got {binCount}.");
+        }
+
+        using var staged = await StageSourceRows(stmt, context, algoName);
+        ValidateColumnsExist(staged.SourceName, staged.Columns, algoName,
+            ("VALUE_COL", [valueCol]),
+            ("BY_GROUP", groupCols));
+
+        var targetColumnDefs = CopySourceSchemaDefinitions(staged.Columns, staged.SourceSchema);
+        AddOrUpdateColumnDef(targetColumnDefs, startCol, "DECIMAL", isNullable: true);
+        AddOrUpdateColumnDef(targetColumnDefs, endCol, "DECIMAL", isNullable: true);
+        AddOrUpdateColumnDef(targetColumnDefs, labelCol, "VARCHAR", isNullable: true);
+
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
+
+        var groups = groupCols.Count > 0
+            ? staged.Rows.GroupBy(r => BuildGroupKey(r, groupCols)).Select(g => g.ToList()).ToList()
+            : staged.Rows.Count > 0 ? new List<List<Row>> { staged.Rows } : new List<List<Row>>();
+
+        foreach (var groupRows in groups)
+        {
+            var nonNulls = new List<decimal>();
+            foreach (var r in groupRows)
+            {
+                if (TryGetNumericDecimal(GetValue(r[valueCol]), out var d))
+                    nonNulls.Add(d);
+            }
+
+            List<decimal>? edges = null;
+            if (method == "THRESHOLDS")
+            {
+                edges = customThresholds;
+            }
+            else if (nonNulls.Count > 0)
+            {
+                nonNulls.Sort();
+                edges = method == "EQUAL_WIDTH"
+                    ? BuildEqualWidthEdges(nonNulls[0], nonNulls[^1], binCount)
+                    : BuildQuantileEdges(nonNulls, binCount);
+            }
+
+            foreach (var row in groupRows)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                var outRow = new Row(sink.Schema);
+                foreach (var col in staged.Columns)
+                    outRow[col] = GetValue(row[col]);
+
+                var raw = GetValue(row[valueCol]);
+                if (raw == null || edges == null || !TryGetNumericDecimal(raw, out var val))
+                {
+                    outRow[startCol] = null;
+                    outRow[endCol] = null;
+                    outRow[labelCol] = null;
+                }
+                else
+                {
+                    var (bStart, bEnd, bLabel) = AssignBin(val, edges, method == "THRESHOLDS");
+                    outRow[startCol] = bStart;
+                    outRow[endCol] = bEnd;
+                    outRow[labelCol] = bLabel;
+                }
+                await sink.WriteRowAsync(outRow);
+            }
+        }
+
+        await sink.CompleteAsync();
+    }
+
+    private async Task ExecuteOutliers(TransformStatement stmt, IExecutionContext context)
+    {
+        const string algoName = "OUTLIERS";
+        ValidateAllowedOptions(stmt, algoName,
+            "VALUE_COL", "METHOD", "ACTION", "THRESHOLD", "LOWER_PCT", "UPPER_PCT", "FLAG_COL", "BY_GROUP");
+
+        var valueCol = GetStringOption(stmt.Options, "VALUE_COL", algoName);
+        var method = stmt.Options.ContainsKey("METHOD")
+            ? GetStringOption(stmt.Options, "METHOD", algoName).Trim().ToUpperInvariant()
+            : "IQR";
+        if (method is not ("IQR" or "Z_SCORE" or "PERCENTILE"))
+            throw new ExecutionException($"{algoName} METHOD must be IQR, Z_SCORE, or PERCENTILE, got '{method}'.");
+
+        var action = stmt.Options.ContainsKey("ACTION")
+            ? GetStringOption(stmt.Options, "ACTION", algoName).Trim().ToUpperInvariant()
+            : "CLIP";
+        if (action is not ("CLIP" or "FLAG" or "FILTER" or "NULL"))
+            throw new ExecutionException($"{algoName} ACTION must be CLIP, FLAG, FILTER, or NULL, got '{action}'.");
+
+        var flagCol = stmt.Options.ContainsKey("FLAG_COL")
+            ? GetStringOption(stmt.Options, "FLAG_COL", algoName)
+            : $"{valueCol}_IsOutlier";
+        var groupCols = GetOptionalColumnList(stmt.Options, "BY_GROUP");
+
+        double defaultThreshold = method switch
+        {
+            "IQR" => 1.5,
+            "Z_SCORE" => 3.0,
+            _ => 5.0
+        };
+        double threshold = stmt.Options.ContainsKey("THRESHOLD")
+            ? await EvaluateDoubleOption(stmt.Options, "THRESHOLD", algoName, defaultThreshold, context)
+            : defaultThreshold;
+        if (threshold <= 0)
+            throw new ExecutionException($"{algoName} THRESHOLD must be positive, got {threshold}.");
+
+        double lowerPct = stmt.Options.ContainsKey("LOWER_PCT")
+            ? await EvaluateDoubleOption(stmt.Options, "LOWER_PCT", algoName, threshold, context)
+            : threshold;
+        double upperPct = stmt.Options.ContainsKey("UPPER_PCT")
+            ? await EvaluateDoubleOption(stmt.Options, "UPPER_PCT", algoName, 100.0 - lowerPct, context)
+            : 100.0 - lowerPct;
+        if (method == "PERCENTILE" && (lowerPct < 0 || upperPct > 100 || lowerPct >= upperPct))
+            throw new ExecutionException($"{algoName} PERCENTILE requires 0 <= LOWER_PCT < UPPER_PCT <= 100, got [{lowerPct}, {upperPct}].");
+
+        using var staged = await StageSourceRows(stmt, context, algoName);
+        ValidateColumnsExist(staged.SourceName, staged.Columns, algoName,
+            ("VALUE_COL", [valueCol]),
+            ("BY_GROUP", groupCols));
+
+        var targetColumnDefs = CopySourceSchemaDefinitions(staged.Columns, staged.SourceSchema);
+        if (action == "FLAG")
+        {
+            AddOrUpdateColumnDef(targetColumnDefs, flagCol, "INT", isNullable: true);
+        }
+        else if (action == "CLIP")
+        {
+            var existing = targetColumnDefs.FindIndex(c => c.ColumnName.Equals(valueCol, StringComparison.OrdinalIgnoreCase));
+            if (existing >= 0 && IsIntegralDataType(targetColumnDefs[existing].DataType))
+                targetColumnDefs[existing] = new ColumnDefinition(targetColumnDefs[existing].ColumnName, "DECIMAL", true);
+        }
+
+        await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
+
+        var groups = groupCols.Count > 0
+            ? staged.Rows.GroupBy(r => BuildGroupKey(r, groupCols)).Select(g => g.ToList()).ToList()
+            : staged.Rows.Count > 0 ? new List<List<Row>> { staged.Rows } : new List<List<Row>>();
+
+        foreach (var groupRows in groups)
+        {
+            var nonNulls = new List<double>();
+            foreach (var r in groupRows)
+            {
+                if (TryGetNumericDecimal(GetValue(r[valueCol]), out var d))
+                    nonNulls.Add((double)d);
+            }
+
+            double? lowBound = null;
+            double? highBound = null;
+            if (nonNulls.Count > 0)
+            {
+                nonNulls.Sort();
+                if (method == "IQR")
+                {
+                    var q1 = ComputePercentile(nonNulls, 0.25);
+                    var q3 = ComputePercentile(nonNulls, 0.75);
+                    var iqr = q3 - q1;
+                    lowBound = q1 - threshold * iqr;
+                    highBound = q3 + threshold * iqr;
+                }
+                else if (method == "Z_SCORE")
+                {
+                    var mean = nonNulls.Average();
+                    var variance = nonNulls.Sum(x => (x - mean) * (x - mean)) / nonNulls.Count;
+                    var std = Math.Sqrt(variance);
+                    if (std > 0)
+                    {
+                        lowBound = mean - threshold * std;
+                        highBound = mean + threshold * std;
+                    }
+                }
+                else
+                {
+                    lowBound = ComputePercentile(nonNulls, lowerPct / 100.0);
+                    highBound = ComputePercentile(nonNulls, upperPct / 100.0);
+                }
+            }
+
+            foreach (var row in groupRows)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                var raw = GetValue(row[valueCol]);
+                decimal decVal = 0m;
+                bool isNull = raw == null || !TryGetNumericDecimal(raw, out decVal);
+                bool isOutlier = !isNull && lowBound.HasValue && highBound.HasValue
+                    && ((double)decVal < lowBound.Value || (double)decVal > highBound.Value);
+
+                if (action == "FILTER" && isOutlier)
+                    continue;
+
+                var outRow = new Row(sink.Schema);
+                foreach (var col in staged.Columns)
+                    outRow[col] = GetValue(row[col]);
+
+                if (action == "FLAG")
+                {
+                    outRow[flagCol] = isNull ? null : (isOutlier ? 1m : 0m);
+                }
+                else if (action == "NULL" && isOutlier)
+                {
+                    outRow[valueCol] = null;
+                }
+                else if (action == "CLIP" && isOutlier && lowBound.HasValue && highBound.HasValue)
+                {
+                    var clipped = (double)decVal < lowBound.Value ? lowBound.Value : highBound.Value;
+                    outRow[valueCol] = Convert.ToDecimal(Math.Round(clipped, 10), CultureInfo.InvariantCulture);
+                }
+
+                await sink.WriteRowAsync(outRow);
+            }
+        }
+
+        await sink.CompleteAsync();
+    }
+
+    private static async Task<double> EvaluateDoubleOption(
+        Dictionary<string, Expression> options,
+        string key,
+        string algorithm,
+        double defaultValue,
+        IExecutionContext context)
+    {
+        if (!options.TryGetValue(key, out var expr))
+            return defaultValue;
+
+        var raw = GetValue(await context.EvaluationContext.EvaluateValue(expr, Row.Empty));
+        if (raw == null)
+            throw new ExecutionException($"{algorithm} {key} cannot be NULL.");
+
+        try
+        {
+            return Convert.ToDouble(raw, CultureInfo.InvariantCulture);
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
+        {
+            throw new ExecutionException($"{algorithm} {key} value '{raw}' must be a number.", ex);
+        }
+    }
+
+    private static void AddOrUpdateColumnDef(List<ColumnDefinition> defs, string name, string dataType, bool isNullable)
+    {
+        var idx = defs.FindIndex(c => c.ColumnName.Equals(name, StringComparison.OrdinalIgnoreCase));
+        var def = new ColumnDefinition(name, dataType, isNullable);
+        if (idx >= 0) defs[idx] = def;
+        else defs.Add(def);
+    }
+
+    private static bool IsIntegralDataType(string? dataType)
+    {
+        if (string.IsNullOrWhiteSpace(dataType)) return false;
+        var u = dataType.Trim().ToUpperInvariant();
+        return u is "INT" or "INTEGER" or "BIGINT" or "SMALLINT" or "TINYINT";
+    }
+
+    private static bool TryGetNumericDecimal(object? val, out decimal result)
+    {
+        result = 0m;
+        if (val == null) return false;
+        switch (val)
+        {
+            case decimal d: result = d; return true;
+            case int i: result = i; return true;
+            case long l: result = l; return true;
+            case double dbl when double.IsFinite(dbl): result = Convert.ToDecimal(dbl, CultureInfo.InvariantCulture); return true;
+            case float flt when float.IsFinite(flt): result = Convert.ToDecimal(flt, CultureInfo.InvariantCulture); return true;
+            default:
+                return decimal.TryParse(Convert.ToString(val, CultureInfo.InvariantCulture), NumberStyles.Any, CultureInfo.InvariantCulture, out result);
+        }
+    }
+
+    private static List<decimal> ParseThresholds(string rawSpec, string algoName)
+    {
+        var parts = rawSpec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length < 2)
+            throw new ExecutionException($"{algoName} THRESHOLDS requires at least two comma-separated numeric bounds.");
+
+        var edges = new List<decimal>(parts.Length);
+        foreach (var part in parts)
+        {
+            if (!decimal.TryParse(part, NumberStyles.Any, CultureInfo.InvariantCulture, out var val))
+                throw new ExecutionException($"{algoName} THRESHOLDS contains non-numeric bound '{part}'.");
+            if (edges.Count > 0 && val <= edges[^1])
+                throw new ExecutionException($"{algoName} THRESHOLDS must be strictly ascending.");
+            edges.Add(val);
+        }
+        return edges;
+    }
+
+    private static List<decimal> BuildEqualWidthEdges(decimal min, decimal max, int bins)
+    {
+        if (min == max) return [min, max];
+        var edges = new List<decimal>(bins + 1);
+        decimal width = (max - min) / bins;
+        for (int i = 0; i < bins; i++)
+            edges.Add(min + i * width);
+        edges.Add(max);
+        return edges;
+    }
+
+    private static List<decimal> BuildQuantileEdges(List<decimal> sorted, int bins)
+    {
+        var doubles = sorted.Select(d => (double)d).ToList();
+        var edges = new List<decimal>(bins + 1);
+        for (int i = 0; i <= bins; i++)
+        {
+            var q = ComputePercentile(doubles, (double)i / bins);
+            edges.Add(Convert.ToDecimal(Math.Round(q, 10), CultureInfo.InvariantCulture));
+        }
+        return edges;
+    }
+
+    private static double ComputePercentile(List<double> sorted, double p)
+    {
+        if (sorted.Count == 0) return 0;
+        if (sorted.Count == 1) return sorted[0];
+        var clamped = Math.Clamp(p, 0.0, 1.0);
+        var pos = clamped * (sorted.Count - 1);
+        int lo = (int)Math.Floor(pos);
+        int hi = (int)Math.Ceiling(pos);
+        if (lo == hi) return sorted[lo];
+        return sorted[lo] + (pos - lo) * (sorted[hi] - sorted[lo]);
+    }
+
+    private static (decimal? Start, decimal? End, string Label) AssignBin(decimal value, List<decimal> edges, bool openEnds)
+    {
+        if (openEnds && value < edges[0])
+            return (null, edges[0], $"< {FormatBinEdge(edges[0])}");
+        if (openEnds && value > edges[^1])
+            return (edges[^1], null, $"> {FormatBinEdge(edges[^1])}");
+
+        int lastBin = edges.Count - 2;
+        for (int i = 0; i <= lastBin; i++)
+        {
+            bool inBin = i == lastBin
+                ? value <= edges[i + 1]
+                : value < edges[i + 1];
+            if (inBin)
+            {
+                var close = i == lastBin ? "]" : ")";
+                return (edges[i], edges[i + 1], $"[{FormatBinEdge(edges[i])}, {FormatBinEdge(edges[i + 1])}{close}");
+            }
+        }
+
+        return (edges[lastBin], edges[^1], $"[{FormatBinEdge(edges[lastBin])}, {FormatBinEdge(edges[^1])}]");
+    }
+
+    private static string FormatBinEdge(decimal d) =>
+        (d / 1.00000000000000000000000000000m).ToString(CultureInfo.InvariantCulture);
 
     private sealed class TransformOutputSink : IAsyncDisposable
     {
