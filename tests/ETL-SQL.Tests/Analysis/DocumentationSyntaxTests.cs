@@ -317,6 +317,14 @@ namespace ETL_SQL.Tests.Analysis
             {
                 return true;
             }
+            // Native upserts inside EXECUTE ... BEGIN ... END: PostgreSQL `ON CONFLICT ... DO UPDATE
+            // SET` and MySQL `ON DUPLICATE KEY UPDATE` belong to the INSERT, not to a new statement.
+            if (statementStart.Equals("INSERT", StringComparison.OrdinalIgnoreCase) &&
+                (nextKeyword.Equals("UPDATE", StringComparison.OrdinalIgnoreCase) ||
+                 nextKeyword.Equals("SET", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
             if (statementStart.Equals("MERGE", StringComparison.OrdinalIgnoreCase) &&
                 (nextKeyword.Equals("INSERT", StringComparison.OrdinalIgnoreCase) ||
                  nextKeyword.Equals("UPDATE", StringComparison.OrdinalIgnoreCase) ||

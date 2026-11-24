@@ -218,13 +218,17 @@ require_statement = "REQUIRE" ">=" string_literal ;
 lint_statement = "LINT" [ string_literal ] ;
 test_connection_statement = "TEST" "CONNECTION" identifier [ "INTO" temp_table_name ] ;
 temp_table_name = "#" identifier ;
-file_transfer_statement = "SEND" "FILE" expression "TO" expression "AT" identifier [ "WITH" "(" "OVERWRITE" "=" expression ")" ]
-                        | "RECEIVE" "FILE" "FROM" expression "TO" expression "AT" identifier [ "WITH" "(" "OVERWRITE" "=" expression ")" ] ;
+file_transfer_statement = "SEND" "FILE" expression "TO" expression "AT" identifier
+                          [ "WITH" "(" send_file_option { "," send_file_option } ")" ]
+                        | "RECEIVE" "FILE" "FROM" expression "TO" expression "AT" identifier
+                          [ "WITH" "(" receive_file_option { "," receive_file_option } ")" ] ;
+send_file_option = ( "OVERWRITE" | "VERIFY" ) "=" expression ;
+receive_file_option = ( "OVERWRITE" | "RECURSIVE" | "VERIFY" ) "=" expression ;
 email_statement = "SEND" "EMAIL" "TO" expression "FROM" expression "SUBJECT" expression "BODY" expression
                   [ "CC" email_value_list ] [ "BCC" email_value_list ] [ "ATTACH" email_value_list ] [ "AT" expression ] ;
 email_value_list = expression | "[" [ expression_list ] "]" ;
 file_operation_statement = ( "COPY" | "MOVE" | "RENAME" ) "FILE" expression [ "TO" [ "DIRECTORY" ] expression ]
-                           [ file_operation_options ] [ "AT" identifier ]
+                           [ file_operation_options ] [ "AT" identifier [ file_operation_options ] ]
                          | ( "COMPRESS" | "DECOMPRESS" ) "FILE" expression [ "TO" [ "DIRECTORY" ] expression ] [ archive_options ] [ "AT" identifier ]
                          | "DELETE" "FILE" [ "IF" "EXISTS" ] expression [ "AT" identifier ]
                          | "ENCRYPT" "FILE" expression [ "TO" [ "DIRECTORY" ] expression ] [ encrypt_key_clause ] [ transform_options ] [ "AT" identifier ]
@@ -244,12 +248,12 @@ file_operation_options = "WITH" "(" file_operation_option { "," file_operation_o
 file_operation_option = ( "OVERWRITE" | "DATE_SUFFIX" | "SUFFIX_SEPARATOR" ) "=" expression ;
 convert_encoding_statement = "CONVERT" "FILE" "ENCODING" string_literal "TO" string_literal "WITH" "(" "FROM_ENCODING" "=" string_literal "," "TO_ENCODING" "=" string_literal ")" ;
 split_file_statement = "SPLIT" "FILE" expression "TO" expression "WITH" "(" "LIMIT_TYPE" "=" expression "," "LIMIT_VALUE" "=" expression { "," ( "PREFIX" | "OVERWRITE" ) "=" expression } ")" ;
-sync_directory_statement = "SYNC" "DIRECTORY" expression "TO" expression
+sync_directory_statement = "SYNC" "DIRECTORY" expression [ "AT" identifier ] "TO" expression [ "AT" identifier ]
                            [ "WITH" "(" sync_directory_option { "," sync_directory_option } ")" ] ;
 sync_directory_option = ( "DELETE_EXTRA" | "OVERWRITE" | "RECURSIVE" ) "=" expression ;
 verify_file_statement = "VERIFY" "FILE" "INTEGRITY" expression "WITH" "("
+                        ( "EXPECTED_HASH" | "HASH_FILE" ) "=" expression { "," identifier "=" expression } ")"
                       | "VERIFY" "FILE" "SIGNATURE" expression [ "SIGNATURE" expression ] "PGP_KEY" expression ;
-                        ( "EXPECTED_HASH" | "HASH_FILE" ) "=" expression { "," identifier "=" expression } ")" ;
 generate_statement = "GENERATE" expression "ROWS" "INTO" table_reference [ "WITH" object_options ]
                      "AS" "(" identifier "=" string_literal { "," identifier "=" string_literal } ")"
                    | "GENERATE" "CALENDAR" "FROM" expression "TO" expression "INTO" table_reference
@@ -272,7 +276,7 @@ drop_statement = "DROP" local_drop_kind [ "IF" "EXISTS" ] identifier
 local_drop_kind = "CONNECTION" | "PROCEDURE" | "FUNCTION" | "VIEW" | "VISUAL" | "PAGE" | "CONTAINER" | "STYLE" | "BUTTON" | "NAVIGATION" | "TEMPLATE" | "THEME" | "JOB" | "BOOKMARK" ;
 create_directory_statement = "CREATE" "DIRECTORY" expression [ "WITH" "(" "OVERWRITE" "=" expression ")" ] [ "AT" identifier ] ;
 directory_operation_statement = ( "COPY" | "MOVE" | "RENAME" ) "DIRECTORY" expression [ "TO" expression ]
-                                [ directory_operation_options ] [ "AT" identifier ]
+                                [ directory_operation_options ] [ "AT" identifier [ directory_operation_options ] ]
                               | ( "COMPRESS" | "DECOMPRESS" ) "DIRECTORY" expression [ "TO" expression ]
                                 [ archive_options ] [ "AT" identifier ]
                               | "DELETE" "DIRECTORY" [ "IF" "EXISTS" ] expression [ "AT" identifier ]
@@ -426,7 +430,13 @@ create_binding_statement = "CREATE" [ "OR" ( "ALTER" | "REPLACE" ) ] "BINDING" i
 run_script_statement = "RUN" "SCRIPT" expression [ "WITH" "(" parameter_assignments ")" ] ;
 parameter_assignments = variable_name "=" expression [ "OUTPUT" ] { "," variable_name "=" expression [ "OUTPUT" ] } ;
 
-execute_statement = ( "EXECUTE" | "EXEC" ) identifier [ "INTO" table_reference ] "BEGIN" { execute_inner_command [ ";" ] } "END" ;
+execute_statement = ( "EXECUTE" | "EXEC" ) identifier [ "INTO" table_reference ] "BEGIN"
+                    ( json_document | { execute_inner_command [ ";" ] } ) "END" ;
+json_document = json_object | json_array ;
+json_object = [ "{" ] [ json_member { "," json_member } ] [ "}" ] ;
+json_member = ( identifier | string_literal | variable_name ) ":" json_value ;
+json_array = "[" [ json_value { "," json_value } ] "]" ;
+json_value = json_object | json_array | literal | identifier | variable_name | "-" number_literal ;
 /* The body of an EXECUTE <conn> BEGIN ... END block is captured verbatim and pushed down to the
    target host; ETL-SQL itself checks only that BEGIN/END are balanced. The portal_* commands below
    are what the Report Portal accepts inside such a block. They are documented here because that is
