@@ -117,9 +117,9 @@ All four items (`DB04`, `DB05`, `DB13`, `DB14`) have shipped on `release/v0.23.0
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| DB09 | **Decision: cloud identity authentication.** `SqlServerConnector` reads no Entra or managed-identity option, and the review did not check Postgres, MySQL, or Oracle for IAM or Entra token auth. BigQuery already uses Application Default Credentials. Verify the current state for each connector, then propose the options (for example Entra access tokens for MSSQL, IAM tokens for Postgres and MySQL) and an estimate. | — | D |
-| DB12 | **Decision: connector resilience options.** The review found no connector-level retry, isolation-level, or session-setup option (`search_path`, time zone). Confirm that against source, then decide which belong on `CREATE CONNECTION` and which belong in script. Output is a proposal and an estimate only. | — | D |
-| DB15 | **MongoDB and SQLite parity.** MongoDB has no pipeline or filter pass-through like Neo4j's `EXECUTE ... BEGIN ... END` and no upsert key like Neo4j's `KEY_COLUMNS`. SQLite has no journal-mode or pragma option. Decide per item whether to add or document the workaround. | DB04 | D |
+| DB09 | **Decision: cloud identity authentication.** Proposal and estimate recorded in [`ROADMAP.md`](ROADMAP.md#database-connectors--documentation-parity-write-path-clarity-and-credential-gaps) (verified current state across MSSQL, Postgres, MySQL, Oracle, Snowflake, and BigQuery; recommends MSSQL Entra `AUTH_MODE` first, deferring `AWS_IAM` / OCI IAM). **Left:** owner decision. | — | D |
+| DB12 | **Decision: connector resilience options.** Proposal and estimate recorded in [`ROADMAP.md`](ROADMAP.md#database-connectors--documentation-parity-write-path-clarity-and-credential-gaps) (verified `ConnectorRetryPolicy.cs` already provides global Polly retries via `appsettings.json`; recommends keeping retries global, adding `POSTGRES` `SEARCH_PATH` on `CREATE CONNECTION`, and keeping isolation level in script). **Left:** owner decision. | — | D |
+| DB15 | **MongoDB and SQLite parity.** Proposal and estimate recorded in [`ROADMAP.md`](ROADMAP.md#database-connectors--documentation-parity-write-path-clarity-and-credential-gaps) (recommends adding MongoDB `EXECUTE` filter/pipeline pass-through, MongoDB `KEY_COLUMNS` upsert, and SQLite `JOURNAL_MODE` + `BUSY_TIMEOUT_MS`, while keeping ad-hoc pragmas in `EXECUTE`). **Left:** owner decision. | — | D |
 
 ## Tier 3 — if time allows
 

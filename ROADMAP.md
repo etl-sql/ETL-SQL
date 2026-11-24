@@ -551,7 +551,32 @@ new package.
 | DB08 | **Decision: credential providers.** No source references Azure Key Vault or AWS Secrets Manager; secrets come from `ENC:`, `SECRET:`, and allow-listed environment variables. Decide whether a vault-backed `SECRET:` source belongs in the product and under which trust rules. Output is a proposal and an estimate only. | — | D |
 | DB11 | **Decision: native warehouse connectors.** Whether Databricks or Redshift justify a native connector over `ODBC`, given that `ODBC` needs a vendor driver installed on the host. Gather evidence (install friction, feature loss through the bridge, type fidelity) and propose or reject. | — | D |
 
-Selected for v0.23.0 (owner, 2026-11-23): DB06 shipped; DB04, DB05, DB09, DB10, DB12, DB13, DB14 and DB15 moved to [`TODO.md`](TODO.md) 2.4.
+Selected for v0.23.0 (owner, 2026-11-23): DB04–DB06, DB10, DB13, and DB14 shipped; DB09, DB12, and DB15 decision proposals recorded below (awaiting owner approval; no code).
+
+**Decision proposals (2026-11-23):**
+
+- **DB09 — Cloud identity authentication (Proposal):**
+  - *Verified current state:* `BIGQUERY` already supports Application Default Credentials (ADC) when `CREDENTIAL_FILE` is omitted. `MSSQL` supports `USER`/`PASSWORD` and `TRUSTED_CONNECTION=TRUE` only; `POSTGRES`, `MYSQL`, and `ORACLE` support `USER`/`PASSWORD` only; `SNOWFLAKE` supports `PASSWORD` or RSA key-pair JWT (`PRIVATE_KEY_FILE` + `PRIVATE_KEY_PASSPHRASE`). Neither `Azure.Identity` nor `AWSSDK.RDS` is referenced in `Directory.Packages.props`.
+  - *Options & estimate:*
+    1. **MSSQL Entra auth (`S–M`, ~2 days):** Add `AUTH_MODE` (`ENTRA_DEFAULT`, `ENTRA_MANAGED_IDENTITY`, `ENTRA_SERVICE_PRINCIPAL`, `ACCESS_TOKEN`) to `MSSQL` via `Microsoft.Data.SqlClient`'s built-in `Authentication=` keywords / `SqlConnection.AccessToken` (confirming §11 dependency status for `Azure.Identity`).
+    2. **Postgres & MySQL cloud IAM tokens (`M`, ~2–3 days per cloud):** Add `AUTH_MODE = 'AWS_IAM'` (+ `AWS_REGION`, requiring `AWSSDK.RDS` under §11) or `AUTH_MODE = 'ENTRA_MANAGED_IDENTITY'` (requiring `Azure.Identity`) wired into Npgsql's `UsePeriodicPasswordProvider` and MySqlConnector's `ProvidePasswordCallback`.
+    3. **Oracle OCI IAM (`L`, ~3–4 days):** Defer; requires OCI SDK/wallet integration.
+  - *Recommendation:* Approve **Option 1 (`MSSQL` Entra `AUTH_MODE`)** for the next release; defer `AWS_IAM` (Postgres/MySQL) and Oracle OCI IAM until a concrete deployment requires adding `AWSSDK.RDS` / `Azure.Identity`.
+
+- **DB12 — Connector resilience options (Proposal):**
+  - *Verified current state:* Transient retries **already exist** globally in `ConnectorRetryPolicy.cs` (Polly exponential backoff with jitter) for `MSSQL`, `POSTGRES`, `ORACLE`, `SNOWFLAKE`, `BIGQUERY`, `ODBC`, and `MYSQL`, configured via `appsettings.json` (`Connectors:Retry:MaxAttempts`, `Connectors:Retry:BaseDelaySeconds`). `SQLITE`, `MONGODB`, and `NEO4J` do not use `ConnectorRetryPolicy`. No connector exposes retry, isolation-level, `search_path`, or time-zone options on `CREATE CONNECTION`.
+  - *Options & estimate:*
+    1. **Retries:** Keep in `appsettings.json` (operational host policy, not per-script); document `Connectors:Retry` on `databases/README.md` (`S`, ~0.5 day). Do not add per-connection retry options unless mixed flaky-WAN + fail-fast-local scripts require an override.
+    2. **Isolation level:** Belongs in script (`BEGIN TRANSACTION ISOLATION LEVEL ...` or native `EXECUTE ... BEGIN SET TRANSACTION ISOLATION LEVEL ...; END;`), not on `CREATE CONNECTION` (`S`, ~1 day if added to `BEGIN TRANSACTION`).
+    3. **Session setup (`SEARCH_PATH`, `TIME_ZONE`):** Because pooled connections reset or vary outside transactions, `SEARCH_PATH` on `POSTGRES` (via `NpgsqlConnectionStringBuilder.SearchPath`) belongs on `CREATE CONNECTION` (`S`, ~0.5 day). Keep ad-hoc session settings (`TIME_ZONE`, etc.) in `EXECUTE ... BEGIN ... END` inside a transaction.
+  - *Recommendation:* Keep retries global in `appsettings.json` (and document them); add `SEARCH_PATH` to `POSTGRES` (`S`, ~0.5 day) and defer `BEGIN TRANSACTION ISOLATION LEVEL` until requested.
+
+- **DB15 — MongoDB and SQLite parity (Proposal):**
+  - *Verified current state:* `MongodbDataSource` implements `IDataSource` only (full-collection `FindAsync({})` reads; `InsertManyAsync` writes with `DropCollectionAsync` on `APPEND=FALSE`; no `EXECUTE` pass-through and no upsert key). `SqliteDataSource` accepts `DATABASE`, `TIMEOUT_SECONDS`, and `TABLE` only; `PRAGMA busy_timeout` is per-connection and does not persist across separate statements outside a transaction.
+  - *Per-item recommendation & estimate:*
+    1. **MongoDB `EXECUTE mongo BEGIN ... END` filter/pipeline pass-through — Add (`M`, ~2–3 days):** Implement `IDatabaseSource` with `SupportsSqlPushdown => false` (matching `Neo4jDataSource`), accepting a JSON filter or aggregation pipeline so large collections do not require full-collection scans into engine memory.
+    2. **MongoDB `KEY_COLUMNS` upsert — Add (`S`, ~1–1.5 days):** Mirror `NEO4J`'s `KEY_COLUMNS` option to switch `WriteBatches` to `BulkWriteAsync` with `ReplaceOneModel(..., IsUpsert = true)`, enabling idempotent incremental loads without dropping the collection.
+    3. **SQLite `JOURNAL_MODE` and `BUSY_TIMEOUT_MS` — Add (`S`, ~1 day); reject generic `PRAGMA` option:** Apply `JOURNAL_MODE` (`DELETE`, `WAL`, `MEMORY`, `OFF`) and `BUSY_TIMEOUT_MS` on connection open (solving per-connection `SQLITE_BUSY` timeouts), while keeping one-off pragmas in `EXECUTE ... BEGIN PRAGMA ...; END;` rather than adding an open-ended `PRAGMA` option.
 
 **Acceptance evidence:** A test fails when any database page's option table differs from the matching
 connector allowlist; each page lists `TIMEOUT_SECONDS` with its default and the mutually exclusive
