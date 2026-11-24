@@ -201,7 +201,7 @@ namespace ETL_SQL.Connectors.Postgres
                             var val = row[key];
                             if (val == null || val == DBNull.Value) return "\\N";
                             var s = FormatCopyValue(val);
-                            return s.Replace("\t", " ").Replace("\n", " ").Replace("\r", " ");
+                            return EscapeCopyText(s);
                         });
                         await writer.WriteLineAsync(string.Join("\t", values).AsMemory(), effectiveCancellationToken);
                     }
@@ -343,6 +343,15 @@ namespace ETL_SQL.Connectors.Postgres
             }
             return value;
         }
+
+        // COPY text format treats backslash as an escape: \N is NULL and \t, \n, \r are control
+        // characters. Escape the backslash first, then the delimiter and line breaks, so every value
+        // (a Windows path, text with tabs or newlines, a literal \N) arrives exactly as written.
+        internal static string EscapeCopyText(string value) => value
+            .Replace("\\", "\\\\")
+            .Replace("\t", "\\t")
+            .Replace("\n", "\\n")
+            .Replace("\r", "\\r");
 
         private static string FormatCopyValue(object value) => value switch
         {

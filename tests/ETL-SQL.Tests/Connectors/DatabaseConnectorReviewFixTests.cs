@@ -176,6 +176,22 @@ public sealed class DatabaseConnectorReviewFixTests
         Assert.Equal(3, parsed.Count);
     }
 
+    [Theory]
+    // COPY text format: backslash escapes, \N is NULL, \t \n \r are control characters.
+    [InlineData(@"C:\temp\new", @"C:\\temp\\new")]
+    [InlineData(@"\N", @"\\N")]
+    [InlineData("a\tb", @"a\tb")]
+    [InlineData("line1\r\nline2", @"line1\r\nline2")]
+    [InlineData("plain", "plain")]
+    public void Postgres_EscapeCopyText_KeepsValuesExact(string value, string expected)
+    {
+        var escaped = PostgresDataSource.EscapeCopyText(value);
+        Assert.Equal(expected, escaped);
+        Assert.DoesNotContain('\t', escaped);
+        Assert.DoesNotContain('\n', escaped);
+        Assert.DoesNotContain('\r', escaped);
+    }
+
     [Fact]
     public void Snowflake_GetHost_IgnoresHostHiddenInQuotedPassword()
     {

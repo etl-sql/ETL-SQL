@@ -80,7 +80,7 @@ assurance boundary, envelope, reserved keys, audit contract, and resource setup.
 
 ## Write Path & Transactions
 
-- **Bulk / write path** — Cross-source `INSERT INTO` and `COPY INTO` stream rows through Npgsql's text-mode `COPY ... FROM STDIN` (`BeginTextImportAsync`, tab-delimited, `\N` for nulls; embedded tabs/newlines in string values are normalized to spaces). Same-connection `INSERT INTO ... SELECT` pushes down as native PostgreSQL SQL. `COPY INTO ... APPEND=FALSE` runs `TRUNCATE TABLE` first.
+- **Bulk / write path** — Cross-source `INSERT INTO` and `COPY INTO` stream rows through Npgsql's text-mode `COPY ... FROM STDIN` (`BeginTextImportAsync`, tab-delimited, `\N` for nulls; backslashes, tabs and line breaks inside values are escaped, so they arrive unchanged). Same-connection `INSERT INTO ... SELECT` pushes down as native PostgreSQL SQL. `COPY INTO ... APPEND=FALSE` runs `TRUNCATE TABLE` first.
 - **`MERGE` behavior** — Engine-emulated. `MERGE` against a `POSTGRES` target reads both sides into bounded engine memory and rewrites the target via `TRUNCATE TABLE` + `COPY ... FROM STDIN`. For large tables, stage `#delta` into a PostgreSQL staging table and run native `INSERT ... ON CONFLICT DO UPDATE` (or PostgreSQL 15+ `MERGE`) inside `EXECUTE pg_db BEGIN ... END`.
 - **Transactions** — Full `ITransactionalDataSource` support. `BEGIN TRANSACTION` enlists `COPY`, pushed-down DML, `TRUNCATE`, and `EXECUTE ... BEGIN ... END` on the same `NpgsqlTransaction`; `COMMIT` persists and `ROLLBACK` discards.
 - **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` and `TruncateAsync` are no-ops. Pushed-down DML and `EXECUTE` blocks log the compiled SQL without executing it.
