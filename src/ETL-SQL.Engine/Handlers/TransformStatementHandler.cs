@@ -1821,7 +1821,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             var nonNulls = new List<decimal>();
             foreach (var r in groupRows)
             {
-                if (TryGetNumericDecimal(GetValue(r[valueCol]), out var d))
+                if (TryGetNumericDecimal(GetValue(r[valueCol]), algoName, valueCol, out var d))
                     nonNulls.Add(d);
             }
 
@@ -1846,7 +1846,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
                     outRow[col] = GetValue(row[col]);
 
                 var raw = GetValue(row[valueCol]);
-                if (raw == null || edges == null || !TryGetNumericDecimal(raw, out var val))
+                if (edges == null || !TryGetNumericDecimal(raw, algoName, valueCol, out var val))
                 {
                     outRow[startCol] = null;
                     outRow[endCol] = null;
@@ -1925,7 +1925,14 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         {
             var existing = targetColumnDefs.FindIndex(c => c.ColumnName.Equals(valueCol, StringComparison.OrdinalIgnoreCase));
             if (existing >= 0 && IsIntegralDataType(targetColumnDefs[existing].DataType))
-                targetColumnDefs[existing] = new ColumnDefinition(targetColumnDefs[existing].ColumnName, "DECIMAL", true);
+                targetColumnDefs[existing] = new ColumnDefinition(targetColumnDefs[existing].ColumnName, "DECIMAL", isIdentity: false) { IsNullable = targetColumnDefs[existing].IsNullable };
+        }
+        else if (action == "NULL")
+        {
+            // ACTION = NULL writes NULL into VALUE_COL, so it must accept NULL even if the source did not.
+            var existing = targetColumnDefs.FindIndex(c => c.ColumnName.Equals(valueCol, StringComparison.OrdinalIgnoreCase));
+            if (existing >= 0 && !targetColumnDefs[existing].IsNullable)
+                targetColumnDefs[existing].IsNullable = true;
         }
 
         await using var sink = await TransformOutputSink.CreateAsync(stmt, context, algoName, targetColumnDefs, _logger);
@@ -1939,7 +1946,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             var nonNulls = new List<double>();
             foreach (var r in groupRows)
             {
-                if (TryGetNumericDecimal(GetValue(r[valueCol]), out var d))
+                if (TryGetNumericDecimal(GetValue(r[valueCol]), algoName, valueCol, out var d))
                     nonNulls.Add((double)d);
             }
 
@@ -1979,7 +1986,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
                 context.CancellationToken.ThrowIfCancellationRequested();
                 var raw = GetValue(row[valueCol]);
                 decimal decVal = 0m;
-                bool isNull = raw == null || !TryGetNumericDecimal(raw, out decVal);
+                bool isNull = !TryGetNumericDecimal(raw, algoName, valueCol, out decVal);
                 bool isOutlier = !isNull && lowBound.HasValue && highBound.HasValue
                     && ((double)decVal < lowBound.Value || (double)decVal > highBound.Value);
 
@@ -2038,7 +2045,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
     private static void AddOrUpdateColumnDef(List<ColumnDefinition> defs, string name, string dataType, bool isNullable)
     {
         var idx = defs.FindIndex(c => c.ColumnName.Equals(name, StringComparison.OrdinalIgnoreCase));
-        var def = new ColumnDefinition(name, dataType, isNullable);
+        var def = new ColumnDefinition(name, dataType, isIdentity: false) { IsNullable = isNullable };
         if (idx >= 0) defs[idx] = def;
         else defs.Add(def);
     }
@@ -2050,20 +2057,16 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         return u is "INT" or "INTEGER" or "BIGINT" or "SMALLINT" or "TINYINT";
     }
 
-    private static bool TryGetNumericDecimal(object? val, out decimal result)
+    // NULL is "no value" (false); any other value must be numeric. A non-numeric value fails the
+    // statement like the other algorithms' ToDecimal, instead of silently becoming NULL.
+    private static bool TryGetNumericDecimal(object? val, string algorithm, string column, out decimal result)
     {
         result = 0m;
         if (val == null) return false;
-        switch (val)
-        {
-            case decimal d: result = d; return true;
-            case int i: result = i; return true;
-            case long l: result = l; return true;
-            case double dbl when double.IsFinite(dbl): result = Convert.ToDecimal(dbl, CultureInfo.InvariantCulture); return true;
-            case float flt when float.IsFinite(flt): result = Convert.ToDecimal(flt, CultureInfo.InvariantCulture); return true;
-            default:
-                return decimal.TryParse(Convert.ToString(val, CultureInfo.InvariantCulture), NumberStyles.Any, CultureInfo.InvariantCulture, out result);
-        }
+        if (val is double dbl && !double.IsFinite(dbl) || val is float flt && !float.IsFinite(flt))
+            throw new ExecutionException($"{algorithm} column '{column}' value '{val}' is not a finite number.");
+        result = ToDecimal(val, algorithm, column);
+        return true;
     }
 
     private static List<decimal> ParseThresholds(string rawSpec, string algoName)

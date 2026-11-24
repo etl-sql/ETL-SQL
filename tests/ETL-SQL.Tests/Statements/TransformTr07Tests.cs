@@ -98,4 +98,44 @@ public sealed class TransformTr07Tests
         var outCols = TransformSchemaProjection.ProjectColumns(outStmt, [new ColumnMetadata("Val", "DECIMAL")]);
         Assert.Contains(outCols, c => c.Name == "Flag" && c.DataType == "INT");
     }
+
+    [Fact]
+    public async Task TransformBinAndOutliers_AddedColumnsAreNotIdentityAndNonNumericValuesFail()
+    {
+        var eval = await RunAsync("""
+            CREATE TABLE #s (Id INT, Val INT NOT NULL);
+            INSERT INTO #s VALUES (1, 10), (2, 11), (3, 12), (4, 13), (5, 100);
+            TRANSFORM #binned FROM #s USING BIN (VALUE_COL = 'Val', BINS = 2);
+            TRANSFORM #flagged FROM #s USING OUTLIERS (VALUE_COL = 'Val', ACTION = 'FLAG');
+            TRANSFORM #clipped FROM #s USING OUTLIERS (VALUE_COL = 'Val', ACTION = 'CLIP');
+            TRANSFORM #nulled FROM #s USING OUTLIERS (VALUE_COL = 'Val', ACTION = 'NULL');
+            """);
+
+        // ColumnDefinition's third argument is isIdentity; the added columns must be ordinary nullable columns.
+        var binned = Assert.IsType<ETL_SQL.Data.InMemoryDataSource>(eval.Connections["#binned"]);
+        foreach (var col in new[] { "Bin_Start", "Bin_End", "Bin_Label" })
+        {
+            Assert.False(binned.Schema[col].IsIdentity, col);
+            Assert.True(binned.Schema[col].IsNullable, col);
+        }
+        var flagged = Assert.IsType<ETL_SQL.Data.InMemoryDataSource>(eval.Connections["#flagged"]);
+        Assert.False(flagged.Schema["Val_IsOutlier"].IsIdentity);
+        var clipped = Assert.IsType<ETL_SQL.Data.InMemoryDataSource>(eval.Connections["#clipped"]);
+        Assert.False(clipped.Schema["Val"].IsIdentity);
+        Assert.Equal("DECIMAL", clipped.Schema["Val"].DataType);
+        Assert.False(clipped.Schema["Val"].IsNullable);
+        var nulled = Assert.IsType<ETL_SQL.Data.InMemoryDataSource>(eval.Connections["#nulled"]);
+        Assert.True(nulled.Schema["Val"].IsNullable);
+
+        // A non-numeric value fails the statement instead of silently becoming NULL.
+        foreach (var algo in new[] { "BIN (VALUE_COL = 'Val', BINS = 2)", "OUTLIERS (VALUE_COL = 'Val', ACTION = 'FLAG')" })
+        {
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => RunAsync($"""
+                CREATE TABLE #t (Id INT, Val VARCHAR);
+                INSERT INTO #t VALUES (1, '10'), (2, 'abc');
+                TRANSFORM #out FROM #t USING {algo};
+                """));
+            Assert.Contains("not numeric", ex.Message);
+        }
+    }
 }
