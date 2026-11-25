@@ -222,15 +222,6 @@ export function updatePageFit(pageDiv: HTMLElement, contentDiv: HTMLElement): vo
         return;
     }
 
-    // Document offset, not viewport offset: the page may already be scrolled when this runs.
-    const top = pageDiv.getBoundingClientRect().top + (window.scrollY || 0);
-    const minHeight = Number(pageDiv.dataset.fitMinHeight) > 0
-        ? Number(pageDiv.dataset.fitMinHeight)
-        : FIT_MIN_HEIGHT_PX;
-    const available = Math.max(minHeight, Math.floor(window.innerHeight - top - 16));
-    const height = `${available}px`;
-    if (pageDiv.style.height !== height) pageDiv.style.height = height;
-
     const rows = (contentDiv.style.gridTemplateAreas.match(/"[^"]*"/g) || []).length;
     if (rows < 1) return;
 
@@ -249,15 +240,39 @@ export function updatePageFit(pageDiv: HTMLElement, contentDiv: HTMLElement): vo
         const allCells = items.filter(el => rowAreas.includes(el.style.gridArea));
         const localCells = allCells.filter(el => (areaRowCounts.get(el.style.gridArea) || 1) === 1);
         const cells = localCells.length > 0 ? localCells : allCells;
+        const isCollapsed = cells.length > 0 && cells.every(el =>
+            Boolean(el.classList?.contains('visual-collapsed') || el.querySelector('.visual-card.visual-collapsed')));
         return {
             hasChart: cells.some(el => el.querySelector('.chart-wrapper, canvas')),
             hasTable: cells.some(el => el.querySelector('table, .tabulator')),
+            isCollapsed,
         };
     });
 
+    // Document offset, not viewport offset: the page may already be scrolled when this runs.
+    const top = pageDiv.getBoundingClientRect().top + (window.scrollY || 0);
+    const authoredMin = Number(pageDiv.dataset.fitMinHeight);
+    let minHeight: number;
+    if (authoredMin > 0) {
+        minHeight = authoredMin;
+    } else {
+        const rowBudget = rowKinds.reduce((sum, kind) => {
+            if (kind.isCollapsed) return sum + 40;
+            if (kind.hasChart) return sum + 200;
+            if (kind.hasTable) return sum + 190;
+            return sum + 90;
+        }, Math.max(0, rows - 1) * 12);
+        minHeight = Math.max(FIT_MIN_HEIGHT_PX, rowBudget);
+    }
+    const available = Math.max(minHeight, Math.floor(window.innerHeight - top - 16));
+    const height = `${available}px`;
+    if (pageDiv.style.height !== height) pageDiv.style.height = height;
+
     const explicitTracks = parseRowWeights(pageDiv.dataset.fitRowWeights, rows);
     if (explicitTracks) {
-        const tracks = explicitTracks.join(' ');
+        const tracks = explicitTracks.map((track, index) =>
+            rowKinds[index]?.isCollapsed ? 'auto' : track
+        ).join(' ');
         if (contentDiv.style.gridTemplateRows !== tracks) {
             contentDiv.style.gridTemplateRows = tracks;
             requestAnimationFrame(() => resizeChartsIn(pageDiv));
@@ -275,6 +290,7 @@ export function updatePageFit(pageDiv: HTMLElement, contentDiv: HTMLElement): vo
     // slicers, text) keep their natural height so their content is never clipped.
     const tracks = heights.map((h, index) => {
         const kind = rowKinds[index];
+        if (kind?.isCollapsed) return 'auto';
         if (kind?.hasChart) return 'minmax(0, 2fr)';
         if (kind?.hasTable) return 'minmax(0, 1fr)';
         return h > 0 && h <= FIT_COMPACT_ROW_PX ? 'auto' : 'minmax(0, 1fr)';
@@ -324,6 +340,7 @@ function applyPageFit(pageDiv: HTMLElement, contentDiv: HTMLElement, value: unkn
         .observe(pageDiv, { attributes: true, attributeFilter: ['class', 'style'] });
     // First attach: a ResizeObserver on the page fires once it has a box in the live document.
     if (typeof ResizeObserver !== 'undefined') new ResizeObserver(schedule).observe(pageDiv);
+    pageDiv.addEventListener('etlsql:fit-reflow', schedule);
     window.addEventListener('resize', schedule);
 }
 

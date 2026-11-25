@@ -114,15 +114,17 @@ function shouldShowVisualToolbar(type: string, styles: Record<string, unknown>):
     return !NON_MAXIMIZABLE_CONTROL_TYPES.has(type);
 }
 
-// Corner arrows pointing out (maximize) or in (restore); drawn as SVG so no font or glyph is needed.
+// Corner arrows pointing out (maximize) or in (restore); minus/plus for collapse/expand.
 const MAXIMIZE_ICON_PATHS: Record<'maximize' | 'restore', string> = {
     maximize: 'M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4',
     restore: 'M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4',
 };
+const COLLAPSE_ICON_PATHS: Record<'collapse' | 'expand', string> = {
+    collapse: 'M3 8h10',
+    expand: 'M3 8h10M8 3v10',
+};
 
-function setMaximizeButtonState(button: HTMLButtonElement, maximized: boolean): void {
-    const icon: 'maximize' | 'restore' = maximized ? 'restore' : 'maximize';
-    const label = maximized ? 'Restore visual' : 'Maximize visual';
+function makeToolbarIcon(pathData: string, iconName: string): SVGSVGElement {
     const svgNs = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgNs, 'svg');
     svg.setAttribute('viewBox', '0 0 16 16');
@@ -130,24 +132,58 @@ function setMaximizeButtonState(button: HTMLButtonElement, maximized: boolean): 
     svg.setAttribute('height', '14');
     svg.setAttribute('aria-hidden', 'true');
     svg.setAttribute('focusable', 'false');
-    svg.setAttribute('data-icon', icon);
+    svg.setAttribute('data-icon', iconName);
     const path = document.createElementNS(svgNs, 'path');
-    path.setAttribute('d', MAXIMIZE_ICON_PATHS[icon]);
+    path.setAttribute('d', pathData);
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke', 'currentColor');
     path.setAttribute('stroke-width', '1.75');
     path.setAttribute('stroke-linecap', 'round');
     path.setAttribute('stroke-linejoin', 'round');
     svg.appendChild(path);
-    button.replaceChildren(svg);
+    return svg;
+}
+
+function setMaximizeButtonState(button: HTMLButtonElement, maximized: boolean): void {
+    const icon: 'maximize' | 'restore' = maximized ? 'restore' : 'maximize';
+    const label = maximized ? 'Restore visual' : 'Maximize visual';
+    button.replaceChildren(makeToolbarIcon(MAXIMIZE_ICON_PATHS[icon], icon));
     button.title = label;
     button.setAttribute('aria-label', label);
 }
 
-function addVisualToolbar(card: MaximizedVisualCard): void {
+function setCollapseButtonState(button: HTMLButtonElement, collapsed: boolean): void {
+    const icon: 'collapse' | 'expand' = collapsed ? 'expand' : 'collapse';
+    const label = collapsed ? 'Expand visual' : 'Collapse visual';
+    button.replaceChildren(makeToolbarIcon(COLLAPSE_ICON_PATHS[icon], icon));
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+}
+
+function addVisualToolbar(card: MaximizedVisualCard, allowCollapse = true): void {
     card.classList.add('has-visual-toolbar');
     const toolbar = document.createElement('div');
     toolbar.className = 'visual-toolbar';
+
+    let collapseBtn: HTMLButtonElement | null = null;
+    if (allowCollapse) {
+        collapseBtn = document.createElement('button');
+        collapseBtn.type = 'button';
+        collapseBtn.className = 'visual-tool-btn visual-collapse-btn';
+        setCollapseButtonState(collapseBtn, false);
+        collapseBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            if (card.classList.contains('visual-maximized')) {
+                closeMaximizedVisual();
+            }
+            const collapsed = card.classList.toggle('visual-collapsed');
+            setCollapseButtonState(collapseBtn!, collapsed);
+            const fitPage = card.closest('.page[data-fit="SCREEN"]');
+            if (fitPage) fitPage.dispatchEvent(new CustomEvent('etlsql:fit-reflow'));
+        });
+        toolbar.appendChild(collapseBtn);
+    }
 
     const maxBtn = document.createElement('button');
     maxBtn.type = 'button';
@@ -155,6 +191,12 @@ function addVisualToolbar(card: MaximizedVisualCard): void {
     setMaximizeButtonState(maxBtn, false);
     maxBtn.addEventListener('click', e => {
         e.stopPropagation();
+        if (card.classList.contains('visual-collapsed')) {
+            card.classList.remove('visual-collapsed');
+            if (collapseBtn) setCollapseButtonState(collapseBtn, false);
+            const fitPage = card.closest('.page[data-fit="SCREEN"]');
+            if (fitPage) fitPage.dispatchEvent(new CustomEvent('etlsql:fit-reflow'));
+        }
         toggleVisualMaximize(card, maxBtn);
     });
 
@@ -386,12 +428,17 @@ export function renderVisual(container: HTMLElement | DocumentFragment, visual: 
     if (isCardType) title.style.display = 'none';
 
     card.appendChild(title);
-    if (subtitleEl && !isCardType) card.appendChild(subtitleEl);
+    if (subtitleEl && !isCardType) {
+        if (subtitleEl.textContent && title.textContent) {
+            title.title = `${title.textContent} — ${subtitleEl.textContent}`;
+        }
+        card.appendChild(subtitleEl);
+    }
     if (type === 'HTML') {
         card.id = htmlVisualContainerId(visual.name);
     }
     if (shouldShowVisualToolbar(type, vstyles)) {
-        addVisualToolbar(card);
+        addVisualToolbar(card, !isCardType);
     }
 
     if (visual.error) {

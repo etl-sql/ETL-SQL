@@ -355,9 +355,18 @@ internal sealed class PlotPlanSvgRenderer
             yScale = plan.Scales.Single(scale => scale.Id.Equals(sharedRibbonScaleId, StringComparison.OrdinalIgnoreCase));
 
         var effectiveLegendPos = ResolveEffectiveLegendPosition(plan, _options);
+        var dynamicLeftMargin = CartesianPlotLayout.BaseLeftMargin;
+        if (_options.EmbedInCard && yScale is not null && !yScale.Ticks.IsDefaultOrEmpty)
+        {
+            var yTitleForMargin = yScale.Title ?? Style(plan, "axis:y:label") ?? Style(plan, "axis:y:title");
+            var maxTickChars = yScale.Ticks.Max(t => t.Label?.Length ?? 0);
+            var charWidth = _compactCanvas ? 6.2m : 5.6m;
+            var titleGutter = string.IsNullOrWhiteSpace(yTitleForMargin) ? 14m : 28m;
+            dynamicLeftMargin = Math.Clamp(maxTickChars * charWidth + titleGutter, CartesianPlotLayout.BaseLeftMargin, 112m);
+        }
         var (areaBounds, sideLabelsGutter, sideLabelsRight) = CartesianPlotLayout.ResolveCartesianMetrics(
             plan.Bounds, plan.Style, plan.Layers, plan.Series, xScale, plan.Legend.Length,
-            Top, Bottom, effectiveLegendPos);
+            Top, Bottom, effectiveLegendPos, dynamicLeftMargin);
         var plotLeft = areaBounds.X;
         var plotWidth = areaBounds.Width;
         var plotHeight = areaBounds.Height;

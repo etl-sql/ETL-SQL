@@ -466,6 +466,8 @@ export function nativeLayoutTier(
         const cutoff = cur === 'STANDARDSHORT' ? 2.00 : 2.25;
         return aspect >= cutoff ? 'STANDARDSHORT' : 'STANDARD';
     }
+    const ultraCutoff = cur === 'ULTRAWIDESHORT' ? 3.85 : 4.20;
+    if (aspect >= ultraCutoff) return 'ULTRAWIDESHORT';
     const cutoff = cur === 'WIDESHORT' ? 2.35 : 2.65;
     return aspect >= cutoff ? 'WIDESHORT' : 'WIDE';
 }

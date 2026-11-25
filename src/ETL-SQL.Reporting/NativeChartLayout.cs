@@ -16,6 +16,7 @@ public enum NativeChartLayoutTier
     CompactWide,
     StandardShort,
     WideShort,
+    UltraWideShort,
     Square
 }
 
@@ -95,6 +96,11 @@ public sealed class NativeChartLayoutProfile
                 wide.MinimumContainerWidth,
                 wide.MaximumContainerWidth,
                 new PlotBounds(0m, 0m, wide.Bounds.Width, 340m)),
+            [NativeChartLayoutTier.UltraWideShort] = new(
+                NativeChartLayoutTier.UltraWideShort,
+                wide.MinimumContainerWidth,
+                wide.MaximumContainerWidth,
+                new PlotBounds(0m, 0m, 1400m, 260m)),
             [NativeChartLayoutTier.Square] = new(
                 NativeChartLayoutTier.Square,
                 0m,
@@ -138,9 +144,18 @@ public sealed class NativeChartLayoutProfile
         {
             NativeChartLayoutTier.Compact => aspect >= 1.95m ? NativeChartLayoutTier.CompactWide : NativeChartLayoutTier.Compact,
             NativeChartLayoutTier.Standard => aspect >= 2.25m ? NativeChartLayoutTier.StandardShort : NativeChartLayoutTier.Standard,
-            NativeChartLayoutTier.Wide => aspect >= 2.65m ? NativeChartLayoutTier.WideShort : NativeChartLayoutTier.Wide,
+            NativeChartLayoutTier.Wide => aspect >= 4.20m
+                ? NativeChartLayoutTier.UltraWideShort
+                : aspect >= 2.65m ? NativeChartLayoutTier.WideShort : NativeChartLayoutTier.Wide,
             _ => baseTier
         };
+    }
+
+    internal static bool IsAspectLocked(string? visualType)
+    {
+        if (string.IsNullOrWhiteSpace(visualType)) return false;
+        var trimmed = visualType.Trim();
+        return MapTypes.Contains(trimmed) || RadialTypes.Contains(trimmed);
     }
 
     public NativeChartLayoutManifest Manifest(NativeChartLayoutTier tier)
@@ -187,6 +202,79 @@ public static class NativeChartLayoutResolver
     {
         if (Supports(visual))
             Resolve(visual, NativeChartLayoutTier.Standard, profile);
+    }
+
+    /// <summary>
+    /// Pre-resolves initial aspect-aware canvases for native charts placed on <c>FIT = 'SCREEN'</c>
+    /// pages using each visual's slot width share in <c>STRUCTURE</c>. Gives Studio Preview,
+    /// offline snapshots, and first-paint Portal views wide-short canvases immediately without
+    /// waiting for a browser <c>/layout</c> round-trip.
+    /// </summary>
+    public static void ApplyFitPageInitialLayouts(ReportManifest manifest, NativeChartLayoutProfile? profile = null)
+    {
+        if (manifest.Pages.Count == 0 || manifest.Visuals.Count == 0) return;
+
+        var visualsByName = manifest.Visuals
+            .GroupBy(v => v.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var page in manifest.Pages)
+        {
+            if (page.Options is null
+                || !page.Options.TryGetValue("FIT", out var fit)
+                || !fit.Trim().Equals("SCREEN", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (string.IsNullOrWhiteSpace(page.Structure) || page.SlotMap.Count == 0)
+                continue;
+
+            var gridRows = page.Structure
+                .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(r => r.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+                .Where(r => r.Length > 0)
+                .ToArray();
+            if (gridRows.Length == 0) continue;
+
+            foreach (var (slot, targetName) in page.SlotMap)
+            {
+                if (!visualsByName.TryGetValue(targetName, out var visual)) continue;
+                if (visual.Layout is not null || !Supports(visual)) continue;
+                if (NativeChartLayoutProfile.IsAspectLocked(visual.VisualType)) continue;
+
+                var maxColSpan = 0;
+                var totalCols = 0;
+                var rowSpan = 0;
+                foreach (var row in gridRows)
+                {
+                    var count = row.Count(token => token.Equals(slot, StringComparison.OrdinalIgnoreCase));
+                    if (count > 0)
+                    {
+                        rowSpan++;
+                        if (count > maxColSpan)
+                        {
+                            maxColSpan = count;
+                            totalCols = row.Length;
+                        }
+                    }
+                }
+                if (maxColSpan == 0 || totalCols == 0) continue;
+
+                var widthRatio = (decimal)maxColSpan / totalCols;
+                var effectiveRows = (decimal)gridRows.Length / Math.Max(1, rowSpan);
+
+                NativeChartLayoutTier? tier = null;
+                if (widthRatio >= 0.65m && effectiveRows >= 3m)
+                    tier = NativeChartLayoutTier.UltraWideShort;
+                else if (widthRatio >= 0.65m)
+                    tier = NativeChartLayoutTier.WideShort;
+                else if (widthRatio >= 0.35m && effectiveRows >= 3m)
+                    tier = NativeChartLayoutTier.StandardShort;
+                else if (widthRatio < 0.35m && effectiveRows >= 3m)
+                    tier = NativeChartLayoutTier.CompactWide;
+
+                if (tier.HasValue)
+                    Resolve(visual, tier.Value, profile);
+            }
+        }
     }
 
     public static void Resolve(VisualManifest visual, NativeChartLayoutTier tier, NativeChartLayoutProfile? profile = null)

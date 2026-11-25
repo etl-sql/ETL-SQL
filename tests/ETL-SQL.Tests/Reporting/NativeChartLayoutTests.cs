@@ -144,6 +144,7 @@ public sealed class NativeChartLayoutTests
     [Theory]
     [InlineData(420, 180, "BAR", NativeChartLayoutTier.CompactWide)]
     [InlineData(700, 260, "LINE", NativeChartLayoutTier.StandardShort)]
+    [InlineData(1400, 260, "BAR", NativeChartLayoutTier.UltraWideShort)]
     [InlineData(1100, 320, "BAR", NativeChartLayoutTier.WideShort)]
     [InlineData(420, 400, "BAR", NativeChartLayoutTier.Square)]
     [InlineData(1100, 320, "DONUT", NativeChartLayoutTier.Wide)]
@@ -179,6 +180,48 @@ public sealed class NativeChartLayoutTests
         Assert.Equal(340m, patch.Layout.Height);
         Assert.Contains("width='1200' height='340'", patch.NativeSvg);
         Assert.Equal(1, service.NativeLayoutCacheEntryCount);
+    }
+
+    [Fact]
+    public void ApplyFitPageInitialLayouts_SelectsWideShortCanvasesFromGridStructure()
+    {
+        var spec = GrammarOfGraphics.GrammarOfGraphicsContractFixtures.ChartSpec();
+        var data = GrammarOfGraphics.GrammarOfGraphicsContractFixtures.ChartData();
+        var wideBar = new VisualManifest { Name = "WideBar", VisualType = "BAR", ChartSpec = spec, ChartData = data };
+        var halfLine = new VisualManifest { Name = "HalfLine", VisualType = "LINE", ChartSpec = spec, ChartData = data };
+        var map = new VisualManifest { Name = "RegionMap", VisualType = "MAP", ChartSpec = spec, ChartData = data };
+
+        var manifest = new ReportManifest
+        {
+            Pages =
+            [
+                new PageManifest
+                {
+                    Name = "Overview",
+                    Mode = "DASHBOARD",
+                    Structure = "A A A A A / B B B B C / D D E E C / F F F F F",
+                    SlotMap = new Dictionary<string, string>
+                    {
+                        ["B"] = "WideBar",
+                        ["D"] = "HalfLine",
+                        ["E"] = "RegionMap"
+                    },
+                    Options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["FIT"] = "SCREEN" }
+                }
+            ],
+            Visuals = [wideBar, halfLine, map]
+        };
+
+        NativeChartLayoutResolver.ApplyFitPageInitialLayouts(manifest);
+
+        Assert.Equal("ULTRAWIDESHORT", wideBar.Layout?.Tier);
+        Assert.Equal(1400m, wideBar.Layout?.Width);
+        Assert.Equal(260m, wideBar.Layout?.Height);
+        Assert.Equal("STANDARDSHORT", halfLine.Layout?.Tier);
+        Assert.Equal(720m, halfLine.Layout?.Width);
+        Assert.Equal(260m, halfLine.Layout?.Height);
+        // MAP is aspect-locked and must not be stretched onto a wide-short strip canvas.
+        Assert.Null(map.Layout);
     }
 
     private static string GetSamplePath(string relativePath)

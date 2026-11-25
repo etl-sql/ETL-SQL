@@ -27,8 +27,9 @@ internal static class CartesianPlotLayout
         int legendCount,
         decimal topMargin = TopMargin,
         decimal bottomMargin = BottomMargin,
-        string? legendPositionOverride = null) =>
-        ResolveCartesianMetrics(frame, style, layers, series, xScale, legendCount, topMargin, bottomMargin, legendPositionOverride).Area;
+        string? legendPositionOverride = null,
+        decimal leftMargin = BaseLeftMargin) =>
+        ResolveCartesianMetrics(frame, style, layers, series, xScale, legendCount, topMargin, bottomMargin, legendPositionOverride, leftMargin).Area;
 
     internal static (PlotBounds Area, decimal SideLabelsGutter, decimal SideLabelsRight) ResolveCartesianMetrics(
         PlotBounds frame,
@@ -39,7 +40,8 @@ internal static class CartesianPlotLayout
         int legendCount,
         decimal topMargin = TopMargin,
         decimal bottomMargin = BottomMargin,
-        string? legendPositionOverride = null)
+        string? legendPositionOverride = null,
+        decimal leftMargin = BaseLeftMargin)
     {
         var totalWidth = frame.Width;
         var minPlotWidth = totalWidth >= 180m ? MinimumPlotWidth : Math.Max(30m, totalWidth - 40m);
@@ -79,13 +81,13 @@ internal static class CartesianPlotLayout
             .DefaultIfEmpty(0m)
             .Max();
 
-        var remainingWidth = Math.Max(0m, totalWidth - minPlotWidth - BaseLeftMargin - BaseRightMargin - legendWidth - leftLegendWidth);
+        var remainingWidth = Math.Max(0m, totalWidth - minPlotWidth - leftMargin - BaseRightMargin - legendWidth - leftLegendWidth);
 
-        var plotLeft = BaseLeftMargin + leftLegendWidth;
+        var plotLeft = leftMargin + leftLegendWidth;
         if (seriesLabelsEnabled && isStartPos && maxSeriesLabelWidth > 0m)
         {
             var startGutter = Math.Min(maxSeriesLabelWidth, remainingWidth);
-            plotLeft = BaseLeftMargin + startGutter;
+            plotLeft = leftMargin + startGutter;
             remainingWidth = Math.Max(0m, remainingWidth - startGutter);
         }
 
