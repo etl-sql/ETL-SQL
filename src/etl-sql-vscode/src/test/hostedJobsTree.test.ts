@@ -235,6 +235,84 @@ describe('HostedJobsTreeProvider (ST59)', () => {
         tree.dispose();
     });
 
+    it('propagates runSavedPipeline outcomes and refreshes after stale_revision', async () => {
+        let serverVersion = 1;
+        const runSavedPipeline = vi.fn(async (_id: number, version: number) => {
+            if (version === 1) {
+                serverVersion = 2;
+                return 'stale_revision' as const;
+            }
+            return 'refused' as const;
+        });
+
+        const fetchImpl: typeof fetch = async (input) => {
+            const url = new URL(String(input));
+            if (url.pathname === '/api/auth/providers') {
+                return jsonResponse(200, { local: false, oidcEnabled: true });
+            }
+            if (url.pathname === '/api/auth/client/exchange') {
+                return jsonResponse(200, {
+                    token: 'tok-alice',
+                    refreshToken: 'ref-alice',
+                    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+                    sessionId: 'sess-alice',
+                    clientId: 'etlsql-vscode',
+                    audience: 'etl-sql-portal-native-api',
+                    tenantId: 'tenant-alpha',
+                    scopes: ['studio.read', 'studio.run'],
+                    user: { id: 1, username: 'alice', roles: ['Publisher'] }
+                });
+            }
+            if (url.pathname === '/api/studio/session') {
+                return jsonResponse(200, { mode: 'CatalogOnly', capabilities: ['StudioAccess', 'ScriptRun'], sourceControlEnabled: false, draftRecovery: false });
+            }
+            if (url.pathname === '/api/studio/hosted-jobs') {
+                return jsonResponse(200, {
+                    items: [{
+                        kind: 'pipeline',
+                        jobName: 'PIPELINE:42',
+                        displayName: 'FinanceCheck.etlsql',
+                        pipelineId: 42,
+                        pipelineVersion: serverVersion,
+                        folderPath: '/Finance',
+                        isEnabled: true,
+                        lastStatus: 'SUCCESS',
+                        canRun: true,
+                        canStop: false,
+                        portalPath: '/studio.html?reportId=42'
+                    }],
+                    total: 1, offset: 0, limit: 50, hasMore: false, orchestratorOnline: true
+                });
+            }
+            return jsonResponse(404, { error: 'not_found' });
+        };
+
+        const sessions = await createSignedInManager(fetchImpl, {
+            origin: 'https://portal-a.example',
+            tenantId: 'tenant-alpha',
+            userId: 1,
+            username: 'alice',
+            sessionId: 'sess-alice'
+        });
+        const tree = new HostedJobsTreeProvider({
+            sessions,
+            client: new HostedPipelineClient(sessions),
+            runSavedPipeline
+        });
+
+        const v1Nodes = await tree.getChildren();
+        expect(v1Nodes).toHaveLength(1);
+        expect(await tree.runNode(v1Nodes[0])).toBe(false);
+
+        // Stale revision triggered refresh -> v2 is now loaded, and 'refused' still returns false.
+        const v2Nodes = await tree.getChildren();
+        expect(v2Nodes).toHaveLength(1);
+        expect((v2Nodes[0] as Extract<HostedTreeNode, { kind: 'job' }>).item.pipelineVersion).toBe(2);
+        expect(await tree.runNode(v2Nodes[0])).toBe(false);
+        expect(runSavedPipeline).toHaveBeenCalledTimes(2);
+        tree.dispose();
+    });
+
     it('clears the tree on target/account switch and discards late responses from the previous session', async () => {
         let resolveSlowPortalA!: (value: Response) => void;
         const slowPortalAPromise = new Promise<Response>(resolve => {

@@ -640,7 +640,9 @@ export async function activate(context: vscode.ExtensionContext) {
     return {
         getHostedController: () => hostedController,
         getHostedJobsTree: () => hostedJobsTreeProvider,
-        getHostedJobsView: () => hostedJobsTreeView
+        getHostedJobsView: () => hostedJobsTreeView,
+        onDidResultsMessage: ResultsPanel.onDidPostMessage,
+        hasLoadedResultsUi: () => ResultsPanel.hasLoadedUiHtml()
     };
 }
 

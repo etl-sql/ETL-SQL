@@ -151,8 +151,7 @@ public sealed class StudioHostedJobsController(
         }
 
         var ordered = merged
-            .OrderByDescending(entry => entry.Activity?.RunState == ScheduledJobRunState.Running)
-            .ThenBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(entry => entry.JobName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 

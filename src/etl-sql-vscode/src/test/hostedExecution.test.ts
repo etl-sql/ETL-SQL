@@ -404,6 +404,57 @@ describe('HostedExecutionController', () => {
             expect.stringContaining('does not match original host, tenant, and user')
         );
     });
+
+    it('returns the actual submission outcome from runSavedPipeline across stale_revision, accepted, skipped, and recovered paths', async () => {
+        let mode: 'stale' | 'accepted' | 'drop' = 'stale';
+        const fetchMock = vi.fn(async (input: string | URL | Request) => {
+            const url = String(input);
+            if (url.endsWith('/api/studio/pipelines/42/runs')) {
+                if (mode === 'stale') {
+                    return jsonResp({ code: 'stale_revision', error: 'Pipeline is at version 2.', currentVersion: 2 }, 409);
+                }
+                if (mode === 'drop') {
+                    throw new TypeError('socket hang up');
+                }
+                return jsonResp({ runId: 700, pipelineId: 42, version: 2, scriptHash: 'sha256:abc', jobName: 'PIPELINE:42', replayed: false }, 202);
+            }
+            if (url.includes('/api/studio/pipelines/42/runs/by-request/')) {
+                return jsonResp({ runId: 701, pipelineId: 42, version: 2, scriptHash: 'sha256:abc', jobName: 'PIPELINE:42', replayed: true }, 200);
+            }
+            if (url.endsWith('/api/studio/pipelines/42/runs/700') || url.endsWith('/api/studio/pipelines/42/runs/701')) {
+                const runId = url.endsWith('/701') ? 701 : 700;
+                return jsonResp({
+                    runId, pipelineId: 42, status: 'SUCCESS', isTerminal: true,
+                    startTime: new Date().toISOString(), endTime: new Date().toISOString(),
+                    rowsProcessed: 1, logTruncated: false, statements: []
+                });
+            }
+            return new Response(null, { status: 404 });
+        });
+
+        const unauthenticated = new HostedExecutionController({
+            sessions: new HostedSessionManager({ fetchImpl: fetchMock as unknown as typeof fetch, openBrowser: async () => true }),
+            postResults: () => {},
+            sleep: async () => {}
+        });
+        expect(await unauthenticated.runSavedPipeline(42, 1, 'FinanceCheck.etlsql')).toBe('skipped');
+
+        const sessions = createSignedInMockManager({ fetchImpl: fetchMock as unknown as typeof fetch });
+        await sessions.signIn({ alias: 'dev', label: 'Dev', origin: 'http://127.0.0.1:5001' });
+        const controller = new HostedExecutionController({
+            sessions,
+            postResults: () => {},
+            sleep: async () => {}
+        });
+
+        expect(await controller.runSavedPipeline(42, 1, 'FinanceCheck.etlsql')).toBe('stale_revision');
+
+        mode = 'accepted';
+        expect(await controller.runSavedPipeline(42, 2, 'FinanceCheck.etlsql')).toBe('accepted');
+
+        mode = 'drop';
+        expect(await controller.runSavedPipeline(42, 2, 'FinanceCheck.etlsql')).toBe('recovered');
+    });
 });
 
 function createSignedInMockManager(overrides: { fetchImpl: typeof fetch }): HostedSessionManager {

@@ -370,6 +370,164 @@ public sealed class St59HostedJobsTreeTests
         Assert.Equal("federated_orchestrator_required", refusal?.Code);
     }
 
+    [Fact]
+    public async Task HostedJobsTree_PagingRemainsStableWhenJobStatusChangesBetweenPages()
+    {
+        using var orchestrator = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var portal = new St59PortalFactory(orchestrator);
+        using var http = portal.CreateClient();
+
+        int folderId;
+        int aliceId;
+        string alicePrincipalKey;
+        using (var scope = portal.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var admin = await db.Users.SingleAsync(u => u.UserName == "admin");
+            admin.MustChangePassword = false;
+
+            var authorsGroup = new Group { Name = "DataAuthors", Provider = "Local" };
+            db.Groups.Add(authorsGroup);
+            await db.SaveChangesAsync();
+            db.GroupStudioCapabilities.AddRange(
+                new GroupStudioCapability { GroupId = authorsGroup.Id, Capability = StudioCapabilities.StudioAccess },
+                new GroupStudioCapability { GroupId = authorsGroup.Id, Capability = StudioCapabilities.ScriptRead },
+                new GroupStudioCapability { GroupId = authorsGroup.Id, Capability = StudioCapabilities.ScriptRun });
+
+            var folder = new Folder { Name = "Paging", Path = "/Paging", OwnerId = admin.Id };
+            db.Folders.Add(folder);
+            await db.SaveChangesAsync();
+            folderId = folder.Id;
+            db.FolderAcls.Add(new FolderAcl { FolderId = folderId, GroupId = authorsGroup.Id, Permission = FolderPermission.Author });
+
+            var alice = new PortalUser
+            {
+                TenantId = "portal-host",
+                UserName = "alice",
+                NormalizedUserName = "ALICE",
+                Email = "alice@alpha.test",
+                NormalizedEmail = "ALICE@ALPHA.TEST",
+                IsActive = true,
+                MustChangePassword = false,
+                Provider = "Local",
+                SecurityStamp = Guid.NewGuid().ToString("N")
+            };
+            db.Users.Add(alice);
+            await db.SaveChangesAsync();
+            aliceId = alice.Id;
+            alicePrincipalKey = alice.PrincipalKey!;
+            db.UserGroups.Add(new UserGroup { UserId = alice.Id, GroupId = authorsGroup.Id });
+            await db.SaveChangesAsync();
+        }
+
+        var loginResp = await http.PostAsJsonAsync("/api/auth/login", new { username = "admin", password = "Admin@12345!" });
+        Assert.Equal(HttpStatusCode.OK, loginResp.StatusCode);
+        var adminToken = (await loginResp.Content.ReadFromJsonAsync<JsonObject>(Json))!["token"]!.GetValue<string>();
+
+        // 50 jobs sorting before "ZebraWait.etlsql" (51st job) plus a 52nd job "ZetaJob".
+        using (var orchScope = orchestrator.Services.CreateScope())
+        {
+            var historyStore = orchScope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
+            var authStore = orchScope.ServiceProvider.GetRequiredService<IOrchestratorAuthorizationStore>();
+            for (var i = 1; i <= 50; i++)
+            {
+                var jobName = $"AlphaBatch-{i:00}";
+                await historyStore.SaveJobAsync(new JobDefinition(
+                    Name: jobName,
+                    Script: "SELECT 1;",
+                    Interval: 1,
+                    Unit: "Days",
+                    AtTime: null,
+                    LastRun: null,
+                    NextRun: DateTime.UtcNow.AddHours(i),
+                    IsEnabled: true,
+                    DisplayName: $"Alpha Batch {i:00}",
+                    TenantId: "portal-host",
+                    CreatedBy: alicePrincipalKey));
+                var objectId = await authStore.ResolveObjectIdAsync("portal-host", OrchestratorObjectKind.Job, jobName);
+                Assert.NotNull(objectId);
+                await authStore.SaveObjectGrantAsync(new OrchestratorObjectGrant(
+                    objectId!, OrchestratorObjectKind.Job, OrchestratorPrincipalKind.User,
+                    alicePrincipalKey, OrchestratorObjectPermission.Execute, "admin"));
+            }
+
+            await historyStore.SaveJobAsync(new JobDefinition(
+                Name: "ZetaScheduledJob",
+                Script: "SELECT 1;",
+                Interval: 1,
+                Unit: "Days",
+                AtTime: null,
+                LastRun: null,
+                NextRun: DateTime.UtcNow.AddHours(2),
+                IsEnabled: true,
+                DisplayName: "Zeta Scheduled Job",
+                TenantId: "portal-host",
+                CreatedBy: alicePrincipalKey));
+            var zetaObjectId = await authStore.ResolveObjectIdAsync("portal-host", OrchestratorObjectKind.Job, "ZetaScheduledJob");
+            Assert.NotNull(zetaObjectId);
+            await authStore.SaveObjectGrantAsync(new OrchestratorObjectGrant(
+                zetaObjectId!, OrchestratorObjectKind.Job, OrchestratorPrincipalKind.User,
+                alicePrincipalKey, OrchestratorObjectPermission.Execute, "admin"));
+        }
+
+        var (zebraId, zebraVersion) = await CreatePipelineAsync(http, adminToken, folderId, "ZebraWait.etlsql", SlowWaitScript);
+        await ProvisionAndGrantAsync(http, adminToken, zebraId, zebraVersion, alicePrincipalKey, cancelImmediately: true);
+
+        var aliceToken = await IssueNativeTokenAsync(portal, aliceId, [NativeClientScopes.StudioRead, NativeClientScopes.StudioRun]);
+
+        // Page 1: 50 jobs, ZebraWait.etlsql (51st) is not on page 1.
+        List<HostedJobItemDto> page1Items;
+        using (var page1Req = AuthedGet("/api/studio/hosted-jobs?limit=50&offset=0", aliceToken))
+        using (var page1Resp = await http.SendAsync(page1Req))
+        {
+            Assert.Equal(HttpStatusCode.OK, page1Resp.StatusCode);
+            var page1 = (await page1Resp.Content.ReadFromJsonAsync<HostedJobsPageDto>(Json))!;
+            Assert.Equal(52, page1.Total);
+            Assert.True(page1.HasMore);
+            Assert.Equal(50, page1.Items.Count);
+            Assert.DoesNotContain(page1.Items, item => item.PipelineId == zebraId);
+            page1Items = [.. page1.Items];
+        }
+
+        // Start ZebraWait.etlsql (51st job) between page 1 and page 2 so its status becomes RUNNING.
+        long activeRunId;
+        using (var submitReq = new HttpRequestMessage(HttpMethod.Post, $"/api/studio/pipelines/{zebraId}/runs")
+        {
+            Content = JsonContent.Create(new { version = zebraVersion })
+        })
+        {
+            submitReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", aliceToken);
+            submitReq.Headers.TryAddWithoutValidation("Idempotency-Key", Guid.NewGuid().ToString("D"));
+            using var submitResp = await http.SendAsync(submitReq);
+            Assert.Equal(HttpStatusCode.Accepted, submitResp.StatusCode);
+            activeRunId = (await submitResp.Content.ReadFromJsonAsync<PipelineRunSubmittedDto>(Json))!.RunId;
+        }
+
+        // Page 2: remaining 2 jobs must appear without repeating page 1 or dropping ZebraWait.etlsql.
+        List<HostedJobItemDto> page2Items;
+        using (var page2Req = AuthedGet("/api/studio/hosted-jobs?limit=50&offset=50", aliceToken))
+        using (var page2Resp = await http.SendAsync(page2Req))
+        {
+            Assert.Equal(HttpStatusCode.OK, page2Resp.StatusCode);
+            var page2 = (await page2Resp.Content.ReadFromJsonAsync<HostedJobsPageDto>(Json))!;
+            Assert.Equal(52, page2.Total);
+            Assert.False(page2.HasMore);
+            Assert.Equal(2, page2.Items.Count);
+            page2Items = [.. page2.Items];
+        }
+
+        var combined = page1Items.Concat(page2Items).ToList();
+        Assert.Equal(52, combined.Count);
+        Assert.Equal(52, combined.Select(item => item.JobName).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        var zebra = Assert.Single(combined, item => item.PipelineId == zebraId);
+        Assert.Equal(activeRunId, zebra.ActiveRunId);
+        Assert.Equal("RUNNING", zebra.LastStatus);
+
+        using var cancelReq = AuthedPost($"/api/studio/hosted-jobs/{Uri.EscapeDataString($"PIPELINE:{zebraId}")}/runs/{activeRunId}/cancel", aliceToken);
+        using var cancelResp = await http.SendAsync(cancelReq);
+        Assert.Equal(HttpStatusCode.Accepted, cancelResp.StatusCode);
+    }
+
     private static HttpRequestMessage AuthedGet(string path, string token)
     {
         var req = new HttpRequestMessage(HttpMethod.Get, path);

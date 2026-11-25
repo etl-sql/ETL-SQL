@@ -11,6 +11,16 @@ interface ExtensionApi {
     getHostedController: () => HostedExecutionController | undefined;
     getHostedJobsTree: () => HostedJobsTreeProvider | undefined;
     getHostedJobsView: () => vscode.TreeView<HostedTreeNode> | undefined;
+    onDidResultsMessage: vscode.Event<unknown>;
+    hasLoadedResultsUi: () => boolean;
+}
+
+interface LastRunSubmission {
+    statusCode?: number;
+    code?: string;
+    runId?: number;
+    version?: number;
+    jobName?: string;
 }
 
 async function controlPost<T = Record<string, unknown>>(controlUrl: string, endpoint: string, body?: unknown): Promise<T> {
@@ -58,7 +68,8 @@ suite('ST56 Hosted Execution Electron Smoke', function () {
         const controlUrl = process.env.ETLSQL_ST56_SMOKE_CONTROL_URL;
         const pipelineId = Number(process.env.ETLSQL_ST56_SMOKE_PIPELINE_ID || '0');
         const slowPipelineId = Number(process.env.ETLSQL_ST56_SMOKE_SLOW_PIPELINE_ID || '0');
-        if (!portalUrl || !controlUrl || pipelineId <= 0 || slowPipelineId <= 0) {
+        const engineExe = process.env.ETLSQL_ST56_SMOKE_ENGINE_EXE;
+        if (!portalUrl || !controlUrl || pipelineId <= 0 || slowPipelineId <= 0 || !engineExe) {
             this.skip();
             return;
         }
@@ -75,11 +86,15 @@ suite('ST56 Hosted Execution Electron Smoke', function () {
         assert.ok(tree, 'HostedJobsTreeProvider should be initialized on activation');
         assert.ok(treeView, 'HostedJobs TreeView should be registered on activation');
 
-        // 1. Startup defaults to Local (Offline) and focuses the actual Hosted Jobs sidebar view
+        // 1. Startup defaults to Local (Offline) and focuses the actual Hosted Jobs sidebar view until visible
         assert.strictEqual(controller.isHostedTarget(), false, 'Extension must default to Local (Offline) on activation');
         assert.strictEqual(controller.sessions.formatStatusBarLabel(), 'ETL-SQL: Local (Offline)');
         await vscode.commands.executeCommand('workbench.view.extension.etlsql-explorer');
         await vscode.commands.executeCommand('etlsql-hosted-jobs.focus');
+        for (let i = 0; i < 50 && !treeView.visible; i++) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        assert.strictEqual(treeView.visible, true, 'Registered etlsql-hosted-jobs TreeView must become visible');
         const offlineRoots = await tree.getChildren();
         assert.strictEqual(offlineRoots.length, 1);
         assert.strictEqual(offlineRoots[0].kind, 'placeholder');
@@ -97,6 +112,7 @@ suite('ST56 Hosted Execution Electron Smoke', function () {
         // 2. Save server in user settings and connect as alice via the real etlsql.hosted.connect command
         const serverEntry = { alias: 'smoke', label: 'Smoke Portal', origin: portalUrl };
         const cfg = vscode.workspace.getConfiguration('etlsql');
+        await cfg.update('executable.path', engineExe, vscode.ConfigurationTarget.Global);
         await cfg.update('hosted.servers', [serverEntry], vscode.ConfigurationTarget.Global);
         await cfg.update('hosted.defaultServerAlias', 'smoke', vscode.ConfigurationTarget.Global);
         await cfg.update('hosted.pipelineId', pipelineId, vscode.ConfigurationTarget.Global);
@@ -111,9 +127,10 @@ suite('ST56 Hosted Execution Electron Smoke', function () {
         assert.ok(controller.sessions.formatStatusBarLabel().includes('alice'));
 
         // 3. Open a saved (non-dirty) .etlsql file and run saved pipeline via etlsql.runScript (ST56)
+        const initialScriptText = 'SELECT 1 AS Value;\n';
         const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'etlsql-electron-smoke-'));
         const scriptFile = path.join(tempDir, 'FinanceCheck.etlsql');
-        await fs.promises.writeFile(scriptFile, 'SELECT 1 AS Value;\n', 'utf8');
+        await fs.promises.writeFile(scriptFile, initialScriptText, 'utf8');
         try {
             const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(scriptFile));
             const editor = await vscode.window.showTextDocument(doc);
@@ -124,7 +141,7 @@ suite('ST56 Hosted Execution Electron Smoke', function () {
             const histAfter = await getHistoryCount(controlUrl, pipelineId);
             assert.strictEqual(histAfter, histBefore + 1, 'Hosted runScript must execute the saved pipeline on Federated Orchestrator');
 
-            // 4. ST59: Load past 50 jobs in the Hosted Jobs sidebar
+            // 4. ST59: Load past 50 jobs in the Hosted Jobs sidebar and check scheduled job next run
             const firstPage = await tree.getChildren();
             assert.strictEqual(firstPage.length, 51, 'First page should return 50 jobs plus the Load more jobs node');
             const moreNode = firstPage[50];
@@ -137,6 +154,15 @@ suite('ST56 Hosted Execution Electron Smoke', function () {
             const allAliceJobs = await tree.getChildren();
             assert.strictEqual(allAliceJobs.length, 53, 'Loading past 50 jobs should yield all 53 authorized jobs for alice');
             assert.ok(allAliceJobs.every(node => node.kind === 'job'));
+
+            const scheduledJob = allAliceJobs.find(
+                (n): n is Extract<HostedTreeNode, { kind: 'job' }> => n.kind === 'job' && n.item.jobName === 'BatchJob-01'
+            );
+            assert.ok(scheduledJob, 'Scheduled job BatchJob-01 should appear in Hosted Jobs tree');
+            assert.ok(scheduledJob.item.nextScheduledRunAt, 'Scheduled job should expose nextScheduledRunAt');
+            const scheduledItem = tree.getTreeItem(scheduledJob);
+            assert.ok(String(scheduledItem.description).includes('Next:'), 'Scheduled job description must display its next run');
+            assert.ok(String(scheduledItem.tooltip).includes('Next Scheduled Run:'), 'Scheduled job tooltip must display its next run');
 
             const financeNode = allAliceJobs.find(
                 (n): n is Extract<HostedTreeNode, { kind: 'job' }> => n.kind === 'job' && n.item.pipelineId === pipelineId
@@ -161,12 +187,16 @@ suite('ST56 Hosted Execution Electron Smoke', function () {
                 'Expanding a run must show statement logs from the Federated Orchestrator'
             );
 
-            // 6. ST59: Run the displayed saved revision (stale_revision on displayed v1, then v2 with dirty local editor untouched)
+            // 6. ST59: Run the displayed saved revision (409 stale_revision on displayed v1 -> false & refresh; v2 -> true & exact runId, dirty editor + disk unchanged)
             await controlPost(controlUrl, '/bump-finance-version', { pipelineId });
             const histBeforeStale = await getHistoryCount(controlUrl, pipelineId);
-            await vscode.commands.executeCommand('etlsql.hostedJobs.run', financeNode);
+            const v1RunOutcome = await vscode.commands.executeCommand<boolean>('etlsql.hostedJobs.run', financeNode);
+            assert.strictEqual(v1RunOutcome, false, 'Running stale displayed v1 node must return false');
+            const staleSubmission = await controlPost<LastRunSubmission>(controlUrl, '/last-run-submission');
+            assert.strictEqual(staleSubmission.statusCode, 409, 'Displayed v1 submission must receive HTTP 409');
+            assert.strictEqual(staleSubmission.code, 'stale_revision', 'Displayed v1 submission must fail with stale_revision');
             const histAfterStale = await getHistoryCount(controlUrl, pipelineId);
-            assert.strictEqual(histAfterStale, histBeforeStale, 'Running stale displayed v1 node must not silently execute v2');
+            assert.strictEqual(histAfterStale, histBeforeStale, 'Running stale displayed v1 node must add no Orchestrator history');
 
             const refreshedJobs = await loadAllJobNodes(tree);
             const financeV2Node = refreshedJobs.find(n => n.item.pipelineId === pipelineId);
@@ -174,24 +204,33 @@ suite('ST56 Hosted Execution Electron Smoke', function () {
             assert.strictEqual(financeV2Node.item.pipelineVersion, 2);
             assert.ok(String(tree.getTreeItem(financeV2Node).description).includes('v2'));
 
-            // Make the local editor dirty to prove Hosted Jobs Run executes the displayed saved v2 revision directly
+            // Make the local editor dirty to prove Hosted Jobs Run executes the displayed saved v2 revision without altering editor text or disk file
             await editor.edit(eb => eb.insert(new vscode.Position(0, 0), '-- unsaved local edit\n'));
             assert.strictEqual(doc.isDirty, true);
+            const expectedDirtyText = doc.getText();
+            assert.ok(expectedDirtyText.startsWith('-- unsaved local edit\n'));
 
-            await vscode.commands.executeCommand('etlsql.hostedJobs.run', financeV2Node);
+            const v2RunOutcome = await vscode.commands.executeCommand<boolean>('etlsql.hostedJobs.run', financeV2Node);
+            assert.strictEqual(v2RunOutcome, true, 'Running displayed v2 node must return true');
+            const v2Submission = await controlPost<LastRunSubmission>(controlUrl, '/last-run-submission');
+            assert.strictEqual(v2Submission.statusCode, 202);
+            assert.strictEqual(v2Submission.version, 2);
+            const v2RunId = Number(v2Submission.runId || 0);
+            assert.ok(v2RunId > 0, 'v2 run submission must return exact runId');
             const histAfterV2 = await getHistoryCount(controlUrl, pipelineId);
             assert.strictEqual(histAfterV2, histBeforeStale + 1, 'Running displayed v2 node should execute saved v2 revision');
-            assert.strictEqual(doc.isDirty, true, 'Dirty local editor buffer must stay untouched');
+            assert.strictEqual(doc.getText(), expectedDirtyText, 'Dirty local editor text must remain unchanged');
+            assert.strictEqual(await fs.promises.readFile(scriptFile, 'utf8'), initialScriptText, 'On-disk file must remain unchanged');
 
             const v2Jobs = await loadAllJobNodes(tree);
             const financeAfterV2 = v2Jobs.find(n => n.item.pipelineId === pipelineId)!;
             const v2Runs = await tree.getChildren(financeAfterV2);
-            const latestV2Run = v2Runs.find((n): n is Extract<HostedTreeNode, { kind: 'run' }> => n.kind === 'run' && n.run.status === 'SUCCESS');
-            assert.ok(latestV2Run);
-            const v2Stmts = await tree.getChildren(latestV2Run);
+            const exactV2Run = v2Runs.find((n): n is Extract<HostedTreeNode, { kind: 'run' }> => n.kind === 'run' && n.run.runId === v2RunId);
+            assert.ok(exactV2Run, `Tree must show exact v2 run #${v2RunId}`);
+            const v2Stmts = await tree.getChildren(exactV2Run);
             assert.ok(
                 v2Stmts.some(s => s.kind === 'statement' && s.statement.statement.includes('TotalUsers')),
-                'Executed run should correspond to saved v2 script'
+                'Exact v2 run must contain saved v2 statements'
             );
 
             // 7. ST59: Start SlowWait, switch to read-only caller bob + refresh, verify inspectable runs/logs and neither Run nor Stop
@@ -319,10 +358,31 @@ suite('ST56 Hosted Execution Electron Smoke', function () {
             assert.strictEqual(disconnectedRoots.length, 1);
             assert.strictEqual(disconnectedRoots[0].kind, 'placeholder');
 
-            // 10. Stop the Portal via control endpoint, then revert dirty buffer and run locally offline via etlsql.runScript
+            // 10. Stop the Portal via control endpoint, revert dirty buffer, run locally offline, and verify Results UI + result
             await controlPost(controlUrl, '/stop-portal');
             await vscode.commands.executeCommand('workbench.action.files.revert');
-            await vscode.commands.executeCommand('etlsql.runScript');
+            const localMessages: Array<Record<string, unknown>> = [];
+            const sub = api.onDidResultsMessage(msg => {
+                if (msg && typeof msg === 'object') {
+                    localMessages.push(msg as Record<string, unknown>);
+                }
+            });
+            try {
+                await vscode.commands.executeCommand('etlsql.runScript');
+                for (let i = 0; i < 50 && !localMessages.some(m => m.type === 'done'); i++) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            } finally {
+                sub.dispose();
+            }
+            assert.strictEqual(api.hasLoadedResultsUi(), true, 'Built Results webview UI (ui/dist/index.html) must load');
+            const resultMsg = localMessages.find(m => m.type === 'results');
+            assert.ok(resultMsg, `Local execution must produce a results message, got ${JSON.stringify(localMessages)}`);
+            assert.ok(JSON.stringify(resultMsg).includes('Value'), 'Local execution result must include Value column');
+            assert.ok(
+                localMessages.some(m => m.type === 'done' && m.exitCode === 0),
+                `Local execution must complete with exitCode 0, got ${JSON.stringify(localMessages)}`
+            );
 
             // 11. Verify no secrets were persisted to VS Code user settings file
             const userSettingsPath = process.env.ETLSQL_ST56_SMOKE_USER_SETTINGS;

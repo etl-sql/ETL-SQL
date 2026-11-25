@@ -6,6 +6,25 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
     public static readonly viewType = 'etlsql-results-view';
     public static currentPanel: ResultsPanel | undefined;
     private static _rawHtmlCache?: string;
+    private static readonly _messageListeners = new Set<(message: unknown) => void>();
+
+    public static readonly onDidPostMessage: vscode.Event<unknown> = (listener, thisArgs, disposables) => {
+        const bound = thisArgs ? (msg: unknown) => listener.call(thisArgs, msg) : listener;
+        ResultsPanel._messageListeners.add(bound);
+        const subscription: vscode.Disposable = {
+            dispose: () => {
+                ResultsPanel._messageListeners.delete(bound);
+            }
+        };
+        if (disposables) {
+            disposables.push(subscription);
+        }
+        return subscription;
+    };
+
+    public static hasLoadedUiHtml(): boolean {
+        return Boolean(ResultsPanel._rawHtmlCache);
+    }
 
     private _view?: vscode.WebviewView;
     private _extensionUri: vscode.Uri;
@@ -66,6 +85,13 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
     }
 
     public static postMessage(message: unknown) {
+        for (const listener of ResultsPanel._messageListeners) {
+            try {
+                listener(message);
+            } catch {
+                // ignore observer errors
+            }
+        }
         if (ResultsPanel.currentPanel) {
             if (ResultsPanel.currentPanel._isReady && ResultsPanel.currentPanel._view) {
                 ResultsPanel.currentPanel._view.show?.(true); 

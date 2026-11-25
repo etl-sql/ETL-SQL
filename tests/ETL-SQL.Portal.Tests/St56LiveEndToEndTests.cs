@@ -115,6 +115,9 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
         var tempUserData = Path.Combine(Path.GetTempPath(), $"etlsql_vscode_smoke_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempUserData);
         var userSettingsPath = Path.Combine(tempUserData, "User", "settings.json");
+        var engineExe = Path.Combine(repoRoot, "src", "ETL-SQL.App", "bin", "Debug", "net10.0",
+            OperatingSystem.IsWindows() ? "ETL-SQL.exe" : "ETL-SQL");
+        Assert.True(File.Exists(engineExe), $"Compiled ETL-SQL engine executable not found at {engineExe}");
 
         try
         {
@@ -123,10 +126,11 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
                 ["ETLSQL_VSCODE_EXECUTABLE"] = vscodeExe!,
                 ["ETLSQL_VSCODE_USER_DATA_DIR"] = tempUserData,
                 ["ETLSQL_VSCODE_TEST_GREP"] = "ST56 Hosted Execution Electron Smoke",
-                ["ETLSQL_ST56_SMOKE_PORTAL_URL"] = portal.ServerAddress,
+                ["ETLSQL_ST56_SMOKE_PORTAL_URL"] = proxy.ProxyBaseUrl,
                 ["ETLSQL_ST56_SMOKE_CONTROL_URL"] = proxy.ControlBaseUrl,
                 ["ETLSQL_ST56_SMOKE_PIPELINE_ID"] = seeded.FinancePipelineId.ToString(),
                 ["ETLSQL_ST56_SMOKE_SLOW_PIPELINE_ID"] = seeded.SlowPipelineId.ToString(),
+                ["ETLSQL_ST56_SMOKE_ENGINE_EXE"] = engineExe,
                 ["ETLSQL_ST56_SMOKE_USER_SETTINGS"] = userSettingsPath
             };
 
@@ -504,6 +508,7 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
 
         private volatile bool _dropNext202;
         private volatile bool _revokeSessionAfterDrop;
+        private JsonObject? _lastRunSubmission;
 
         public string ProxyBaseUrl { get; }
         public string ControlBaseUrl { get; }
@@ -608,6 +613,27 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
                 }
 
                 var bodyBytes = await resp.Content.ReadAsByteArrayAsync();
+                if (ctx.Request.HttpMethod == "POST"
+                    && (ctx.Request.Url?.AbsolutePath.EndsWith("/runs", StringComparison.OrdinalIgnoreCase) == true))
+                {
+                    var recorded = new JsonObject
+                    {
+                        ["statusCode"] = (int)resp.StatusCode,
+                        ["path"] = ctx.Request.Url?.AbsolutePath
+                    };
+                    try
+                    {
+                        if (JsonNode.Parse(bodyBytes) is JsonObject parsed)
+                        {
+                            if (parsed["code"] is not null) recorded["code"] = parsed["code"]!.DeepClone();
+                            if (parsed["runId"] is not null) recorded["runId"] = parsed["runId"]!.DeepClone();
+                            if (parsed["version"] is not null) recorded["version"] = parsed["version"]!.DeepClone();
+                            if (parsed["jobName"] is not null) recorded["jobName"] = parsed["jobName"]!.DeepClone();
+                        }
+                    }
+                    catch { }
+                    _lastRunSubmission = recorded;
+                }
                 ctx.Response.ContentLength64 = bodyBytes.Length;
                 await ctx.Response.OutputStream.WriteAsync(bodyBytes);
                 ctx.Response.Close();
@@ -683,6 +709,10 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
                     }
                     var saved = (await saveResp.Content.ReadFromJsonAsync<JsonObject>(Json))!;
                     result = new { ok = true, version = saved["version"]!.GetValue<long>() };
+                }
+                else if (path == "/last-run-submission")
+                {
+                    result = _lastRunSubmission ?? new JsonObject();
                 }
                 else
                 {

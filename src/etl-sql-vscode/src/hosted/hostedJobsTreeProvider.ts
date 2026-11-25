@@ -10,6 +10,7 @@ import {
 } from './hostedTypes';
 import { HostedSessionExpiredError, HostedSessionManager } from './hostedSessionManager';
 import { HostedPipelineClient } from './hostedPipelineClient';
+import type { HostedSubmissionOutcome } from './hostedExecutionController';
 
 export type HostedTreeNode =
     | { kind: 'placeholder'; id: string; label: string; description?: string; commandId?: string }
@@ -22,7 +23,7 @@ export type HostedTreeNode =
 export interface HostedJobsTreeOptions {
     sessions: HostedSessionManager;
     client?: HostedPipelineClient;
-    runSavedPipeline?: (pipelineId: number, version: number, displayName: string) => Promise<void>;
+    runSavedPipeline?: (pipelineId: number, version: number, displayName: string) => Promise<HostedSubmissionOutcome | boolean | void>;
     openExternal?: (uri: vscode.Uri) => Thenable<boolean> | Promise<boolean>;
     log?: (message: string) => void;
 }
@@ -430,23 +431,34 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
 
         const item = node.item;
         try {
+            let started = false;
+            let shouldRefresh = false;
             if (item.kind === 'pipeline') {
                 if (!item.pipelineId || !item.pipelineVersion || !this._runSavedPipeline) {
                     return false;
                 }
-                await this._runSavedPipeline(item.pipelineId, item.pipelineVersion, item.displayName);
+                const outcome = await this._runSavedPipeline(item.pipelineId, item.pipelineVersion, item.displayName);
+                if (outcome === undefined || outcome === true || outcome === 'accepted' || outcome === 'recovered') {
+                    started = true;
+                    shouldRefresh = true;
+                } else if (outcome === 'stale_revision') {
+                    started = false;
+                    shouldRefresh = true;
+                }
             } else {
                 const triggered = await this._client.triggerHostedJob(item.jobName);
                 if (this.getCurrentSessionKey() !== sessionKey) {
                     return false;
                 }
                 void vscode.window.showInformationMessage(`ETL-SQL: ${triggered.message}`);
+                started = true;
+                shouldRefresh = true;
             }
 
-            if (this.computeSessionKey(this._sessions.getSession()) === sessionKey) {
+            if (shouldRefresh && this.computeSessionKey(this._sessions.getSession()) === sessionKey) {
                 this.refresh();
             }
-            return true;
+            return started;
         } catch (err) {
             if (this.getCurrentSessionKey() === sessionKey) {
                 void vscode.window.showErrorMessage(`ETL-SQL: ${this.sanitizeError(err)}`);
