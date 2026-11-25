@@ -67,7 +67,10 @@
     "onCommand:etlsql.openConnectionWizard",
     "onCommand:etlsql.walkthrough.openPipeline",
     "onCommand:etlsql.walkthrough.runPipeline",
-    "onCommand:etlsql.walkthrough.previewReport"
+    "onCommand:etlsql.walkthrough.previewReport",
+    "onCommand:etlsql.hosted.selectTarget",
+    "onCommand:etlsql.hosted.connect",
+    "onCommand:etlsql.hosted.disconnect"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -261,6 +264,47 @@
             "markdownDescription": "Automatically open the interactive split-screen **Report Preview** pane when opening a `.rptsql` file."
           }
         }
+      },
+      {
+        "title": "Hosted Execution",
+        "order": 5,
+        "properties": {
+          "etlsql.hosted.servers": {
+            "type": "array",
+            "scope": "application",
+            "default": [],
+            "markdownDescription": "Saved trusted **ETL-SQL Portal** servers (user-level only). Plain `http://` is allowed only for explicit `localhost` / `127.0.0.1` development hosts.",
+            "items": {
+              "type": "object",
+              "required": ["alias", "label", "origin"],
+              "properties": {
+                "alias": { "type": "string" },
+                "label": { "type": "string" },
+                "origin": { "type": "string" },
+                "environment": { "type": "string" }
+              }
+            }
+          },
+          "etlsql.hosted.defaultServerAlias": {
+            "type": "string",
+            "scope": "resource",
+            "default": "",
+            "markdownDescription": "Optional workspace reference to a saved server **alias** from `etlsql.hosted.servers`. Never auto-trusts unknown URLs; startup always defaults to Local (Offline)."
+          },
+          "etlsql.hosted.pipelineId": {
+            "type": "integer",
+            "scope": "resource",
+            "default": 0,
+            "markdownDescription": "Optional workspace Portal pipeline document ID linked to the active script."
+          },
+          "etlsql.hosted.pipelineLinks": {
+            "type": "object",
+            "scope": "resource",
+            "default": {},
+            "markdownDescription": "Optional map of workspace-relative script paths (or filenames) to saved Portal pipeline IDs.",
+            "additionalProperties": { "type": "integer" }
+          }
+        }
       }
     ],
     "commands": [
@@ -390,6 +434,18 @@
       {
         "command": "etlsql.walkthrough.previewReport",
         "title": "ETL-SQL: Preview Sample Dashboard"
+      },
+      {
+        "command": "etlsql.hosted.selectTarget",
+        "title": "ETL-SQL: Select Execution Target"
+      },
+      {
+        "command": "etlsql.hosted.connect",
+        "title": "ETL-SQL: Connect to Hosted Portal"
+      },
+      {
+        "command": "etlsql.hosted.disconnect",
+        "title": "ETL-SQL: Disconnect from Hosted Portal"
       }
     ],
     "walkthroughs": [

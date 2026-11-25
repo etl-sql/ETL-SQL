@@ -18,15 +18,28 @@ export const window = {
     showInputBox: vi.fn(),
     showQuickPick: vi.fn(),
     registerWebviewViewProvider: vi.fn(),
+    createStatusBarItem: vi.fn(() => ({
+        text: '',
+        tooltip: '',
+        command: '',
+        show: vi.fn(),
+        hide: vi.fn(),
+        dispose: vi.fn()
+    })),
     activeTextEditor: undefined as unknown,
     onDidChangeActiveTextEditor: vi.fn(() => ({ dispose: vi.fn() }))
 };
 
+export const StatusBarAlignment = { Left: 1, Right: 2 };
+export const ConfigurationTarget = { Global: 1, Workspace: 2, WorkspaceFolder: 3 };
+
 export const workspace = {
     getConfiguration: vi.fn(() => ({
         get: vi.fn(),
+        inspect: vi.fn(() => ({})),
         update: vi.fn()
     })),
+    getWorkspaceFolder: vi.fn(),
     workspaceFolders: undefined as unknown,
     onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
     onDidCloseTextDocument: vi.fn(() => ({ dispose: vi.fn() }))

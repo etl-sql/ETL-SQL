@@ -33,11 +33,14 @@ import { consumePolicySave } from './saveGuard';
 import { replaceDocumentWithoutUndoHistory } from './documentWriter';
 import { analyzeSavePolicy, getSealPasswordRequirement, requiresRunPasswordPrompt } from './savePolicy';
 import { registerWalkthroughCommands } from './walkthrough';
+import { HostedSessionManager } from './hosted/hostedSessionManager';
+import { HostedExecutionController } from './hosted/hostedExecutionController';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
 let connectionsProvider: ConnectionsProvider;
 let sidebarProvider: SidebarProvider;
+let hostedController: HostedExecutionController | undefined;
 let activeTerminals: vscode.Terminal[] = [];
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -201,11 +204,31 @@ export async function activate(context: vscode.ExtensionContext) {
     ResultsPanel.setOnMessageReceived((msg: unknown) => {
         const typedMsg = msg as { type: string; level?: string; message?: string };
         if (typedMsg.type === 'cancel') {
-            ReplManager.getInstance().cancel();
+            if (hostedController?.isRunning()) {
+                void hostedController.stopHostedRun();
+            } else {
+                ReplManager.getInstance().cancel();
+            }
         } else if (typedMsg.type === 'log') {
             logger.logWebview('Results', typedMsg.message || '', (typedMsg.level as 'info' | 'warn' | 'error') || 'info');
         }
     });
+
+    // Hosted execution manager & status bar (always defaults to Local (Offline) on startup)
+    const hostedSessions = new HostedSessionManager({
+        openBrowser: url => vscode.env.openExternal(vscode.Uri.parse(url)),
+        log: msg => outputChannel.appendLine(msg)
+    });
+    hostedController = new HostedExecutionController({
+        sessions: hostedSessions,
+        log: msg => outputChannel.appendLine(msg)
+    });
+    context.subscriptions.push(
+        hostedController,
+        vscode.commands.registerCommand('etlsql.hosted.selectTarget', () => hostedController?.selectTarget()),
+        vscode.commands.registerCommand('etlsql.hosted.connect', () => hostedController?.connect()),
+        vscode.commands.registerCommand('etlsql.hosted.disconnect', () => hostedController?.disconnect())
+    );
 
     let serverPath = (config.get<string>('server.path') || '').trim();
 
@@ -348,8 +371,12 @@ export async function activate(context: vscode.ExtensionContext) {
         runEtlSql(context, true);
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('etlsql.stopScript', () => {
-        ReplManager.getInstance().cancel();
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.stopScript', async () => {
+        if (hostedController?.isRunning()) {
+            await hostedController.stopHostedRun();
+        } else {
+            ReplManager.getInstance().cancel();
+        }
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.format', async () => {
@@ -605,6 +632,15 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
         return;
     }
 
+    if (hostedController?.isHostedTarget()) {
+        if (selectionOnly) {
+            hostedController.handleRunSelectionUnavailable();
+            return;
+        }
+        await hostedController.runHostedScript(editor);
+        return;
+    }
+
     if (ReplManager.getInstance().isRunning()) {
         vscode.window.showWarningMessage("ETL-SQL: A script is already running. Stop it first or wait for completion.");
         return;
@@ -801,6 +837,12 @@ function forceKillProcesses() {
 }
 
 export async function deactivate(): Promise<void> {
+    try {
+        await hostedController?.disconnectOnShutdown();
+    } catch (err) {
+        outputChannel?.appendLine(`[Extension] Error disconnecting hosted session: ${err}`);
+    }
+
     // Force kill processes immediately to unlock files for VS Code's installer
     forceKillProcesses();
 
