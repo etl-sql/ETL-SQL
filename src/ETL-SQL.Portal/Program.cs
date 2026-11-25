@@ -127,6 +127,7 @@ builder.Services.AddSingleton<ETL_SQL.Gateway.IGatewayAmbiguousOutcomeSink>(sp =
 builder.Services.AddSingleton<ETL_SQL.Core.Governance.IGatewayOperationRouter, ETL_SQL.Portal.Services.PortalGatewayOperationRouter>();
 builder.Services.AddSingleton<PortalModuleRegistry>();
 builder.Services.AddSingleton<StudioAuthorizationService>();
+builder.Services.AddSingleton<StudioRunIdempotencyCoordinator>();
 builder.Services.AddScoped<StudioCapabilityStore>();
 builder.Services.AddScoped<AccessSimulationService>();
 builder.Services.AddScoped<GovernanceService>();

@@ -71,6 +71,9 @@ public sealed class RefreshTokenMaintenanceService(
             removed += await db.NativeClientAuthTransactions
                 .Where(t => t.ExpiresAt <= utcNow)
                 .ExecuteDeleteAsync(ct);
+            removed += await db.StudioRunIdempotencies
+                .Where(r => r.ExpiresAt <= utcNow)
+                .ExecuteDeleteAsync(ct);
             sw.Stop();
             BackgroundServiceObservability.SetRowsProcessed(activity, removed);
             BackgroundServiceObservability.CompleteRun(

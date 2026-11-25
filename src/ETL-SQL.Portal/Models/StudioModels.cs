@@ -80,7 +80,8 @@ public sealed record PipelineRunSubmittedDto(
     int PipelineId,
     long Version,
     string ScriptHash,
-    string JobName);
+    string JobName,
+    bool Replayed = false);
 
 /// <summary>
 /// A refusal the author can act on. <see cref="Code"/> is stable and names whose decision it was:

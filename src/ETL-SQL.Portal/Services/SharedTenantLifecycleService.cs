@@ -359,6 +359,7 @@ public sealed class SharedTenantLifecycleService(
         var datasetIds = db.Datasets.Where(x => x.TenantId == tenant).Select(x => x.Id);
 
         await db.PortalExecutionJobs.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
+        await db.StudioRunIdempotencies.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
         await db.StudioPrivateDraftRevisions.Where(x => db.StudioPrivateDrafts
             .Where(d => d.TenantId == tenant).Select(d => d.Id).Contains(x.DraftId)).ExecuteDeleteAsync(ct);
         await db.StudioPrivateDrafts.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);

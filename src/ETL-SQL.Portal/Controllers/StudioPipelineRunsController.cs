@@ -35,11 +35,17 @@ public sealed class StudioPipelineRunsController(
     OrchestratorProxyService orchestrator,
     AuditService audit,
     DatasetTenantScope? tenantScope = null,
-    PortalTenantCatalogScope? catalogScope = null) : ControllerBase
+    PortalTenantCatalogScope? catalogScope = null,
+    StudioRunIdempotencyCoordinator? idempotencyCoordinator = null,
+    TimeProvider? clock = null) : ControllerBase
 {
+    public const string IdempotencyKeyHeader = "Idempotency-Key";
+    internal static readonly TimeSpan IdempotencyTtl = TimeSpan.FromHours(24);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly DatasetTenantScope _tenantScope = tenantScope ?? new DatasetTenantScope(portalConfig);
+    private readonly StudioRunIdempotencyCoordinator _coordinator = idempotencyCoordinator ?? new StudioRunIdempotencyCoordinator();
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _tenantScope);
     private int? CurrentUserId =>
         int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
@@ -50,10 +56,187 @@ public sealed class StudioPipelineRunsController(
     [HttpPost("{id:int}/runs")]
     public async Task<IActionResult> Submit(int id, [FromBody] SubmitPipelineRunRequest request, CancellationToken ct)
     {
+        string? idempotencyKey = null;
+        if (Request.Headers.TryGetValue(IdempotencyKeyHeader, out var headerValues))
+        {
+            if (headerValues.Count != 1 || !TryParseUuidV4(headerValues[0], out var parsedKey))
+                return BadRequest(new PipelineRunRefusalDto(
+                    "invalid_idempotency_key",
+                    "Idempotency-Key must be a valid UUIDv4."));
+            idempotencyKey = parsedKey;
+        }
+
         var pipeline = await RunnablePipelineAsync(id, ct);
         if (pipeline.Refusal is not null) return pipeline.Refusal;
         var document = pipeline.Document!;
 
+        if (idempotencyKey is null)
+            return await SubmitWithoutIdempotencyKeyAsync(document, request, ct);
+
+        var userId = CurrentUserId;
+        if (userId is null) return Unauthorized();
+
+        var tenantId = _tenantScope.TenantId;
+        var compositeKey = StudioRunIdempotencyCoordinator.BuildKey(tenantId, userId.Value, document.Id, idempotencyKey);
+        using var gate = await _coordinator.AcquireAsync(compositeKey, ct);
+
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var existing = await FindActiveIdempotencyRowAsync(tenantId, userId.Value, document.Id, idempotencyKey, now, ct);
+        if (existing is not null)
+            return await ResolveExistingSubmissionAsync(existing, request.Version, isPostReplay: true, now, ct);
+
+        // Run means the saved revision. An author looking at an older or unsaved one is told so
+        // instead of running text they are not looking at.
+        if (request.Version != document.Version)
+            return Conflict(new PipelineRunRefusalDto(
+                "stale_revision",
+                $"Run uses the saved revision. This pipeline is at version {document.Version}; save or reload, then run again.",
+                document.Version));
+
+        if (!orchestrator.IsConfigured)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new PipelineRunRefusalDto(
+                "orchestrator_not_connected",
+                "No Orchestrator is connected to this Portal, so a pipeline cannot run from here. "
+                + "Authoring, validation and preview still work. An administrator connects one under Admin, Orchestrator."));
+
+        var scriptKey = PortalPathGuard.ToScriptKey(portalConfig, document.ScriptPath);
+        if (scriptKey is null || !await artifacts.ExistsAsync(ArtifactArea.Scripts, scriptKey, ct))
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new PipelineRunRefusalDto(
+                "revision_unavailable", "The saved revision of this pipeline could not be read."));
+        var scriptText = await artifacts.ReadAllTextAsync(ArtifactArea.Scripts, scriptKey, ct);
+        if (string.IsNullOrWhiteSpace(scriptText))
+            return UnprocessableEntity(new PipelineRunRefusalDto(
+                "empty_revision", "The saved revision of this pipeline is empty, so there is nothing to run."));
+
+        var jobName = JobName(document.Id);
+        var scriptHash = ComputeScriptHash(scriptText);
+
+        var claim = new StudioRunIdempotency
+        {
+            TenantId = tenantId,
+            UserId = userId.Value,
+            PipelineId = document.Id,
+            IdempotencyKey = idempotencyKey,
+            RequestedVersion = document.Version,
+            ScriptHash = scriptHash,
+            JobName = jobName,
+            State = "Pending",
+            OwnerInstanceId = _coordinator.InstanceId,
+            CreatedAt = now,
+            ExpiresAt = now.Add(IdempotencyTtl)
+        };
+
+        db.StudioRunIdempotencies.Add(claim);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            db.Entry(claim).State = EntityState.Detached;
+            var raced = await FindActiveIdempotencyRowAsync(tenantId, userId.Value, document.Id, idempotencyKey, now, ct);
+            if (raced is not null)
+                return await ResolveExistingSubmissionAsync(raced, request.Version, isPostReplay: true, now, ct);
+            throw;
+        }
+
+        HttpResponseMessage? response;
+        try
+        {
+            response = await orchestrator.RunJobRevisionAsync(
+                jobName, scriptText, document.Name, $"Portal pipeline {document.Folder.Path}/{document.Name}", ct);
+        }
+        catch (Exception)
+        {
+            await MarkIdempotencyUnknownAsync(claim.Id);
+            return SubmissionOutcomeUnknown(idempotencyKey, jobName);
+        }
+
+        if (response is null)
+        {
+            await MarkIdempotencyUnknownAsync(claim.Id);
+            return SubmissionOutcomeUnknown(idempotencyKey, jobName);
+        }
+
+        using (response)
+        {
+            if (response.StatusCode == HttpStatusCode.Accepted)
+            {
+                OrchestratorRunAccepted? accepted = null;
+                try
+                {
+                    accepted = await response.Content.ReadFromJsonAsync<OrchestratorRunAccepted>(Json, CancellationToken.None);
+                }
+                catch (Exception)
+                {
+                    accepted = null;
+                }
+
+                if (accepted is null || accepted.RunId <= 0)
+                {
+                    await MarkIdempotencyUnknownAsync(claim.Id);
+                    return SubmissionOutcomeUnknown(idempotencyKey, jobName);
+                }
+
+                var completedAt = _clock.GetUtcNow().UtcDateTime;
+                await db.StudioRunIdempotencies
+                    .Where(row => row.Id == claim.Id)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(row => row.State, "Accepted")
+                        .SetProperty(row => row.RunId, accepted.RunId)
+                        .SetProperty(row => row.CompletedAt, completedAt), CancellationToken.None);
+
+                await audit.LogAsync(CurrentUserId, "PIPELINE_RUN_SUBMITTED", "Report", document.Id.ToString(),
+                    $"version={document.Version}; hash={scriptHash}; job={jobName}; run={accepted.RunId}; key={idempotencyKey}");
+                return Accepted(new PipelineRunSubmittedDto(
+                    accepted.RunId, document.Id, document.Version, scriptHash, jobName, Replayed: false));
+            }
+
+            if (IsDefiniteNonAcceptance(response.StatusCode))
+            {
+                await db.StudioRunIdempotencies
+                    .Where(row => row.Id == claim.Id && row.State == "Pending")
+                    .ExecuteDeleteAsync(CancellationToken.None);
+                return await RelayRefusalAsync(response, jobName, ct);
+            }
+
+            await MarkIdempotencyUnknownAsync(claim.Id);
+            return SubmissionOutcomeUnknown(idempotencyKey, jobName);
+        }
+    }
+
+    [HttpGet("{id:int}/runs/by-request/{key}")]
+    public async Task<IActionResult> GetSubmissionByRequest(int id, string key, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "no-store";
+        var pipeline = await RunnablePipelineAsync(id, ct);
+        if (pipeline.Refusal is not null) return pipeline.Refusal;
+
+        if (!TryParseUuidV4(key, out var normalizedKey))
+            return BadRequest(new PipelineRunRefusalDto(
+                "invalid_idempotency_key",
+                "Idempotency-Key must be a valid UUIDv4."));
+
+        var userId = CurrentUserId;
+        if (userId is null) return Unauthorized();
+
+        var tenantId = _tenantScope.TenantId;
+        var compositeKey = StudioRunIdempotencyCoordinator.BuildKey(tenantId, userId.Value, id, normalizedKey);
+        using var gate = await _coordinator.AcquireAsync(compositeKey, ct);
+
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var existing = await FindActiveIdempotencyRowAsync(tenantId, userId.Value, id, normalizedKey, now, ct);
+        if (existing is null)
+            return NotFound(new PipelineRunRefusalDto(
+                "submission_not_found",
+                $"No pipeline run submission was found for request '{normalizedKey}'."));
+
+        return await ResolveExistingSubmissionAsync(existing, expectedVersion: null, isPostReplay: false, now, ct);
+    }
+
+    private async Task<IActionResult> SubmitWithoutIdempotencyKeyAsync(
+        Report document, SubmitPipelineRunRequest request, CancellationToken ct)
+    {
         // Run means the saved revision. An author looking at an older or unsaved one is told so
         // instead of running text they are not looking at.
         if (request.Version != document.Version)
@@ -85,8 +268,7 @@ public sealed class StudioPipelineRunsController(
             return await RelayRefusalAsync(response, jobName, ct);
 
         var accepted = await response.Content.ReadFromJsonAsync<OrchestratorRunAccepted>(Json, ct);
-        var scriptHash = "sha256:" + Convert.ToHexString(
-            SHA256.HashData(Encoding.UTF8.GetBytes(scriptText))).ToLowerInvariant();
+        var scriptHash = ComputeScriptHash(scriptText);
         if (accepted is null || accepted.RunId <= 0)
             return StatusCode(StatusCodes.Status502BadGateway, new PipelineRunRefusalDto(
                 "orchestrator_answer_unreadable", "The Orchestrator accepted the run but did not name it."));
@@ -96,6 +278,118 @@ public sealed class StudioPipelineRunsController(
         await audit.LogAsync(CurrentUserId, "PIPELINE_RUN_SUBMITTED", "Report", document.Id.ToString(),
             $"version={document.Version}; hash={scriptHash}; job={jobName}; run={accepted.RunId}");
         return Accepted(new PipelineRunSubmittedDto(accepted.RunId, document.Id, document.Version, scriptHash, jobName));
+    }
+
+    private async Task<StudioRunIdempotency?> FindActiveIdempotencyRowAsync(
+        string tenantId, int userId, int pipelineId, string idempotencyKey, DateTime utcNow, CancellationToken ct)
+    {
+        var row = await db.StudioRunIdempotencies
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r =>
+                r.TenantId == tenantId
+                && r.UserId == userId
+                && r.PipelineId == pipelineId
+                && r.IdempotencyKey == idempotencyKey, ct);
+        if (row is null)
+            return null;
+
+        if (row.ExpiresAt <= utcNow)
+        {
+            await db.StudioRunIdempotencies
+                .Where(r => r.Id == row.Id && r.ExpiresAt <= utcNow)
+                .ExecuteDeleteAsync(ct);
+            return null;
+        }
+
+        return row;
+    }
+
+    private async Task<IActionResult> ResolveExistingSubmissionAsync(
+        StudioRunIdempotency existing,
+        long? expectedVersion,
+        bool isPostReplay,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
+        if (expectedVersion is not null && existing.RequestedVersion != expectedVersion.Value)
+            return Conflict(new PipelineRunRefusalDto(
+                "idempotency_key_conflict",
+                $"Idempotency-Key '{existing.IdempotencyKey}' was already used for version {existing.RequestedVersion}. Use a new key for version {expectedVersion.Value}.",
+                existing.RequestedVersion));
+
+        if (string.Equals(existing.State, "Accepted", StringComparison.Ordinal) && existing.RunId is { } runId)
+        {
+            var dto = new PipelineRunSubmittedDto(
+                runId,
+                existing.PipelineId,
+                existing.RequestedVersion,
+                existing.ScriptHash,
+                existing.JobName,
+                Replayed: true);
+            return isPostReplay ? Accepted(dto) : Ok(dto);
+        }
+
+        if (string.Equals(existing.State, "Pending", StringComparison.Ordinal))
+        {
+            // Holding the per-key coordinator gate guarantees no dispatch for this key is active in
+            // this Portal process; a remaining Pending row indicates a crash/restart or foreign-node
+            // dispatch whose acceptance cannot be confirmed.
+            await db.StudioRunIdempotencies
+                .Where(row => row.Id == existing.Id && row.State == "Pending")
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(row => row.State, "Unknown")
+                    .SetProperty(row => row.CompletedAt, utcNow), ct);
+        }
+
+        return SubmissionOutcomeUnknown(existing.IdempotencyKey, existing.JobName);
+    }
+
+    private Task MarkIdempotencyUnknownAsync(long claimId)
+    {
+        var completedAt = _clock.GetUtcNow().UtcDateTime;
+        return db.StudioRunIdempotencies
+            .Where(row => row.Id == claimId && row.State == "Pending")
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(row => row.State, "Unknown")
+                .SetProperty(row => row.CompletedAt, completedAt), CancellationToken.None);
+    }
+
+    private static bool IsDefiniteNonAcceptance(HttpStatusCode statusCode) => statusCode is
+        HttpStatusCode.BadRequest
+        or HttpStatusCode.Unauthorized
+        or HttpStatusCode.Forbidden
+        or HttpStatusCode.NotFound
+        or HttpStatusCode.Conflict
+        or HttpStatusCode.UnprocessableEntity
+        or HttpStatusCode.NotImplemented;
+
+    private ConflictObjectResult SubmissionOutcomeUnknown(string idempotencyKey, string jobName) =>
+        Conflict(new PipelineRunRefusalDto(
+            "submission_outcome_unknown",
+            $"Portal could not confirm whether the Orchestrator accepted submission '{idempotencyKey}' for '{jobName}'. "
+            + "Inspect recent runs before starting a new run."));
+
+    private static string ComputeScriptHash(string scriptText) =>
+        "sha256:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(scriptText))).ToLowerInvariant();
+
+    internal static bool TryParseUuidV4(string? raw, out string normalized)
+    {
+        normalized = string.Empty;
+        if (string.IsNullOrWhiteSpace(raw))
+            return false;
+
+        var trimmed = raw.Trim();
+        if (!Guid.TryParseExact(trimmed, "D", out var guid))
+            return false;
+        if (trimmed[14] != '4')
+            return false;
+
+        var variant = char.ToLowerInvariant(trimmed[19]);
+        if (variant is not ('8' or '9' or 'a' or 'b'))
+            return false;
+
+        normalized = guid.ToString("D");
+        return true;
     }
 
     [HttpGet("{id:int}/runs/{runId:long}")]

@@ -38,6 +38,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<NativeClientAuthCode> NativeClientAuthCodes => Set<NativeClientAuthCode>();
     public DbSet<NativeClientSession> NativeClientSessions => Set<NativeClientSession>();
     public DbSet<NativeClientRefreshToken> NativeClientRefreshTokens => Set<NativeClientRefreshToken>();
+    public DbSet<StudioRunIdempotency> StudioRunIdempotencies => Set<StudioRunIdempotency>();
     public DbSet<Dataset> Datasets => Set<Dataset>();
     public DbSet<DatasetAcl> DatasetAcls => Set<DatasetAcl>();
     public DbSet<DatasetUserAcl> DatasetUserAcls => Set<DatasetUserAcl>();
@@ -289,6 +290,19 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasOne(x => x.Session).WithMany(s => s.RefreshTokens).HasForeignKey(x => x.SessionId)
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<StudioRunIdempotency>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.IdempotencyKey).HasMaxLength(36);
+            e.Property(x => x.ScriptHash).HasMaxLength(80);
+            e.Property(x => x.JobName).HasMaxLength(128);
+            e.Property(x => x.State).HasMaxLength(32);
+            e.Property(x => x.OwnerInstanceId).HasMaxLength(64);
+            e.HasIndex(x => new { x.TenantId, x.UserId, x.PipelineId, x.IdempotencyKey }).IsUnique();
+            e.HasIndex(x => x.ExpiresAt);
         });
 
         builder.Entity<ServiceAccount>(e =>

@@ -3923,6 +3923,92 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.ToTable("studio_recovery_drafts");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.StudioRunIdempotency", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<string>("JobName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("job_name");
+
+                    b.Property<string>("OwnerInstanceId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("owner_instance_id");
+
+                    b.Property<int>("PipelineId")
+                        .HasColumnType("integer")
+                        .HasColumnName("pipeline_id");
+
+                    b.Property<long>("RequestedVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("requested_version");
+
+                    b.Property<long?>("RunId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("run_id");
+
+                    b.Property<string>("ScriptHash")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("script_hash");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("state");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_studio_run_idempotencies");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_studio_run_idempotencies_expires_at");
+
+                    b.HasIndex("TenantId", "UserId", "PipelineId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_studio_run_idempotencies_tenant_id_user_id_pipeline_id_idem~");
+
+                    b.ToTable("studio_run_idempotencies");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.Subscription", b =>
                 {
                     b.Property<int>("Id")

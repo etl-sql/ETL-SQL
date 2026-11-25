@@ -3822,6 +3822,90 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.ToTable("studio_recovery_drafts");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.StudioRunIdempotency", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<string>("JobName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("job_name");
+
+                    b.Property<string>("OwnerInstanceId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("owner_instance_id");
+
+                    b.Property<int>("PipelineId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("pipeline_id");
+
+                    b.Property<long>("RequestedVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("requested_version");
+
+                    b.Property<long?>("RunId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("run_id");
+
+                    b.Property<string>("ScriptHash")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("script_hash");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("state");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_studio_run_idempotencies");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_studio_run_idempotencies_expires_at");
+
+                    b.HasIndex("TenantId", "UserId", "PipelineId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_studio_run_idempotencies_tenant_id_user_id_pipeline_id_idempotency_key");
+
+                    b.ToTable("studio_run_idempotencies");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.Subscription", b =>
                 {
                     b.Property<int>("Id")
