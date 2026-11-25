@@ -57,6 +57,42 @@ public sealed record HostedStatusDto(
     HostedPendingSubmissionDto? PendingSubmission,
     HostedActiveRunDto? ActiveRun);
 
+public sealed record HostedRunnablePipelineDto(
+    int Id,
+    string Name,
+    string FolderPath,
+    long Version,
+    bool CanAuthor);
+
+public sealed record HostedRunnablePipelinePageDto(
+    IReadOnlyList<HostedRunnablePipelineDto> Items,
+    int? NextAfterId);
+
+public sealed record HostedPipelineRunRefusalDto(
+    string Code,
+    string Error,
+    long? CurrentVersion = null);
+
+public sealed record HostedPipelineRunStatementDto(
+    string Statement,
+    long DurationMs,
+    long RowsProcessed,
+    bool Failed);
+
+public sealed record HostedPipelineRunDto(
+    long RunId,
+    int PipelineId,
+    string JobName,
+    string Status,
+    bool IsTerminal,
+    DateTime StartTime,
+    DateTime? EndTime,
+    string? ErrorMessage,
+    long RowsProcessed,
+    string? ScriptHash,
+    bool LogTruncated,
+    IReadOnlyList<HostedPipelineRunStatementDto> Statements);
+
 public sealed record HostedRunEventDto(string Level, string Text);
 
 public sealed record HostedRunOperationDto(
@@ -77,8 +113,8 @@ public sealed record HostedRunOperationDto(
     long? RunId,
     bool CancelRequested,
     string? Message,
-    PipelineRunRefusalDto? Refusal,
-    PipelineRunDto? FinalRun,
+    HostedPipelineRunRefusalDto? Refusal,
+    HostedPipelineRunDto? FinalRun,
     HostedPendingSubmissionDto? PendingSubmission,
     IReadOnlyList<HostedRunEventDto> Events);
 
@@ -92,10 +128,29 @@ public sealed record HostedConnectRequest(string? Alias);
 
 public sealed record HostedStartRunRequest(
     int PipelineId,
+    long ExpectedVersion,
+    string? ExpectedOrigin,
+    string? ExpectedTenantId,
+    int ExpectedUserId,
     string? DocumentId = null,
     string? DocumentPath = null);
 
+public sealed record HostedStopRunRequest(string? OperationId);
+
+public sealed record HostedStopRunResponse(string Message, HostedStatusDto Status);
+
 public sealed record HostedRecoverRunRequest(string? Mode = "check");
+
+public sealed class HostedSelectionChangedException(string code, string message, long? currentVersion = null)
+    : Exception(message)
+{
+    public string Code { get; } = code;
+    public long? CurrentVersion { get; } = currentVersion;
+}
+
+public sealed class HostedOperationForbiddenException(string message) : Exception(message);
+
+public sealed class HostedOperationNotActiveException(string message) : Exception(message);
 
 /// <summary>
 /// Desktop Studio hosted execution facade over the shared ST57 .NET client
@@ -223,19 +278,35 @@ public sealed class WorkstationHostedService : IAsyncDisposable
         return GetStatus();
     }
 
-    public Task<RunnablePipelinePageDto> ListRunnablePipelinesAsync(string? query, int afterId, CancellationToken ct = default) =>
-        _client.GetRunnablePipelinesAsync(query, afterId, ct);
+    public async Task<HostedRunnablePipelinePageDto> ListRunnablePipelinesAsync(string? query, int afterId, CancellationToken ct = default)
+    {
+        var page = await _client.GetRunnablePipelinesAsync(query, afterId, ct);
+        return new HostedRunnablePipelinePageDto(
+            page.Items.Select(ToRunnableDto).ToArray(),
+            page.NextAfterId);
+    }
 
-    public Task<RunnablePipelineDto> GetPipelineRevisionAsync(int pipelineId, CancellationToken ct = default) =>
-        _client.GetRunnableRevisionAsync(pipelineId, ct);
+    public async Task<HostedRunnablePipelineDto> GetPipelineRevisionAsync(int pipelineId, CancellationToken ct = default) =>
+        ToRunnableDto(await _client.GetRunnableRevisionAsync(pipelineId, ct));
 
     public async Task<HostedRunOperationDto> StartRunAsync(HostedStartRunRequest request, CancellationToken ct = default)
     {
         if (request.PipelineId <= 0)
             throw new ArgumentException("A valid saved pipeline ID is required.");
+        if (request.ExpectedVersion <= 0)
+            throw new ArgumentException("A valid saved pipeline version is required.");
+        if (string.IsNullOrWhiteSpace(request.ExpectedOrigin)
+            || string.IsNullOrWhiteSpace(request.ExpectedTenantId)
+            || request.ExpectedUserId <= 0)
+            throw new ArgumentException("Expected Portal origin, tenant, and signed-in user are required.");
 
         var session = _sessions.Session
             ?? throw new HostedSessionExpiredException("Hosted Portal session is not signed in. Sign in again or switch to Local (Offline).");
+
+        if (!MatchesExpectedTarget(session, request.ExpectedOrigin, request.ExpectedTenantId, request.ExpectedUserId))
+            throw new HostedSelectionChangedException(
+                "target_changed",
+                "The hosted Portal target or signed-in account changed since this pipeline was selected. Choose a saved pipeline on the current target and try again.");
 
         var existingPending = _coordinator.GetPendingSubmissionForCurrentCaller();
         if (existingPending is not null)
@@ -243,7 +314,15 @@ public sealed class WorkstationHostedService : IAsyncDisposable
 
         var revision = await _client.GetRunnableRevisionAsync(request.PipelineId, ct, session);
         if (!_sessions.IsCurrentSession(session))
-            throw new HostedSessionExpiredException("Hosted target or sign-in changed while preparing the run.");
+            throw new HostedSelectionChangedException(
+                "target_changed",
+                "The hosted Portal target or signed-in account changed while preparing the run. Choose again before running.");
+
+        if (revision.Version != request.ExpectedVersion)
+            throw new HostedSelectionChangedException(
+                "revision_changed",
+                $"Saved pipeline '{revision.Name}' changed from v{request.ExpectedVersion} to v{revision.Version}. Review and choose again before running.",
+                revision.Version);
 
         var ownerTargetKey = BuildTargetKey(ExecutionTarget.Hosted(session.Server), session);
         var op = new TrackedOperation(
@@ -286,7 +365,7 @@ public sealed class WorkstationHostedService : IAsyncDisposable
             }
         });
 
-        return op.ToDto(_coordinator.ActiveRun, MapPending);
+        return op.ToDto(_coordinator.ActiveRun);
     }
 
     public HostedRunOperationDto StartRecovery(HostedRecoverRunRequest request)
@@ -339,7 +418,7 @@ public sealed class WorkstationHostedService : IAsyncDisposable
             {
                 var safe = Redact(ex.Message);
                 op.AddEvent("error", safe);
-                op.Complete("error", safe, null, null, MapPending(pending));
+                op.Complete("error", safe, null, null, ToPendingDto(pending));
             }
             finally
             {
@@ -348,22 +427,42 @@ public sealed class WorkstationHostedService : IAsyncDisposable
             }
         });
 
-        return op.ToDto(_coordinator.ActiveRun, MapPending);
+        return op.ToDto(_coordinator.ActiveRun);
     }
 
-    public HostedRunOperationDto? GetOperation(string operationId)
+    public HostedRunOperationDto GetOperation(string operationId)
     {
         if (string.IsNullOrWhiteSpace(operationId) || !_operations.TryGetValue(operationId, out var op))
-            return null;
-        return op.ToDto(_coordinator.ActiveRun, MapPending);
+            throw new KeyNotFoundException("Hosted run operation not found.");
+
+        var session = _sessions.Session
+            ?? throw new HostedSessionExpiredException("Hosted Portal session is not signed in.");
+
+        if (!IsOwnedBySession(op, session))
+            throw new HostedOperationForbiddenException("This hosted run operation belongs to a different Portal, tenant, or signed-in user.");
+
+        return op.ToDto(_coordinator.ActiveRun);
     }
 
-    public async Task<(string Message, HostedStatusDto Status)> RequestStopAsync(CancellationToken ct = default)
+    public async Task<HostedStopRunResponse> RequestStopAsync(HostedStopRunRequest request, CancellationToken ct = default)
     {
-        var current = _currentOperation;
-        var callbacks = current is null ? null : CreateCallbacks(current);
-        var message = await _coordinator.RequestStopAsync(callbacks, ct);
-        return (Redact(message), GetStatus());
+        if (string.IsNullOrWhiteSpace(request.OperationId))
+            throw new ArgumentException("OperationId is required to stop a hosted run.");
+
+        if (!_operations.TryGetValue(request.OperationId.Trim(), out var op))
+            throw new KeyNotFoundException("Hosted run operation not found.");
+
+        var session = _sessions.Session
+            ?? throw new HostedSessionExpiredException("Hosted Portal session is not signed in.");
+
+        if (!IsOwnedBySession(op, session))
+            throw new HostedOperationForbiddenException("Cannot stop a hosted run owned by a different Portal, tenant, or signed-in user.");
+
+        if (op.IsTerminal || !ReferenceEquals(_currentOperation, op))
+            throw new HostedOperationNotActiveException("That hosted run operation is no longer active; Stop was not applied to any later run.");
+
+        var message = await _coordinator.RequestStopAsync(CreateCallbacks(op), ct);
+        return new HostedStopRunResponse(Redact(message), GetStatus());
     }
 
     public string Redact(string? message) =>
@@ -374,6 +473,15 @@ public sealed class WorkstationHostedService : IAsyncDisposable
         await _stoppingRegistration.DisposeAsync();
         await _sessions.DisposeAsync();
     }
+
+    private bool IsOwnedBySession(TrackedOperation op, HostedSession session) =>
+        _sessions.IsCurrentSession(session)
+        && MatchesExpectedTarget(session, op.OwnerOrigin, op.OwnerTenantId, op.OwnerUserId);
+
+    private static bool MatchesExpectedTarget(HostedSession session, string origin, string tenantId, int userId) =>
+        string.Equals(session.Server.Origin, origin.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase)
+        && string.Equals(session.TenantId, tenantId.Trim(), StringComparison.OrdinalIgnoreCase)
+        && session.User.Id == userId;
 
     private HostedRunCallbacks CreateCallbacks(TrackedOperation op) => new(
         OnInfo: msg => op.AddEvent("info", Redact(msg)),
@@ -401,11 +509,31 @@ public sealed class WorkstationHostedService : IAsyncDisposable
             _ => "error"
         };
 
-        var pendingDto = outcome.PendingSubmission is null ? null : ToPendingDto(outcome.PendingSubmission);
-        op.Complete(state, Redact(outcome.Message), outcome.Refusal, outcome.FinalRun, pendingDto);
-    }
+        var refusalDto = outcome.Refusal is null
+            ? null
+            : new HostedPipelineRunRefusalDto(outcome.Refusal.Code, Redact(outcome.Refusal.Error), outcome.Refusal.CurrentVersion);
 
-    private HostedPendingSubmissionDto MapPending(PendingSubmissionRecord pending) => ToPendingDto(pending);
+        var finalRunDto = outcome.FinalRun is null
+            ? null
+            : new HostedPipelineRunDto(
+                outcome.FinalRun.RunId,
+                outcome.FinalRun.PipelineId,
+                outcome.FinalRun.JobName,
+                outcome.FinalRun.Status,
+                outcome.FinalRun.IsTerminal,
+                outcome.FinalRun.StartTime,
+                outcome.FinalRun.EndTime,
+                outcome.FinalRun.ErrorMessage is null ? null : Redact(outcome.FinalRun.ErrorMessage),
+                outcome.FinalRun.RowsProcessed,
+                outcome.FinalRun.ScriptHash,
+                outcome.FinalRun.LogTruncated,
+                outcome.FinalRun.Statements
+                    .Select(s => new HostedPipelineRunStatementDto(s.Statement, s.DurationMs, s.RowsProcessed, s.Failed))
+                    .ToArray());
+
+        var pendingDto = outcome.PendingSubmission is null ? null : ToPendingDto(outcome.PendingSubmission);
+        op.Complete(state, Redact(outcome.Message), refusalDto, finalRunDto, pendingDto);
+    }
 
     private HostedPendingSubmissionDto ToPendingDto(PendingSubmissionRecord pending)
     {
@@ -428,6 +556,9 @@ public sealed class WorkstationHostedService : IAsyncDisposable
             docPath,
             pending.CreatedAtUtc);
     }
+
+    private static HostedRunnablePipelineDto ToRunnableDto(RunnablePipelineDto dto) =>
+        new(dto.Id, dto.Name, dto.FolderPath, dto.Version, dto.CanAuthor);
 
     private static HostedServerStatusDto ToServerDto(HostedServerEntry server) =>
         new(server.Alias, server.Label, server.Origin, server.Environment);
@@ -461,13 +592,17 @@ public sealed class WorkstationHostedService : IAsyncDisposable
         private bool _isTerminal;
         private long? _runId;
         private string? _message;
-        private PipelineRunRefusalDto? _refusal;
-        private PipelineRunDto? _finalRun;
+        private HostedPipelineRunRefusalDto? _refusal;
+        private HostedPipelineRunDto? _finalRun;
         private HostedPendingSubmissionDto? _pendingSubmission;
 
         public string OperationId { get; } = OperationId;
         public string? DocumentId { get; } = DocumentId;
         public string? DocumentPath { get; } = DocumentPath;
+        public string OwnerOrigin { get; } = OwnerOrigin;
+        public string OwnerTenantId { get; } = OwnerTenantId;
+        public int OwnerUserId { get; } = OwnerUserId;
+        public bool IsTerminal { get { lock (_lock) return _isTerminal; } }
 
         public void AddEvent(string level, string text)
         {
@@ -478,8 +613,8 @@ public sealed class WorkstationHostedService : IAsyncDisposable
         public void Complete(
             string state,
             string? message,
-            PipelineRunRefusalDto? refusal,
-            PipelineRunDto? finalRun,
+            HostedPipelineRunRefusalDto? refusal,
+            HostedPipelineRunDto? finalRun,
             HostedPendingSubmissionDto? pendingSubmission)
         {
             lock (_lock)
@@ -494,9 +629,7 @@ public sealed class WorkstationHostedService : IAsyncDisposable
             }
         }
 
-        public HostedRunOperationDto ToDto(
-            ActiveHostedRun? activeRun,
-            Func<PendingSubmissionRecord, HostedPendingSubmissionDto> mapPending)
+        public HostedRunOperationDto ToDto(ActiveHostedRun? activeRun)
         {
             lock (_lock)
             {

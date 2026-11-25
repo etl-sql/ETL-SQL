@@ -6,124 +6,11 @@
  * Stop, session expiry/recovery, and target-scoped result ownership (ST58).
  */
 
+/// <reference path="../../../../../types/etlsql-contracts.generated.d.ts" />
+
 import type { RunTraceEvent } from './run-results.js';
 import type { StudioDom, StudioDomElement, StudioRuntimeDocument, StudioRuntimeState } from './studio-context.js';
 import { _escapeHtml, _feedback, errorMessage, queryElement, queryElements } from './studio-context.js';
-
-export interface HostedServerEntryDto {
-    alias: string;
-    label: string;
-    origin: string;
-    environment?: string | null;
-}
-
-export interface HostedUserDto {
-    id: number;
-    username: string;
-    email?: string | null;
-}
-
-export interface HostedPendingSubmissionDto {
-    idempotencyKey: string;
-    origin: string;
-    tenantId: string;
-    userId: number;
-    username: string;
-    pipelineId: number;
-    pipelineName: string;
-    version: number;
-    jobName: string;
-    status: string;
-    documentId?: string | null;
-    documentPath?: string | null;
-    createdAtUtc: string;
-}
-
-export interface HostedActiveRunDto {
-    runId: number;
-    pipelineId: number;
-    pipelineName: string;
-    jobName: string;
-    version: number;
-    origin: string;
-    tenantId: string;
-    userId: number;
-    username: string;
-    cancelRequested: boolean;
-    documentId?: string | null;
-    documentPath?: string | null;
-}
-
-export interface HostedStatusDto {
-    mode: 'local' | 'hosted';
-    targetKey: string;
-    statusLabel: string;
-    server: HostedServerEntryDto | null;
-    signedIn: boolean;
-    tenantId?: string | null;
-    user: HostedUserDto | null;
-    scopes: string[];
-    servers: HostedServerEntryDto[];
-    pendingSubmission: HostedPendingSubmissionDto | null;
-    activeRun: HostedActiveRunDto | null;
-}
-
-export interface HostedRunnablePipelineDto {
-    id: number;
-    name: string;
-    folderPath: string;
-    version: number;
-    canAuthor: boolean;
-}
-
-interface HostedRunEventDto {
-    level: string;
-    text: string;
-}
-
-interface HostedPipelineRunStatementDto {
-    statement: string;
-    durationMs: number;
-    rowsProcessed: number;
-    failed: boolean;
-}
-
-interface HostedPipelineRunDto {
-    runId: number;
-    pipelineId: number;
-    jobName: string;
-    status: string;
-    isTerminal: boolean;
-    errorMessage?: string | null;
-    rowsProcessed: number;
-    scriptHash?: string | null;
-    logTruncated: boolean;
-    statements: HostedPipelineRunStatementDto[];
-}
-
-interface HostedRunOperationDto {
-    operationId: string;
-    documentId?: string | null;
-    documentPath?: string | null;
-    ownerTargetKey: string;
-    ownerOrigin: string;
-    ownerTenantId: string;
-    ownerUserId: number;
-    ownerUsername: string;
-    pipelineId: number;
-    pipelineName: string;
-    version: number;
-    jobName: string;
-    state: string;
-    isTerminal: boolean;
-    runId?: number | null;
-    cancelRequested: boolean;
-    message?: string | null;
-    refusal?: { code: string; error: string; currentVersion?: number | null } | null;
-    finalRun?: HostedPipelineRunDto | null;
-    pendingSubmission?: HostedPendingSubmissionDto | null;
-    events: HostedRunEventDto[];
-}
 
 export interface StudioHostedExecutionContext {
     readonly apiBase: string;
@@ -150,6 +37,23 @@ export interface StudioHostedExecutionHandle {
     readonly stopActiveRun: (doc: StudioRuntimeDocument) => Promise<void>;
     readonly recoverPendingSubmission: (mode?: 'check' | 'retry') => Promise<void>;
     readonly dispose: () => void;
+}
+
+interface CapturedHostedTarget {
+    readonly targetKey: string;
+    readonly origin: string;
+    readonly tenantId: string;
+    readonly userId: number;
+    readonly label: string;
+}
+
+interface DetachedRecoveryNotice {
+    readonly targetKey: string;
+    readonly operationId: string;
+    readonly pipelineName: string;
+    readonly version: number;
+    readonly isTerminal: boolean;
+    readonly text: string;
 }
 
 const POLL_INTERVAL_MS = 250;
@@ -183,6 +87,7 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
     let status: HostedStatusDto = defaultLocalStatus();
     let disposed = false;
     let activeModalCleanup: (() => void) | null = null;
+    let detachedRecovery: DetachedRecoveryNotice | null = null;
     const activeOperations = new Map<string, { operationId: string; doc: StudioRuntimeDocument; targetKey: string }>();
 
     const targetBtn = queryElement<HTMLButtonElement>(hostContext.shell, '[data-hosted-target-btn]');
@@ -192,9 +97,33 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
         return `${docId}||${targetKey}`;
     }
 
+    function captureCurrentTarget(): CapturedHostedTarget | null {
+        if (status.mode !== 'hosted' || !status.signedIn || !status.server || !status.tenantId || !status.user)
+            return null;
+        return {
+            targetKey: status.targetKey,
+            origin: status.server.origin,
+            tenantId: status.tenantId,
+            userId: status.user.id,
+            label: status.server.label,
+        };
+    }
+
+    function matchesCapturedTarget(captured: CapturedHostedTarget): boolean {
+        return status.mode === 'hosted'
+            && status.signedIn
+            && status.targetKey === captured.targetKey
+            && status.server?.origin === captured.origin
+            && status.tenantId === captured.tenantId
+            && status.user?.id === captured.userId;
+    }
+
     function applyStatus(next: HostedStatusDto) {
         const prevTargetKey = status.targetKey;
         status = next;
+        if (detachedRecovery && detachedRecovery.targetKey !== next.targetKey) {
+            detachedRecovery = null;
+        }
         renderHeaderAndBanner();
         if (prevTargetKey !== next.targetKey) {
             hostContext.repaintActiveTarget();
@@ -229,6 +158,21 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
             });
             queryElement(bannerEl, '[data-hosted-switch-local]')?.addEventListener('click', () => {
                 void disconnectToLocal();
+            });
+            return;
+        }
+
+        if (status.mode === 'hosted' && status.signedIn && detachedRecovery && detachedRecovery.targetKey === status.targetKey) {
+            const notice = detachedRecovery;
+            bannerEl.hidden = false;
+            bannerEl.innerHTML = `
+                <div class="etlsql-hosted-banner-content" data-hosted-recovery-status>
+                    <span><strong>Recovered run (original document closed)</strong> · ${_escapeHtml(notice.pipelineName)} v${notice.version}: ${_escapeHtml(notice.text)}</span>
+                    ${notice.isTerminal ? '<div class="etlsql-hosted-banner-actions"><button type="button" class="etlsql-studio-btn" data-hosted-dismiss-recovery>Dismiss</button></div>' : ''}
+                </div>`;
+            queryElement(bannerEl, '[data-hosted-dismiss-recovery]')?.addEventListener('click', () => {
+                detachedRecovery = null;
+                renderHeaderAndBanner();
             });
             return;
         }
@@ -285,10 +229,11 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
 
     async function connectServer(alias: string): Promise<boolean> {
         try {
+            const body: HostedConnectRequest = { alias };
             const response = await hostContext.authFetch(hostContext.apiBase + '/api/hosted/connect', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ alias }),
+                body: JSON.stringify(body),
             });
             const payload = await response.json().catch(() => ({})) as { error?: string; status?: HostedStatusDto } & Partial<HostedStatusDto>;
             if (!response.ok) {
@@ -438,15 +383,16 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
                 event.preventDefault();
                 const errorEl = queryElement<HTMLElement>(hostContext.modalBox, '[data-hosted-form-error]');
                 const formData = new FormData(addForm);
+                const addBody: HostedAddServerRequest = {
+                    alias: String(formData.get('alias') || '').trim(),
+                    label: String(formData.get('label') || '').trim(),
+                    origin: String(formData.get('origin') || '').trim(),
+                    environment: String(formData.get('environment') || '').trim() || null,
+                };
                 const response = await hostContext.authFetch(hostContext.apiBase + '/api/hosted/servers', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        alias: String(formData.get('alias') || '').trim(),
-                        label: String(formData.get('label') || '').trim(),
-                        origin: String(formData.get('origin') || '').trim(),
-                        environment: String(formData.get('environment') || '').trim() || null,
-                    }),
+                    body: JSON.stringify(addBody),
                 });
                 const payload = await response.json().catch(() => ({})) as { error?: string } & Partial<HostedStatusDto>;
                 if (!response.ok) {
@@ -509,11 +455,68 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
         });
     }
 
-    function pickRunnablePipeline(items: HostedRunnablePipelineDto[]): Promise<HostedRunnablePipelineDto | null> {
+    async function fetchRunnablePage(
+        doc: StudioRuntimeDocument,
+        captured: CapturedHostedTarget,
+        query: string,
+        afterId: number
+    ): Promise<HostedRunnablePipelinePageDto | null> {
+        const params = new URLSearchParams();
+        if (query.trim()) params.set('query', query.trim());
+        if (afterId > 0) params.set('afterId', String(afterId));
+        const qs = params.toString();
+        const response = await hostContext.authFetch(
+            hostContext.apiBase + '/api/hosted/pipelines' + (qs ? `?${qs}` : ''));
+
+        if (!matchesCapturedTarget(captured)) {
+            _feedback.notify('Hosted target or account changed while loading pipelines. Choose again before running.', {
+                title: 'Target Changed',
+                tone: 'warning',
+            });
+            return null;
+        }
+
+        if (!response.ok) {
+            const payload = await response.json().catch(() => ({})) as { code?: string; error?: string; status?: HostedStatusDto };
+            if (payload.status) applyStatus(payload.status);
+            if (response.status === 401 || payload.code === 'session_expired') {
+                hostContext.setDocumentTraceForTarget(doc, captured.targetKey, [
+                    { type: 'clear', resetHistory: true },
+                    { type: 'status', status: 'failed' },
+                    { type: 'show', tab: 'messages' },
+                    { type: 'message', level: 'warn', text: payload.error || 'Hosted Portal session expired. Sign in again to continue. Nothing ran locally.' },
+                    { type: 'done', exitCode: 1, status: 'Session Expired' },
+                ]);
+                return null;
+            }
+            hostContext.setDocumentTraceForTarget(doc, captured.targetKey, [
+                { type: 'clear', resetHistory: true },
+                { type: 'status', status: 'failed' },
+                { type: 'show', tab: 'messages' },
+                { type: 'message', level: 'error', text: payload.error || `Could not list runnable pipelines (${response.status}). Nothing ran locally.` },
+                { type: 'done', exitCode: 1, status: 'Not run' },
+            ]);
+            return null;
+        }
+
+        return await response.json() as HostedRunnablePipelinePageDto;
+    }
+
+    function pickRunnablePipeline(
+        doc: StudioRuntimeDocument,
+        captured: CapturedHostedTarget,
+        initialItems: HostedRunnablePipelineDto[],
+        initialNextAfterId: number | null
+    ): Promise<HostedRunnablePipelineDto | null> {
         closeActiveModal();
         return new Promise<HostedRunnablePipelineDto | null>(resolve => {
             const titleId = 'etlsql-hosted-pick-title';
             let settled = false;
+            let loadedItems = [...initialItems];
+            let nextAfterId = initialNextAfterId;
+            let currentQuery = '';
+            let loadingMore = false;
+
             const finish = (choice: HostedRunnablePipelineDto | null) => {
                 if (settled) return;
                 settled = true;
@@ -521,31 +524,95 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
                 resolve(choice);
             };
 
-            const rows = items.map(item => `
-                <button type="button" class="etlsql-hosted-pipeline-choice" data-hosted-pick-pipeline="${item.id}">
-                    <strong>${_escapeHtml(item.name)}</strong>
-                    <span>${_escapeHtml(item.folderPath)} · v${item.version}</span>
-                </button>`).join('');
+            const renderPicker = () => {
+                const rows = loadedItems.length
+                    ? loadedItems.map(item => `
+                        <button type="button" class="etlsql-hosted-pipeline-choice" data-hosted-pick-pipeline="${item.id}">
+                            <strong>${_escapeHtml(item.name)}</strong>
+                            <span>${_escapeHtml(item.folderPath)} · v${item.version}</span>
+                        </button>`).join('')
+                    : '<p class="etlsql-hosted-empty">No matching runnable pipelines found.</p>';
 
-            hostContext.modalBox.innerHTML = `
-                <div class="etlsql-hosted-modal" data-hosted-pipeline-modal>
-                    <h3 id="${titleId}">Select Saved Portal Pipeline</h3>
-                    <p>Choose which saved revision to run on ${_escapeHtml(status.server?.label || 'Portal')} (${_escapeHtml(status.tenantId || '')}):</p>
-                    <div class="etlsql-hosted-pipeline-list">${rows}</div>
-                    <div class="etlsql-hosted-modal-actions">
-                        <button type="button" class="etlsql-studio-btn" data-hosted-pick-cancel>Cancel</button>
-                    </div>
-                </div>`;
+                hostContext.modalBox.innerHTML = `
+                    <div class="etlsql-hosted-modal" data-hosted-pipeline-modal>
+                        <h3 id="${titleId}">Select Saved Portal Pipeline</h3>
+                        <p>Choose which saved revision to run on ${_escapeHtml(captured.label)} (${_escapeHtml(captured.tenantId)}):</p>
+                        <form class="etlsql-hosted-search-row" data-hosted-pipeline-search-form>
+                            <input type="search" value="${_escapeHtml(currentQuery)}" placeholder="Filter pipelines by name…" data-hosted-pipeline-search />
+                            <button type="submit" class="etlsql-studio-btn">Search</button>
+                        </form>
+                        <div class="etlsql-hosted-pipeline-list" data-hosted-pipeline-list>${rows}</div>
+                        <div class="etlsql-hosted-modal-actions">
+                            ${nextAfterId !== null ? `<button type="button" class="etlsql-studio-btn" data-hosted-pipeline-load-more ${loadingMore ? 'disabled' : ''}>${loadingMore ? 'Loading…' : 'Load More'}</button>` : ''}
+                            <button type="button" class="etlsql-studio-btn" data-hosted-pick-cancel>Cancel</button>
+                        </div>
+                    </div>`;
 
-            queryElements(hostContext.modalBox, '[data-hosted-pick-pipeline]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const id = Number(btn.dataset.hostedPickPipeline);
-                    const found = items.find(i => i.id === id) || null;
-                    finish(found);
+                queryElements(hostContext.modalBox, '[data-hosted-pick-pipeline]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        if (!matchesCapturedTarget(captured)) {
+                            _feedback.notify('Hosted target or account changed. Choose again before running.', {
+                                title: 'Target Changed',
+                                tone: 'warning',
+                            });
+                            finish(null);
+                            return;
+                        }
+                        const id = Number(btn.dataset.hostedPickPipeline);
+                        const found = loadedItems.find(i => i.id === id) || null;
+                        finish(found);
+                    });
                 });
-            });
-            queryElement(hostContext.modalBox, '[data-hosted-pick-cancel]')?.addEventListener('click', () => finish(null));
 
+                queryElement<HTMLFormElement>(hostContext.modalBox, '[data-hosted-pipeline-search-form]')?.addEventListener('submit', async event => {
+                    event.preventDefault();
+                    if (loadingMore) return;
+                    const input = queryElement<HTMLInputElement>(hostContext.modalBox, '[data-hosted-pipeline-search]');
+                    currentQuery = (input?.value || '').trim();
+                    loadingMore = true;
+                    renderPicker();
+                    try {
+                        const page = await fetchRunnablePage(doc, captured, currentQuery, 0);
+                        if (!page) {
+                            finish(null);
+                            return;
+                        }
+                        loadedItems = [...(page.items || [])];
+                        nextAfterId = page.nextAfterId ?? null;
+                    } finally {
+                        loadingMore = false;
+                        if (!settled) renderPicker();
+                    }
+                });
+
+                queryElement(hostContext.modalBox, '[data-hosted-pipeline-load-more]')?.addEventListener('click', async () => {
+                    if (loadingMore || nextAfterId === null) return;
+                    loadingMore = true;
+                    renderPicker();
+                    try {
+                        const page = await fetchRunnablePage(doc, captured, currentQuery, nextAfterId);
+                        if (!page) {
+                            finish(null);
+                            return;
+                        }
+                        const existingIds = new Set(loadedItems.map(i => i.id));
+                        for (const item of page.items || []) {
+                            if (!existingIds.has(item.id)) {
+                                loadedItems.push(item);
+                                existingIds.add(item.id);
+                            }
+                        }
+                        nextAfterId = page.nextAfterId ?? null;
+                    } finally {
+                        loadingMore = false;
+                        if (!settled) renderPicker();
+                    }
+                });
+
+                queryElement(hostContext.modalBox, '[data-hosted-pick-cancel]')?.addEventListener('click', () => finish(null));
+            };
+
+            renderPicker();
             activeModalCleanup = hostContext.setupModalAccessibility(
                 hostContext.modalBox as unknown as HTMLElement,
                 hostContext.modalBackdrop as unknown as HTMLElement,
@@ -560,35 +627,17 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
         });
     }
 
-    async function resolvePipelineForDoc(doc: StudioRuntimeDocument): Promise<HostedRunnablePipelineDto | null> {
-        const response = await hostContext.authFetch(hostContext.apiBase + '/api/hosted/pipelines');
-        if (!response.ok) {
-            const payload = await response.json().catch(() => ({})) as { code?: string; error?: string; status?: HostedStatusDto };
-            if (payload.status) applyStatus(payload.status);
-            if (response.status === 401 || payload.code === 'session_expired') {
-                hostContext.setDocumentTraceForTarget(doc, status.targetKey, [
-                    { type: 'clear', resetHistory: true },
-                    { type: 'status', status: 'failed' },
-                    { type: 'show', tab: 'messages' },
-                    { type: 'message', level: 'warn', text: payload.error || 'Hosted Portal session expired. Sign in again to continue. Nothing ran locally.' },
-                    { type: 'done', exitCode: 1, status: 'Session Expired' },
-                ]);
-                return null;
-            }
-            hostContext.setDocumentTraceForTarget(doc, status.targetKey, [
-                { type: 'clear', resetHistory: true },
-                { type: 'status', status: 'failed' },
-                { type: 'show', tab: 'messages' },
-                { type: 'message', level: 'error', text: payload.error || `Could not list runnable pipelines (${response.status}). Nothing ran locally.` },
-                { type: 'done', exitCode: 1, status: 'Not run' },
-            ]);
-            return null;
-        }
+    async function resolvePipelineForDoc(
+        doc: StudioRuntimeDocument,
+        captured: CapturedHostedTarget
+    ): Promise<HostedRunnablePipelineDto | null> {
+        const page = await fetchRunnablePage(doc, captured, '', 0);
+        if (!page) return null;
 
-        const page = await response.json() as { items?: HostedRunnablePipelineDto[] };
         const items = page.items || [];
+        const nextAfterId = page.nextAfterId ?? null;
         if (!items.length) {
-            hostContext.setDocumentTraceForTarget(doc, status.targetKey, [
+            hostContext.setDocumentTraceForTarget(doc, captured.targetKey, [
                 { type: 'clear', resetHistory: true },
                 { type: 'status', status: 'failed' },
                 { type: 'show', tab: 'messages' },
@@ -605,8 +654,9 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
             return itemBase === docBase || stripScriptExt(itemBase) === docStem;
         });
 
-        if (exactMatches.length === 1) return exactMatches[0];
-        return pickRunnablePipeline(exactMatches.length > 1 ? exactMatches : items);
+        // Only auto-select when there is a single unambiguous match and no further pages could hide a duplicate.
+        if (exactMatches.length === 1 && nextAfterId === null) return exactMatches[0];
+        return pickRunnablePipeline(doc, captured, items, nextAfterId);
     }
 
     function buildOperationTrace(op: HostedRunOperationDto): RunTraceEvent[] {
@@ -672,12 +722,36 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
         return trace;
     }
 
-    async function pollOperation(doc: StudioRuntimeDocument, initialOp: HostedRunOperationDto): Promise<void> {
+    function summarizeDetachedOperation(op: HostedRunOperationDto): string {
+        if (!op.isTerminal) {
+            return op.runId
+                ? `Run #${op.runId} is ${op.state}…`
+                : 'Checking Portal for accepted run…';
+        }
+        if (op.state === 'completed' && op.finalRun) {
+            return `Run #${op.finalRun.runId} finished: ${op.finalRun.status} (${op.finalRun.rowsProcessed} rows).`;
+        }
+        return op.message || `Status: ${op.state}`;
+    }
+
+    async function pollOperation(doc: StudioRuntimeDocument | null, initialOp: HostedRunOperationDto): Promise<void> {
         const ownerTargetKey = initialOp.ownerTargetKey;
-        const trackingKey = opKey(doc.id, ownerTargetKey);
-        activeOperations.set(trackingKey, { operationId: initialOp.operationId, doc, targetKey: ownerTargetKey });
-        hostContext.updateRunControls();
-        hostContext.setDocumentTraceForTarget(doc, ownerTargetKey, buildOperationTrace(initialOp));
+        const trackingKey = doc ? opKey(doc.id, ownerTargetKey) : null;
+        if (doc && trackingKey) {
+            activeOperations.set(trackingKey, { operationId: initialOp.operationId, doc, targetKey: ownerTargetKey });
+            hostContext.updateRunControls();
+            hostContext.setDocumentTraceForTarget(doc, ownerTargetKey, buildOperationTrace(initialOp));
+        } else {
+            detachedRecovery = {
+                targetKey: ownerTargetKey,
+                operationId: initialOp.operationId,
+                pipelineName: initialOp.pipelineName,
+                version: initialOp.version,
+                isTerminal: initialOp.isTerminal,
+                text: summarizeDetachedOperation(initialOp),
+            };
+            renderHeaderAndBanner();
+        }
 
         try {
             let current = initialOp;
@@ -689,12 +763,26 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
                     hostContext.apiBase + '/api/hosted/runs/' + encodeURIComponent(initialOp.operationId));
                 if (!response.ok) break;
                 current = await response.json() as HostedRunOperationDto;
-                hostContext.setDocumentTraceForTarget(doc, ownerTargetKey, buildOperationTrace(current));
+                if (doc) {
+                    hostContext.setDocumentTraceForTarget(doc, ownerTargetKey, buildOperationTrace(current));
+                } else {
+                    detachedRecovery = {
+                        targetKey: ownerTargetKey,
+                        operationId: current.operationId,
+                        pipelineName: current.pipelineName,
+                        version: current.version,
+                        isTerminal: current.isTerminal,
+                        text: summarizeDetachedOperation(current),
+                    };
+                    renderHeaderAndBanner();
+                }
             }
         } finally {
-            const existing = activeOperations.get(trackingKey);
-            if (existing?.operationId === initialOp.operationId) {
-                activeOperations.delete(trackingKey);
+            if (trackingKey) {
+                const existing = activeOperations.get(trackingKey);
+                if (existing?.operationId === initialOp.operationId) {
+                    activeOperations.delete(trackingKey);
+                }
             }
             await refreshStatus();
             hostContext.updateRunControls();
@@ -704,7 +792,8 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
     async function runActiveDocument(doc: StudioRuntimeDocument): Promise<void> {
         if (status.mode !== 'hosted') return;
 
-        if (!status.signedIn) {
+        const captured = captureCurrentTarget();
+        if (!captured) {
             hostContext.setDocumentTraceForTarget(doc, status.targetKey, [
                 { type: 'clear', resetHistory: true },
                 { type: 'status', status: 'failed' },
@@ -717,7 +806,7 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
         }
 
         if (status.pendingSubmission) {
-            hostContext.setDocumentTraceForTarget(doc, status.targetKey, [
+            hostContext.setDocumentTraceForTarget(doc, captured.targetKey, [
                 { type: 'clear', resetHistory: true },
                 { type: 'status', status: 'failed' },
                 { type: 'show', tab: 'messages' },
@@ -731,30 +820,57 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
         if (doc.isDirty) {
             const proceed = await confirmDirtyRun(doc);
             if (!proceed) return;
+            if (!matchesCapturedTarget(captured) || hostContext.getActiveDoc() !== doc) {
+                _feedback.notify('Hosted target, account, or active document changed while confirming. Choose again before running.', {
+                    title: 'Selection Changed',
+                    tone: 'warning',
+                });
+                return;
+            }
         }
 
-        const pipeline = await resolvePipelineForDoc(doc);
+        const pipeline = await resolvePipelineForDoc(doc, captured);
         if (!pipeline) return;
 
-        const runTargetKey = status.targetKey;
+        if (!matchesCapturedTarget(captured) || hostContext.getActiveDoc() !== doc) {
+            _feedback.notify('Hosted target, account, or active document changed. Choose again before running.', {
+                title: 'Selection Changed',
+                tone: 'warning',
+            });
+            return;
+        }
+
+        const startRequest: HostedStartRunRequest = {
+            pipelineId: pipeline.id,
+            expectedVersion: pipeline.version,
+            expectedOrigin: captured.origin,
+            expectedTenantId: captured.tenantId,
+            expectedUserId: captured.userId,
+            documentId: doc.id,
+            documentPath: doc.path || doc.name || null,
+        };
+
         const response = await hostContext.authFetch(hostContext.apiBase + '/api/hosted/runs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                pipelineId: pipeline.id,
-                documentId: doc.id,
-                documentPath: doc.path || doc.name || null,
-            }),
+            body: JSON.stringify(startRequest),
         });
 
         const payload = await response.json().catch(() => ({})) as { code?: string; error?: string; status?: HostedStatusDto } & Partial<HostedRunOperationDto>;
         if (!response.ok) {
             if (payload.status) applyStatus(payload.status);
-            hostContext.setDocumentTraceForTarget(doc, runTargetKey, [
+            const selectionChanged = payload.code === 'target_changed' || payload.code === 'revision_changed';
+            if (selectionChanged) {
+                _feedback.notify(payload.error || 'The hosted target or saved revision changed. Choose again before running.', {
+                    title: 'Selection Changed',
+                    tone: 'warning',
+                });
+            }
+            hostContext.setDocumentTraceForTarget(doc, captured.targetKey, [
                 { type: 'clear', resetHistory: true },
                 { type: 'status', status: 'failed' },
                 { type: 'show', tab: 'messages' },
-                { type: 'message', level: 'error', text: payload.error || `Hosted run could not start (${response.status}). Nothing ran locally.` },
+                { type: 'message', level: selectionChanged ? 'warn' : 'error', text: payload.error || `Hosted run could not start (${response.status}). Nothing ran locally.` },
                 { type: 'done', exitCode: 1, status: payload.code === 'session_expired' ? 'Session Expired' : 'Not run' },
             ]);
             return;
@@ -764,10 +880,11 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
     }
 
     async function recoverPendingSubmission(mode: 'check' | 'retry' = 'check'): Promise<void> {
+        const body: HostedRecoverRunRequest = { mode };
         const response = await hostContext.authFetch(hostContext.apiBase + '/api/hosted/runs/recover', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode }),
+            body: JSON.stringify(body),
         });
 
         const payload = await response.json().catch(() => ({})) as { error?: string; status?: HostedStatusDto } & Partial<HostedRunOperationDto>;
@@ -781,12 +898,14 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
         }
 
         const op = payload as HostedRunOperationDto;
-        const ownerDoc = (op.documentId && hostContext.state.documents.find(d => d.id === op.documentId))
-            || hostContext.getActiveDoc();
-        if (!ownerDoc) {
-            await refreshStatus();
-            return;
-        }
+        // Tie recovery strictly to its original document; never attach to an unrelated active document.
+        const ownerDoc = (op.documentId
+            ? hostContext.state.documents.find(d => d.id === op.documentId)
+            : null)
+            || (!op.documentId && op.documentPath
+                ? hostContext.state.documents.find(d => d.path === op.documentPath)
+                : null)
+            || null;
 
         await pollOperation(ownerDoc, op);
     }
@@ -795,13 +914,22 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
         const tracking = activeOperations.get(opKey(doc.id, status.targetKey));
         if (!tracking) return;
         try {
+            const body: HostedStopRunRequest = { operationId: tracking.operationId };
             const response = await hostContext.authFetch(hostContext.apiBase + '/api/hosted/runs/stop', {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
             });
-            if (response.ok) {
-                const payload = await response.json() as { message?: string; status?: HostedStatusDto };
+            const payload = await response.json().catch(() => ({})) as Partial<HostedStopRunResponse> & { error?: string };
+            if (!response.ok) {
                 if (payload.status) applyStatus(payload.status);
+                _feedback.notify(payload.error || `Hosted stop refused (${response.status}).`, {
+                    title: 'Hosted Stop',
+                    tone: 'warning',
+                });
+                return;
             }
+            if (payload.status) applyStatus(payload.status);
         } catch (error) {
             _feedback.notify(errorMessage(error) || 'Failed to send hosted stop request.', {
                 title: 'Hosted Stop Failed',

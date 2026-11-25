@@ -356,6 +356,10 @@ public static class WorkstationEditorApp
                 var op = await hosted.StartRunAsync(request, cancellationToken);
                 return Results.Json(op, JsonOptions, statusCode: StatusCodes.Status202Accepted);
             }
+            catch (HostedSelectionChangedException ex)
+            {
+                return Results.Conflict(new { code = ex.Code, error = hosted.Redact(ex.Message), currentVersion = ex.CurrentVersion, status = hosted.GetStatus() });
+            }
             catch (HostedSessionExpiredException ex)
             {
                 return Results.Json(new { code = "session_expired", error = hosted.Redact(ex.Message), status = hosted.GetStatus() },
@@ -378,16 +382,54 @@ public static class WorkstationEditorApp
 
         app.MapGet("/api/hosted/runs/{operationId}", (string operationId, WorkstationHostedService hosted) =>
         {
-            var op = hosted.GetOperation(operationId);
-            return op is null
-                ? Results.NotFound(new { error = "Hosted run operation not found." })
-                : Results.Json(op, JsonOptions);
+            try
+            {
+                return Results.Json(hosted.GetOperation(operationId), JsonOptions);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { error = hosted.Redact(ex.Message) });
+            }
+            catch (HostedSessionExpiredException ex)
+            {
+                return Results.Json(new { code = "session_expired", error = hosted.Redact(ex.Message), status = hosted.GetStatus() },
+                    JsonOptions, statusCode: StatusCodes.Status401Unauthorized);
+            }
+            catch (HostedOperationForbiddenException ex)
+            {
+                return Results.Json(new { code = "operation_forbidden", error = hosted.Redact(ex.Message) },
+                    JsonOptions, statusCode: StatusCodes.Status403Forbidden);
+            }
         });
 
-        app.MapPost("/api/hosted/runs/stop", async (WorkstationHostedService hosted, CancellationToken cancellationToken) =>
+        app.MapPost("/api/hosted/runs/stop", async (HostedStopRunRequest request, WorkstationHostedService hosted, CancellationToken cancellationToken) =>
         {
-            var (message, status) = await hosted.RequestStopAsync(cancellationToken);
-            return Results.Json(new { message, status }, JsonOptions);
+            try
+            {
+                return Results.Json(await hosted.RequestStopAsync(request, cancellationToken), JsonOptions);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
+            }
+            catch (HostedSessionExpiredException ex)
+            {
+                return Results.Json(new { code = "session_expired", error = hosted.Redact(ex.Message), status = hosted.GetStatus() },
+                    JsonOptions, statusCode: StatusCodes.Status401Unauthorized);
+            }
+            catch (HostedOperationForbiddenException ex)
+            {
+                return Results.Json(new { code = "operation_forbidden", error = hosted.Redact(ex.Message), status = hosted.GetStatus() },
+                    JsonOptions, statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (HostedOperationNotActiveException ex)
+            {
+                return Results.Conflict(new { code = "operation_not_active", error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
+            }
         });
 
         app.MapPost("/api/hosted/runs/recover", (HostedRecoverRunRequest request, WorkstationHostedService hosted) =>

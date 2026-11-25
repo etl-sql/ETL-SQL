@@ -1121,6 +1121,168 @@ interface GroupMembershipResponse {
     version: number;
 }
 
+interface HostedActiveRunDto {
+    runId: number;
+    pipelineId: number;
+    pipelineName: string;
+    jobName: string;
+    version: number;
+    origin: string;
+    tenantId: string;
+    userId: number;
+    username: string;
+    cancelRequested: boolean;
+    documentId?: string | null;
+    documentPath?: string | null;
+}
+
+interface HostedAddServerRequest {
+    alias?: string | null;
+    label?: string | null;
+    origin?: string | null;
+    environment?: string | null;
+}
+
+interface HostedConnectRequest {
+    alias?: string | null;
+}
+
+interface HostedPendingSubmissionDto {
+    idempotencyKey: string;
+    origin: string;
+    tenantId: string;
+    userId: number;
+    username: string;
+    pipelineId: number;
+    pipelineName: string;
+    version: number;
+    jobName: string;
+    status: string;
+    documentId?: string | null;
+    documentPath?: string | null;
+    createdAtUtc: string;
+}
+
+interface HostedPipelineRunDto {
+    runId: number;
+    pipelineId: number;
+    jobName: string;
+    status: string;
+    isTerminal: boolean;
+    startTime: string;
+    endTime?: string | null;
+    errorMessage?: string | null;
+    rowsProcessed: number;
+    scriptHash?: string | null;
+    logTruncated: boolean;
+    statements: HostedPipelineRunStatementDto[];
+}
+
+interface HostedPipelineRunRefusalDto {
+    code: string;
+    error: string;
+    currentVersion?: number | null;
+}
+
+interface HostedPipelineRunStatementDto {
+    statement: string;
+    durationMs: number;
+    rowsProcessed: number;
+    failed: boolean;
+}
+
+interface HostedRecoverRunRequest {
+    mode?: string | null;
+}
+
+interface HostedRunEventDto {
+    level: string;
+    text: string;
+}
+
+interface HostedRunOperationDto {
+    operationId: string;
+    documentId?: string | null;
+    documentPath?: string | null;
+    ownerTargetKey: string;
+    ownerOrigin: string;
+    ownerTenantId: string;
+    ownerUserId: number;
+    ownerUsername: string;
+    pipelineId: number;
+    pipelineName: string;
+    version: number;
+    jobName: string;
+    state: string;
+    isTerminal: boolean;
+    runId?: number | null;
+    cancelRequested: boolean;
+    message?: string | null;
+    refusal?: HostedPipelineRunRefusalDto | null;
+    finalRun?: HostedPipelineRunDto | null;
+    pendingSubmission?: HostedPendingSubmissionDto | null;
+    events: HostedRunEventDto[];
+}
+
+interface HostedRunnablePipelineDto {
+    id: number;
+    name: string;
+    folderPath: string;
+    version: number;
+    canAuthor: boolean;
+}
+
+interface HostedRunnablePipelinePageDto {
+    items: HostedRunnablePipelineDto[];
+    nextAfterId?: number | null;
+}
+
+interface HostedServerStatusDto {
+    alias: string;
+    label: string;
+    origin: string;
+    environment?: string | null;
+}
+
+interface HostedStartRunRequest {
+    pipelineId: number;
+    expectedVersion: number;
+    expectedOrigin?: string | null;
+    expectedTenantId?: string | null;
+    expectedUserId: number;
+    documentId?: string | null;
+    documentPath?: string | null;
+}
+
+interface HostedStatusDto {
+    mode: string;
+    targetKey: string;
+    statusLabel: string;
+    server?: HostedServerStatusDto | null;
+    signedIn: boolean;
+    tenantId?: string | null;
+    user?: HostedUserStatusDto | null;
+    scopes: string[];
+    servers: HostedServerStatusDto[];
+    pendingSubmission?: HostedPendingSubmissionDto | null;
+    activeRun?: HostedActiveRunDto | null;
+}
+
+interface HostedStopRunRequest {
+    operationId?: string | null;
+}
+
+interface HostedStopRunResponse {
+    message: string;
+    status: HostedStatusDto;
+}
+
+interface HostedUserStatusDto {
+    id: number;
+    username: string;
+    email?: string | null;
+}
+
 interface HourlyExecutionLoad {
     hourUtc: string;
     executions: number;

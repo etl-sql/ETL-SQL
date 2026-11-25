@@ -341,6 +341,202 @@ public sealed partial class DesktopStudioJourneyTests
         Assert.Empty(browser.PageErrors);
     }
 
+    [Fact]
+    public async Task DesktopStudio_HostedRecovery_WhenOriginalDocumentClosed_DoesNotAttachToOtherDocument()
+    {
+        using var workspace = new StudioTempWorkspace();
+        using var registryTemp = new StudioTempWorkspace();
+
+        var financeFile = Path.Combine(workspace.Root, "FinanceCheck.etlsql");
+        var otherFile = Path.Combine(workspace.Root, "OtherLocal.etlsql");
+        await File.WriteAllTextAsync(financeFile, HostedFinanceCheckScript);
+        await File.WriteAllTextAsync(otherFile, "SELECT 99 AS LocalOnlyValue;");
+
+        using var orchestrator = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var portal = new HostedLiveKestrelPortalFactory(orchestrator);
+        portal.Start();
+        var seeded = await SeedHostedAcceptanceTopologyAsync(portal);
+        await using var proxy = new HostedLoopbackFaultProxy(portal.ServerAddress, portal);
+        proxy.Start();
+
+        var registryPath = Path.Combine(registryTemp.Root, "hosted-servers.json");
+        new HostedServerRegistryStore(registryPath).AddOrUpdate("dev", "Loopback Portal", proxy.ProxyBaseUrl, "Dev");
+
+        var authenticator = new LoopbackPkceAuthenticator(async (authorizeUri, ct) =>
+        {
+            await DrivePortalOidcConsentAsync(authorizeUri, _ => { }, ct);
+            return true;
+        });
+
+        var options = new WorkstationEditorOptions(
+            workspace.Root, financeFile, 0, false, "st58-closed-doc-token",
+            StudioMode: true, InstanceId: Guid.NewGuid().ToString("D"), HostedServerRegistryPath: registryPath);
+
+        await using var host = WorkstationEditorApp.Create([], options, services =>
+        {
+            services.AddSingleton(authenticator);
+            services.AddSingleton(provider => new HostedRunCoordinator(
+                provider.GetRequiredService<HostedClientSessionService>(),
+                provider.GetRequiredService<HostedPipelineClient>(),
+                provider.GetRequiredService<TimeProvider>(),
+                initialPollDelay: TimeSpan.FromMilliseconds(150),
+                maxPollDelay: TimeSpan.FromMilliseconds(400)));
+        });
+        await host.StartAsync();
+
+        await using var browser = await fixture.NewSessionAsync();
+        var page = browser.Page;
+        await page.GotoWithDiagnosticsAsync(StudioUrl(host, options.SessionToken));
+        await WaitForStudioAsync(browser);
+
+        // Sign in as alice.
+        portal.StubOidc.Identity = new OidcIdentity("oid-alice", "alice", "alice@alpha.test", ["DataAuthors"]);
+        var targetBtn = page.Locator("[data-hosted-target-btn]");
+        await targetBtn.ClickAsync();
+        await page.Locator("[data-hosted-connect='dev']").ClickAsync();
+        await page.WaitForFunctionAsync(
+            "() => document.querySelector('[data-hosted-target-btn]')?.getAttribute('data-hosted-signed-in') === 'true'");
+
+        // Arm dropped 202 + revoked session, then start hosted run on FinanceCheck.etlsql.
+        var histBefore = await GetHostedHistoryCountAsync(orchestrator, seeded.FinancePipelineId);
+        proxy.ArmDropNext202(revokeAliceSessionAfterDrop: true);
+        await page.Locator("[data-action='run']").ClickAsync();
+        await page.Locator("[data-hosted-reauth]").WaitForAsync(new() { Timeout = 20_000 });
+
+        // Open OtherLocal.etlsql and CLOSE FinanceCheck.etlsql BEFORE recovering.
+        await page.Locator("[data-activity='explorer']").ClickAsync();
+        await page.Locator("[data-explorer-file='OtherLocal.etlsql']").ClickAsync();
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO__.state.documents.find(d => d.id === window.__STUDIO__.state.activeDocId)?.path === 'OtherLocal.etlsql'");
+
+        await page.Locator("#etlsql-tab-doc-primary .etlsql-tab-close").ClickAsync();
+        await page.WaitForFunctionAsync(
+            "() => !window.__STUDIO__.state.documents.some(d => d.path === 'FinanceCheck.etlsql')");
+
+        // Sign back in as alice and recover.
+        await page.Locator("[data-hosted-reauth]").ClickAsync();
+        await page.WaitForFunctionAsync(
+            "() => document.querySelector('[data-hosted-target-btn]')?.getAttribute('data-hosted-signed-in') === 'true'");
+        await page.Locator("[data-hosted-recover]").ClickAsync();
+
+        // Recovery status must appear in the hosted banner (original document closed) and finish SUCCESS.
+        var recoveryBanner = page.Locator("[data-hosted-recovery-status]");
+        await recoveryBanner.WaitForAsync(new() { Timeout = 20_000 });
+        await page.WaitForFunctionAsync(
+            "() => (document.querySelector('[data-hosted-recovery-status]')?.textContent || '').includes('SUCCESS')",
+            null, new PageWaitForFunctionOptions { Timeout = 20_000 });
+
+        Assert.Equal(histBefore + 1, await GetHostedHistoryCountAsync(orchestrator, seeded.FinancePipelineId));
+
+        // OtherLocal.etlsql MUST NOT receive FinanceCheck's recovered trace.
+        var otherTrace = await page.EvaluateAsync<string>(
+            "() => JSON.stringify(window.__STUDIO__.state.documents.find(d => d.path === 'OtherLocal.etlsql').studioContext.resultsTrace)");
+        Assert.DoesNotContain("FinanceCheck", otherTrace, StringComparison.Ordinal);
+        Assert.DoesNotContain("PIPELINE:", otherTrace, StringComparison.Ordinal);
+        Assert.DoesNotContain("Recovered accepted run", otherTrace, StringComparison.Ordinal);
+        Assert.Empty(browser.PageErrors);
+    }
+
+    [Fact]
+    public async Task DesktopStudio_HostedPipelinePicker_PagesBeyondFiftyResultsAndRunsSelection()
+    {
+        using var workspace = new StudioTempWorkspace();
+        using var registryTemp = new StudioTempWorkspace();
+
+        var localFile = Path.Combine(workspace.Root, "PickFromCatalog.etlsql");
+        await File.WriteAllTextAsync(localFile, "SELECT 1 AS Placeholder;");
+
+        using var orchestrator = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var portal = new HostedLiveKestrelPortalFactory(orchestrator);
+        portal.Start();
+        await SeedHostedAcceptanceTopologyAsync(portal);
+
+        // Seed 50 more pipelines so the target pipeline sits beyond the first page of 50.
+        int pageTwoPipelineId;
+        using (var http = new HttpClient { BaseAddress = new Uri(portal.ServerAddress) })
+        {
+            var loginResp = await http.PostAsJsonAsync("/api/auth/login", new { username = "admin", password = "Admin@12345!" });
+            Assert.Equal(HttpStatusCode.OK, loginResp.StatusCode);
+            var adminToken = (await loginResp.Content.ReadFromJsonAsync<JsonObject>(HostedJson))!["token"]!.GetValue<string>();
+
+            int folderId;
+            string alicePrincipalKey;
+            using (var scope = portal.BrowserServices.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                folderId = (await db.Folders.SingleAsync(f => f.Path == "/Finance")).Id;
+                alicePrincipalKey = (await db.Users.SingleAsync(u => u.UserName == "alice")).PrincipalKey!;
+            }
+
+            for (var i = 1; i <= 50; i++)
+            {
+                await CreateHostedPipelineAsync(http, adminToken, folderId, $"BulkPipeline_{i:D2}.etlsql", HostedFinanceCheckScript);
+            }
+            var (zebraId, zebraVersion) = await CreateHostedPipelineAsync(http, adminToken, folderId, "ZebraPageTwo.etlsql", HostedFinanceCheckScript);
+            pageTwoPipelineId = zebraId;
+            await ProvisionAndGrantHostedAsync(http, adminToken, zebraId, zebraVersion, alicePrincipalKey, cancelImmediately: false);
+        }
+
+        var registryPath = Path.Combine(registryTemp.Root, "hosted-servers.json");
+        new HostedServerRegistryStore(registryPath).AddOrUpdate("dev", "Loopback Portal", portal.ServerAddress, "Dev");
+
+        var authenticator = new LoopbackPkceAuthenticator(async (authorizeUri, ct) =>
+        {
+            await DrivePortalOidcConsentAsync(authorizeUri, _ => { }, ct);
+            return true;
+        });
+
+        var options = new WorkstationEditorOptions(
+            workspace.Root, localFile, 0, false, "st58-paging-token",
+            StudioMode: true, InstanceId: Guid.NewGuid().ToString("D"), HostedServerRegistryPath: registryPath);
+
+        await using var host = WorkstationEditorApp.Create([], options, services =>
+        {
+            services.AddSingleton(authenticator);
+            services.AddSingleton(provider => new HostedRunCoordinator(
+                provider.GetRequiredService<HostedClientSessionService>(),
+                provider.GetRequiredService<HostedPipelineClient>(),
+                provider.GetRequiredService<TimeProvider>(),
+                initialPollDelay: TimeSpan.FromMilliseconds(150),
+                maxPollDelay: TimeSpan.FromMilliseconds(400)));
+        });
+        await host.StartAsync();
+
+        await using var browser = await fixture.NewSessionAsync();
+        var page = browser.Page;
+        await page.GotoWithDiagnosticsAsync(StudioUrl(host, options.SessionToken));
+        await WaitForStudioAsync(browser);
+
+        portal.StubOidc.Identity = new OidcIdentity("oid-alice", "alice", "alice@alpha.test", ["DataAuthors"]);
+        await page.Locator("[data-hosted-target-btn]").ClickAsync();
+        await page.Locator("[data-hosted-connect='dev']").ClickAsync();
+        await page.WaitForFunctionAsync(
+            "() => document.querySelector('[data-hosted-target-btn]')?.getAttribute('data-hosted-signed-in') === 'true'");
+
+        var histBefore = await GetHostedHistoryCountAsync(orchestrator, pageTwoPipelineId);
+        await page.Locator("[data-action='run']").ClickAsync();
+        await page.Locator("[data-hosted-pipeline-modal]").WaitForAsync();
+
+        // Page 1 must show 50 items and offer Load More (ZebraPageTwo is on page 2).
+        Assert.Equal(50, await page.Locator("[data-hosted-pick-pipeline]").CountAsync());
+        Assert.Equal(0, await page.Locator($"[data-hosted-pick-pipeline='{pageTwoPipelineId}']").CountAsync());
+
+        var loadMoreBtn = page.Locator("[data-hosted-pipeline-load-more]");
+        await loadMoreBtn.WaitForAsync();
+        await loadMoreBtn.ClickAsync();
+
+        // Page 2 appends ZebraPageTwo.etlsql; select and run it.
+        var zebraChoice = page.Locator($"[data-hosted-pick-pipeline='{pageTwoPipelineId}']");
+        await zebraChoice.WaitForAsync();
+        await zebraChoice.ClickAsync();
+
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO__.state.documents[0].studioContext.resultsTrace.some(e => e.type === 'done' && e.status === 'Complete')",
+            null, new PageWaitForFunctionOptions { Timeout = 20_000 });
+        Assert.Equal(histBefore + 1, await GetHostedHistoryCountAsync(orchestrator, pageTwoPipelineId));
+        Assert.Empty(browser.PageErrors);
+    }
+
     private static int GetFreeLoopbackPort()
     {
         using var tcp = new TcpListener(IPAddress.Loopback, 0);
