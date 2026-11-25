@@ -234,6 +234,12 @@ async function main() {
     assert.strictEqual(await controller.connectToServer(hostedServer), true);
     captureActiveTokens();
     await controller.runHostedScript(makeEditor(financePipelineId, 'FinanceCheck.etlsql'));
+    const runnable = await controller.client.findRunnablePipelines('Finance');
+    // The search matches folder paths too, so both pipelines in /Finance are visible.
+    assert.deepEqual(runnable.items.map(item => [item.id, item.canAuthor]), [[financePipelineId, false], [slowPipelineId, false]],
+        `Bob should see runnable pipelines in /Finance and none in /FinancePrivate. Found: ${JSON.stringify(runnable.items)}`);
+    const authorSummary = await sessions.authorizedFetch(`/api/studio/reports/${financePipelineId}/summary`);
+    assert.strictEqual(authorSummary.status, 404, 'Execute-only Bob must not see authoring summary');
     const histAfterBob = Number((await controlPost(controlUrl, '/history-count', { pipelineId: financePipelineId })).count);
     assert.strictEqual(histAfterBob, histBeforeBob, 'Bob must not trigger Orchestrator execution');
     assert.ok(

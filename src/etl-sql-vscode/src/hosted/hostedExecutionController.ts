@@ -7,7 +7,7 @@ import {
     PendingSubmissionRecord,
     PipelineRunDto,
     PipelineRunSubmittedDto,
-    StudioReportDto,
+    StudioRunnablePipelineDto,
     normalizeTrustedServerOrigin,
     parseSavedServers,
     redactSecrets
@@ -224,8 +224,17 @@ export class HostedExecutionController implements vscode.Disposable {
         await this.connectToServer(targetServer);
     }
 
-    public async connect(): Promise<void> {
+    public async connect(serverAlias?: string): Promise<void> {
         const servers = this.getSavedServers();
+        if (typeof serverAlias === 'string') {
+            const entry = servers.find(server => server.alias.toLowerCase() === serverAlias.trim().toLowerCase());
+            if (!entry) {
+                vscode.window.showWarningMessage('ETL-SQL: Select a hosted server saved in your user settings.');
+                return;
+            }
+            await this.connectToServer(entry);
+            return;
+        }
         const config = vscode.workspace.getConfiguration('etlsql');
         const workspaceAlias = (config.get<string>('hosted.defaultServerAlias') || '').trim();
 
@@ -360,21 +369,26 @@ export class HostedExecutionController implements vscode.Disposable {
         if (!sameSession()) {
             return;
         }
-        const pipelineId = await this.resolvePipelineId(editor.document, session.server.alias, sameSession);
-        if (pipelineId === undefined || !sameSession()) {
-            return;
-        }
-
-        let summary: StudioReportDto;
+        let pipelineId: number | undefined;
+        let summary: StudioRunnablePipelineDto;
         try {
-            summary = await this.client.getReportSummary(pipelineId);
+            pipelineId = await this.resolvePipelineId(editor.document, session.server.alias, sameSession);
+            if (pipelineId === undefined || !sameSession()) {
+                return;
+            }
+            summary = await this.client.getRunnableRevision(pipelineId);
         } catch (err) {
             if (err instanceof HostedSessionExpiredError) {
                 await this.handleExpiredSession(undefined);
                 return;
             }
-            const msg = err instanceof Error ? err.message : String(err);
-            vscode.window.showErrorMessage(`ETL-SQL: ${msg}`);
+            if (sameSession()) {
+                const msg = err instanceof Error ? err.message : String(err);
+                vscode.window.showErrorMessage(`ETL-SQL: ${msg}`);
+            }
+            return;
+        }
+        if (!sameSession()) {
             return;
         }
 
@@ -382,7 +396,7 @@ export class HostedExecutionController implements vscode.Disposable {
 
         // Dirty buffer handling: Save to Portal & Run (when allowed), Run Last Saved Revision, or Cancel.
         if (editor.document.isDirty) {
-            const canSave = session.scopes.includes('studio.save')
+            const canSave = summary.canAuthor && session.scopes.includes('studio.save')
                 && session.studioSession.capabilities.includes('ScriptSave');
             const choices = canSave
                 ? ['Save to Portal & Run', 'Run Last Saved Revision', 'Cancel']
@@ -766,34 +780,43 @@ export class HostedExecutionController implements vscode.Disposable {
             return defaultId;
         }
 
-        // Discover saved pipelines from Portal catalog.
-        const page = await this.client.searchCatalog(path.basename(document.fileName, path.extname(document.fileName)));
-        if (!sameSession()) {
-            return undefined;
+        let query: string | undefined = path.basename(document.fileName, path.extname(document.fileName));
+        let page = await this.client.findRunnablePipelines(query);
+        if (sameSession() && page.items.length === 0 && page.nextAfterId === null && query) {
+            query = undefined;
+            page = await this.client.findRunnablePipelines();
         }
-        const pipelines = page.items.filter(item => !item.kind || item.kind.toLowerCase() === 'pipeline');
-        const catalogItems = pipelines.length > 0 ? pipelines : (await this.client.searchCatalog()).items.filter(
-            item => !item.kind || item.kind.toLowerCase() === 'pipeline'
-        );
+        while (sameSession()) {
+            if (page.items.length === 0 && page.nextAfterId === null) {
+                vscode.window.showWarningMessage('ETL-SQL: No more runnable Portal pipelines were found for this account.');
+                return undefined;
+            }
 
-        if (catalogItems.length === 0) {
-            vscode.window.showWarningMessage('ETL-SQL: No saved Portal pipelines were found for this account.');
-            return undefined;
-        }
-
-        const picked = await vscode.window.showQuickPick(
-            catalogItems.map(item => ({
+            const items: (vscode.QuickPickItem & { id?: number })[] = page.items.map(item => ({
                 label: item.name,
-                description: `v${item.version} · ${item.folderPath}`,
+                description: `v${item.version} ? ${item.folderPath}`,
                 detail: `Pipeline #${item.id}`,
                 id: item.id
-            })),
-            {
+            }));
+            if (page.nextAfterId !== null) {
+                items.push({ label: 'Show more pipelines' });
+            }
+
+            const picked = await vscode.window.showQuickPick(items, {
                 title: `Select Saved Portal Pipeline to Run ? ${serverAlias}`,
                 placeHolder: 'Choose a published pipeline revision'
+            });
+            if (!picked || !sameSession()) {
+                return undefined;
             }
-        );
-        return picked?.id;
+            if (picked.id !== undefined) {
+                return picked.id;
+            }
+            if (page.nextAfterId !== null) {
+                page = await this.client.findRunnablePipelines(query, page.nextAfterId);
+            }
+        }
+        return undefined;
     }
 
     private async attachAndPollRun(

@@ -15,7 +15,7 @@ public static class NativeClientScopes
     public static string Describe(string scope) => scope switch
     {
         StudioRead => "Read Studio session capabilities, catalog entries, and document summaries",
-        StudioRun => "Submit, monitor, and cancel saved pipeline runs",
+        StudioRun => "Discover runnable revisions, submit runs, monitor status, and cancel runs",
         StudioSave => "Save linked pipeline documents subject to server publication policy",
         _ => scope
     };

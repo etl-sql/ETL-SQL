@@ -4,8 +4,8 @@ import {
     PipelineRunRefusalDto,
     PipelineRunSubmittedDto,
     SaveDesignerResponse,
-    StudioCatalogPageDto,
-    StudioReportDto,
+    StudioRunnablePipelinePageDto,
+    StudioRunnablePipelineDto,
     redactSecrets
 } from './hostedTypes';
 import { HostedNetworkError, HostedSessionManager } from './hostedSessionManager';
@@ -44,18 +44,22 @@ export type CancelRunResult =
 export class HostedPipelineClient {
     constructor(private readonly sessions: HostedSessionManager) {}
 
-    public async getReportSummary(pipelineId: number): Promise<StudioReportDto> {
-        const resp = await this.sessions.authorizedFetch(`/api/studio/reports/${pipelineId}/summary`, {
+    public async getRunnableRevision(pipelineId: number): Promise<StudioRunnablePipelineDto> {
+        const resp = await this.sessions.authorizedFetch(`/api/studio/pipelines/${pipelineId}/revision`, {
             method: 'GET'
         });
         if (!resp.ok) {
             const refusal = await this.readRefusal(resp);
             throw new Error(refusal.error || `Could not load pipeline #${pipelineId} (${resp.status}).`);
         }
-        return await resp.json() as StudioReportDto;
+        const revision = this.readRunnablePipeline(await resp.json());
+        if (revision.id !== pipelineId) {
+            throw new HostedNetworkError('Portal returned a different pipeline revision.');
+        }
+        return revision;
     }
 
-    public async searchCatalog(query?: string, afterId: number = 0): Promise<StudioCatalogPageDto> {
+    public async findRunnablePipelines(query?: string, afterId: number = 0): Promise<StudioRunnablePipelinePageDto> {
         const params = new URLSearchParams();
         if (query) {
             params.set('query', query);
@@ -64,14 +68,31 @@ export class HostedPipelineClient {
             params.set('afterId', String(afterId));
         }
         const qs = params.toString();
-        const resp = await this.sessions.authorizedFetch(`/api/studio/catalog${qs ? `?${qs}` : ''}`, {
+        const resp = await this.sessions.authorizedFetch(`/api/studio/pipelines/runnable${qs ? `?${qs}` : ''}`, {
             method: 'GET'
         });
         if (!resp.ok) {
             const refusal = await this.readRefusal(resp);
-            throw new Error(refusal.error || `Could not load Studio catalog (${resp.status}).`);
+            throw new Error(refusal.error || `Could not load runnable pipelines (${resp.status}).`);
         }
-        return await resp.json() as StudioCatalogPageDto;
+        const page = await this.readJsonSafe(resp);
+        const cursor = page?.nextAfterId;
+        if (!page || !Array.isArray(page.items) || page.items.length > 50
+            || (cursor !== null && (typeof cursor !== 'number' || !Number.isSafeInteger(cursor) || cursor <= afterId))) {
+            throw new HostedNetworkError('Portal returned an invalid runnable pipeline page.');
+        }
+        return { items: page.items.map(value => this.readRunnablePipeline(value)), nextAfterId: cursor };
+    }
+
+    private readRunnablePipeline(input: unknown): StudioRunnablePipelineDto {
+        const value = input as Partial<StudioRunnablePipelineDto> | null;
+        if (!value || typeof value.id !== 'number' || !Number.isSafeInteger(value.id) || value.id <= 0
+            || typeof value.name !== 'string' || typeof value.folderPath !== 'string'
+            || typeof value.version !== 'number' || !Number.isSafeInteger(value.version) || value.version <= 0
+            || typeof value.canAuthor !== 'boolean') {
+            throw new HostedNetworkError('Portal returned invalid runnable revision metadata.');
+        }
+        return { id: value.id, name: value.name, folderPath: value.folderPath, version: value.version, canAuthor: value.canAuthor };
     }
 
     public async savePipelineScript(

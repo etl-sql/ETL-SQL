@@ -2543,6 +2543,19 @@ interface StudioReportDto {
     kind: string;
 }
 
+interface StudioRunnablePipelineDto {
+    id: number;
+    name: string;
+    folderPath: string;
+    version: number;
+    canAuthor: boolean;
+}
+
+interface StudioRunnablePipelinePageDto {
+    items: StudioRunnablePipelineDto[];
+    nextAfterId?: number | null;
+}
+
 interface StudioSessionDto {
     mode: string;
     capabilities: string[];

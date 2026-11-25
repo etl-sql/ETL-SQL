@@ -35,7 +35,6 @@ import { analyzeSavePolicy, getSealPasswordRequirement, requiresRunPasswordPromp
 import { registerWalkthroughCommands } from './walkthrough';
 import { HostedSessionManager } from './hosted/hostedSessionManager';
 import { HostedExecutionController } from './hosted/hostedExecutionController';
-import { HostedServerEntry } from './hosted/hostedTypes';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -227,8 +226,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         hostedController,
         vscode.commands.registerCommand('etlsql.hosted.selectTarget', () => hostedController?.selectTarget()),
-        vscode.commands.registerCommand('etlsql.hosted.connect', (server?: HostedServerEntry) =>
-            server ? hostedController?.connectToServer(server) : hostedController?.connect()),
+        vscode.commands.registerCommand('etlsql.hosted.connect', (alias?: string) => hostedController?.connect(alias)),
         vscode.commands.registerCommand('etlsql.hosted.disconnect', () => hostedController?.disconnect())
     );
 

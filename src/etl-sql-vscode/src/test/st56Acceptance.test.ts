@@ -163,7 +163,7 @@ describe('ST56 8-Step Hosted Acceptance Fixture (VS Code Client)', () => {
                 });
             }
 
-            const summaryMatch = url.pathname.match(/^\/api\/studio\/reports\/(\d+)\/summary$/);
+            const summaryMatch = url.pathname.match(/^\/api\/studio\/pipelines\/(\d+)\/revision$/);
             if (req.method === 'GET' && summaryMatch) {
                 const id = Number(summaryMatch[1]);
                 record(200);
@@ -174,7 +174,7 @@ describe('ST56 8-Step Hosted Acceptance Fixture (VS Code Client)', () => {
                     name: id === 101 ? 'FinanceCheck.etlsql' : 'SlowWait.etlsql',
                     updatedAt: new Date().toISOString(),
                     version: 1,
-                    kind: 'Pipeline'
+                    canAuthor: session.user === 'alice'
                 });
             }
 

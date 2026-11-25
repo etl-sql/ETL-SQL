@@ -16,6 +16,9 @@ public sealed partial class NativeClientScopeMiddleware(RequestDelegate next)
     [GeneratedRegex("^/api/studio/pipelines/\\d+/runs$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex PipelineRunsSubmitRegex();
 
+    [GeneratedRegex("^/api/studio/pipelines/\\d+/revision$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex PipelineRevisionRegex();
+
     [GeneratedRegex("^/api/studio/pipelines/\\d+/runs/\\d+$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex PipelineRunStatusRegex();
 
@@ -78,7 +81,9 @@ public sealed partial class NativeClientScopeMiddleware(RequestDelegate next)
                 || StudioDocumentSummaryRegex().IsMatch(path))
                 return NativeClientScopes.StudioRead;
 
-            if (PipelineRunStatusRegex().IsMatch(path)
+            if (path.Equals("/api/studio/pipelines/runnable", StringComparison.OrdinalIgnoreCase)
+                || PipelineRevisionRegex().IsMatch(path)
+                || PipelineRunStatusRegex().IsMatch(path)
                 || PipelineRunByRequestRegex().IsMatch(path))
                 return NativeClientScopes.StudioRun;
 

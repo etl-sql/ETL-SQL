@@ -53,6 +53,38 @@ public sealed class StudioPipelineRunsController(
     /// <summary>The Orchestrator job a pipeline document runs through.</summary>
     public static string JobName(int pipelineId) => $"PIPELINE:{pipelineId}";
 
+    [HttpGet("runnable")]
+    public async Task<ActionResult<StudioRunnablePipelinePageDto>> GetRunnablePipelines(
+        CancellationToken ct, [FromQuery] string? query = null, [FromQuery] int afterId = 0)
+    {
+        query = query?.Trim() ?? string.Empty;
+        if (query.Length > 160 || afterId < 0)
+            return BadRequest(new PipelineRunRefusalDto("invalid_search", "Invalid pipeline search or cursor."));
+
+        var candidates = CatalogScope.Documents.AsNoTracking()
+            .Where(report => !report.IsDeleted && report.Kind == CatalogDocumentKind.Pipeline && report.Id > afterId
+                && (query == "" || report.Name.Contains(query) || report.Folder.Path.Contains(query)));
+        var visible = await folderPermissions.FilterVisibleReportsAsync(candidates, FolderPermission.Execute, User, ct);
+        var page = await visible.Include(report => report.Folder).OrderBy(report => report.Id).Take(51).ToListAsync(ct);
+        var inspected = page.Take(50).ToList();
+        var permissions = await folderPermissions.GetEffectiveReportPermissionsAsync(inspected, User, ct);
+        var items = inspected.Where(report => permissions[report.Id].AtLeast(FolderPermission.Execute))
+            .Select(report => ToRunnablePipeline(report, permissions[report.Id])).ToArray();
+        return Ok(new StudioRunnablePipelinePageDto(items, page.Count > 50 ? inspected[^1].Id : null));
+    }
+
+    [HttpGet("{id:int}/revision")]
+    public async Task<ActionResult<StudioRunnablePipelineDto>> GetRunnableRevision(int id, CancellationToken ct)
+    {
+        var pipeline = await RunnablePipelineAsync(id, ct);
+        return pipeline.Refusal is ActionResult refusal
+            ? refusal
+            : Ok(ToRunnablePipeline(pipeline.Document!, pipeline.Permission));
+    }
+
+    private static StudioRunnablePipelineDto ToRunnablePipeline(Report document, FolderPermission? permission) =>
+        new(document.Id, document.Name, document.Folder.Path, document.Version, permission.AtLeast(FolderPermission.Author));
+
     [HttpPost("{id:int}/runs")]
     public async Task<IActionResult> Submit(int id, [FromBody] SubmitPipelineRunRequest request, CancellationToken ct)
     {
@@ -562,19 +594,19 @@ public sealed class StudioPipelineRunsController(
     /// The pipeline, when it exists in this tenant and the caller may run it. A report, a deleted
     /// document and another tenant's document all answer as no pipeline does.
     /// </summary>
-    private async Task<(Report? Document, IActionResult? Refusal)> RunnablePipelineAsync(int id, CancellationToken ct)
+    private async Task<(Report? Document, ActionResult? Refusal, FolderPermission? Permission)> RunnablePipelineAsync(int id, CancellationToken ct)
     {
         var document = await CatalogScope.Documents.AsNoTracking()
             .Include(item => item.Folder)
             .FirstOrDefaultAsync(item => item.Id == id && !item.IsDeleted, ct);
         if (document is null || document.Kind != CatalogDocumentKind.Pipeline)
-            return (null, NotFound(new PipelineRunRefusalDto("pipeline_not_found", "No such pipeline.")));
+            return (null, NotFound(new PipelineRunRefusalDto("pipeline_not_found", "No such pipeline.")), null);
 
         var permission = await folderPermissions.GetEffectiveReportPermissionAsync(document, User);
         if (!permission.AtLeast(FolderPermission.Execute))
             return (null, StatusCode(StatusCodes.Status403Forbidden, new PipelineRunRefusalDto(
-                "document_execute_denied", "This account does not have Execute on this pipeline.")));
-        return (document, null);
+                "document_execute_denied", "This account does not have Execute on this pipeline.")), null);
+        return (document, null, permission);
     }
 
     /// <summary>Turns the Orchestrator's refusal into one the author can act on, keeping its code.</summary>

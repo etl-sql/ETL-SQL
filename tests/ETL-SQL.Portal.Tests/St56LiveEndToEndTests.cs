@@ -10,13 +10,10 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
-using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -27,7 +24,7 @@ namespace ETL_SQL.Portal.Tests;
 /// (Node 22) and the REAL VS Code Electron Extension Host against a live loopback Kestrel Portal
 /// and real Federated Orchestrator (ST55 §4.1).
 /// </summary>
-[Trait("Category", "Portal")]
+[Trait("Category", "Integration")]
 public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
 {
     private const string FinanceCheckScript =
@@ -38,18 +35,18 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
     private const string SlowWaitScript = "WAITFOR DELAY '00:00:40';\n";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    [Fact]
+    [St56LiveFact]
     public async Task LiveVsCodeClient_EightStepAcceptance_PassesAgainstKestrelPortalAndFederatedOrchestrator()
     {
         var repoRoot = FindRepoRoot();
-        var node22 = Path.Combine(repoRoot, "release-validation", "local-tools", "node-v22.23.5", "node.exe");
+        var node22 = Environment.GetEnvironmentVariable("ETLSQL_ST56_NODE") ?? "node";
         var runnerJs = Path.Combine(repoRoot, "src", "etl-sql-vscode", "out", "test", "st56LiveAcceptanceRunner.js");
-        Assert.True(File.Exists(node22), $"Node 22 binary not found at {node22}");
+        await RequireNode22Async(node22, repoRoot);
         Assert.True(File.Exists(runnerJs), $"Compiled live runner not found at {runnerJs}. Run npm run compile first.");
 
         using var orchestrator = new OrchestratorWebFactory(requireFederatedIdentity: true);
         using var portal = new LiveKestrelPortalFactory(orchestrator);
-        portal.CreateClient().Dispose(); // boots Kestrel + TestServer
+        portal.Start();
 
         var seeded = await SeedAcceptanceTopologyAsync(portal, orchestrator);
 
@@ -80,7 +77,7 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
         Assert.Contains("ST56_LIVE_TRACE_END", stdout);
 
         // Verify Portal audit rows from the live run
-        using var scope = portal.BrowserServices.CreateScope();
+        using var scope = portal.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
         var alice = await db.Users.SingleAsync(u => u.UserName == "alice");
         Assert.True(await db.AuditLogs.AnyAsync(a => a.UserId == alice.Id && a.Action == "CLIENT_LOGIN"));
@@ -89,20 +86,20 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
         Assert.True(await db.AuditLogs.AnyAsync(a => a.UserId == alice.Id && a.Action == "LOGOUT"));
     }
 
-    [Fact]
+    [St56LiveFact(windowsOnly: true)]
     public async Task LiveElectronExtensionHost_Smoke_PassesAgainstKestrelPortalAndFederatedOrchestrator()
     {
         var repoRoot = FindRepoRoot();
-        var node22 = Path.Combine(repoRoot, "release-validation", "local-tools", "node-v22.23.5", "node.exe");
+        var node22 = Environment.GetEnvironmentVariable("ETLSQL_ST56_NODE") ?? "node";
         var runTestJs = Path.Combine(repoRoot, "src", "etl-sql-vscode", "out", "test", "runTest.js");
         var vscodeExe = FindCachedVsCodeExecutable(Path.Combine(repoRoot, "src", "etl-sql-vscode", ".vscode-test"));
-        Assert.True(File.Exists(node22), $"Node 22 binary not found at {node22}");
+        await RequireNode22Async(node22, repoRoot);
         Assert.True(File.Exists(runTestJs), $"Compiled Electron test launcher not found at {runTestJs}");
         Assert.True(vscodeExe is not null && File.Exists(vscodeExe), "Cached VS Code Electron executable not found under .vscode-test");
 
         using var orchestrator = new OrchestratorWebFactory(requireFederatedIdentity: true);
         using var portal = new LiveKestrelPortalFactory(orchestrator);
-        portal.CreateClient().Dispose();
+        portal.Start();
 
         var seeded = await SeedAcceptanceTopologyAsync(portal, orchestrator);
         await using var proxy = new LoopbackFaultProxy(portal.ServerAddress, portal, orchestrator);
@@ -149,7 +146,8 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
         OrchestratorWebFactory orchestrator)
     {
         int folderId;
-        using (var scope = portal.BrowserServices.CreateScope())
+        int restrictedFolderId;
+        using (var scope = portal.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
             var admin = await db.Users.SingleAsync(u => u.UserName == "admin");
@@ -170,18 +168,16 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
                 new GroupStudioCapability { GroupId = readersGroup.Id, Capability = StudioCapabilities.ScriptRun });
 
             var folder = new Folder { Name = "Finance", Path = "/Finance", OwnerId = admin.Id };
-            db.Folders.Add(folder);
+            var restricted = new Folder { Name = "FinancePrivate", Path = "/FinancePrivate", OwnerId = admin.Id };
+            db.Folders.AddRange(folder, restricted);
             await db.SaveChangesAsync();
             folderId = folder.Id;
+            restrictedFolderId = restricted.Id;
 
-            // Note: GET /api/studio/reports/{id}/summary currently requires FolderPermission.Author
-            // (unlike POST /api/studio/pipelines/{id}/runs which requires FolderPermission.Execute).
-            // Granting DataReaders FolderPermission.Author (without ScriptSave and without any
-            // Orchestrator EXECUTE grant) lets the live VS Code client read the pipeline version
-            // and reach POST /runs to verify the 403 run_grant_denied path end-to-end.
+            // DataReaders may look up runnable revisions, but do not receive Author or Orchestrator Execute.
             db.FolderAcls.AddRange(
                 new FolderAcl { FolderId = folderId, GroupId = authorsGroup.Id, Permission = FolderPermission.Author },
-                new FolderAcl { FolderId = folderId, GroupId = readersGroup.Id, Permission = FolderPermission.Author });
+                new FolderAcl { FolderId = folderId, GroupId = readersGroup.Id, Permission = FolderPermission.Execute });
 
             // Pre-provision alice so we can grant her Orchestrator EXECUTE on PIPELINE:{id} before the runner signs in
             var alice = new PortalUser
@@ -210,9 +206,10 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
 
         var (financeId, financeVersion) = await CreatePipelineAsync(http, adminToken, folderId, "FinanceCheck.etlsql", FinanceCheckScript);
         var (slowId, slowVersion) = await CreatePipelineAsync(http, adminToken, folderId, "SlowWait.etlsql", SlowWaitScript);
+        await CreatePipelineAsync(http, adminToken, restrictedFolderId, "FinancePrivate.etlsql", FinanceCheckScript);
 
         string alicePrincipalKey;
-        using (var scope = portal.BrowserServices.CreateScope())
+        using (var scope = portal.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
             alicePrincipalKey = (await db.Users.SingleAsync(u => u.UserName == "alice")).PrincipalKey!;
@@ -312,6 +309,13 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
         return (proc.ExitCode, await stdoutTask, await stderrTask);
     }
 
+    private static async Task RequireNode22Async(string node, string repoRoot)
+    {
+        var (exitCode, stdout, _) = await RunProcessAsync(node, "--version", repoRoot, [], TimeSpan.FromSeconds(10));
+        Assert.True(exitCode == 0 && stdout.Trim().StartsWith("v22.", StringComparison.Ordinal),
+            "The live ST56 fixture requires Node 22 on PATH or in ETLSQL_ST56_NODE.");
+    }
+
     private static string FindRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -335,20 +339,21 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
 
     private sealed class LiveKestrelPortalFactory(OrchestratorWebFactory orchestrator) : PortalWebFactory
     {
-        private IHost? _kestrelHost;
         public string ServerAddress { get; private set; } = string.Empty;
-        public IServiceProvider BrowserServices => _kestrelHost?.Services
-            ?? throw new InvalidOperationException("Kestrel host has not started.");
         public MutableStubOidc StubOidc { get; } = new();
+
+        public void Start()
+        {
+            _ = orchestrator.Server;
+            UseKestrel(options => options.Listen(IPAddress.Loopback, 0));
+            using var client = CreateClient();
+            ServerAddress = client.BaseAddress!.AbsoluteUri.TrimEnd('/');
+        }
 
         public async Task StopKestrelAsync()
         {
-            if (_kestrelHost is not null)
-            {
-                await _kestrelHost.StopAsync();
-                _kestrelHost.Dispose();
-                _kestrelHost = null;
-            }
+            using var stopTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await Services.GetRequiredService<IServer>().StopAsync(stopTimeout.Token);
         }
 
         protected override void CustomizeConfiguration(Dictionary<string, string?> settings)
@@ -374,35 +379,6 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
             services.AddSingleton<IOidcAuthenticationService>(StubOidc);
             services.AddHttpClient<OrchestratorProxyService>()
                 .ConfigurePrimaryHttpMessageHandler(() => orchestrator.Server.CreateHandler());
-        }
-
-        protected override IHost CreateHost(IHostBuilder builder)
-        {
-            var testHost = builder.Build();
-            builder.ConfigureWebHost(webHost => webHost.UseKestrel().UseUrls("http://127.0.0.1:0"));
-            _kestrelHost = builder.Build();
-
-            _kestrelHost.Start();
-            var started = _kestrelHost.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStarted;
-            if (!started.WaitHandle.WaitOne(TimeSpan.FromSeconds(30)))
-                throw new TimeoutException("Kestrel Portal did not start within 30s.");
-
-            var addresses = _kestrelHost.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!;
-            ServerAddress = addresses.Addresses.Last().TrimEnd('/');
-
-            testHost.Start();
-            return testHost;
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing && _kestrelHost is not null)
-            {
-                try { _kestrelHost.StopAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult(); } catch { }
-                _kestrelHost.Dispose();
-                _kestrelHost = null;
-            }
-            base.Dispose(disposing);
         }
     }
 
@@ -613,7 +589,7 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
 
         private async Task RevokeAliceNativeSessionsAsync()
         {
-            using var scope = _portal.BrowserServices.CreateScope();
+            using var scope = _portal.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
             var alice = await db.Users.SingleAsync(u => u.UserName == "alice");
             var now = DateTime.UtcNow;
@@ -643,5 +619,16 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
             _cts.Dispose();
             return ValueTask.CompletedTask;
         }
+    }
+}
+
+internal sealed class St56LiveFactAttribute : FactAttribute
+{
+    public St56LiveFactAttribute(bool windowsOnly = false)
+    {
+        if (Environment.GetEnvironmentVariable("ETLSQL_ST56_LIVE") != "1")
+            Skip = "Set ETLSQL_ST56_LIVE=1 after building the extension to run the live ST56 fixtures.";
+        else if (windowsOnly && !OperatingSystem.IsWindows())
+            Skip = "The Electron fixture currently uses a Windows VS Code test executable.";
     }
 }

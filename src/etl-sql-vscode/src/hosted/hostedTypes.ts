@@ -46,19 +46,16 @@ export interface StudioSessionDto {
     maxScriptCharacters?: number;
 }
 
-export interface StudioReportDto {
+export interface StudioRunnablePipelineDto {
     id: number;
-    folderId: number;
     folderPath: string;
     name: string;
-    description?: string | null;
-    updatedAt: string;
     version: number;
-    kind?: string;
+    canAuthor: boolean;
 }
 
-export interface StudioCatalogPageDto {
-    items: StudioReportDto[];
+export interface StudioRunnablePipelinePageDto {
+    items: StudioRunnablePipelineDto[];
     nextAfterId: number | null;
 }
 

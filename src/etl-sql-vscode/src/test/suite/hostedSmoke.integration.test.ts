@@ -53,7 +53,7 @@ suite('ST56 Hosted Execution Electron Smoke', function () {
         await cfg.update('hosted.defaultServerAlias', 'smoke', vscode.ConfigurationTarget.Global);
         await cfg.update('hosted.pipelineId', pipelineId, vscode.ConfigurationTarget.Global);
 
-        await vscode.commands.executeCommand('etlsql.hosted.connect', serverEntry);
+        await vscode.commands.executeCommand('etlsql.hosted.connect', serverEntry.alias);
         const session = controller.sessions.getSession();
         assert.ok(session, 'Session should be established after etlsql.hosted.connect');
         capturedSecrets.add(session.token);

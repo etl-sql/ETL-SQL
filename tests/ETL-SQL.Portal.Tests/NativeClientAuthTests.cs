@@ -361,6 +361,8 @@ public sealed partial class NativeClientAuthTests
         {
             Assert.Equal(HttpStatusCode.OK, (await AuthGet(browser, accessToken, "/api/studio/session")).StatusCode);
             Assert.Equal(HttpStatusCode.OK, (await AuthGet(browser, accessToken, "/api/studio/catalog")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(browser, accessToken, "/api/studio/pipelines/runnable")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(browser, accessToken, "/api/studio/pipelines/1/revision")).StatusCode);
 
             // Narrow scope blocks studio.run and studio.save
             var runDenied = await AuthPost(browser, accessToken, "/api/studio/pipelines/1/runs", new { version = 1 });

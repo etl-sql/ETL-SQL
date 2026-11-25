@@ -244,7 +244,7 @@ describe('HostedExecutionController', () => {
         const sessionManager = createSignedInMockManager({
             fetchImpl: vi.fn(async (input: string | URL | Request) => {
                 const url = String(input);
-                if (url.endsWith('/api/studio/reports/42/summary')) {
+                if (url.endsWith('/api/studio/pipelines/42/revision')) {
                     return jsonResp({
                         id: 42,
                         folderId: 1,
@@ -252,7 +252,7 @@ describe('HostedExecutionController', () => {
                         name: 'FinanceCheck.etlsql',
                         updatedAt: new Date().toISOString(),
                         version: 3,
-                        kind: 'Pipeline'
+                        canAuthor: true
                     });
                 }
                 if (url.endsWith('/api/designer/save')) {
@@ -301,6 +301,44 @@ describe('HostedExecutionController', () => {
         );
         expect(controller.getActiveRun()).toBeNull();
         expect(editor.document.getText()).toBe('SELECT 1;');
+    });
+
+    it('can select a runnable pipeline on a later page', async () => {
+        const first = { id: 50, folderPath: '/Finance', name: 'Finance A', version: 1, canAuthor: false };
+        const second = { id: 51, folderPath: '/Archive', name: 'Finance B', version: 2, canAuthor: false };
+        const fetchMock = vi.fn(async (input: string | URL | Request) => {
+            const url = new URL(String(input));
+            if (url.pathname.endsWith('/runnable')) {
+                return url.searchParams.get('afterId') === '50'
+                    ? jsonResp({ items: [second], nextAfterId: null })
+                    : jsonResp({ items: [first], nextAfterId: 50 });
+            }
+            if (url.pathname.endsWith('/51/revision')) {
+                return jsonResp(second);
+            }
+            if (url.pathname.endsWith('/51/runs')) {
+                return jsonResp({ code: 'run_grant_denied', error: 'Missing job grant.' }, 403);
+            }
+            return new Response(null, { status: 404 });
+        });
+        const sessions = createSignedInMockManager({ fetchImpl: fetchMock as unknown as typeof fetch });
+        await sessions.signIn({ alias: 'dev', label: 'Dev', origin: 'http://127.0.0.1:5001' });
+        vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
+            get: vi.fn(() => undefined)
+        } as unknown as vscode.WorkspaceConfiguration);
+        vi.mocked(vscode.window.showQuickPick)
+            .mockResolvedValueOnce({ label: 'Show more pipelines' } as never)
+            .mockResolvedValueOnce({ label: second.name, id: second.id } as never);
+        const controller = new HostedExecutionController({ sessions, postResults: () => {} });
+        const editor = {
+            document: { uri: vscode.Uri.file('/workspace/Finance.etlsql'), fileName: '/workspace/Finance.etlsql', isDirty: false }
+        } as unknown as vscode.TextEditor;
+
+        await controller.runHostedScript(editor);
+
+        const accessed = fetchMock.mock.calls.map(([input]) => new URL(String(input)).pathname + new URL(String(input)).search);
+        expect(accessed).toContain('/api/studio/pipelines/runnable?query=Finance&afterId=50');
+        expect(accessed).toContain('/api/studio/pipelines/51/runs');
     });
 
     it('keeps submission_outcome_unknown unconfirmed and verifies host/tenant/user before resuming after re-sign-in', async () => {

@@ -70,6 +70,11 @@ public sealed record StudioFolderDto(int Id, string Path, string Name);
 /// <summary>A bounded discovery page. NextAfterId advances past the inspected candidate rows.</summary>
 public sealed record StudioCatalogPageDto(IReadOnlyList<StudioReportDto> Items, int? NextAfterId);
 
+/// <summary>Saved-revision metadata visible to a caller with permission to execute a pipeline.</summary>
+public sealed record StudioRunnablePipelineDto(int Id, string Name, string FolderPath, long Version, bool CanAuthor);
+
+public sealed record StudioRunnablePipelinePageDto(IReadOnlyList<StudioRunnablePipelineDto> Items, int? NextAfterId);
+
 /// <summary>Asks the Orchestrator to run one saved pipeline revision.</summary>
 /// <param name="Version">The saved version the author is looking at; a stale one is refused.</param>
 public sealed record SubmitPipelineRunRequest(long Version);

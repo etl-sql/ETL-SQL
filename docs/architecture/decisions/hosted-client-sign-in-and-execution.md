@@ -56,6 +56,7 @@ TUI (ST57) and desktop Studio (ST58) reusing the same server contract.
 | Session renewal | `POST /api/auth/refresh` | None (add `client_id` / bounded client scopes on client-issued tokens) |
 | Sign-out | `POST /api/auth/logout` (all sessions) | `POST /api/auth/client/logout` to revoke only this client's refresh token |
 | Capability probe | `GET /api/studio/session` | None |
+| Runnable pipeline lookup | `GET /api/studio/pipelines/runnable`, `GET /api/studio/pipelines/{id}/revision` | Portal execution metadata for `studio.run` callers with `Execute` on the document |
 | Pipeline run, poll, cancel | `POST /api/studio/pipelines/{id}/runs`, `GET .../runs/{runId}`, `POST .../runs/{runId}/cancel` | `Idempotency-Key` header on `POST .../runs` + `GET /api/studio/pipelines/{id}/runs/by-request/{key}` for lost-response recovery |
 | Orchestrator federation | `OrchestratorAssertionIssuer`, `OrchestratorProxyService`, Orchestrator `/api/scheduled-jobs/{name}/runs` and `/api/job-runs/{id}` | None |
 
@@ -239,6 +240,11 @@ Every hosted run passes independent checks across boundaries:
 1. **Submission authorization (Portal + Orchestrator):**
    - Portal checks `StudioAccess`, `ScriptRun`, `StudioDeploymentMode`, tenant partition, document
      `Execute` ACL, and saved `version`.
+   - Native clients use the runnable pipeline endpoints to find a pipeline or look up its saved
+     version. They return the ID, name, folder path, version, and whether the caller holds
+     `Author`. Discovery filters the caller?s visible pipelines before paging. The authoring
+     endpoints keep their `ScriptRead` and `Author` requirements. Save also requires the applicable
+     client scope and Portal capability.
    - Orchestrator verifies `X-Orchestrator-Identity` and checks the caller's `EXECUTE` grant on
      `PIPELINE:{id}` (or `Admin`/`OrchestratorManager` auto-provision).
 2. **Shared connection authorization (`SHARED:alias`, execution host):**
@@ -308,11 +314,23 @@ receives `202 Accepted`:
 | 1. First sign-in | Start on `Local (Offline)`, click Connect, pick Hosted target, sign in via loopback browser OIDC as `alice` | `GET /api/auth/providers`, `GET /api/auth/client/authorize`, `POST /api/auth/client/exchange`, `GET /api/studio/session` | Session held in process memory only; status bar shows host + `tenant-alpha` + `alice`; zero tokens on disk, in settings, or in logs |
 | 2. Authorized run | Run `FinanceCheck.etlsql` (`version = 1`) | `POST /api/studio/pipelines/{id}/runs` (`Idempotency-Key`), `GET .../runs/{runId}` | `202` with `runId`; polls to `SUCCESS`; statement metrics rendered; `PIPELINE_RUN_SUBMITTED` audited |
 | 3. Session reuse | Run `FinanceCheck.etlsql` a second time | `POST /api/studio/pipelines/{id}/runs`, `GET .../runs/{runId}` | Zero browser launches; same in-memory session reused; second distinct `runId` completes |
-| 4. Denied run | Sign in as `bob`, attempt to run `FinanceCheck.etlsql` | `POST /api/studio/pipelines/{id}/runs` | `403 run_grant_denied`; zero Orchestrator execution; clear explanation of missing job grant |
+| 4. Denied run | Sign in as `bob`, attempt to run `FinanceCheck.etlsql` | `GET /api/studio/pipelines/runnable`, `GET /api/studio/pipelines/{id}/revision`, `POST /api/studio/pipelines/{id}/runs` | Execute-only discovery and revision lookup succeed. The Orchestrator returns `403 run_grant_denied` with zero new runs. |
 | 5. Session expiry | (a) Expire `alice`'s access token -> run; (b) revoke `alice`'s refresh token -> run | `POST /api/auth/client/refresh`, `POST /api/studio/pipelines/{id}/runs` | (a) Silent single-flight refresh succeeds; (b) `401` leaves run pending, prompts **Sign In Again**, preserves dirty buffer, does **not** run locally |
 | 6. Stop | Run `SlowWait.etlsql` as `alice`, invoke `etlsql.stopScript` | `POST .../runs`, `POST .../runs/{runId}/cancel`, `GET .../runs/{runId}` | `202` cancel accepted; polls to terminal `CANCELLED`; `runId` retained; `PIPELINE_RUN_CANCEL_REQUESTED` audited |
 | 7. Lost response | Drop `202` response after Portal accepts `Idempotency-Key: K1`, recover | `POST .../runs` (dropped), `GET .../runs/by-request/K1`, `GET .../runs/{runId}` | Client recovers exact `runId`; Orchestrator history contains exactly **one** run for `K1` |
 | 8. Disconnect & offline | Disconnect `alice` (and verify clean restart defaults to `Local`), stop Portal, run local script | `POST /api/auth/client/logout`, local `ReplManager` | In-memory session cleared; server refresh token revoked; fresh startup defaults to `Local (Offline)` and runs locally offline under OS account |
+
+- **Live test setup**. Build the VS Code extension with Node 22. The Electron smoke test uses
+  a cached Windows VS Code executable in `.vscode-test`. Set `ETLSQL_ST56_NODE` to the absolute path
+  to Node 22 if it is outside the test runner's PATH.
+
+```powershell
+Push-Location src\etl-sql-vscode
+npm run compile
+Pop-Location
+$env:ETLSQL_ST56_LIVE = '1'
+dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --filter 'FullyQualifiedName~St56LiveEndToEndTests'
+```
 
 - **Evidence to retain:** Automated Portal + Orchestrator + VS Code test run logs, sanitized HTTP
   transcript of steps 1–8, Portal audit rows (`CLIENT_LOGIN`, `PIPELINE_RUN_SUBMITTED`,
