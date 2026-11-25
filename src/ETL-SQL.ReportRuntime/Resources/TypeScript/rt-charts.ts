@@ -297,7 +297,11 @@ function saveChartImage(wrapper: HTMLElement, visual: ChartVisual): void {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        ctx.fillStyle = '#ffffff';
+        const card = wrapper.closest('.visual-card') as HTMLElement | null;
+        const computedBg = card && typeof getComputedStyle === 'function' ? getComputedStyle(card).backgroundColor : '';
+        const isTransparent = !computedBg || computedBg === 'transparent' || computedBg === 'rgba(0, 0, 0, 0)';
+        const isDark = Boolean(card?.classList.contains('theme-dark') || document.body.classList.contains('theme-dark') || document.body.classList.contains('vscode-dark'));
+        ctx.fillStyle = isTransparent ? (isDark ? '#1e1e1e' : '#ffffff') : computedBg;
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(image, 0, 0, width, height);
         canvas.toBlob(blob => {
@@ -418,15 +422,52 @@ function broadcastZoomRange(group: string, origin: HTMLElement, first: number, l
     });
 }
 
-export function nativeLayoutTier(layout?: ChartLayout | null, containerWidth?: number | string | null): string | null {
+const RADIAL_LAYOUT_TYPES = new Set(['PIE', 'DONUT', 'GAUGE', 'RADAR', 'SUNBURST']);
+const MAP_LAYOUT_TYPES = new Set(['MAP', 'GEO', 'CHOROPLETH']);
+
+export function nativeLayoutTier(
+    layout?: ChartLayout | null,
+    containerWidth?: number | string | null,
+    containerHeight?: number | string | null,
+    visualType?: string | null,
+    currentTier?: string | null
+): string | null {
     const width = Number(containerWidth);
     if (!layout || !Number.isFinite(width) || width <= 0) return null;
     const compactMax = Number(layout.compactMaxWidth);
     const standardMax = Number(layout.standardMaxWidth);
     if (!Number.isFinite(compactMax) || !Number.isFinite(standardMax)) return null;
-    if (width <= compactMax) return 'COMPACT';
-    if (width <= standardMax) return 'STANDARD';
-    return 'WIDE';
+
+    const baseTier = width <= compactMax ? 'COMPACT' : width <= standardMax ? 'STANDARD' : 'WIDE';
+    const height = Number(containerHeight);
+    if (!Number.isFinite(height) || height <= 0) return baseTier;
+
+    const aspect = width / height;
+    const cur = String(currentTier || '').toUpperCase();
+    const normalizedType = String(visualType || '').trim().toUpperCase();
+    if (MAP_LAYOUT_TYPES.has(normalizedType)) {
+        return baseTier;
+    }
+    const isRadial = RADIAL_LAYOUT_TYPES.has(normalizedType);
+
+    if (isRadial) {
+        const squareCutoff = cur === 'SQUARE' ? 1.50 : 1.35;
+        return aspect <= squareCutoff && height >= 260 ? 'SQUARE' : baseTier;
+    }
+
+    const squareCutoff = cur === 'SQUARE' ? 1.40 : 1.25;
+    if (aspect <= squareCutoff && height >= 340) return 'SQUARE';
+
+    if (baseTier === 'COMPACT') {
+        const cutoff = cur === 'COMPACTWIDE' ? 1.75 : 1.95;
+        return aspect >= cutoff ? 'COMPACTWIDE' : 'COMPACT';
+    }
+    if (baseTier === 'STANDARD') {
+        const cutoff = cur === 'STANDARDSHORT' ? 2.00 : 2.25;
+        return aspect >= cutoff ? 'STANDARDSHORT' : 'STANDARD';
+    }
+    const cutoff = cur === 'WIDESHORT' ? 2.35 : 2.65;
+    return aspect >= cutoff ? 'WIDESHORT' : 'WIDE';
 }
 
 export function observeNativeLayout(wrapper: HTMLElement, visual: ChartVisual): void {
@@ -437,9 +478,12 @@ export function observeNativeLayout(wrapper: HTMLElement, visual: ChartVisual): 
     if (!visualName) return;
     const layout = visual.layout;
     const observer = new ResizeObserver(entries => {
-        const width = entries[entries.length - 1]?.contentRect?.width;
-        const tier = nativeLayoutTier(layout, width);
-        if (!tier || tier === String(layout.tier || '').toUpperCase()) return;
+        const rect = entries[entries.length - 1]?.contentRect;
+        const width = rect?.width;
+        const height = rect?.height;
+        const currentTier = String(layout.tier || '').toUpperCase();
+        const tier = nativeLayoutTier(layout, width, height, visual.visualType, currentTier);
+        if (!tier || tier === currentTier) return;
 
         const pending = _nativeLayoutRequests.get(visualName);
         if (pending?.tier === tier) return;
@@ -623,6 +667,7 @@ function updateNativeVisualInPlace(card: HTMLElement, visual: ChartVisual): bool
 
     const newSvg = parseSafeSvg(visual.nativeSvg);
     if (!newSvg) return false;
+    wrapper.classList.add('chart-swap-no-anim');
     const oldSvg = wrapper.querySelector('svg');
     if (oldSvg) {
         wrapper.replaceChild(document.importNode(newSvg, true), oldSvg);
@@ -661,10 +706,13 @@ async function requestNativeLayout(visualName: string, tier: string): Promise<vo
             signal: controller.signal
         });
         if (!response.ok) return;
-        const manifest = (await response.json()) as ChartManifest;
+        const payload = (await response.json()) as ChartManifest & { visualName?: string; nativeSvg?: string; layout?: ChartLayout };
         if (_nativeLayoutRequests.get(visualName)?.controller !== controller) return;
 
-        const newVisual = findVisualInManifest(manifest, visualName);
+        const isPatch = typeof payload.nativeSvg === 'string' && !Array.isArray(payload.visuals);
+        const newVisual: ChartVisual | null = isPatch
+            ? { name: payload.visualName || visualName, nativeSvg: payload.nativeSvg, layout: payload.layout }
+            : findVisualInManifest(payload, visualName);
         const targetVisual = findVisualInManifest(getLastManifest() as ChartManifest, visualName);
         const cards = document.querySelectorAll('.visual-card');
         const card = Array.from(cards).find(c => (c.getAttribute('data-name') || '').toLowerCase() === visualName.toLowerCase());
@@ -687,8 +735,8 @@ async function requestNativeLayout(visualName: string, tier: string): Promise<vo
             updatedInPlace = updateNativeVisualInPlace(/** @type {HTMLElement} */ ((card) as HTMLElement), targetVisual);
         }
 
-        if (!updatedInPlace) {
-            renderManifest(manifest);
+        if (!updatedInPlace && !isPatch) {
+            renderManifest(payload);
         }
     } catch (error: any) {
         if (error?.name !== 'AbortError') console.warn('Native chart layout refresh failed:', error);

@@ -141,6 +141,46 @@ public sealed class NativeChartLayoutTests
         Assert.Same(original.Fallback, relaid.Fallback);
     }
 
+    [Theory]
+    [InlineData(420, 180, "BAR", NativeChartLayoutTier.CompactWide)]
+    [InlineData(700, 260, "LINE", NativeChartLayoutTier.StandardShort)]
+    [InlineData(1100, 320, "BAR", NativeChartLayoutTier.WideShort)]
+    [InlineData(420, 400, "BAR", NativeChartLayoutTier.Square)]
+    [InlineData(1100, 320, "DONUT", NativeChartLayoutTier.Wide)]
+    [InlineData(400, 350, "PIE", NativeChartLayoutTier.Square)]
+    [InlineData(1400, 320, "MAP", NativeChartLayoutTier.Wide)]
+    [InlineData(720, 220, "MAP", NativeChartLayoutTier.Standard)]
+    public void DefaultProfile_ResolvesAspectAwareTiers(
+        int containerWidth,
+        int containerHeight,
+        string visualType,
+        NativeChartLayoutTier expected)
+    {
+        Assert.Equal(expected, NativeChartLayoutProfile.Default.Resolve(containerWidth, containerHeight, visualType));
+    }
+
+    [Fact]
+    public async Task DashboardService_ResolveVisualLayoutPatch_ReturnsSingleVisualWithoutFullManifest()
+    {
+        var scriptPath = GetSamplePath(Path.Combine(
+            "samples", "08_Reporting", "custom_statistical_financial_layers.rptsql"));
+        await using var service = new DashboardService(
+            scriptPath,
+            DashboardTestHelper.CreateMockScopeFactory());
+
+        var baseline = await service.GetManifestAsync();
+        var source = baseline.Visuals.Single(visual => visual.Name == "PriceAndVolume");
+
+        var patch = await service.ResolveVisualLayoutPatchAsync(source.Name, NativeChartLayoutTier.WideShort);
+        Assert.NotNull(patch);
+        Assert.Equal(source.Name, patch.VisualName);
+        Assert.Equal("WIDESHORT", patch.Layout.Tier);
+        Assert.Equal(1200m, patch.Layout.Width);
+        Assert.Equal(340m, patch.Layout.Height);
+        Assert.Contains("width='1200' height='340'", patch.NativeSvg);
+        Assert.Equal(1, service.NativeLayoutCacheEntryCount);
+    }
+
     private static string GetSamplePath(string relativePath)
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

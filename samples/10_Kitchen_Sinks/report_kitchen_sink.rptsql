@@ -458,9 +458,9 @@ DECLARE @includeReturns BIT   = 1;
 DECLARE @minRevenue   DECIMAL = 0;
 DECLARE @analystNote  VARCHAR = 'Watch discount and return outliers';
 DECLARE @search       VARCHAR = '';
-DECLARE @relStartDate    RELDATE  = 'D-1';
-DECLARE @brush_selection VARCHAR  = '';   -- set by SCATTER BRUSH lasso on Page 9
-DECLARE @relEndDate   RELDATE = 'D';
+DECLARE @relStartDate    RELDATE  = 'M-1';
+DECLARE @brush_selection VARCHAR  = '';   -- set by SCATTER BRUSH lasso on Page 10
+DECLARE @relEndDate   RELDATE = 'D-0';
 
 -- ============================================================================
 -- Phase 5: Visual Definitions
@@ -471,6 +471,7 @@ DECLARE @relEndDate   RELDATE = 'D';
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- KPI CARDS (5 metrics, with subtitles and formatted values)
+-- RevenueDelta compares against a fixed 1.25M demo forecast; swap in a real forecast table for production use.
 CREATE VISUAL KpiRevenue AS CARD (
     SOURCE   = (
         SELECT
@@ -633,7 +634,7 @@ CREATE VISUAL LineTrend AS LINE (
         Y_AXIS (LABEL = 'Revenue ($)', MIN = 0)
     ),
     OVERLAYS (
-        GOAL(180000)  AS DASHED WITH (COLOR = '#ef4444', LABEL = 'Monthly Target'),
+        GOAL(450000)  AS DASHED WITH (COLOR = '#ef4444', LABEL = 'Monthly Target'),
         AVERAGE       AS DOTTED WITH (COLOR = '#f59e0b', LABEL = 'Mean'),
         MOVING_AVG(3) AS SOLID  WITH (COLOR = '#10b981', LABEL = '3-Mo Avg')
     ),
@@ -660,6 +661,10 @@ CREATE VISUAL TxnTable AS TABLE (
           AND (@category = 'All' OR Category = @category)
           AND (@includeReturns = 1 OR Returned = 0)
           AND Revenue >= @minRevenue
+          AND TxnDate >= CAST(@startDate AS DATE)
+          AND TxnDate <= CAST(@endDate AS DATE)
+          AND Qty >= @minQty
+          AND (@search = '' OR Salesperson LIKE '%' + @search + '%' OR Category LIKE '%' + @search + '%')
     ),
     TITLE    = 'Transaction Detail',
     SUBTITLE = 'Cross-filtered by chart clicks · Use slicers above to narrow results',
@@ -669,8 +674,8 @@ CREATE VISUAL TxnTable AS TABLE (
     ),
     FORMATTING (
         Returned = 1                           THEN '#ef4444',
-        Revenue >= 5000                        THEN '#10b981',
-        Revenue >= 2000 AND Revenue < 5000     THEN '#6366f1',
+        Revenue >= 20000                       THEN '#10b981',
+        Revenue >= 8000 AND Revenue < 20000    THEN '#6366f1',
         DiscountPct >= 20                      THEN '#f59e0b'
     ),
     SUMMARY (
@@ -705,7 +710,7 @@ CREATE VISUAL ComboRevenueReturns AS COMBO (
 -- WATERFALL — Month-over-month revenue delta
 CREATE VISUAL WaterfallDelta AS WATERFALL (
     SOURCE   = #waterfall,
-    TITLE    = 'Month-over-Month Revenue Δ',
+    TITLE    = 'Monthly Revenue Δ vs Average',
     SUBTITLE = 'Green = growth · Red = decline',
     MAPPINGS (X = Month, Y = Delta),
     OPTIONS  (
@@ -804,9 +809,9 @@ CREATE VISUAL FunnelPipeline AS FUNNEL (
 CREATE VISUAL GaugeTarget AS GAUGE (
     SOURCE   = #gauge_data,
     TITLE    = 'Revenue Target Achievement',
-    SUBTITLE = 'Needle gauge — % of $1.5M goal',
+    SUBTITLE = 'Needle gauge — % of $1.5M goal (random data runs ~200%)',
     MAPPINGS (VALUE = PctOfTarget, LABEL = Lbl),
-    OPTIONS  (MIN = 0, MAX = 100),
+    OPTIONS  (MIN = 0, MAX = 250),
     STYLE    = ChartPanel
 );
 
@@ -816,7 +821,7 @@ CREATE VISUAL GaugeProgress AS GAUGE (
     TITLE    = 'Progress Ring',
     SUBTITLE = 'Circular progress style',
     MAPPINGS (VALUE = PctOfTarget, LABEL = Lbl),
-    OPTIONS  (MIN = 0, MAX = 100, GAUGE_STYLE = 'PROGRESS'),
+    OPTIONS  (MIN = 0, MAX = 250, GAUGE_STYLE = 'PROGRESS'),
     STYLE    = ChartPanel
 );
 
@@ -913,6 +918,7 @@ CREATE VISUAL TxnSearch AS SEARCH (
 CREATE VISUAL IncludeReturnsToggle AS CHECKBOX (
     TITLE          = 'Include Returns (CHECKBOX)',
     LABEL_POSITION = 'LEFT',
+    OPTIONS        (DEFAULT = ON),
     ACTIONS        (ON_CHANGE = SET_PARAMETER(@includeReturns, value)),
     STYLE          = FilterPanel
 );
@@ -1394,6 +1400,7 @@ CREATE PAGE Overview AS DASHBOARD (
         'F' = DrillRegionDetail,
         'E' = TxnTable
     ),
+    OPTIONS   (FIT = 'SCREEN', MIN_HEIGHT = 680, ROW_WEIGHTS = 'auto, 2, 2, 1.5'),
     STYLE (THEME = dark)
 );
 
@@ -1413,6 +1420,7 @@ CREATE PAGE Trends AS DASHBOARD (
         'D' = HBarRep,
         'E' = BoxRevDist
     ),
+    OPTIONS   (FIT = 'SCREEN'),
     STYLE (THEME = dark)
 );
 
@@ -1429,6 +1437,7 @@ CREATE PAGE Composition AS DASHBOARD (
         'E' = GaugeProgress,
         'F' = PieUnits
     ),
+    OPTIONS   (FIT = 'SCREEN'),
     STYLE (THEME = dark)
 );
 
@@ -1501,11 +1510,12 @@ CREATE PAGE Detail AS DASHBOARD (
         'B' = MonthlyTable,
         'C' = AuditScroll
     ),
+    OPTIONS   (FIT = 'SCREEN'),
     STYLE (THEME = dark)
 );
 
 -- ── PAGE 6: Feature Lab ──────────────────────────────────────────────────────
-CREATE PAGE FeatureLab AS PAGINATED (
+CREATE PAGE FeatureLab AS DASHBOARD (
     TITLE     = 'Feature Lab',
     TOOLTIP   = 'Rich table cells, run-to-data controls, selected refresh, clear filters, and viewer actions.',
     STRUCTURE = '
@@ -1536,6 +1546,7 @@ CREATE PAGE BusinessSignals AS DASHBOARD (
         'B' = RadarRegions,
         'C' = CandlestickDemo
     ),
+    OPTIONS   (FIT = 'SCREEN'),
     STYLE (THEME = dark)
 );
 
@@ -1551,6 +1562,7 @@ CREATE PAGE MapCharts AS DASHBOARD (
         'A' = StateRevenueMap,
         'B' = WorldRevenueMap
     ),
+    OPTIONS   (FIT = 'SCREEN'),
     STYLE (THEME = dark)
 );
 
@@ -1573,6 +1585,7 @@ CREATE PAGE FlowPlanning AS DASHBOARD (
         'F' = GanttMilestones,
         'G' = ScatterBrush
     ),
+    OPTIONS   (FIT = 'SCREEN'),
     STYLE (THEME = dark)
 );
 
@@ -1588,6 +1601,7 @@ CREATE PAGE Drilldown AS DASHBOARD (
         'A' = DrillInExplainer,
         'B' = DrillInByCategory
     ),
+    OPTIONS   (FIT = 'SCREEN'),
     STYLE (THEME = dark)
 );
 

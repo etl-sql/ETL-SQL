@@ -8,7 +8,7 @@
 // Cross-cycle functions use hoisted declarations; imported state is read only when
 // those functions run. Boot starts after the graph has evaluated. Preserve that
 // ordering when adding top-level work or changing functions to const declarations.
-import { abbreviateNumber, errorEl, escHtml, formatValue, getOption, getStyle, isOff, isOn, renderInlineMarkdown, renderSafeSvgInto, safeUrl, simpleMarkdown } from './rt-util.js';
+import { abbreviateNumber, errorEl, escHtml, formatValue, getOption, getStyle, isOff, isOn, renderInlineMarkdown, renderSafeSvgInto, safeImageSrc, simpleMarkdown } from './rt-util.js';
 import { ALLOWED_TOKEN_NAMES, applyDesignTokens, isAllowedTokenName } from './rt-theme.js';
 import { actionsFor, evaluateExpressionAgainstParameters, executeAction, matchesCondition } from './rt-actions.js';
 import type { ActionVisual, ReportAction } from './rt-actions.js';
@@ -342,6 +342,7 @@ export function renderVisual(container: HTMLElement | DocumentFragment, visual: 
     } else {
         title.textContent = visual.name;
     }
+    if (title.textContent) title.title = title.textContent;
 
     const tColor = getStyle(vstyles, 'TITLE_COLOR');
     const tSize = getStyle(vstyles, 'TITLE_SIZE');
@@ -365,6 +366,7 @@ export function renderVisual(container: HTMLElement | DocumentFragment, visual: 
         } else {
             subtitleEl.textContent = customSubtitle as string;
         }
+        if (subtitleEl.textContent) subtitleEl.title = subtitleEl.textContent;
         const sColor = getStyle(vstyles, 'SUBTITLE_COLOR');
         const sSize = getStyle(vstyles, 'SUBTITLE_SIZE');
         const sWeight = getStyle(vstyles, 'SUBTITLE_WEIGHT');
@@ -1101,12 +1103,12 @@ function renderImage(container: HTMLElement, visual: VisualVisual): void {
         visual.rows.forEach(row => {
             const rawUrl = String(row[useIdx] ?? '');
             const img = document.createElement('img');
-            img.src = safeUrl(rawUrl || fallback || '');
+            img.src = safeImageSrc(rawUrl || fallback || '');
             img.alt = alt;
             img.style.objectFit = fit;
             if (aspect) img.style.aspectRatio = aspect.replace(':', '/');
             if (fallback) {
-                img.onerror = () => { img.src = safeUrl(fallback); img.onerror = null; };
+                img.onerror = () => { img.src = safeImageSrc(fallback); img.onerror = null; };
             }
             if (clickActions.length > 0) {
                 img.style.cursor = 'pointer';
@@ -1129,14 +1131,14 @@ function renderImage(container: HTMLElement, visual: VisualVisual): void {
 
     const finalSrc = src || (visual.rows && visual.rows.length > 0 && visual.rows[0][0] != null ? String(visual.rows[0][0]) : '') || fallback || '';
     const img = document.createElement('img');
-    img.src   = safeUrl(finalSrc);
+    img.src   = safeImageSrc(finalSrc);
     img.alt   = alt;
     img.style.maxWidth  = '100%';
     img.style.maxHeight = '100%';
     img.style.objectFit = fit;
     if (aspect) img.style.aspectRatio = aspect.replace(':', '/');
     if (fallback) {
-        img.onerror = () => { img.src = safeUrl(fallback); img.onerror = null; };
+        img.onerror = () => { img.src = safeImageSrc(fallback); img.onerror = null; };
     }
 
     if (clickActions.length > 0) {

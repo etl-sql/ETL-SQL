@@ -178,6 +178,9 @@ namespace ETL_SQL.Reporting.Builders
             var effectiveTheme = visualExplicitTheme
                 ?? (inheritedStyles != null && inheritedStyles.TryGetValue("THEME", out var inhTheme) ? inhTheme : null);
 
+            if (!string.IsNullOrEmpty(effectiveTheme))
+                resolvedStyles["THEME"] = effectiveTheme;
+
             if (resolvedStyles.Count > 0)
                 vm.Styles = resolvedStyles;
 
@@ -619,7 +622,7 @@ namespace ETL_SQL.Reporting.Builders
                     vm.ChartConfig = vStmt.VisualType == VisualType.Matrix
                         ? MatrixPivotBuilder.Build(vm)
                         : null;
-                    vm.NativeSvg = new SvgChartRenderer().Render(vm);
+                    vm.NativeSvg = new SvgChartRenderer().RenderForCard(vm);
                 }
                 catch (AdvancedChartSemanticException ex)
                 {

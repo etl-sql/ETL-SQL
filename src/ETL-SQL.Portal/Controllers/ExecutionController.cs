@@ -564,14 +564,14 @@ public class ExecutionController(
         if (perm is null) return Forbid();
         if (string.IsNullOrWhiteSpace(req.VisualName)
             || !Enum.TryParse<NativeChartLayoutTier>(req.Tier, true, out var tier))
-            return BadRequest(new { error = "visualName and a COMPACT, STANDARD, or WIDE tier are required" });
+            return BadRequest(new { error = "visualName and a valid native layout tier are required" });
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
         var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
-        var manifest = await svc.ResolveVisualLayoutAsync(req.VisualName, tier);
-        return manifest is null ? NotFound() : this.BrowserManifest(manifest);
+        var patch = await svc.ResolveVisualLayoutPatchAsync(req.VisualName, tier);
+        return patch is null ? NotFound() : Ok(patch);
     }
 
     // ── 2.3b  POST /api/reports/{id}/bookmark ────────────────────────────────
