@@ -26,7 +26,8 @@ public sealed record FocusedLayoutInputs(
     ThemeSpec Theme,
     PlotBounds Bounds,
     ImmutableArray<PaletteAssignment> Palette,
-    FocusedInteractionInputs Interaction)
+    FocusedInteractionInputs Interaction,
+    bool EmbedInCard = false)
 {
     /// <summary>The canvas every focused module has always drawn on, and still defaults to.</summary>
     public static readonly PlotBounds DefaultBounds = new(0m, 0m, 600m, 350m);
@@ -41,12 +42,24 @@ public sealed record FocusedLayoutInputs(
 
     public double Height => (double)Bounds.Height;
 
+    /// <summary>Top margin reserved above the plot area (tightened when the outer card displays the title).</summary>
+    public double TitleBand => EmbedInCard ? 8.0 : 38.0;
+
     /// <summary>True when the visual declares a dark theme, so surface tokens flip together.</summary>
     public bool IsDark => Theme.Name.Contains("dark", StringComparison.OrdinalIgnoreCase)
         || string.Equals(Token("MODE"), "DARK", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Chart background.</summary>
-    public string Surface => Paint(Token("BACKGROUND") ?? Token("BACKGROUND_COLOR"), IsDark ? "#1f2430" : "#ffffff");
+    /// <summary>Chart background (transparent in card-embedded mode unless an opaque color is authored).</summary>
+    public string Surface
+    {
+        get
+        {
+            var authored = Token("BACKGROUND") ?? Token("BACKGROUND_COLOR");
+            if (EmbedInCard)
+                return ChartPalette.IsSafePaint(authored) ? authored!.Trim() : "transparent";
+            return Paint(authored, IsDark ? "#1f2430" : "#ffffff");
+        }
+    }
 
     /// <summary>Primary text colour, used for the title and any label drawn on the surface.</summary>
     public string OnSurface => Paint(Token("TEXT_COLOR") ?? Token("COLOR"), IsDark ? "#e6e8ee" : "#1f2937");
@@ -88,7 +101,8 @@ public sealed record FocusedLayoutInputs(
     public static FocusedLayoutInputs From(
         VisualManifest visual,
         IEnumerable<string>? seriesKeys = null,
-        PlotBounds? bounds = null)
+        PlotBounds? bounds = null,
+        bool embedInCard = false)
     {
         var theme = ChartStyleTokens.Theme(visual);
         var keys = (seriesKeys ?? []).Where(key => !string.IsNullOrWhiteSpace(key))
@@ -106,7 +120,8 @@ public sealed record FocusedLayoutInputs(
             theme,
             bounds ?? ResolveBounds(visual),
             palette,
-            FocusedInteractionInputs.From(visual));
+            FocusedInteractionInputs.From(visual),
+            embedInCard);
     }
 
     /// <summary>

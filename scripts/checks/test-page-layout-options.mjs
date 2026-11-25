@@ -33,10 +33,12 @@ function lift(name) {
 // `getOption` is the case-insensitive lookup the runtime uses for every option bag; the lifted
 // helpers depend on it, so it is lifted too rather than reimplemented here.
 const evaluated = new Function(
-    `${lift('getOption')}\n${lift('toCssLength')}\n${lift('toPixels')}\n${lift('applyPageOptions')}\n` +
-    'return { toCssLength, toPixels, applyPageOptions };'
+    `const FIT_MIN_HEIGHT_PX = 520; const FIT_COMPACT_ROW_PX = 260; const fitObserved = new WeakSet(); const resizeChartsIn = () => {};\n` +
+    `${lift('getOption')}\n${lift('toCssLength')}\n${lift('toPixels')}\n${lift('normalizePageFit')}\n` +
+    `${lift('parseRowWeights')}\n${lift('updatePageFit')}\n${lift('measureGridRows')}\n${lift('applyPageFit')}\n${lift('applyPageOptions')}\n` +
+    'return { toCssLength, toPixels, applyPageOptions, normalizePageFit, updatePageFit };'
 )();
-const { toCssLength, toPixels, applyPageOptions } = evaluated;
+const { toCssLength, toPixels, applyPageOptions, normalizePageFit, updatePageFit } = evaluated;
 
 // ── Lengths ─────────────────────────────────────────────────────────────────
 
@@ -94,6 +96,80 @@ const bareContent = fakeElement();
 applyPageOptions(bare, bareContent, { options: null });
 assert.deepEqual(bare.style, {});
 assert.deepEqual(bareContent.style, {});
+
+// ── FIT = 'SCREEN' ──────────────────────────────────────────────────────────
+
+assert.equal(normalizePageFit('screen'), 'SCREEN');
+assert.equal(normalizePageFit(' SCREEN '), 'SCREEN');
+assert.equal(normalizePageFit('NONE'), 'NONE');
+assert.equal(normalizePageFit('bogus'), 'NONE');
+assert.equal(normalizePageFit(undefined), 'NONE');
+
+// No FIT leaves the page alone (no data-fit marker, so the CSS never matches).
+const unfit = { ...fakeElement(), dataset: {} };
+applyPageOptions(unfit, fakeElement(), { options: { MAX_WIDTH: '900' } });
+assert.equal(unfit.dataset.fit, undefined);
+
+globalThis.window = { innerHeight: 900, matchMedia: () => ({ matches: false }) };
+// An inactive page is not measured: it is display:none and would report a zero rect.
+const inactive = {
+    dataset: { fit: 'SCREEN' }, style: { height: '999px' },
+    classList: { contains: () => false },
+};
+updatePageFit(inactive, { style: {} });
+assert.equal(inactive.style.height, '');
+
+// An active page is sized to the viewport and its rows are split: short rows stay auto,
+// tall rows share the rest.
+globalThis.window = { innerHeight: 900, matchMedia: () => ({ matches: false }) };
+globalThis.requestAnimationFrame = (f) => f();
+globalThis.getComputedStyle = () => ({ gridTemplateRows: '90px 400px 400px' });
+const active = {
+    dataset: { fit: 'SCREEN' }, style: {},
+    classList: { contains: () => true },
+    getBoundingClientRect: () => ({ top: 100 }),
+};
+const cell = (area, heavy) => ({ style: { gridArea: area }, querySelector: (sel) => (heavy === sel.split(',')[0].trim() || (heavy === 'table' && sel.startsWith('table')) ? {} : null) });
+const grid = { style: { gridTemplateAreas: '"A A" "B C" "D D"', gridTemplateRows: '' },
+    children: [cell('A', null), cell('B', '.chart-wrapper'), cell('D', 'table')] };
+updatePageFit(active, grid);
+assert.equal(active.style.height, '784px');
+assert.equal(grid.style.gridTemplateRows, 'auto minmax(0, 2fr) minmax(0, 1fr)');
+
+// A small window never squeezes below the minimum; the page scrolls instead.
+globalThis.window.innerHeight = 300;
+updatePageFit(active, grid);
+assert.equal(active.style.height, '520px');
+
+// MIN_HEIGHT and ROW_WEIGHTS override the default floor and row heuristics.
+const customFit = {
+    dataset: {},
+    style: {},
+    classList: { contains: () => true },
+    getBoundingClientRect: () => ({ top: 100 }),
+};
+const customGrid = { style: { gridTemplateAreas: '"A A" "B C" "D D"', gridTemplateRows: '' }, children: [] };
+applyPageOptions(customFit, customGrid, {
+    options: { FIT: 'SCREEN', MIN_HEIGHT: '680', ROW_WEIGHTS: 'auto, 3, 1.5' },
+});
+updatePageFit(customFit, customGrid);
+assert.equal(customFit.style.height, '680px');
+assert.equal(customGrid.style.gridTemplateRows, 'auto minmax(0, 3fr) minmax(0, 1.5fr)');
+
+// A multi-row spanning sidebar does not pull a compact KPI row into 2fr.
+globalThis.window.innerHeight = 900;
+globalThis.getComputedStyle = () => ({ gridTemplateRows: '80px 400px' });
+const spanPage = {
+    dataset: { fit: 'SCREEN' }, style: {},
+    classList: { contains: () => true },
+    getBoundingClientRect: () => ({ top: 100 }),
+};
+const spanGrid = {
+    style: { gridTemplateAreas: '"A S" "B S"', gridTemplateRows: '' },
+    children: [cell('A', null), cell('B', '.chart-wrapper'), cell('S', '.chart-wrapper')],
+};
+updatePageFit(spanPage, spanGrid);
+assert.equal(spanGrid.style.gridTemplateRows, 'auto minmax(0, 2fr)');
 
 // ── The render path actually calls them ─────────────────────────────────────
 

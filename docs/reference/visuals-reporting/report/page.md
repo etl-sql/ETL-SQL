@@ -27,6 +27,9 @@ CREATE PAGE <name> AS DASHBOARD | PAGINATED (
     [MAX_WIDTH = <number_in_px>,]
     [ALIGN_CONTENT = 'CENTER' | 'LEFT' | 'RIGHT',]
     [OVERFLOW = 'SCROLL' | 'CLIP',]
+    [FIT = 'SCREEN' | 'NONE',]
+    [MIN_HEIGHT = <number_in_px>,]
+    [ROW_WEIGHTS = '<weight_list>',]
     [TRANSITION = 'NONE' | 'FADE' | 'SLIDE']
   ),]
   [ACTIONS (
@@ -69,6 +72,9 @@ CREATE PAGE <name> AS DASHBOARD | PAGINATED (
 - **`MAX_WIDTH = <px>`** — Maximum container width in pixels for page content.
 - **`ALIGN_CONTENT = 'CENTER' | 'LEFT' | 'RIGHT'`** — Content alignment within the viewport when `MAX_WIDTH` is applied (default `'CENTER'`).
 - **`OVERFLOW = 'SCROLL' | 'CLIP'`** — Viewport overflow behavior for long dashboard content.
+- **`FIT = 'SCREEN' | 'NONE'`** — `SCREEN` sizes the page to the viewport, like a Power BI page, so a dashboard shows without page-level scrolling. Rows of short content (KPI strips, slicers) keep their natural height, the other rows share the rest, and a long table scrolls inside its own tile. The page never shrinks below `MIN_HEIGHT` (default `520` px) and scrolls instead on a small window. It does not apply below the mobile breakpoint (768px). `NONE` (default) lets the page grow as tall as its rows need.
+- **`MIN_HEIGHT = <px>`** — Optional minimum page height in pixels when `FIT = 'SCREEN'` is active (default `520`). On viewports shorter than `MIN_HEIGHT`, the page holds this floor and scrolls vertically instead of crushing rows.
+- **`ROW_WEIGHTS = '<weights>'`** — Optional explicit row track weights for `FIT = 'SCREEN'` (one entry per `STRUCTURE` row, e.g. `'auto, 2, 1'` or `'1, 3, 2'`). Numbers map to `minmax(0, <n>fr)` and `auto` keeps natural row height.
 - **`TRANSITION = 'NONE' | 'FADE' | 'SLIDE'`** — Visual transition effect when navigating to this page.
 - **`VISIBLE = ON | OFF | <expression>`** — Controls page visibility. Accepts boolean literals or dynamic parameter expressions (e.g. `@ShowAdminTab`).
 - **`ACTIONS (ON_LOAD = (...))`** — Page-level actions triggered immediately upon page mounting (e.g. `SET_PARAMETER(@Loaded, 1)` or `REFRESH_REPORT`).

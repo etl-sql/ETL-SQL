@@ -485,6 +485,9 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("htmlEmbeds")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<HtmlVisualEmbedManifest>? HtmlEmbeds { get; set; }
+
+        /// <summary>Shallow copy used to re-resolve a single visual's layout without cloning the full manifest.</summary>
+        public VisualManifest ShallowCloneForLayout() => (VisualManifest)MemberwiseClone();
     }
 
     /// <summary>The compact browser contract for a server-resolved native chart layout.</summary>

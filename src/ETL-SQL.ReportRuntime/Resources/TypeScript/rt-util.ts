@@ -26,6 +26,14 @@ export function safeUrl(value: unknown) {
     return raw; // scheme-less (relative) URL
 }
 
+// Image-only variant of safeUrl: also allows raster/SVG data URIs. An <img> never runs script
+// (SVG loaded through <img> is sandboxed), so this is safe for img.src and nowhere else.
+export function safeImageSrc(value: unknown) {
+    const raw = String(value == null ? '' : value).trim();
+    if (/^data:image\/(?:png|jpe?g|gif|webp|svg\+xml)[;,]/i.test(raw)) return raw;
+    return safeUrl(raw);
+}
+
 /**
  * Fills an `OPEN_URL(TEMPLATE = ...)` template from the clicked row. Only the fields the author
  * declared in `PARAMS` may be interpolated, and every value is URL-encoded, so a row value can

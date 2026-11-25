@@ -914,7 +914,7 @@ namespace ETL_SQL.Reporting
             if (vm.HighlightRows == null) return;
             vm.HighlightRows = null;
             vm.ChartConfig = null;
-            vm.NativeSvg = new SvgChartRenderer().Render(vm);
+            vm.NativeSvg = new SvgChartRenderer().RenderForCard(vm);
         }
 
         /// <summary>
