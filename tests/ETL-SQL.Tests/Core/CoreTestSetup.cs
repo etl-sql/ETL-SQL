@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.CompilerServices;
 using ETL_SQL.App;
@@ -16,6 +17,7 @@ namespace ETL_SQL.Tests.Core
 {
     public static class TestSetup
     {
+        [SuppressMessage("Usage", "CA2255", Justification = "Configure test isolation before any tests in the assembly run.")]
         [ModuleInitializer]
         public static void InitializeTests()
         {
