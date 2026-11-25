@@ -542,6 +542,161 @@ public sealed class HostedClientTests
         return result;
     }
 
+    [Fact]
+    public async Task Coordinator_StopBoundToRunA_DoesNotCancelRunB_WhenRunAFinishesAndRunBStarts()
+    {
+        var runAGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runBGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runBRunning = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var nextRunId = 100L;
+        var cancelledRunIds = new List<long>();
+
+        using var http = new HttpClient(new StubHttpHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (path == "/api/auth/providers")
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, new { localEnabled = true, oidcEnabled = false, ldapEnabled = false }));
+            if (path == "/api/auth/client/exchange")
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, new
+                {
+                    token = "tok-race-a",
+                    refreshToken = "ref-race-a",
+                    expiresAt = DateTime.UtcNow.AddHours(1),
+                    sessionId = "sess-race",
+                    clientId = HostedClientIds.DesktopStudio,
+                    audience = "etl-sql-portal-native-api",
+                    tenantId = "tenant-alpha",
+                    scopes = new[] { "studio.read", "studio.run" },
+                    user = new { id = 10, username = "alice", email = "alice@example.test" }
+                }));
+            if (path == "/api/studio/session")
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, new
+                {
+                    mode = "CatalogOnly",
+                    capabilities = new[] { "StudioAccess", "ScriptRun" },
+                    sourceControlEnabled = false,
+                    draftRecovery = false,
+                    privateDrafts = false,
+                    maxScriptCharacters = 100000
+                }));
+            if (req.Method == HttpMethod.Post && path == "/api/studio/pipelines/7/runs")
+            {
+                var runId = Interlocked.Increment(ref nextRunId);
+                return Task.FromResult(JsonResponse(HttpStatusCode.Accepted, new
+                {
+                    runId,
+                    pipelineId = 7,
+                    version = 1,
+                    scriptHash = "sha256:race",
+                    jobName = "PIPELINE:7",
+                    replayed = false
+                }));
+            }
+            if (req.Method == HttpMethod.Get && path == "/api/studio/pipelines/7/runs/101")
+            {
+                var done = runAGate.Task.IsCompleted;
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, new
+                {
+                    runId = 101L,
+                    pipelineId = 7,
+                    jobName = "PIPELINE:7",
+                    status = done ? "SUCCESS" : "RUNNING",
+                    isTerminal = done,
+                    startTime = DateTime.UtcNow,
+                    endTime = done ? DateTime.UtcNow : (DateTime?)null,
+                    errorMessage = (string?)null,
+                    rowsProcessed = done ? 1 : 0,
+                    scriptHash = "sha256:race",
+                    logTruncated = false,
+                    statements = Array.Empty<object>()
+                }));
+            }
+            if (req.Method == HttpMethod.Get && path == "/api/studio/pipelines/7/runs/102")
+            {
+                runBRunning.TrySetResult();
+                var done = runBGate.Task.IsCompleted;
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, new
+                {
+                    runId = 102L,
+                    pipelineId = 7,
+                    jobName = "PIPELINE:7",
+                    status = done ? "SUCCESS" : "RUNNING",
+                    isTerminal = done,
+                    startTime = DateTime.UtcNow,
+                    endTime = done ? DateTime.UtcNow : (DateTime?)null,
+                    errorMessage = (string?)null,
+                    rowsProcessed = done ? 2 : 0,
+                    scriptHash = "sha256:race",
+                    logTruncated = false,
+                    statements = Array.Empty<object>()
+                }));
+            }
+            if (req.Method == HttpMethod.Post && path.EndsWith("/cancel", StringComparison.Ordinal))
+            {
+                var runId = long.Parse(path.Split('/')[^2]);
+                lock (cancelledRunIds) cancelledRunIds.Add(runId);
+                return Task.FromResult(JsonResponse(HttpStatusCode.Accepted, new { runId, pipelineId = 7 }));
+            }
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent));
+        }));
+
+        var auth = new LoopbackPkceAuthenticator(async (authorizeUri, ct) =>
+        {
+            var q = ParseQuery(authorizeUri.Query);
+            using var cb = new HttpClient();
+            await cb.GetAsync($"{q["redirect_uri"]}?code=code-race&state={Uri.EscapeDataString(q["state"])}", ct);
+            return true;
+        });
+
+        var tempReg = Path.Combine(Path.GetTempPath(), $"etlsql_race_{Guid.NewGuid():N}.json");
+        try
+        {
+            var registry = new HostedServerRegistryStore(tempReg);
+            var server = registry.AddOrUpdate("dev", "Dev", "https://portal.race.test");
+            await using var sessions = new HostedClientSessionService(
+                HostedClientIds.DesktopStudio, HostedClientScopes.TuiDefault, registry, auth, http);
+            var session = await sessions.SignInAsync(server);
+            var client = new HostedPipelineClient(sessions);
+            var coordinator = new HostedRunCoordinator(
+                sessions, client, initialPollDelay: TimeSpan.FromMilliseconds(20), maxPollDelay: TimeSpan.FromMilliseconds(40));
+
+            var pipeline = new RunnablePipelineDto(7, "RaceCheck.etlsql", "/Finance", 1, true);
+
+            // Start run A (runId = 101) and capture its exact stop target.
+            long? runAId = null;
+            var runATask = coordinator.SubmitNewRunAsync(pipeline, new HostedRunCallbacks(OnAccepted: r => runAId = r.RunId));
+            for (var i = 0; i < 40 && runAId is null; i++) await Task.Delay(20);
+            Assert.Equal(101L, runAId);
+            var stopTargetForRunA = new HostedRunStopTarget(7, 101L, session.Server.Origin, session.TenantId, session.User.Id);
+
+            // Simulate the race: run A finishes and run B (runId = 102) starts before Stop(run A) reaches the coordinator.
+            runAGate.TrySetResult();
+            var outcomeA = await runATask;
+            Assert.Equal(HostedRunOutcomeKind.Completed, outcomeA.Kind);
+
+            var runBTask = coordinator.SubmitNewRunAsync(pipeline);
+            await runBRunning.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(102L, coordinator.ActiveRun?.RunId);
+
+            // Stop bound to run A must NOT cancel run B.
+            var stopMsg = await coordinator.RequestStopAsync(expectedTarget: stopTargetForRunA, expectedSession: session);
+            Assert.Contains("no longer active", stopMsg, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(cancelledRunIds);
+            Assert.False(coordinator.ActiveRun!.CancelRequested);
+
+            // Run B continues and completes cleanly.
+            runBGate.TrySetResult();
+            var outcomeB = await runBTask;
+            Assert.Equal(HostedRunOutcomeKind.Completed, outcomeB.Kind);
+            Assert.Equal("SUCCESS", outcomeB.FinalRun?.Status);
+            Assert.Equal(102L, outcomeB.FinalRun?.RunId);
+        }
+        finally
+        {
+            try { File.Delete(tempReg); } catch { }
+        }
+    }
+
     private sealed class StubHttpHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> handler) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>

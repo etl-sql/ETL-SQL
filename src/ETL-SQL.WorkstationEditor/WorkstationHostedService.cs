@@ -334,6 +334,7 @@ public sealed class WorkstationHostedService : IAsyncDisposable
             OwnerTenantId: session.TenantId,
             OwnerUserId: session.User.Id,
             OwnerUsername: session.User.Username,
+            OwnerSession: session,
             PipelineId: revision.Id,
             PipelineName: revision.Name,
             Version: revision.Version,
@@ -392,6 +393,7 @@ public sealed class WorkstationHostedService : IAsyncDisposable
             OwnerTenantId: session.TenantId,
             OwnerUserId: session.User.Id,
             OwnerUsername: session.User.Username,
+            OwnerSession: session,
             PipelineId: pending.PipelineId,
             PipelineName: pending.PipelineName,
             Version: pending.Version,
@@ -461,7 +463,12 @@ public sealed class WorkstationHostedService : IAsyncDisposable
         if (op.IsTerminal || !ReferenceEquals(_currentOperation, op))
             throw new HostedOperationNotActiveException("That hosted run operation is no longer active; Stop was not applied to any later run.");
 
-        var message = await _coordinator.RequestStopAsync(CreateCallbacks(op), ct);
+        var runId = op.RunId;
+        if (runId is null)
+            throw new HostedOperationNotActiveException("That hosted run has not been accepted by the Orchestrator yet.");
+
+        var stopTarget = new HostedRunStopTarget(op.PipelineId, runId.Value, op.OwnerOrigin, op.OwnerTenantId, op.OwnerUserId);
+        var message = await _coordinator.RequestStopAsync(CreateCallbacks(op), ct, stopTarget, op.OwnerSession);
         return new HostedStopRunResponse(Redact(message), GetStatus());
     }
 
@@ -492,7 +499,8 @@ public sealed class WorkstationHostedService : IAsyncDisposable
             var preview = stmt.Statement.Length > 120 ? stmt.Statement[..120] + "…" : stmt.Statement;
             var status = stmt.Failed ? "Failed" : "Ran";
             op.AddEvent(stmt.Failed ? "error" : "info", $"[{index}] {status}: {preview} ({stmt.RowsProcessed} rows, {stmt.DurationMs} ms)");
-        });
+        },
+        OnAccepted: receipt => op.SetRunId(receipt.RunId));
 
     private void CompleteOperation(TrackedOperation op, HostedRunOutcome outcome)
     {
@@ -581,6 +589,7 @@ public sealed class WorkstationHostedService : IAsyncDisposable
         string OwnerTenantId,
         int OwnerUserId,
         string OwnerUsername,
+        HostedSession OwnerSession,
         int PipelineId,
         string PipelineName,
         long Version,
@@ -602,7 +611,15 @@ public sealed class WorkstationHostedService : IAsyncDisposable
         public string OwnerOrigin { get; } = OwnerOrigin;
         public string OwnerTenantId { get; } = OwnerTenantId;
         public int OwnerUserId { get; } = OwnerUserId;
+        public HostedSession OwnerSession { get; } = OwnerSession;
+        public int PipelineId { get; } = PipelineId;
+        public long? RunId { get { lock (_lock) return _runId; } }
         public bool IsTerminal { get { lock (_lock) return _isTerminal; } }
+
+        public void SetRunId(long runId)
+        {
+            lock (_lock) _runId = runId;
+        }
 
         public void AddEvent(string level, string text)
         {

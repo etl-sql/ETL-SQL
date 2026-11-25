@@ -21,7 +21,8 @@ public sealed record HostedRunCallbacks(
     Action<string>? OnInfo = null,
     Action<string>? OnWarning = null,
     Action<string>? OnError = null,
-    Action<PipelineRunStatementDto, int>? OnStatement = null);
+    Action<PipelineRunStatementDto, int>? OnStatement = null,
+    Action<PipelineRunSubmittedDto>? OnAccepted = null);
 
 /// <summary>
 /// UI-agnostic coordinator for hosted pipeline runs, UUIDv4 idempotency, dropped-response
@@ -300,7 +301,11 @@ public sealed class HostedRunCoordinator
         finally { Volatile.Write(ref _operationInProgress, 0); }
     }
 
-    public async Task<string> RequestStopAsync(HostedRunCallbacks? callbacks = null, CancellationToken ct = default)
+    public async Task<string> RequestStopAsync(
+        HostedRunCallbacks? callbacks = null,
+        CancellationToken ct = default,
+        HostedRunStopTarget? expectedTarget = null,
+        HostedSession? expectedSession = null)
     {
         ActiveHostedRun? active;
         HostedSession? session;
@@ -308,6 +313,19 @@ public sealed class HostedRunCoordinator
 
         if (active is null || session is null || !_sessions.IsCurrentSession(session))
             return "No active hosted run to stop.";
+
+        if (expectedSession is not null
+            && (session.SessionId != expectedSession.SessionId
+                || !MatchesCaller(session, expectedSession.Server.Origin, expectedSession.TenantId, expectedSession.User.Id)))
+            return "Hosted session changed; Stop was not applied to a different session.";
+
+        if (expectedTarget is not null
+            && (active.RunId != expectedTarget.RunId
+                || active.PipelineId != expectedTarget.PipelineId
+                || !string.Equals(active.Origin, expectedTarget.Origin, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(active.TenantId, expectedTarget.TenantId, StringComparison.OrdinalIgnoreCase)
+                || active.UserId != expectedTarget.UserId))
+            return $"Run #{expectedTarget.RunId} is no longer active; Stop was not applied to run #{active.RunId}.";
 
         try
         {
@@ -373,6 +391,7 @@ public sealed class HostedRunCoordinator
             _activeSession = session;
         }
 
+        callbacks?.OnAccepted?.Invoke(receipt);
         callbacks?.OnInfo?.Invoke(
             $"Accepted run #{receipt.RunId} ({receipt.JobName}, v{receipt.Version}{(receipt.Replayed ? ", replayed" : "")})");
 

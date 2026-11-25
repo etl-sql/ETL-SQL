@@ -186,6 +186,13 @@ public sealed record ActiveHostedRun(
     public bool CancelRequested { get; set; }
 }
 
+public sealed record HostedRunStopTarget(
+    int PipelineId,
+    long RunId,
+    string Origin,
+    string TenantId,
+    int UserId);
+
 public sealed class HostedSessionExpiredException(string message, Exception? inner = null)
     : Exception(message, inner);
 
