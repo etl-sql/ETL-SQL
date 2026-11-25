@@ -32,6 +32,11 @@ export const window = {
 
 export const StatusBarAlignment = { Left: 1, Right: 2 };
 export const ConfigurationTarget = { Global: 1, Workspace: 2, WorkspaceFolder: 3 };
+export enum ExtensionMode {
+    Production = 1,
+    Development = 2,
+    Test = 3
+}
 
 export const workspace = {
     getConfiguration: vi.fn(() => ({

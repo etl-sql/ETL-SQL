@@ -30,7 +30,8 @@ describe('ResultsPanel Webview Provider', () => {
 
         mockContext = {
             subscriptions: [],
-            extensionUri: vscode.Uri.file('C:/mock/extension')
+            extensionUri: vscode.Uri.file('C:/mock/extension'),
+            extensionMode: vscode.ExtensionMode.Test
         } as any;
 
         // Register the provider
@@ -141,5 +142,46 @@ describe('ResultsPanel Webview Provider', () => {
         triggerMessage(testMsg);
 
         expect(handler).toHaveBeenCalledWith(testMsg);
+    });
+
+    it('notifies test delivery observer only after queued and ready messages post to the webview', async () => {
+        const { webviewView, triggerMessage } = createMockWebviewView();
+        const delivered: unknown[] = [];
+        const sub = ResultsPanel.onDidDeliverMessage(msg => delivered.push(msg));
+
+        ResultsPanel.postMessage({ type: 'results', columns: ['Value'], rows: [{ Value: 1 }] });
+        await Promise.resolve();
+        expect(delivered).toEqual([]);
+
+        await provider.resolveWebviewView(webviewView as any);
+        triggerMessage({ type: 'ready' });
+        await vi.waitFor(() => expect(delivered).toHaveLength(1));
+        expect(delivered[0]).toEqual({ type: 'results', columns: ['Value'], rows: [{ Value: 1 }] });
+
+        ResultsPanel.postMessage({ type: 'done', exitCode: 0 });
+        await vi.waitFor(() => expect(delivered).toHaveLength(2));
+        expect(delivered[1]).toEqual({ type: 'done', exitCode: 0 });
+        sub.dispose();
+    });
+
+    it('keeps delivery observer disabled outside ExtensionMode.Test', async () => {
+        const prodContext = {
+            subscriptions: [],
+            extensionUri: vscode.Uri.file('C:/mock/extension'),
+            extensionMode: vscode.ExtensionMode.Production
+        } as any;
+        const prodProvider = ResultsPanel.register(prodContext);
+        const { webviewView, triggerMessage } = createMockWebviewView();
+        const delivered: unknown[] = [];
+        const sub = ResultsPanel.onDidDeliverMessage(msg => delivered.push(msg));
+
+        await prodProvider.resolveWebviewView(webviewView as any);
+        triggerMessage({ type: 'ready' });
+        ResultsPanel.postMessage({ type: 'results', columns: ['Value'], rows: [{ Value: 1 }] });
+        await Promise.resolve();
+
+        expect(webviewView.webview.postMessage).toHaveBeenCalledTimes(1);
+        expect(delivered).toEqual([]);
+        sub.dispose();
     });
 });

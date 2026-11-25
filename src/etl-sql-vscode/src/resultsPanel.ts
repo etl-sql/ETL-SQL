@@ -6,14 +6,18 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
     public static readonly viewType = 'etlsql-results-view';
     public static currentPanel: ResultsPanel | undefined;
     private static _rawHtmlCache?: string;
-    private static readonly _messageListeners = new Set<(message: unknown) => void>();
+    private static _testMode = false;
+    private static readonly _deliveryListeners = new Set<(message: unknown) => void>();
 
-    public static readonly onDidPostMessage: vscode.Event<unknown> = (listener, thisArgs, disposables) => {
+    public static readonly onDidDeliverMessage: vscode.Event<unknown> = (listener, thisArgs, disposables) => {
+        if (!ResultsPanel._testMode) {
+            return { dispose: () => {} };
+        }
         const bound = thisArgs ? (msg: unknown) => listener.call(thisArgs, msg) : listener;
-        ResultsPanel._messageListeners.add(bound);
+        ResultsPanel._deliveryListeners.add(bound);
         const subscription: vscode.Disposable = {
             dispose: () => {
-                ResultsPanel._messageListeners.delete(bound);
+                ResultsPanel._deliveryListeners.delete(bound);
             }
         };
         if (disposables) {
@@ -37,6 +41,10 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
     }
 
     public static register(context: vscode.ExtensionContext): ResultsPanel {
+        ResultsPanel._testMode = context.extensionMode === vscode.ExtensionMode.Test;
+        if (!ResultsPanel._testMode) {
+            ResultsPanel._deliveryListeners.clear();
+        }
         const provider = new ResultsPanel(context.extensionUri);
         context.subscriptions.push(
             vscode.window.registerWebviewViewProvider(ResultsPanel.viewType, provider, {
@@ -85,17 +93,10 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
     }
 
     public static postMessage(message: unknown) {
-        for (const listener of ResultsPanel._messageListeners) {
-            try {
-                listener(message);
-            } catch {
-                // ignore observer errors
-            }
-        }
         if (ResultsPanel.currentPanel) {
             if (ResultsPanel.currentPanel._isReady && ResultsPanel.currentPanel._view) {
-                ResultsPanel.currentPanel._view.show?.(true); 
-                ResultsPanel.currentPanel._view.webview.postMessage(message);
+                ResultsPanel.currentPanel._view.show?.(true);
+                ResultsPanel.currentPanel._deliverToWebview(message);
             } else {
                 ResultsPanel.currentPanel._messageQueue.push(message);
                 vscode.commands.executeCommand('workbench.view.extension.etlsql-panel');
@@ -111,7 +112,7 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
      */
     public static postMessagePassive(message: unknown) {
         if (ResultsPanel.currentPanel?._isReady && ResultsPanel.currentPanel._view) {
-            ResultsPanel.currentPanel._view.webview.postMessage(message);
+            ResultsPanel.currentPanel._deliverToWebview(message);
         }
         // If the view is not ready/visible, silently drop passive messages — they are
         // informational and will be superseded by fresh state when the panel does open.
@@ -123,7 +124,28 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
         }
         while (this._messageQueue.length > 0) {
             const msg = this._messageQueue.shift();
-            this._view.webview.postMessage(msg);
+            this._deliverToWebview(msg);
+        }
+    }
+
+    private _deliverToWebview(message: unknown): void {
+        if (!this._view) {
+            return;
+        }
+        const posted = this._view.webview.postMessage(message);
+        if (ResultsPanel._testMode && ResultsPanel._deliveryListeners.size > 0) {
+            void Promise.resolve(posted).then(ok => {
+                if (!ok) {
+                    return;
+                }
+                for (const listener of ResultsPanel._deliveryListeners) {
+                    try {
+                        listener(message);
+                    } catch {
+                        // ignore observer errors
+                    }
+                }
+            });
         }
     }
 

@@ -11,8 +11,8 @@ interface ExtensionApi {
     getHostedController: () => HostedExecutionController | undefined;
     getHostedJobsTree: () => HostedJobsTreeProvider | undefined;
     getHostedJobsView: () => vscode.TreeView<HostedTreeNode> | undefined;
-    onDidResultsMessage: vscode.Event<unknown>;
-    hasLoadedResultsUi: () => boolean;
+    onDidResultsDelivered?: vscode.Event<unknown>;
+    hasLoadedResultsUi?: () => boolean;
 }
 
 interface LastRunSubmission {
@@ -358,30 +358,36 @@ suite('ST56 Hosted Execution Electron Smoke', function () {
             assert.strictEqual(disconnectedRoots.length, 1);
             assert.strictEqual(disconnectedRoots[0].kind, 'placeholder');
 
-            // 10. Stop the Portal via control endpoint, revert dirty buffer, run locally offline, and verify Results UI + result
+            // 10. Stop the Portal via control endpoint, revert dirty buffer, run locally offline, and verify ready webview delivery + Value = 1
+            assert.ok(api.onDidResultsDelivered, 'ExtensionMode.Test must expose onDidResultsDelivered');
+            assert.ok(api.hasLoadedResultsUi, 'ExtensionMode.Test must expose hasLoadedResultsUi');
             await controlPost(controlUrl, '/stop-portal');
             await vscode.commands.executeCommand('workbench.action.files.revert');
-            const localMessages: Array<Record<string, unknown>> = [];
-            const sub = api.onDidResultsMessage(msg => {
+            const deliveredMessages: Array<Record<string, unknown>> = [];
+            const sub = api.onDidResultsDelivered(msg => {
                 if (msg && typeof msg === 'object') {
-                    localMessages.push(msg as Record<string, unknown>);
+                    deliveredMessages.push(msg as Record<string, unknown>);
                 }
             });
             try {
                 await vscode.commands.executeCommand('etlsql.runScript');
-                for (let i = 0; i < 50 && !localMessages.some(m => m.type === 'done'); i++) {
+                for (let i = 0; i < 80 && !deliveredMessages.some(m => m.type === 'done'); i++) {
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
             } finally {
                 sub.dispose();
             }
             assert.strictEqual(api.hasLoadedResultsUi(), true, 'Built Results webview UI (ui/dist/index.html) must load');
-            const resultMsg = localMessages.find(m => m.type === 'results');
-            assert.ok(resultMsg, `Local execution must produce a results message, got ${JSON.stringify(localMessages)}`);
-            assert.ok(JSON.stringify(resultMsg).includes('Value'), 'Local execution result must include Value column');
+            const resultMsg = deliveredMessages.find(m => m.type === 'results');
+            assert.ok(resultMsg, `Ready Results webview must receive a results message, got ${JSON.stringify(deliveredMessages)}`);
+            const columns = Array.isArray(resultMsg.columns) ? resultMsg.columns as unknown[] : [];
+            const rows = Array.isArray(resultMsg.rows) ? resultMsg.rows as Array<Record<string, unknown>> : [];
+            assert.ok(columns.includes('Value'), `Expected Value column in ${JSON.stringify(resultMsg)}`);
+            assert.strictEqual(rows.length, 1, `Expected 1 result row, got ${JSON.stringify(resultMsg)}`);
+            assert.strictEqual(Number(rows[0].Value), 1, `Expected Value = 1 in ${JSON.stringify(resultMsg)}`);
             assert.ok(
-                localMessages.some(m => m.type === 'done' && m.exitCode === 0),
-                `Local execution must complete with exitCode 0, got ${JSON.stringify(localMessages)}`
+                deliveredMessages.some(m => m.type === 'done' && m.exitCode === 0),
+                `Ready Results webview must receive done with exitCode 0, got ${JSON.stringify(deliveredMessages)}`
             );
 
             // 11. Verify no secrets were persisted to VS Code user settings file

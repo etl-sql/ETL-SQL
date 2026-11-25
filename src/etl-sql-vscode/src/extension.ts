@@ -637,13 +637,19 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    return {
+    const exportsApi = {
         getHostedController: () => hostedController,
         getHostedJobsTree: () => hostedJobsTreeProvider,
-        getHostedJobsView: () => hostedJobsTreeView,
-        onDidResultsMessage: ResultsPanel.onDidPostMessage,
-        hasLoadedResultsUi: () => ResultsPanel.hasLoadedUiHtml()
+        getHostedJobsView: () => hostedJobsTreeView
     };
+    if (context.extensionMode === vscode.ExtensionMode.Test) {
+        return {
+            ...exportsApi,
+            onDidResultsDelivered: ResultsPanel.onDidDeliverMessage,
+            hasLoadedResultsUi: () => ResultsPanel.hasLoadedUiHtml()
+        };
+    }
+    return exportsApi;
 }
 
 function syncConnectionsToLsp() {
