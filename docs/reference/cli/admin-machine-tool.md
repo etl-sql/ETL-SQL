@@ -13,7 +13,9 @@ etl-sql admin machine tool <subcommand>
 | Subcommand | Description |
 | :--- | :--- |
 | [`delete`](admin-machine-tool-delete.md) | Permanently remove a machine-local tool |
+| [`grant`](admin-machine-tool-grant.md) | Grant use of a machine-local tool |
 | [`list`](admin-machine-tool-list.md) | List machine-local tools |
+| [`revoke`](admin-machine-tool-revoke.md) | Revoke use of a machine-local tool |
 | [`set`](admin-machine-tool-set.md) | Store a machine-local tool |
 
 ## References

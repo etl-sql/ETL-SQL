@@ -983,7 +983,7 @@ must complete before the unified beginner experience can be accepted.
 
 ### Security — External Tool Permissions, Artifact Identity, and Launch Contracts
 
-**Status:** Accepted (XT09 shipped in v0.23.0; XT07–XT08 open for future scheduling)
+**Status:** XT09 shipped in v0.23.0. XT07 catalog grants, federated caller propagation, and saved-version owner approval passed local end-to-end validation in the feature branch. XT08 direct Linux executable and fixed dash script approval passed in restricted workers, including one-shot and warm scheduled execution. The Windows x64 fixture passed activation and rollback under a restricted virtual service account on GitHub Actions. Windows x64 direct PE approval is wired into the catalog and engine on the feature branch. The portable qualification bundle can exercise the installed Orchestrator and CLI under the restricted profile. The candidate MSI passed the installed qualification under the restricted Windows service profile. [Installed qualification](docs/architecture/decisions/external-tool-use-and-artifact-approval.md#qualify-the-installed-orchestrator)
 
 **Horizon:** Next
 

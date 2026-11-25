@@ -122,6 +122,153 @@ The audit events are emitted from the HTTP endpoints and the statement handlers 
 
 The management API uses `/api/authorization/{kind}/{name}` to list grants and `/api/authorization/{kind}/{name}/{principalKind}/{principalId}` to set or revoke them. Valid kinds are `JOB`, `SCHEDULE`, and `NOTIFICATION`; valid principal kinds are `USER`, `GROUP`, and `SERVICE`. Job history and data-quality APIs filter rows using the same `READ` decision. Ad-hoc run status and cancellation are visible only to that run's submitting principal or an administrator. Kinds, principal kinds, and permissions are named in responses exactly as they are accepted in requests. The Portal proxies the same routes under `/api/orchestrator/authorization/...` for the Access panel and for `etl-sql admin orchestrator show|grant|revoke`, so no operator needs the Orchestrator's signing secret on their machine.
 
+## Refresh tool identity for saved jobs
+
+A federated Orchestrator can refresh tool group membership for an owner-approved scheduled run,
+or when the verified owner triggers or resumes a saved job. Create a separate Portal service account in each participating tenant with
+only the `orchestrator.tool-identity.read` scope. Use
+[`etl-sql admin service-account create`](../../reference/cli/admin-service-account-create.md) to
+provision it. Set these Orchestrator settings through the service's secure configuration, replacing
+`<tenant>` with the job's tenant ID.
+
+- `Orchestrator:ScheduledToolIdentity:PortalUrl` is the Portal origin. Use HTTPS for a remote Portal.
+- `Orchestrator:ScheduledToolIdentity:Tenants:<tenant>:ClientId` is the tenant's service account client ID.
+- `Orchestrator:ScheduledToolIdentity:Tenants:<tenant>:ClientSecret` is the corresponding secret.
+
+For unattended execution, the job owner approves the saved inline script using
+`PUT /api/orchestrator/jobs/{name}/tool-approval` with the job's current `If-Match` version and
+`{"approved":true}`. Send `{"approved":false}` to revoke it. A saved edit or ownership transfer
+requires a new approval. Service account owners need `orchestrator.publish` or `orchestrator.admin`
+to record approval. The Orchestrator checks approval and current membership on each attempt.
+The unattended grant applies to tool calls in the top-level saved script. Calls from nested
+scripts or procedures need a separately authenticated run.
+
+## Approve native tools on a restricted Linux host
+
+Use `Governance:Tools:ArtifactRoot` with an ownership-verified local machine catalog.
+Set it to an absolute, local, root-owned directory. Use a dedicated non-root worker with
+`NoNewPrivileges=true` and no effective, permitted, inheritable, or ambient capabilities.
+Configure publisher and worker catalog access through the same protected machine key
+(`ETLSQL_MACHINE_KEY_FILE` on Linux) and the catalog's `ServiceIdentity`. Restrict key read access
+to the administrator and worker service identity.
+
+1. Review the direct ELF binary and its fixed arguments, allowed data arguments, working directory, and
+   dependencies. Use statically linked binaries or ensure that all loader dependencies are protected by
+   the host. This approval form supports one regular executable per version directory.
+2. As the machine administrator, stage the file in a private root-owned directory on the same
+   filesystem as the artifact root. Compare its SHA-256 to the reviewed digest. Publish by renaming
+   the staged directory to `<ArtifactRoot>/<alias in lowercase>/<lowercase sha256>/` at a new path.
+   Give the worker read and execute access to the executable and directory. For example, use mode
+   `0555` for both. Keep the version directory and ancestors under root ownership and deny group
+   and other write access.
+3. Activate the reviewed version through the catalog. For example, with the approved digest
+   already assigned to `digest`:
+
+   ```bash
+   etl-sql admin machine tool set --name MaskSales --type EXECUTABLE \
+     --option "COMMAND=/srv/etl-sql-artifacts/masksales/$digest/mask-sales" \
+     --option "ARTIFACT_SHA256=$digest"
+   ```
+
+   Supply any approved `ARGS`, `PARAM_ROLES`, and other tool options in the same update.
+   Federated callers still need the appropriate catalog grants.
+4. When every native alias is approved, set `Governance:Tools:RequireArtifactApproval` to `true`
+   on the host. Orchestrator passes both settings to its CLI workers. This setting gates native
+   aliases. Container tool policy continues to apply independently.
+
+Rotate by publishing a new immutable generation and activating it with another `set` command.
+Keep previous generations while a worker or checkpoint may still refer to them. To roll back,
+activate the retained version with its original options. An invalid activation leaves the current
+catalog definition available. Preview confirms the selected catalog definition. The worker verifies
+the protected path, executable type and SHA-256 for each actual launch.
+
+A persistent session binds each alias to its first launch contract. After a rotation, use the
+original approved version to resume that session. To run the new approval, start a new session
+after reconciling effects from the previous run. Create and test recovery procedures before
+enabling enforcement for scheduled jobs. The supported restricted-worker profiles are direct ELF
+execution and fixed `dash` scripts on Linux.
+
+### Approve a fixed dash script
+
+Stage a reviewed `dash` ELF executable named `dash` and one reviewed `.sh` file in the same
+private directory. Use mode `0555` for the executable and `0444` for the script, and keep both
+files under root ownership. Use the same publication and retention rules as for direct ELF
+tools. Compute the generation name by hashing the lowercase interpreter SHA-256, one line
+feed, and the lowercase script SHA-256. The digest input ends with the last hexadecimal digit
+of the script hash.
+
+For this example, `interpreter_digest` and `script_digest` hold the reviewed digests. Publish
+the directory at `$version_dir` before activating it.
+
+```bash
+generation=$(printf '%s\n%s' "$interpreter_digest" "$script_digest" | sha256sum | cut -d ' ' -f 1)
+version_dir="/srv/etl-sql-artifacts/masksales/$generation"
+
+etl-sql admin machine tool set --name MaskSales --type EXECUTABLE \
+  --option "COMMAND=$version_dir/dash" \
+  --option "ARTIFACT_SHA256=$interpreter_digest" \
+  --option "SCRIPT_PATH=$version_dir/mask-sales.sh" \
+  --option "SCRIPT_SHA256=$script_digest"
+```
+
+The runner verifies both files, invokes `dash` noninteractively with the absolute script path
+as its first argument, and appends any reviewed `ARGS` as positional script arguments. The
+runner clears inherited shell startup variables. Review the script to treat input as data
+and to rely only on shell builtins or protected host dependencies at explicit paths.
+[Dash invocation reference](https://sources.debian.org/src/dash/0.5.12-13/src/dash.1)
+
+## Configure the restricted Windows native tool profile
+
+The Windows x64 profile verifies direct PE executables. Run the Orchestrator under the dedicated
+`NT SERVICE\<service-name>` virtual account assigned to that service. Configure the service to
+retain only `SeChangeNotifyPrivilege`. The worker refuses LocalSystem, administrator tokens,
+interactive tokens, and a token that does not match the configured account. The Windows MSI
+default uses LocalSystem. The restricted service skips the initial setup of the shared installer
+secrets. Provision its Orchestrator API key separately in a configuration source readable by that
+service and writable only by an administrator. For example, use a service-specific
+`appsettings.<environment>.json` beside the installed executable, set `DOTNET_ENVIRONMENT` for the
+service, and give the file read access only to the service, Administrators, and LocalSystem.
+Provision the Orchestrator identity-signing secret in the same way when using federated mode.
+Keep the shared installer secrets private.
+
+Configure the same local machine catalog and fixed NTFS artifact root for the elevated publisher
+and the Orchestrator. The Orchestrator passes these settings to its process workers.
+
+```json
+{
+  "Governance": {
+    "Tools": {
+      "Provider": "LOCAL",
+      "LocalRoot": "C:\\ETL-SQL\\tools",
+      "ArtifactRoot": "C:\\ETL-SQL\\artifacts",
+      "OwnershipMode": "MachineAdministrator",
+      "ServiceIdentity": "NT SERVICE\\ETL-SQL-Orchestrator",
+      "ValidateOwnership": true,
+      "RequireArtifactApproval": true
+    }
+  }
+}
+```
+
+1. Use local NTFS directories owned by Administrators or LocalSystem. Give the service account
+   read and execute access to the catalog and version store. It must be able to read the ACLs
+   on their ancestors. Put writable job state, logs, and scratch outside both protected roots.
+   Set `Logging:AppLog:Directory` to a directory the service can write. The restricted service keeps
+   its child-process ledger there for orphan recovery after a restart.
+2. Review the x64 executable, arguments, and loader dependencies. Stage one `.exe` under
+   `<ArtifactRoot>\<lowercase alias>\<lowercase sha256>\` and compare its SHA-256 with the
+   reviewed digest. Keep the version directory immutable. It also serves as the working directory.
+3. From an elevated shell, activate the reviewed executable using
+   `etl-sql admin machine tool set --name <alias> --type EXECUTABLE` with
+   `--option "COMMAND=<absolute executable path>"` and `--option "ARTIFACT_SHA256=<reviewed digest>"`.
+   Federated callers still need a tool use grant.
+4. Rotate by publishing a new version directory and activating its reviewed digest. Roll back by
+   activating a retained version. The worker checks its token and effective access before
+   launch. It verifies the opened executable and holds that handle through process start.
+
+The proof for the Windows virtual service token and NTFS checks is recorded in the
+[native artifact approval decision](../../architecture/decisions/external-tool-use-and-artifact-approval.md#windows-service-qualification-procedure).
+
 ## Legacy mode (Solo only)
 
 `Orchestrator:RequireFederatedIdentity=false` runs the service in **legacy mode**: requests are authenticated by the shared API key and nothing else. There are no principals, so there are no grants and no ownership decisions — the API key is a root key over every job, schedule, and notification on the host. This is supported for a **Solo** deployment: one person, one box, no Portal. Team and above require a Portal, because the Portal is where principals, groups, and audit live.
