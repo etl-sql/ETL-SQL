@@ -11,6 +11,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Formatting;
+using ETL_SQL.Core.Hosted;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Services;
 using ETL_SQL.Data;
@@ -42,6 +43,9 @@ namespace ETL_SQL.TUI.UI
         private readonly IServiceProvider? _serviceProvider;
         private readonly Linter _linter;
         private readonly PortalClient _portal = new();
+        private readonly Queue<int> _queuedChooserSelections = new();
+        public TuiHostedExecutionController Hosted { get; private set; }
+        public HostedRunOutcome? LastHostedOutcome { get; private set; }
         private readonly Dictionary<string, IDataSource> _connections;
         // Swapped (not mutated) so a background analysis can replace the set atomically while the
         // render thread enumerates the old one — see AnalyzeAsync / ScheduleLiveAnalysis.
@@ -74,6 +78,12 @@ namespace ETL_SQL.TUI.UI
         /// <summary>Requests cancellation of the running script, if any.</summary>
         public void CancelRun()
         {
+            if (Hosted.IsHosted && Hosted.Coordinator.ActiveRun is not null)
+            {
+                _renderer.ShowStatus("Requesting hosted run cancellation…");
+                _ = Hosted.RequestStopAsync();
+                return;
+            }
             if (IsRunning) { _runCts?.Cancel(); _renderer.ShowStatus("Stopping execution…"); }
         }
 
@@ -155,6 +165,11 @@ namespace ETL_SQL.TUI.UI
             _linter = LinterFactory.CreateWithAllRules(_serviceProvider ?? Program.ServiceProvider);
             _autocomplete = new AutocompleteController(_buffer, _renderer, _metadata, _connections, _logger, helpRegistry);
             _input = new InputHandler(this, _buffer, _renderer, _autocomplete);
+            Hosted = new TuiHostedExecutionController(
+                (msg, color) => _evaluator.Log(msg, color),
+                msg => _renderer.ShowStatus(msg),
+                ShowChooser,
+                ShowPrompt);
             _tabs.Add(new TabState { FilePath = filePath });
 
             if (_logger is LoggerService ls)
@@ -283,6 +298,8 @@ namespace ETL_SQL.TUI.UI
             }
             finally
             {
+                // Best-effort revocation of any active hosted native session on clean exit.
+                try { await Hosted.DisconnectOnExitAsync(); } catch { }
                 // Persist the final session and clear the crash sentinel — this is a clean exit.
                 try { _workspace.Save(CaptureSession()); _workspace.MarkCleanExit(Directory.GetCurrentDirectory()); } catch { }
 
@@ -608,9 +625,33 @@ namespace ETL_SQL.TUI.UI
         private Task PublishError(string detail) =>
             ShowInfoOverlay("Publish failed", $"{detail}\n\nPress any key to close.", "");
 
+        /// <summary>Test seam: replace the hosted execution controller (e.g. with a test browser launcher / clock).</summary>
+        public void ConfigureHostedController(ETL_SQL.Core.Hosted.HostedClientSessionService sessions,
+            ETL_SQL.Core.Hosted.HostedPipelineClient? client = null,
+            ETL_SQL.Core.Hosted.HostedRunCoordinator? coordinator = null)
+        {
+            Hosted = new TuiHostedExecutionController(
+                (msg, color) => _evaluator.Log(msg, color),
+                msg => _renderer.ShowStatus(msg),
+                ShowChooser,
+                ShowPrompt,
+                sessions,
+                client,
+                coordinator);
+        }
+
+        /// <summary>Test seam: queue a selection index for the next <see cref="ShowChooser"/> invocation.</summary>
+        public void QueueChooserSelection(int index) => _queuedChooserSelections.Enqueue(index);
+
+        public Task SelectHostedTarget() => Hosted.SelectTargetAsync();
+        public Task DisconnectHostedPortal() => Hosted.DisconnectAsync();
+        public Task CheckPendingHostedSubmission() => Hosted.CheckPendingSubmissionAsync();
+
         /// <summary>A modal, filterable single-choice list (reuses the palette overlay). Returns the chosen index or -1.</summary>
         private async Task<int> ShowChooser(string title, IReadOnlyList<string> items)
         {
+            if (_queuedChooserSelections.Count > 0)
+                return _queuedChooserSelections.Dequeue();
             string filter = "";
             int selected = 0;
             _renderer.PaletteVisible = true;
@@ -1500,11 +1541,19 @@ namespace ETL_SQL.TUI.UI
         }
 
         /// <summary>Starts executing the entire script (non-blocking). Returns the run task.</summary>
-        public Task RunScript() => StartRun(_buffer.GetText(), "Executing script…");
+        public Task RunScript() =>
+            Hosted.IsHosted ? StartHostedRunAsync() : StartRun(_buffer.GetText(), "Executing script…");
 
         /// <summary>Starts executing only the currently selected text (non-blocking).</summary>
         public Task RunSelectedText()
         {
+            if (Hosted.IsHosted)
+            {
+                const string msg = "Run Selection is unavailable for hosted execution. Hosted runs execute saved Portal pipeline revisions — press F5 or switch to Local (Offline).";
+                _evaluator.Log($"[HOSTED] {msg}", ConsoleColor.Yellow);
+                _renderer.ShowStatus(msg);
+                return Task.CompletedTask;
+            }
             var selectedText = _buffer.GetSelectedText();
             if (string.IsNullOrEmpty(selectedText))
             {
@@ -1517,8 +1566,50 @@ namespace ETL_SQL.TUI.UI
         /// <summary>Starts executing only the line at the current cursor position (non-blocking).</summary>
         public Task RunStatementAtCursor()
         {
+            if (Hosted.IsHosted)
+            {
+                const string msg = "Run Statement at Cursor is unavailable for hosted execution. Hosted runs execute saved Portal pipeline revisions — press F5 or switch to Local (Offline).";
+                _evaluator.Log($"[HOSTED] {msg}", ConsoleColor.Yellow);
+                _renderer.ShowStatus(msg);
+                return Task.CompletedTask;
+            }
             var currentLine = _buffer.Lines[_buffer.CursorLine];
             return StartRun(currentLine, $"Executing line {_buffer.CursorLine + 1}…");
+        }
+
+        private async Task StartHostedRunAsync()
+        {
+            if (IsRunning)
+            {
+                _renderer.ShowStatus("A run is already in progress — press Esc to stop it.");
+                return;
+            }
+
+            var work = await Hosted.PrepareHostedRunAsync(_filePath, _isDirty);
+            if (work is null)
+                return;
+
+            _runCts?.Dispose();
+            _runCts = new System.Threading.CancellationTokenSource();
+            var ct = _runCts.Token;
+            _renderer.ExecutionRunning = true;
+            _renderer.ResultsVisible = false;
+            _renderer.PerformanceVisible = false;
+            _renderer.ActiveLowerTab = EditorFocus.ExecutionTree;
+
+            _runningTask = Task.Run(async () =>
+            {
+                try
+                {
+                    LastHostedOutcome = await work(ct);
+                }
+                finally
+                {
+                    _renderer.ExecutionRunning = false;
+                }
+            });
+
+            await _runningTask;
         }
 
         private async Task ExecuteSource(string source, System.Threading.CancellationToken ct = default)

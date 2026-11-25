@@ -241,6 +241,7 @@ namespace ETL_SQL.TUI.UI
                 _editor.SwitchToTab(nextIndex);
                 return;
             }
+            if (key.Key == ConsoleKey.H && key.Modifiers.HasFlag(ConsoleModifiers.Alt)) { await _editor.SelectHostedTarget(); return; }
             // Alt+P is the default (Windows Terminal grabs Ctrl+Shift+P for its own palette);
             // Ctrl+Shift+P still works in terminals that don't intercept it.
             if (key.Key == ConsoleKey.P && (key.Modifiers.HasFlag(ConsoleModifiers.Alt) || (key.Modifiers.HasFlag(ConsoleModifiers.Control) && key.Modifiers.HasFlag(ConsoleModifiers.Shift)))) { await _editor.ShowCommandPalette(); return; }
