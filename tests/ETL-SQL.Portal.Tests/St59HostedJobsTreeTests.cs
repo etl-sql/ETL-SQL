@@ -61,6 +61,7 @@ public sealed class St59HostedJobsTreeTests
         int aliceId;
         string alicePrincipalKey;
         int bobId;
+        string bobPrincipalKey;
         using (var scope = portal.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
@@ -118,6 +119,7 @@ public sealed class St59HostedJobsTreeTests
             aliceId = alice.Id;
             alicePrincipalKey = alice.PrincipalKey!;
             bobId = bob.Id;
+            bobPrincipalKey = bob.PrincipalKey!;
 
             db.UserGroups.AddRange(
                 new UserGroup { UserId = alice.Id, GroupId = authorsGroup.Id },
@@ -242,7 +244,50 @@ public sealed class St59HostedJobsTreeTests
             slowRunId = (await submitSlowResp.Content.ReadFromJsonAsync<PipelineRunSubmittedDto>(Json))!.RunId;
         }
 
-        // Wrong job name MUST return 404 and NOT cancel slowRunId.
+        var slowJobPath = $"/api/studio/hosted-jobs/{Uri.EscapeDataString($"PIPELINE:{slowId}")}";
+        using (var grant = new HttpRequestMessage(HttpMethod.Put,
+            $"/api/orchestrator/authorization/JOB/{Uri.EscapeDataString($"PIPELINE:{slowId}")}/USER/{bobPrincipalKey}")
+        {
+            Content = JsonContent.Create(new { permission = "READ" })
+        })
+        {
+            grant.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+            using var response = await http.SendAsync(grant);
+            Assert.True(response.IsSuccessStatusCode);
+        }
+
+        using (var jobsReq = AuthedGet("/api/studio/hosted-jobs", bobToken))
+        using (var jobsResp = await http.SendAsync(jobsReq))
+        {
+            Assert.Equal(HttpStatusCode.OK, jobsResp.StatusCode);
+            var page = (await jobsResp.Content.ReadFromJsonAsync<HostedJobsPageDto>(Json))!;
+            var slow = Assert.Single(page.Items, item => item.PipelineId == slowId);
+            Assert.Equal(slowRunId, slow.ActiveRunId);
+            Assert.False(slow.CanRun);
+            Assert.False(slow.CanStop);
+        }
+
+        using (var runsReq = AuthedGet($"{slowJobPath}/runs", aliceToken))
+        using (var runsResp = await http.SendAsync(runsReq))
+        {
+            Assert.Equal(HttpStatusCode.OK, runsResp.StatusCode);
+            var runs = (await runsResp.Content.ReadFromJsonAsync<HostedJobRecentRunDto[]>(Json))!;
+            Assert.True(Assert.Single(runs, run => run.RunId == slowRunId).CanStop);
+        }
+
+        using (var runsReq = AuthedGet($"{slowJobPath}/runs", bobToken))
+        using (var runsResp = await http.SendAsync(runsReq))
+        {
+            Assert.Equal(HttpStatusCode.OK, runsResp.StatusCode);
+            var runs = (await runsResp.Content.ReadFromJsonAsync<HostedJobRecentRunDto[]>(Json))!;
+            Assert.False(Assert.Single(runs, run => run.RunId == slowRunId).CanStop);
+        }
+
+        using (var bobCancel = AuthedPost($"{slowJobPath}/runs/{slowRunId}/cancel", bobToken))
+        using (var response = await http.SendAsync(bobCancel))
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+
+        // A different job at the same run ID cannot signal this run.
         using (var wrongJobCancelReq = AuthedPost($"/api/studio/hosted-jobs/{Uri.EscapeDataString($"PIPELINE:{financeId}")}/runs/{slowRunId}/cancel", aliceToken))
         using (var wrongJobCancelResp = await http.SendAsync(wrongJobCancelReq))
             Assert.Equal(HttpStatusCode.NotFound, wrongJobCancelResp.StatusCode);
@@ -290,6 +335,39 @@ public sealed class St59HostedJobsTreeTests
             using var afterRevokeResp = await http.SendAsync(afterRevokeReq);
             Assert.Equal(HttpStatusCode.Forbidden, afterRevokeResp.StatusCode);
         }
+    }
+
+    [Fact]
+    public async Task HostedJobsTree_LegacyOrchestratorDoesNotAuthorizeThePortalCaller()
+    {
+        using var orchestrator = new OrchestratorWebFactory();
+        using var portal = new St59PortalFactory(orchestrator);
+        using var http = portal.CreateClient();
+
+        using (var scope = portal.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var admin = await db.Users.SingleAsync(u => u.UserName == "admin");
+            admin.MustChangePassword = false;
+            await db.SaveChangesAsync();
+        }
+
+        using var login = await http.PostAsJsonAsync("/api/auth/login", new { username = "admin", password = "Admin@12345!" });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        var token = (await login.Content.ReadFromJsonAsync<JsonObject>(Json))!["token"]!.GetValue<string>();
+
+        using var list = AuthedGet("/api/studio/hosted-jobs", token);
+        using var listResult = await http.SendAsync(list);
+        Assert.Equal(HttpStatusCode.OK, listResult.StatusCode);
+        var page = (await listResult.Content.ReadFromJsonAsync<HostedJobsPageDto>(Json))!;
+        Assert.False(page.OrchestratorOnline);
+        Assert.Empty(page.Items);
+
+        using var trigger = AuthedPost("/api/studio/hosted-jobs/LegacyJob/trigger", token);
+        using var triggerResult = await http.SendAsync(trigger);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, triggerResult.StatusCode);
+        var refusal = await triggerResult.Content.ReadFromJsonAsync<PipelineRunRefusalDto>(Json);
+        Assert.Equal("federated_orchestrator_required", refusal?.Code);
     }
 
     private static HttpRequestMessage AuthedGet(string path, string token)

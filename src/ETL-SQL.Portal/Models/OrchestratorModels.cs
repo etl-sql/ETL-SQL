@@ -51,7 +51,8 @@ public record JobHistoryEntryDto(
     long RowsWarned = 0,
     string? DataQualityFailures = null,
     string? CheckpointLabel = null,
-    bool HasResumeSession = false
+    bool HasResumeSession = false,
+    bool CanCancel = false
 );
 
 public record OrchestratorMetricsDto(

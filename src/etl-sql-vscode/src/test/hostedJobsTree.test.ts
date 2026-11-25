@@ -61,6 +61,8 @@ describe('HostedJobsTreeProvider (ST59)', () => {
 
     it('renders jobs, saved pipelines, recent runs, statement logs, and cancels the exact selected run', async () => {
         const cancelledUrls: string[] = [];
+        const requestedOffsets: string[] = [];
+        const runSavedPipeline = vi.fn(async () => {});
         const jobs: HostedJobItemDto[] = [
             {
                 kind: 'pipeline',
@@ -153,7 +155,16 @@ describe('HostedJobsTreeProvider (ST59)', () => {
                 return jsonResponse(200, { mode: 'CatalogOnly', capabilities: ['StudioAccess', 'ScriptRun'], sourceControlEnabled: false, draftRecovery: false });
             }
             if (url.pathname === '/api/studio/hosted-jobs' && method === 'GET') {
-                return jsonResponse(200, { items: jobs, total: 2, offset: 0, limit: 50, hasMore: false, orchestratorOnline: true });
+                const offset = Number(url.searchParams.get('offset'));
+                requestedOffsets.push(String(offset));
+                return jsonResponse(200, {
+                    items: offset === 0
+                        ? [jobs[0], ...Array.from({ length: 49 }, (_, index) => ({
+                            ...jobs[1], jobName: `Job-${index}`
+                        }))]
+                        : [jobs[1]],
+                    total: 51, offset, limit: 50, hasMore: offset === 0, orchestratorOnline: true
+                });
             }
             if (url.pathname === '/api/studio/hosted-jobs/PIPELINE%3A42/runs' && method === 'GET') {
                 return jsonResponse(200, runs);
@@ -179,13 +190,22 @@ describe('HostedJobsTreeProvider (ST59)', () => {
         const tree = new HostedJobsTreeProvider({
             sessions,
             client: new HostedPipelineClient(sessions),
-            openExternal
+            openExternal,
+            runSavedPipeline
         });
 
         const rootNodes = await tree.getChildren();
-        expect(rootNodes).toHaveLength(2);
+        expect(rootNodes).toHaveLength(51);
         const pipelineNode = rootNodes[0];
-        const readOnlyNode = rootNodes[1];
+        const more = rootNodes[50];
+        expect(tree.getTreeItem(more).command?.command).toBe('etlsql.hostedJobs.loadMore');
+        await tree.loadMore(more);
+        const allNodes = await tree.getChildren();
+        expect(allNodes).toHaveLength(51);
+        expect(allNodes[50]).toMatchObject({ kind: 'job', item: { jobName: 'ReadOnlySummary' } });
+        const readOnlyNode = allNodes[50];
+        await tree.loadMore(more);
+        expect(requestedOffsets).toEqual(['0', '50']);
         expect(tree.getTreeItem(pipelineNode).contextValue).toBe('hosted-job-run-stop');
         expect(tree.getTreeItem(readOnlyNode).contextValue).toBe('hosted-job-readonly');
 
@@ -202,6 +222,11 @@ describe('HostedJobsTreeProvider (ST59)', () => {
         const opened = await tree.openInPortal(runNodes[0]);
         expect(opened).toBe('https://portal-a.example/orchestrator.html?job=PIPELINE%3A42&run=501');
         expect(openExternal).toHaveBeenCalledTimes(1);
+
+        expect(await tree.runNode(readOnlyNode)).toBe(false);
+        expect(await tree.stopNode(runNodes[1])).toBe(false);
+        expect(await tree.runNode(pipelineNode)).toBe(true);
+        expect(runSavedPipeline).toHaveBeenCalledExactlyOnceWith(42, 3, 'FinanceCheck.etlsql');
 
         // Stop targets exact selected run #501.
         const stopped = await tree.stopNode(runNodes[0]);

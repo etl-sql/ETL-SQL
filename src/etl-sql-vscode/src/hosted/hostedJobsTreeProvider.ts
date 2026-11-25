@@ -1,4 +1,3 @@
-import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import {
     HostedJobItemDto,
@@ -14,6 +13,7 @@ import { HostedPipelineClient } from './hostedPipelineClient';
 
 export type HostedTreeNode =
     | { kind: 'placeholder'; id: string; label: string; description?: string; commandId?: string }
+    | { kind: 'more'; id: string; sessionKey: string; epoch: number; offset: number }
     | { kind: 'job'; id: string; item: HostedJobItemDto; sessionKey: string }
     | { kind: 'run'; id: string; job: HostedJobItemDto; run: HostedJobRecentRunDto; sessionKey: string }
     | { kind: 'statement'; id: string; index: number; statement: HostedJobRunStatementDto }
@@ -22,10 +22,9 @@ export type HostedTreeNode =
 export interface HostedJobsTreeOptions {
     sessions: HostedSessionManager;
     client?: HostedPipelineClient;
-    runSavedPipeline?: (pipelineId: number) => Promise<void>;
+    runSavedPipeline?: (pipelineId: number, version: number, displayName: string) => Promise<void>;
     openExternal?: (uri: vscode.Uri) => Thenable<boolean> | Promise<boolean>;
     log?: (message: string) => void;
-    randomUuid?: () => string;
 }
 
 /**
@@ -38,10 +37,9 @@ export interface HostedJobsTreeOptions {
 export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTreeNode>, vscode.Disposable {
     private readonly _sessions: HostedSessionManager;
     private readonly _client: HostedPipelineClient;
-    private readonly _runSavedPipeline?: (pipelineId: number) => Promise<void>;
+    private readonly _runSavedPipeline?: HostedJobsTreeOptions['runSavedPipeline'];
     private readonly _openExternal: (uri: vscode.Uri) => Thenable<boolean> | Promise<boolean>;
     private readonly _log: (message: string) => void;
-    private readonly _randomUuid: () => string;
 
     private readonly _onDidChangeTreeData = new vscode.EventEmitter<HostedTreeNode | undefined | void>();
     public readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
@@ -53,7 +51,8 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
     private _jobsLoaded = false;
     private _runsByJob = new Map<string, HostedJobRecentRunDto[]>();
     private _detailByRun = new Map<string, HostedJobRunDetailDto>();
-    private _loadError: string | null = null;
+    private _nextJobsOffset: number | null = null;
+    private _loadingMore = false;
 
     constructor(options: HostedJobsTreeOptions) {
         this._sessions = options.sessions;
@@ -61,7 +60,6 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
         this._runSavedPipeline = options.runSavedPipeline;
         this._openExternal = options.openExternal ?? (uri => vscode.env.openExternal(uri));
         this._log = options.log ?? (() => {});
-        this._randomUuid = options.randomUuid ?? (() => crypto.randomUUID());
 
         this._lastSessionKey = this.computeSessionKey(this._sessions.getSession());
         const sub = this._sessions.onDidChange(() => this.handleSessionChanged());
@@ -92,11 +90,18 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
         this._jobsLoaded = false;
         this._runsByJob.clear();
         this._detailByRun.clear();
-        this._loadError = null;
+        this._nextJobsOffset = null;
+        this._loadingMore = false;
         this._onDidChangeTreeData.fire(undefined);
     }
 
     public getTreeItem(element: HostedTreeNode): vscode.TreeItem {
+        if (element.kind === 'more') {
+            const item = new vscode.TreeItem('Load more jobs', vscode.TreeItemCollapsibleState.None);
+            item.id = element.id;
+            item.command = { command: 'etlsql.hostedJobs.loadMore', title: 'Load more jobs', arguments: [element] };
+            return item;
+        }
         if (element.kind === 'placeholder') {
             const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
             item.description = element.description;
@@ -119,6 +124,7 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
         if (element.kind === 'job') {
             const j = element.item;
             const item = new vscode.TreeItem(j.displayName, vscode.TreeItemCollapsibleState.Collapsed);
+            item.id = element.id;
             const parts: string[] = [];
             if (j.kind === 'pipeline' && j.pipelineVersion) {
                 parts.push(`v${j.pipelineVersion}`);
@@ -143,6 +149,7 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
         if (element.kind === 'run') {
             const r = element.run;
             const item = new vscode.TreeItem(`Run #${r.runId} · ${r.status}`, vscode.TreeItemCollapsibleState.Collapsed);
+            item.id = element.id;
             const descParts = [`${r.rowsProcessed} rows`];
             if (typeof r.durationMs === 'number') {
                 descParts.push(`${r.durationMs} ms`);
@@ -191,15 +198,16 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
                     if (this.isStale(epoch, sessionKey)) {
                         return [];
                     }
-                    this._jobs = page.items;
-                    this._jobsLoaded = true;
-                    this._loadError = null;
+                    if (!this._jobsLoaded) {
+                        this._jobs = page.items;
+                        this._jobsLoaded = true;
+                        this._nextJobsOffset = page.hasMore && page.items.length > 0 ? page.items.length : null;
+                    }
                 } catch (err) {
                     if (this.isStale(epoch, sessionKey)) {
                         return [];
                     }
                     const msg = this.sanitizeError(err);
-                    this._loadError = msg;
                     this._log(`[HostedJobs] Failed to load jobs: ${msg}`);
                     return [{
                         kind: 'info',
@@ -219,12 +227,22 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
                 }];
             }
 
-            return this._jobs.map(item => ({
+            const jobs: HostedTreeNode[] = this._jobs.map(item => ({
                 kind: 'job',
                 id: `job:${sessionKey}:${item.jobName}`,
                 item,
                 sessionKey
             }));
+            if (this._nextJobsOffset !== null) {
+                jobs.push({
+                    kind: 'more',
+                    id: `more:${sessionKey}:${this._nextJobsOffset}`,
+                    sessionKey,
+                    epoch,
+                    offset: this._nextJobsOffset
+                });
+            }
+            return jobs;
         }
 
         if (element.kind === 'job') {
@@ -332,6 +350,37 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
         return [];
     }
 
+    public async loadMore(node?: HostedTreeNode): Promise<void> {
+        if (node?.kind !== 'more' || this._loadingMore || this._nextJobsOffset !== node.offset
+            || this.isStale(node.epoch, node.sessionKey)) {
+            return;
+        }
+
+        this._loadingMore = true;
+        try {
+            const page = await this._client.listHostedJobs(50, node.offset);
+            if (this.isStale(node.epoch, node.sessionKey)) {
+                return;
+            }
+
+            const jobsByName = new Map(this._jobs.map(item => [item.jobName, item]));
+            for (const item of page.items) {
+                jobsByName.set(item.jobName, item);
+            }
+            this._jobs = [...jobsByName.values()];
+            this._nextJobsOffset = page.hasMore && page.items.length > 0 ? node.offset + page.items.length : null;
+            this._onDidChangeTreeData.fire(undefined);
+        } catch (err) {
+            if (!this.isStale(node.epoch, node.sessionKey)) {
+                void vscode.window.showErrorMessage(`ETL-SQL: Could not load more jobs. ${this.sanitizeError(err)}`);
+            }
+        } finally {
+            if (!this.isStale(node.epoch, node.sessionKey)) {
+                this._loadingMore = false;
+            }
+        }
+    }
+
     public async openInPortal(node?: HostedTreeNode): Promise<string | null> {
         const session = this._sessions.getSession();
         if (!session) {
@@ -366,7 +415,7 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
 
     public async runNode(node?: HostedTreeNode): Promise<boolean> {
         const session = this._sessions.getSession();
-        if (!session || node?.kind !== 'job') {
+        if (!session || node?.kind !== 'job' || !node.item.canRun) {
             return false;
         }
         const sessionKey = this.computeSessionKey(session);
@@ -377,22 +426,17 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
 
         const item = node.item;
         try {
-            if (item.kind === 'pipeline' && item.pipelineId) {
-                if (this._runSavedPipeline) {
-                    await this._runSavedPipeline(item.pipelineId);
-                } else {
-                    const revision = await this._client.getRunnableRevision(item.pipelineId);
-                    const result = await this._client.submitPipelineRun(revision.id, revision.version, this._randomUuid());
-                    if (result.kind !== 'accepted') {
-                        throw new Error(result.refusal.error || `Run refused (${result.refusal.code}).`);
-                    }
-                    vscode.window.showInformationMessage(
-                        `ETL-SQL: Started saved pipeline ${item.displayName} (v${revision.version}, run #${result.receipt.runId}).`
-                    );
+            if (item.kind === 'pipeline') {
+                if (!item.pipelineId || !item.pipelineVersion || !this._runSavedPipeline) {
+                    return false;
                 }
+                await this._runSavedPipeline(item.pipelineId, item.pipelineVersion, item.displayName);
             } else {
                 const triggered = await this._client.triggerHostedJob(item.jobName);
-                vscode.window.showInformationMessage(`ETL-SQL: ${triggered.message}`);
+                if (this.getCurrentSessionKey() !== sessionKey) {
+                    return false;
+                }
+                void vscode.window.showInformationMessage(`ETL-SQL: ${triggered.message}`);
             }
 
             if (this.computeSessionKey(this._sessions.getSession()) === sessionKey) {
@@ -400,8 +444,9 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
             }
             return true;
         } catch (err) {
-            const msg = this.sanitizeError(err);
-            vscode.window.showErrorMessage(`ETL-SQL: ${msg}`);
+            if (this.getCurrentSessionKey() === sessionKey) {
+                void vscode.window.showErrorMessage(`ETL-SQL: ${this.sanitizeError(err)}`);
+            }
             return false;
         }
     }
@@ -415,10 +460,10 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
         let jobName: string | null = null;
         let runId: number | null = null;
 
-        if (node.kind === 'run' && node.sessionKey === sessionKey) {
+        if (node.kind === 'run' && node.sessionKey === sessionKey && node.run.canStop) {
             jobName = node.job.jobName;
             runId = node.run.runId;
-        } else if (node.kind === 'job' && node.sessionKey === sessionKey && node.item.activeRunId) {
+        } else if (node.kind === 'job' && node.sessionKey === sessionKey && node.item.canStop && node.item.activeRunId) {
             jobName = node.item.jobName;
             runId = node.item.activeRunId;
         }
@@ -429,14 +474,18 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
 
         try {
             const cancelled = await this._client.cancelHostedJobRun(jobName, runId);
-            vscode.window.showInformationMessage(`ETL-SQL: ${cancelled.message}`);
+            if (this.getCurrentSessionKey() !== sessionKey) {
+                return false;
+            }
+            void vscode.window.showInformationMessage(`ETL-SQL: ${cancelled.message}`);
             if (this.computeSessionKey(this._sessions.getSession()) === sessionKey) {
                 this.refresh();
             }
             return true;
         } catch (err) {
-            const msg = this.sanitizeError(err);
-            vscode.window.showErrorMessage(`ETL-SQL: ${msg}`);
+            if (this.getCurrentSessionKey() === sessionKey) {
+                void vscode.window.showErrorMessage(`ETL-SQL: ${this.sanitizeError(err)}`);
+            }
             return false;
         }
     }

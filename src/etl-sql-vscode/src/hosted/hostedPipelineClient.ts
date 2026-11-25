@@ -304,8 +304,13 @@ export class HostedPipelineClient {
             `/api/studio/hosted-jobs/${encodeURIComponent(jobName)}/runs/${runId}/cancel`,
             { method: 'POST' }
         );
-        if (resp.status === 202 || resp.ok) {
-            return await resp.json() as HostedJobCancelResponseDto;
+        if (resp.ok) {
+            const receipt = await this.readJsonSafe(resp);
+            if (!receipt || receipt.runId !== runId || typeof receipt.jobName !== 'string'
+                || receipt.jobName.toLowerCase() !== jobName.toLowerCase() || typeof receipt.message !== 'string') {
+                throw new HostedNetworkError(`Portal returned an invalid cancellation receipt for run #${runId}.`);
+            }
+            return { runId, jobName: receipt.jobName, message: receipt.message };
         }
         const refusal = await this.readRefusal(resp);
         throw new Error(refusal.error || `Could not stop run #${runId} (${resp.status}).`);

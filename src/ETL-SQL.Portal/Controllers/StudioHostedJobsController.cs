@@ -127,22 +127,9 @@ public sealed class StudioHostedJobsController(
             .ToDictionary(report => StudioPipelineRunsController.JobName(report.Id), StringComparer.OrdinalIgnoreCase);
 
         // 2. Authorized Orchestrator jobs for this tenant and caller (filtered by Orchestrator before return).
-        var orchestratorOnline = false;
-        var activityByJob = new Dictionary<string, ScheduledJobActivity>(StringComparer.OrdinalIgnoreCase);
-        if (orchestrator.IsConfigured)
-        {
-            using var actResp = await orchestrator.GetJobActivityAsync("all", "all", null, 1000, 0, ct);
-            if (actResp is not null && actResp.IsSuccessStatusCode)
-            {
-                orchestratorOnline = true;
-                var page = await actResp.Content.ReadFromJsonAsync<ScheduledJobActivityPage>(Json, ct);
-                if (page?.Items is not null)
-                {
-                    foreach (var item in page.Items)
-                        activityByJob[item.Job.Name] = item;
-                }
-            }
-        }
+        var authorizedActivity = await ReadFederatedActivityAsync(ct);
+        var orchestratorOnline = authorizedActivity is not null;
+        var activityByJob = authorizedActivity ?? new Dictionary<string, ScheduledJobActivity>(StringComparer.OrdinalIgnoreCase);
 
         // 3. Merge authorized saved pipelines + authorized non-pipeline Orchestrator jobs BEFORE paging.
         var merged = new List<(string Kind, string JobName, string DisplayName, Report? Pipeline, ScheduledJobActivity? Activity)>();
@@ -180,10 +167,11 @@ public sealed class StudioHostedJobsController(
             long? lastRunId = null;
             DateTime? lastRunAt = entry.Activity?.Job.LastRun;
             long? activeRunId = null;
+            var canCancel = false;
 
-            if (orchestratorOnline && entry.Activity is not null)
+            if (entry.Activity is not null)
             {
-                var hist = await orchestrator.ReadHistoryAsync(entry.JobName, 1, ct);
+                var hist = await orchestrator.ReadHistoryAsync(entry.JobName, 1, ct, requireVerifiedCaller: true);
                 var latest = hist.StatusCode == StatusCodes.Status200OK && hist.Value is { Count: > 0 } ? hist.Value[0] : null;
                 if (latest is not null)
                 {
@@ -191,7 +179,10 @@ public sealed class StudioHostedJobsController(
                     lastRunId = latest.Id;
                     lastRunAt = latest.StartTime;
                     if (!IsTerminalStatus(latest.Status))
+                    {
                         activeRunId = latest.Id;
+                        canCancel = latest.CanCancel;
+                    }
                 }
             }
 
@@ -214,8 +205,8 @@ public sealed class StudioHostedJobsController(
                 LastRunAt: lastRunAt,
                 ActiveRunId: activeRunId,
                 NextScheduledRunAt: nextRun,
-                CanRun: canRunCapability && orchestratorOnline,
-                CanStop: canRunCapability && orchestratorOnline && activeRunId.HasValue,
+                CanRun: canRunCapability && entry.Activity?.CanExecute == true,
+                CanStop: canRunCapability && canCancel,
                 PortalPath: portalPath));
         }
 
@@ -242,11 +233,11 @@ public sealed class StudioHostedJobsController(
         var pipelineCheck = await VerifyPipelineAccessIfApplicableAsync(unescaped, ct);
         if (pipelineCheck is not null) return pipelineCheck;
 
-        if (!orchestrator.IsConfigured)
+        if (!await orchestrator.RequiresFederatedIdentityAsync(ct))
             return StatusCode(StatusCodes.Status503ServiceUnavailable,
-                new PipelineRunRefusalDto("orchestrator_not_connected", "No Orchestrator is connected."));
+                new PipelineRunRefusalDto("federated_orchestrator_required", "Hosted jobs require a connected Orchestrator with caller authentication."));
 
-        var read = await orchestrator.ReadHistoryAsync(unescaped, Math.Clamp(limit, 1, 50), ct);
+        var read = await orchestrator.ReadHistoryAsync(unescaped, Math.Clamp(limit, 1, 50), ct, requireVerifiedCaller: true);
         if (read.StatusCode != StatusCodes.Status200OK)
         {
             return read.StatusCode switch
@@ -277,7 +268,7 @@ public sealed class StudioHostedJobsController(
                     DurationMs: durationMs,
                     RowsProcessed: entry.RowsProcessed,
                     ErrorMessage: Redact(entry.ErrorMessage),
-                    CanStop: canRun && !isTerminal,
+                    CanStop: canRun && !isTerminal && entry.CanCancel,
                     PortalPath: $"/orchestrator.html?job={Uri.EscapeDataString(unescaped)}&run={entry.Id}");
             })
             .ToArray();
@@ -296,11 +287,11 @@ public sealed class StudioHostedJobsController(
         var pipelineCheck = await VerifyPipelineAccessIfApplicableAsync(unescaped, ct);
         if (pipelineCheck is not null) return pipelineCheck;
 
-        if (!orchestrator.IsConfigured)
+        if (!await orchestrator.RequiresFederatedIdentityAsync(ct))
             return StatusCode(StatusCodes.Status503ServiceUnavailable,
-                new PipelineRunRefusalDto("orchestrator_not_connected", "No Orchestrator is connected."));
+                new PipelineRunRefusalDto("federated_orchestrator_required", "Hosted jobs require a connected Orchestrator with caller authentication."));
 
-        using var resp = await orchestrator.GetJobRunAsync(runId, ct);
+        using var resp = await orchestrator.GetJobRunAsync(runId, ct, requireVerifiedCaller: true);
         if (resp is null)
             return StatusCode(StatusCodes.Status503ServiceUnavailable,
                 new PipelineRunRefusalDto("orchestrator_unreachable", "Could not reach the Orchestrator."));
@@ -354,11 +345,11 @@ public sealed class StudioHostedJobsController(
                 "use_pipeline_run_endpoint",
                 "Saved pipelines must be submitted through /api/studio/pipelines/{id}/runs with an explicit saved version."));
 
-        if (!orchestrator.IsConfigured)
+        if (!await orchestrator.RequiresFederatedIdentityAsync(ct))
             return StatusCode(StatusCodes.Status503ServiceUnavailable,
-                new PipelineRunRefusalDto("orchestrator_not_connected", "No Orchestrator is connected."));
+                new PipelineRunRefusalDto("federated_orchestrator_required", "Hosted jobs require a connected Orchestrator with caller authentication."));
 
-        using var resp = await orchestrator.TriggerJobAsync(unescaped);
+        using var resp = await orchestrator.TriggerJobAsync(unescaped, ct: ct, requireVerifiedCaller: true);
         if (resp is null)
             return StatusCode(StatusCodes.Status503ServiceUnavailable,
                 new PipelineRunRefusalDto("orchestrator_unreachable", "Could not reach the Orchestrator."));
@@ -394,12 +385,12 @@ public sealed class StudioHostedJobsController(
         var pipelineCheck = await VerifyPipelineAccessIfApplicableAsync(unescaped, ct);
         if (pipelineCheck is not null) return pipelineCheck;
 
-        if (!orchestrator.IsConfigured)
+        if (!await orchestrator.RequiresFederatedIdentityAsync(ct))
             return StatusCode(StatusCodes.Status503ServiceUnavailable,
-                new PipelineRunRefusalDto("orchestrator_not_connected", "No Orchestrator is connected."));
+                new PipelineRunRefusalDto("federated_orchestrator_required", "Hosted jobs require a connected Orchestrator with caller authentication."));
 
         // Verify the run belongs to this exact job in this tenant before signalling cancellation.
-        using (var readResp = await orchestrator.GetJobRunAsync(runId, ct))
+        using (var readResp = await orchestrator.GetJobRunAsync(runId, ct, requireVerifiedCaller: true))
         {
             if (readResp is null)
                 return StatusCode(StatusCodes.Status503ServiceUnavailable,
@@ -418,7 +409,7 @@ public sealed class StudioHostedJobsController(
                 return NotFound(new PipelineRunRefusalDto("run_not_found", $"Run {runId} does not belong to job '{unescaped}'."));
         }
 
-        using var cancelResp = await orchestrator.CancelJobRunAsync(runId, ct);
+        using var cancelResp = await orchestrator.CancelJobRunAsync(runId, ct, requireVerifiedCaller: true);
         if (cancelResp is null)
             return StatusCode(StatusCodes.Status503ServiceUnavailable,
                 new PipelineRunRefusalDto("orchestrator_unreachable", "Could not reach the Orchestrator."));
@@ -438,6 +429,34 @@ public sealed class StudioHostedJobsController(
             _ => StatusCode(StatusCodes.Status503ServiceUnavailable,
                 new PipelineRunRefusalDto("orchestrator_unreachable", "Could not signal cancellation on the Orchestrator."))
         };
+    }
+
+    private async Task<Dictionary<string, ScheduledJobActivity>?> ReadFederatedActivityAsync(CancellationToken ct)
+    {
+        if (!await orchestrator.RequiresFederatedIdentityAsync(ct))
+            return null;
+
+        const int pageSize = 1000;
+        var activity = new Dictionary<string, ScheduledJobActivity>(StringComparer.OrdinalIgnoreCase);
+        var offset = 0;
+        while (true)
+        {
+            using var response = await orchestrator.GetJobActivityAsync(
+                "all", "all", null, pageSize, offset, ct, requireVerifiedCaller: true);
+            if (response is null || !response.IsSuccessStatusCode)
+                return null;
+
+            var page = await response.Content.ReadFromJsonAsync<ScheduledJobActivityPage>(Json, ct);
+            if (page is null || page.Offset != offset)
+                return null;
+
+            foreach (var item in page.Items)
+                activity[item.Job.Name] = item;
+
+            offset += page.Items.Count;
+            if (page.Items.Count == 0 || offset >= page.Total)
+                return activity;
+        }
     }
 
     private async Task<ActionResult?> VerifyPipelineAccessIfApplicableAsync(string jobName, CancellationToken ct)

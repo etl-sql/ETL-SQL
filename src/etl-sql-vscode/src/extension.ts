@@ -220,13 +220,15 @@ export async function activate(context: vscode.ExtensionContext) {
         openBrowser: url => vscode.env.openExternal(vscode.Uri.parse(url)),
         log: msg => outputChannel.appendLine(msg)
     });
-    hostedController = new HostedExecutionController({
+    const hostedExecution = new HostedExecutionController({
         sessions: hostedSessions,
         log: msg => outputChannel.appendLine(msg)
     });
+    hostedController = hostedExecution;
     const hostedJobsTree = new HostedJobsTreeProvider({
         sessions: hostedSessions,
-        client: hostedController.client,
+        client: hostedExecution.client,
+        runSavedPipeline: (id, version, name) => hostedExecution.runSavedPipeline(id, version, name),
         log: msg => outputChannel.appendLine(msg)
     });
     context.subscriptions.push(
@@ -237,6 +239,7 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('etlsql.hosted.connect', (alias?: string) => hostedController?.connect(alias)),
         vscode.commands.registerCommand('etlsql.hosted.disconnect', () => hostedController?.disconnect()),
         vscode.commands.registerCommand('etlsql.hostedJobs.refresh', () => hostedJobsTree.refresh()),
+        vscode.commands.registerCommand('etlsql.hostedJobs.loadMore', (node?: HostedTreeNode) => hostedJobsTree.loadMore(node)),
         vscode.commands.registerCommand('etlsql.hostedJobs.openInPortal', (node?: HostedTreeNode) => hostedJobsTree.openInPortal(node)),
         vscode.commands.registerCommand('etlsql.hostedJobs.run', (node?: HostedTreeNode) => hostedJobsTree.runNode(node)),
         vscode.commands.registerCommand('etlsql.hostedJobs.stop', (node?: HostedTreeNode) => hostedJobsTree.stopNode(node))

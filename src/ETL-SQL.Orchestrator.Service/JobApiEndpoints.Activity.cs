@@ -55,9 +55,21 @@ public static partial class JobApiEndpoints
                     && (status == "all" || a.Job.IsEnabled == (status == "enabled"))
                     && MatchesActivitySearch(a.Job, query)).ToList();
                 var dayStart = new DateTimeOffset(asOfUtc.UtcDateTime.Date, TimeSpan.Zero);
+                var items = matching.Skip(offset).Take(limit).ToArray();
+                if (RequiresVerifiedCaller(ctx))
+                {
+                    for (var i = 0; i < items.Length; i++)
+                    {
+                        var job = items[i].Job;
+                        items[i] = items[i] with
+                        {
+                            CanExecute = await authorization.CanAsync(caller, OrchestratorObjectKind.Job,
+                                job.Id, job.TenantId, OrchestratorObjectPermission.Execute, job.CreatedBy, ctx.RequestAborted)
+                        };
+                    }
+                }
                 return Results.Ok(new ScheduledJobActivityPage(
-                    asOfUtc, dayStart, counts, matching.Count, offset, limit,
-                    matching.Skip(offset).Take(limit).ToArray()));
+                    asOfUtc, dayStart, counts, matching.Count, offset, limit, items));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

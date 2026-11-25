@@ -332,6 +332,25 @@ public sealed partial class ScheduledJobActivityBrowserTests : IAsyncLifetime
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task HostedRunLinkOpensExactRunOfSelectedJob()
+    {
+        await SeedAsync();
+        var job = (await Store.GetJobAsync(Tenant, "activity-idle"))!;
+        var runId = await AddOutcomeAsync(job, "SUCCESS", "2026-10-07T03:00:00Z");
+
+        await using var session = await browser.NewSessionAsync();
+        var page = session.Page;
+        await browser.SignInAsync(page);
+        await page.GotoWithDiagnosticsAsync($"/orchestrator.html?job=activity-idle&run={runId}");
+        await Expect(page.Locator("#runWaterfallModal")).ToBeVisibleAsync();
+        await Expect(page.Locator("#runWaterfallTitle")).ToHaveTextAsync($"Run #{runId} \u2014 activity-idle");
+
+        await page.GotoWithDiagnosticsAsync($"/orchestrator.html?job=activity-complete&run={runId}");
+        await Expect(page.Locator("#runWaterfallBody")).ToContainTextAsync("This run does not belong to the selected job.");
+        Assert.Empty(session.PageErrors);
+    }
+
     private static ILocator Rows(IPage page) => page.Locator("#jobsTableWrap tr.job-row");
 
     private static async Task OpenAsync(IPage page)

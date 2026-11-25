@@ -324,6 +324,44 @@ export class HostedExecutionController implements vscode.Disposable {
         }
     }
 
+    public async runSavedPipeline(pipelineId: number, version: number, displayName: string): Promise<void> {
+        if (this._activeRun || this._runningCommand) {
+            void vscode.window.showWarningMessage('ETL-SQL: A hosted pipeline run is already in progress. Stop it first or wait for completion.');
+            return;
+        }
+
+        const session = this.sessions.getSession();
+        if (!session) {
+            return;
+        }
+
+        this._runningCommand = true;
+        try {
+            const sameSession = () => this.sessions.getSession()?.sessionId === session.sessionId
+                && this.matchesCaller({ origin: session.server.origin, tenantId: session.tenantId, userId: session.user.id });
+            if (!await this.prepareNewSubmission(sameSession) || !sameSession()) {
+                return;
+            }
+
+            this.renderRunHeader(displayName, session.server.origin, session.tenantId, session.user.username,
+                `PIPELINE:${pipelineId}`, version);
+            await this.submitWithRecovery({
+                idempotencyKey: this._randomUuid(),
+                origin: session.server.origin,
+                tenantId: session.tenantId,
+                userId: session.user.id,
+                username: session.user.username,
+                pipelineId,
+                version,
+                jobName: `PIPELINE:${pipelineId}`,
+                status: 'unconfirmed',
+                createdAtMs: Date.now()
+            });
+        } finally {
+            this._runningCommand = false;
+        }
+    }
+
     private async runSelectedPipeline(editor: vscode.TextEditor): Promise<void> {
         const target = this.sessions.getTarget();
         if (target.kind !== 'hosted') {
@@ -342,31 +380,9 @@ export class HostedExecutionController implements vscode.Disposable {
             return;
         }
 
-        const pendingForCaller = this.getPendingSubmission();
-        if (pendingForCaller) {
-            const action = await vscode.window.showWarningMessage(
-                `Submission unconfirmed (request ${pendingForCaller.idempotencyKey}) for ${pendingForCaller.jobName}. Check recent runs before starting another.`,
-                'Check Status Again',
-                'Switch to Local (Offline)',
-                'Dismiss & Start New Run'
-            );
-            if (action === 'Check Status Again') {
-                await this.recoverPendingSubmission(pendingForCaller);
-                return;
-            }
-            if (action === 'Switch to Local (Offline)') {
-                await this.disconnect();
-                return;
-            }
-            if (action !== 'Dismiss & Start New Run') {
-                return;
-            }
-            this.forgetSubmission(pendingForCaller);
-        }
-
         const sameSession = () => this.sessions.getSession()?.sessionId === session.sessionId
             && this.matchesCaller({ origin: session.server.origin, tenantId: session.tenantId, userId: session.user.id });
-        if (!sameSession()) {
+        if (!await this.prepareNewSubmission(sameSession) || !sameSession()) {
             return;
         }
         let pipelineId: number | undefined;
@@ -441,6 +457,33 @@ export class HostedExecutionController implements vscode.Disposable {
 
         this.renderRunHeader(editor.document.uri.toString(), session.server.origin, session.tenantId, session.user.username, pending.jobName, targetVersion);
         await this.submitWithRecovery(pending);
+    }
+
+    private async prepareNewSubmission(sameSession: () => boolean): Promise<boolean> {
+        const pending = this.getPendingSubmission();
+        if (!pending) {
+            return sameSession();
+        }
+
+        const action = await vscode.window.showWarningMessage(
+            `Submission unconfirmed (request ${pending.idempotencyKey}) for ${pending.jobName}. Check recent runs before starting another.`,
+            'Check Status Again',
+            'Switch to Local (Offline)',
+            'Dismiss & Start New Run'
+        );
+        if (!sameSession()) {
+            return false;
+        }
+
+        if (action === 'Check Status Again') {
+            await this.recoverPendingSubmission(pending);
+        } else if (action === 'Switch to Local (Offline)') {
+            await this.disconnect();
+        } else if (action === 'Dismiss & Start New Run') {
+            this.forgetSubmission(pending);
+            return true;
+        }
+        return false;
     }
 
     public async stopHostedRun(): Promise<void> {

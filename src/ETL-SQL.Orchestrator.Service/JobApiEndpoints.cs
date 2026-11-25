@@ -573,7 +573,7 @@ namespace ETL_SQL.Orchestrator.Service
 
             app.MapGet("/api/scheduled-jobs/{name}/history", async (HttpContext ctx, string name,
                 IJobHistoryStore store, OrchestratorObjectAuthorizationService authorization,
-                IConfiguration cfg, int limit = 50) =>
+                IConfiguration cfg, SchedulerService scheduler, int limit = 50) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 var unescaped = Uri.UnescapeDataString(name);
@@ -584,7 +584,18 @@ namespace ETL_SQL.Orchestrator.Service
                         OrchestratorObjectPermission.Read, job.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
                 var history = await store.GetHistoryAsync(job.Id, Math.Clamp(limit, 1, 1000));
-                return Results.Ok(history);
+                if (!RequiresVerifiedCaller(ctx))
+                    return Results.Ok(history);
+
+                var caller = RequestCaller(ctx);
+                var runs = new List<JobHistoryEntry>();
+                foreach (var run in history)
+                {
+                    var canCancel = !IsTerminalRunStatus(run)
+                        && await CanCancelRunAsync(ctx, scheduler, authorization, caller, job, run.Id);
+                    runs.Add(run with { CanCancel = canCancel });
+                }
+                return Results.Ok(runs);
             }).WithName("getScheduledJobHistory");
 
             app.MapPost("/api/job-runs/{historyId:long}/resume", async (HttpContext ctx, long historyId,
@@ -2964,6 +2975,9 @@ namespace ETL_SQL.Orchestrator.Service
             });
         }
 
+        private static bool RequiresVerifiedCaller(HttpContext ctx) =>
+            ctx.Request.Headers.ContainsKey(OrchestratorIdentityAssertion.RequireVerifiedCallerHeader);
+
         private static bool ApiKeyDenied(HttpContext ctx, IConfiguration cfg)
         {
             InitializeCache(cfg);
@@ -2980,6 +2994,8 @@ namespace ETL_SQL.Orchestrator.Service
             var signingSecret = cfg["Orchestrator:IdentitySigningSecret"];
             if (!OrchestratorAuthorizationMode.RequiresFederatedIdentity(cfg))
             {
+                if (RequiresVerifiedCaller(ctx)) return false;
+
                 // The one place a legacy-mode request is recognised as such, and so the place to notice
                 // that it came through a proxy — which is how a "loopback, therefore Solo" guess turns
                 // out to have a whole organization behind it.
