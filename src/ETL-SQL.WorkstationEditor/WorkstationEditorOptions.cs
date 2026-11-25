@@ -15,7 +15,9 @@ public sealed record WorkstationEditorOptions(
     int IdleShutdownMinutes = 0,
     // Where recovery drafts are kept; the OS user's local app data when null. Tests point it at a
     // temporary folder so they never write into the developer's profile.
-    string? DraftDirectory = null)
+    string? DraftDirectory = null,
+    // Where user-level trusted hosted Portal servers are kept; %APPDATA%\etl-sql\hosted-servers.json when null.
+    string? HostedServerRegistryPath = null)
 {
     /// <summary>
     /// How long a Studio host waits after its last browser leaves before it stops, when the command

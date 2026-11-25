@@ -315,6 +315,7 @@ scripts/vsix/node_modules/
 /src/ETL-SQL.Portal/wwwroot/designer/studio-governance-security.js
 /src/ETL-SQL.Portal/wwwroot/designer/studio-governance-tags.js
 /src/ETL-SQL.Portal/wwwroot/designer/studio-host.js
+/src/ETL-SQL.Portal/wwwroot/designer/studio-hosted.js
 /src/ETL-SQL.Portal/wwwroot/designer/studio-lifecycle.js
 /src/ETL-SQL.Portal/wwwroot/designer/studio-navigation.js
 /src/ETL-SQL.Portal/wwwroot/designer/studio-outline.js
@@ -553,6 +554,7 @@ scripts/vsix/node_modules/
 /src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-governance-security.js
 /src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-governance-tags.js
 /src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-host.js
+/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-hosted.js
 /src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-lifecycle.js
 /src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-navigation.js
 /src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-outline.js
@@ -645,6 +647,7 @@ scripts/vsix/node_modules/
 /src/ETL-SQL.WorkstationEditor/wwwroot/designer/studio-governance-security.js
 /src/ETL-SQL.WorkstationEditor/wwwroot/designer/studio-governance-tags.js
 /src/ETL-SQL.WorkstationEditor/wwwroot/designer/studio-host.js
+/src/ETL-SQL.WorkstationEditor/wwwroot/designer/studio-hosted.js
 /src/ETL-SQL.WorkstationEditor/wwwroot/designer/studio-lifecycle.js
 /src/ETL-SQL.WorkstationEditor/wwwroot/designer/studio-navigation.js
 /src/ETL-SQL.WorkstationEditor/wwwroot/designer/studio-outline.js

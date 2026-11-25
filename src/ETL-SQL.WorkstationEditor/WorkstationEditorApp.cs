@@ -7,6 +7,7 @@ using ETL_SQL.Connectors;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Diagnostics;
+using ETL_SQL.Core.Hosted;
 using ETL_SQL.Core.Services;
 using ETL_SQL.Data;
 using ETL_SQL.Orchestrator;
@@ -16,6 +17,7 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
 
@@ -25,7 +27,10 @@ public static class WorkstationEditorApp
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public static WebApplication Create(string[] args, WorkstationEditorOptions options)
+    public static WebApplication Create(
+        string[] args,
+        WorkstationEditorOptions options,
+        Action<IServiceCollection>? configureServices = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
@@ -66,6 +71,23 @@ public static class WorkstationEditorApp
         builder.Services.AddSingleton<WorkstationGitService>();
         builder.Services.AddSingleton<StudioHostLifecycleService>();
         builder.Services.AddHostedService(services => services.GetRequiredService<StudioHostLifecycleService>());
+
+        configureServices?.Invoke(builder.Services);
+        builder.Services.TryAddSingleton(_ => new HostedServerRegistryStore(options.HostedServerRegistryPath));
+        builder.Services.TryAddSingleton<LoopbackPkceAuthenticator>();
+        builder.Services.TryAddSingleton(TimeProvider.System);
+        builder.Services.TryAddSingleton(provider => new HostedClientSessionService(
+            clientId: HostedClientIds.DesktopStudio,
+            requestedScope: HostedClientScopes.TuiDefault,
+            serverRegistry: provider.GetRequiredService<HostedServerRegistryStore>(),
+            authenticator: provider.GetRequiredService<LoopbackPkceAuthenticator>(),
+            clock: provider.GetRequiredService<TimeProvider>()));
+        builder.Services.TryAddSingleton<HostedPipelineClient>();
+        builder.Services.TryAddSingleton(provider => new HostedRunCoordinator(
+            provider.GetRequiredService<HostedClientSessionService>(),
+            provider.GetRequiredService<HostedPipelineClient>(),
+            provider.GetRequiredService<TimeProvider>()));
+        builder.Services.TryAddSingleton<WorkstationHostedService>();
 
         var app = builder.Build();
 
@@ -228,6 +250,162 @@ public static class WorkstationEditorApp
             return lifecycle.TryRequestShutdown(request.Force, out var reason)
                 ? Results.Accepted(value: new { message = "Studio shutdown requested." })
                 : Results.Conflict(new { error = reason });
+        });
+
+        // Hosted execution (ST58): Portal access/refresh tokens stay strictly inside the .NET host's
+        // HostedClientSessionService and are never returned to the browser UI.
+        app.MapGet("/api/hosted/status", (WorkstationHostedService hosted) =>
+            Results.Json(hosted.GetStatus(), JsonOptions));
+
+        app.MapPost("/api/hosted/servers", (HostedAddServerRequest request, WorkstationHostedService hosted) =>
+        {
+            try
+            {
+                return Results.Json(hosted.AddOrUpdateServer(request), JsonOptions);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = hosted.Redact(ex.Message) });
+            }
+        });
+
+        app.MapDelete("/api/hosted/servers/{alias}", (string alias, WorkstationHostedService hosted) =>
+            Results.Json(hosted.RemoveServer(alias), JsonOptions));
+
+        app.MapPost("/api/hosted/connect", async (HostedConnectRequest request, WorkstationHostedService hosted, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return Results.Json(await hosted.ConnectAsync(request.Alias ?? string.Empty, cancellationToken), JsonOptions);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
+            }
+            catch (HostedNetworkException ex)
+            {
+                return Results.Json(new { code = "hosted_network_error", error = hosted.Redact(ex.Message), status = hosted.GetStatus() },
+                    JsonOptions, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+            catch (HostedSessionExpiredException ex)
+            {
+                return Results.Json(new { code = "session_expired", error = hosted.Redact(ex.Message), status = hosted.GetStatus() },
+                    JsonOptions, statusCode: StatusCodes.Status401Unauthorized);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or TimeoutException)
+            {
+                return Results.BadRequest(new { error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
+            }
+        });
+
+        app.MapPost("/api/hosted/disconnect", async (WorkstationHostedService hosted, CancellationToken cancellationToken) =>
+            Results.Json(await hosted.DisconnectAsync(cancellationToken), JsonOptions));
+
+        app.MapGet("/api/hosted/pipelines", async (string? query, int? afterId, WorkstationHostedService hosted, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return Results.Json(await hosted.ListRunnablePipelinesAsync(query, afterId ?? 0, cancellationToken), JsonOptions);
+            }
+            catch (HostedSessionExpiredException ex)
+            {
+                return Results.Json(new { code = "session_expired", error = hosted.Redact(ex.Message), status = hosted.GetStatus() },
+                    JsonOptions, statusCode: StatusCodes.Status401Unauthorized);
+            }
+            catch (HostedNetworkException ex)
+            {
+                return Results.Json(new { code = "hosted_network_error", error = hosted.Redact(ex.Message), status = hosted.GetStatus() },
+                    JsonOptions, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
+            }
+        });
+
+        app.MapGet("/api/hosted/pipelines/{id:int}/revision", async (int id, WorkstationHostedService hosted, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return Results.Json(await hosted.GetPipelineRevisionAsync(id, cancellationToken), JsonOptions);
+            }
+            catch (HostedSessionExpiredException ex)
+            {
+                return Results.Json(new { code = "session_expired", error = hosted.Redact(ex.Message), status = hosted.GetStatus() },
+                    JsonOptions, statusCode: StatusCodes.Status401Unauthorized);
+            }
+            catch (HostedNetworkException ex)
+            {
+                return Results.Json(new { code = "hosted_network_error", error = hosted.Redact(ex.Message), status = hosted.GetStatus() },
+                    JsonOptions, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
+            }
+        });
+
+        app.MapPost("/api/hosted/runs", async (HostedStartRunRequest request, WorkstationHostedService hosted, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var op = await hosted.StartRunAsync(request, cancellationToken);
+                return Results.Json(op, JsonOptions, statusCode: StatusCodes.Status202Accepted);
+            }
+            catch (HostedSessionExpiredException ex)
+            {
+                return Results.Json(new { code = "session_expired", error = hosted.Redact(ex.Message), status = hosted.GetStatus() },
+                    JsonOptions, statusCode: StatusCodes.Status401Unauthorized);
+            }
+            catch (HostedNetworkException ex)
+            {
+                return Results.Json(new { code = "hosted_network_error", error = hosted.Redact(ex.Message), status = hosted.GetStatus() },
+                    JsonOptions, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Conflict(new { code = "hosted_run_blocked", error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
+            }
+        });
+
+        app.MapGet("/api/hosted/runs/{operationId}", (string operationId, WorkstationHostedService hosted) =>
+        {
+            var op = hosted.GetOperation(operationId);
+            return op is null
+                ? Results.NotFound(new { error = "Hosted run operation not found." })
+                : Results.Json(op, JsonOptions);
+        });
+
+        app.MapPost("/api/hosted/runs/stop", async (WorkstationHostedService hosted, CancellationToken cancellationToken) =>
+        {
+            var (message, status) = await hosted.RequestStopAsync(cancellationToken);
+            return Results.Json(new { message, status }, JsonOptions);
+        });
+
+        app.MapPost("/api/hosted/runs/recover", (HostedRecoverRunRequest request, WorkstationHostedService hosted) =>
+        {
+            try
+            {
+                var op = hosted.StartRecovery(request);
+                return Results.Json(op, JsonOptions, statusCode: StatusCodes.Status202Accepted);
+            }
+            catch (HostedSessionExpiredException ex)
+            {
+                return Results.Json(new { code = "session_expired", error = hosted.Redact(ex.Message), status = hosted.GetStatus() },
+                    JsonOptions, statusCode: StatusCodes.Status401Unauthorized);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
+            }
         });
 
         app.MapGet("/api/connections", (string? documentUri, IMetadataManager metadata) =>

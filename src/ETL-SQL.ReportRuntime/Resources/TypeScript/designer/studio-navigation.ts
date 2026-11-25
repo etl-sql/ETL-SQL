@@ -113,6 +113,7 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
 
                 <!-- Global Action Controls -->
                 <div class="etlsql-studio-actions">
+                    ${hostContext.opts.hostedExecution ? `<button type="button" class="etlsql-studio-btn etlsql-hosted-target-btn" data-hosted-target-btn data-hosted-mode="local" data-hosted-signed-in="false" title="Execution Target (Local Offline or Hosted Portal)">Local (Offline)</button>` : ''}
                     <button type="button" class="etlsql-studio-btn" data-action="theme" title="Toggle Theme">
                         ${_studioIcon('theme', 14)}
                     </button>
@@ -135,6 +136,7 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
             </header>
 
             <div class="etlsql-studio-preview-banner" data-studio-preview-banner role="status" hidden></div>
+            ${hostContext.opts.hostedExecution ? '<div class="etlsql-studio-hosted-banner" data-hosted-banner role="status" hidden></div>' : ''}
 
             <!-- Workbench Body -->
             <div class="etlsql-studio-body">

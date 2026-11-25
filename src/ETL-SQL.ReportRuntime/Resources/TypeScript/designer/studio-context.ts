@@ -43,6 +43,8 @@ export interface StudioRuntimeContext {
     /** The pipeline run this document is following, while it is following one. */
     pipelineRun?: PipelineRunTracking | null;
     resultsTrace: RunTraceEvent[];
+    resultsTraceByTarget?: Record<string, RunTraceEvent[]>;
+    activeRunTargetKey?: string | null;
     diagnostics: RunDiagnostic[];
     dagRevision: number;
     modelRevision: number;
@@ -319,6 +321,8 @@ export interface StudioOptions extends StudioStateOptions {
     };
     initialSnapshot?: any;
     previewUrl?: string;
+    /** Desktop Studio hosted Portal execution support (ST58). */
+    hostedExecution?: boolean;
     onSave?: (content: string, path: string, document?: any) => Promise<any> | any;
     onExit?: (options: { force: boolean; activeRuns: number; dirtyDocuments: number }) => Promise<boolean> | boolean;
     onOpenDocument?: (report: any) => Promise<any> | any;

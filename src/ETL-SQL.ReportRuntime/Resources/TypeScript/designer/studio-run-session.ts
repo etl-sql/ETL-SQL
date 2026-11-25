@@ -20,6 +20,9 @@ export interface StudioRunSessionContext {
     readonly authFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
     readonly documentContext: (document?: StudioRuntimeDocument | null) => StudioRuntimeContext;
     readonly getActiveDoc: () => StudioRuntimeDocument | null;
+    readonly getCurrentTargetKey?: () => string;
+    readonly isHostedRunActive?: (doc: StudioRuntimeDocument | null, targetKey: string) => boolean;
+    readonly stopHostedRun?: (doc: StudioRuntimeDocument) => Promise<void> | void;
     /** Present where the host runs a saved catalog pipeline outside the authoring process. */
     readonly pipelineRuns?: StudioPipelineRunHost;
     readonly shell: StudioDom;
@@ -38,20 +41,50 @@ export function createStudioRunSession(hostContext: StudioRunSessionContext) {
         writeSnapshotPackage(hostContext.activeDocumentContext() as unknown as StudioDataContext, snapshot);
     }
 
+    function currentTargetKey(): string {
+        return hostContext.getCurrentTargetKey?.() || 'local';
+    }
+
+    function setDocumentTraceForTarget(document: StudioRuntimeDocument, targetKey: string, trace: RunTraceEvent[]) {
+        const context = hostContext.documentContext(document);
+        const normalized = Array.isArray(trace) ? trace : [];
+        context.resultsTraceByTarget ||= {};
+        context.resultsTraceByTarget[targetKey] = normalized;
+        if (currentTargetKey() === targetKey) {
+            context.resultsTrace = normalized;
+            if (hostContext.getActiveDoc() === document) paintResults(context);
+        }
+    }
+
     // Results are a per-document trace replayed into one shared panel, not an HTML blob. The panel
     // owns the Results / Messages / Pipeline / Performance tabs, the result filter, CSV/Excel/JSON
     // export, and the column lineage bar — the workbench surface Studio previously did without.
     function setDocumentTrace(document: StudioRuntimeDocument, trace: RunTraceEvent[]) {
-        const context = hostContext.documentContext(document);
-        context.resultsTrace = Array.isArray(trace) ? trace : [];
-        if (hostContext.getActiveDoc() === document) paintResults(context);
+        setDocumentTraceForTarget(document, currentTargetKey(), trace);
     }
 
     function paintResults(context: StudioRuntimeContext) {
         if (!hostContext.state.resultsPanel) return;
+        const targetKey = currentTargetKey();
+        const scoped = context.resultsTraceByTarget?.[targetKey];
+        const trace = scoped !== undefined
+            ? scoped
+            : (targetKey === 'local' && Array.isArray(context.resultsTrace) ? context.resultsTrace : []);
+        context.resultsTrace = trace;
         hostContext.state.resultsPanel.clear();
-        if (context.resultsTrace?.length) hostContext.state.resultsPanel.replay(context.resultsTrace);
+        if (trace.length) hostContext.state.resultsPanel.replay(trace);
         hostContext.state.resultsPanel.setDiagnostics(context.diagnostics || []);
+    }
+
+    function repaintActiveTarget() {
+        const doc = hostContext.getActiveDoc();
+        if (doc) {
+            paintResults(hostContext.documentContext(doc));
+        } else {
+            hostContext.state.resultsPanel?.clear();
+            hostContext.state.resultsPanel?.setDiagnostics([]);
+        }
+        updateRunControls();
     }
 
     // Studio owns the Messages surface, so lint diagnostics are routed to it rather than living only
@@ -67,7 +100,10 @@ export function createStudioRunSession(hostContext: StudioRunSessionContext) {
     function updateRunControls() {
         const doc = hostContext.getActiveDoc();
         const context = doc ? hostContext.documentContext(doc) : null;
-        const isRunning = Boolean(context?.runActive);
+        const targetKey = currentTargetKey();
+        const localRunning = Boolean(context?.runActive && (context.activeRunTargetKey ?? 'local') === targetKey);
+        const hostedRunning = Boolean(doc && hostContext.isHostedRunActive?.(doc, targetKey));
+        const isRunning = localRunning || hostedRunning;
 
         const runBtn = queryElement<HTMLButtonElement>(hostContext.shell, '[data-action="run"]');
         const stopBtn = queryElement<HTMLButtonElement>(hostContext.shell, '[data-action="stop"]');
@@ -79,12 +115,17 @@ export function createStudioRunSession(hostContext: StudioRunSessionContext) {
         if (stopBtn) stopBtn.style.display = isRunning ? '' : 'none';
         if (codeRunBtn) codeRunBtn.style.display = isRunning ? 'none' : '';
         if (codeStopBtn) codeStopBtn.style.display = isRunning ? '' : 'none';
-        if (runSelBtn) runSelBtn.disabled = isRunning;
+        if (runSelBtn) runSelBtn.disabled = isRunning || targetKey !== 'local';
     }
 
     function handleStopRun() {
         const doc = hostContext.getActiveDoc();
         if (!doc) return;
+        const targetKey = currentTargetKey();
+        if (hostContext.isHostedRunActive?.(doc, targetKey) && hostContext.stopHostedRun) {
+            void hostContext.stopHostedRun(doc);
+            return;
+        }
         const context = hostContext.documentContext(doc);
         if (context.runActive && context.pipelineRun) {
             // A pipeline run belongs to the Orchestrator. Stop asks it to stop that run; abandoning
@@ -95,7 +136,7 @@ export function createStudioRunSession(hostContext: StudioRunSessionContext) {
         if (context.runActive && context.runAbort) {
             context.stopRequested = true;
             context.runAbort.abort();
-            setDocumentTrace(doc, [
+            setDocumentTraceForTarget(doc, context.activeRunTargetKey ?? targetKey, [
                 { type: 'status', status: 'running' },
                 { type: 'message', level: 'sys', text: `Stopping run... [Run ID: ${context.currentRunId || ''}]` },
             ]);
@@ -107,15 +148,17 @@ export function createStudioRunSession(hostContext: StudioRunSessionContext) {
     // Messages tab with the real reason instead of being painted as a success.
     async function executeRun(doc: StudioRuntimeDocument, { script, selection = null, label, parameters = null }: StudioRunRequest) {
         const context = hostContext.documentContext(doc);
+        const runTargetKey = currentTargetKey();
         context.runAbort?.abort();
         const controller = new AbortController();
         context.runAbort = controller;
         context.runActive = true;
+        context.activeRunTargetKey = runTargetKey;
         context.stopRequested = false;
         const clientRunId = 'run_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
         context.currentRunId = clientRunId;
         updateRunControls();
-        setDocumentTrace(doc, runStatusTrace(`Running ${label}… [Run ID: ${clientRunId}]`, 'running'));
+        setDocumentTraceForTarget(doc, runTargetKey, runStatusTrace(`Running ${label}… [Run ID: ${clientRunId}]`, 'running'));
         hostContext.state.resultsPanel?.startElapsed();
         try {
             const response = await hostContext.authFetch(hostContext.apiBase + STUDIO_ROUTES.run, {
@@ -140,7 +183,7 @@ export function createStudioRunSession(hostContext: StudioRunSessionContext) {
 
             if (!response.ok) {
                 if (response.status === 499) {
-                    setDocumentTrace(doc, [
+                    setDocumentTraceForTarget(doc, runTargetKey, [
                         { type: 'clear', resetHistory: true },
                         { type: 'status', status: 'failed' },
                         { type: 'message', level: 'warn', text: `Run cancelled by server (server-confirmed). [Run ID: ${clientRunId}]` },
@@ -149,7 +192,7 @@ export function createStudioRunSession(hostContext: StudioRunSessionContext) {
                     return;
                 }
                 if (response.status === 408) {
-                    setDocumentTrace(doc, [
+                    setDocumentTraceForTarget(doc, runTargetKey, [
                         { type: 'clear', resetHistory: true },
                         { type: 'status', status: 'failed' },
                         { type: 'message', level: 'error', text: `Run timed out on server. [Run ID: ${clientRunId}]` },
@@ -158,7 +201,7 @@ export function createStudioRunSession(hostContext: StudioRunSessionContext) {
                     return;
                 }
                 const reason = await _readErrorText(response);
-                setDocumentTrace(doc, [
+                setDocumentTraceForTarget(doc, runTargetKey, [
                     { type: 'clear', resetHistory: true },
                     { type: 'status', status: 'failed' },
                     { type: 'message', level: 'error', text: `${reason} [Run ID: ${clientRunId}]` },
@@ -177,18 +220,18 @@ export function createStudioRunSession(hostContext: StudioRunSessionContext) {
             } else {
                 trace.push(runIdEvent);
             }
-            setDocumentTrace(doc, trace);
+            setDocumentTraceForTarget(doc, runTargetKey, trace);
         } catch (error) {
             if (error instanceof DOMException && error.name === 'AbortError') {
                 if (context.stopRequested) {
-                    setDocumentTrace(doc, [
+                    setDocumentTraceForTarget(doc, runTargetKey, [
                         { type: 'clear', resetHistory: true },
                         { type: 'status', status: 'failed' },
                         { type: 'message', level: 'warn', text: `Run stopped by client. Cancellation is unconfirmed — server may have completed execution. [Run ID: ${clientRunId}]` },
                         { type: 'done', exitCode: 1, status: 'Cancelled (Unconfirmed)' },
                     ]);
                 } else {
-                    setDocumentTrace(doc, [
+                    setDocumentTraceForTarget(doc, runTargetKey, [
                         { type: 'clear', resetHistory: true },
                         { type: 'status', status: 'failed' },
                         { type: 'message', level: 'warn', text: `Run cancelled. [Run ID: ${clientRunId}]` },
@@ -198,7 +241,7 @@ export function createStudioRunSession(hostContext: StudioRunSessionContext) {
                 return;
             }
             // Losing the response cannot establish whether the server finished the run.
-            setDocumentTrace(doc, [
+            setDocumentTraceForTarget(doc, runTargetKey, [
                 { type: 'clear', resetHistory: true },
                 { type: 'status', status: 'failed' },
                 { type: 'message', level: 'warn', text: `The run response was lost: ${errorMessage(error)} Its outcome is unknown; the server may have completed execution. Check the run ID before running again. [Run ID: ${clientRunId}]` },
@@ -206,8 +249,13 @@ export function createStudioRunSession(hostContext: StudioRunSessionContext) {
             ]);
         } finally {
             context.runActive = false;
-            if (context.runAbort === controller) context.runAbort = null;
-            hostContext.state.resultsPanel?.stopElapsed();
+            if (context.runAbort === controller) {
+                context.runAbort = null;
+                context.activeRunTargetKey = null;
+            }
+            if (hostContext.getActiveDoc() === doc && currentTargetKey() === runTargetKey) {
+                hostContext.state.resultsPanel?.stopElapsed();
+            }
             updateRunControls();
         }
     }
@@ -404,5 +452,5 @@ export function createStudioRunSession(hostContext: StudioRunSessionContext) {
         return upper === 'CANCELLED' ? 'Cancelled' : upper === 'FAILURE' || upper === 'FAILED' ? 'Failed' : status;
     }
 
-    return { updateSnapshotPackage, setDocumentTrace, paintResults, setDocumentDiagnostics, updateRunControls, handleStopRun, executeRun, executePipelineRun, runsAsSavedPipeline };
+    return { updateSnapshotPackage, setDocumentTrace, setDocumentTraceForTarget, repaintActiveTarget, paintResults, setDocumentDiagnostics, updateRunControls, handleStopRun, executeRun, executePipelineRun, runsAsSavedPipeline };
 }
