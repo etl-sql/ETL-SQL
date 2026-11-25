@@ -13,6 +13,9 @@ public class TokenService(PortalConfig config)
     public const string SecurityStampClaim = "security_stamp";
     public const string IdentityTypeClaim = "identity_type";
     public const string ServiceIdentityType = "service";
+    public const string NativeClientIdentityType = "native_client";
+    public const string NativeSessionIdClaim = "native_session_id";
+    public const string NativeClientIdClaim = "client_id";
     public const string ServiceAccountIdClaim = "service_account_id";
     public const string ScopeClaim = "scope";
     public const string TenantClaim = "tenant_id";
@@ -25,6 +28,7 @@ public class TokenService(PortalConfig config)
     // of that secret) no longer validates interchangeably.
     public const string TokenIssuer = "etl-sql-portal";
     public const string TokenAudience = "etl-sql-portal-api";
+    public const string NativeTokenAudience = "etl-sql-portal-native-api";
     public int ServiceTokenLifetimeSeconds => Math.Min(15, Math.Max(1, config.Jwt.ExpiryMinutes)) * 60;
 
     /// <param name="studioCapabilities">
@@ -57,6 +61,46 @@ public class TokenService(PortalConfig config)
             audience: TokenAudience,
             claims: claims,
             expires: DateTime.UtcNow.AddMinutes(config.Jwt.ExpiryMinutes),
+            signingCredentials: creds);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public string GenerateNativeClientJwt(
+        PortalUser user,
+        IList<string> roles,
+        string sessionId,
+        string clientId,
+        IEnumerable<string> scopes,
+        IEnumerable<string>? studioCapabilities = null,
+        TenantContext? tenantContext = null,
+        DateTime? expiresAtUtc = null)
+    {
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new(JwtRegisteredClaimNames.UniqueName, user.UserName!),
+            new("mustChangePassword", user.MustChangePassword.ToString().ToLower()),
+            new(SecurityStampClaim, user.SecurityStamp ?? string.Empty),
+            new(IdentityTypeClaim, NativeClientIdentityType),
+            new(NativeSessionIdClaim, sessionId),
+            new(NativeClientIdClaim, clientId)
+        };
+        foreach (var role in roles.Distinct(StringComparer.OrdinalIgnoreCase))
+            claims.Add(new Claim(ClaimTypes.Role, role));
+        foreach (var scope in scopes.Distinct(StringComparer.OrdinalIgnoreCase))
+            claims.Add(new Claim(ScopeClaim, scope));
+        foreach (var capability in (studioCapabilities ?? []).Distinct(StringComparer.OrdinalIgnoreCase))
+            claims.Add(new Claim(StudioAuthorizationService.CapabilityClaim, capability));
+        AddTenantClaim(claims, tenantContext);
+
+        var key = JwtSigningKeyRing.Current(config.Jwt);
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var token = new JwtSecurityToken(
+            issuer: TokenIssuer,
+            audience: NativeTokenAudience,
+            claims: claims,
+            expires: expiresAtUtc ?? DateTime.UtcNow.AddMinutes(config.Jwt.ExpiryMinutes),
             signingCredentials: creds);
 
         return new JwtSecurityTokenHandler().WriteToken(token);

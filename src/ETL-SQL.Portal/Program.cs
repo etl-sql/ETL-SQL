@@ -361,7 +361,7 @@ builder.Services.AddAuthentication(opt =>
         ValidateIssuer = true,
         ValidIssuer = TokenService.TokenIssuer,
         ValidateAudience = true,
-        ValidAudience = TokenService.TokenAudience,
+        ValidAudiences = [TokenService.TokenAudience, TokenService.NativeTokenAudience],
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
         IssuerSigningKeys = validationKeys,
@@ -384,6 +384,25 @@ builder.Services.AddAuthentication(opt =>
                 return;
             }
             var tenantId = tenantContext?.Tenant.Value ?? "portal-host";
+            var isNativeAudience = context.SecurityToken switch
+            {
+                System.IdentityModel.Tokens.Jwt.JwtSecurityToken jwtToken =>
+                    jwtToken.Audiences.Contains(TokenService.NativeTokenAudience, StringComparer.Ordinal),
+                Microsoft.IdentityModel.JsonWebTokens.JsonWebToken jsonJwt =>
+                    jsonJwt.Audiences.Contains(TokenService.NativeTokenAudience, StringComparer.Ordinal),
+                _ => context.Principal?.FindAll("aud").Any(c =>
+                    string.Equals(c.Value, TokenService.NativeTokenAudience, StringComparison.Ordinal)) == true
+            };
+            var isNativeIdentity = string.Equals(
+                context.Principal?.FindFirstValue(TokenService.IdentityTypeClaim),
+                TokenService.NativeClientIdentityType,
+                StringComparison.Ordinal);
+            if (isNativeAudience != isNativeIdentity)
+            {
+                context.Fail("Invalid native client token.");
+                return;
+            }
+
             if (context.Principal?.FindFirstValue(TokenService.IdentityTypeClaim) == TokenService.ServiceIdentityType)
             {
                 var accountId = context.Principal.FindFirstValue(TokenService.ServiceAccountIdClaim);
@@ -429,7 +448,35 @@ builder.Services.AddAuthentication(opt =>
             var issuedStamp = context.Principal?.FindFirstValue(TokenService.SecurityStampClaim);
             if (string.IsNullOrEmpty(issuedStamp)
                 || !string.Equals(issuedStamp, user.SecurityStamp, StringComparison.Ordinal))
+            {
                 context.Fail("Security context has changed.");
+                return;
+            }
+
+            if (isNativeAudience)
+            {
+                var nativeSessionId = context.Principal?.FindFirstValue(TokenService.NativeSessionIdClaim);
+                var nativeClientId = context.Principal?.FindFirstValue(TokenService.NativeClientIdClaim);
+                if (string.IsNullOrWhiteSpace(nativeSessionId)
+                    || !ETL_SQL.Portal.Services.NativeClientRegistry.TryGet(nativeClientId, out _))
+                {
+                    context.Fail("Invalid native client session.");
+                    return;
+                }
+
+                var nativeSession = await services
+                    .GetRequiredService<ETL_SQL.Portal.Services.NativeClientSessionCache>()
+                    .GetAsync(tenantId, nativeSessionId, services.GetRequiredService<PortalDbContext>());
+                if (nativeSession is null
+                    || nativeSession.UserId != userId
+                    || !string.Equals(nativeSession.ClientId, nativeClientId, StringComparison.Ordinal)
+                    || nativeSession.RevokedAt is not null
+                    || nativeSession.ExpiresAt <= DateTime.UtcNow)
+                {
+                    context.Fail("Native client session is expired or revoked.");
+                    return;
+                }
+            }
         },
         OnChallenge = async context =>
         {
@@ -547,6 +594,8 @@ builder.Services.AddSingleton(sp =>
     PortalPiiProtector.Create(sp.GetRequiredService<IDataProtectionProvider>()));
 builder.Services.AddScoped<ETL_SQL.Portal.Services.TokenService>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.UserSecurityStateCache>();
+builder.Services.AddSingleton<ETL_SQL.Portal.Services.NativeClientSessionCache>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.NativeClientAuthService>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.PortalNodeIdentity>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SecuritySessionService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.AuditService>();
@@ -1095,6 +1144,7 @@ app.UseAuthentication();
 app.UseMiddleware<ETL_SQL.Portal.Middleware.TenantContextMiddleware>();
 app.UseMiddleware<ETL_SQL.Portal.Middleware.SharedTenantLifecycleMiddleware>();
 app.UseMiddleware<ETL_SQL.Portal.Middleware.ServiceAccountScopeMiddleware>();
+app.UseMiddleware<ETL_SQL.Portal.Middleware.NativeClientScopeMiddleware>();
 app.Use(async (context, next) =>
 {
     if (context.User.Identity?.IsAuthenticated == true

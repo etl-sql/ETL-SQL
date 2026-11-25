@@ -372,6 +372,10 @@ public sealed class SharedTenantLifecycleService(
         await db.FolderAcls.Where(x => folderIds.Contains(x.FolderId) || groupIds.Contains(x.GroupId)).ExecuteDeleteAsync(ct);
         await db.Folders.Where(x => folderIds.Contains(x.Id)).ExecuteDeleteAsync(ct);
         await db.ServiceAccounts.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
+        await db.NativeClientRefreshTokens.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
+        await db.NativeClientSessions.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
+        await db.NativeClientAuthCodes.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
+        await db.NativeClientAuthTransactions.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
         await db.RefreshTokens.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
         await db.UserGroups.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);
         await db.SharedConnectionUsages.Where(x => x.TenantId == tenant).ExecuteDeleteAsync(ct);

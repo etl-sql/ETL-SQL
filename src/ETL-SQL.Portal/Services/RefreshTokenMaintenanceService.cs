@@ -62,6 +62,15 @@ public sealed class RefreshTokenMaintenanceService(
             var removed = await db.RefreshTokens
                 .Where(t => t.ExpiresAt <= utcNow)
                 .ExecuteDeleteAsync(ct);
+            removed += await db.NativeClientRefreshTokens
+                .Where(t => t.ExpiresAt <= utcNow)
+                .ExecuteDeleteAsync(ct);
+            removed += await db.NativeClientAuthCodes
+                .Where(c => c.ExpiresAt <= utcNow)
+                .ExecuteDeleteAsync(ct);
+            removed += await db.NativeClientAuthTransactions
+                .Where(t => t.ExpiresAt <= utcNow)
+                .ExecuteDeleteAsync(ct);
             sw.Stop();
             BackgroundServiceObservability.SetRowsProcessed(activity, removed);
             BackgroundServiceObservability.CompleteRun(

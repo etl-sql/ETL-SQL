@@ -12,7 +12,8 @@ public class SecuritySessionService(
     PortalDbContext db,
     UserSecurityStateCache securityStateCache,
     PortalConfig config,
-    RequestTenantContextAccessor tenantAccessor)
+    RequestTenantContextAccessor tenantAccessor,
+    NativeClientSessionCache? nativeSessionCache = null)
 {
     private string TenantId => config.SharedTenancy.Enabled
         ? tenantAccessor.RequireCurrent().Tenant.Value
@@ -42,11 +43,31 @@ public class SecuritySessionService(
         foreach (var token in refreshTokens)
             token.RevokedAt = now;
 
+        var nativeSessions = await db.NativeClientSessions
+            .Where(s => s.TenantId == tenantId && ids.Contains(s.UserId) && s.RevokedAt == null)
+            .ToListAsync(ct);
+        foreach (var session in nativeSessions)
+        {
+            session.RevokedAt = now;
+            session.RevokedReason = "user_invalidated";
+        }
+
+        var nativeRefreshTokens = await db.NativeClientRefreshTokens
+            .Where(t => t.TenantId == tenantId && ids.Contains(t.UserId) && t.RevokedAt == null)
+            .ToListAsync(ct);
+        foreach (var token in nativeRefreshTokens)
+            token.RevokedAt = now;
+
         await db.SaveChangesAsync(ct);
 
         // Make in-process revocation immediate; cross-process latency stays bounded by the TTL.
         foreach (var id in ids)
             securityStateCache.Evict(tenantId, id);
+        if (nativeSessionCache is not null)
+        {
+            foreach (var session in nativeSessions)
+                nativeSessionCache.Evict(tenantId, session.Id);
+        }
     }
 
     public async Task InvalidateGroupMembersAsync(int groupId, CancellationToken ct = default)

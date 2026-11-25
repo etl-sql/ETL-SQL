@@ -18,6 +18,7 @@ public class MustChangePasswordMiddleware(RequestDelegate next)
         "/api/auth/logout",
         "/api/auth/login",
         "/api/auth/refresh",
+        "/api/auth/client/logout",
     };
 
     public async Task InvokeAsync(HttpContext ctx)
