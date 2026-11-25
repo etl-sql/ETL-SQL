@@ -42,6 +42,8 @@ let outputChannel: vscode.OutputChannel;
 let connectionsProvider: ConnectionsProvider;
 let sidebarProvider: SidebarProvider;
 let hostedController: HostedExecutionController | undefined;
+let hostedJobsTreeProvider: HostedJobsTreeProvider | undefined;
+let hostedJobsTreeView: vscode.TreeView<HostedTreeNode> | undefined;
 let activeTerminals: vscode.Terminal[] = [];
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -231,10 +233,16 @@ export async function activate(context: vscode.ExtensionContext) {
         runSavedPipeline: (id, version, name) => hostedExecution.runSavedPipeline(id, version, name),
         log: msg => outputChannel.appendLine(msg)
     });
+    hostedJobsTreeProvider = hostedJobsTree;
+    const hostedJobsView = vscode.window.createTreeView('etlsql-hosted-jobs', {
+        treeDataProvider: hostedJobsTree,
+        showCollapseAll: true
+    });
+    hostedJobsTreeView = hostedJobsView;
     context.subscriptions.push(
         hostedController,
         hostedJobsTree,
-        vscode.window.registerTreeDataProvider('etlsql-hosted-jobs', hostedJobsTree),
+        hostedJobsView,
         vscode.commands.registerCommand('etlsql.hosted.selectTarget', () => hostedController?.selectTarget()),
         vscode.commands.registerCommand('etlsql.hosted.connect', (alias?: string) => hostedController?.connect(alias)),
         vscode.commands.registerCommand('etlsql.hosted.disconnect', () => hostedController?.disconnect()),
@@ -630,7 +638,9 @@ export async function activate(context: vscode.ExtensionContext) {
     }));
 
     return {
-        getHostedController: () => hostedController
+        getHostedController: () => hostedController,
+        getHostedJobsTree: () => hostedJobsTreeProvider,
+        getHostedJobsView: () => hostedJobsTreeView
     };
 }
 

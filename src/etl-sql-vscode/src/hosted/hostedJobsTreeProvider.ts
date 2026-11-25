@@ -38,7 +38,7 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
     private readonly _sessions: HostedSessionManager;
     private readonly _client: HostedPipelineClient;
     private readonly _runSavedPipeline?: HostedJobsTreeOptions['runSavedPipeline'];
-    private readonly _openExternal: (uri: vscode.Uri) => Thenable<boolean> | Promise<boolean>;
+    private _openExternal: (uri: vscode.Uri) => Thenable<boolean> | Promise<boolean>;
     private readonly _log: (message: string) => void;
 
     private readonly _onDidChangeTreeData = new vscode.EventEmitter<HostedTreeNode | undefined | void>();
@@ -82,6 +82,10 @@ export class HostedJobsTreeProvider implements vscode.TreeDataProvider<HostedTre
 
     public getCachedJobs(): readonly HostedJobItemDto[] {
         return this._jobs;
+    }
+
+    public setOpenExternal(opener: (uri: vscode.Uri) => Thenable<boolean> | Promise<boolean>): void {
+        this._openExternal = opener;
     }
 
     public refresh(): void {

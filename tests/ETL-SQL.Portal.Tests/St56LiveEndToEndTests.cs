@@ -32,7 +32,13 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
         + "SELECT UserID INTO #users FROM sample_data.Users;\n"
         + "ASSERT (SELECT COUNT(*) FROM #users) > 0;\n";
 
-    private const string SlowWaitScript = "WAITFOR DELAY '00:00:40';\n";
+    private const string FinanceCheckV2Script =
+        "CREATE CONNECTION sample_data AS MOCKDB();\n"
+        + "SELECT UserID INTO #users FROM sample_data.Users;\n"
+        + "ASSERT (SELECT COUNT(*) FROM #users) > 0;\n"
+        + "SELECT COUNT(*) AS TotalUsers FROM #users;\n";
+
+    private const string SlowWaitScript = "WAITFOR DELAY '00:01:00';\n";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     [St56LiveFact]
@@ -92,7 +98,8 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
         var repoRoot = FindRepoRoot();
         var node22 = Environment.GetEnvironmentVariable("ETLSQL_ST56_NODE") ?? "node";
         var runTestJs = Path.Combine(repoRoot, "src", "etl-sql-vscode", "out", "test", "runTest.js");
-        var vscodeExe = FindCachedVsCodeExecutable(Path.Combine(repoRoot, "src", "etl-sql-vscode", ".vscode-test"));
+        var vscodeExe = Environment.GetEnvironmentVariable("ETLSQL_VSCODE_EXECUTABLE")
+            ?? FindCachedVsCodeExecutable(Path.Combine(repoRoot, "src", "etl-sql-vscode", ".vscode-test"));
         await RequireNode22Async(node22, repoRoot);
         Assert.True(File.Exists(runTestJs), $"Compiled Electron test launcher not found at {runTestJs}");
         Assert.True(vscodeExe is not null && File.Exists(vscodeExe), "Cached VS Code Electron executable not found under .vscode-test");
@@ -101,7 +108,7 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
         using var portal = new LiveKestrelPortalFactory(orchestrator);
         portal.Start();
 
-        var seeded = await SeedAcceptanceTopologyAsync(portal, orchestrator);
+        var seeded = await SeedAcceptanceTopologyAsync(portal, orchestrator, extraScheduledJobCount: 51);
         await using var proxy = new LoopbackFaultProxy(portal.ServerAddress, portal, orchestrator);
         proxy.Start();
 
@@ -119,6 +126,7 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
                 ["ETLSQL_ST56_SMOKE_PORTAL_URL"] = portal.ServerAddress,
                 ["ETLSQL_ST56_SMOKE_CONTROL_URL"] = proxy.ControlBaseUrl,
                 ["ETLSQL_ST56_SMOKE_PIPELINE_ID"] = seeded.FinancePipelineId.ToString(),
+                ["ETLSQL_ST56_SMOKE_SLOW_PIPELINE_ID"] = seeded.SlowPipelineId.ToString(),
                 ["ETLSQL_ST56_SMOKE_USER_SETTINGS"] = userSettingsPath
             };
 
@@ -127,13 +135,33 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
                 $"\"{runTestJs}\"",
                 Path.Combine(repoRoot, "src", "etl-sql-vscode"),
                 env,
-                TimeSpan.FromMinutes(2));
+                TimeSpan.FromMinutes(3));
 
             output.WriteLine(stdout);
             if (!string.IsNullOrWhiteSpace(stderr))
                 output.WriteLine("STDERR:\n" + stderr);
 
             Assert.True(exitCode == 0, $"Electron Extension-Host smoke failed (exit {exitCode}).\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+
+            using var scope = portal.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var alice = await db.Users.SingleAsync(u => u.UserName == "alice");
+            var bob = await db.Users.SingleAsync(u => u.UserName == "bob");
+
+            Assert.True(await db.AuditLogs.AnyAsync(a =>
+                a.UserId == alice.Id
+                && a.Action == "PIPELINE_RUN_SUBMITTED"
+                && a.ResourceId == seeded.FinancePipelineId.ToString()
+                && a.Detail != null && a.Detail.Contains("version=2;")));
+            Assert.True(await db.AuditLogs.AnyAsync(a =>
+                a.UserId == alice.Id
+                && (a.Action == "HOSTED_JOB_RUN_CANCEL_REQUESTED" || a.Action == "PIPELINE_RUN_CANCEL_REQUESTED")));
+            Assert.False(await db.AuditLogs.AnyAsync(a =>
+                a.UserId == bob.Id
+                && (a.Action == "PIPELINE_RUN_SUBMITTED"
+                    || a.Action == "HOSTED_JOB_TRIGGERED"
+                    || a.Action == "PIPELINE_RUN_CANCEL_REQUESTED"
+                    || a.Action == "HOSTED_JOB_RUN_CANCEL_REQUESTED")));
         }
         finally
         {
@@ -143,7 +171,8 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
 
     private static async Task<(int FinancePipelineId, int SlowPipelineId)> SeedAcceptanceTopologyAsync(
         LiveKestrelPortalFactory portal,
-        OrchestratorWebFactory orchestrator)
+        OrchestratorWebFactory orchestrator,
+        int extraScheduledJobCount = 0)
     {
         int folderId;
         int restrictedFolderId;
@@ -179,7 +208,7 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
                 new FolderAcl { FolderId = folderId, GroupId = authorsGroup.Id, Permission = FolderPermission.Author },
                 new FolderAcl { FolderId = folderId, GroupId = readersGroup.Id, Permission = FolderPermission.Execute });
 
-            // Pre-provision alice so we can grant her Orchestrator EXECUTE on PIPELINE:{id} before the runner signs in
+            // Pre-provision alice (author/executor) and bob (read-only on Orchestrator jobs)
             var alice = new PortalUser
             {
                 TenantId = "portal-host",
@@ -193,9 +222,24 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
                 ExternalSubject = "oid-alice",
                 SecurityStamp = Guid.NewGuid().ToString("N")
             };
-            db.Users.Add(alice);
+            var bob = new PortalUser
+            {
+                TenantId = "portal-host",
+                UserName = "bob",
+                NormalizedUserName = "BOB",
+                Email = "bob@alpha.test",
+                NormalizedEmail = "BOB@ALPHA.TEST",
+                IsActive = true,
+                MustChangePassword = false,
+                Provider = "OIDC",
+                ExternalSubject = "oid-bob",
+                SecurityStamp = Guid.NewGuid().ToString("N")
+            };
+            db.Users.AddRange(alice, bob);
             await db.SaveChangesAsync();
-            db.UserGroups.Add(new UserGroup { UserId = alice.Id, GroupId = authorsGroup.Id });
+            db.UserGroups.AddRange(
+                new UserGroup { UserId = alice.Id, GroupId = authorsGroup.Id },
+                new UserGroup { UserId = bob.Id, GroupId = readersGroup.Id });
             await db.SaveChangesAsync();
         }
 
@@ -209,16 +253,61 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
         await CreatePipelineAsync(http, adminToken, restrictedFolderId, "FinancePrivate.etlsql", FinanceCheckScript);
 
         string alicePrincipalKey;
+        string bobPrincipalKey;
         using (var scope = portal.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
             alicePrincipalKey = (await db.Users.SingleAsync(u => u.UserName == "alice")).PrincipalKey!;
+            bobPrincipalKey = (await db.Users.SingleAsync(u => u.UserName == "bob")).PrincipalKey!;
         }
 
         await ProvisionAndGrantAsync(http, adminToken, financeId, financeVersion, alicePrincipalKey, cancelImmediately: false);
         await ProvisionAndGrantAsync(http, adminToken, slowId, slowVersion, alicePrincipalKey, cancelImmediately: true);
+        await GrantJobPermissionAsync(http, adminToken, $"PIPELINE:{financeId}", bobPrincipalKey, "READ");
+        await GrantJobPermissionAsync(http, adminToken, $"PIPELINE:{slowId}", bobPrincipalKey, "READ");
+
+        if (extraScheduledJobCount > 0)
+        {
+            using var orchScope = orchestrator.Services.CreateScope();
+            var historyStore = orchScope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
+            var authStore = orchScope.ServiceProvider.GetRequiredService<IOrchestratorAuthorizationStore>();
+            for (var i = 1; i <= extraScheduledJobCount; i++)
+            {
+                var jobName = $"BatchJob-{i:00}";
+                await historyStore.SaveJobAsync(new JobDefinition(
+                    Name: jobName,
+                    Script: "SELECT 1;",
+                    Interval: 1,
+                    Unit: "Days",
+                    AtTime: null,
+                    LastRun: null,
+                    NextRun: DateTime.UtcNow.AddHours(i),
+                    IsEnabled: true,
+                    DisplayName: $"Batch Job {i:00}",
+                    TenantId: "portal-host",
+                    CreatedBy: alicePrincipalKey));
+                var objectId = await authStore.ResolveObjectIdAsync("portal-host", OrchestratorObjectKind.Job, jobName);
+                Assert.NotNull(objectId);
+                await authStore.SaveObjectGrantAsync(new OrchestratorObjectGrant(
+                    objectId!, OrchestratorObjectKind.Job, OrchestratorPrincipalKind.User,
+                    alicePrincipalKey, OrchestratorObjectPermission.Execute, "admin"));
+            }
+        }
 
         return (financeId, slowId);
+    }
+
+    private static async Task GrantJobPermissionAsync(
+        HttpClient http, string token, string jobName, string principalKey, string permission)
+    {
+        using var grantReq = new HttpRequestMessage(HttpMethod.Put,
+            $"/api/orchestrator/authorization/JOB/{Uri.EscapeDataString(jobName)}/USER/{principalKey}")
+        {
+            Content = JsonContent.Create(new { permission })
+        };
+        grantReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var grantResp = await http.SendAsync(grantReq);
+        Assert.Equal(HttpStatusCode.OK, grantResp.StatusCode);
     }
 
     private static async Task<(int Id, long Version)> CreatePipelineAsync(
@@ -566,6 +655,34 @@ public sealed class St56LiveEndToEndTests(ITestOutputHelper output)
                 {
                     await _portal.StopKestrelAsync();
                     result = new { ok = true };
+                }
+                else if (path == "/bump-finance-version")
+                {
+                    var pipelineId = payload["pipelineId"]!.GetValue<int>();
+                    using var adminHttp = new HttpClient { BaseAddress = new Uri(_upstreamOrigin) };
+                    var loginResp = await adminHttp.PostAsJsonAsync("/api/auth/login", new { username = "admin", password = "Admin@12345!" });
+                    if (!loginResp.IsSuccessStatusCode)
+                    {
+                        ctx.Response.StatusCode = (int)loginResp.StatusCode;
+                        ctx.Response.Close();
+                        return;
+                    }
+                    var adminToken = (await loginResp.Content.ReadFromJsonAsync<JsonObject>(Json))!["token"]!.GetValue<string>();
+                    using var saveReq = new HttpRequestMessage(HttpMethod.Post, "/api/designer/save")
+                    {
+                        Content = JsonContent.Create(new { reportId = pipelineId, scriptText = FinanceCheckV2Script })
+                    };
+                    saveReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+                    saveReq.Headers.TryAddWithoutValidation("If-Match", "\"1\"");
+                    using var saveResp = await adminHttp.SendAsync(saveReq);
+                    if (!saveResp.IsSuccessStatusCode)
+                    {
+                        ctx.Response.StatusCode = (int)saveResp.StatusCode;
+                        ctx.Response.Close();
+                        return;
+                    }
+                    var saved = (await saveResp.Content.ReadFromJsonAsync<JsonObject>(Json))!;
+                    result = new { ok = true, version = saved["version"]!.GetValue<long>() };
                 }
                 else
                 {
