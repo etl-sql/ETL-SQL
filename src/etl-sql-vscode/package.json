@@ -54,6 +54,7 @@
     "onLanguage:rptsql",
     "onNotebook:etl-sql-notebook",
     "onView:etlsql-sidebar",
+    "onView:etlsql-hosted-jobs",
     "onView:etlsql-results-view",
     "onCommand:etlsql.previewReport",
     "onCommand:etlsql.openReportDesigner",
@@ -107,6 +108,11 @@
           "type": "webview",
           "id": "etlsql-sidebar",
           "name": "Metadata Explorer",
+          "visibility": "visible"
+        },
+        {
+          "id": "etlsql-hosted-jobs",
+          "name": "Hosted Jobs & Runs",
           "visibility": "visible"
         }
       ],
@@ -446,6 +452,26 @@
       {
         "command": "etlsql.hosted.disconnect",
         "title": "ETL-SQL: Disconnect from Hosted Portal"
+      },
+      {
+        "command": "etlsql.hostedJobs.refresh",
+        "title": "ETL-SQL: Refresh Hosted Jobs & Runs",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "etlsql.hostedJobs.openInPortal",
+        "title": "ETL-SQL: Open in Portal",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "etlsql.hostedJobs.run",
+        "title": "ETL-SQL: Run Hosted Job or Pipeline",
+        "icon": "$(play)"
+      },
+      {
+        "command": "etlsql.hostedJobs.stop",
+        "title": "ETL-SQL: Stop Hosted Run",
+        "icon": "$(debug-stop)"
       }
     ],
     "walkthroughs": [
@@ -596,6 +622,16 @@
           "command": "etlsql.runScript",
           "when": "view == etlsql-sidebar",
           "group": "navigation@2"
+        },
+        {
+          "command": "etlsql.hostedJobs.refresh",
+          "when": "view == etlsql-hosted-jobs",
+          "group": "navigation@0"
+        },
+        {
+          "command": "etlsql.hostedJobs.openInPortal",
+          "when": "view == etlsql-hosted-jobs",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -603,6 +639,21 @@
           "command": "etlsql.copyConnection",
           "when": "view == etlsql-sidebar && viewItem == connection-script",
           "group": "inline"
+        },
+        {
+          "command": "etlsql.hostedJobs.run",
+          "when": "view == etlsql-hosted-jobs && (viewItem == hosted-job-run || viewItem == hosted-job-run-stop)",
+          "group": "inline@1"
+        },
+        {
+          "command": "etlsql.hostedJobs.stop",
+          "when": "view == etlsql-hosted-jobs && (viewItem == hosted-job-stop || viewItem == hosted-job-run-stop || viewItem == hosted-run-stoppable)",
+          "group": "inline@2"
+        },
+        {
+          "command": "etlsql.hostedJobs.openInPortal",
+          "when": "view == etlsql-hosted-jobs && (viewItem =~ /^hosted-job-/ || viewItem =~ /^hosted-run-/)",
+          "group": "inline@3"
         }
       ],
       "explorer/context": [

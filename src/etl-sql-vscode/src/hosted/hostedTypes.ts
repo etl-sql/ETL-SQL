@@ -106,6 +106,102 @@ export interface SaveDesignerResponse {
     scriptText?: string | null;
 }
 
+export interface HostedJobItemDto {
+    kind: 'pipeline' | 'job';
+    jobName: string;
+    displayName: string;
+    pipelineId?: number | null;
+    pipelineVersion?: number | null;
+    folderPath?: string | null;
+    isEnabled: boolean;
+    lastStatus?: string | null;
+    lastRunId?: number | null;
+    lastRunAt?: string | null;
+    activeRunId?: number | null;
+    nextScheduledRunAt?: string | null;
+    canRun: boolean;
+    canStop: boolean;
+    portalPath: string;
+}
+
+export interface HostedJobsPageDto {
+    items: HostedJobItemDto[];
+    total: number;
+    offset: number;
+    limit: number;
+    hasMore: boolean;
+    orchestratorOnline: boolean;
+}
+
+export interface HostedJobRecentRunDto {
+    runId: number;
+    jobName: string;
+    status: string;
+    isTerminal: boolean;
+    startTime: string;
+    endTime?: string | null;
+    durationMs?: number | null;
+    rowsProcessed: number;
+    errorMessage?: string | null;
+    canStop: boolean;
+    portalPath: string;
+}
+
+export interface HostedJobRunStatementDto {
+    statement: string;
+    durationMs: number;
+    rowsProcessed: number;
+    failed: boolean;
+}
+
+export interface HostedJobRunDetailDto {
+    runId: number;
+    jobName: string;
+    status: string;
+    isTerminal: boolean;
+    startTime: string;
+    endTime?: string | null;
+    errorMessage?: string | null;
+    rowsProcessed: number;
+    logTruncated: boolean;
+    statements: HostedJobRunStatementDto[];
+}
+
+export interface HostedJobTriggerResponseDto {
+    jobName: string;
+    message: string;
+}
+
+export interface HostedJobCancelResponseDto {
+    jobName: string;
+    runId: number;
+    message: string;
+}
+
+/**
+ * Resolves a Portal relative path strictly against the connected trusted server origin.
+ * Refuses absolute URLs, protocol-relative URLs, or anything that escapes the trusted origin.
+ */
+export function resolveTrustedPortalUrl(trustedOrigin: string, relativePath: string): string | null {
+    const validated = normalizeTrustedServerOrigin(trustedOrigin);
+    if (!validated.ok) {
+        return null;
+    }
+    const trimmed = relativePath.trim();
+    if (!trimmed.startsWith('/') || trimmed.startsWith('//') || trimmed.includes('\\')) {
+        return null;
+    }
+    try {
+        const resolved = new URL(trimmed, validated.origin);
+        if (resolved.origin !== validated.origin) {
+            return null;
+        }
+        return resolved.toString();
+    } catch {
+        return null;
+    }
+}
+
 export interface HostedSessionState {
     server: HostedServerEntry;
     token: string;

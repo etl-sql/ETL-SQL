@@ -1,4 +1,10 @@
 import {
+    HostedJobCancelResponseDto,
+    HostedJobItemDto,
+    HostedJobRecentRunDto,
+    HostedJobRunDetailDto,
+    HostedJobsPageDto,
+    HostedJobTriggerResponseDto,
     PipelineRunCancelRequestedDto,
     PipelineRunDto,
     PipelineRunRefusalDto,
@@ -221,6 +227,88 @@ export class HostedPipelineClient {
             return { kind: 'denied', refusal };
         }
         return { kind: 'refused', status: resp.status, refusal };
+    }
+
+    public async listHostedJobs(limit: number = 50, offset: number = 0): Promise<HostedJobsPageDto> {
+        const params = new URLSearchParams({
+            limit: String(Math.max(1, Math.min(100, limit))),
+            offset: String(Math.max(0, offset))
+        });
+        const resp = await this.sessions.authorizedFetch(`/api/studio/hosted-jobs?${params.toString()}`, {
+            method: 'GET'
+        });
+        if (!resp.ok) {
+            const refusal = await this.readRefusal(resp);
+            throw new Error(refusal.error || `Could not load hosted jobs (${resp.status}).`);
+        }
+        const raw = await this.readJsonSafe(resp);
+        if (!raw || !Array.isArray(raw.items)) {
+            throw new HostedNetworkError('Portal returned an invalid hosted jobs payload.');
+        }
+        return {
+            items: raw.items as HostedJobItemDto[],
+            total: typeof raw.total === 'number' ? raw.total : raw.items.length,
+            offset: typeof raw.offset === 'number' ? raw.offset : offset,
+            limit: typeof raw.limit === 'number' ? raw.limit : limit,
+            hasMore: Boolean(raw.hasMore),
+            orchestratorOnline: Boolean(raw.orchestratorOnline)
+        };
+    }
+
+    public async listHostedJobRuns(jobName: string, limit: number = 10): Promise<HostedJobRecentRunDto[]> {
+        const resp = await this.sessions.authorizedFetch(
+            `/api/studio/hosted-jobs/${encodeURIComponent(jobName)}/runs?limit=${Math.max(1, Math.min(50, limit))}`,
+            { method: 'GET' }
+        );
+        if (!resp.ok) {
+            const refusal = await this.readRefusal(resp);
+            throw new Error(refusal.error || `Could not load recent runs for ${jobName} (${resp.status}).`);
+        }
+        const parsed = await resp.json() as unknown;
+        if (!Array.isArray(parsed)) {
+            throw new HostedNetworkError('Portal returned an invalid recent runs payload.');
+        }
+        return parsed as HostedJobRecentRunDto[];
+    }
+
+    public async getHostedJobRunDetail(jobName: string, runId: number): Promise<HostedJobRunDetailDto> {
+        const resp = await this.sessions.authorizedFetch(
+            `/api/studio/hosted-jobs/${encodeURIComponent(jobName)}/runs/${runId}`,
+            { method: 'GET' }
+        );
+        if (!resp.ok) {
+            const refusal = await this.readRefusal(resp);
+            throw new Error(refusal.error || `Could not load run #${runId} detail (${resp.status}).`);
+        }
+        const detail = await resp.json() as HostedJobRunDetailDto;
+        if (!detail || detail.runId !== runId) {
+            throw new HostedNetworkError(`Portal returned detail for a different run than #${runId}.`);
+        }
+        return detail;
+    }
+
+    public async triggerHostedJob(jobName: string): Promise<HostedJobTriggerResponseDto> {
+        const resp = await this.sessions.authorizedFetch(
+            `/api/studio/hosted-jobs/${encodeURIComponent(jobName)}/trigger`,
+            { method: 'POST' }
+        );
+        if (resp.status === 202 || resp.ok) {
+            return await resp.json() as HostedJobTriggerResponseDto;
+        }
+        const refusal = await this.readRefusal(resp);
+        throw new Error(refusal.error || `Could not run job ${jobName} (${resp.status}).`);
+    }
+
+    public async cancelHostedJobRun(jobName: string, runId: number): Promise<HostedJobCancelResponseDto> {
+        const resp = await this.sessions.authorizedFetch(
+            `/api/studio/hosted-jobs/${encodeURIComponent(jobName)}/runs/${runId}/cancel`,
+            { method: 'POST' }
+        );
+        if (resp.status === 202 || resp.ok) {
+            return await resp.json() as HostedJobCancelResponseDto;
+        }
+        const refusal = await this.readRefusal(resp);
+        throw new Error(refusal.error || `Could not stop run #${runId} (${resp.status}).`);
     }
 
     private async readReceipt(resp: Response, pipelineId: number, expectedVersion?: number): Promise<PipelineRunSubmittedDto> {

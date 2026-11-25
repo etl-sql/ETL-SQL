@@ -35,6 +35,7 @@ import { analyzeSavePolicy, getSealPasswordRequirement, requiresRunPasswordPromp
 import { registerWalkthroughCommands } from './walkthrough';
 import { HostedSessionManager } from './hosted/hostedSessionManager';
 import { HostedExecutionController } from './hosted/hostedExecutionController';
+import { HostedJobsTreeProvider, HostedTreeNode } from './hosted/hostedJobsTreeProvider';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -223,11 +224,22 @@ export async function activate(context: vscode.ExtensionContext) {
         sessions: hostedSessions,
         log: msg => outputChannel.appendLine(msg)
     });
+    const hostedJobsTree = new HostedJobsTreeProvider({
+        sessions: hostedSessions,
+        client: hostedController.client,
+        log: msg => outputChannel.appendLine(msg)
+    });
     context.subscriptions.push(
         hostedController,
+        hostedJobsTree,
+        vscode.window.registerTreeDataProvider('etlsql-hosted-jobs', hostedJobsTree),
         vscode.commands.registerCommand('etlsql.hosted.selectTarget', () => hostedController?.selectTarget()),
         vscode.commands.registerCommand('etlsql.hosted.connect', (alias?: string) => hostedController?.connect(alias)),
-        vscode.commands.registerCommand('etlsql.hosted.disconnect', () => hostedController?.disconnect())
+        vscode.commands.registerCommand('etlsql.hosted.disconnect', () => hostedController?.disconnect()),
+        vscode.commands.registerCommand('etlsql.hostedJobs.refresh', () => hostedJobsTree.refresh()),
+        vscode.commands.registerCommand('etlsql.hostedJobs.openInPortal', (node?: HostedTreeNode) => hostedJobsTree.openInPortal(node)),
+        vscode.commands.registerCommand('etlsql.hostedJobs.run', (node?: HostedTreeNode) => hostedJobsTree.runNode(node)),
+        vscode.commands.registerCommand('etlsql.hostedJobs.stop', (node?: HostedTreeNode) => hostedJobsTree.stopNode(node))
     );
 
     let serverPath = (config.get<string>('server.path') || '').trim();

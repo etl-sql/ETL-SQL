@@ -28,6 +28,18 @@ public sealed partial class NativeClientScopeMiddleware(RequestDelegate next)
     [GeneratedRegex("^/api/studio/pipelines/\\d+/runs/\\d+/cancel$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex PipelineRunCancelRegex();
 
+    [GeneratedRegex("^/api/studio/hosted-jobs/[^/]+/runs$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex HostedJobRunsListRegex();
+
+    [GeneratedRegex("^/api/studio/hosted-jobs/[^/]+/runs/\\d+$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex HostedJobRunDetailRegex();
+
+    [GeneratedRegex("^/api/studio/hosted-jobs/[^/]+/trigger$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex HostedJobTriggerRegex();
+
+    [GeneratedRegex("^/api/studio/hosted-jobs/[^/]+/runs/\\d+/cancel$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex HostedJobRunCancelRegex();
+
     public async Task InvokeAsync(HttpContext context)
     {
         var isNativeClient = string.Equals(
@@ -78,7 +90,10 @@ public sealed partial class NativeClientScopeMiddleware(RequestDelegate next)
         {
             if (path.Equals("/api/studio/session", StringComparison.OrdinalIgnoreCase)
                 || path.Equals("/api/studio/catalog", StringComparison.OrdinalIgnoreCase)
-                || StudioDocumentSummaryRegex().IsMatch(path))
+                || StudioDocumentSummaryRegex().IsMatch(path)
+                || path.Equals("/api/studio/hosted-jobs", StringComparison.OrdinalIgnoreCase)
+                || HostedJobRunsListRegex().IsMatch(path)
+                || HostedJobRunDetailRegex().IsMatch(path))
                 return NativeClientScopes.StudioRead;
 
             if (path.Equals("/api/studio/pipelines/runnable", StringComparison.OrdinalIgnoreCase)
@@ -93,7 +108,9 @@ public sealed partial class NativeClientScopeMiddleware(RequestDelegate next)
         if (HttpMethods.IsPost(method))
         {
             if (PipelineRunsSubmitRegex().IsMatch(path)
-                || PipelineRunCancelRegex().IsMatch(path))
+                || PipelineRunCancelRegex().IsMatch(path)
+                || HostedJobTriggerRegex().IsMatch(path)
+                || HostedJobRunCancelRegex().IsMatch(path))
                 return NativeClientScopes.StudioRun;
 
             if (path.Equals("/api/designer/save", StringComparison.OrdinalIgnoreCase))
