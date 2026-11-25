@@ -326,7 +326,7 @@ describe('ST56 8-Step Hosted Acceptance Fixture (VS Code Client)', () => {
                 } as unknown as vscode.TextEditor;
             };
 
-            // Step 1: Starts on Local (Offline), connects via loopback OIDC as alice
+            // Starts on Local (Offline), connects via loopback OIDC as alice
             expect(sessions.getTarget()).toEqual({ kind: 'local' });
             expect(sessions.formatStatusBarLabel()).toBe('ETL-SQL: Local (Offline)');
             await sessions.signIn(hostedEntry);
@@ -334,24 +334,24 @@ describe('ST56 8-Step Hosted Acceptance Fixture (VS Code Client)', () => {
             expect(sessions.formatStatusBarLabel()).toContain('tenant-alpha');
             expect(sessions.formatStatusBarLabel()).toContain('alice');
 
-            // Step 2: Authorized run of FinanceCheck.etlsql (pipeline 101)
+            // Authorized run of FinanceCheck.etlsql (pipeline 101)
             await controller.runHostedScript(makeEditor(101, 'FinanceCheck.etlsql'));
             expect(orchestratorRuns.size).toBe(1);
             expect(resultsMessages.some(m => JSON.stringify(m).includes('finished: SUCCESS'))).toBe(true);
 
-            // Step 3: Session reuse (zero new browser launches, distinct runId)
+            // Session reuse (zero new browser launches, distinct runId)
             await controller.runHostedScript(makeEditor(101, 'FinanceCheck.etlsql'));
             expect(browserLaunches).toBe(1);
             expect(orchestratorRuns.size).toBe(2);
 
-            // Step 4: Denied run as bob (403 run_grant_denied, zero new Orchestrator runs)
+            // Denied run as bob (403 run_grant_denied, zero new Orchestrator runs)
             currentOidcUser = 'bob';
             await sessions.signIn(hostedEntry);
             await controller.runHostedScript(makeEditor(101, 'FinanceCheck.etlsql'));
             expect(orchestratorRuns.size).toBe(2);
             expect(resultsMessages.some(m => JSON.stringify(m).includes('run_grant_denied'))).toBe(true);
 
-            // Step 5: (a) Expired access token -> silent single-flight refresh; (b) revoked refresh -> 401 keeps buffer
+            // (a) Expired access token -> silent single-flight refresh; (b) revoked refresh -> 401 keeps buffer
             currentOidcUser = 'alice';
             await sessions.signIn(hostedEntry);
             nowMs += 3_700_000; // expire access token
@@ -369,7 +369,7 @@ describe('ST56 8-Step Hosted Acceptance Fixture (VS Code Client)', () => {
             // Re-sign-in as alice for Step 6 & 7
             await sessions.signIn(hostedEntry);
 
-            // Step 6: Stop on SlowWait.etlsql (pipeline 102) -> Cancellation requested -> CANCELLED
+            // Stop on SlowWait.etlsql (pipeline 102) -> Cancellation requested -> CANCELLED
             const slowRunPromise = controller.runHostedScript(makeEditor(102, 'SlowWait.etlsql'));
             // Wait a tick for active run to attach, then invoke Stop
             await new Promise(resolve => setTimeout(resolve, 15));
@@ -378,14 +378,14 @@ describe('ST56 8-Step Hosted Acceptance Fixture (VS Code Client)', () => {
             expect(resultsMessages.some(m => JSON.stringify(m).includes('Cancellation requested'))).toBe(true);
             expect(resultsMessages.some(m => JSON.stringify(m).includes('finished: CANCELLED'))).toBe(true);
 
-            // Step 7: Lost 202 response -> recovers exact runId, creates exactly ONE Orchestrator run for K1
+            // Lost 202 response -> recovers exact runId, creates exactly ONE Orchestrator run for K1
             const runsBeforeDrop = orchestratorRuns.size;
             dropNextSubmitResponse = true;
             await controller.runHostedScript(makeEditor(101, 'FinanceCheck.etlsql'));
             expect(orchestratorRuns.size).toBe(runsBeforeDrop + 1);
             expect(resultsMessages.some(m => JSON.stringify(m).includes('Recovered accepted run'))).toBe(true);
 
-            // Step 8: Disconnect -> Local (Offline), server session revoked, fresh activation starts on Local
+            // Disconnect -> Local (Offline), server session revoked, fresh activation starts on Local
             const preDisconnectToken = sessions.getSession()!.token;
             await controller.disconnect();
             expect(sessions.getTarget()).toEqual({ kind: 'local' });
