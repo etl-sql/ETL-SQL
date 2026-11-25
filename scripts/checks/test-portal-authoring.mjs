@@ -30,6 +30,10 @@ try {
     assert.deepEqual(responses.readScriptContent(script), script);
     assert.deepEqual(responses.readDesignerLease(lease), lease);
     assert.deepEqual(responses.readStudioDraft(draft), draft);
+    const runReceipt = { runId: 11, pipelineId: 7, version: 4, scriptHash: 'sha256:fixture', jobName: 'PIPELINE:7' };
+    assert.deepEqual(responses.readPipelineRunSubmitted(runReceipt), { ...runReceipt, replayed: false });
+    assert.deepEqual(responses.readPipelineRunSubmitted({ ...runReceipt, replayed: true }), { ...runReceipt, replayed: true });
+    assert.throws(() => responses.readPipelineRunSubmitted({ ...runReceipt, replayed: 'true' }), /Invalid/);
     const normalized = responses.readDesignerParse({ designState: state, error: null });
     assert.equal(normalized.pages[0].visuals[0].formatting.title.text, undefined);
     assert.equal(normalized.pages[0].visuals[0].formatting.fields.Revenue.format, undefined);

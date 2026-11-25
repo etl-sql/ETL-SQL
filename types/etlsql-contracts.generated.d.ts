@@ -1616,6 +1616,7 @@ interface PipelineRunSubmittedDto {
     version: number;
     scriptHash: string;
     jobName: string;
+    replayed: boolean;
 }
 
 interface PipelineScheduleDto {

@@ -117,10 +117,11 @@ export function readStudioDraft(value: unknown): StudioRecoveryDraftDto {
 
 export function readPipelineRunSubmitted(value: unknown): PipelineRunSubmittedDto {
     if (!isObject(value) || !version(value.runId) || !integer(value.pipelineId) || !version(value.version)
-        || !string(value.scriptHash) || !string(value.jobName))
+        || !string(value.scriptHash) || !string(value.jobName)
+        || ('replayed' in value && typeof value.replayed !== 'boolean'))
         throw new TypeError('Invalid pipeline run submission response.');
     return { runId: value.runId, pipelineId: value.pipelineId, version: value.version,
-        scriptHash: value.scriptHash, jobName: value.jobName };
+        scriptHash: value.scriptHash, jobName: value.jobName, replayed: value.replayed === true };
 }
 export function readPipelineRunCancelRequested(value: unknown): PipelineRunCancelRequestedDto {
     if (!isObject(value) || !version(value.runId) || !integer(value.pipelineId))

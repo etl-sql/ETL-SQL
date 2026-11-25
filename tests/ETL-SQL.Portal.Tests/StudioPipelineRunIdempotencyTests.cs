@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Testcontainers.PostgreSql;
 using Xunit;
 
 namespace ETL_SQL.Portal.Tests;
@@ -74,6 +75,123 @@ public sealed class StudioPipelineRunIdempotencyTests
         });
         Assert.Equal(1, payloads.Count(dto => !dto.Replayed));
         Assert.Equal(4, payloads.Count(dto => dto.Replayed));
+        Assert.Equal(0, portal.Services.GetRequiredService<StudioRunIdempotencyCoordinator>().ActiveGateCount);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Accepted)]
+    [InlineData(HttpStatusCode.Conflict)]
+    public Task TwoPortalInstances_PendingLookupDoesNotFinalizeAnotherNodesClaim(HttpStatusCode outcome) =>
+        CheckTwoPortalInstancesAsync(outcome);
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task PostgresPortals_ShareTheDurableClaimAndReceipt()
+    {
+        await using var postgres = new PostgreSqlBuilder("postgres:16-alpine").Build();
+        await postgres.StartAsync();
+        await CheckTwoPortalInstancesAsync(HttpStatusCode.Accepted, postgres.GetConnectionString());
+    }
+
+    private static async Task CheckTwoPortalInstancesAsync(HttpStatusCode outcome, string? postgres = null)
+    {
+        var sharedTempDir = Path.Combine(Path.GetTempPath(), $"portal_idemp_ha_{Guid.NewGuid():N}");
+        var dispatchEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var dispatchOutcome = new TaskCompletionSource<HttpStatusCode>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstHandler = new StubOrchestratorHandler { DispatchEntered = dispatchEntered, DispatchOutcome = dispatchOutcome.Task };
+        var secondHandler = new StubOrchestratorHandler();
+        try
+        {
+            using var nodeA = new IdempotencyPortalFactory(firstHandler, sharedTempDir, postgres);
+            await MarkAdminReadyAsync(nodeA);
+            using var clientA = nodeA.CreateClient();
+            var token = await LoginAsync(clientA, "admin", "Admin@12345!");
+            var folderId = await CreateFolderAsync(nodeA, ownerId: null);
+            var (pipelineId, version) = await CreatePipelineAsync(clientA, token, folderId, ScriptV1);
+
+            using var nodeB = new IdempotencyPortalFactory(secondHandler, sharedTempDir, postgres);
+            using var clientB = nodeB.CreateClient();
+            var key = Guid.NewGuid().ToString("D");
+            var submit = SubmitAsync(clientA, pipelineId, version, token, key);
+            try
+            {
+                await dispatchEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                var recovery = await GetByRequestAsync(clientB, pipelineId, key, token);
+                var repeat = await SubmitAsync(clientB, pipelineId, version, token, key);
+                Assert.Equal(HttpStatusCode.Conflict, recovery.StatusCode);
+                Assert.Equal(HttpStatusCode.Conflict, repeat.StatusCode);
+                Assert.Equal("submission_outcome_unknown",
+                    (await repeat.Content.ReadFromJsonAsync<PipelineRunRefusalDto>(Json))!.Code);
+                Assert.Equal(0, secondHandler.DispatchCount);
+                using var scope = nodeB.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                Assert.Equal("Pending", (await db.StudioRunIdempotencies.SingleAsync()).State);
+            }
+            finally
+            {
+                dispatchOutcome.TrySetResult(outcome);
+            }
+
+            Assert.Equal(outcome, (await submit).StatusCode);
+            var recovered = await GetByRequestAsync(clientB, pipelineId, key, token);
+            if (outcome == HttpStatusCode.Accepted)
+            {
+                Assert.Equal(HttpStatusCode.OK, recovered.StatusCode);
+                Assert.True((await recovered.Content.ReadFromJsonAsync<PipelineRunSubmittedDto>(Json))!.Replayed);
+            }
+            else
+            {
+                Assert.Equal(HttpStatusCode.NotFound, recovered.StatusCode);
+                Assert.Equal(HttpStatusCode.Accepted, (await SubmitAsync(clientB, pipelineId, version, token, key)).StatusCode);
+                Assert.Equal(1, secondHandler.DispatchCount);
+            }
+            Assert.Equal(1, firstHandler.DispatchCount);
+        }
+        finally
+        {
+            try { Directory.Delete(sharedTempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ScriptBytesMustMatchTheSavedVersionBeforeDispatch()
+    {
+        var handler = new StubOrchestratorHandler();
+        using var portal = new IdempotencyPortalFactory(handler);
+        await MarkAdminReadyAsync(portal);
+        using var client = portal.CreateClient();
+        var token = await LoginAsync(client, "admin", "Admin@12345!");
+        var folderId = await CreateFolderAsync(portal, ownerId: null);
+        var (pipelineId, version) = await CreatePipelineAsync(client, token, folderId, ScriptV1);
+        using var scope = portal.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var pipeline = await db.Reports.SingleAsync(r => r.Id == pipelineId);
+        pipeline.PublishedScriptHash = Sha(ScriptV2);
+        await db.SaveChangesAsync();
+
+        var refusal = await SubmitAsync(client, pipelineId, version, token, Guid.NewGuid().ToString("D"));
+        Assert.Equal(HttpStatusCode.Conflict, refusal.StatusCode);
+        Assert.Equal("revision_changed", (await refusal.Content.ReadFromJsonAsync<PipelineRunRefusalDto>(Json))!.Code);
+        Assert.Equal(0, handler.DispatchCount);
+        Assert.Empty(await db.StudioRunIdempotencies.ToListAsync());
+    }
+
+    [Fact]
+    public async Task OrchestratorReceiptMustMatchTheDispatchedVersion()
+    {
+        var handler = new StubOrchestratorHandler { MismatchReceipt = true };
+        using var portal = new IdempotencyPortalFactory(handler);
+        await MarkAdminReadyAsync(portal);
+        using var client = portal.CreateClient();
+        var token = await LoginAsync(client, "admin", "Admin@12345!");
+        var folderId = await CreateFolderAsync(portal, ownerId: null);
+        var (pipelineId, version) = await CreatePipelineAsync(client, token, folderId, ScriptV1);
+        var key = Guid.NewGuid().ToString("D");
+        var refusal = await SubmitAsync(client, pipelineId, version, token, key);
+        Assert.Equal(HttpStatusCode.Conflict, refusal.StatusCode);
+        Assert.Equal("submission_outcome_unknown", (await refusal.Content.ReadFromJsonAsync<PipelineRunRefusalDto>(Json))!.Code);
+        Assert.Equal(HttpStatusCode.Conflict, (await GetByRequestAsync(client, pipelineId, key, token)).StatusCode);
+        Assert.Equal(1, handler.DispatchCount);
     }
 
     [Fact]
@@ -214,7 +332,8 @@ public sealed class StudioPipelineRunIdempotencyTests
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
             var row = await db.StudioRunIdempotencies.SingleAsync(r => r.IdempotencyKey == crashedKey);
-            Assert.Equal("Unknown", row.State);
+            Assert.Equal("Pending", row.State);
+            Assert.Null(row.CompletedAt);
         }
 
         // 3. A key with no visible submission record returns 404 submission_not_found.
@@ -493,12 +612,27 @@ public sealed class StudioPipelineRunIdempotencyTests
         public int DispatchCount => Volatile.Read(ref _dispatchCount);
         public TimeSpan Delay { get; set; } = TimeSpan.Zero;
         public Exception? ThrowOnNextDispatch { get; set; }
+        public TaskCompletionSource? DispatchEntered { get; init; }
+        public Task<HttpStatusCode>? DispatchOutcome { get; init; }
+        public bool MismatchReceipt { get; init; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/runs", StringComparison.Ordinal) == true)
             {
                 Interlocked.Increment(ref _dispatchCount);
+                DispatchEntered?.TrySetResult();
+                if (DispatchOutcome is not null)
+                {
+                    var status = await DispatchOutcome.WaitAsync(cancellationToken);
+                    if (status != HttpStatusCode.Accepted)
+                    {
+                        return new HttpResponseMessage(status)
+                        {
+                            Content = JsonContent.Create(new { code = "already_running" })
+                        };
+                    }
+                }
                 if (Delay > TimeSpan.Zero)
                     await Task.Delay(Delay, cancellationToken);
 
@@ -509,10 +643,14 @@ public sealed class StudioPipelineRunIdempotencyTests
                     throw ex;
                 }
 
+                var payload = await request.Content!.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+                var scriptHash = Sha(payload.GetProperty("scriptText").GetString()!);
+                var segments = request.RequestUri!.AbsolutePath.Split('/');
+                var jobName = Uri.UnescapeDataString(segments[^2]);
                 var runId = Interlocked.Increment(ref _nextRunId);
                 return new HttpResponseMessage(HttpStatusCode.Accepted)
                 {
-                    Content = JsonContent.Create(new { runId, jobName = "PIPELINE:stub", scriptHash = "sha256:stub" })
+                    Content = JsonContent.Create(new { runId, jobName, scriptHash = MismatchReceipt ? Sha(ScriptV2) : scriptHash })
                 };
             }
 
@@ -528,10 +666,13 @@ public sealed class StudioPipelineRunIdempotencyTests
         private readonly StubOrchestratorHandler _handler;
         private readonly string? _sharedTempDir;
 
-        public IdempotencyPortalFactory(StubOrchestratorHandler handler, string? sharedTempDir = null)
+        private readonly string? _postgres;
+
+        public IdempotencyPortalFactory(StubOrchestratorHandler handler, string? sharedTempDir = null, string? postgres = null)
         {
             _handler = handler;
             _sharedTempDir = sharedTempDir;
+            _postgres = postgres;
             if (_sharedTempDir is not null)
             {
                 Directory.CreateDirectory(_sharedTempDir);
@@ -556,6 +697,11 @@ public sealed class StudioPipelineRunIdempotencyTests
                 settings["Portal:Storage:KeyRingPath"] = Path.Combine(_sharedTempDir, "keys");
                 settings["Portal:Orchestrator:DatabasePath"] = Path.Combine(_sharedTempDir, "etlsql.db");
             }
+            if (_postgres is not null)
+            {
+                settings["Portal:Database:Provider"] = "Postgres";
+                settings["Portal:Database:ConnectionString"] = _postgres;
+            }
         }
 
         protected override void CustomizePortalConfig(PortalConfig config)
@@ -570,6 +716,8 @@ public sealed class StudioPipelineRunIdempotencyTests
                 config.Storage.KeyRingPath = Path.Combine(_sharedTempDir, "keys");
                 config.Orchestrator.DatabasePath = Path.Combine(_sharedTempDir, "etlsql.db");
             }
+            if (_postgres is not null)
+                config.Database = new PortalDatabaseConfig { Provider = "Postgres", ConnectionString = _postgres };
             config.Orchestrator.ApiUrl = "http://orchestrator.test";
             config.Orchestrator.ApiKey = "test-orch-key-12345";
             config.Orchestrator.IdentitySigningSecret = OrchestratorWebFactory.IdentitySecret;
@@ -588,7 +736,10 @@ public sealed class StudioPipelineRunIdempotencyTests
                 services.RemoveAll<Microsoft.EntityFrameworkCore.Infrastructure.IDbContextOptionsConfiguration<PortalDbContext>>();
                 services.AddDbContext<PortalDbContext>((sp, opt) =>
                 {
-                    opt.UseSqlite($"Data Source={dbPath}");
+                    if (_postgres is null)
+                        opt.UseSqlite($"Data Source={dbPath}");
+                    else
+                        opt.UseNpgsql(_postgres, provider => provider.MigrationsAssembly(PortalDatabase.PostgresMigrationsAssembly));
                     opt.AddInterceptors(sp.GetRequiredService<AuditFailClosedInterceptor>());
                     opt.UsePortalEncryption(sp.GetRequiredService<PortalPiiProtector>());
                 });

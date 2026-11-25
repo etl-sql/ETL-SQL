@@ -1,76 +1,66 @@
-using System.Collections.Concurrent;
-
 namespace ETL_SQL.Portal.Services;
 
-/// <summary>
-/// Serializes in-process concurrent requests sharing the same (tenant, user, pipeline, idempotencyKey)
-/// and stamps each durable <c>Pending</c> claim with a per-process <see cref="InstanceId"/> so rows
-/// left <c>Pending</c> across a Portal restart are detected as <c>Unknown</c> without redispatch.
-/// </summary>
+/// <summary>Coalesces same-key submissions on this Portal. The database claim coordinates across instances.</summary>
 public sealed class StudioRunIdempotencyCoordinator
 {
     public string InstanceId { get; } = Guid.NewGuid().ToString("N");
 
-    private readonly ConcurrentDictionary<string, RefCountedGate> _gates = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string TenantId, int UserId, int PipelineId, string Key), Gate> _gates = [];
 
-    public static string BuildKey(string tenantId, int userId, int pipelineId, string idempotencyKey) =>
-        $"{tenantId}|{userId}|{pipelineId}|{idempotencyKey}";
-
-    public async Task<IDisposable> AcquireAsync(string compositeKey, CancellationToken ct)
+    internal int ActiveGateCount
     {
-        RefCountedGate gate;
-        while (true)
+        get { lock (_gates) return _gates.Count; }
+    }
+
+    public async Task<IDisposable> AcquireAsync(
+        string tenantId, int userId, int pipelineId, string key, CancellationToken ct)
+    {
+        var scope = (tenantId, userId, pipelineId, key);
+        Gate gate;
+        lock (_gates)
         {
-            gate = _gates.GetOrAdd(compositeKey, static _ => new RefCountedGate());
-            if (gate.TryAddRef())
-                break;
+            if (!_gates.TryGetValue(scope, out gate!))
+            {
+                gate = new Gate();
+                _gates.Add(scope, gate);
+            }
+            gate.References++;
         }
 
         try
         {
             await gate.Semaphore.WaitAsync(ct);
-            return new GateLease(this, compositeKey, gate);
+            return new GateLease(this, scope, gate);
         }
         catch
         {
-            ReleaseRef(compositeKey, gate);
+            ReleaseReference(scope, gate);
             throw;
         }
     }
 
-    private void ReleaseRef(string compositeKey, RefCountedGate gate)
+    private void ReleaseReference((string TenantId, int UserId, int PipelineId, string Key) scope, Gate gate)
     {
-        if (gate.ReleaseRef())
+        lock (_gates)
         {
-            _gates.TryRemove(new KeyValuePair<string, RefCountedGate>(compositeKey, gate));
-            gate.Semaphore.Dispose();
+            if (--gate.References == 0)
+            {
+                _gates.Remove(scope);
+                gate.Semaphore.Dispose();
+            }
         }
     }
 
-    private sealed class RefCountedGate
+    private sealed class Gate
     {
-        private int _refCount = 1;
         public SemaphoreSlim Semaphore { get; } = new(1, 1);
-
-        public bool TryAddRef()
-        {
-            while (true)
-            {
-                var current = Volatile.Read(ref _refCount);
-                if (current <= 0)
-                    return false;
-                if (Interlocked.CompareExchange(ref _refCount, current + 1, current) == current)
-                    return true;
-            }
-        }
-
-        public bool ReleaseRef() => Interlocked.Decrement(ref _refCount) == 0;
+        public int References { get; set; }
     }
 
     private sealed class GateLease(
         StudioRunIdempotencyCoordinator owner,
-        string compositeKey,
-        RefCountedGate gate) : IDisposable
+        (string TenantId, int UserId, int PipelineId, string Key) scope,
+        Gate gate) : IDisposable
     {
         private int _disposed;
 
@@ -79,7 +69,7 @@ public sealed class StudioRunIdempotencyCoordinator
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
                 return;
             gate.Semaphore.Release();
-            owner.ReleaseRef(compositeKey, gate);
+            owner.ReleaseReference(scope, gate);
         }
     }
 }

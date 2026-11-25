@@ -263,8 +263,9 @@ receives `202 Accepted`:
 1. **Client sends `Idempotency-Key: <uuid-v4>`** on every submission.
 2. **Portal records the key** in a tenant-and-user-scoped table (`StudioRunIdempotency`, 24-hour
    TTL) keyed by `(TenantId, UserId, PipelineId, IdempotencyKey)` with state `Pending` ->
-   `Accepted(RunId, ScriptHash, Version)` or `Unknown` (if Orchestrator call threw/timed out after
-   dispatch).
+   `Accepted(RunId, ScriptHash, Version)` or `Unknown` if the dispatch could not be confirmed.
+   Only the request that owns the claim can finalize it. The Portal checks the bytes against the
+   saved revision's hash before dispatch and checks that the acceptance receipt names that script and job.
 3. **Recovery without duplicates:**
    - The client displays `Submission unconfirmed (request <key>)` and does **not** claim failure or
      mint a new key.
@@ -273,9 +274,10 @@ receives `202 Accepted`:
    - `Accepted`: Portal returns the existing `{ runId, pipelineId, version, scriptHash, jobName }`
      with `replayed: true`; client attaches to `GET .../runs/{runId}`.
    - `404 Not Found`: Submission never reached the Portal; client enables explicit user retry.
-   - `Unknown` (`409 submission_outcome_unknown`): Portal could not confirm whether the Orchestrator
-     accepted the call; Portal refuses to auto-submit a duplicate and directs the user to inspect
-     recent runs for `PIPELINE:{id}` before starting a new run.
+   - `Pending` or `Unknown` (`409 submission_outcome_unknown`): Portal has no confirmed receipt.
+     A same-key lookup can recover a receipt if the original request later completes. During the
+     recovery window the Portal refuses a duplicate dispatch. Inspect recent runs for `PIPELINE:{id}`
+     before starting a new run.
 
 ---
 
