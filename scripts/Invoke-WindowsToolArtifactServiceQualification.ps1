@@ -26,7 +26,7 @@ $sc = Join-Path ([Environment]::SystemDirectory) 'sc.exe'
 $serviceName = 'EtlsqlXt08Probe-' + [guid]::NewGuid().ToString('N')
 $workerAccount = "NT SERVICE\$serviceName"
 
-function Invoke-FixtureSc([string[]] $Arguments) {
+function Invoke-FixtureSc([string[]] $Arguments, [int] $TimeoutMs = 15000, [switch] $AllowAlreadyStopped) {
     $start = [Diagnostics.ProcessStartInfo]::new($sc)
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true
@@ -37,11 +37,11 @@ function Invoke-FixtureSc([string[]] $Arguments) {
     try {
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit(15000)) {
+        if (-not $process.WaitForExit($TimeoutMs)) {
             $process.Kill()
             throw "Service control command '$($Arguments[0])' timed out for '$serviceName'."
         }
-        if ($process.ExitCode -ne 0) {
+        if ($process.ExitCode -ne 0 -and -not ($AllowAlreadyStopped -and $process.ExitCode -eq 1062)) {
             throw "Service control command '$($Arguments[0])' failed for '$serviceName'. $($stdout.Result) $($stderr.Result)"
         }
     } finally {
@@ -52,8 +52,9 @@ function Invoke-FixtureSc([string[]] $Arguments) {
 function Stop-FixtureService {
     $service = Get-Service -Name $serviceName
     try {
+        $service.Refresh()
         if ($service.Status -ne 'Stopped' -and $service.Status -ne 'StopPending') {
-            Invoke-FixtureSc @('stop', $serviceName)
+            Invoke-FixtureSc @('stop', $serviceName) -AllowAlreadyStopped
         }
         $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20))
     } finally {
@@ -68,6 +69,8 @@ $runnerPath = Join-Path $workspace.FullName 'ProbeService.exe'
 $settingsPath = Join-Path $workspace.FullName 'probe-settings.json'
 $fixtureScript = Join-Path $PSScriptRoot 'Invoke-WindowsToolArtifactQualification.ps1'
 $installed = $false
+$qualificationFailed = $false
+$startedAt = Get-Date
 
 try {
     $imagePath = '"' + $runnerPath + '" ' + $serviceName
@@ -121,10 +124,17 @@ try {
             ReceiptPath = $receiptPath
         } | ConvertTo-Json -Compress | Set-Content -LiteralPath $settingsPath -Encoding utf8NoBOM
 
-        Invoke-FixtureSc @('start', $serviceName)
+        Invoke-FixtureSc @('start', $serviceName) -TimeoutMs 45000
         $timer = [Diagnostics.Stopwatch]::StartNew()
-        while (-not [IO.File]::Exists($receiptPath) -and $timer.Elapsed.TotalSeconds -lt 55) {
-            Start-Sleep -Milliseconds 200
+        $service = Get-Service -Name $serviceName
+        try {
+            while (-not [IO.File]::Exists($receiptPath) -and $timer.Elapsed.TotalSeconds -lt 55) {
+                $service.Refresh()
+                if ($service.Status -eq 'Stopped') { break }
+                Start-Sleep -Milliseconds 200
+            }
+        } finally {
+            $service.Dispose()
         }
         Stop-FixtureService
         if (-not [IO.File]::Exists($receiptPath)) {
@@ -152,12 +162,40 @@ try {
         WorkerProfile = 'Windows virtual service account'
         Receipts = $receipts
     }
+} catch {
+    $qualificationFailed = $true
+    if ($installed) {
+        try {
+            $diagnostic = Get-CimInstance Win32_Service -Filter "Name = '$serviceName'"
+            if ($diagnostic) {
+                Write-Warning "Service state=$($diagnostic.State), exit=$($diagnostic.ExitCode), service exit=$($diagnostic.ServiceSpecificExitCode)."
+            }
+            $events = Get-WinEvent -FilterHashtable @{
+                LogName = 'System'
+                ProviderName = 'Service Control Manager'
+                StartTime = $startedAt
+            } -ErrorAction SilentlyContinue | Where-Object {
+                $_.Message -like "*$serviceName*"
+            }
+            foreach ($event in $events) {
+                Write-Warning "SCM event $($event.Id): $($event.Message)"
+            }
+        } catch {
+            Write-Warning "Could not read service diagnostics: $($_.Exception.Message)"
+        }
+    }
+    throw
 } finally {
     if ($installed) {
         try {
-            Stop-FixtureService
-        } finally {
-            Invoke-FixtureSc @('delete', $serviceName)
+            try {
+                Stop-FixtureService
+            } finally {
+                Invoke-FixtureSc @('delete', $serviceName)
+            }
+        } catch {
+            if (-not $qualificationFailed) { throw }
+            Write-Warning "Could not clean up the test service: $($_.Exception.Message)"
         }
     }
 }

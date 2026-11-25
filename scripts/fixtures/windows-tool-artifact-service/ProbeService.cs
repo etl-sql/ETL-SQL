@@ -6,19 +6,19 @@ namespace ETL_SQL.ToolArtifactServiceFixture;
 
 internal sealed class ProbeService(ProbeSettings settings) : ServiceBase
 {
-    private static async Task<int> Main(string[] args)
+    private static int Main(string[] args)
     {
         if (args.Length != 1)
             return 2;
 
         string path = Path.Combine(AppContext.BaseDirectory, "probe-settings.json");
-        await using var input = File.OpenRead(path);
-        var settings = await JsonSerializer.DeserializeAsync<ProbeSettings>(input)
+        using var input = File.OpenRead(path);
+        var settings = JsonSerializer.Deserialize<ProbeSettings>(input)
             ?? throw new InvalidDataException("Missing qualification settings.");
         if (args[0] == "--console")
-            return await RunProbeAsync(settings, CancellationToken.None);
+            return RunProbeAsync(settings, CancellationToken.None).GetAwaiter().GetResult();
 
-        using var service = new ProbeService(settings) { ServiceName = args[0], AutoLog = false };
+        using var service = new ProbeService(settings) { ServiceName = args[0], AutoLog = false, CanStop = true };
         Run(service);
         return service.ExitCode;
     }
