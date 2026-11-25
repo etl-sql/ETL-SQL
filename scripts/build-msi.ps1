@@ -11,7 +11,7 @@ if ([string]::IsNullOrWhiteSpace($WindowsPayloadDirectory) -ne [string]::IsNullO
 if ($LASTEXITCODE -ne 0) { throw 'Installer source validation failed.' }
 & node (Join-Path $PSScriptRoot 'sync-assets.js')
 if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci --prefix scripts/typecheck first.' }
-$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.23.0" }
+$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.24.0" }
 $BuildDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer\publish\win-x64\bin"
 $InstallerDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer"
 $PayloadSourceSha = $null

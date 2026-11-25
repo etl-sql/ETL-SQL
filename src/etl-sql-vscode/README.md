@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=Octocolee.etl-sql-vscode"><img src="https://img.shields.io/badge/VS%20Marketplace-v0.23.0-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="Visual Studio Marketplace Version" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=Octocolee.etl-sql-vscode"><img src="https://img.shields.io/badge/VS%20Marketplace-v0.24.0-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="Visual Studio Marketplace Version" /></a>
   <img src="https://img.shields.io/badge/Tests-10%2C000%2B%20Passing-brightgreen?style=for-the-badge&logo=checkmarx&logoColor=white" alt="10,000+ Tests Passing" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-4CAF50?style=for-the-badge" alt="Platform" />
 </p>

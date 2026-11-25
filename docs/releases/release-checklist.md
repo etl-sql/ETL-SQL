@@ -192,7 +192,7 @@ candidate; missing artifacts or changed package bytes must pass verification bef
 Each upload step has a ten-minute deadline. Windows has a twenty-minute job budget; macOS has
 twenty-five minutes to include staging the accepted files from their native artifact trees.
 
-Replace `x.y.z` with the target version (current target: **0.23.0**) throughout.
+Replace `x.y.z` with the target version (current target: **0.24.0**) throughout.
 
 ---
 
