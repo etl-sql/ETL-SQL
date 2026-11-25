@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 using ETL_SQL.Reporting;
 using ETL_SQL.Reporting.Renderers;
 using ETL_SQL.Reporting.Semantics;
@@ -47,6 +49,25 @@ public sealed class CardSvgPresentationTests
 
         Assert.Contains("font-size='10'", card);
         Assert.DoesNotContain("fill='white'", card);
+    }
+
+    [Fact]
+    public void RenderForCard_WideYAxisTicksWithTitle_ExpandsLeftMarginToAvoidCollision()
+    {
+        var spec = GrammarOfGraphics.GrammarOfGraphicsContractFixtures.ChartSpec() with { Title = "Revenue" };
+        var data = GrammarOfGraphics.GrammarOfGraphicsContractFixtures.ChartData();
+        var resolved = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0m, 0m, 720m, 260m));
+        var widenedScales = resolved.Scales.Select(s => s.Channel == FieldChannel.Y
+            ? s with { Ticks = s.Ticks.Select(t => t with { Label = "522195.24" }).ToImmutableArray() }
+            : s).ToImmutableArray();
+        var styleBuilder = resolved.Style.ToBuilder();
+        styleBuilder.Add(new StyleToken("axis:y:title", "Revenue ($)"));
+        var plan = resolved with { Scales = widenedScales, Style = styleBuilder.ToImmutable() };
+
+        var card = new SvgChartRenderer().Render(plan, PlotSvgRenderOptions.Card);
+
+        // Plot axis line x1 should be widened past the default 60px left margin so wide tick labels clear the Y title.
+        Assert.DoesNotContain("class='plot-axis-line' x1='60'", card);
     }
 
     private static VisualManifest CreateBarVisual(string? theme, string title)

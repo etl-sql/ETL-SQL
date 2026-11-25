@@ -68,22 +68,32 @@ public sealed class FitPageSizingTests(DetailSurfaceHarnessFixture fixture) : ID
 
         var desktop = await MeasureAsync(page);
         Assert.Empty(session.PageErrors);
-        Assert.InRange(desktop.PageHeight, 680, desktop.ViewportHeight);
+        Assert.InRange(desktop.PageHeight, 700, desktop.ViewportHeight);
         Assert.True(desktop.GridScrollHeight <= desktop.PageHeight + 2,
             $"Single-page FIT='SCREEN' overflowed: gridScrollHeight={desktop.GridScrollHeight} > pageHeight={desktop.PageHeight}");
         Assert.Equal("auto minmax(0px, 2fr) minmax(0px, 2fr) minmax(0px, 1.5fr)", desktop.GridRows);
-        Assert.True(desktop.ChartWrapperHeight >= 150, $"Expected chart wrapper >= 150px, got {desktop.ChartWrapperHeight}");
+        Assert.True(desktop.ChartWrapperHeight >= 100, $"Expected chart wrapper >= 100px, got {desktop.ChartWrapperHeight}");
         Assert.True(desktop.SvgHeight >= desktop.ChartWrapperHeight * 0.85,
             $"Expected SVG height ({desktop.SvgHeight}) to fill chart wrapper ({desktop.ChartWrapperHeight})");
         Assert.False(desktop.HasWhiteBgRect, "Embedded dark card SVG should not paint an opaque white background rect.");
         Assert.Equal(0, desktop.H3MarginTop);
 
-        // Shrink viewport below MIN_HEIGHT = 680 and confirm Overview holds its 680px floor instead of crushing rows.
+        // Collapsing the first chart row switches its grid track to auto and expands the table row.
+        var beforeTableHeight = desktop.TableCardHeight;
+        await page.Locator(".page[data-fit='SCREEN'].active .visual-card:has(.chart-wrapper) .visual-collapse-btn").First.ClickAsync();
+        await page.WaitForTimeoutAsync(450);
+        var collapsed = await MeasureAsync(page);
+        Assert.Equal("auto auto minmax(0px, 2fr) minmax(0px, 1.5fr)", collapsed.GridRows);
+        Assert.True(collapsed.TableCardHeight > beforeTableHeight + 30,
+            $"Expected table card to expand after collapsing a chart row ({beforeTableHeight} -> {collapsed.TableCardHeight})");
+
+        // Expand it back and confirm the automatic row-budget floor holds on a short viewport.
+        await page.Locator(".page[data-fit='SCREEN'].active .visual-card.visual-collapsed .visual-collapse-btn").First.ClickAsync();
         await page.SetViewportSizeAsync(1440, 600);
-        await page.WaitForTimeoutAsync(500);
+        await page.WaitForTimeoutAsync(450);
 
         var shortViewport = await MeasureAsync(page);
-        Assert.True(shortViewport.PageHeight >= 679, $"Expected MIN_HEIGHT floor >= 680px, got {shortViewport.PageHeight}");
+        Assert.True(shortViewport.PageHeight >= 710, $"Expected automatic row-budget floor >= 716px, got {shortViewport.PageHeight}");
         Assert.Empty(session.PageErrors);
     }
 

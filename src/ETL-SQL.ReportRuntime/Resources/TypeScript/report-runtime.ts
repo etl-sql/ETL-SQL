@@ -426,7 +426,7 @@ export function renderManifest(inputManifest: unknown): void {
         });
     }
 
-    renderFooter(root, manifest);
+    renderFooter();
     renderPipelineConsole(root, manifest);
     renderAutoPanel(root, manifest);
     if (getPendingLazyRows() === 0) {

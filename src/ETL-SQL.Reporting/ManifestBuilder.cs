@@ -450,6 +450,7 @@ namespace ETL_SQL.Reporting
             // resolving the AST: it depends on the rows the surface's visuals actually
             // returned, which only exist now.
             DetailSurfacePayloadGuard.Enforce(manifest);
+            NativeChartLayoutResolver.ApplyFitPageInitialLayouts(manifest);
 
             return manifest;
         }

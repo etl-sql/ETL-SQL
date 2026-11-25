@@ -1400,7 +1400,7 @@ CREATE PAGE Overview AS DASHBOARD (
         'F' = DrillRegionDetail,
         'E' = TxnTable
     ),
-    OPTIONS   (FIT = 'SCREEN', MIN_HEIGHT = 680, ROW_WEIGHTS = 'auto, 2, 2, 1.5'),
+    OPTIONS   (FIT = 'SCREEN', ROW_WEIGHTS = 'auto, 2, 2, 1.5'),
     STYLE (THEME = dark)
 );
 
