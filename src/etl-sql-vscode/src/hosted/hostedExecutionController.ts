@@ -45,7 +45,8 @@ export class HostedExecutionController implements vscode.Disposable {
     private readonly _statusBarItem: vscode.StatusBarItem;
     private readonly _disposables: vscode.Disposable[] = [];
     private _activeRun: ActiveHostedRun | null = null;
-    private _pendingSubmission: PendingSubmissionRecord | null = null;
+    private readonly _pendingSubmissions = new Map<string, PendingSubmissionRecord>();
+    private _runningCommand = false;
 
     constructor(options: HostedExecutionControllerOptions) {
         this.sessions = options.sessions;
@@ -89,7 +90,25 @@ export class HostedExecutionController implements vscode.Disposable {
     }
 
     public getPendingSubmission(): PendingSubmissionRecord | null {
-        return this._pendingSubmission;
+        const session = this.sessions.getSession();
+        return session ? this._pendingSubmissions.get(this.submissionScope(session.server.origin, session.tenantId, session.user.id)) ?? null : null;
+    }
+
+    private submissionScope(origin: string, tenantId: string, userId: number): string {
+        return JSON.stringify([origin, tenantId, userId]);
+    }
+
+    private matchesCaller(record: Pick<PendingSubmissionRecord, 'origin' | 'tenantId' | 'userId'>): boolean {
+        const current = this.sessions.getSession();
+        return current !== null && current.server.origin === record.origin
+            && current.tenantId === record.tenantId && current.user.id === record.userId;
+    }
+
+    private forgetSubmission(pending: PendingSubmissionRecord): void {
+        const scope = this.submissionScope(pending.origin, pending.tenantId, pending.userId);
+        if (this._pendingSubmissions.get(scope)?.idempotencyKey === pending.idempotencyKey) {
+            this._pendingSubmissions.delete(scope);
+        }
     }
 
     public refreshStatusBar(): void {
@@ -258,7 +277,6 @@ export class HostedExecutionController implements vscode.Disposable {
 
     public async disconnect(): Promise<void> {
         this._activeRun = null;
-        this._pendingSubmission = null;
         void vscode.commands.executeCommand('setContext', 'etlsql.isRunning', false);
         await this.sessions.disconnect();
         this.refreshStatusBar();
@@ -266,7 +284,7 @@ export class HostedExecutionController implements vscode.Disposable {
 
     public async disconnectOnShutdown(): Promise<void> {
         this._activeRun = null;
-        this._pendingSubmission = null;
+        this._pendingSubmissions.clear();
         await this.sessions.disconnect({ bestEffortTimeoutMs: 2_000 });
     }
 
@@ -277,11 +295,27 @@ export class HostedExecutionController implements vscode.Disposable {
     }
 
     public async runHostedScript(editor: vscode.TextEditor): Promise<void> {
-        if (this._activeRun) {
+        if (this._activeRun || this._runningCommand) {
             vscode.window.showWarningMessage('ETL-SQL: A hosted pipeline run is already in progress. Stop it first or wait for completion.');
             return;
         }
 
+        this._runningCommand = true;
+        try {
+            await this.runSelectedPipeline(editor);
+        } catch (error) {
+            if (error instanceof HostedSessionExpiredError) {
+                await this.handleExpiredSession(undefined);
+            } else {
+                const message = error instanceof Error ? error.message : String(error);
+                vscode.window.showErrorMessage(`ETL-SQL: ${redactSecrets(message, this.sessions.getActiveSecrets())}`);
+            }
+        } finally {
+            this._runningCommand = false;
+        }
+    }
+
+    private async runSelectedPipeline(editor: vscode.TextEditor): Promise<void> {
         const target = this.sessions.getTarget();
         if (target.kind !== 'hosted') {
             return;
@@ -299,19 +333,16 @@ export class HostedExecutionController implements vscode.Disposable {
             return;
         }
 
-        // If there is an unresolved pending submission for this host/tenant/caller, offer recovery first.
-        if (this._pendingSubmission
-            && this._pendingSubmission.origin === session.server.origin
-            && this._pendingSubmission.tenantId === session.tenantId
-            && this._pendingSubmission.userId === session.user.id) {
+        const pendingForCaller = this.getPendingSubmission();
+        if (pendingForCaller) {
             const action = await vscode.window.showWarningMessage(
-                `Submission unconfirmed (request ${this._pendingSubmission.idempotencyKey}) for ${this._pendingSubmission.jobName}.`,
+                `Submission unconfirmed (request ${pendingForCaller.idempotencyKey}) for ${pendingForCaller.jobName}. Check recent runs before starting another.`,
                 'Check Status Again',
                 'Switch to Local (Offline)',
                 'Dismiss & Start New Run'
             );
             if (action === 'Check Status Again') {
-                await this.recoverPendingSubmission(this._pendingSubmission);
+                await this.recoverPendingSubmission(pendingForCaller);
                 return;
             }
             if (action === 'Switch to Local (Offline)') {
@@ -321,11 +352,16 @@ export class HostedExecutionController implements vscode.Disposable {
             if (action !== 'Dismiss & Start New Run') {
                 return;
             }
-            this._pendingSubmission = null;
+            this.forgetSubmission(pendingForCaller);
         }
 
-        const pipelineId = await this.resolvePipelineId(editor.document);
-        if (pipelineId === undefined) {
+        const sameSession = () => this.sessions.getSession()?.sessionId === session.sessionId
+            && this.matchesCaller({ origin: session.server.origin, tenantId: session.tenantId, userId: session.user.id });
+        if (!sameSession()) {
+            return;
+        }
+        const pipelineId = await this.resolvePipelineId(editor.document, session.server.alias, sameSession);
+        if (pipelineId === undefined || !sameSession()) {
             return;
         }
 
@@ -358,12 +394,12 @@ export class HostedExecutionController implements vscode.Disposable {
                 ...choices
             );
 
-            if (!choice || choice === 'Cancel') {
+            if (!choice || choice === 'Cancel' || !sameSession()) {
                 return;
             }
 
             if (choice === 'Save to Portal & Run') {
-                const savedVersion = await this.saveLinkedPipeline(pipelineId, editor.document.getText(), summary.version);
+                const savedVersion = await this.saveLinkedPipeline(pipelineId, editor.document.getText(), summary.version, sameSession);
                 if (savedVersion === undefined) {
                     // Conflict, refusal, or cancel — editor buffer is preserved untouched.
                     return;
@@ -372,6 +408,9 @@ export class HostedExecutionController implements vscode.Disposable {
             }
         }
 
+        if (!sameSession()) {
+            return;
+        }
         const idempotencyKey = this._randomUuid();
         const pending: PendingSubmissionRecord = {
             idempotencyKey,
@@ -386,14 +425,13 @@ export class HostedExecutionController implements vscode.Disposable {
             createdAtMs: Date.now()
         };
 
-        this._pendingSubmission = pending;
         this.renderRunHeader(editor.document.uri.toString(), session.server.origin, session.tenantId, session.user.username, pending.jobName, targetVersion);
         await this.submitWithRecovery(pending);
     }
 
     public async stopHostedRun(): Promise<void> {
         const active = this._activeRun;
-        if (!active) {
+        if (!active || !this.matchesCaller(active)) {
             return;
         }
 
@@ -428,7 +466,7 @@ export class HostedExecutionController implements vscode.Disposable {
             vscode.window.showErrorMessage(`ETL-SQL: Could not cancel run ${active.runId}: ${result.refusal.error}`);
         } catch (err) {
             if (err instanceof HostedSessionExpiredError) {
-                await this.handleExpiredSession(this._pendingSubmission ?? undefined);
+                await this.handleExpiredSession(undefined);
                 return;
             }
             const msg = err instanceof Error ? err.message : String(err);
@@ -437,11 +475,21 @@ export class HostedExecutionController implements vscode.Disposable {
     }
 
     public async submitWithRecovery(pending: PendingSubmissionRecord): Promise<void> {
-        this._pendingSubmission = pending;
+        if (!this.matchesCaller(pending)) {
+            return;
+        }
+        if (Date.now() - pending.createdAtMs >= 24 * 60 * 60 * 1_000) {
+            vscode.window.showWarningMessage('The 24-hour recovery window has expired. Check recent runs before starting another run.');
+            return;
+        }
+        this._pendingSubmissions.set(this.submissionScope(pending.origin, pending.tenantId, pending.userId), pending);
         try {
             const result = await this.client.submitPipelineRun(pending.pipelineId, pending.version, pending.idempotencyKey);
+            if (!this.matchesCaller(pending)) {
+                return;
+            }
             if (result.kind === 'accepted') {
-                this._pendingSubmission = null;
+                this.forgetSubmission(pending);
                 await this.attachAndPollRun(result.receipt, pending);
                 return;
             }
@@ -479,8 +527,12 @@ export class HostedExecutionController implements vscode.Disposable {
                 return;
             }
 
-            // Definite refusal (403 run_grant_denied, 409 stale_revision, etc.)
-            this._pendingSubmission = null;
+            if (result.status >= 500) {
+                await this.recoverPendingSubmission(pending);
+                return;
+            }
+
+            this.forgetSubmission(pending);
             this._postResults({
                 type: 'message',
                 level: 'err',
@@ -520,11 +572,7 @@ export class HostedExecutionController implements vscode.Disposable {
     }
 
     public async recoverPendingSubmission(pending: PendingSubmissionRecord): Promise<void> {
-        const session = this.sessions.getSession();
-        if (!session
-            || session.server.origin !== pending.origin
-            || session.tenantId !== pending.tenantId
-            || session.user.id !== pending.userId) {
+        if (!this.matchesCaller(pending)) {
             vscode.window.showWarningMessage(
                 `Cannot resume recovery for request ${pending.idempotencyKey}: active session does not match original host, tenant, and user.`
             );
@@ -533,8 +581,15 @@ export class HostedExecutionController implements vscode.Disposable {
 
         try {
             const lookup = await this.client.getSubmissionByRequest(pending.pipelineId, pending.idempotencyKey);
+            if (!this.matchesCaller(pending)) {
+                return;
+            }
             if (lookup.kind === 'found') {
-                this._pendingSubmission = null;
+                if (lookup.receipt.version !== pending.version) {
+                    this._postResults({ type: 'message', level: 'warn', text: 'Submission remains unconfirmed. The receipt names a different revision.' });
+                    return;
+                }
+                this.forgetSubmission(pending);
                 this._postResults({
                     type: 'message',
                     level: 'info',
@@ -560,11 +615,11 @@ export class HostedExecutionController implements vscode.Disposable {
                 this._postResults({
                     type: 'message',
                     level: 'warn',
-                    text: `Submission ${pending.idempotencyKey} did not reach the Portal.`
+                    text: `Submission ${pending.idempotencyKey} has no visible Portal receipt.`
                 });
                 this._postResults({ type: 'status', status: 'error' });
                 const choice = await vscode.window.showWarningMessage(
-                    `Submission ${pending.idempotencyKey} did not reach the Portal. Retry with the original key?`,
+                    `Submission ${pending.idempotencyKey} has no visible Portal receipt. Retry with the original key?`,
                     'Retry Hosted',
                     'Switch to Local (Offline)',
                     'Cancel'
@@ -646,7 +701,6 @@ export class HostedExecutionController implements vscode.Disposable {
             vscode.window.showWarningMessage(
                 'Signed in as a different host, tenant, or account than the pending submission. Original request was not resumed automatically.'
             );
-            this._pendingSubmission = null;
             return;
         }
 
@@ -656,7 +710,8 @@ export class HostedExecutionController implements vscode.Disposable {
     private async saveLinkedPipeline(
         pipelineId: number,
         scriptText: string,
-        expectedVersion: number
+        expectedVersion: number,
+        sameSession: () => boolean
     ): Promise<number | undefined> {
         let result = await this.client.savePipelineScript(pipelineId, scriptText, expectedVersion);
 
@@ -666,7 +721,7 @@ export class HostedExecutionController implements vscode.Disposable {
                 prompt: 'Master Password required to seal plaintext secrets before saving to Portal',
                 placeHolder: 'Master Password'
             });
-            if (!sealPassword) {
+            if (!sealPassword || !sameSession()) {
                 return undefined;
             }
             result = await this.client.savePipelineScript(pipelineId, scriptText, expectedVersion, sealPassword);
@@ -691,9 +746,11 @@ export class HostedExecutionController implements vscode.Disposable {
         return undefined;
     }
 
-    private async resolvePipelineId(document: vscode.TextDocument): Promise<number | undefined> {
+    private async resolvePipelineId(document: vscode.TextDocument, serverAlias: string, sameSession: () => boolean): Promise<number | undefined> {
         const config = vscode.workspace.getConfiguration('etlsql');
-        const links = config.get<Record<string, number>>('hosted.pipelineLinks') ?? {};
+        const configuredAlias = config.get<string>('hosted.defaultServerAlias')?.trim();
+        const useWorkspaceLinks = configuredAlias?.toLowerCase() === serverAlias.toLowerCase();
+        const links = useWorkspaceLinks ? config.get<Record<string, number>>('hosted.pipelineLinks') ?? {} : {};
         const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
         const relPath = workspaceFolder
             ? path.relative(workspaceFolder.uri.fsPath, document.fileName).replace(/\\/g, '/')
@@ -704,13 +761,16 @@ export class HostedExecutionController implements vscode.Disposable {
             return linkedId;
         }
 
-        const defaultId = config.get<number>('hosted.pipelineId');
+        const defaultId = useWorkspaceLinks ? config.get<number>('hosted.pipelineId') : undefined;
         if (typeof defaultId === 'number' && defaultId > 0) {
             return defaultId;
         }
 
         // Discover saved pipelines from Portal catalog.
         const page = await this.client.searchCatalog(path.basename(document.fileName, path.extname(document.fileName)));
+        if (!sameSession()) {
+            return undefined;
+        }
         const pipelines = page.items.filter(item => !item.kind || item.kind.toLowerCase() === 'pipeline');
         const catalogItems = pipelines.length > 0 ? pipelines : (await this.client.searchCatalog()).items.filter(
             item => !item.kind || item.kind.toLowerCase() === 'pipeline'
@@ -729,7 +789,7 @@ export class HostedExecutionController implements vscode.Disposable {
                 id: item.id
             })),
             {
-                title: 'Select Saved Portal Pipeline to Run',
+                title: `Select Saved Portal Pipeline to Run ? ${serverAlias}`,
                 placeHolder: 'Choose a published pipeline revision'
             }
         );
@@ -746,6 +806,7 @@ export class HostedExecutionController implements vscode.Disposable {
             jobName: receipt.jobName,
             origin: pending.origin,
             tenantId: pending.tenantId,
+            userId: pending.userId,
             username: pending.username,
             version: receipt.version,
             scriptHash: receipt.scriptHash,
@@ -764,8 +825,11 @@ export class HostedExecutionController implements vscode.Disposable {
         let renderedStatementCount = 0;
 
         try {
-            while (this._activeRun === active) {
+            while (this._activeRun === active && this.matchesCaller(active)) {
                 const polled = await this.client.getPipelineRun(active.pipelineId, active.runId);
+                if (this._activeRun !== active || !this.matchesCaller(active)) {
+                    return;
+                }
                 if (polled.kind === 'refused') {
                     this._postResults({
                         type: 'message',

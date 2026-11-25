@@ -142,6 +142,7 @@ export interface ActiveHostedRun {
     jobName: string;
     origin: string;
     tenantId: string;
+    userId: number;
     username: string;
     version: number;
     scriptHash: string;

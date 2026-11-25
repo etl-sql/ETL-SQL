@@ -102,7 +102,6 @@ export async function startLoopbackCallbackListener(
         const state = parsed.searchParams.get('state') ?? '';
         if (!state || !timingSafeStringEqual(state, expectedState)) {
             writeHtml(res, 400, DENIED_HTML);
-            finishError(new LoopbackAuthError('invalid_callback', 'Loopback sign-in callback state mismatch.'));
             return;
         }
 
@@ -110,19 +109,19 @@ export async function startLoopbackCallbackListener(
         if (error) {
             writeHtml(res, 200, DENIED_HTML);
             const code = error === 'access_denied' ? 'access_denied' : 'invalid_callback';
-            finishError(new LoopbackAuthError(code, `Browser sign-in did not complete (${error}).`));
+            finishError(new LoopbackAuthError(code, 'Browser sign-in did not complete.'), req.socket);
             return;
         }
 
         const authCode = parsed.searchParams.get('code') ?? '';
         if (!authCode) {
             writeHtml(res, 400, DENIED_HTML);
-            finishError(new LoopbackAuthError('invalid_callback', 'Loopback sign-in callback did not include an authorization code.'));
+            finishError(new LoopbackAuthError('invalid_callback', 'Loopback sign-in callback did not include an authorization code.'), req.socket);
             return;
         }
 
         writeHtml(res, 200, SUCCESS_HTML);
-        finishSuccess({ code: authCode, state });
+        finishSuccess({ code: authCode, state }, req.socket);
     });
 
     server.on('connection', socket => {
@@ -130,14 +129,16 @@ export async function startLoopbackCallbackListener(
         socket.on('close', () => sockets.delete(socket));
     });
 
-    const closeServer = () => {
+    const closeServer = (responseSocket?: net.Socket) => {
         if (timer) {
             clearTimeout(timer);
             timer = undefined;
         }
         for (const socket of sockets) {
             try {
-                socket.destroy();
+                if (socket !== responseSocket) {
+                    socket.destroy();
+                }
             } catch {
                 // ignore
             }
@@ -150,21 +151,21 @@ export async function startLoopbackCallbackListener(
         }
     };
 
-    const finishSuccess = (result: LoopbackCallbackResult) => {
+    const finishSuccess = (result: LoopbackCallbackResult, responseSocket: net.Socket) => {
         if (settled) {
             return;
         }
         settled = true;
-        closeServer();
+        closeServer(responseSocket);
         resolvePromise(result);
     };
 
-    const finishError = (err: Error) => {
+    const finishError = (err: Error, responseSocket?: net.Socket) => {
         if (settled) {
             return;
         }
         settled = true;
-        closeServer();
+        closeServer(responseSocket);
         rejectPromise(err);
     };
 

@@ -29,7 +29,7 @@ describe('ST56 8-Step Hosted Acceptance Fixture (VS Code Client)', () => {
         let dropNextSubmitResponse = false;
 
         const authCodes = new Map<string, { challenge: string; redirectUri: string; user: 'alice' | 'bob' }>();
-        const activeSessions = new Map<string, { user: 'alice' | 'bob'; refreshToken: string; revoked: boolean }>();
+        const activeSessions = new Map<string, { user: 'alice' | 'bob'; sessionId: string; refreshToken: string; revoked: boolean }>();
         const idempotencyLedger = new Map<string, { runId: number; pipelineId: number; version: number; scriptHash: string; jobName: string }>();
         const orchestratorRuns = new Map<number, {
             runId: number;
@@ -89,7 +89,7 @@ describe('ST56 8-Step Hosted Acceptance Fixture (VS Code Client)', () => {
                 const refreshToken = `ref_${sessionId}_${crypto.randomBytes(12).toString('hex')}`;
                 issuedSecrets.add(token);
                 issuedSecrets.add(refreshToken);
-                activeSessions.set(token, { user: entry.user, refreshToken, revoked: false });
+                activeSessions.set(token, { user: entry.user, sessionId, refreshToken, revoked: false });
 
                 record(200);
                 return sendJson(res, 200, {
@@ -118,14 +118,14 @@ describe('ST56 8-Step Hosted Acceptance Fixture (VS Code Client)', () => {
                 const newRefresh = `ref_rotated_${crypto.randomBytes(12).toString('hex')}`;
                 issuedSecrets.add(newToken);
                 issuedSecrets.add(newRefresh);
-                activeSessions.set(newToken, { user: state.user, refreshToken: newRefresh, revoked: false });
+                activeSessions.set(newToken, { ...state, refreshToken: newRefresh });
 
                 record(200);
                 return sendJson(res, 200, {
                     token: newToken,
                     refreshToken: newRefresh,
                     expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-                    sessionId: 'sess_refreshed',
+                    sessionId: state.sessionId,
                     clientId: 'etlsql-vscode',
                     user: { id: state.user === 'alice' ? 10 : 11, username: state.user, email: `${state.user}@alpha.test`, roles: ['Publisher'] },
                     tenantId: 'tenant-alpha',
@@ -312,7 +312,7 @@ describe('ST56 8-Step Hosted Acceptance Fixture (VS Code Client)', () => {
 
             const makeEditor = (pipelineId: number, name: string) => {
                 vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-                    get: vi.fn((key: string) => key === 'hosted.pipelineId' ? pipelineId : undefined),
+                    get: vi.fn((key: string) => key === 'hosted.pipelineId' ? pipelineId : key === 'hosted.defaultServerAlias' ? 'alpha' : undefined),
                     inspect: vi.fn(() => ({ globalValue: [hostedEntry] })),
                     update: vi.fn()
                 } as unknown as vscode.WorkspaceConfiguration);

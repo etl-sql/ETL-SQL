@@ -8,7 +8,7 @@ import {
     StudioReportDto,
     redactSecrets
 } from './hostedTypes';
-import { HostedSessionManager } from './hostedSessionManager';
+import { HostedNetworkError, HostedSessionManager } from './hostedSessionManager';
 
 export type SavePipelineResult =
     | { kind: 'saved'; response: SaveDesignerResponse }
@@ -135,7 +135,7 @@ export class HostedPipelineClient {
         });
 
         if (resp.status === 202) {
-            return { kind: 'accepted', receipt: await resp.json() as PipelineRunSubmittedDto };
+            return { kind: 'accepted', receipt: await this.readReceipt(resp, pipelineId, version) };
         }
 
         return {
@@ -155,11 +155,11 @@ export class HostedPipelineClient {
         );
 
         if (resp.status === 200) {
-            return { kind: 'found', receipt: await resp.json() as PipelineRunSubmittedDto };
+            return { kind: 'found', receipt: await this.readReceipt(resp, pipelineId) };
         }
 
         const refusal = await this.readRefusal(resp);
-        if (resp.status === 404) {
+        if (resp.status === 404 && refusal.code === 'submission_not_found') {
             return { kind: 'not_found', refusal };
         }
         if (resp.status === 409 && refusal.code === 'submission_outcome_unknown') {
@@ -202,6 +202,22 @@ export class HostedPipelineClient {
         return { kind: 'refused', status: resp.status, refusal };
     }
 
+    private async readReceipt(resp: Response, pipelineId: number, expectedVersion?: number): Promise<PipelineRunSubmittedDto> {
+        const value = await this.readJsonSafe(resp);
+        if (!value || typeof value.runId !== 'number' || !Number.isSafeInteger(value.runId) || value.runId <= 0
+            || value.pipelineId !== pipelineId || typeof value.version !== 'number'
+            || !Number.isSafeInteger(value.version) || value.version <= 0
+            || (expectedVersion !== undefined && expectedVersion !== value.version)
+            || value.jobName !== `PIPELINE:${pipelineId}` || typeof value.scriptHash !== 'string'
+            || !value.scriptHash || typeof value.replayed !== 'boolean') {
+            throw new HostedNetworkError('Portal returned an invalid run receipt.');
+        }
+        return {
+            runId: value.runId, pipelineId, version: value.version,
+            scriptHash: value.scriptHash, jobName: value.jobName, replayed: value.replayed
+        };
+    }
+
     private async readJsonSafe(resp: Response): Promise<Record<string, unknown> | null> {
         try {
             const text = await resp.text();
@@ -218,9 +234,9 @@ export class HostedPipelineClient {
     private async readRefusal(resp: Response): Promise<PipelineRunRefusalDto> {
         const parsed = await this.readJsonSafe(resp);
         const code = typeof parsed?.code === 'string'
-            ? parsed.code
+            ? this.sanitize(parsed.code)
             : typeof parsed?.error === 'string'
-                ? parsed.error
+                ? this.sanitize(parsed.error)
                 : `http_${resp.status}`;
         const error = this.sanitize(
             typeof parsed?.error === 'string'

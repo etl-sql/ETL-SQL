@@ -7,7 +7,6 @@ import {
     redactSecrets
 } from '../hosted/hostedTypes';
 import {
-    LoopbackAuthError,
     createPkcePair,
     createRandomState,
     startLoopbackCallbackListener
@@ -93,10 +92,12 @@ describe('loopbackPkceAuth', () => {
         // 3. State mismatch path
         const state3 = createRandomState();
         const listener3 = await startLoopbackCallbackListener(state3, 5_000);
-        const expect3 = expect(listener3.waitForCallback()).rejects.toBeInstanceOf(LoopbackAuthError);
+        const wait3 = listener3.waitForCallback();
         const cbResp3 = await fetch(`${listener3.redirectUri}?code=abc&state=wrong-state-value`);
         expect(cbResp3.status).toBe(400);
-        await expect3;
+        const recovery3 = await fetch(`${listener3.redirectUri}?code=expected&state=${encodeURIComponent(state3)}`);
+        expect(recovery3.status).toBe(200);
+        await expect(wait3).resolves.toEqual({ code: 'expected', state: state3 });
 
         // 4. Cancellation path
         const listener4 = await startLoopbackCallbackListener(createRandomState(), 5_000);
@@ -214,6 +215,25 @@ describe('HostedSessionManager', () => {
     });
 });
 
+describe('hosted target changes', () => {
+    it('discards an old host response without refreshing or retrying with the new session', async () => {
+        let complete!: (response: Response) => void;
+        const oldResponse = new Promise<Response>(resolve => { complete = resolve; });
+        const send = vi.fn(async () => oldResponse);
+        const manager = createSignedInMockManager({ fetchImpl: send as unknown as typeof fetch });
+        await manager.signIn({ alias: 'dev', label: 'Dev', origin: 'http://127.0.0.1:5001' });
+        const request = manager.authorizedFetch('/api/studio/catalog');
+        const rejected = expect(request).rejects.toThrow('Hosted target or sign-in changed');
+        await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+        await manager.signIn({ alias: 'prod', label: 'Prod', origin: 'https://portal.example' });
+        complete(new Response(null, { status: 401 }));
+        await rejected;
+        expect(send).toHaveBeenCalledTimes(1);
+        expect(send.mock.calls[0]).toHaveLength(2);
+        expect(manager.getSession()?.server.alias).toBe('prod');
+    });
+});
+
 describe('HostedExecutionController', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -248,7 +268,7 @@ describe('HostedExecutionController', () => {
         await sessionManager.signIn({ alias: 'dev', label: 'Dev', origin: 'http://127.0.0.1:5001' });
 
         vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-            get: vi.fn((key: string) => key === 'hosted.pipelineId' ? 42 : undefined),
+            get: vi.fn((key: string) => key === 'hosted.pipelineId' ? 42 : key === 'hosted.defaultServerAlias' ? 'dev' : undefined),
             inspect: vi.fn(() => ({ globalValue: [] })),
             update: vi.fn()
         } as unknown as vscode.WorkspaceConfiguration);
@@ -334,6 +354,9 @@ describe('HostedExecutionController', () => {
         await controller.submitWithRecovery(pending);
         expect(byRequestCalls).toBe(2);
         expect(controller.getPendingSubmission()?.status).toBe('unknown');
+        await controller.disconnect();
+        await sessionManager.signIn({ alias: 'dev', label: 'Dev', origin: pending.origin });
+        expect(controller.getPendingSubmission()?.idempotencyKey).toBe(pending.idempotencyKey);
         expect(results.some(r => JSON.stringify(r).includes('Submission unconfirmed'))).toBe(true);
 
         // Attempting recovery when signed in as a different user refuses automatically.

@@ -60,6 +60,7 @@ export class HostedSessionManager {
     private _session: HostedSessionState | null = null;
     private _refreshInFlight: Promise<HostedSessionState> | null = null;
     private _activeLoopback: LoopbackCallbackListener | null = null;
+    private _connection = 0;
     private readonly _listeners = new Set<() => void>();
 
     constructor(options: HostedSessionManagerOptions) {
@@ -113,6 +114,7 @@ export class HostedSessionManager {
     }
 
     public cancelPendingSignIn(): void {
+        this._connection++;
         if (this._activeLoopback) {
             this._activeLoopback.cancel('Sign-in cancelled.');
             this._activeLoopback = null;
@@ -129,13 +131,21 @@ export class HostedSessionManager {
         }
         const normalizedServer: HostedServerEntry = { ...server, origin: validated.origin };
 
-        // If switching away from an existing signed-in hosted server, revoke the prior native session first.
-        if (this._session && this._session.server.origin !== normalizedServer.origin) {
-            await this.disconnect({ bestEffortTimeoutMs: 3_000 });
+        this.cancelPendingSignIn();
+        const connection = this._connection;
+        const previous = this._session;
+        this._session = null;
+        this._refreshInFlight = null;
+        this._target = { kind: 'hosted', server: normalizedServer };
+        this.notifyChanged();
+        if (previous) {
+            await this.revokeSession(previous.server.origin, previous, 3_000);
+            this.requireConnection(connection);
         }
 
         // 1. Discover auth providers on the target Portal.
         const providers = await this.fetchProviders(normalizedServer.origin);
+        this.requireConnection(connection);
         this.safeLog(
             `[Hosted] Discovered auth providers at ${normalizedServer.origin}: local=${providers.local}, oidc=${providers.oidcEnabled}`
         );
@@ -146,8 +156,13 @@ export class HostedSessionManager {
         const timeoutMs = options?.timeoutMs ?? this._signInTimeoutMs;
         const scopes = options?.scopes ?? DEFAULT_NATIVE_SCOPES;
 
-        this.cancelPendingSignIn();
         const listener = await this._startLoopback(state, timeoutMs);
+        const callbackPromise = listener.waitForCallback();
+        void callbackPromise.catch(() => {});
+        if (connection !== this._connection) {
+            listener.cancel();
+            this.requireConnection(connection);
+        }
         this._activeLoopback = listener;
 
         const authorizeUrl = new URL('/api/auth/client/authorize', normalizedServer.origin);
@@ -164,9 +179,11 @@ export class HostedSessionManager {
             if (!opened) {
                 listener.cancel('Could not launch system browser for sign-in.');
             }
-            const callback = await listener.waitForCallback();
+            const callback = await callbackPromise;
+            this.requireConnection(connection);
             code = callback.code;
         } finally {
+            listener.cancel();
             if (this._activeLoopback === listener) {
                 this._activeLoopback = null;
             }
@@ -185,17 +202,19 @@ export class HostedSessionManager {
         });
 
         if (!exchangeResp.ok) {
-            const detail = await this.readErrorMessage(exchangeResp);
-            throw new Error(`Sign-in code exchange failed (${exchangeResp.status}): ${detail}`);
+            throw new Error(`Sign-in code exchange failed (${exchangeResp.status}).`);
         }
 
-        const tokenResponse = await exchangeResp.json() as NativeClientTokenResponse;
-        if (!tokenResponse?.token || !tokenResponse?.refreshToken) {
-            throw new Error('Portal returned an incomplete native session response.');
+        const tokenResponse = await this.readNativeCredentials(exchangeResp);
+        let studioSession: StudioSessionDto;
+        try {
+            this.requireConnection(connection);
+            studioSession = await this.fetchStudioSession(normalizedServer.origin, tokenResponse.token);
+            this.requireConnection(connection);
+        } catch (error) {
+            await this.revokeSession(normalizedServer.origin, tokenResponse, 3_000);
+            throw error;
         }
-
-        // 4. Probe Studio capabilities for this session.
-        const studioSession = await this.fetchStudioSession(normalizedServer.origin, tokenResponse.token);
 
         const sessionState: HostedSessionState = {
             server: normalizedServer,
@@ -245,7 +264,7 @@ export class HostedSessionManager {
             throw new HostedSessionExpiredError();
         }
 
-        const promise = this.performRefresh(current);
+        const promise = this.performRefresh(current, this._connection);
         this._refreshInFlight = promise;
         try {
             return await promise;
@@ -262,20 +281,27 @@ export class HostedSessionManager {
             throw new HostedSessionExpiredError();
         }
 
-        const origin = session.server.origin;
+        const connection = this._connection;
         const token = await this.ensureValidAccessToken();
-        const url = `${origin}${path.startsWith('/') ? path : `/${path}`}`;
+        this.requireConnection(connection);
+        const url = `${session.server.origin}${path.startsWith('/') ? path : `/${path}`}`;
 
         const firstResp = await this.rawFetch(url, this.withBearer(init, token));
+        this.requireConnection(connection);
         if (firstResp.status !== 401) {
             return firstResp;
         }
 
-        // Single retry after single-flight refresh.
-        const refreshed = await this.refreshSingleFlight();
+        // Another request may already have rotated the rejected token.
+        const current = this._session;
+        const refreshed = current && current.token !== token ? current : await this.refreshSingleFlight();
+        this.requireConnection(connection);
         const retryResp = await this.rawFetch(url, this.withBearer(init, refreshed.token));
+        this.requireConnection(connection);
         if (retryResp.status === 401) {
-            this.clearSessionKeepTarget('Hosted session was rejected after refresh.');
+            if (this._session === refreshed) {
+                this.clearSessionKeepTarget('Hosted session was rejected after refresh.');
+            }
             throw new HostedSessionExpiredError();
         }
         return retryResp;
@@ -293,17 +319,19 @@ export class HostedSessionManager {
         this._target = { kind: 'local' };
         this.notifyChanged();
 
-        if (!snapshot) {
-            return;
+        if (snapshot) {
+            await this.revokeSession(snapshot.server.origin, snapshot, options?.bestEffortTimeoutMs ?? 5_000);
         }
+    }
 
-        const timeoutMs = options?.bestEffortTimeoutMs ?? 5_000;
+    private async revokeSession(origin: string, snapshot: Pick<HostedSessionState, 'token' | 'refreshToken'>, timeoutMs: number): Promise<void> {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
         timer.unref?.();
 
         try {
-            await this._fetch(`${snapshot.server.origin}/api/auth/client/logout`, {
+            const response = await this._fetch(`${origin}/api/auth/client/logout`, {
+                redirect: 'error',
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -312,10 +340,10 @@ export class HostedSessionManager {
                 body: JSON.stringify({ refreshToken: snapshot.refreshToken }),
                 signal: controller.signal
             });
-            this.safeLog(`[Hosted] Disconnected from ${snapshot.server.origin} (tenant=${snapshot.tenantId}, user=${snapshot.user.username})`);
+            this.safeLog(`[Hosted] Client logout at ${origin} returned HTTP ${response.status}.`);
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
-            this.safeLog(`[Hosted] Best-effort logout to ${snapshot.server.origin} did not complete: ${redactSecrets(msg, [snapshot.token, snapshot.refreshToken])}`);
+            this.safeLog(`[Hosted] Best-effort logout to ${origin} did not complete: ${redactSecrets(msg, [snapshot.token, snapshot.refreshToken])}`);
         } finally {
             clearTimeout(timer);
         }
@@ -325,7 +353,7 @@ export class HostedSessionManager {
         await this.disconnect();
     }
 
-    private async performRefresh(current: HostedSessionState): Promise<HostedSessionState> {
+    private async performRefresh(current: HostedSessionState, connection: number): Promise<HostedSessionState> {
         const resp = await this.rawFetch(`${current.server.origin}/api/auth/client/refresh`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -335,18 +363,25 @@ export class HostedSessionManager {
             })
         });
 
+        this.requireConnection(connection);
         if (resp.status === 401 || resp.status === 403) {
             this.clearSessionKeepTarget('Hosted refresh token expired or revoked.');
             throw new HostedSessionExpiredError();
         }
 
         if (!resp.ok) {
-            const detail = await this.readErrorMessage(resp);
-            throw new HostedNetworkError(`Token refresh failed (${resp.status}): ${detail}`);
+            throw new HostedNetworkError(`Token refresh failed (${resp.status}).`);
         }
 
-        const refreshed = await resp.json() as NativeClientTokenResponse;
-        const studioSession = await this.fetchStudioSession(current.server.origin, refreshed.token);
+        const refreshed = await this.readNativeCredentials(resp);
+        this.requireConnection(connection);
+        if (refreshed.sessionId !== current.sessionId || refreshed.tenantId !== current.tenantId
+            || refreshed.user.id !== current.user.id) {
+            await this.revokeSession(current.server.origin, refreshed, 3_000);
+            this.requireConnection(connection);
+            this.clearSessionKeepTarget('Portal returned a different session during refresh.');
+            throw new HostedSessionExpiredError();
+        }
 
         const nextState: HostedSessionState = {
             server: current.server,
@@ -359,14 +394,11 @@ export class HostedSessionManager {
             tenantId: refreshed.tenantId,
             audience: refreshed.audience,
             scopes: refreshed.scopes ?? current.scopes,
-            studioSession
+            studioSession: current.studioSession
         };
 
-        // Only replace if user has not disconnected in the meantime.
-        if (this._target.kind === 'hosted' && this._target.server.origin === current.server.origin) {
-            this._session = nextState;
-            this.notifyChanged();
-        }
+        this._session = nextState;
+        this.notifyChanged();
         return nextState;
     }
 
@@ -380,8 +412,7 @@ export class HostedSessionManager {
     private async fetchProviders(origin: string): Promise<AuthProvidersResponse> {
         const resp = await this.rawFetch(`${origin}/api/auth/providers`, { method: 'GET' });
         if (!resp.ok) {
-            const detail = await this.readErrorMessage(resp);
-            throw new Error(`Could not reach Portal auth providers (${resp.status}): ${detail}`);
+            throw new Error(`Could not reach Portal auth providers (${resp.status}).`);
         }
         return await resp.json() as AuthProvidersResponse;
     }
@@ -395,18 +426,19 @@ export class HostedSessionManager {
             throw new HostedSessionExpiredError();
         }
         if (!resp.ok) {
-            const detail = await this.readErrorMessage(resp);
-            throw new Error(`Could not read Studio session capabilities (${resp.status}): ${detail}`);
+            throw new Error(`Could not read Studio session capabilities (${resp.status}).`);
         }
         return await resp.json() as StudioSessionDto;
     }
 
     private async rawFetch(url: string, init?: RequestInit): Promise<Response> {
         try {
-            return await this._fetch(url, init);
+            const timeout = AbortSignal.timeout(30_000);
+            const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
+            return await this._fetch(url, { ...init, signal, redirect: 'error' });
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
-            throw new HostedNetworkError(redactSecrets(msg, this.getActiveSecrets()), err);
+            throw new HostedNetworkError(redactSecrets(msg, this.getActiveSecrets()));
         }
     }
 
@@ -416,22 +448,26 @@ export class HostedSessionManager {
         return { ...init, headers };
     }
 
-    private async readErrorMessage(resp: Response): Promise<string> {
-        try {
-            const text = await resp.text();
-            if (!text) {
-                return resp.statusText || 'Unknown error';
-            }
-            try {
-                const parsed = JSON.parse(text) as Record<string, unknown>;
-                const detail = parsed.detail ?? parsed.error ?? text;
-                return redactSecrets(String(detail), this.getActiveSecrets());
-            } catch {
-                return redactSecrets(text, this.getActiveSecrets());
-            }
-        } catch {
-            return resp.statusText || 'Unknown error';
+    private requireConnection(connection: number): void {
+        if (connection !== this._connection) {
+            throw new Error('Hosted target or sign-in changed. Start the action again on the selected target.');
         }
+    }
+
+    private async readNativeCredentials(response: Response): Promise<NativeClientTokenResponse> {
+        const credentials = await response.json().catch(() => null) as Partial<NativeClientTokenResponse> | null;
+        if (!credentials || typeof credentials.token !== 'string' || !credentials.token
+            || typeof credentials.refreshToken !== 'string' || !credentials.refreshToken
+            || typeof credentials.sessionId !== 'string' || !credentials.sessionId
+            || credentials.clientId !== NATIVE_CLIENT_ID || credentials.audience !== 'etl-sql-portal-native-api'
+            || typeof credentials.tenantId !== 'string' || !credentials.tenantId
+            || typeof credentials.expiresAt !== 'string' || !Number.isFinite(Date.parse(credentials.expiresAt))
+            || !credentials.user || !Number.isSafeInteger(credentials.user.id) || credentials.user.id <= 0
+            || typeof credentials.user.username !== 'string' || !credentials.user.username
+            || !Array.isArray(credentials.scopes) || credentials.scopes.some(scope => typeof scope !== 'string')) {
+            throw new Error('Portal returned an invalid native session response.');
+        }
+        return credentials as NativeClientTokenResponse;
     }
 
     private safeLog(message: string): void {

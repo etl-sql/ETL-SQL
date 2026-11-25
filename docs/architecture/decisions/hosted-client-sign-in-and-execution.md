@@ -101,8 +101,9 @@ proposed later as an opt-in, server-gated mode for `CatalogOnly` hosts if operat
   canonical `https://` origin, optional environment tag). Plain `http://` is refused except for
   explicit `localhost` / `127.0.0.1` development hosts.
 - Workspace settings (`.vscode/settings.json`) may reference a server **alias** or catalog document
-  ID, never register a new URL or auto-trust a host. Opening an untrusted workspace that names an
-  unknown host prompts the user before any network call.
+  ID, never register a new URL or auto-trust a host. The client applies a workspace pipeline link
+  only when its configured alias matches the selected trusted server. For any other target, the
+  client asks the user to select a saved pipeline from that target's catalog.
 
 ### 2.2 First-use browser sign-in (including Entra ID SSO)
 
@@ -273,7 +274,8 @@ receives `202 Accepted`:
      `POST .../runs` with the **same** `Idempotency-Key` and `version`).
    - `Accepted`: Portal returns the existing `{ runId, pipelineId, version, scriptHash, jobName }`
      with `replayed: true`; client attaches to `GET .../runs/{runId}`.
-   - `404 Not Found`: Submission never reached the Portal; client enables explicit user retry.
+   - `404 submission_not_found`: Portal has no visible receipt. The client offers an explicit retry
+     with the original key and revision within the 24-hour recovery window.
    - `Pending` or `Unknown` (`409 submission_outcome_unknown`): Portal has no confirmed receipt.
      A same-key lookup can recover a receipt if the original request later completes. During the
      recovery window the Portal refuses a duplicate dispatch. Inspect recent runs for `PIPELINE:{id}`
