@@ -198,13 +198,12 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            // F5 - Run. Fire-and-forget: execution runs on a background task so this loop stays
-            // responsive (live updates, Esc to stop). The run task is intentionally not awaited.
+            // Let hosted confirmation own input before starting execution in the background.
             if (key.Key == ConsoleKey.F5)
             {
                 if (key.Modifiers.HasFlag(ConsoleModifiers.Shift)) _ = _editor.RunStatementAtCursor();
                 else if (key.Modifiers.HasFlag(ConsoleModifiers.Control)) _ = _editor.RunSelectedText();
-                else _ = _editor.RunScript();
+                else await _editor.HandleRunKeyAsync();
                 return;
             }
 
@@ -549,7 +548,7 @@ namespace ETL_SQL.TUI.UI
                     _renderer.AutocompleteVisible = false;
 
                     // If no report has been built yet, try running the script automatically
-                    if (_renderer.CurrentReportManifest == null)
+                    if (_renderer.CurrentReportManifest == null && !_editor.Hosted.IsHosted)
                     {
                         _renderer.ShowStatus("Initializing report preview...");
                         await _editor.RunScript();

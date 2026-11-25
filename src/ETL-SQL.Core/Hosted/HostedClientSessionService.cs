@@ -21,12 +21,13 @@ public sealed class HostedClientSessionService : IAsyncDisposable
     private readonly bool _ownsHttp;
     private readonly LoopbackPkceAuthenticator _authenticator;
     private readonly TimeProvider _clock;
-    private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private readonly object _stateLock = new();
 
     private ExecutionTarget _target = ExecutionTarget.Local;
     private HostedSession? _session;
     private Task<HostedSession>? _inFlightRefresh;
+    private long _selectionVersion;
+    private bool _disposed;
 
     public string ClientId { get; }
     public string RequestedScope { get; }
@@ -88,7 +89,7 @@ public sealed class HostedClientSessionService : IAsyncDisposable
             if (_session is null)
                 return $"Hosted: {_target.Server.Label} (Sign in required)";
 
-            return $"Hosted: {_session.Server.Label} ({_session.TenantId}) · {_session.User.Username}";
+            return $"Hosted: {_session.Server.Label} ({new Uri(_session.Server.Origin).Authority} / {_session.TenantId}) · {_session.User.Username}";
         }
     }
 
@@ -102,8 +103,20 @@ public sealed class HostedClientSessionService : IAsyncDisposable
 
         var normalizedServer = server with { Origin = origin };
 
-        // Revoke any existing native session before switching host or account.
-        var previous = Session;
+        HostedSession? previous;
+        long selection;
+        lock (_stateLock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            selection = ++_selectionVersion;
+            previous = _session;
+            _target = ExecutionTarget.Hosted(normalizedServer);
+            _session = null;
+            _inFlightRefresh = null;
+        }
+        NotifyStateChanged();
+
+        // Revoke the previous session after retiring it locally.
         if (previous is not null)
             await BestEffortRevokeAsync(previous, TimeSpan.FromSeconds(3), ct);
 
@@ -125,10 +138,12 @@ public sealed class HostedClientSessionService : IAsyncDisposable
             throw new InvalidOperationException($"Portal at {origin} has no enabled sign-in providers.");
 
         // 2. Run RFC 8252 loopback PKCE S256 browser flow.
+        RequireSelection(selection, ct);
         var pkce = await _authenticator.AuthorizeAsync(origin, ClientId, RequestedScope, browserTimeout, ct);
         var ephemeralSecrets = new[] { pkce.Code, pkce.CodeVerifier };
 
         // 3. Exchange authorization code + PKCE verifier via /api/auth/client/exchange.
+        RequireSelection(selection, ct);
         HostedClientTokenResponseDto tokenResponse;
         try
         {
@@ -159,14 +174,26 @@ public sealed class HostedClientSessionService : IAsyncDisposable
                 HostedSecretRedactor.Redact($"Network error during Portal token exchange: {ex.Message}", ephemeralSecrets), ex);
         }
 
+        if (!IsValidTokenResponse(tokenResponse))
+            throw new InvalidOperationException("Portal returned an invalid native token response.");
         var sessionSecrets = new[] { pkce.Code, pkce.CodeVerifier, tokenResponse.Token, tokenResponse.RefreshToken };
 
-        // 4. Verify Studio capabilities via /api/studio/session with the new native bearer token.
-        HostedStudioSessionDto studioSession;
+        var session = new HostedSession(
+            normalizedServer,
+            tokenResponse.SessionId,
+            tokenResponse.Token,
+            tokenResponse.RefreshToken,
+            ToUtc(tokenResponse.ExpiresAt),
+            tokenResponse.TenantId,
+            tokenResponse.User,
+            tokenResponse.Scopes,
+            new HostedStudioSessionDto("", [], false, false, false, 0));
+
         try
         {
+            RequireSelection(selection, ct);
             using var req = new HttpRequestMessage(HttpMethod.Get, $"{origin}/api/studio/session");
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokenResponse.Token);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
             using var studioResp = await _http.SendAsync(req, ct);
             if (!studioResp.IsSuccessStatusCode)
             {
@@ -174,39 +201,63 @@ public sealed class HostedClientSessionService : IAsyncDisposable
                 throw new InvalidOperationException($"Portal Studio session check failed ({(int)studioResp.StatusCode}): {detail}");
             }
 
-            studioSession = await studioResp.Content.ReadFromJsonAsync<HostedStudioSessionDto>(JsonOptions, ct)
+            var studioSession = await studioResp.Content.ReadFromJsonAsync<HostedStudioSessionDto>(JsonOptions, ct)
                 ?? throw new InvalidOperationException("Portal returned an empty Studio session response.");
+            session = session with { StudioSession = studioSession };
+
+            lock (_stateLock)
+            {
+                RequireSelection(selection, ct);
+                _session = session;
+            }
         }
-        catch (Exception ex) when (ex is HttpRequestException or IOException && !ct.IsCancellationRequested)
+        catch
         {
-            throw new HostedNetworkException(
-                HostedSecretRedactor.Redact($"Network error checking Studio session: {ex.Message}", sessionSecrets), ex);
-        }
-
-        var expiresAt = tokenResponse.ExpiresAt.Kind == DateTimeKind.Utc
-            ? new DateTimeOffset(tokenResponse.ExpiresAt, TimeSpan.Zero)
-            : new DateTimeOffset(tokenResponse.ExpiresAt.ToUniversalTime(), TimeSpan.Zero);
-
-        var session = new HostedSession(
-            normalizedServer,
-            tokenResponse.SessionId,
-            tokenResponse.Token,
-            tokenResponse.RefreshToken,
-            expiresAt,
-            tokenResponse.TenantId,
-            tokenResponse.User,
-            tokenResponse.Scopes,
-            studioSession);
-
-        lock (_stateLock)
-        {
-            _target = ExecutionTarget.Hosted(normalizedServer);
-            _session = session;
-            _inFlightRefresh = null;
+            await BestEffortRevokeAsync(session, TimeSpan.FromSeconds(2), CancellationToken.None);
+            throw;
         }
 
         NotifyStateChanged();
         return session;
+    }
+
+    private void RequireSelection(long selection, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_stateLock)
+        {
+            if (_selectionVersion != selection)
+                throw new HostedSessionExpiredException("Hosted target changed during sign-in.");
+        }
+    }
+
+    private bool IsValidTokenResponse(HostedClientTokenResponseDto? token) =>
+        token is { User.Id: > 0, Scopes: not null } && token.ClientId == ClientId
+        && token.Audience == "etl-sql-portal-native-api" && !string.IsNullOrWhiteSpace(token.SessionId)
+        && !string.IsNullOrWhiteSpace(token.TenantId) && !string.IsNullOrWhiteSpace(token.Token)
+        && !string.IsNullOrWhiteSpace(token.RefreshToken);
+
+    private static DateTimeOffset ToUtc(DateTime value) => new(value.ToUniversalTime(), TimeSpan.Zero);
+
+    public bool IsCurrentSession(HostedSession expected)
+    {
+        lock (_stateLock) return IsSameSession(_session, expected);
+    }
+
+    private static bool IsSameSession(HostedSession? current, HostedSession expected) =>
+        current is not null && current.SessionId == expected.SessionId
+        && current.Server.Origin == expected.Server.Origin
+        && current.TenantId == expected.TenantId
+        && current.User.Id == expected.User.Id;
+
+    private HostedSession RequireSession(HostedSession? expected)
+    {
+        lock (_stateLock)
+        {
+            if (_session is null || (expected is not null && !IsSameSession(_session, expected)))
+                throw new HostedSessionExpiredException("Hosted target or sign-in changed. Sign in again or switch to Local (Offline).");
+            return _session;
+        }
     }
 
     /// <summary>
@@ -215,107 +266,86 @@ public sealed class HostedClientSessionService : IAsyncDisposable
     /// </summary>
     public async Task<HttpResponseMessage> AuthorizedSendAsync(
         Func<string, HttpRequestMessage> requestFactory,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        HostedSession? expectedSession = null)
     {
-        var session = Session;
-        if (session is null)
-            throw new HostedSessionExpiredException("Hosted Portal session is not signed in. Sign in again or switch to Local (Offline).");
-
+        var session = RequireSession(expectedSession);
         if (_clock.GetUtcNow() >= session.ExpiresAtUtc - ProactiveRefreshSkew)
             session = await EnsureRefreshedAsync(session, ct);
 
-        HttpResponseMessage response;
-        try
-        {
-            using var req = requestFactory(session.Server.Origin);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
-            response = await _http.SendAsync(req, ct);
-        }
-        catch (Exception ex) when (ex is HttpRequestException or IOException && !ct.IsCancellationRequested)
-        {
-            throw new HostedNetworkException(
-                HostedSecretRedactor.Redact($"Network error communicating with {session.Server.Origin}: {ex.Message}", session.ActiveSecrets), ex);
-        }
-
+        var response = await SendForSessionAsync(session, requestFactory, ct);
         if (response.StatusCode != HttpStatusCode.Unauthorized)
             return response;
 
         response.Dispose();
-
-        // Reactive single-flight refresh on 401, then retry once.
         var refreshed = await EnsureRefreshedAsync(session, ct);
+        var retry = await SendForSessionAsync(refreshed, requestFactory, ct);
+        if (retry.StatusCode != HttpStatusCode.Unauthorized)
+            return retry;
+
+        retry.Dispose();
+        ClearExpiredSession(refreshed);
+        throw new HostedSessionExpiredException("Hosted Portal session expired or was revoked. Sign in again or switch to Local (Offline).");
+    }
+
+    private async Task<HttpResponseMessage> SendForSessionAsync(
+        HostedSession session, Func<string, HttpRequestMessage> requestFactory, CancellationToken ct)
+    {
         try
         {
-            using var retryReq = requestFactory(refreshed.Server.Origin);
-            retryReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", refreshed.Token);
-            var retryResp = await _http.SendAsync(retryReq, ct);
-            if (retryResp.StatusCode == HttpStatusCode.Unauthorized)
+            using var req = requestFactory(session.Server.Origin);
+            if (req.RequestUri is not { IsAbsoluteUri: true } uri
+                || !string.Equals(uri.GetLeftPart(UriPartial.Authority), session.Server.Origin, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Authorized requests must stay on the signed-in Portal origin.");
+
+            Task<HttpResponseMessage> sending;
+            lock (_stateLock)
             {
-                retryResp.Dispose();
-                ClearExpiredSession(refreshed.SessionId);
-                throw new HostedSessionExpiredException("Hosted Portal session expired or was revoked. Sign in again or switch to Local (Offline).");
+                var current = RequireSession(session);
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", current.Token);
+                sending = _http.SendAsync(req, ct);
             }
-            return retryResp;
+
+            var response = await sending;
+            if (!IsCurrentSession(session))
+            {
+                response.Dispose();
+                throw new HostedSessionExpiredException("Hosted target or sign-in changed while waiting for Portal.");
+            }
+            return response;
         }
-        catch (Exception ex) when (ex is HttpRequestException or IOException && !ct.IsCancellationRequested)
+        catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException && !ct.IsCancellationRequested)
         {
+            if (!IsCurrentSession(session))
+                throw new HostedSessionExpiredException("Hosted target or sign-in changed while waiting for Portal.");
             throw new HostedNetworkException(
-                HostedSecretRedactor.Redact($"Network error communicating with {refreshed.Server.Origin}: {ex.Message}", refreshed.ActiveSecrets), ex);
+                HostedSecretRedactor.Redact($"Network error communicating with {session.Server.Origin}: {ex.Message}", session.ActiveSecrets), ex);
         }
     }
 
     public async Task<HostedSession> EnsureRefreshedAsync(HostedSession staleSession, CancellationToken ct = default)
     {
-        Task<HostedSession> refreshTask;
-        await _refreshGate.WaitAsync(ct);
-        try
+        ct.ThrowIfCancellationRequested();
+        Task<HostedSession> refresh;
+        lock (_stateLock)
         {
-            // Another caller may have already refreshed this session.
-            var current = Session;
-            if (current is not null
-                && current.SessionId == staleSession.SessionId
-                && current.Token != staleSession.Token
-                && _clock.GetUtcNow() < current.ExpiresAtUtc - ProactiveRefreshSkew)
-            {
+            var current = RequireSession(staleSession);
+            if (current.Token != staleSession.Token)
                 return current;
-            }
 
-            if (_inFlightRefresh is { IsCompleted: false })
-            {
-                refreshTask = _inFlightRefresh;
-            }
-            else
-            {
-                refreshTask = PerformRefreshCoreAsync(staleSession, ct);
-                _inFlightRefresh = refreshTask;
-            }
-        }
-        finally
-        {
-            _refreshGate.Release();
+            if (_inFlightRefresh is null || _inFlightRefresh.IsCompleted)
+                _inFlightRefresh = Task.Run(() => PerformRefreshCoreAsync(staleSession, CancellationToken.None));
+            refresh = _inFlightRefresh;
         }
 
-        try
-        {
-            return await refreshTask;
-        }
-        finally
-        {
-            await _refreshGate.WaitAsync(CancellationToken.None);
-            try
-            {
-                if (ReferenceEquals(_inFlightRefresh, refreshTask))
-                    _inFlightRefresh = null;
-            }
-            finally
-            {
-                _refreshGate.Release();
-            }
-        }
+        // Cancelling one caller shouldn't cancel a refresh shared by other requests.
+        await refresh.WaitAsync(ct);
+        return RequireSession(staleSession);
     }
 
     private async Task<HostedSession> PerformRefreshCoreAsync(HostedSession staleSession, CancellationToken ct)
     {
+        RequireSession(staleSession);
         HttpResponseMessage resp;
         try
         {
@@ -339,7 +369,7 @@ public sealed class HostedClientSessionService : IAsyncDisposable
         {
             if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             {
-                ClearExpiredSession(staleSession.SessionId);
+                ClearExpiredSession(staleSession);
                 throw new HostedSessionExpiredException("Hosted Portal session expired or was revoked. Sign in again or switch to Local (Offline).");
             }
 
@@ -350,32 +380,26 @@ public sealed class HostedClientSessionService : IAsyncDisposable
             }
 
             var refreshedDto = await resp.Content.ReadFromJsonAsync<HostedClientTokenResponseDto>(JsonOptions, ct);
-            if (refreshedDto is null || string.IsNullOrEmpty(refreshedDto.Token))
+            if (refreshedDto is null || !IsValidTokenResponse(refreshedDto)
+                || refreshedDto.SessionId != staleSession.SessionId || refreshedDto.TenantId != staleSession.TenantId
+                || refreshedDto.User.Id != staleSession.User.Id)
             {
-                ClearExpiredSession(staleSession.SessionId);
-                throw new HostedSessionExpiredException("Portal returned an empty refresh response.");
+                ClearExpiredSession(staleSession);
+                throw new HostedSessionExpiredException("Portal returned a different or invalid native session during refresh.");
             }
-
-            var expiresAt = refreshedDto.ExpiresAt.Kind == DateTimeKind.Utc
-                ? new DateTimeOffset(refreshedDto.ExpiresAt, TimeSpan.Zero)
-                : new DateTimeOffset(refreshedDto.ExpiresAt.ToUniversalTime(), TimeSpan.Zero);
 
             var updated = staleSession with
             {
-                SessionId = refreshedDto.SessionId,
                 Token = refreshedDto.Token,
                 RefreshToken = refreshedDto.RefreshToken,
-                ExpiresAtUtc = expiresAt,
-                TenantId = refreshedDto.TenantId,
+                ExpiresAtUtc = ToUtc(refreshedDto.ExpiresAt),
                 User = refreshedDto.User,
                 Scopes = refreshedDto.Scopes
             };
 
             lock (_stateLock)
             {
-                // Guard against a disconnect or account switch that raced with refresh.
-                if (_session is null || _session.SessionId != staleSession.SessionId)
-                    throw new HostedSessionExpiredException("Hosted Portal session changed while refreshing.");
+                RequireSession(staleSession);
                 _session = updated;
             }
 
@@ -393,6 +417,7 @@ public sealed class HostedClientSessionService : IAsyncDisposable
         HostedSession? existing;
         lock (_stateLock)
         {
+            ++_selectionVersion;
             existing = _session;
             _session = null;
             _target = ExecutionTarget.Local;
@@ -424,12 +449,12 @@ public sealed class HostedClientSessionService : IAsyncDisposable
         }
     }
 
-    private void ClearExpiredSession(string expectedSessionId)
+    private void ClearExpiredSession(HostedSession expected)
     {
         bool changed = false;
         lock (_stateLock)
         {
-            if (_session is not null && _session.SessionId == expectedSessionId)
+            if (IsSameSession(_session, expected) && _session!.Token == expected.Token)
             {
                 _session = null;
                 changed = true;
@@ -478,8 +503,8 @@ public sealed class HostedClientSessionService : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        lock (_stateLock) _disposed = true;
         await DisconnectAsync(TimeSpan.FromSeconds(2));
-        _refreshGate.Dispose();
         if (_ownsHttp)
             _http.Dispose();
     }

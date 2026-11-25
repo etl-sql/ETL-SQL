@@ -37,10 +37,12 @@ public sealed class HostedRunCoordinator
     private readonly TimeProvider _clock;
     private readonly TimeSpan _initialPollDelay;
     private readonly TimeSpan _maxPollDelay;
-    private readonly Dictionary<string, PendingSubmissionRecord> _pendingByScope = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<(string Origin, string TenantId, int UserId), PendingSubmissionRecord> _pendingByScope = new();
     private readonly object _lock = new();
 
     private ActiveHostedRun? _activeRun;
+    private HostedSession? _activeSession;
+    private int _operationInProgress;
 
     public HostedRunCoordinator(
         HostedClientSessionService sessions,
@@ -74,7 +76,7 @@ public sealed class HostedRunCoordinator
         var key = ScopeKey(session.Server.Origin, session.TenantId, session.User.Id);
         lock (_lock)
         {
-            if (!_pendingByScope.TryGetValue(key, out var pending))
+            if (!_sessions.IsCurrentSession(session) || !_pendingByScope.TryGetValue(key, out var pending))
                 return null;
 
             if (_clock.GetUtcNow() - pending.CreatedAtUtc >= RecoveryWindow)
@@ -100,18 +102,14 @@ public sealed class HostedRunCoordinator
         }
     }
 
-    public void ClearAllPendingSubmissions()
-    {
-        lock (_lock) _pendingByScope.Clear();
-    }
-
     public async Task<HostedRunOutcome> SubmitNewRunAsync(
         RunnablePipelineDto pipeline,
         HostedRunCallbacks? callbacks = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        HostedSession? expectedSession = null)
     {
-        var session = _sessions.Session;
-        if (session is null)
+        var session = expectedSession ?? _sessions.Session;
+        if (session is null || !_sessions.IsCurrentSession(session))
             return new HostedRunOutcome(HostedRunOutcomeKind.SessionExpired, "Hosted Portal session is not signed in.");
 
         var pending = new PendingSubmissionRecord(
@@ -127,15 +125,21 @@ public sealed class HostedRunCoordinator
             Status: PendingSubmissionStatus.Unconfirmed,
             CreatedAtUtc: _clock.GetUtcNow());
 
-        return await SubmitWithRecoveryAsync(pending, callbacks, ct);
+        return await SubmitWithRecoveryAsync(pending, callbacks, ct, session);
     }
 
-    public async Task<HostedRunOutcome> SubmitWithRecoveryAsync(
+    public Task<HostedRunOutcome> SubmitWithRecoveryAsync(
         PendingSubmissionRecord pending,
         HostedRunCallbacks? callbacks = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        HostedSession? expectedSession = null) =>
+        RunExclusiveAsync(() => SubmitCoreAsync(pending, callbacks, ct, expectedSession ?? _sessions.Session));
+
+    private async Task<HostedRunOutcome> SubmitCoreAsync(
+        PendingSubmissionRecord pending, HostedRunCallbacks? callbacks, CancellationToken ct, HostedSession? session)
     {
-        if (!MatchesCurrentCaller(pending.Origin, pending.TenantId, pending.UserId))
+        if (session is null || !MatchesCaller(session, pending.Origin, pending.TenantId, pending.UserId)
+            || !_sessions.IsCurrentSession(session))
             return new HostedRunOutcome(HostedRunOutcomeKind.SessionExpired, "Active hosted session does not match submission owner.");
 
         if (_clock.GetUtcNow() - pending.CreatedAtUtc >= RecoveryWindow)
@@ -144,18 +148,18 @@ public sealed class HostedRunCoordinator
             return new HostedRunOutcome(HostedRunOutcomeKind.Error, "The 24-hour recovery window has expired. Check recent runs before starting another run.");
         }
 
-        StorePending(pending);
+        if (!TryClaimPending(pending))
+            return new HostedRunOutcome(HostedRunOutcomeKind.Error, "Check the prior unconfirmed submission before starting another run.");
 
         try
         {
-            var submitted = await _client.SubmitPipelineRunAsync(pending.PipelineId, pending.Version, pending.IdempotencyKey, ct);
-            if (!MatchesCurrentCaller(pending.Origin, pending.TenantId, pending.UserId))
+            var submitted = await _client.SubmitPipelineRunAsync(pending.PipelineId, pending.Version, pending.IdempotencyKey, ct, session);
+            if (!_sessions.IsCurrentSession(session))
                 return new HostedRunOutcome(HostedRunOutcomeKind.SessionExpired, "Hosted session changed during submission.");
 
             if (submitted.Accepted && submitted.Receipt is not null)
             {
-                ForgetPendingSubmission(pending);
-                return await AttachAndPollAsync(submitted.Receipt, pending, callbacks, ct);
+                return await AttachAndPollAsync(submitted.Receipt, pending, session, callbacks, ct);
             }
 
             var refusal = submitted.Refusal ?? new PipelineRunRefusalDto($"http_{submitted.StatusCode}", $"Submission failed ({submitted.StatusCode}).");
@@ -169,14 +173,12 @@ public sealed class HostedRunCoordinator
                 return new HostedRunOutcome(HostedRunOutcomeKind.UnconfirmedUnknown, msg, Refusal: refusal, PendingSubmission: updated);
             }
 
-            if (submitted.StatusCode >= 500
-                && !string.Equals(refusal.Code, "orchestrator_not_connected", StringComparison.Ordinal)
-                && !string.Equals(refusal.Code, "orchestrator_unreachable", StringComparison.Ordinal))
+            if (submitted.StatusCode >= 500)
             {
-                return await RecoverPendingSubmissionAsync(pending, callbacks, ct);
+                return await RecoverCoreAsync(pending, callbacks, ct, session);
             }
 
-            // Definite refusal (4xx or orchestrator_not_connected / orchestrator_unreachable)
+            // A definite refusal clears this request key.
             ForgetPendingSubmission(pending);
             var refusedMsg = $"Hosted run refused ({refusal.Code}): {refusal.Error}";
             callbacks?.OnError?.Invoke(refusedMsg);
@@ -194,7 +196,7 @@ public sealed class HostedRunCoordinator
             var unconfirmed = pending with { Status = PendingSubmissionStatus.Unconfirmed };
             StorePending(unconfirmed);
             callbacks?.OnWarning?.Invoke($"Submission unconfirmed (request {pending.IdempotencyKey}) — checking Portal for accepted run…");
-            return await RecoverPendingSubmissionAsync(unconfirmed, callbacks, ct);
+            return await RecoverCoreAsync(unconfirmed, callbacks, ct, session);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -208,12 +210,18 @@ public sealed class HostedRunCoordinator
         }
     }
 
-    public async Task<HostedRunOutcome> RecoverPendingSubmissionAsync(
+    public Task<HostedRunOutcome> RecoverPendingSubmissionAsync(
         PendingSubmissionRecord pending,
         HostedRunCallbacks? callbacks = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        HostedSession? expectedSession = null) =>
+        RunExclusiveAsync(() => RecoverCoreAsync(pending, callbacks, ct, expectedSession ?? _sessions.Session));
+
+    private async Task<HostedRunOutcome> RecoverCoreAsync(
+        PendingSubmissionRecord pending, HostedRunCallbacks? callbacks, CancellationToken ct, HostedSession? session)
     {
-        if (!MatchesCurrentCaller(pending.Origin, pending.TenantId, pending.UserId))
+        if (session is null || !MatchesCaller(session, pending.Origin, pending.TenantId, pending.UserId)
+            || !_sessions.IsCurrentSession(session))
             return new HostedRunOutcome(HostedRunOutcomeKind.SessionExpired, "Active hosted session does not match pending submission owner.");
 
         if (_clock.GetUtcNow() - pending.CreatedAtUtc >= RecoveryWindow)
@@ -222,17 +230,19 @@ public sealed class HostedRunCoordinator
             return new HostedRunOutcome(HostedRunOutcomeKind.Error, "The 24-hour recovery window has expired. Check recent runs before starting another run.");
         }
 
+        if (!TryClaimPending(pending))
+            return new HostedRunOutcome(HostedRunOutcomeKind.Error, "A different submission is pending for this account.");
+
         try
         {
-            var lookup = await _client.GetSubmissionByRequestAsync(pending.PipelineId, pending.IdempotencyKey, ct);
-            if (!MatchesCurrentCaller(pending.Origin, pending.TenantId, pending.UserId))
+            var lookup = await _client.GetSubmissionByRequestAsync(pending.PipelineId, pending.IdempotencyKey, ct, session, pending.Version);
+            if (!_sessions.IsCurrentSession(session))
                 return new HostedRunOutcome(HostedRunOutcomeKind.SessionExpired, "Hosted session changed during recovery.");
 
             if (lookup.Kind == LookupByRequestKind.Found && lookup.Receipt is not null)
             {
-                ForgetPendingSubmission(pending);
                 callbacks?.OnInfo?.Invoke($"Recovered accepted run #{lookup.Receipt.RunId} for request {pending.IdempotencyKey}.");
-                return await AttachAndPollAsync(lookup.Receipt, pending, callbacks, ct);
+                return await AttachAndPollAsync(lookup.Receipt, pending, session, callbacks, ct);
             }
 
             if (lookup.Kind == LookupByRequestKind.Unknown)
@@ -246,9 +256,11 @@ public sealed class HostedRunCoordinator
 
             if (lookup.Kind == LookupByRequestKind.NotFound)
             {
+                var missing = pending with { Status = PendingSubmissionStatus.NotFound };
+                StorePending(missing);
                 var msg = $"Submission unconfirmed (request {pending.IdempotencyKey}): Portal has no record of this request. Retry using the same key or check recent runs.";
                 callbacks?.OnWarning?.Invoke(msg);
-                return new HostedRunOutcome(HostedRunOutcomeKind.UnconfirmedNotFound, msg, Refusal: lookup.Refusal, PendingSubmission: pending);
+                return new HostedRunOutcome(HostedRunOutcomeKind.UnconfirmedNotFound, msg, Refusal: lookup.Refusal, PendingSubmission: missing);
             }
 
             var refusedMsg = $"Recovery check refused ({lookup.Refusal?.Code ?? "error"}): {lookup.Refusal?.Error ?? "Unable to check submission."}";
@@ -267,19 +279,39 @@ public sealed class HostedRunCoordinator
             callbacks?.OnWarning?.Invoke(msg);
             return new HostedRunOutcome(HostedRunOutcomeKind.UnconfirmedUnknown, msg, PendingSubmission: pending);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return new HostedRunOutcome(HostedRunOutcomeKind.Error, "Hosted recovery was interrupted.", PendingSubmission: pending);
+        }
+        catch (Exception ex)
+        {
+            var safe = HostedSecretRedactor.Redact(ex.Message, session.ActiveSecrets);
+            callbacks?.OnError?.Invoke($"Hosted recovery error: {safe}");
+            return new HostedRunOutcome(HostedRunOutcomeKind.Error, safe, PendingSubmission: pending);
+        }
+    }
+
+    private async Task<HostedRunOutcome> RunExclusiveAsync(Func<Task<HostedRunOutcome>> operation)
+    {
+        if (Interlocked.CompareExchange(ref _operationInProgress, 1, 0) != 0)
+            return new HostedRunOutcome(HostedRunOutcomeKind.Error, "A hosted run or recovery is already in progress.");
+
+        try { return await operation(); }
+        finally { Volatile.Write(ref _operationInProgress, 0); }
     }
 
     public async Task<string> RequestStopAsync(HostedRunCallbacks? callbacks = null, CancellationToken ct = default)
     {
         ActiveHostedRun? active;
-        lock (_lock) active = _activeRun;
+        HostedSession? session;
+        lock (_lock) { active = _activeRun; session = _activeSession; }
 
-        if (active is null || !MatchesCurrentCaller(active.Origin, active.TenantId, active.UserId))
+        if (active is null || session is null || !_sessions.IsCurrentSession(session))
             return "No active hosted run to stop.";
 
         try
         {
-            var result = await _client.CancelPipelineRunAsync(active.PipelineId, active.RunId, ct);
+            var result = await _client.CancelPipelineRunAsync(active.PipelineId, active.RunId, ct, session);
             if (result.Kind == CancelRunKind.Accepted)
             {
                 active.CancelRequested = true;
@@ -317,6 +349,7 @@ public sealed class HostedRunCoordinator
     private async Task<HostedRunOutcome> AttachAndPollAsync(
         PipelineRunSubmittedDto receipt,
         PendingSubmissionRecord pending,
+        HostedSession session,
         HostedRunCallbacks? callbacks,
         CancellationToken ct)
     {
@@ -332,7 +365,13 @@ public sealed class HostedRunCoordinator
             receipt.Version,
             receipt.ScriptHash);
 
-        lock (_lock) _activeRun = active;
+        lock (_lock)
+        {
+            if (_activeRun is not null)
+                return new HostedRunOutcome(HostedRunOutcomeKind.Error, "A hosted run is already being monitored.");
+            _activeRun = active;
+            _activeSession = session;
+        }
 
         callbacks?.OnInfo?.Invoke(
             $"Accepted run #{receipt.RunId} ({receipt.JobName}, v{receipt.Version}{(receipt.Replayed ? ", replayed" : "")})");
@@ -344,9 +383,9 @@ public sealed class HostedRunCoordinator
         {
             while (MatchesActive(active) && !ct.IsCancellationRequested)
             {
-                var polled = await _client.GetPipelineRunAsync(active.PipelineId, active.RunId, ct);
+                var polled = await _client.GetPipelineRunAsync(active.PipelineId, active.RunId, ct, session);
                 if (!MatchesActive(active))
-                    return new HostedRunOutcome(HostedRunOutcomeKind.Error, "Hosted session changed while polling run.");
+                    return new HostedRunOutcome(HostedRunOutcomeKind.SessionExpired, "Hosted session changed while polling run.", PendingSubmission: pending);
 
                 if (!polled.Ok || polled.Run is null)
                 {
@@ -356,6 +395,8 @@ public sealed class HostedRunCoordinator
                 }
 
                 var run = polled.Run;
+                if (run.ScriptHash is not null && run.ScriptHash != active.ScriptHash)
+                    throw new HostedNetworkException("Portal returned status for a different script revision.");
                 if (run.Statements is not null)
                 {
                     for (var i = renderedStatements; i < run.Statements.Count; i++)
@@ -365,6 +406,7 @@ public sealed class HostedRunCoordinator
 
                 if (run.IsTerminal)
                 {
+                    ForgetPendingSubmission(pending);
                     var summary = $"Hosted run #{run.RunId} finished: {run.Status} ({run.RowsProcessed} rows)";
                     if (string.Equals(run.Status, "SUCCESS", StringComparison.OrdinalIgnoreCase))
                         callbacks?.OnInfo?.Invoke(summary);
@@ -387,7 +429,13 @@ public sealed class HostedRunCoordinator
         {
             var msg = $"Hosted session expired while polling run #{active.RunId}.";
             callbacks?.OnWarning?.Invoke(msg);
-            return new HostedRunOutcome(HostedRunOutcomeKind.SessionExpired, ex.Message);
+            return new HostedRunOutcome(HostedRunOutcomeKind.SessionExpired, ex.Message, PendingSubmission: pending);
+        }
+        catch (HostedNetworkException ex)
+        {
+            var message = $"Lost contact while monitoring run #{active.RunId}. Check the original request key to resume.";
+            callbacks?.OnWarning?.Invoke(message);
+            return new HostedRunOutcome(HostedRunOutcomeKind.UnconfirmedUnknown, $"{message} {ex.Message}", PendingSubmission: pending);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -398,7 +446,10 @@ public sealed class HostedRunCoordinator
             lock (_lock)
             {
                 if (ReferenceEquals(_activeRun, active))
+                {
                     _activeRun = null;
+                    _activeSession = null;
+                }
             }
         }
     }
@@ -410,16 +461,24 @@ public sealed class HostedRunCoordinator
             if (!ReferenceEquals(_activeRun, active))
                 return false;
         }
-        return MatchesCurrentCaller(active.Origin, active.TenantId, active.UserId);
+        return _activeSession is { } session && _sessions.IsCurrentSession(session);
     }
 
-    private bool MatchesCurrentCaller(string origin, string tenantId, int userId)
+    private static bool MatchesCaller(HostedSession? session, string origin, string tenantId, int userId) =>
+        session is not null && session.Server.Origin == origin && session.TenantId == tenantId && session.User.Id == userId;
+
+    private bool TryClaimPending(PendingSubmissionRecord pending)
     {
-        var session = _sessions.Session;
-        return session is not null
-            && string.Equals(session.Server.Origin, origin, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(session.TenantId, tenantId, StringComparison.OrdinalIgnoreCase)
-            && session.User.Id == userId;
+        var key = ScopeKey(pending.Origin, pending.TenantId, pending.UserId);
+        lock (_lock)
+        {
+            if (_pendingByScope.TryGetValue(key, out var previous)
+                && previous.IdempotencyKey != pending.IdempotencyKey
+                && _clock.GetUtcNow() - previous.CreatedAtUtc < RecoveryWindow)
+                return false;
+            _pendingByScope[key] = pending;
+            return true;
+        }
     }
 
     private void StorePending(PendingSubmissionRecord pending)
@@ -428,6 +487,6 @@ public sealed class HostedRunCoordinator
         lock (_lock) _pendingByScope[key] = pending;
     }
 
-    private static string ScopeKey(string origin, string tenantId, int userId) =>
-        $"{origin.ToLowerInvariant()}|{tenantId.ToLowerInvariant()}|{userId}";
+    private static (string Origin, string TenantId, int UserId) ScopeKey(string origin, string tenantId, int userId) =>
+        (origin, tenantId, userId);
 }

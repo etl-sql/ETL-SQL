@@ -18,7 +18,7 @@ public sealed class TuiHostedExecutionController : IAsyncDisposable
     private readonly Action<string> _showStatus;
     private readonly Func<string, IReadOnlyList<string>, Task<int>> _choose;
     private readonly Func<string, string, bool, Task<string?>> _prompt;
-    private readonly Dictionary<string, int> _linkedPipelinesByScope = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<(string Origin, string Tenant, int User, string FilePath), int> _linkedPipelinesByScope = new();
 
     public HostedClientSessionService Sessions { get; }
     public HostedPipelineClient Client { get; }
@@ -43,13 +43,6 @@ public sealed class TuiHostedExecutionController : IAsyncDisposable
         Sessions = sessions ?? new HostedClientSessionService(HostedClientIds.Tui, HostedClientScopes.TuiDefault);
         Client = client ?? new HostedPipelineClient(Sessions);
         Coordinator = coordinator ?? new HostedRunCoordinator(Sessions, Client);
-    }
-
-    /// <summary>Links a server alias + filename to a specific saved pipeline ID (used by UI and tests).</summary>
-    public void LinkPipeline(string serverAlias, string filePath, int pipelineId)
-    {
-        var key = PipelineLinkKey(serverAlias, filePath);
-        _linkedPipelinesByScope[key] = pipelineId;
     }
 
     public async Task SelectTargetAsync(CancellationToken ct = default)
@@ -154,9 +147,6 @@ public sealed class TuiHostedExecutionController : IAsyncDisposable
         _showStatus("Local (Offline)");
     }
 
-    public Task DisconnectOnExitAsync() =>
-        Sessions.DisconnectAsync(bestEffortTimeout: TimeSpan.FromSeconds(2));
-
     /// <summary>
     /// Prepares a hosted pipeline submission on the UI thread (checks pending recovery, session expiry,
     /// runnable pipeline discovery, and dirty-buffer confirmation). Returns a delegate to execute on
@@ -186,20 +176,27 @@ public sealed class TuiHostedExecutionController : IAsyncDisposable
         var pending = Coordinator.GetPendingSubmissionForCurrentCaller();
         if (pending is not null)
         {
+            var options = new List<string>
+            {
+                "Check Status Again (same request key)",
+                "Switch to Local (Offline)",
+                "I checked recent runs — start a new run",
+                "Cancel"
+            };
+            if (pending.Status == PendingSubmissionStatus.NotFound)
+                options.Add($"Retry the same request (saved v{pending.Version})");
             var choice = await _choose(
-                $"Unconfirmed submission ({pending.IdempotencyKey[..8]}…) for {pending.PipelineName}",
-                [
-                    "Check Status Again (same request key)",
-                    "Switch to Local (Offline)",
-                    "Dismiss & Start New Run",
-                    "Cancel"
-                ]);
+                $"Unconfirmed submission ({pending.IdempotencyKey[..8]}…) for {pending.PipelineName}", options);
+            if (!Sessions.IsCurrentSession(session))
+                return null;
+            if (choice == 4 && pending.Status == PendingSubmissionStatus.NotFound)
+                return runCt => RunAndHandleOutcomeAsync(
+                    () => Coordinator.SubmitWithRecoveryAsync(pending, BuildCallbacks(), runCt, session));
 
             if (choice == 0)
             {
                 return runCt => RunAndHandleOutcomeAsync(
-                    () => Coordinator.RecoverPendingSubmissionAsync(pending, BuildCallbacks(), runCt),
-                    runCt);
+                    () => Coordinator.RecoverPendingSubmissionAsync(pending, BuildCallbacks(), runCt, session));
             }
             if (choice == 1)
             {
@@ -216,7 +213,7 @@ public sealed class TuiHostedExecutionController : IAsyncDisposable
         RunnablePipelineDto? pipeline;
         try
         {
-            pipeline = await ResolveRunnablePipelineAsync(session.Server.Alias, filePath, ct);
+            pipeline = await ResolveRunnablePipelineAsync(session, filePath, ct);
         }
         catch (HostedSessionExpiredException)
         {
@@ -232,7 +229,7 @@ public sealed class TuiHostedExecutionController : IAsyncDisposable
             return null;
         }
 
-        if (pipeline is null)
+        if (pipeline is null || !Sessions.IsCurrentSession(session))
             return null;
 
         // Dirty local buffer: offer Run Last Saved Revision or Cancel (hosted editing/saving is separate).
@@ -251,6 +248,9 @@ public sealed class TuiHostedExecutionController : IAsyncDisposable
             }
         }
 
+        if (!Sessions.IsCurrentSession(session))
+            return null;
+
         // Surface active host, tenant, and signed-in user before submission.
         _log(
             $"[HOSTED] Target={session.Server.Origin} | Tenant={session.TenantId} | User={session.User.Username} | Pipeline={pipeline.Name} (v{pipeline.Version})",
@@ -258,11 +258,16 @@ public sealed class TuiHostedExecutionController : IAsyncDisposable
         _showStatus($"Running {pipeline.Name} v{pipeline.Version} on {session.Server.Label} ({session.TenantId}) as {session.User.Username}…");
 
         return runCt => RunAndHandleOutcomeAsync(
-            () => Coordinator.SubmitNewRunAsync(pipeline, BuildCallbacks(), runCt),
-            runCt);
+            () => Coordinator.SubmitNewRunAsync(pipeline, BuildCallbacks(), runCt, session));
     }
 
     public async Task<HostedRunOutcome?> CheckPendingSubmissionAsync(CancellationToken ct = default)
+    {
+        var work = await PreparePendingRecoveryAsync(ct);
+        return work is null ? null : await work(ct);
+    }
+
+    public async Task<Func<CancellationToken, Task<HostedRunOutcome>>?> PreparePendingRecoveryAsync(CancellationToken ct = default)
     {
         if (!Sessions.IsHosted)
         {
@@ -276,14 +281,16 @@ public sealed class TuiHostedExecutionController : IAsyncDisposable
                 return null;
         }
 
+        var session = Sessions.Session;
         var pending = Coordinator.GetPendingSubmissionForCurrentCaller();
-        if (pending is null)
+        if (pending is null || session is null)
         {
             _showStatus("No unconfirmed hosted submission for the active host, tenant, and account.");
             return null;
         }
 
-        return await Coordinator.RecoverPendingSubmissionAsync(pending, BuildCallbacks(), ct);
+        return runCt => RunAndHandleOutcomeAsync(
+            () => Coordinator.RecoverPendingSubmissionAsync(pending, BuildCallbacks(), runCt, session));
     }
 
     public async Task<string> RequestStopAsync(CancellationToken ct = default)
@@ -293,9 +300,7 @@ public sealed class TuiHostedExecutionController : IAsyncDisposable
         return msg;
     }
 
-    private async Task<HostedRunOutcome> RunAndHandleOutcomeAsync(
-        Func<Task<HostedRunOutcome>> action,
-        CancellationToken ct)
+    private async Task<HostedRunOutcome> RunAndHandleOutcomeAsync(Func<Task<HostedRunOutcome>> action)
     {
         var outcome = await action();
         if (outcome.Kind == HostedRunOutcomeKind.SessionExpired)
@@ -306,48 +311,58 @@ public sealed class TuiHostedExecutionController : IAsyncDisposable
     }
 
     private async Task<RunnablePipelineDto?> ResolveRunnablePipelineAsync(
-        string serverAlias,
-        string filePath,
-        CancellationToken ct)
+        HostedSession session, string filePath, CancellationToken ct)
     {
-        var linkKey = PipelineLinkKey(serverAlias, filePath);
-        if (_linkedPipelinesByScope.TryGetValue(linkKey, out var linkedId) && linkedId > 0)
-            return await Client.GetRunnableRevisionAsync(linkedId, ct);
+        var key = (session.Server.Origin, session.TenantId, session.User.Id, Path.GetFullPath(filePath));
+        if (_linkedPipelinesByScope.TryGetValue(key, out var linkedId))
+            return await Client.GetRunnableRevisionAsync(linkedId, ct, session);
 
         var fileName = Path.GetFileName(filePath);
-        var query = string.IsNullOrWhiteSpace(fileName) ? null : Path.GetFileNameWithoutExtension(fileName);
-        var page = await Client.GetRunnablePipelinesAsync(query, afterId: 0, ct: ct);
-        var items = page.Items.Count > 0
-            ? page.Items
-            : (await Client.GetRunnablePipelinesAsync(query: null, afterId: 0, ct: ct)).Items;
-
-        if (items.Count == 0)
+        string? query = Path.GetFileNameWithoutExtension(fileName);
+        var page = await Client.GetRunnablePipelinesAsync(query, ct: ct, expectedSession: session);
+        if (page.Items.Count == 0 && page.NextAfterId is null && !string.IsNullOrWhiteSpace(query))
         {
-            _log("[HOSTED] No runnable Portal pipelines found for this account.", ConsoleColor.Yellow);
-            _showStatus("No runnable Portal pipelines found.");
-            return null;
+            query = null;
+            page = await Client.GetRunnablePipelinesAsync(ct: ct, expectedSession: session);
         }
 
-        // Exact filename match on a single candidate resolves directly; otherwise show picker.
-        var exact = items.Where(i => string.Equals(i.Name, fileName, StringComparison.OrdinalIgnoreCase)).ToList();
-        RunnablePipelineDto chosen;
-        if (exact.Count == 1)
+        var canAutoSelect = page.NextAfterId is null;
+        while (Sessions.IsCurrentSession(session))
         {
-            chosen = exact[0];
-        }
-        else
-        {
-            var labels = items.Select(i => $"{i.Name} (v{i.Version} · {i.FolderPath}) [#{i.Id}]").ToList();
-            var idx = await _choose($"Select Saved Portal Pipeline ({serverAlias})", labels);
-            if (idx < 0 || idx >= items.Count)
+            if (page.Items.Count == 0 && page.NextAfterId is null)
+            {
+                _showStatus("No runnable Portal pipelines found.");
                 return null;
-            chosen = items[idx];
+            }
+
+            var exact = page.Items.Where(item => string.Equals(item.Name, fileName, StringComparison.OrdinalIgnoreCase)).ToArray();
+            int selectedId;
+            if (canAutoSelect && exact.Length == 1)
+            {
+                selectedId = exact[0].Id;
+            }
+            else
+            {
+                var labels = page.Items.Select(item => $"{item.Name} (v{item.Version} · {item.FolderPath}) [#{item.Id}]").ToList();
+                if (page.NextAfterId is not null)
+                    labels.Add("Show more pipelines");
+                var idx = await _choose($"Select Saved Portal Pipeline ({session.Server.Alias})", labels);
+                if (idx < 0 || idx >= labels.Count || !Sessions.IsCurrentSession(session))
+                    return null;
+                if (idx == page.Items.Count && page.NextAfterId is int next)
+                {
+                    page = await Client.GetRunnablePipelinesAsync(query, next, ct, session);
+                    continue;
+                }
+                selectedId = page.Items[idx].Id;
+            }
+
+            var revision = await Client.GetRunnableRevisionAsync(selectedId, ct, session);
+            _linkedPipelinesByScope[key] = revision.Id;
+            return revision;
         }
 
-        // Always fetch fresh revision metadata via /api/studio/pipelines/{id}/revision.
-        var fresh = await Client.GetRunnableRevisionAsync(chosen.Id, ct);
-        _linkedPipelinesByScope[linkKey] = fresh.Id;
-        return fresh;
+        return null;
     }
 
     private async Task<bool> HandleExpiredSessionChoiceAsync(
@@ -385,9 +400,6 @@ public sealed class TuiHostedExecutionController : IAsyncDisposable
             _log($"[HOSTED STMT {index}] {status} | {stmt.DurationMs}ms | {stmt.RowsProcessed} rows | {stmt.Statement}",
                 stmt.Failed ? ConsoleColor.Red : ConsoleColor.Gray);
         });
-
-    private static string PipelineLinkKey(string serverAlias, string filePath) =>
-        $"{serverAlias.Trim().ToLowerInvariant()}|{Path.GetFileName(filePath ?? string.Empty).ToLowerInvariant()}";
 
     public ValueTask DisposeAsync() => Sessions.DisposeAsync();
 }

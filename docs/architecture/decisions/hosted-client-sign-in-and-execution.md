@@ -340,16 +340,26 @@ dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --filter 'Ful
 
 ### 4.2 Reuse by TUI (ST57) and Desktop Studio (ST58)
 
-- **Shared server contract (100% reused):** `/api/auth/providers`, `/api/auth/client/authorize`,
-  `/api/auth/client/exchange`, `/api/auth/client/refresh`, `/api/auth/client/logout`,
-  `/api/studio/session`, `/api/studio/pipelines/{id}/runs` (with `Idempotency-Key`),
-  `/api/studio/pipelines/{id}/runs/by-request/{key}`, `/api/studio/pipelines/{id}/runs/{runId}`, and
-  `/api/studio/pipelines/{id}/runs/{runId}/cancel`.
-- **Shared .NET client library for ST57 + ST58:** TUI (`ETL-SQL.TUI`) and Desktop Studio
-  (`ETL-SQL.WorkstationEditor`) can share one small .NET `HostedClientSessionService` (saved server
-  list, loopback `HttpListener`, PKCE `S256`, in-memory session state cleared on close,
-  single-flight refresh, and `Idempotency-Key` run client). Only the UI affordances (TUI status
-  bar/picker vs. Desktop Studio workbench target bar) differ.
+- The shared .NET client lives in `ETL-SQL.Core/Hosted`. TUI uses it with the
+  `etlsql-tui` client ID and the `studio.read` and `studio.run` scopes. Desktop Studio can reuse
+  the session service, pipeline client, and run coordinator with its own client ID.
+- The client uses the ST56 native authentication endpoints, `GET /api/studio/session`,
+  `GET /api/studio/pipelines/runnable`, `GET /api/studio/pipelines/{id}/revision`, and the
+  existing submission, recovery, polling, and cancellation endpoints. All pipeline operations
+  bind to the session that prepared them. Recovery after signing in again requires the same
+  Portal origin, tenant, and user.
+- The TUI starts on `Local (Offline)`. Use **Alt+H** to select a user-trusted Portal,
+  **F5** to run a saved revision, and **Esc** after Portal accepts the run to request
+  cancellation. Hosted execution uses the Portal revision even when the local editor has
+  pending changes. The buffer stays available through cancellation, expiry, and recovery.
+- The opt-in TUI test runs the hosted controller against a real loopback Portal and
+  Federated Orchestrator. It supplies a test OIDC provider and drives the browser redirects
+  and consent over HTTP.
+
+```powershell
+$env:ETLSQL_ST57_LIVE = '1'
+dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --filter 'FullyQualifiedName~St57TuiHostedLiveTests'
+```
 
 ---
 

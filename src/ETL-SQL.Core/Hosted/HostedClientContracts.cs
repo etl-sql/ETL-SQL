@@ -82,14 +82,16 @@ public sealed record HostedStudioSessionDto(
 public sealed record HostedSession(
     HostedServerEntry Server,
     string SessionId,
-    string Token,
-    string RefreshToken,
+    [property: JsonIgnore] string Token,
+    [property: JsonIgnore] string RefreshToken,
     DateTimeOffset ExpiresAtUtc,
     string TenantId,
     HostedClientUserDto User,
     IReadOnlyList<string> Scopes,
     HostedStudioSessionDto StudioSession)
 {
+    public override string ToString() => $"HostedSession {{ Origin = {Server.Origin}, TenantId = {TenantId}, UserId = {User.Id} }}";
+
     [JsonIgnore]
     public IEnumerable<string> ActiveSecrets
     {
@@ -152,7 +154,8 @@ public sealed record PipelineRunRefusalDto(
 public enum PendingSubmissionStatus
 {
     Unconfirmed,
-    Unknown
+    Unknown,
+    NotFound
 }
 
 public sealed record PendingSubmissionRecord(

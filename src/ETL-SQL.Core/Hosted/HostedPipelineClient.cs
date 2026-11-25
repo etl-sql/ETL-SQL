@@ -55,7 +55,7 @@ public sealed class HostedPipelineClient(HostedClientSessionService sessions)
     public async Task<RunnablePipelinePageDto> GetRunnablePipelinesAsync(
         string? query = null,
         int afterId = 0,
-        CancellationToken ct = default)
+        CancellationToken ct = default, HostedSession? expectedSession = null)
     {
         var qs = new List<string>();
         if (!string.IsNullOrWhiteSpace(query))
@@ -65,7 +65,7 @@ public sealed class HostedPipelineClient(HostedClientSessionService sessions)
         var path = qs.Count > 0 ? $"/api/studio/pipelines/runnable?{string.Join("&", qs)}" : "/api/studio/pipelines/runnable";
 
         using var resp = await sessions.AuthorizedSendAsync(
-            origin => new HttpRequestMessage(HttpMethod.Get, origin + path), ct);
+            origin => new HttpRequestMessage(HttpMethod.Get, origin + path), ct, expectedSession);
 
         if (!resp.IsSuccessStatusCode)
         {
@@ -73,14 +73,17 @@ public sealed class HostedPipelineClient(HostedClientSessionService sessions)
             throw new InvalidOperationException(refusal.Error);
         }
 
-        return await resp.Content.ReadFromJsonAsync<RunnablePipelinePageDto>(JsonOptions, ct)
-            ?? new RunnablePipelinePageDto([], null);
+        var page = await resp.Content.ReadFromJsonAsync<RunnablePipelinePageDto>(JsonOptions, ct);
+        if (page?.Items is null || page.Items.Count > 50 || page.NextAfterId <= afterId
+            || page.Items.Any(item => !ValidRevision(item) || item.Id <= afterId))
+            throw new HostedNetworkException("Portal returned an invalid runnable pipeline page.");
+        return page;
     }
 
-    public async Task<RunnablePipelineDto> GetRunnableRevisionAsync(int pipelineId, CancellationToken ct = default)
+    public async Task<RunnablePipelineDto> GetRunnableRevisionAsync(int pipelineId, CancellationToken ct = default, HostedSession? expectedSession = null)
     {
         using var resp = await sessions.AuthorizedSendAsync(
-            origin => new HttpRequestMessage(HttpMethod.Get, $"{origin}/api/studio/pipelines/{pipelineId}/revision"), ct);
+            origin => new HttpRequestMessage(HttpMethod.Get, $"{origin}/api/studio/pipelines/{pipelineId}/revision"), ct, expectedSession);
 
         if (!resp.IsSuccessStatusCode)
         {
@@ -88,15 +91,17 @@ public sealed class HostedPipelineClient(HostedClientSessionService sessions)
             throw new InvalidOperationException(refusal.Error);
         }
 
-        return await resp.Content.ReadFromJsonAsync<RunnablePipelineDto>(JsonOptions, ct)
-            ?? throw new HostedNetworkException($"Portal returned an empty revision for pipeline #{pipelineId}.");
+        var revision = await resp.Content.ReadFromJsonAsync<RunnablePipelineDto>(JsonOptions, ct);
+        if (revision is null || revision.Id != pipelineId || !ValidRevision(revision))
+            throw new HostedNetworkException($"Portal returned invalid revision metadata for pipeline #{pipelineId}.");
+        return revision;
     }
 
     public async Task<SubmitRunResult> SubmitPipelineRunAsync(
         int pipelineId,
         long version,
         string idempotencyKey,
-        CancellationToken ct = default)
+        CancellationToken ct = default, HostedSession? expectedSession = null)
     {
         using var resp = await sessions.AuthorizedSendAsync(origin =>
         {
@@ -106,7 +111,7 @@ public sealed class HostedPipelineClient(HostedClientSessionService sessions)
             };
             req.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey);
             return req;
-        }, ct);
+        }, ct, expectedSession);
 
         if (resp.StatusCode == HttpStatusCode.Accepted)
         {
@@ -120,17 +125,19 @@ public sealed class HostedPipelineClient(HostedClientSessionService sessions)
     public async Task<LookupByRequestResult> GetSubmissionByRequestAsync(
         int pipelineId,
         string idempotencyKey,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        HostedSession? expectedSession = null,
+        long? expectedVersion = null)
     {
         using var resp = await sessions.AuthorizedSendAsync(
             origin => new HttpRequestMessage(
                 HttpMethod.Get,
                 $"{origin}/api/studio/pipelines/{pipelineId}/runs/by-request/{Uri.EscapeDataString(idempotencyKey)}"),
-            ct);
+            ct, expectedSession);
 
         if (resp.StatusCode == HttpStatusCode.OK)
         {
-            var receipt = await ReadValidatedReceiptAsync(resp, pipelineId, expectedVersion: null, ct);
+            var receipt = await ReadValidatedReceiptAsync(resp, pipelineId, expectedVersion, ct);
             return new LookupByRequestResult(LookupByRequestKind.Found, (int)resp.StatusCode, Receipt: receipt);
         }
 
@@ -143,32 +150,36 @@ public sealed class HostedPipelineClient(HostedClientSessionService sessions)
         return new LookupByRequestResult(LookupByRequestKind.Refused, (int)resp.StatusCode, Refusal: refusal);
     }
 
-    public async Task<GetRunResult> GetPipelineRunAsync(int pipelineId, long runId, CancellationToken ct = default)
+    public async Task<GetRunResult> GetPipelineRunAsync(int pipelineId, long runId, CancellationToken ct = default, HostedSession? expectedSession = null)
     {
         using var resp = await sessions.AuthorizedSendAsync(
             origin => new HttpRequestMessage(HttpMethod.Get, $"{origin}/api/studio/pipelines/{pipelineId}/runs/{runId}"),
-            ct);
+            ct, expectedSession);
 
         if (resp.IsSuccessStatusCode)
         {
             var run = await resp.Content.ReadFromJsonAsync<PipelineRunDto>(JsonOptions, ct)
                 ?? throw new HostedNetworkException($"Portal returned an empty status payload for run #{runId}.");
+            if (run.RunId != runId || run.PipelineId != pipelineId)
+                throw new HostedNetworkException("Portal returned status for a different pipeline run.");
             return new GetRunResult(true, (int)resp.StatusCode, Run: run);
         }
 
         return new GetRunResult(false, (int)resp.StatusCode, Refusal: await ReadRefusalAsync(resp, ct));
     }
 
-    public async Task<CancelRunResult> CancelPipelineRunAsync(int pipelineId, long runId, CancellationToken ct = default)
+    public async Task<CancelRunResult> CancelPipelineRunAsync(int pipelineId, long runId, CancellationToken ct = default, HostedSession? expectedSession = null)
     {
         using var resp = await sessions.AuthorizedSendAsync(
             origin => new HttpRequestMessage(HttpMethod.Post, $"{origin}/api/studio/pipelines/{pipelineId}/runs/{runId}/cancel"),
-            ct);
+            ct, expectedSession);
 
         if (resp.StatusCode == HttpStatusCode.Accepted)
         {
             var receipt = await resp.Content.ReadFromJsonAsync<PipelineRunCancelRequestedDto>(JsonOptions, ct)
-                ?? new PipelineRunCancelRequestedDto(runId, pipelineId);
+                ?? throw new HostedNetworkException("Portal returned an empty cancellation receipt.");
+            if (receipt.RunId != runId || receipt.PipelineId != pipelineId)
+                throw new HostedNetworkException("Portal returned a cancellation receipt for a different pipeline run.");
             return new CancelRunResult(CancelRunKind.Accepted, (int)resp.StatusCode, Receipt: receipt);
         }
 
@@ -180,6 +191,9 @@ public sealed class HostedPipelineClient(HostedClientSessionService sessions)
 
         return new CancelRunResult(CancelRunKind.Refused, (int)resp.StatusCode, Refusal: refusal);
     }
+
+    private static bool ValidRevision(RunnablePipelineDto? revision) =>
+        revision is { Id: > 0, Version: > 0, Name.Length: > 0, FolderPath.Length: > 0 };
 
     private async Task<PipelineRunSubmittedDto> ReadValidatedReceiptAsync(
         HttpResponseMessage resp,

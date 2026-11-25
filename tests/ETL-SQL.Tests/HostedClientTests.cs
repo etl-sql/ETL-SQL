@@ -161,7 +161,7 @@ public sealed class HostedClientTests
         var server = new HostedServerEntry("dev", "Dev Portal", "http://127.0.0.1:5001");
         var session = await sessions.SignInAsync(server);
         Assert.True(sessions.IsHosted);
-        Assert.Equal("Hosted: Dev Portal (tenant-alpha) · alice", sessions.FormatStatusLabel());
+        Assert.Equal("Hosted: Dev Portal (127.0.0.1:5001 / tenant-alpha) · alice", sessions.FormatStatusLabel());
         Assert.Equal("tok-initial-12345678", session.Token);
 
         // Advance past expiry and fire two concurrent requests -> must coalesce to 1 refresh call
@@ -186,10 +186,12 @@ public sealed class HostedClientTests
     }
 
     [Fact]
-    public async Task RunCoordinator_Dropped202_RecoversExactRunIdWithSameKey_AndScopesPendingToCaller()
+    public async Task RunCoordinator_Dropped202_RecoversOriginalRunAndPreventsConcurrentSubmission()
     {
         var clock = new TestClock(new DateTimeOffset(2026, 11, 25, 12, 0, 0, TimeSpan.Zero));
-        var currentUser = "alice";
+        const string currentUser = "alice";
+        var dispatchStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDispatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         string? capturedKey = null;
         var postRunsCount = 0;
 
@@ -231,8 +233,8 @@ public sealed class HostedClientTests
             {
                 postRunsCount++;
                 capturedKey = req.Headers.GetValues("Idempotency-Key").Single();
-                // Simulate dropped 202 response after Portal accepted run #42
-                throw new HttpRequestException("Simulated connection reset after Portal accepted run");
+                dispatchStarted.TrySetResult();
+                return DropResponseAsync();
             }
 
             if (path == $"/api/studio/pipelines/1/runs/by-request/{capturedKey}")
@@ -291,16 +293,32 @@ public sealed class HostedClientTests
         await sessions.SignInAsync(new HostedServerEntry("dev", "Dev", "http://127.0.0.1:5001"));
         var pipeline = new RunnablePipelineDto(1, "FinanceCheck.etlsql", "/Finance", 1, CanAuthor: false);
 
-        var outcome = await coordinator.SubmitNewRunAsync(pipeline);
+        var firstRun = coordinator.SubmitNewRunAsync(pipeline);
+        await dispatchStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        try
+        {
+            var concurrent = await coordinator.SubmitNewRunAsync(pipeline);
+            Assert.Equal(HostedRunOutcomeKind.Error, concurrent.Kind);
+            Assert.Equal(1, postRunsCount);
+        }
+        finally { releaseDispatch.TrySetResult(); }
+
+        var outcome = await firstRun;
         Assert.Equal(HostedRunOutcomeKind.Completed, outcome.Kind);
         Assert.Equal(42L, outcome.FinalRun?.RunId);
         Assert.Equal(1, postRunsCount);
         Assert.True(Guid.TryParse(capturedKey, out _));
         Assert.Null(coordinator.GetPendingSubmissionForCurrentCaller());
+
+        async Task<HttpResponseMessage> DropResponseAsync()
+        {
+            await releaseDispatch.Task;
+            throw new HttpRequestException("Simulated connection reset after Portal accepted run");
+        }
     }
 
     [Fact]
-    public async Task TuiHostedController_DirtyBufferCancel_PreservesLocalBuffer_AndBlocksPartialExecution()
+    public async Task TuiHostedController_PreservesDirtyBufferAndDiscardsWorkPreparedForAnotherTarget()
     {
         var logs = new List<string>();
         var statuses = new List<string>();
@@ -382,7 +400,119 @@ public sealed class HostedClientTests
         var work = await controller.PrepareHostedRunAsync("FinanceCheck.etlsql", isDirty: true);
         Assert.Null(work);
         Assert.Contains(statuses, s => s.Contains("preserved", StringComparison.OrdinalIgnoreCase));
+
+        var prepared = await controller.PrepareHostedRunAsync("FinanceCheck.etlsql", isDirty: false);
+        Assert.NotNull(prepared);
+        Assert.True(await controller.ConnectToServerAsync(new HostedServerEntry("other", "Other", "http://127.0.0.1:5002")));
+        var staleOutcome = await prepared(CancellationToken.None);
+        Assert.Equal(HostedRunOutcomeKind.SessionExpired, staleOutcome.Kind);
+        Assert.Null(controller.Coordinator.GetPendingSubmissionForCurrentCaller());
     }
+
+    [Fact]
+    public async Task DisconnectDuringSignInDiscardsAndRevokesTheLateSession()
+    {
+        var studioRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var studioResponse = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var logoutCalls = 0;
+        using var handler = new StubHttpHandler(async request =>
+        {
+            switch (request.RequestUri!.AbsolutePath)
+            {
+                case "/api/auth/providers":
+                    return JsonResponse(HttpStatusCode.OK, new { oidcEnabled = true });
+                case "/api/auth/client/exchange":
+                    return RaceToken("dev");
+                case "/api/studio/session":
+                    studioRequested.TrySetResult();
+                    return await studioResponse.Task;
+                case "/api/auth/client/logout":
+                    Interlocked.Increment(ref logoutCalls);
+                    return new HttpResponseMessage(HttpStatusCode.NoContent);
+                default:
+                    return new HttpResponseMessage(HttpStatusCode.NotFound);
+            }
+        });
+        using var http = new HttpClient(handler);
+        await using var sessions = new HostedClientSessionService(httpClient: http, authenticator: RaceBrowser());
+        var signIn = sessions.SignInAsync(new HostedServerEntry("dev", "Dev", "http://127.0.0.1:5001"));
+        await studioRequested.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        await sessions.DisconnectAsync();
+        studioResponse.SetResult(JsonResponse(HttpStatusCode.OK, new { mode = "CatalogOnly" }));
+
+        await Assert.ThrowsAsync<HostedSessionExpiredException>(() => signIn);
+        Assert.Null(sessions.Session);
+        Assert.False(sessions.IsHosted);
+        Assert.Equal(1, logoutCalls);
+    }
+
+    [Fact]
+    public async Task LateUnauthorizedResponseIsDiscardedAfterSwitchAndNeverRefreshesTheNewSession()
+    {
+        var oldRequestSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldResponse = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var unexpectedCalls = 0;
+        using var handler = new StubHttpHandler(async request =>
+        {
+            var uri = request.RequestUri!;
+            switch (uri.AbsolutePath)
+            {
+                case "/api/auth/providers":
+                    return JsonResponse(HttpStatusCode.OK, new { oidcEnabled = true });
+                case "/api/auth/client/exchange":
+                    return RaceToken(uri.Port == 5001 ? "dev" : "other");
+                case "/api/studio/session":
+                    return JsonResponse(HttpStatusCode.OK, new { mode = "CatalogOnly" });
+                case "/api/auth/client/logout":
+                    return new HttpResponseMessage(HttpStatusCode.NoContent);
+                case "/api/studio/pipelines/runnable" when uri.Port == 5001:
+                    oldRequestSent.TrySetResult();
+                    return await oldResponse.Task;
+                default:
+                    Interlocked.Increment(ref unexpectedCalls);
+                    return new HttpResponseMessage(HttpStatusCode.NotFound);
+            }
+        });
+        using var http = new HttpClient(handler);
+        await using var sessions = new HostedClientSessionService(httpClient: http, authenticator: RaceBrowser());
+        var initial = await sessions.SignInAsync(new HostedServerEntry("dev", "Dev", "http://127.0.0.1:5001"));
+        var client = new HostedPipelineClient(sessions);
+        var oldList = client.GetRunnablePipelinesAsync(expectedSession: initial);
+        await oldRequestSent.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var current = await sessions.SignInAsync(new HostedServerEntry("other", "Other", "http://127.0.0.1:5002"));
+        oldResponse.SetResult(new HttpResponseMessage(HttpStatusCode.Unauthorized));
+
+        await Assert.ThrowsAsync<HostedSessionExpiredException>(() => oldList);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sessions.AuthorizedSendAsync(_ => new HttpRequestMessage(HttpMethod.Get, initial.Server.Origin), expectedSession: current));
+        Assert.Equal(0, unexpectedCalls);
+        Assert.Same(current, sessions.Session);
+        Assert.DoesNotContain(current.Token, current.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(current.RefreshToken, System.Text.Json.JsonSerializer.Serialize(current), StringComparison.Ordinal);
+    }
+
+    private static LoopbackPkceAuthenticator RaceBrowser() => new(async (authorizeUri, ct) =>
+    {
+        var query = ParseQuery(authorizeUri.Query);
+        using var http = new HttpClient();
+        using var response = await http.GetAsync($"{query["redirect_uri"]}?code=race-auth-code&state={Uri.EscapeDataString(query["state"])}", ct);
+        return response.IsSuccessStatusCode;
+    });
+
+    private static HttpResponseMessage RaceToken(string session) => JsonResponse(HttpStatusCode.OK, new
+    {
+        token = $"test-access-token-{session}",
+        refreshToken = $"test-refresh-token-{session}",
+        expiresAt = DateTime.UtcNow.AddMinutes(10),
+        sessionId = session,
+        clientId = HostedClientIds.Tui,
+        audience = "etl-sql-portal-native-api",
+        tenantId = "tenant-alpha",
+        scopes = new[] { "studio.read", "studio.run" },
+        user = new { id = 7, username = "alice" }
+    });
 
     [Fact]
     public void SecretRedactor_StripsTokensAndVerifiers()
