@@ -49,7 +49,7 @@ export interface HostedSessionManagerOptions {
  */
 export class HostedSessionManager {
     private readonly _fetch: typeof fetch;
-    private readonly _openBrowser: (url: string) => Promise<boolean> | Thenable<boolean>;
+    private _openBrowser: (url: string) => Promise<boolean> | Thenable<boolean>;
     private readonly _now: () => number;
     private readonly _log: (message: string) => void;
     private readonly _signInTimeoutMs: number;
@@ -76,6 +76,10 @@ export class HostedSessionManager {
     public onDidChange(listener: () => void): { dispose(): void } {
         this._listeners.add(listener);
         return { dispose: () => this._listeners.delete(listener) };
+    }
+
+    public setBrowserLauncher(launcher: (url: string) => Promise<boolean> | Thenable<boolean>): void {
+        this._openBrowser = launcher;
     }
 
     public getTarget(): ExecutionTarget {

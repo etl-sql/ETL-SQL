@@ -35,6 +35,7 @@ import { analyzeSavePolicy, getSealPasswordRequirement, requiresRunPasswordPromp
 import { registerWalkthroughCommands } from './walkthrough';
 import { HostedSessionManager } from './hosted/hostedSessionManager';
 import { HostedExecutionController } from './hosted/hostedExecutionController';
+import { HostedServerEntry } from './hosted/hostedTypes';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -226,7 +227,8 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         hostedController,
         vscode.commands.registerCommand('etlsql.hosted.selectTarget', () => hostedController?.selectTarget()),
-        vscode.commands.registerCommand('etlsql.hosted.connect', () => hostedController?.connect()),
+        vscode.commands.registerCommand('etlsql.hosted.connect', (server?: HostedServerEntry) =>
+            server ? hostedController?.connectToServer(server) : hostedController?.connect()),
         vscode.commands.registerCommand('etlsql.hosted.disconnect', () => hostedController?.disconnect())
     );
 
@@ -364,11 +366,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.runScript', () => {
-        runEtlSql(context);
+        return runEtlSql(context);
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.runSelection', () => {
-        runEtlSql(context, true);
+        return runEtlSql(context, true);
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.stopScript', async () => {
@@ -613,6 +615,10 @@ export async function activate(context: vscode.ExtensionContext) {
             await vscode.commands.executeCommand('etlsql.secureConnection', document.uri.toString());
         }
     }));
+
+    return {
+        getHostedController: () => hostedController
+    };
 }
 
 function syncConnectionsToLsp() {
