@@ -5,10 +5,8 @@ using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.Portal.Controllers;
 
@@ -22,11 +20,7 @@ namespace ETL_SQL.Portal.Controllers;
 [EnableRateLimiting("auth")]
 public sealed class NativeClientAuthController(
     NativeClientAuthService nativeAuth,
-    UserManager<PortalUser> userManager,
-    SignInManager<PortalUser> signInManager,
-    ILdapService ldapService,
-    AuditService auditService,
-    PortalDbContext db,
+    PortalPasswordAuthenticationService passwordAuthentication,
     PortalConfig config) : ControllerBase
 {
     [HttpGet("authorize")]
@@ -98,11 +92,12 @@ public sealed class NativeClientAuthController(
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))
             return Content(RenderLoginHtml(transaction, client, cookie.CsrfToken, "Username and password are required."), "text/html; charset=utf-8");
 
-        var (user, error) = await AuthenticateDedicatedUserAsync(username, password, ct);
-        if (user is null)
+        var result = await passwordAuthentication.AuthenticateAsync(username, password, ct);
+        if (result.User is not { } user)
         {
-            Response.StatusCode = StatusCodes.Status401Unauthorized;
-            return Content(RenderLoginHtml(transaction, client, cookie.CsrfToken, error ?? "Invalid credentials."), "text/html; charset=utf-8");
+            Response.StatusCode = result.StatusCode;
+            var error = result.Error ?? "Unable to provision LDAP account.";
+            return Content(RenderLoginHtml(transaction, client, cookie.CsrfToken, error), "text/html; charset=utf-8");
         }
 
         if (user.MustChangePassword)
@@ -200,99 +195,6 @@ public sealed class NativeClientAuthController(
         return statusCode == StatusCodes.Status204NoContent
             ? NoContent()
             : StatusCode(statusCode, new { error = statusCode == StatusCodes.Status403Forbidden ? "native_client_session_required" : "unauthorized" });
-    }
-
-    private async Task<(PortalUser? User, string? Error)> AuthenticateDedicatedUserAsync(
-        string rawUsername,
-        string password,
-        CancellationToken ct)
-    {
-        var isDomainQualified = rawUsername.Contains('@') || rawUsername.Contains('\\');
-        var accountName = LdapService.AccountName(
-            rawUsername,
-            config.Identity.Ldap.Enabled ? config.Identity.Ldap.Domain : null);
-        if (accountName is null)
-            return (null, "Invalid credentials");
-
-        var user = await userManager.FindByNameAsync(accountName);
-        if (user is not null && !user.IsActive)
-        {
-            await auditService.LogAsync(user.Id, "LOGIN_FAILED", "User", user.Id.ToString(), "Account is disabled.");
-            return (null, "Invalid credentials");
-        }
-
-        var useLdap = config.Identity.Ldap.Enabled
-            && ((user is not null && user.Provider == "LDAP")
-                || (user is null && (isDomainQualified || !string.IsNullOrEmpty(config.Identity.Ldap.Domain))));
-
-        if (useLdap)
-        {
-            var ldapResult = await ldapService.AuthenticateAsync(rawUsername, password);
-            if (ldapResult is null)
-            {
-                if (user is not null)
-                    await auditService.LogAsync(user.Id, "LOGIN_FAILED", "User", user.Id.ToString(), "LDAP authentication failed.");
-                return (null, "Invalid LDAP credentials");
-            }
-
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            try
-            {
-                if (user is null)
-                {
-                    user = new PortalUser
-                    {
-                        UserName = ldapResult.Username,
-                        Email = ldapResult.Email ?? $"{ldapResult.Username}@{config.Identity.Ldap.Domain}",
-                        FirstName = ldapResult.FirstName,
-                        LastName = ldapResult.LastName,
-                        IsActive = true,
-                        MustChangePassword = false,
-                        Provider = "LDAP"
-                    };
-                    var created = await userManager.CreateAsync(user);
-                    if (!created.Succeeded)
-                    {
-                        await transaction.RollbackAsync(ct);
-                        return (null, "Unable to provision LDAP account.");
-                    }
-                }
-                else
-                {
-                    user.Email = ldapResult.Email ?? user.Email;
-                    user.FirstName = ldapResult.FirstName ?? user.FirstName;
-                    user.LastName = ldapResult.LastName ?? user.LastName;
-                    await userManager.UpdateAsync(user);
-                }
-
-                await transaction.CommitAsync(ct);
-            }
-            catch
-            {
-                await transaction.RollbackAsync(ct);
-                throw;
-            }
-
-            return (user, null);
-        }
-
-        if (user is null || !user.IsActive)
-            return (null, "Invalid credentials");
-        if (user.Provider == "LDAP")
-            return (null, "Invalid LDAP credentials");
-        if (user.Provider == "OIDC")
-            return (null, "Use single sign-on for this account");
-
-        var check = await signInManager.CheckPasswordSignInAsync(user, password, lockoutOnFailure: true);
-        if (!check.Succeeded)
-        {
-            await auditService.LogAsync(user.Id, "LOGIN_FAILED", "User", user.Id.ToString());
-            return check.IsLockedOut
-                ? (null, "Account locked. Try again in 15 minutes.")
-                : (null, "Invalid credentials");
-        }
-
-        return (user, null);
     }
 
     private static string RenderLoginHtml(

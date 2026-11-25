@@ -223,6 +223,59 @@ public sealed partial class NativeClientAuthTests
     }
 
     [Fact]
+    public async Task NativeLdapLoginRefreshesRolesAndGroupsBeforeIssuingTokens()
+    {
+        using var factory = new LdapAuthTests.LdapPortalWebFactory();
+        using var browser = NoRedirectClient(factory);
+        const string username = "native-ldap-user";
+        const string adGroup = "GG-Portal-Publishers";
+        factory.MockLdap.AuthenticateFunc = (_, _) => new LdapUserResult
+        {
+            Username = username,
+            Groups = [adGroup]
+        };
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.Groups.Add(new ETL_SQL.Portal.Data.Group { Name = adGroup, Provider = "LDAP" });
+            await db.SaveChangesAsync();
+        }
+
+        var browserSignIn = await browser.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, "test-password"));
+        Assert.Equal(HttpStatusCode.OK, browserSignIn.StatusCode);
+        var previousSession = await browserSignIn.Content.ReadFromJsonAsync<LoginResponse>(Json);
+        Assert.NotNull(previousSession);
+        Assert.True((await AuthGet(browser, previousSession.Token, "/api/studio/session")).IsSuccessStatusCode);
+
+        factory.MockLdap.AuthenticateFunc = (_, _) => new LdapUserResult
+        {
+            Username = username,
+            Groups = []
+        };
+        var (verifier, challenge) = CreatePkcePair();
+        const string redirectUri = "http://127.0.0.1:45204/callback";
+        var callback = await CompleteDedicatedBrowserFlowAsync(browser, username, "test-password",
+            NativeClientRegistry.VsCodeClientId, redirectUri, challenge, "state-ldap-sync-123456");
+        var response = await browser.PostAsJsonAsync("/api/auth/client/exchange", new NativeClientExchangeRequest(
+            ParseQuery(callback)["code"], verifier, redirectUri, NativeClientRegistry.VsCodeClientId));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var issued = await response.Content.ReadFromJsonAsync<NativeClientTokenResponse>(Json);
+        Assert.NotNull(issued);
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(issued.Token);
+        Assert.DoesNotContain(jwt.Claims, claim => claim.Value == "Publisher");
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var userId = await db.Users.Where(user => user.UserName == username).Select(user => user.Id).SingleAsync();
+            Assert.False(await db.UserGroups.AnyAsync(membership => membership.UserId == userId));
+        }
+
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await AuthGet(browser, previousSession.Token, "/api/studio/session")).StatusCode);
+    }
+
+    [Fact]
     public async Task Exchange_RejectsInvalidVerifierRedirectClientAndOrigin_AndRevokesOnCodeReplay()
     {
         using var factory = new PortalWebFactory();
@@ -269,6 +322,14 @@ public sealed partial class NativeClientAuthTests
 
         // Session works before replay
         Assert.Equal(HttpStatusCode.OK, (await AuthGet(browser, issued!.Token, "/api/studio/session")).StatusCode);
+
+        var replayFromWrongOrigin = await otherPortalClient.PostAsJsonAsync("/api/auth/client/exchange",
+            new NativeClientExchangeRequest(code, verifier, redirectUri, NativeClientRegistry.VsCodeClientId));
+        Assert.Equal(HttpStatusCode.BadRequest, replayFromWrongOrigin.StatusCode);
+        var replayWithoutProof = await browser.PostAsJsonAsync("/api/auth/client/exchange",
+            new NativeClientExchangeRequest(code, CreatePkcePair().Verifier, redirectUri, NativeClientRegistry.VsCodeClientId));
+        Assert.Equal(HttpStatusCode.BadRequest, replayWithoutProof.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await AuthGet(browser, issued.Token, "/api/studio/session")).StatusCode);
 
         // Code replay is refused AND revokes the issued session + refresh family
         var replay = await browser.PostAsJsonAsync("/api/auth/client/exchange", new NativeClientExchangeRequest(
@@ -471,6 +532,11 @@ public sealed partial class NativeClientAuthTests
         Assert.Equal("tenant-alpha", jwt.Claims.Single(c => c.Type == TokenService.TenantClaim).Value);
         Assert.Equal(HttpStatusCode.OK, (await AuthGet(alpha, session.Token, "/api/studio/session")).StatusCode);
 
+        var crossTenantReplay = await beta.PostAsJsonAsync("/api/auth/client/exchange", new NativeClientExchangeRequest(
+            code, verifier, redirectUri, NativeClientRegistry.VsCodeClientId));
+        Assert.Equal(HttpStatusCode.BadRequest, crossTenantReplay.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await AuthGet(alpha, session.Token, "/api/studio/session")).StatusCode);
+
         // Cross-tenant refresh on beta.portal.test must fail.
         var crossTenantRefresh = await beta.PostAsJsonAsync("/api/auth/client/refresh", new NativeClientRefreshRequest(session.RefreshToken));
         Assert.Equal(HttpStatusCode.Unauthorized, crossTenantRefresh.StatusCode);
@@ -497,6 +563,51 @@ public sealed partial class NativeClientAuthTests
         Assert.Equal(HttpStatusCode.OK, alphaRefresh.StatusCode);
         var refreshed = await alphaRefresh.Content.ReadFromJsonAsync<NativeClientTokenResponse>(Json);
         Assert.Equal("tenant-alpha", refreshed!.TenantId);
+
+        // A different Portal node can revoke this session without access to this process's memory.
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            await db.NativeClientSessions.Where(s => s.Id == session.SessionId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(s => s.RevokedAt, DateTime.UtcNow));
+        }
+        Assert.Equal(HttpStatusCode.Unauthorized, (await AuthGet(alpha, session.Token, "/api/studio/session")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConcurrentUseOfTheSameNativeCredentialRevokesItsSession(bool refresh)
+    {
+        using var factory = new PortalWebFactory();
+        await MarkAdminReadyAsync(factory);
+        using var browser = NoRedirectClient(factory);
+        var (verifier, challenge) = CreatePkcePair();
+        const string redirect = "http://127.0.0.1:45220/callback";
+        var callback = await CompleteDedicatedBrowserFlowAsync(browser, "admin", "Admin@12345!",
+            NativeClientRegistry.VsCodeClientId, redirect, challenge, "state-concurrent-reuse-123");
+        var exchange = new NativeClientExchangeRequest(
+            ParseQuery(callback)["code"], verifier, redirect, NativeClientRegistry.VsCodeClientId);
+        var route = "/api/auth/client/exchange";
+        object payload = exchange;
+        if (refresh)
+        {
+            var first = await browser.PostAsJsonAsync(route, exchange);
+            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+            var issued = await first.Content.ReadFromJsonAsync<NativeClientTokenResponse>(Json);
+            Assert.NotNull(issued);
+            route = "/api/auth/client/refresh";
+            payload = new NativeClientRefreshRequest(issued.RefreshToken);
+        }
+
+        var responses = await Task.WhenAll(browser.PostAsJsonAsync(route, payload), browser.PostAsJsonAsync(route, payload));
+        var winner = Assert.Single(responses, r => r.StatusCode == HttpStatusCode.OK);
+        var loser = Assert.Single(responses, r => r.StatusCode != HttpStatusCode.OK);
+        Assert.Equal(refresh ? HttpStatusCode.Unauthorized : HttpStatusCode.BadRequest, loser.StatusCode);
+        var session = await winner.Content.ReadFromJsonAsync<NativeClientTokenResponse>(Json);
+        Assert.NotNull(session);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await AuthGet(browser, session.Token, "/api/studio/session")).StatusCode);
     }
 
     private static HttpClient NoRedirectClient(PortalWebFactory factory) =>

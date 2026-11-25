@@ -12,8 +12,7 @@ public class SecuritySessionService(
     PortalDbContext db,
     UserSecurityStateCache securityStateCache,
     PortalConfig config,
-    RequestTenantContextAccessor tenantAccessor,
-    NativeClientSessionCache? nativeSessionCache = null)
+    RequestTenantContextAccessor tenantAccessor)
 {
     private string TenantId => config.SharedTenancy.Enabled
         ? tenantAccessor.RequireCurrent().Tenant.Value
@@ -63,11 +62,6 @@ public class SecuritySessionService(
         // Make in-process revocation immediate; cross-process latency stays bounded by the TTL.
         foreach (var id in ids)
             securityStateCache.Evict(tenantId, id);
-        if (nativeSessionCache is not null)
-        {
-            foreach (var session in nativeSessions)
-                nativeSessionCache.Evict(tenantId, session.Id);
-        }
     }
 
     public async Task InvalidateGroupMembersAsync(int groupId, CancellationToken ct = default)

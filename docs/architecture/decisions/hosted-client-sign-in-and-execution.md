@@ -141,16 +141,15 @@ sequenceDiagram
   2-minute timeout and no custom OS URI scheme registration. Portal validates that `redirect_uri` is
   strictly `http://127.0.0.1:<port>/callback` (or `http://[::1]:<port>/callback`) with no query,
   fragment, or alternate path.
-- In remote VS Code environments (SSH/WSL/Codespaces) where the browser runs on a different machine
-  than the extension host, VS Code may optionally use `vscode.env.asExternalUri` to tunnel the
-  loopback port.
+- ST56 requires the browser and client to share the callback loopback interface. Remote VS Code
+  sessions that run the extension host on a different machine need a separate callback design.
 
 ### 2.3 Session reuse, run, results, Stop, and disconnect
 
 1. **Session reuse while open:** Once connected to a hosted environment, the client keeps the
    access and refresh tokens **in process memory only** for the lifetime of the app window/process.
    If the access token is valid with at least 60 s remaining, subsequent runs reuse it immediately
-   with no browser prompt. If expired, the client runs a single-flight `POST /api/auth/refresh`,
+   with no browser prompt. If expired, the client runs a single-flight `POST /api/auth/client/refresh`,
    replaces the in-memory pair, and stays connected across the work session until the server
    revokes/changes security, the user disconnects, or the app closes.
 2. **Run:** The client checks that the linked pipeline document is saved (or prompts **Save to
@@ -180,7 +179,7 @@ sequenceDiagram
 
 ### 2.4 Expired sessions, unavailable hosts, and offline/local execution
 
-- **Expired or revoked session:** When `POST /api/auth/refresh` returns `401` (expired, revoked,
+- **Expired or revoked session:** When `POST /api/auth/client/refresh` returns `401` (expired, revoked,
   disabled account, or `REFRESH_TOKEN_REUSE`), the client clears the dead credential, leaves the run
   **pending**, preserves all editor buffers, and offers **Sign In Again** or **Cancel**.
 - **Unavailable host or disconnected Orchestrator:** Network failure, timeout, `503 orchestrator_not_connected`,
@@ -208,9 +207,9 @@ sequenceDiagram
     keychains, `.etlsql`/`.rptsql` files, `.vscode/settings.json`, `globalState`, output channels,
     crash reports, or diagnostic logs. Only the non-secret saved server list (label + HTTPS URL)
     persists in user settings.
-- **Refreshed:** Single-flight `POST /api/auth/refresh` keeps the active session connected while the
+- **Refreshed:** Single-flight `POST /api/auth/client/refresh` keeps the active session connected while the
   app stays open. Concurrent requests share one refresh promise so two calls never present the same
-  single-use refresh token and trip `REFRESH_TOKEN_REUSE`.
+  single-use refresh token and trigger native refresh-family revocation.
 - **Cleared:** Zeroed/dropped from memory on disconnect, app close, account disable, or
   unrecoverable `401`, and revoked on the server via `POST /api/auth/client/logout` (single token)
   or `POST /api/auth/logout` (all sessions).
@@ -220,8 +219,10 @@ sequenceDiagram
 - **Portal token verification:** Existing JWT validation verifies HMAC-SHA256 signature (key ring),
   `iss = "etl-sql-portal"`, `aud = "etl-sql-portal-api"`, lifetime, `security_stamp`, `IsActive`,
   and `tenant_id` via `TenantCredentialBinding` (fail-closed on Shared tenancy).
-- **Client-session scope ceiling (proposed):** Tokens issued by `POST /api/auth/client/exchange`
-  carry `client_id` (e.g. `etlsql-vscode`, `etlsql-tui`, `etlsql-studio-desktop`) and bounded
+- **Client-session scope ceiling:** Native access tokens use `aud = "etl-sql-portal-native-api"`.
+  Portal validates the tenant, active user security stamp, and durable native session on each
+  authenticated request. Tokens issued by `POST /api/auth/client/exchange`
+  carry `client_id` (e.g. `etlsql-vscode`, `etlsql-tui`, `etlsql-studio`) and bounded
   client scopes (`studio.read`, `studio.run`, `studio.save`) rather than implicit Portal
   administration authority. A stolen workstation token cannot call `/api/admin/*` user, role,
   secret-store, or policy endpoints.
@@ -304,7 +305,7 @@ receives `202 Accepted`:
 | 2. Authorized run | Run `FinanceCheck.etlsql` (`version = 1`) | `POST /api/studio/pipelines/{id}/runs` (`Idempotency-Key`), `GET .../runs/{runId}` | `202` with `runId`; polls to `SUCCESS`; statement metrics rendered; `PIPELINE_RUN_SUBMITTED` audited |
 | 3. Session reuse | Run `FinanceCheck.etlsql` a second time | `POST /api/studio/pipelines/{id}/runs`, `GET .../runs/{runId}` | Zero browser launches; same in-memory session reused; second distinct `runId` completes |
 | 4. Denied run | Sign in as `bob`, attempt to run `FinanceCheck.etlsql` | `POST /api/studio/pipelines/{id}/runs` | `403 run_grant_denied`; zero Orchestrator execution; clear explanation of missing job grant |
-| 5. Session expiry | (a) Expire `alice`'s access token -> run; (b) revoke `alice`'s refresh token -> run | `POST /api/auth/refresh`, `POST /api/studio/pipelines/{id}/runs` | (a) Silent single-flight refresh succeeds; (b) `401` leaves run pending, prompts **Sign In Again**, preserves dirty buffer, does **not** run locally |
+| 5. Session expiry | (a) Expire `alice`'s access token -> run; (b) revoke `alice`'s refresh token -> run | `POST /api/auth/client/refresh`, `POST /api/studio/pipelines/{id}/runs` | (a) Silent single-flight refresh succeeds; (b) `401` leaves run pending, prompts **Sign In Again**, preserves dirty buffer, does **not** run locally |
 | 6. Stop | Run `SlowWait.etlsql` as `alice`, invoke `etlsql.stopScript` | `POST .../runs`, `POST .../runs/{runId}/cancel`, `GET .../runs/{runId}` | `202` cancel accepted; polls to terminal `CANCELLED`; `runId` retained; `PIPELINE_RUN_CANCEL_REQUESTED` audited |
 | 7. Lost response | Drop `202` response after Portal accepts `Idempotency-Key: K1`, recover | `POST .../runs` (dropped), `GET .../runs/by-request/K1`, `GET .../runs/{runId}` | Client recovers exact `runId`; Orchestrator history contains exactly **one** run for `K1` |
 | 8. Disconnect & offline | Disconnect `alice` (and verify clean restart defaults to `Local`), stop Portal, run local script | `POST /api/auth/client/logout`, local `ReplManager` | In-memory session cleared; server refresh token revoked; fresh startup defaults to `Local (Offline)` and runs locally offline under OS account |
@@ -318,7 +319,7 @@ receives `202 Accepted`:
 ### 4.2 Reuse by TUI (ST57) and Desktop Studio (ST58)
 
 - **Shared server contract (100% reused):** `/api/auth/providers`, `/api/auth/client/authorize`,
-  `/api/auth/client/exchange`, `/api/auth/refresh`, `/api/auth/client/logout`,
+  `/api/auth/client/exchange`, `/api/auth/client/refresh`, `/api/auth/client/logout`,
   `/api/studio/session`, `/api/studio/pipelines/{id}/runs` (with `Idempotency-Key`),
   `/api/studio/pipelines/{id}/runs/by-request/{key}`, `/api/studio/pipelines/{id}/runs/{runId}`, and
   `/api/studio/pipelines/{id}/runs/{runId}/cancel`.
@@ -336,7 +337,7 @@ receives `202 Accepted`:
 
 | Slice | Scope | Estimate |
 | :--- | :--- | :--- |
-| 1. Portal native-client auth handoff | `GET /api/auth/client/authorize`, `POST /api/auth/client/exchange`, `POST /api/auth/client/logout`, PKCE `S256` + loopback validation, bounded client scopes, audit events, Portal unit/integration tests | 2–3 engineering days |
+| 1. Portal native-client auth handoff | `GET /api/auth/client/authorize`, `POST /api/auth/client/exchange`, `POST /api/auth/client/refresh`, `POST /api/auth/client/logout`, PKCE `S256` + loopback validation, bounded client scopes, audit events, Portal unit/integration tests | 2–3 engineering days |
 | 2. Idempotent run submission & recovery | `Idempotency-Key` support on `POST /api/studio/pipelines/{id}/runs`, `StudioRunIdempotency` persistence (SQLite + Postgres migration), `GET .../by-request/{key}`, Portal + Orchestrator tests | 1–2 engineering days |
 | 3. VS Code hosted execution & fixture | Saved server list, in-memory session manager (defaulting to Local on startup and revoking on close), loopback browser sign-in, status-bar target picker, saved-revision link/save-and-run prompt, `ResultsPanel` polling + Stop, full ST56 acceptance fixture | 2–3 engineering days |
 | **Total (ST56)** | End-to-end VS Code hosted sign-in, execution, Stop, lost-response recovery, and offline local path | **5–8 engineering days** |

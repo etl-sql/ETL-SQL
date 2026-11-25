@@ -436,6 +436,30 @@ builder.Services.AddAuthentication(opt =>
                 return;
             }
 
+            var issuedStamp = context.Principal?.FindFirstValue(TokenService.SecurityStampClaim);
+            if (isNativeAudience)
+            {
+                var sessionId = context.Principal?.FindFirstValue(TokenService.NativeSessionIdClaim);
+                var clientId = context.Principal?.FindFirstValue(TokenService.NativeClientIdClaim);
+                if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrEmpty(issuedStamp)
+                    || !NativeClientRegistry.TryGet(clientId, out _))
+                {
+                    context.Fail("Invalid native client session.");
+                    return;
+                }
+
+                // Native sign-out must apply across Portal instances sharing the same store.
+                var now = services.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime;
+                var active = await services.GetRequiredService<PortalDbContext>().NativeClientSessions.AnyAsync(session =>
+                    session.TenantId == tenantId && session.Id == sessionId && session.UserId == userId
+                    && session.ClientId == clientId && session.RevokedAt == null && session.ExpiresAt > now
+                    && session.User.TenantId == tenantId && session.User.IsActive && !session.User.MustChangePassword
+                    && session.User.SecurityStamp == issuedStamp, context.HttpContext.RequestAborted);
+                if (!active)
+                    context.Fail("Native client session is expired or revoked.");
+                return;
+            }
+
             var user = await services
                 .GetRequiredService<ETL_SQL.Portal.Services.UserSecurityStateCache>()
                 .GetAsync(tenantId, userId, services.GetRequiredService<PortalDbContext>());
@@ -445,7 +469,6 @@ builder.Services.AddAuthentication(opt =>
                 return;
             }
 
-            var issuedStamp = context.Principal?.FindFirstValue(TokenService.SecurityStampClaim);
             if (string.IsNullOrEmpty(issuedStamp)
                 || !string.Equals(issuedStamp, user.SecurityStamp, StringComparison.Ordinal))
             {
@@ -453,30 +476,6 @@ builder.Services.AddAuthentication(opt =>
                 return;
             }
 
-            if (isNativeAudience)
-            {
-                var nativeSessionId = context.Principal?.FindFirstValue(TokenService.NativeSessionIdClaim);
-                var nativeClientId = context.Principal?.FindFirstValue(TokenService.NativeClientIdClaim);
-                if (string.IsNullOrWhiteSpace(nativeSessionId)
-                    || !ETL_SQL.Portal.Services.NativeClientRegistry.TryGet(nativeClientId, out _))
-                {
-                    context.Fail("Invalid native client session.");
-                    return;
-                }
-
-                var nativeSession = await services
-                    .GetRequiredService<ETL_SQL.Portal.Services.NativeClientSessionCache>()
-                    .GetAsync(tenantId, nativeSessionId, services.GetRequiredService<PortalDbContext>());
-                if (nativeSession is null
-                    || nativeSession.UserId != userId
-                    || !string.Equals(nativeSession.ClientId, nativeClientId, StringComparison.Ordinal)
-                    || nativeSession.RevokedAt is not null
-                    || nativeSession.ExpiresAt <= DateTime.UtcNow)
-                {
-                    context.Fail("Native client session is expired or revoked.");
-                    return;
-                }
-            }
         },
         OnChallenge = async context =>
         {
@@ -594,8 +593,8 @@ builder.Services.AddSingleton(sp =>
     PortalPiiProtector.Create(sp.GetRequiredService<IDataProtectionProvider>()));
 builder.Services.AddScoped<ETL_SQL.Portal.Services.TokenService>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.UserSecurityStateCache>();
-builder.Services.AddSingleton<ETL_SQL.Portal.Services.NativeClientSessionCache>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.NativeClientAuthService>();
+builder.Services.AddScoped<PortalPasswordAuthenticationService>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.PortalNodeIdentity>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SecuritySessionService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.AuditService>();

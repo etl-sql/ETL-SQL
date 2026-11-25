@@ -18,7 +18,6 @@ public sealed class NativeClientAuthService(
     StudioCapabilityStore studioCapabilities,
     SharedIdentityAuthorityResolver sharedAuthorities,
     RequestTenantContextAccessor tenantAccessor,
-    NativeClientSessionCache sessionCache,
     AuditService auditService,
     PortalConfig config,
     IDataProtectionProvider dataProtection,
@@ -417,24 +416,6 @@ public sealed class NativeClientAuthService(
 
         var now = clock.GetUtcNow().UtcDateTime;
 
-        // Code replay: revoke the session minted by the original exchange (RFC 6749 §10.5 / RFC 9700).
-        if (authCode.ConsumedAt is not null)
-        {
-            if (!string.IsNullOrWhiteSpace(authCode.IssuedSessionId))
-            {
-                await RevokeSessionInternalAsync(authCode.TenantId, authCode.IssuedSessionId, "code_replay", now, ct);
-                if (config.SharedTenancy.Enabled)
-                    tenantAccessor.SetVerifiedCredential(TenantContext.FromVerifiedCredential(authCode.TenantId));
-                await auditService.LogAsync(
-                    authCode.UserId,
-                    "NATIVE_CLIENT_CODE_REPLAY",
-                    "NativeClientSession",
-                    authCode.IssuedSessionId,
-                    $"Replayed authorization code for client={authCode.ClientId}; issued session revoked.");
-            }
-            return FailedToken(StatusCodes.Status400BadRequest, "invalid_grant", "Authorization code has already been used.");
-        }
-
         if (authCode.ExpiresAt <= now)
             return FailedToken(StatusCodes.Status400BadRequest, "invalid_grant", "Authorization code has expired.");
 
@@ -450,6 +431,9 @@ public sealed class NativeClientAuthService(
             || !string.Equals(authCode.RedirectUri, canonicalRedirect, StringComparison.Ordinal)
             || !NativeClientRegistry.VerifyPkceS256(req.CodeVerifier, authCode.CodeChallenge))
             return FailedToken(StatusCodes.Status400BadRequest, "invalid_grant", "Invalid client_id, redirect_uri, or PKCE code_verifier.");
+
+        if (authCode.ConsumedAt is not null)
+            return await RejectCodeReplayAsync(authCode, now, ct);
 
         var sessionId = NativeClientRegistry.GenerateOpaqueToken(24);
         var rawRefresh = tokenService.GenerateRefreshToken();
@@ -469,7 +453,11 @@ public sealed class NativeClientAuthService(
             if (consumed != 1)
             {
                 await transaction.RollbackAsync(ct);
-                return FailedToken(StatusCodes.Status400BadRequest, "invalid_grant", "Authorization code has already been used.");
+                var updated = await db.NativeClientAuthCodes.AsNoTracking()
+                    .SingleOrDefaultAsync(c => c.CodeHash == codeHash && c.TenantId == authCode.TenantId, ct);
+                if (updated?.ConsumedAt is not null)
+                    return await RejectCodeReplayAsync(updated, now, ct);
+                return FailedToken(StatusCodes.Status400BadRequest, "invalid_grant", "Invalid authorization grant.");
             }
 
             user = await db.Users
@@ -556,20 +544,7 @@ public sealed class NativeClientAuthService(
         var now = clock.GetUtcNow().UtcDateTime;
 
         if (token.RevokedAt is not null)
-        {
-            // Reuse of a rotated/revoked native refresh token revokes ONLY this native session family.
-            if (token.ExpiresAt > now && token.Session.RevokedAt is null)
-            {
-                await RevokeSessionInternalAsync(token.TenantId, token.SessionId, "refresh_token_reuse", now, ct);
-                await auditService.LogAsync(
-                    token.UserId,
-                    "NATIVE_REFRESH_TOKEN_REUSE",
-                    "NativeClientSession",
-                    token.SessionId,
-                    $"A revoked native refresh token was presented for client={token.Session.ClientId}; native session family revoked.");
-            }
-            return FailedToken(StatusCodes.Status401Unauthorized, "invalid_grant", "Invalid or expired refresh token.");
-        }
+            return await RejectRefreshReuseAsync(token, now, ct);
 
         if (token.ExpiresAt <= now || token.Session.RevokedAt is not null || token.Session.ExpiresAt <= now)
             return FailedToken(StatusCodes.Status401Unauthorized, "invalid_grant", "Invalid or expired refresh token.");
@@ -596,6 +571,10 @@ public sealed class NativeClientAuthService(
             if (consumed != 1)
             {
                 await transaction.RollbackAsync(ct);
+                var reused = await db.NativeClientRefreshTokens.AsNoTracking()
+                    .AnyAsync(t => t.Id == token.Id && t.TenantId == token.TenantId && t.RevokedAt != null, ct);
+                if (reused)
+                    return await RejectRefreshReuseAsync(token, now, ct);
                 return FailedToken(StatusCodes.Status401Unauthorized, "invalid_grant", "Invalid or expired refresh token.");
             }
 
@@ -707,6 +686,28 @@ public sealed class NativeClientAuthService(
         return StatusCodes.Status204NoContent;
     }
 
+    private async Task<TokenOutcome> RejectCodeReplayAsync(NativeClientAuthCode code, DateTime now, CancellationToken ct)
+    {
+        if (code.IssuedSessionId is { Length: > 0 } sessionId
+            && await RevokeSessionInternalAsync(code.TenantId, sessionId, "code_replay", now, ct))
+        {
+            await auditService.LogAsync(code.UserId, "NATIVE_CLIENT_CODE_REPLAY", "NativeClientSession", sessionId,
+                $"Replayed authorization code for client={code.ClientId}; issued session revoked.");
+        }
+        return FailedToken(StatusCodes.Status400BadRequest, "invalid_grant", "Authorization code has already been used.");
+    }
+
+    private async Task<TokenOutcome> RejectRefreshReuseAsync(NativeClientRefreshToken token, DateTime now, CancellationToken ct)
+    {
+        if (token.ExpiresAt > now && token.Session.RevokedAt is null
+            && await RevokeSessionInternalAsync(token.TenantId, token.SessionId, "refresh_token_reuse", now, ct))
+        {
+            await auditService.LogAsync(token.UserId, "NATIVE_REFRESH_TOKEN_REUSE", "NativeClientSession", token.SessionId,
+                $"A revoked native refresh token was presented for client={token.Session.ClientId}; native session family revoked.");
+        }
+        return FailedToken(StatusCodes.Status401Unauthorized, "invalid_grant", "Invalid or expired refresh token.");
+    }
+
     private async Task<bool> RevokeSessionInternalAsync(
         string tenantId,
         string sessionId,
@@ -724,7 +725,6 @@ public sealed class NativeClientAuthService(
             .Where(t => t.SessionId == sessionId && t.TenantId == tenantId && t.RevokedAt == null)
             .ExecuteUpdateAsync(setters => setters.SetProperty(t => t.RevokedAt, now), ct);
 
-        sessionCache.Evict(tenantId, sessionId);
         return updatedSessions > 0;
     }
 
