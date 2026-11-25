@@ -8,9 +8,9 @@ import { HostedJobsTreeProvider, HostedTreeNode } from '../../hosted/hostedJobsT
 import { driveRealPortalOidcConsentFlow } from '../st56BrowserFlowHelper';
 
 interface ExtensionApi {
-    getHostedController: () => HostedExecutionController | undefined;
-    getHostedJobsTree: () => HostedJobsTreeProvider | undefined;
-    getHostedJobsView: () => vscode.TreeView<HostedTreeNode> | undefined;
+    getHostedController?: () => HostedExecutionController | undefined;
+    getHostedJobsTree?: () => HostedJobsTreeProvider | undefined;
+    getHostedJobsView?: () => vscode.TreeView<HostedTreeNode> | undefined;
     onDidResultsDelivered?: vscode.Event<unknown>;
     hasLoadedResultsUi?: () => boolean;
 }
@@ -79,9 +79,9 @@ suite('ST56 Hosted Execution Electron Smoke', function () {
         const api = await ext.activate();
         assert.strictEqual(ext.isActive, true, 'Extension should be active');
 
-        const controller = api?.getHostedController();
-        const tree = api?.getHostedJobsTree();
-        const treeView = api?.getHostedJobsView();
+        const controller = api?.getHostedController?.();
+        const tree = api?.getHostedJobsTree?.();
+        const treeView = api?.getHostedJobsView?.();
         assert.ok(controller, 'HostedExecutionController should be initialized on activation');
         assert.ok(tree, 'HostedJobsTreeProvider should be initialized on activation');
         assert.ok(treeView, 'HostedJobs TreeView should be registered on activation');

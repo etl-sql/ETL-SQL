@@ -42,8 +42,6 @@ let outputChannel: vscode.OutputChannel;
 let connectionsProvider: ConnectionsProvider;
 let sidebarProvider: SidebarProvider;
 let hostedController: HostedExecutionController | undefined;
-let hostedJobsTreeProvider: HostedJobsTreeProvider | undefined;
-let hostedJobsTreeView: vscode.TreeView<HostedTreeNode> | undefined;
 let activeTerminals: vscode.Terminal[] = [];
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -233,12 +231,10 @@ export async function activate(context: vscode.ExtensionContext) {
         runSavedPipeline: (id, version, name) => hostedExecution.runSavedPipeline(id, version, name),
         log: msg => outputChannel.appendLine(msg)
     });
-    hostedJobsTreeProvider = hostedJobsTree;
     const hostedJobsView = vscode.window.createTreeView('etlsql-hosted-jobs', {
         treeDataProvider: hostedJobsTree,
         showCollapseAll: true
     });
-    hostedJobsTreeView = hostedJobsView;
     context.subscriptions.push(
         hostedController,
         hostedJobsTree,
@@ -637,19 +633,16 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    const exportsApi = {
-        getHostedController: () => hostedController,
-        getHostedJobsTree: () => hostedJobsTreeProvider,
-        getHostedJobsView: () => hostedJobsTreeView
-    };
     if (context.extensionMode === vscode.ExtensionMode.Test) {
         return {
-            ...exportsApi,
+            getHostedController: () => hostedController,
+            getHostedJobsTree: () => hostedJobsTree,
+            getHostedJobsView: () => hostedJobsView,
             onDidResultsDelivered: ResultsPanel.onDidDeliverMessage,
             hasLoadedResultsUi: () => ResultsPanel.hasLoadedUiHtml()
         };
     }
-    return exportsApi;
+    return undefined;
 }
 
 function syncConnectionsToLsp() {
