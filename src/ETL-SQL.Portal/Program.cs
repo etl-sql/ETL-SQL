@@ -77,7 +77,9 @@ builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(services => service
 builder.Logging.ClearProviders();
 builder.Services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider, ApplicationLoggerProvider>();
 
-builder.Services.AddEtlSqlEngine(builder.Configuration);
+builder.Services.AddEtlSqlEngine(builder.Configuration,
+    requireToolUseGrants: portalConfig.SharedTenancy.Enabled
+        || !string.IsNullOrWhiteSpace(portalConfig.Orchestrator.IdentitySigningSecret));
 
 // Shared connection-diagnostic core behind the admin "Test connection" button. Stateless; depends
 // only on the IConnectorRegistry registered by AddEtlSqlEngine.
@@ -1119,6 +1121,7 @@ app.Use(async (context, next) =>
 app.UseAuthorization();
 app.UseMiddleware<MustChangePasswordMiddleware>();
 app.MapControllers();
+app.MapScheduledToolPrincipalLookup();
 
 app.Map("/api/gateway/broker", async context =>
 {

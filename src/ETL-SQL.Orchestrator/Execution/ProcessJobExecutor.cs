@@ -285,6 +285,8 @@ namespace ETL_SQL.Orchestrator.Execution
         internal Dictionary<string, string> BuildChildHostEnvironment()
         {
             var childEnv = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (_options.RequireToolUseGrants || _configuration?.GetValue<bool>("Governance:Tools:RequireUseGrants") == true)
+                childEnv["Governance__Tools__RequireUseGrants"] = "true";
 
             // The child's own Orchestrator store binds the run's tenant (EngineRunner looks the job
             // up by tenant and name), so it needs the parent's store location. It never needs a
@@ -298,6 +300,17 @@ namespace ETL_SQL.Orchestrator.Execution
                              ("Orchestrator:Database:ConnectionString", "Orchestrator__Database__ConnectionString"),
                              ("Engine:SpillRoot", "Engine__SpillRoot"),
                              ("Engine:SpillMinimumFreeDiskMB", "Engine__SpillMinimumFreeDiskMB"),
+                             // Prefer the current catalog root key when both keys are configured.
+                             ("Governance:Tools:OsStoreRoot", "Governance__Tools__LocalRoot"),
+                             ("Governance:Tools:LocalRoot", "Governance__Tools__LocalRoot"),
+                             ("Governance:Tools:Provider", "Governance__Tools__Provider"),
+                             ("Governance:Tools:OwnershipMode", "Governance__Tools__OwnershipMode"),
+                             ("Governance:Tools:ServiceIdentity", "Governance__Tools__ServiceIdentity"),
+                             ("Governance:Tools:ValidateOwnership", "Governance__Tools__ValidateOwnership"),
+                             ("Governance:Tools:ArtifactRoot", "Governance__Tools__ArtifactRoot"),
+                             ("Governance:Tools:RequireArtifactApproval", "Governance__Tools__RequireArtifactApproval"),
+                             ("Tools:AllowNativeToolsForTenants", "Tools__AllowNativeToolsForTenants"),
+                             ("Tools:Limits:RequiredIsolationProfile", "Tools__Limits__RequiredIsolationProfile"),
                              ("Session:Root", "Session__Root"),
                              ("Session:PersistenceDefault", "Session__PersistenceDefault"),
                              ("Orchestration:ResourceManagement:SystemMemoryFloorMB", "Orchestration__ResourceManagement__SystemMemoryFloorMB")
@@ -335,19 +348,19 @@ namespace ETL_SQL.Orchestrator.Execution
         }
 
         /// <summary>
-        /// A child inherits the parent's environment, and deployments commonly configure the
-        /// identity-signing secret as an environment variable. Strip it before spawning: the child
-        /// runs user script text and must not be able to forge Orchestrator identity assertions.
+        /// Strip signing secrets and parent-only directory credentials from the inherited environment
+        /// before spawning a child that can execute user scripts.
         /// </summary>
         internal static void RemoveParentSigningSecrets(ProcessStartInfo psi)
         {
-            foreach (var name in ProcessCallerIdentityEnvelope.ParentSigningSecretEnvironmentNames)
+            var lookupPrefix = ScheduledToolPrincipalRequest.ConfigurationSection + ":";
+            foreach (var key in psi.Environment.Keys.ToArray())
             {
-                // ProcessStartInfo's environment block is case-insensitive on Windows only; on Unix
-                // remove any case variant the parent happened to inherit.
-                foreach (var key in psi.Environment.Keys
-                             .Where(k => string.Equals(k, name, StringComparison.OrdinalIgnoreCase))
-                             .ToList())
+                // Both configuration separators are accepted by the environment provider.
+                var normalized = key.Replace("__", ":", StringComparison.Ordinal);
+                var signingSecret = ProcessCallerIdentityEnvelope.ParentSigningSecretEnvironmentNames
+                    .Any(name => normalized.Equals(name.Replace("__", ":", StringComparison.Ordinal), StringComparison.OrdinalIgnoreCase));
+                if (signingSecret || normalized.StartsWith(lookupPrefix, StringComparison.OrdinalIgnoreCase))
                     psi.Environment.Remove(key);
             }
         }
@@ -844,6 +857,8 @@ namespace ETL_SQL.Orchestrator.Execution
         public int TimeoutSeconds { get; set; } = 3600;
         /// <summary>When true, SchedulerService uses ProcessJobExecutor instead of ScriptExecutorAdapter.</summary>
         public bool UseProcessSpawning { get; set; } = false;
+        /// <summary>Require tool use grants in spawned runners, including runs without a caller envelope.</summary>
+        public bool RequireToolUseGrants { get; set; }
         /// <summary>When true, ProcessJobExecutor reuses warm ETL-SQL runner processes instead of launching a fresh process per job.</summary>
         public bool UseWarmRunner { get; set; } = false;
         /// <summary>Maximum warm runner processes kept for concurrent job execution.</summary>

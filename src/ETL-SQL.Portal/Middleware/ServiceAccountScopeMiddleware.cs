@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
 using Microsoft.EntityFrameworkCore;
@@ -175,6 +176,9 @@ public sealed class ServiceAccountScopeMiddleware(RequestDelegate next)
     private static string[]? RequiredScopes(HttpRequest request)
     {
         var path = request.Path.Value ?? "";
+        if (HttpMethods.IsPost(request.Method)
+            && path.Equals(ScheduledToolPrincipalRequest.Path, StringComparison.OrdinalIgnoreCase))
+            return [ScheduledToolPrincipalRequest.Scope];
 
         // Exchanging a session for an Orchestrator assertion is reachable from any rung: the token it
         // returns carries the caller's own scopes, so the ceiling that governs what the assertion can

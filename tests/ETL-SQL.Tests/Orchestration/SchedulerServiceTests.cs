@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Orchestrator.Execution;
@@ -78,7 +79,8 @@ namespace ETL_SQL.Tests.Orchestration
             Dictionary<string, string?>? config = null,
             Mock<ISessionStateManager>? sessionManager = null,
             Mock<ISandboxScheduledJobExecutor>? sandboxExecutor = null,
-            Mock<ITenantMeteringLedger>? meteringLedger = null)
+            Mock<ITenantMeteringLedger>? meteringLedger = null,
+            IScheduledToolPrincipalLookup? toolPrincipalLookup = null)
         {
             capacityMonitor ??= new FixedCapacityMonitor(isOverloaded: false);
             // IServiceProvider.CreateScope() is an extension that calls
@@ -125,7 +127,7 @@ namespace ETL_SQL.Tests.Orchestration
                 configuration,
                 sessionManager.Object,
                 capacityMonitor,
-                meteringLedger?.Object);
+                meteringLedger?.Object, toolPrincipalLookup: toolPrincipalLookup);
         }
 
         public void Dispose()
@@ -1051,6 +1053,43 @@ namespace ETL_SQL.Tests.Orchestration
                     id.EffectiveUser == "user:alice" &&
                     id.TenantId == "tenant-a" &&
                     !id.IsAdmin)), Times.Once());
+        }
+
+        [Fact]
+        public async Task ToolLookupRefreshesVerifiedOwnerWithoutElevatingAnUnattendedRun()
+        {
+            var job = new JobDefinition("OwnerRun", "SELECT 1;", 1, "HOUR", null, null, null,
+                CreatedBy: "user:alice", TenantId: "tenant-a", Id: JobId.From("job-alice-owner-run"));
+            var store = new Mock<IJobHistoryStore>();
+            var current = job;
+            store.Setup(s => s.GetJobByIdAsync(job.Id)).ReturnsAsync(() => current);
+            var lookup = new Mock<IScheduledToolPrincipalLookup>(MockBehavior.Strict);
+            var signed = new ToolExecutionPrincipal("tenant-a", ToolPrincipalKind.User, "alice", ["removed-group"], true);
+            ToolExecutionPrincipal? live = signed with { GroupIds = ["current-group"] };
+            lookup.Setup(value => value.ResolveAsync("tenant-a", "user:alice", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => live);
+            var scheduler = BuildService(store, new Mock<IScriptExecutor>(), toolPrincipalLookup: lookup.Object);
+            var caller = new ExecutionIdentity
+            {
+                EffectiveUser = "user:alice",
+                RealUser = "user:alice",
+                TenantId = "tenant-a",
+                IsAdmin = false,
+                ToolPrincipal = signed
+            };
+
+            Assert.Null((await scheduler.ResolveAttemptIdentityAsync(job, null, null, default))?.ToolPrincipal);
+            lookup.VerifyNoOtherCalls();
+
+            var refreshed = await scheduler.ResolveAttemptIdentityAsync(job, caller, null, default);
+            Assert.Equal(live, refreshed?.ToolPrincipal);
+
+            live = null;
+            Assert.Null((await scheduler.ResolveAttemptIdentityAsync(job, caller, null, default))?.ToolPrincipal);
+
+            current = job with { Version = job.Version + 1 };
+            Assert.Null((await scheduler.ResolveAttemptIdentityAsync(job, caller, null, default))?.ToolPrincipal);
+            lookup.Verify(value => value.ResolveAsync("tenant-a", "user:alice", It.IsAny<CancellationToken>()), Times.Exactly(2));
         }
 
         private sealed class FixedCapacityMonitor(bool isOverloaded) : INodeCapacityMonitor

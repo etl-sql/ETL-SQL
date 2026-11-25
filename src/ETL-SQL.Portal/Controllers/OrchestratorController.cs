@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
@@ -133,6 +134,21 @@ public class OrchestratorController(
             await audit.LogAsync(CurrentUserId, "JobScriptEdited", "Job", name, null);
         }
         return NoContent();
+    }
+
+    [HttpPut("jobs/{name}/tool-approval")]
+    public async Task<IActionResult> SetJobToolApproval(string name, SavedJobToolApprovalRequest request)
+    {
+        if (request.Approved is not { } approved)
+            return BadRequest(new { Error = "Approved is required." });
+
+        var version = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (version is null) return OptimisticConcurrency.MissingVersion(this);
+
+        using var response = await proxy.SetJobToolApprovalAsync(name, approved, version.Value);
+        if (response is null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (response.IsSuccessStatusCode) return NoContent();
+        return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
     }
 
     [HttpDelete("jobs/{name}")]

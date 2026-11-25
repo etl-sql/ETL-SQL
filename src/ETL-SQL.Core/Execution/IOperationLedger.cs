@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ETL_SQL.Core.Execution;
@@ -27,6 +28,13 @@ public interface IOperationLedger
     Task RecordStartAsync(string operationId, string operationType, string payload);
     Task RecordCompletionAsync(string operationId, int exitCode, string? error);
     Task<OperationState?> GetStateAsync(string operationId);
+}
+
+/// <summary>Seals an alias to one launch contract within a persistent session.</summary>
+public interface IToolApprovalStore
+{
+    Task<bool> TryBindAsync(string sessionRoot, string sessionId, string alias, string? approval,
+        CancellationToken cancellationToken);
 }
 
 public interface IOperationLedgerFactory
