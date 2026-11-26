@@ -419,6 +419,11 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public InteractionManifest? Interaction { get; set; }
 
+        /// <summary>The inherited theme used by server-rendered charts.</summary>
+        [JsonPropertyName("inheritedTheme")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? InheritedTheme { get; set; }
+
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }
