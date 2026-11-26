@@ -34,6 +34,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Engine.Services;
+using ETL_SQL.Infrastructure.Sqlite;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Storage;
@@ -70,11 +71,15 @@ namespace ETL_SQL.Orchestrator
                 LocalRoot = configuration["Governance:Tools:LocalRoot"] ?? configuration["Governance:Tools:OsStoreRoot"],
                 OwnershipMode = ownershipMode,
                 ServiceIdentity = configuration["Governance:Tools:ServiceIdentity"],
-                ValidateOwnership = configuration.GetValue<bool?>("Governance:Tools:ValidateOwnership") ?? true
+                ValidateOwnership = configuration.GetValue<bool?>("Governance:Tools:ValidateOwnership") ?? true,
+                RequireUseGrants = configuration.GetValue<bool>("Governance:Tools:RequireUseGrants"),
+                ArtifactRoot = configuration["Governance:Tools:ArtifactRoot"],
+                RequireArtifactApproval = configuration.GetValue<bool>("Governance:Tools:RequireArtifactApproval")
             };
         }
 
-        public static IServiceCollection AddEtlSqlEngine(this IServiceCollection services, IConfiguration configuration)
+        public static IServiceCollection AddEtlSqlEngine(this IServiceCollection services, IConfiguration configuration,
+            bool requireToolUseGrants = false)
         {
             // 1. Core Services
             services.AddSingleton<CliContext>(new CliContext());
@@ -98,9 +103,13 @@ namespace ETL_SQL.Orchestrator
             if (connectionCatalog != null)
                 services.AddSingleton(connectionCatalog);
 
-            var toolCatalog = ToolCatalogProviderFactory.Create(BuildToolCatalogOptions(configuration));
+            var toolOptions = BuildToolCatalogOptions(configuration);
+            toolOptions.RequireUseGrants |= requireToolUseGrants;
+            var toolCatalog = ToolCatalogProviderFactory.Create(toolOptions);
             if (toolCatalog != null)
                 services.AddSingleton(toolCatalog);
+            if (!string.IsNullOrWhiteSpace(toolOptions.ArtifactRoot))
+                services.TryAddSingleton<IToolApprovalStore, SqliteToolApprovalStore>();
 
             services.AddSingleton<ICapabilityTokenIssuer, ETL_SQL.Engine.Governance.DefaultCapabilityTokenIssuer>();
 

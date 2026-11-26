@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
@@ -27,6 +28,125 @@ public sealed class ExternalToolSecurityTests : IDisposable
 {
     private readonly string _tempRoot;
 
+    [Fact]
+    public void XT08_FixedDashApprovalBindsBothFilesToTheSameGeneration()
+    {
+        var root = Path.Combine(_tempRoot, "artifacts");
+        var interpreterDigest = new string('a', 64);
+        var scriptDigest = new string('b', 64);
+        var generation = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+            Encoding.ASCII.GetBytes(interpreterDigest + "\n" + scriptDigest)));
+        var version = Path.Combine(root, "tool", generation);
+        var interpreter = Path.Combine(version, "dash");
+        var entry = Path.Combine(version, "entry.sh");
+        var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["COMMAND"] = interpreter,
+            ["ARTIFACT_SHA256"] = interpreterDigest,
+            ["SCRIPT_PATH"] = entry,
+            ["SCRIPT_SHA256"] = scriptDigest
+        };
+
+        if (!OperatingSystem.IsLinux())
+        {
+            Assert.Throws<PlatformNotSupportedException>(() => NativeToolArtifact.Resolve(root, "Tool", "EXECUTABLE", options));
+            return;
+        }
+
+        var approval = NativeToolArtifact.Resolve(root, "Tool", "EXECUTABLE", options);
+        Assert.Equal(interpreter, approval.ExecutablePath);
+        Assert.Equal(entry, approval.ScriptPath);
+        Assert.Equal(generation, approval.GenerationSha256);
+
+        options["ARGS"] = "{data}";
+        var newContract = NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options);
+        Assert.Equal(approval.GenerationSha256, newContract.GenerationSha256);
+        Assert.NotEqual(approval.ApprovalId, newContract.ApprovalId);
+
+        options["SCRIPT_SHA256"] = new string('c', 64);
+        Assert.Throws<InvalidOperationException>(() => NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options));
+        options["SCRIPT_SHA256"] = scriptDigest;
+        options["SCRIPT_PATH"] = Path.Combine(root, "other.sh");
+        Assert.Throws<InvalidOperationException>(() => NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options));
+        options["SCRIPT_PATH"] = entry;
+        options.Remove("ARTIFACT_SHA256");
+        Assert.Throws<ArgumentException>(() => NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options));
+    }
+
+    [Fact]
+    public async Task XT08_WindowsApprovalRejectsInteractiveExecutionAndNonLocalPaths()
+    {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041) || RuntimeInformation.OSArchitecture != System.Runtime.InteropServices.Architecture.X64)
+            return;
+
+        const string virtualAccount = @"NT SERVICE\EtlsqlXt08Fixture";
+        var root = Path.Combine(_tempRoot, "artifacts");
+        var digest = new string('a', 64);
+        var version = Path.Combine(root, "tool", digest);
+        var executable = Path.Combine(version, "fixture.exe");
+        var catalog = Path.Combine(_tempRoot, "catalog", "tool.json");
+        var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["COMMAND"] = executable,
+            ["ARTIFACT_SHA256"] = digest
+        };
+
+        Assert.Throws<InvalidOperationException>(() => NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options));
+        Assert.Throws<InvalidOperationException>(() =>
+            NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options, @"NT AUTHORITY\LocalService", catalog));
+        var networkError = Assert.Throws<InvalidOperationException>(() =>
+            NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options, virtualAccount, @"\\server\catalog\tool.json"));
+        Assert.Contains("absolute drive paths", networkError.Message, StringComparison.Ordinal);
+        options["COMMAND"] = executable + ":other";
+        var streamError = Assert.Throws<InvalidOperationException>(() =>
+            NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options, virtualAccount, catalog));
+        Assert.Contains("alternate data streams", streamError.Message, StringComparison.Ordinal);
+        options["COMMAND"] = executable;
+
+        options["WORKING_DIR"] = root;
+        Assert.Throws<InvalidOperationException>(() =>
+            NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options, virtualAccount, catalog));
+        options["WORKING_DIR"] = version;
+
+        var artifact = NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options, virtualAccount, catalog);
+        Assert.Equal(executable, artifact.ExecutablePath);
+        Assert.Equal(digest, artifact.GenerationSha256);
+
+        using var identity = WindowsIdentity.GetCurrent();
+        var serviceSid = new SecurityIdentifier(WellKnownSidType.ServiceSid, null);
+        if (!new WindowsPrincipal(identity).IsInRole(serviceSid) || identity.IsSystem)
+        {
+            var error = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => artifact.OpenForLaunchAsync(default));
+            Assert.Contains("virtual service token", error.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task XT08_WindowsHandleVerifiesPeAndReplacementKeepsAnOpenCatalogSnapshot()
+    {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041) || RuntimeInformation.OSArchitecture != System.Runtime.InteropServices.Architecture.X64)
+            return;
+
+        var executable = Path.Combine(_tempRoot, "fixture.exe");
+        File.Copy(Environment.ProcessPath!, executable);
+        using (var verified = new FileStream(executable, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            WindowsNativeToolBoundary.VerifyExecutable(verified, executable);
+            Assert.Equal(0, verified.Position);
+            Assert.Throws<IOException>(() => new FileStream(executable, FileMode.Open, FileAccess.Write, FileShare.ReadWrite).Dispose());
+        }
+
+        var active = Path.Combine(_tempRoot, "active.json");
+        var staged = Path.Combine(_tempRoot, "staged.json");
+        await File.WriteAllTextAsync(active, "generation-one");
+        await File.WriteAllTextAsync(staged, "generation-two");
+        using var snapshot = new FileStream(active, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        WindowsNativeToolBoundary.ReplaceCatalogEntry(staged, active);
+        using var reader = new StreamReader(snapshot);
+        Assert.Equal("generation-one", await reader.ReadToEndAsync());
+        Assert.Equal("generation-two", await File.ReadAllTextAsync(active));
+    }
+
     public ExternalToolSecurityTests()
     {
         SecurityEventRuntime.ConfigureLocalOutboxFactory(new SqliteSecurityEventOutboxFactory());
@@ -34,7 +154,7 @@ public sealed class ExternalToolSecurityTests : IDisposable
         _tempRoot = CreateProtectedTestRoot();
     }
 
-    private static string CreateProtectedTestRoot()
+    internal static string CreateProtectedTestRoot()
     {
         var baseDir = Path.GetTempPath();
         if (OperatingSystem.IsWindows())
@@ -261,6 +381,32 @@ public sealed class ExternalToolSecurityTests : IDisposable
     }
 
     [Fact]
+    public async Task SavedJobApprovalDoesNotAuthorizeToolsFromNestedCode()
+    {
+        var catalog = new Mock<IToolCatalogProvider>(MockBehavior.Strict);
+        var context = new Mock<IExecutionContext>();
+        context.SetupGet(c => c.CurrentRecursiveDepth).Returns(1);
+        context.SetupGet(c => c.ExecutionIdentity).Returns(new ExecutionIdentity
+        {
+            EffectiveUser = "user:job-owner",
+            RealUser = "user:job-owner",
+            TenantId = "tenant-a",
+            IsAdmin = false,
+            ToolPrincipal = new("tenant-a", ToolPrincipalKind.User, "job-owner", [], true,
+                ApprovedSavedScriptOnly: true)
+        });
+        var processFactory = new RecordingProcessFactory();
+        var handler = new ExecuteToolStatementHandler(new Mock<ILogger>().Object, catalog.Object,
+            processFactory: processFactory);
+
+        var exception = await Assert.ThrowsAsync<ExecutionException>(
+            () => handler.Execute(new ExecuteToolStatement("nested_tool"), context.Object));
+        Assert.Contains("top-level script", exception.Message);
+        catalog.VerifyNoOtherCalls();
+        Assert.Empty(processFactory.StartedCommands);
+    }
+
+    [Fact]
     public async Task XT02_EvaluatorWhatIfSuppressesExecuteToolViaDi()
     {
         var toolCatalogDir = Path.Combine(_tempRoot, "eval_catalog");
@@ -418,6 +564,26 @@ public sealed class ExternalToolSecurityTests : IDisposable
             "admin-machine-tool-delete", ctx, writableCatalog.Object, logger.Object, CancellationToken.None, isElevated: () => false);
         Assert.Equal(1, deleteDenied);
         writableCatalog.VerifyNoOtherCalls();
+
+        ctx.ToolGrantTenant = "tenant-a";
+        ctx.GrantPrincipalKind = "GROUP";
+        ctx.GrantPrincipalId = "finance-id";
+        var grant = new ToolUseGrant("tenant-a", ToolPrincipalKind.Group, "finance-id");
+        var grantDenied = await ToolAdminService.ExecuteAsync(
+            "admin-machine-tool-grant", ctx, writableCatalog.Object, logger.Object, CancellationToken.None, isElevated: () => false);
+        Assert.Equal(1, grantDenied);
+        writableCatalog.VerifyNoOtherCalls();
+
+        writableCatalog.Setup(w => w.SetUseGrantAsync("mytool", grant, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        writableCatalog.Setup(w => w.SetUseGrantAsync("mytool", grant, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        Assert.Equal(0, await ToolAdminService.ExecuteAsync("admin-machine-tool-grant", ctx,
+            writableCatalog.Object, logger.Object, CancellationToken.None, isElevated: () => true));
+        Assert.Equal(0, await ToolAdminService.ExecuteAsync("admin-machine-tool-revoke", ctx,
+            writableCatalog.Object, logger.Object, CancellationToken.None, isElevated: () => true));
+        writableCatalog.Verify(w => w.SetUseGrantAsync("mytool", grant, true, It.IsAny<CancellationToken>()), Times.Once);
+        writableCatalog.Verify(w => w.SetUseGrantAsync("mytool", grant, false, It.IsAny<CancellationToken>()), Times.Once);
 
         // Explicit elevation succeeds and delegates store cleanly.
         writableCatalog.Setup(w => w.StoreAsync(It.IsAny<ToolDefinition>(), It.IsAny<CancellationToken>()))

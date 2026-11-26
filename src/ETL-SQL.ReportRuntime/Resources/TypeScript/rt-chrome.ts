@@ -292,8 +292,15 @@ export function renderHeader(container: HTMLElement | DocumentFragment, manifest
     if (manifest.certification) badges.push(`<span class="header-badge cert" title="Certification">⭐ ${escHtml(manifest.certification)}</span>`);
     const rawFreshnessStatus = String(manifest.freshnessStatus || (manifest.lastRefreshed || manifest.builtAt ? 'fresh' : 'unknown')).toLowerCase();
     const freshnessStatus = ['fresh', 'stale', 'unknown'].includes(rawFreshnessStatus) ? rawFreshnessStatus : 'unknown';
-    const freshnessText = manifest.lastRefreshed || manifest.builtAt || 'Freshness unknown';
-    badges.push(`<span class="header-badge fresh ${freshnessStatus}" title="Freshness: ${escHtml(freshnessStatus)}">🕒 ${escHtml(freshnessText)}</span>`);
+    const rawFreshnessText = manifest.lastRefreshed || manifest.builtAt || '';
+    const parsedFreshness = rawFreshnessText ? new Date(rawFreshnessText) : null;
+    const freshnessText = parsedFreshness && !Number.isNaN(parsedFreshness.getTime())
+        ? parsedFreshness.toLocaleString()
+        : (rawFreshnessText || 'Freshness unknown');
+    const freshnessTitle = rawFreshnessText
+        ? `Freshness: ${freshnessStatus} (${rawFreshnessText})`
+        : `Freshness: ${freshnessStatus}`;
+    badges.push(`<span class="header-badge fresh ${freshnessStatus}" title="${escHtml(freshnessTitle)}">🕒 ${escHtml(freshnessText)}</span>`);
     if (manifest.tags) {
         const tagList = Array.isArray(manifest.tags) ? manifest.tags : String(manifest.tags).split(',');
         tagList.forEach((t: string) => {
@@ -302,8 +309,9 @@ export function renderHeader(container: HTMLElement | DocumentFragment, manifest
         });
     }
 
+    let badgeContainer: HTMLDivElement | null = null;
     if (badges.length > 0) {
-        const badgeContainer = document.createElement('div');
+        badgeContainer = document.createElement('div');
         badgeContainer.className = 'header-badges';
         badgeContainer.innerHTML = badges.join('');
         badgeContainer.querySelectorAll('a.header-badge.tag').forEach(el => {
@@ -322,7 +330,6 @@ export function renderHeader(container: HTMLElement | DocumentFragment, manifest
                 }
             });
         });
-        left.appendChild(badgeContainer);
     }
 
     const actions = document.createElement('div');
@@ -392,8 +399,13 @@ export function renderHeader(container: HTMLElement | DocumentFragment, manifest
         actions.appendChild(publishBtn);
     }
 
+    const right = document.createElement('div');
+    right.className = 'header-right';
+    if (badgeContainer) right.appendChild(badgeContainer);
+    right.appendChild(actions);
+
     header.appendChild(left);
-    header.appendChild(actions);
+    header.appendChild(right);
     container.appendChild(header);
 }
 
@@ -691,12 +703,10 @@ export function hideModalDialog(modalName: string | null | undefined): void {
 
 
 // ── Footer ──────────────────────────────────────────────────────────────
-
-export function renderFooter(container: HTMLElement, manifest: ChromeManifest): void {
-    const footer = document.createElement('footer');
-    const built  = manifest.builtAt ? new Date(manifest.builtAt).toLocaleString() : '';
-    footer.innerHTML = '<small>Built: ' + escHtml(built) + '</small>';
-    container.appendChild(footer);
+// The build/freshness timestamp now lives in the right-aligned header badge, so we do not emit a
+// duplicate footer row that consumes vertical space below FIT = 'SCREEN' pages.
+export function renderFooter(): void {
+    // Intentionally empty; kept exported for module contract compatibility.
 }
 
 export function renderPipelineConsole(root: HTMLElement, manifest: ChromeManifest): void {

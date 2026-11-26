@@ -61,21 +61,22 @@ body.theme-dark, body.vscode-dark, .theme-dark {
   a    { color: #5470c6; }
   .report-desc { color: #555; margin-top: 2px; margin-bottom: 16px; }
   h2   { border-bottom: 2px solid #ccc; padding-bottom: 4px; margin-top: 32px; }
-  h3   { margin-bottom: 8px; }
+  h3   { margin-top: 0; margin-bottom: 8px; }
 
   .report-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 24px; background: #fff; border-bottom: 1px solid #ddd;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 8px 20px; background: #fff; border-bottom: 1px solid #ddd;
     position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-    margin: -16px -16px 20px -16px;
+    margin: -16px -16px 10px -16px;
   }
   .theme-dark .report-header { background: #252526; border-color: #333; color: #fff; }
 
-  .header-left { display: flex; flex-direction: column; }
-  .header-title { font-size: 1.2em; font-weight: bold; }
-  .header-subtitle { font-size: 0.85em; color: #666; }
+  .header-left { display: flex; flex-direction: column; min-width: 0; }
+  .header-title { font-size: 1.15em; font-weight: bold; line-height: 1.25; }
+  .header-subtitle { font-size: 0.82em; color: #666; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .theme-dark .header-subtitle { color: #888; }
-  .header-badges { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+  .header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .header-badges { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 0; flex-wrap: wrap; }
   .header-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: 500; background: #f0f4f8; color: #334155; }
   .header-badge.cert { background: #fef3c7; color: #92400e; }
   .header-badge.fresh { background: #dcfce7; color: #166534; }
@@ -120,7 +121,10 @@ body.theme-dark, body.vscode-dark, .theme-dark {
   .html-inline-microchart { display:inline-block; max-width:100%; line-height:0; vertical-align:middle; }
   .html-inline-microchart svg { display:block; max-width:100%; height:auto; }
   .visual-toolbar { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 20; }
-  .visual-card.has-visual-toolbar > h3:first-child { padding-right: 40px; }
+  .visual-card.has-visual-toolbar > h3:first-child { padding-right: 68px; }
+  .visual-card.visual-collapsed { flex: 0 0 auto; height: auto !important; min-height: 36px !important; padding-top: 8px; padding-bottom: 8px; overflow: hidden !important; }
+  .visual-card.visual-collapsed > :not(h3):not(.visual-toolbar) { display: none !important; }
+  .visual-card.visual-collapsed > h3 { display: block !important; margin-bottom: 0 !important; }
   .visual-tool-btn {
     width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
     border: 1px solid rgba(0,0,0,0.12); border-radius: 4px; background: rgba(255,255,255,0.92);
@@ -232,6 +236,12 @@ body.theme-dark, body.vscode-dark, .theme-dark {
   }
   .native-chart-wrapper.chart-animated svg {
     animation: etlsql-chart-fade-in var(--anim-duration, 800ms) var(--anim-easing, cubic-bezier(0, 0, 0.2, 1)) both;
+  }
+  .native-chart-wrapper.chart-swap-no-anim svg {
+    animation: none !important;
+  }
+  .native-chart-wrapper svg [data-row-index] {
+    cursor: pointer;
   }
   .native-chart-wrapper.chart-animated.update-animated svg rect,
   .native-chart-wrapper.chart-animated.update-animated svg path,
@@ -458,6 +468,42 @@ body.theme-dark, body.vscode-dark, .theme-dark {
   .page.active { display: flex; flex-direction: column; height: auto; min-height: 100%; }
   .page-grid { display: grid; gap: 24px; flex: 1; width: 100%; }
   .page-grid > div { display: flex; flex-direction: column; min-height: 0; }
+  @media (width > 768px) {
+    /* PAGE OPTIONS (FIT = 'SCREEN'): the page height is set from the viewport by rt-layout.ts. */
+    .page[data-fit="SCREEN"].active { overflow-y: auto; min-height: 0; }
+    /* The runtime sets inline display:block on the active page, so it is not a flex column here;
+       the grid takes the page height directly. */
+    .page[data-fit="SCREEN"] .page-grid { height: 100%; flex: none; gap: 12px; }
+    .page[data-fit="SCREEN"] .page-grid > div { min-height: 0; overflow: hidden; }
+    .page[data-fit="SCREEN"] .visual-card { padding: 10px 12px; min-height: 0; overflow: auto; }
+    .page[data-fit="SCREEN"] .visual-card:has(.chart-wrapper),
+    .page[data-fit="SCREEN"] .visual-card:has(.table-wrapper) { overflow: hidden; }
+    .page[data-fit="SCREEN"] .table-wrapper { flex: 1; min-height: 0; max-height: none; overflow: auto; }
+    .page[data-fit="SCREEN"] .table-wrapper th,
+    .page[data-fit="SCREEN"] .table-wrapper td { padding: 3px 8px; font-size: 0.86em; }
+    .page[data-fit="SCREEN"] .visual-card > h3 {
+      flex-shrink: 0;
+      font-size: 0.92em; line-height: 1.25; margin: 0 0 4px 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .page[data-fit="SCREEN"] .visual-card.has-visual-toolbar > h3:first-child { padding-right: 62px; }
+    .page[data-fit="SCREEN"] .visual-card:has(.table-search-row) > h3:first-child { padding-right: 224px; }
+    .page[data-fit="SCREEN"] .visual-card:has(.table-wrapper) > .visual-subtitle { display: none; }
+    .page[data-fit="SCREEN"] .visual-card:has(.table-search-row) .table-search-row {
+      position: absolute; top: 5px; right: 62px; padding: 0; z-index: 15;
+    }
+    .page[data-fit="SCREEN"] .visual-card:has(.table-search-row) .table-search-input {
+      width: 154px; height: 24px; padding: 2px 7px; font-size: 0.78em;
+    }
+    .page[data-fit="SCREEN"] .visual-card > .visual-subtitle {
+      flex-shrink: 0;
+      font-size: 0.78em; line-height: 1.2; margin: 0 0 4px 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .page[data-fit="SCREEN"] .visual-toolbar { top: 6px; right: 6px; }
+    .page[data-fit="SCREEN"] .visual-tool-btn { width: 24px; height: 24px; }
+    .page[data-fit="SCREEN"] .chart-wrapper { min-height: 0; }
+  }
   .container-box { display: flex; flex-direction: column; gap: 12px; }
   .container-scroll { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
   .filter-wrapper { display: flex; flex-direction: column; gap: 6px; }

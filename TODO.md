@@ -110,6 +110,23 @@ All five items (`DB09`, `DB12`, `DB15a`, `DB15b`, `DB15c`) have shipped on `rele
 
 All seven remote-file items (`RT03`–`RT09`) have shipped on `release/v0.23.0` (see `CHANGELOG.md`). `DB07` binary `COPY` was built, measured slower than text `COPY` (104 ms vs 92 ms on 25,000 rows), and reverted by owner decision on 2026-11-24; the result is recorded in `ROADMAP.md`. Decision proposals recorded in `ROADMAP.md` on 2026-11-23 (`DB08`, `DB11`, `RT11`, awaiting owner approval).
 
+### 2.5 Report page sizing
+
+`PAGE OPTIONS (FIT = 'SCREEN')` shipped (fills the viewport, short rows stay natural, tall rows share the rest). Implemented on `feat/report-page-sizing`:
+
+- [x] **Aspect-aware chart canvases.** Extended `NativeChartLayoutTier` / `NativeChartLayoutProfile` with bounded aspect-aware canvases (`CompactWide`, `StandardShort`, `WideShort`, `Square`) plus radial-chart guards, width+height `ResizeObserver` with aspect hysteresis in `rt-charts.ts`, and a single-visual `/layout` patch (`ResolveVisualLayoutPatchAsync`) that avoids full-manifest cloning and serialization.
+- [x] **Theme-aware chart SVG colors and background.** `PlotPlanSvgRenderer.cs` and `SpecializedNativeSvgRenderer.cs` emit transparent card backgrounds and dark-theme axis/grid/text/legend tokens for embedded cards (`RenderForCard`), while `saveChartImage` fills exported PNGs with the card/theme surface color. Standalone/PDF/golden `Render(...)` output is preserved.
+- [x] **Drop duplicate title inside chart SVG.** `RenderForCard` suppresses the redundant inner SVG title `<text>` when the `.visual-card` header already displays it, reclaiming top margin on short tiles.
+- [x] **SVG text legibility, tick density, and legend reflow.** Enforced a readable minimum font floor on compact card canvases, thinned Y-axis tick labels on short plots, and reflowed legends when plot room is tight.
+- [x] **Compact card header option.** Reset default `<h3>` top margin in `.visual-card` and tightened `FIT = 'SCREEN'` card padding, grid gap, single-line title/subtitle truncation (with hover tooltips), and toolbar button size.
+- [x] **Chart SVG polish under fit/resize.** Suppressed replaying the 800ms `.chart-animated` fade-in when `updateNativeVisualInPlace` swaps SVGs on resize and ensured pointer cursors on `[data-row-index]` marks.
+- [ ] **`FIT = 'CANVAS'` + `CANVAS_SIZE`.** Fixed design size (default 1280x720, also `(w, h)` or `'16:9'`/`'4:3'` presets). The whole grid scales uniformly to the window with letterboxing and never reflows, like a Power BI page. Uses `transform: scale()` plus a resize observer. Needs tests for tooltips, popups, and drag under the transform.
+- [x] **`MIN_HEIGHT = n`.** Replaces the hardcoded 520px floor for `FIT = 'SCREEN'`.
+- [x] **`ROW_WEIGHTS = (1, 3, 2)`.** Explicit `fr`/`auto` weight per row (`ROW_WEIGHTS = 'auto, 2, 2, 1.5'`). Overrides the content-based row guess when needed, and fixed spanning-slot classification in `updatePageFit`.
+- [x] **Chart minimum height in fit mode.** Raised the `FIT = 'SCREEN'` `.chart-wrapper` floor from 120px to 200px so charts stay readable and scroll gracefully when a viewport is too short.
+- [x] **Overview row budget.** Configured `Overview` in `samples/10_Kitchen_Sinks/report_kitchen_sink.rptsql` with `MIN_HEIGHT = 680` and `ROW_WEIGHTS = 'auto, 2, 2, 1.5'`.
+- [x] **Playwright check for fit pages.** Added real Chromium browser test (`FitPageSizingTests.cs`) verifying `FIT = 'SCREEN'` viewport sizing, dark card SVGs, and chart fill geometry.
+
 ## Tier 3 — if time allows
 
 ### 3.1 Performance watch

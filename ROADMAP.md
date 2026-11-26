@@ -806,6 +806,59 @@ resize/reversal and missing-data cases; and unchanged payload, render-time and b
 Update the capability matrix and focused reference for only the accepted form. Finish that increment
 before selecting the next; preserve all existing fixtures for earlier supported forms.
 
+### Reporting & Presentation — Client-Side 1:1 GoG Chart Painter (Fluid Resize without Letterboxing)
+
+**Status:** Exploring
+**Horizon:** Later
+**Authoritative design:** none yet; builds on the existing `ChartSpec` → `PlotPlanResolver` → `PlotPlan` boundary in [Reporting Architecture](docs/architecture/reporting.md) and [Reporting Semantic Contracts](docs/architecture/reporting-semantic-contracts.md).
+
+**Problem and intended outcome:** Native charts currently render server-side through `PlotPlanSvgRenderer` onto a bounded set of fixed canvases (`Compact`, `Standard`, `Wide`, plus aspect-aware variants such as `StandardShort`, `WideShort`, and `UltraWideShort`). When a chart tile is resized to an arbitrary aspect ratio or container size, scaling a static `<svg viewBox="0 0 W H">` scales fonts, stroke widths, margins, and aspect ratio together, producing either letterboxing or undersized text between discrete tiers. The intended outcome is fluid, zero-letterboxing chart rendering at any container `width × height` — readable CSS-pixel typography (`11–12px`), crisp `1px` gridlines, native wrapping HTML/CSS legends (including click-to-toggle series), smooth animated transitions on slicer/cross-filter updates, and zero `/layout` server round-trips on resize — pairing GoG's script-first composability with modern presentation polish that stands clearly apart from rigid legacy BI visuals.
+
+**Why later:** Aspect-aware server canvases, grid-aware initial layout selection (`ApplyFitPageInitialLayouts`), and single-visual `/layout` patches cover the immediate `FIT = 'SCREEN'` pain without duplicating renderer code. This entry captures the next architectural step for review before committing to a second (TypeScript) painter while GoG semantics are still maturing.
+
+**Boundaries:**
+- **Avoid parity tax:** Keep all GoG semantics (`ChartSpec`, `PlotPlanResolver`, stacking, scale domains, ticks, formatting, palettes, aggregations, interaction contracts, and Zero-Trust data shaping) in C#. The client painter must stay a stateless, dumb coordinate mapper with zero data or aggregation logic.
+- **Keep Phase 1 narrow:** Scope the initial client painter strictly to the 5 core composable Cartesian primitives (`Rect`, `Line`, `Area`, `Point`, `Rule`) plus `Arc`, which cover ~80–85% of real dashboards (BAR, HBAR, LINE, AREA, COMBO, SCATTER, BUBBLE, PIE, DONUT, overlays, and reference bands).
+- Keep `PlotPlanSvgRenderer.cs` as the authoritative renderer for PDF, Markdown, offline static exports, and deterministic golden tests.
+- Do not use `preserveAspectRatio="none"` stretching on server SVGs (distorts circles, text, and corners).
+- Any visual type not yet supported by the client painter (`MAP`, `SANKEY`, `SUNBURST`, `NETWORK`, `GANTT`, etc.) falls back to `visual.nativeSvg` until demand justifies porting it.
+
+**Dependencies:** Compact, versioned browser-safe `PlotPlan` render DTO (scales, ticks, legend entries, and normalized mark data without baked pixel coordinates), `ReportRuntime` `ResizeObserver` lifecycle, and existing `rt-detail.ts` / cross-filter `[data-row-index]` interaction hooks.
+
+**Delivery slices:**
+1. **Decision & DTO design (D):** Define the minimal browser-safe `PlotPlan` render payload and measure payload size vs. pre-rendered SVG on the kitchen-sink fixture.
+2. **Cartesian + Arc 1:1 painter (M):** Paint `Rect`, `Line`, `Area`, `Point`, `Rule`, and `Arc` marks into an `<svg width="W" height="H" viewBox="0 0 W H">` sized to the tile's exact `ResizeObserver` box, with HTML/CSS legends, theme tokens, dynamic margin/tick thinning, and existing `[data-row-index]` hover/click/detail wiring.
+3. **Host parity & high-density follow-up (S/M):** Verify parity across Portal, ReportPlayer, Studio Preview, and VS Code; evaluate optional `<canvas>` mark layer only if high-cardinality scatter/line fixtures (50k+ points) require it.
+
+**Acceptance evidence:** Browser geometry tests asserting `1:1` SVG-to-container fit (zero letterboxing) and readable computed font sizes across narrow, square, and ultra-wide tiles; zero `/layout` network requests during window resize; preserved cross-filtering, hover detail popovers, and dark/light theme parity; unchanged golden/PDF/Markdown outputs for `PlotPlanSvgRenderer.cs`.
+
+### Reporting & Presentation — Composable Visual Card Shell, CSS Token Cascade & Bookshelf Collapse
+
+**Status:** Exploring
+**Horizon:** Later
+**Authoritative design:** none yet; extends [Reporting Architecture](docs/architecture/reporting.md) and the card shell in `src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-visual.ts`.
+
+**Problem and intended outcome:** Today `.visual-card` places `<h3>`, `.visual-subtitle`, `.visual-toolbar`, and `.chart-wrapper` as flat siblings with an absolutely positioned toolbar and hardcoded `padding-right` offsets, writes RptSQL `STYLE (...)` properties as inline styles that override `SET REPORT CSS`, and emits literal hex colors inside card SVGs. Authors who want custom card layouts (such as a vertical left-side header bar with custom background/border, or a "bookshelf" side rail that folds horizontally into a vertical spine to give adjacent charts more width) have to fight the DOM and CSS cascade. The intended outcome is a clean semantic card shell (`.visual-header` + `.visual-body`) backed by scoped CSS custom properties that flow into both HTML chrome and GoG SVG marks, plus horizontal bookshelf collapse and container-query density steps so small KPI cards stay legible at any size.
+
+**Why later:** Current `FIT = 'SCREEN'` vertical collapse and inline table headers handle immediate layout density. Refactoring `.visual-card` DOM and CSS tokens should be designed once alongside the 1:1 client painter so existing Playwright/CSS selectors migrate cleanly.
+
+**Boundaries:**
+- Keep existing `.visual-card[data-name]` and `[data-tag]` hooks working for `SET REPORT CSS` and tests.
+- Keep `var(--etl-chart-*, #hex)` fallbacks in SVG attributes so static PDF/Markdown/offline exports render identically without a stylesheet.
+- Do not break `CARD`/`KPI` maximize or existing `COLLAPSIBLE` container behavior.
+
+**Dependencies:** `rt-visual.ts`, `rt-layout.ts`, `report-runtime.css`, and `PlotPlanSvgRenderer.cs` (for `var(--etl-chart-*, #fallback)` token emission).
+
+**Delivery slices:**
+1. **Semantic card shell & token cascade (S):** Group title, subtitle, and in-flow toolbar inside `.visual-header` and content inside `.visual-body`; expose `HEADER_POSITION = 'TOP' | 'LEFT' | 'BOTTOM' | 'NONE'` and scoped `--visual-*` / `--etl-chart-*` CSS variables instead of hard inline style overrides.
+2. **Bookshelf horizontal collapse (S):** Allow left-header or side-column cards to collapse horizontally into a slim vertical spine (`writing-mode: vertical-rl` title + expand toggle), switching that grid column to `auto` so neighboring visuals expand across the freed width.
+3. **Container-query responsive KPI cards (S):** Add `@container` size breakpoints on `.visual-card` with fluid `clamp()` typography so small KPI cards step down cleanly instead of clipping:
+   - **Full (`>= 180px × 120px`):** label, subtitle, large number, target/goal, delta, and progress ring/bar.
+   - **Compact (`< 180px` wide or `< 110px` tall):** scaled-down tabular value, label, and compact delta; hide subtitle and progress ring.
+   - **Micro (`< 120px` wide or `< 70px` tall):** single-line label and tabular value only, with full goal/delta details available in the hover tooltip.
+
+**Acceptance evidence:** Browser geometry tests verifying `HEADER_POSITION = 'LEFT'` vertical headers with custom CSS colors/borders, bookshelf column collapse/expand reflowing sibling widths, CSS variable theming propagating into GoG SVG axes/gridlines, and zero text/ring clipping on small KPI cards (down to ~120×70px).
+
 ### Presentation & Workspaces — Studio Authoring for Mobile Page Layouts
 
 **Status:** Exploring
@@ -983,7 +1036,7 @@ must complete before the unified beginner experience can be accepted.
 
 ### Security — External Tool Permissions, Artifact Identity, and Launch Contracts
 
-**Status:** Accepted (XT09 shipped in v0.23.0; XT07–XT08 open for future scheduling)
+**Status:** XT09 shipped in v0.23.0. XT07 catalog grants, federated caller propagation, and saved-version owner approval passed local end-to-end validation in the feature branch. XT08 direct Linux executable and fixed dash script approval passed in restricted workers, including one-shot and warm scheduled execution. The Windows x64 fixture passed activation and rollback under a restricted virtual service account on GitHub Actions. Windows x64 direct PE approval is wired into the catalog and engine on the feature branch. The portable qualification bundle can exercise the installed Orchestrator and CLI under the restricted profile. The candidate MSI passed the installed qualification under the restricted Windows service profile. [Installed qualification](docs/architecture/decisions/external-tool-use-and-artifact-approval.md#qualify-the-installed-orchestrator)
 
 **Horizon:** Next
 

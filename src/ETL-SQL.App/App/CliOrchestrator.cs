@@ -503,6 +503,11 @@ namespace ETL_SQL.App
             Description = "Field name this entry classifies as sensitive (repeatable): masked in displays and SECRET:-resolvable.",
             AllowMultipleArgumentsPerToken = true
         };
+        private static readonly Option<string?> ToolGrantTenantOption = new("--tenant")
+        {
+            Description = "Tenant ID from the configured Orchestrator identity authority."
+        };
+
         private static readonly Option<string?> ToolNameOption = new("--name", new[] { "-n" })
         {
             Description = "Name of the tool.",
@@ -1840,6 +1845,21 @@ namespace ETL_SQL.App
             };
             deleteToolCommand.SetAction(context => Dispatch(context, "admin-machine-tool-delete", handler));
             machineToolCommand.Add(deleteToolCommand);
+
+            var grantToolCommand = new Command("grant", "Grant use of a machine-local tool")
+            {
+                ToolNameOption, ToolGrantTenantOption, GrantPrincipalKindOption, GrantPrincipalOption
+            };
+            grantToolCommand.SetAction(context => Dispatch(context, "admin-machine-tool-grant", handler));
+            machineToolCommand.Add(grantToolCommand);
+
+            var revokeToolCommand = new Command("revoke", "Revoke use of a machine-local tool")
+            {
+                ToolNameOption, ToolGrantTenantOption, GrantPrincipalKindOption, GrantPrincipalOption
+            };
+            revokeToolCommand.SetAction(context => Dispatch(context, "admin-machine-tool-revoke", handler));
+            machineToolCommand.Add(revokeToolCommand);
+
             machineCommand.Add(machineToolCommand);
 
             adminCommand.Add(machineCommand);
@@ -2357,6 +2377,13 @@ namespace ETL_SQL.App
             else if (commandName == "admin-machine-tool-delete")
             {
                 cliContext.ToolName = res.GetValue(ToolNameOption);
+            }
+            else if (commandName is "admin-machine-tool-grant" or "admin-machine-tool-revoke")
+            {
+                cliContext.ToolName = res.GetValue(ToolNameOption);
+                cliContext.ToolGrantTenant = res.GetValue(ToolGrantTenantOption);
+                cliContext.GrantPrincipalKind = res.GetValue(GrantPrincipalKindOption);
+                cliContext.GrantPrincipalId = res.GetValue(GrantPrincipalOption);
             }
             else if (commandName == "enterprise-enroll")
             {

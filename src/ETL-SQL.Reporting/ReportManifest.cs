@@ -419,6 +419,11 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public InteractionManifest? Interaction { get; set; }
 
+        /// <summary>The inherited theme used by server-rendered charts.</summary>
+        [JsonPropertyName("inheritedTheme")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? InheritedTheme { get; set; }
+
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }
@@ -485,6 +490,9 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("htmlEmbeds")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<HtmlVisualEmbedManifest>? HtmlEmbeds { get; set; }
+
+        /// <summary>Shallow copy used to re-resolve a single visual's layout without cloning the full manifest.</summary>
+        public VisualManifest ShallowCloneForLayout() => (VisualManifest)MemberwiseClone();
     }
 
     /// <summary>The compact browser contract for a server-resolved native chart layout.</summary>

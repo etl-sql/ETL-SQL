@@ -289,6 +289,7 @@ namespace ETL_SQL.Orchestrator.Service
 
             app.MapScheduledJobActivity();
             app.MapJobRevisionRuns();
+            app.MapJobToolApproval();
             app.MapPortalBridgeEndpoints();
 
             app.MapGet("/api/scheduled-jobs", async (HttpContext ctx, IJobHistoryStore store,
@@ -2526,8 +2527,25 @@ namespace ETL_SQL.Orchestrator.Service
             // script author wrote — while a grant resolves against the opaque key. This carried the
             // key's predecessor, the numeric group id, so HAS_GROUP could never match in a scheduled
             // job even though it matched in the Portal's own execution path.
-            Groups = caller.EffectiveGroupNames
+            Groups = caller.EffectiveGroupNames,
+            ToolPrincipal = ProjectToolPrincipal(caller)
         };
+
+        private static ToolExecutionPrincipal? ProjectToolPrincipal(OrchestratorCaller caller)
+        {
+            if (string.IsNullOrWhiteSpace(caller.TenantId)) return null;
+
+            var kind = caller.SubjectType.ToLowerInvariant() switch
+            {
+                "user" => ToolPrincipalKind.User,
+                "service" => ToolPrincipalKind.Service,
+                _ => (ToolPrincipalKind?)null
+            };
+            return kind is { } subjectKind
+                ? new ToolExecutionPrincipal(caller.TenantId, subjectKind, caller.SubjectId, caller.GroupIds,
+                    OrchestratorObjectAuthorizationService.WithinScopeCeiling(caller, OrchestratorObjectPermission.Execute))
+                : null;
+        }
 
         /// <summary>An ad-hoc job belongs to the tenant that submitted it; a role does not cross that.</summary>
         private static bool SameAdHocTenant(OrchestratorCaller caller, JobEntry entry) =>

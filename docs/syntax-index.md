@@ -1118,7 +1118,7 @@ see the [Lifecycle Capability Matrix](reference/statements/lifecycle-matrix.md).
 - [Report Runtime Contract](reference/visuals-reporting/report-runtime-contract.md) — The report canvas is shared infrastructure. ReportPlayer, Portal, and the VS Code previ...
 - [Report-SQL](reference/visuals-reporting/report/index.md) — Report-SQL extends ETL-SQL with components for building interactive dashboards: dataset...
 - [CREATE THEME](reference/visuals-reporting/report/theme.md) — Defines a renderer-neutral color theme applied to visuals or pages with `STYLE (THEME = name)`.
-- [ETL-SQL Performance Reference](reference/performance/performance.md) — **Applies to ETL-SQL 0.23.0**
+- [ETL-SQL Performance Reference](reference/performance/performance.md) — **Applies to ETL-SQL 0.23.1**
 - [Large Data Certification](reference/performance/large-data-certification.md) — This document describes which large-data scenarios are certified, at which scale tiers,...
 
 ## 9. Portal & Orchestrator Admin
@@ -1463,7 +1463,9 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql admin machine secret verify` | Resolve a machine-local secret without printing the value | [admin machine secret verify](reference/cli/admin-machine-secret-verify.md) |
 | `etl-sql admin machine secret` | Manage the machine-local Governance:Secrets provider | [admin machine secret](reference/cli/admin-machine-secret.md) |
 | `etl-sql admin machine tool delete` | Permanently remove a machine-local tool | [admin machine tool delete](reference/cli/admin-machine-tool-delete.md) |
+| `etl-sql admin machine tool grant` | Grant use of a machine-local tool | [admin machine tool grant](reference/cli/admin-machine-tool-grant.md) |
 | `etl-sql admin machine tool list` | List machine-local tools | [admin machine tool list](reference/cli/admin-machine-tool-list.md) |
+| `etl-sql admin machine tool revoke` | Revoke use of a machine-local tool | [admin machine tool revoke](reference/cli/admin-machine-tool-revoke.md) |
 | `etl-sql admin machine tool set` | Store a machine-local tool | [admin machine tool set](reference/cli/admin-machine-tool-set.md) |
 | `etl-sql admin machine tool` | Manage the machine-local tool catalog | [admin machine tool](reference/cli/admin-machine-tool.md) |
 | `etl-sql admin machine` | Manage machine-local governance stores | [admin machine](reference/cli/admin-machine.md) |

@@ -167,6 +167,194 @@ function applyPageOptions(pageDiv: HTMLElement, contentDiv: HTMLElement, page: L
         contentDiv.style.marginLeft = 'auto';
         contentDiv.style.marginRight = 'auto';
     }
+
+    if (pageDiv.dataset) {
+        const fitMinHeight = toPixels(getOption(opts, 'MIN_HEIGHT'));
+        if (fitMinHeight > 0) pageDiv.dataset.fitMinHeight = String(fitMinHeight);
+        else delete pageDiv.dataset.fitMinHeight;
+
+        const rowWeights = getOption(opts, 'ROW_WEIGHTS');
+        if (rowWeights != null && String(rowWeights).trim()) {
+            pageDiv.dataset.fitRowWeights = String(rowWeights).trim();
+        } else {
+            delete pageDiv.dataset.fitRowWeights;
+        }
+    }
+
+    applyPageFit(pageDiv, contentDiv, getOption(opts, 'FIT'));
+}
+
+// A fit page never grows taller than the viewport. Rows that hold short content (KPI strips,
+// slicers) keep their natural height and the remaining rows share what is left, so charts and
+// tables fill the screen and a long table scrolls inside its own tile.
+const FIT_MIN_HEIGHT_PX = 520;
+const FIT_COMPACT_ROW_PX = 260;
+const fitPageDisposers = new Map<HTMLElement, () => void>();
+
+export function disposePageFit(): void {
+    for (const dispose of fitPageDisposers.values()) dispose();
+    fitPageDisposers.clear();
+}
+
+export function normalizePageFit(value: unknown): 'SCREEN' | 'NONE' {
+    return String(value ?? '').trim().toUpperCase() === 'SCREEN' ? 'SCREEN' : 'NONE';
+}
+
+function parseRowWeights(raw: string | undefined, expectedRows: number): string[] | null {
+    if (!raw || expectedRows < 1) return null;
+    const cleaned = raw.trim().replace(/^\(/, '').replace(/\)$/, '');
+    const tokens = cleaned.split(/[\s,]+/).filter(Boolean);
+    if (tokens.length !== expectedRows) return null;
+    const tracks: string[] = [];
+    for (const token of tokens) {
+        const lower = token.toLowerCase();
+        if (lower === 'auto') {
+            tracks.push('auto');
+            continue;
+        }
+        const num = Number.parseFloat(lower.replace(/fr$/, ''));
+        if (!Number.isFinite(num) || num <= 0) return null;
+        tracks.push(`minmax(0, ${num}fr)`);
+    }
+    return tracks;
+}
+
+export function updatePageFit(pageDiv: HTMLElement, contentDiv: HTMLElement): void {
+    if (pageDiv.dataset.fit !== 'SCREEN') return;
+    const phone = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches;
+    if (phone || !pageDiv.classList.contains('active') || pageDiv.style.display === 'none') {
+        if (pageDiv.style.height) pageDiv.style.height = '';
+        return;
+    }
+
+    const rows = (contentDiv.style.gridTemplateAreas.match(/"[^"]*"/g) || []).length;
+    if (rows < 1) return;
+
+    const items = Array.from(contentDiv.children) as HTMLElement[];
+    const areaRows = (contentDiv.style.gridTemplateAreas.match(/"[^"]*"/g) || [])
+        .map(row => row.replace(/"/g, '').trim().split(/\s+/));
+    // Track how many rows each named area spans so a multi-row sidebar/chart does not misclassify
+    // an unrelated row that shares a column with it.
+    const areaRowCounts = new Map<string, number>();
+    for (const row of areaRows) {
+        for (const name of new Set(row)) {
+            if (name && name !== '.') areaRowCounts.set(name, (areaRowCounts.get(name) || 0) + 1);
+        }
+    }
+    const rowKinds = areaRows.map(rowAreas => {
+        const allCells = items.filter(el => rowAreas.includes(el.style.gridArea));
+        const localCells = allCells.filter(el => (areaRowCounts.get(el.style.gridArea) || 1) === 1);
+        const cells = localCells.length > 0 ? localCells : allCells;
+        const isCollapsed = cells.length > 0 && cells.every(el =>
+            Boolean(el.classList?.contains('visual-collapsed') || el.querySelector('.visual-card.visual-collapsed')));
+        return {
+            hasChart: cells.some(el => el.querySelector('.chart-wrapper, canvas')),
+            hasTable: cells.some(el => el.querySelector('table, .tabulator')),
+            isCollapsed,
+        };
+    });
+
+    // Document offset, not viewport offset: the page may already be scrolled when this runs.
+    const top = pageDiv.getBoundingClientRect().top + (window.scrollY || 0);
+    const authoredMin = Number(pageDiv.dataset.fitMinHeight);
+    let minHeight: number;
+    if (authoredMin > 0) {
+        minHeight = authoredMin;
+    } else {
+        const rowBudget = rowKinds.reduce((sum, kind) => {
+            if (kind.isCollapsed) return sum + 40;
+            if (kind.hasChart) return sum + 200;
+            if (kind.hasTable) return sum + 190;
+            return sum + 90;
+        }, Math.max(0, rows - 1) * 12);
+        minHeight = Math.max(FIT_MIN_HEIGHT_PX, rowBudget);
+    }
+    const available = Math.max(minHeight, Math.floor(window.innerHeight - top - 16));
+    const height = `${available}px`;
+    if (pageDiv.style.height !== height) pageDiv.style.height = height;
+
+    const explicitTracks = parseRowWeights(pageDiv.dataset.fitRowWeights, rows);
+    if (explicitTracks) {
+        const tracks = explicitTracks.map((track, index) =>
+            rowKinds[index]?.isCollapsed ? 'auto' : track
+        ).join(' ');
+        if (contentDiv.style.gridTemplateRows !== tracks) {
+            contentDiv.style.gridTemplateRows = tracks;
+            requestAnimationFrame(() => resizeChartsIn(pageDiv));
+        }
+        return;
+    }
+
+    // Measure natural row heights with every row on `auto`, then hand the flexible rows to fr.
+    // `start` keeps `auto` tracks at content height; stretched tracks would all measure tall.
+    contentDiv.style.alignContent = 'start';
+    contentDiv.style.gridTemplateRows = `repeat(${rows}, auto)`;
+    const heights = measureGridRows(contentDiv, rows);
+    contentDiv.style.alignContent = '';
+    // Charts take twice the share of a table row; short rows without a chart or table (KPI strips,
+    // slicers, text) keep their natural height so their content is never clipped.
+    const tracks = heights.map((h, index) => {
+        const kind = rowKinds[index];
+        if (kind?.isCollapsed) return 'auto';
+        if (kind?.hasChart) return 'minmax(0, 2fr)';
+        if (kind?.hasTable) return 'minmax(0, 1fr)';
+        return h > 0 && h <= FIT_COMPACT_ROW_PX ? 'auto' : 'minmax(0, 1fr)';
+    }).join(' ');
+    if (contentDiv.style.gridTemplateRows !== tracks) {
+        contentDiv.style.gridTemplateRows = tracks;
+        // Charts size themselves at render; the tiles just changed size, so ask them to redraw.
+        requestAnimationFrame(() => resizeChartsIn(pageDiv));
+    }
+}
+
+function measureGridRows(contentDiv: HTMLElement, rows: number): number[] {
+    const computed = getComputedStyle(contentDiv).gridTemplateRows.split(' ').map(parseFloat);
+    return computed.length === rows ? computed.map(h => (Number.isFinite(h) ? h : 0)) : new Array(rows).fill(0);
+}
+
+function applyPageFit(pageDiv: HTMLElement, contentDiv: HTMLElement, value: unknown): void {
+    const mode = normalizePageFit(value);
+    if (mode === 'NONE') return;
+    pageDiv.dataset.fit = mode;
+    if (typeof MutationObserver === 'undefined') return;
+    if (fitPageDisposers.has(pageDiv)) return;
+
+    const refit = () => {
+        const grid = (pageDiv.querySelector('.page-grid') as HTMLElement | null) || contentDiv;
+        updatePageFit(pageDiv, grid);
+    };
+    // Activation toggles the `active` class; a page cannot be measured while it is display:none.
+    // The runtime also toggles inline display, and it adds active while the page is still in a
+    // detached fragment, so both are watched and the measurement waits for layout.
+    let rafId = 0;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+            rafId = 0;
+            refit();
+        });
+        if (settleTimer) clearTimeout(settleTimer);
+        settleTimer = setTimeout(() => {
+            settleTimer = null;
+            refit();
+        }, 350);
+    };
+    const activationObserver = new MutationObserver(schedule);
+    activationObserver.observe(pageDiv, { attributes: true, attributeFilter: ['class', 'style'] });
+    const sizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
+    sizeObserver?.observe(pageDiv);
+    pageDiv.addEventListener('etlsql:fit-reflow', schedule);
+    window.addEventListener('resize', schedule);
+
+    fitPageDisposers.set(pageDiv, () => {
+        activationObserver.disconnect();
+        sizeObserver?.disconnect();
+        pageDiv.removeEventListener('etlsql:fit-reflow', schedule);
+        window.removeEventListener('resize', schedule);
+        if (rafId) cancelAnimationFrame(rafId);
+        if (settleTimer !== null) clearTimeout(settleTimer);
+    });
 }
 
 export function renderPage(manifest: LayoutManifest, page: LayoutPage, pageSections: Record<string, HTMLElement>, pageTheme: string | null): HTMLElement {

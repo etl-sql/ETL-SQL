@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Certifies the MSI's Portal profile: a fresh install, an in-place upgrade from the previous
     release, and rollback to it. The first public release has no previous release, so without
@@ -211,6 +211,23 @@ function Get-Setting([string]$Path) {
     return $value
 }
 
+function Initialize-PreviousPortalUpgradeSettings {
+    $cfgPath = Join-Path $installDir 'appsettings.json'
+    $cfg = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
+    if (-not (Test-Path -LiteralPath (Join-Path $installDir 'appsettings.defaults.json') -PathType Leaf)) {
+        # Legacy installers store the configuration in the shared file. The newer layout
+        # supplies these values through the service bootstrap and protected secrets file.
+        $random = { $bytes = [byte[]]::new(32); [Security.Cryptography.RandomNumberGenerator]::Fill($bytes); [Convert]::ToBase64String($bytes) }
+        $cfg.Portal.FirstRun | Add-Member NoteProperty AdminPassword ('Upgrade-' + (& $random).Substring(0, 12).Replace('/', 'x') + '9!') -Force
+        $cfg.Portal.Dataset.AtRestKey = & $random
+        $signing = & $random
+        $cfg.Orchestrator | Add-Member NoteProperty IdentitySigningSecret $signing -Force
+        $cfg.Portal.Orchestrator | Add-Member NoteProperty IdentitySigningSecret $signing -Force
+    }
+    $cfg | Add-Member NoteProperty UpgradeSentinel ([pscustomobject]@{ Value = 'kept' }) -Force
+    ($cfg | ConvertTo-Json -Depth 64) | Set-Content -LiteralPath $cfgPath -Encoding UTF8
+}
+
 function Initialize-PreviousPortalUpgradeBaseline {
     # The previous release may already use protected settings. Capture what its services read,
     # not a shared-file override hidden by that protected file.
@@ -368,16 +385,7 @@ try {
         # 1. The previous release, configured as its documentation says.
         Write-Line "== install previous $($previousVersion)"
         Test-Step 'previous: msiexec install' { Install-Msi $previousPath '01-previous.log' }
-        $cfgPath = Join-Path $installDir 'appsettings.json'
-        $cfg = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
-        $random = { $bytes = [byte[]]::new(32); [Security.Cryptography.RandomNumberGenerator]::Fill($bytes); [Convert]::ToBase64String($bytes) }
-        $cfg.Portal.FirstRun | Add-Member NoteProperty AdminPassword ('Upgrade-' + (& $random).Substring(0, 12).Replace('/', 'x') + '9!') -Force
-        $cfg.Portal.Dataset.AtRestKey = & $random
-        $signing = & $random
-        $cfg.Orchestrator | Add-Member NoteProperty IdentitySigningSecret $signing -Force
-        $cfg.Portal.Orchestrator | Add-Member NoteProperty IdentitySigningSecret $signing -Force
-        $cfg | Add-Member NoteProperty UpgradeSentinel ([pscustomobject]@{ Value = 'kept' }) -Force
-        ($cfg | ConvertTo-Json -Depth 64) | Set-Content -LiteralPath $cfgPath -Encoding UTF8
+        Test-Step 'previous: configure operator settings' { Initialize-PreviousPortalUpgradeSettings }
         Set-ServicesState Stopped
         Set-ServicesState Running
         Test-Step 'previous: Portal healthy' { Wait-Portal 'previous' }

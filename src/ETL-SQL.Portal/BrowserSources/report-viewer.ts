@@ -57,8 +57,8 @@ export function buildReportFrameDocument(root: Document, id: number, preview: bo
     const token = (auth.getToken() || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const dark = root.body.classList.contains('theme-dark');
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<link rel="stylesheet" href="/css/report-runtime.css?v=0.23.0">
-<script nonce="${nonce}" src="/js/feedback.js?v=0.23.0"></script>
+<link rel="stylesheet" href="/css/report-runtime.css?v=0.23.1">
+<script nonce="${nonce}" src="/js/feedback.js?v=0.23.1"></script>
 <script nonce="${nonce}">
   window.__IS_WEB__ = true; window.__IS_PREVIEW__ = ${preview}; window.__API_BASE__ = '/api/reports/${Number(id)}';
   ${initialPage ? `window.__INITIAL_PAGE__ = ${JSON.stringify(initialPage).replace(/</g, '\\u003c')};` : ''}

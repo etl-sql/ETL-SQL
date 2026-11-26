@@ -178,14 +178,15 @@ namespace ETL_SQL.Reporting.Builders
             var effectiveTheme = visualExplicitTheme
                 ?? (inheritedStyles != null && inheritedStyles.TryGetValue("THEME", out var inhTheme) ? inhTheme : null);
 
+            vm.InheritedTheme = visualExplicitTheme is null ? effectiveTheme : null;
+
             if (resolvedStyles.Count > 0)
                 vm.Styles = resolvedStyles;
 
             var resolvedPalette = styleBuilder.ResolvePalette(vStmt.StyleName, vStmt.Palette, inheritedPalette, vStmt.VisualType.ToString(), effectiveTheme);
 
             // Effective background resolution across visual and inherited styles
-            var isDark = string.Equals(resolvedStyles.GetValueOrDefault("THEME"), "DARK", StringComparison.OrdinalIgnoreCase) ||
-                         (inheritedStyles != null && inheritedStyles.TryGetValue("THEME", out var ith) && string.Equals(ith, "DARK", StringComparison.OrdinalIgnoreCase));
+            var isDark = string.Equals(effectiveTheme, "DARK", StringComparison.OrdinalIgnoreCase);
 
             string? inhBg = null;
             if (inheritedStyles != null)
@@ -619,7 +620,7 @@ namespace ETL_SQL.Reporting.Builders
                     vm.ChartConfig = vStmt.VisualType == VisualType.Matrix
                         ? MatrixPivotBuilder.Build(vm)
                         : null;
-                    vm.NativeSvg = new SvgChartRenderer().Render(vm);
+                    vm.NativeSvg = new SvgChartRenderer().RenderForCard(vm);
                 }
                 catch (AdvancedChartSemanticException ex)
                 {

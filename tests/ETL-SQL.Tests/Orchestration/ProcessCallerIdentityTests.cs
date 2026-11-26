@@ -9,6 +9,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Storage;
+using ETL_SQL.Tests.Hardening;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -49,7 +50,12 @@ public sealed class ProcessCallerIdentityTests : IDisposable
     {
         var guard = new ProcessCallerNonceReplayGuard();
         var scriptHash = ProcessCallerIdentityEnvelope.ComputeScriptHash("PRINT 'ok';"u8.ToArray());
-        var identity = AliceIdentity() with { Scopes = ["orchestrator.execute", "orchestrator.publish"] };
+        var identity = AliceIdentity() with
+        {
+            Scopes = ["orchestrator.execute", "orchestrator.publish"],
+            ToolPrincipal = new("tenant-a", ToolPrincipalKind.User, "alice", ["opaque-finance-id"], true,
+                ApprovedSavedScriptOnly: true)
+        };
 
         var envelope = ProcessCallerIdentityEnvelope.Create(
             identity, "NightlySales", scriptHash, TestSigningSecret);
@@ -63,6 +69,13 @@ public sealed class ProcessCallerIdentityTests : IDisposable
         Assert.False(resolved.IsAdmin);
         Assert.Contains("orchestrator.execute", resolved.Scopes);
         Assert.Contains("grp-finance", resolved.Groups);
+        var toolPrincipal = Assert.IsType<ToolExecutionPrincipal>(resolved.ToolPrincipal);
+        Assert.Equal("tenant-a", toolPrincipal.TenantId);
+        Assert.Equal(ToolPrincipalKind.User, toolPrincipal.Kind);
+        Assert.Equal("alice", toolPrincipal.PrincipalId);
+        Assert.Equal("opaque-finance-id", Assert.Single(toolPrincipal.GroupIds));
+        Assert.True(toolPrincipal.WithinExecutionScope);
+        Assert.True(toolPrincipal.ApprovedSavedScriptOnly);
     }
 
     [Fact]
@@ -144,6 +157,104 @@ public sealed class ProcessCallerIdentityTests : IDisposable
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             ProcessCallerIdentityLoader.ReadAndConsumeAsync(
                 scriptPath, envelopePath, expectedJobId: "LoaderJob", TestSigningSecret));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SpawnedWorkerExecutesGrantedNativeToolAndObservesRevocation(bool warmRunner)
+    {
+        const string alias = "xt07_native";
+        const string ungrantedAlias = "xt07_ungranted";
+        const string tenant = "tenant-a";
+        const string groupKey = "finance-key";
+        // Linux root can create a real machine-owned catalog. Other test hosts exercise
+        // the same signed-identity and catalog checks with their ownership-verified personal catalog.
+        var machineCatalog = OperatingSystem.IsLinux() && AdministrativePrivilege.IsElevated();
+        var ownership = machineCatalog
+            ? ToolCatalogOwnershipMode.MachineAdministrator
+            : ToolCatalogOwnershipMode.PersonalWorkstation;
+        var fixtureRoot = ExternalToolSecurityTests.CreateProtectedTestRoot();
+        var catalogRoot = Path.Combine(fixtureRoot, "catalog");
+        var command = OperatingSystem.IsWindows()
+            ? Path.Combine(Environment.SystemDirectory, "hostname.exe")
+            : Path.Combine(fixtureRoot, "xt07-true");
+        try
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                // The shipped test command can be linked on some distributions. Stage a
+                // regular executable in the protected fixture and keep the tool's path checks active.
+                File.Copy("/usr/bin/true", command);
+                File.SetUnixFileMode(command, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            }
+
+            var catalog = new LocalToolCatalogProvider(catalogRoot, ownership, requireUseGrants: machineCatalog);
+            var definition = new ToolDefinition(alias, "EXECUTABLE",
+                new Dictionary<string, string> { ["COMMAND"] = command }, false);
+            await catalog.StoreAsync(definition);
+            await catalog.StoreAsync(definition with { Name = ungrantedAlias });
+            var grant = new ToolUseGrant(tenant, ToolPrincipalKind.Group, groupKey);
+            Assert.True(await catalog.SetUseGrantAsync(alias, grant, allow: true));
+
+            var cfg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Governance:Tools:Provider"] = "LOCAL",
+                ["Governance:Tools:LocalRoot"] = catalogRoot,
+                ["Governance:Tools:OwnershipMode"] = ownership.ToString(),
+                ["Tools:AllowNativeToolsForTenants"] = "true",
+                ["Tools:Limits:RequiredIsolationProfile"] = "DedicatedTrusted",
+                ["Session:Root"] = Path.Combine(_tempDir, "sessions")
+            }).Build();
+            var tracker = new ChildProcessTracker(
+                new Mock<ILogger<ChildProcessTracker>>().Object,
+                Path.Combine(_tempDir, "child-pids.json"));
+            var logger = new Mock<ILogger<ProcessJobExecutor>>();
+            var executor = new ProcessJobExecutor(
+                Options.Create(new ProcessJobExecutorOptions
+                {
+                    ExecutablePath = ResolveChildExecutablePath(),
+                    RequireToolUseGrants = machineCatalog,
+                    TimeoutSeconds = 60,
+                    UseWarmRunner = warmRunner,
+                    WarmRunnerPoolSize = 1
+                }), tracker, logger.Object, cfg);
+
+            var principal = new ToolExecutionPrincipal(tenant, ToolPrincipalKind.User, "alice", [groupKey], true,
+                ApprovedSavedScriptOnly: true);
+            var caller = AliceIdentity() with { ToolPrincipal = principal };
+            var otherGroup = caller with { ToolPrincipal = principal with { GroupIds = ["other-key"] } };
+
+            var allowed = await RunAsync(alias, caller);
+            Assert.True(allowed.Success, allowed.ErrorMessage);
+            var denied = await RunAsync(alias, otherGroup);
+            Assert.False(denied.Success);
+            Assert.Contains("unavailable to this caller", denied.ErrorMessage);
+
+            if (machineCatalog)
+            {
+                var noIdentity = await RunAsync(ungrantedAlias, null);
+                Assert.False(noIdentity.Success);
+                Assert.Contains("unavailable to this caller", noIdentity.ErrorMessage);
+            }
+
+            Assert.True(await catalog.SetUseGrantAsync(alias, grant, allow: false));
+            var revoked = await RunAsync(alias, caller);
+            Assert.False(revoked.Success);
+            Assert.Contains("unavailable to this caller", revoked.ErrorMessage);
+            Assert.DoesNotContain(logger.Invocations, invocation =>
+                invocation.Arguments.Any(argument =>
+                    argument?.ToString()?.Contains("falling back to one-shot", StringComparison.Ordinal) == true));
+
+            Task<ScriptExecutionResult> RunAsync(string toolName, ExecutionIdentity? identity) =>
+                executor.ExecuteTextAsync($"EXECUTE TOOL '{toolName}';",
+                    sessionId: Guid.NewGuid().ToString("N"), jobName: "NativeToolGrantCheck", executionIdentity: identity);
+        }
+        finally
+        {
+            if (warmRunner) ProcessJobExecutor.ClearWarmRunnerPoolsForTests();
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
     }
 
     [Fact]
@@ -328,11 +439,14 @@ public sealed class ProcessCallerIdentityTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Orchestrator:IdentitySigningSecret"] = configuredSecret,
+                ["Governance:Tools:ArtifactRoot"] = Path.Combine(_tempDir, "artifacts"),
+                ["Governance:Tools:RequireArtifactApproval"] = "true",
+                ["Governance:Tools:ServiceIdentity"] = @"NT SERVICE\ETL-SQL-RestrictedWorker",
                 ["Orchestrator:DatabasePath"] = Path.Combine(_tempDir, "orch.db"),
             })
             .Build();
         var executor = new ProcessJobExecutor(
-            Options.Create(new ProcessJobExecutorOptions()),
+            Options.Create(new ProcessJobExecutorOptions { RequireToolUseGrants = true }),
             new ChildProcessTracker(
                 new Mock<ILogger<ChildProcessTracker>>().Object,
                 Path.Combine(_tempDir, "child-pids.json")),
@@ -341,6 +455,10 @@ public sealed class ProcessCallerIdentityTests : IDisposable
 
         // What the executor adds for a one-shot child and seeds a warm-runner pool with.
         var childEnv = executor.BuildChildHostEnvironment();
+        Assert.Equal("true", childEnv["Governance__Tools__RequireUseGrants"]);
+        Assert.Equal("true", childEnv["Governance__Tools__RequireArtifactApproval"]);
+        Assert.Equal(@"NT SERVICE\ETL-SQL-RestrictedWorker", childEnv["Governance__Tools__ServiceIdentity"]);
+        Assert.Equal(Path.Combine(_tempDir, "artifacts"), childEnv["Governance__Tools__ArtifactRoot"]);
         Assert.DoesNotContain(childEnv.Values, v => v.Contains(configuredSecret, StringComparison.Ordinal));
         Assert.DoesNotContain(childEnv.Keys, k => k.Contains("IdentitySigningSecret", StringComparison.OrdinalIgnoreCase));
 
@@ -348,6 +466,8 @@ public sealed class ProcessCallerIdentityTests : IDisposable
         var psi = new System.Diagnostics.ProcessStartInfo("child");
         psi.Environment["Orchestrator__IdentitySigningSecret"] = configuredSecret;
         psi.Environment["Portal__Orchestrator__IdentitySigningSecret"] = configuredSecret;
+        psi.Environment["ORCHESTRATOR__ScheduledToolIdentity__Tenants__tenant-a__ClientSecret"] = configuredSecret;
+        psi.Environment["Orchestrator:ScheduledToolIdentity:Tenants:tenant-a:ClientSecret"] = configuredSecret;
         psi.Environment["Unrelated__Setting"] = "kept";
         ProcessJobExecutor.RemoveParentSigningSecrets(psi);
         Assert.DoesNotContain(psi.Environment.Values, v => v == configuredSecret);
