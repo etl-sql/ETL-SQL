@@ -20,7 +20,7 @@ try {
     $DiagnosticScenario = 'All'
     if (-not (Invoke-Expression $fresh.Clauses[0].Item1.Extent.Text)) { throw 'Full certification omitted fresh install.' }
 } finally { $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = $priorDiagnostic }
-foreach ($name in @('Get-InstallRecord', 'Get-Setting', 'Initialize-PreviousPortalUpgradeBaseline')) {
+foreach ($name in @('Get-InstallRecord', 'Get-Setting', 'Initialize-PreviousPortalUpgradeSettings', 'Initialize-PreviousPortalUpgradeBaseline')) {
     $function = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     if ($null -eq $function) { throw "Missing baseline function $name" }
     Invoke-Expression $function.Extent.Text
@@ -39,6 +39,34 @@ New-Item -ItemType Directory -Path $installDir | Out-Null
 try {
     $shared = '{"Portal":{"Jwt":{"Secret":"shared-jwt"},"Dataset":{"AtRestKey":"shared-data"},"Orchestrator":{"ApiKey":"shared-api","IdentitySigningSecret":"shared-signing"}},"Orchestrator":{"ApiKey":"shared-api","IdentitySigningSecret":"shared-signing"}}'
     $protected = $shared.Replace('shared-', 'protected-')
+    $operatorFile = Join-Path $installDir 'appsettings.json'
+    $defaultsFile = Join-Path $installDir 'appsettings.defaults.json'
+    $secretsFile = Join-Path $installDir 'appsettings.secrets.json'
+    $legacy = $shared | ConvertFrom-Json
+    $legacy.Portal | Add-Member NoteProperty FirstRun ([pscustomobject]@{})
+    Set-Content -LiteralPath $operatorFile -Value ($legacy | ConvertTo-Json -Depth 16)
+    Initialize-PreviousPortalUpgradeSettings
+    $configured = Get-Content -LiteralPath $operatorFile -Raw | ConvertFrom-Json
+    if ($configured.UpgradeSentinel.Value -cne 'kept' -or
+        $configured.Portal.FirstRun.AdminPassword -notlike 'Upgrade-*' -or
+        $configured.Portal.Dataset.AtRestKey -ceq 'shared-data' -or
+        $configured.Orchestrator.IdentitySigningSecret -ceq 'shared-signing' -or
+        $configured.Orchestrator.IdentitySigningSecret -cne $configured.Portal.Orchestrator.IdentitySigningSecret) {
+        throw 'Legacy operator setup did not seed the expected fixture settings.'
+    }
+
+    Set-Content -LiteralPath $operatorFile -Value '{}'
+    Set-Content -LiteralPath $defaultsFile -Value '{}'
+    Set-Content -LiteralPath $secretsFile -Value $protected
+    $secretsHash = (Get-FileHash -LiteralPath $secretsFile).Hash
+    Initialize-PreviousPortalUpgradeSettings
+    $configured = Get-Content -LiteralPath $operatorFile -Raw | ConvertFrom-Json
+    if (@($configured.PSObject.Properties).Count -ne 1 -or $configured.UpgradeSentinel.Value -cne 'kept' -or
+        (Get-FileHash -LiteralPath $secretsFile).Hash -cne $secretsHash) {
+        throw 'Modern operator setup changed more than the operator sentinel.'
+    }
+    Remove-Item -LiteralPath $defaultsFile, $secretsFile
+
     foreach ($modern in @($false, $true)) {
         Set-Content -LiteralPath (Join-Path $installDir 'appsettings.json') -Value $shared
         if ($modern) { Set-Content -LiteralPath (Join-Path $installDir 'appsettings.secrets.json') -Value $protected }
@@ -78,7 +106,7 @@ try {
     $rejected = $false
     try { $null = Initialize-PreviousPortalUpgradeBaseline } catch { $rejected = $true }
     if (-not $rejected -or -not (Test-Path -LiteralPath $signIn)) { throw 'Empty baseline was accepted or consumed bootstrap.' }
-    Write-Host 'Portal upgrade baseline: legacy/shared and protected precedence, consumed bootstrap, idempotency and invalid mirrors passed. No installer executed.'
+    Write-Host 'Portal upgrade baseline: legacy and protected operator setup, settings precedence, consumed bootstrap, idempotency and invalid mirrors passed. No installer executed.'
 } finally {
     $resolved = [IO.Path]::GetFullPath($installDir)
     if (-not $resolved.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -or
