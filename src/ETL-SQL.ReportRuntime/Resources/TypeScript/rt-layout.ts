@@ -189,7 +189,12 @@ function applyPageOptions(pageDiv: HTMLElement, contentDiv: HTMLElement, page: L
 // tables fill the screen and a long table scrolls inside its own tile.
 const FIT_MIN_HEIGHT_PX = 520;
 const FIT_COMPACT_ROW_PX = 260;
-const fitObserved = new WeakSet<HTMLElement>();
+const fitPageDisposers = new Map<HTMLElement, () => void>();
+
+export function disposePageFit(): void {
+    for (const dispose of fitPageDisposers.values()) dispose();
+    fitPageDisposers.clear();
+}
 
 export function normalizePageFit(value: unknown): 'SCREEN' | 'NONE' {
     return String(value ?? '').trim().toUpperCase() === 'SCREEN' ? 'SCREEN' : 'NONE';
@@ -312,15 +317,14 @@ function applyPageFit(pageDiv: HTMLElement, contentDiv: HTMLElement, value: unkn
     if (mode === 'NONE') return;
     pageDiv.dataset.fit = mode;
     if (typeof MutationObserver === 'undefined') return;
-    if (fitObserved.has(pageDiv)) return;
-    fitObserved.add(pageDiv);
+    if (fitPageDisposers.has(pageDiv)) return;
 
     const refit = () => {
         const grid = (pageDiv.querySelector('.page-grid') as HTMLElement | null) || contentDiv;
         updatePageFit(pageDiv, grid);
     };
     // Activation toggles the `active` class; a page cannot be measured while it is display:none.
-    // The runtime also toggles inline display, and it adds ctive while the page is still in a
+    // The runtime also toggles inline display, and it adds active while the page is still in a
     // detached fragment, so both are watched and the measurement waits for layout.
     let rafId = 0;
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -336,12 +340,21 @@ function applyPageFit(pageDiv: HTMLElement, contentDiv: HTMLElement, value: unkn
             refit();
         }, 350);
     };
-    new MutationObserver(schedule)
-        .observe(pageDiv, { attributes: true, attributeFilter: ['class', 'style'] });
-    // First attach: a ResizeObserver on the page fires once it has a box in the live document.
-    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(schedule).observe(pageDiv);
+    const activationObserver = new MutationObserver(schedule);
+    activationObserver.observe(pageDiv, { attributes: true, attributeFilter: ['class', 'style'] });
+    const sizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
+    sizeObserver?.observe(pageDiv);
     pageDiv.addEventListener('etlsql:fit-reflow', schedule);
     window.addEventListener('resize', schedule);
+
+    fitPageDisposers.set(pageDiv, () => {
+        activationObserver.disconnect();
+        sizeObserver?.disconnect();
+        pageDiv.removeEventListener('etlsql:fit-reflow', schedule);
+        window.removeEventListener('resize', schedule);
+        if (rafId) cancelAnimationFrame(rafId);
+        if (settleTimer !== null) clearTimeout(settleTimer);
+    });
 }
 
 export function renderPage(manifest: LayoutManifest, page: LayoutPage, pageSections: Record<string, HTMLElement>, pageTheme: string | null): HTMLElement {

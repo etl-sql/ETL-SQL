@@ -468,40 +468,42 @@ body.theme-dark, body.vscode-dark, .theme-dark {
   .page.active { display: flex; flex-direction: column; height: auto; min-height: 100%; }
   .page-grid { display: grid; gap: 24px; flex: 1; width: 100%; }
   .page-grid > div { display: flex; flex-direction: column; min-height: 0; }
-  /* PAGE OPTIONS (FIT = 'SCREEN'): the page height is set from the viewport by rt-layout.ts. */
-  .page[data-fit="SCREEN"].active { overflow-y: auto; min-height: 0; }
-  /* The runtime sets inline display:block on the active page, so it is not a flex column here;
-     the grid takes the page height directly. */
-  .page[data-fit="SCREEN"] .page-grid { height: 100%; flex: none; gap: 12px; }
-  .page[data-fit="SCREEN"] .page-grid > div { min-height: 0; overflow: hidden; }
-  .page[data-fit="SCREEN"] .visual-card { padding: 10px 12px; min-height: 0; overflow: auto; }
-  .page[data-fit="SCREEN"] .visual-card:has(.chart-wrapper),
-  .page[data-fit="SCREEN"] .visual-card:has(.table-wrapper) { overflow: hidden; }
-  .page[data-fit="SCREEN"] .table-wrapper { flex: 1; min-height: 0; max-height: none; overflow: auto; }
-  .page[data-fit="SCREEN"] .table-wrapper th,
-  .page[data-fit="SCREEN"] .table-wrapper td { padding: 3px 8px; font-size: 0.86em; }
-  .page[data-fit="SCREEN"] .visual-card > h3 {
-    flex-shrink: 0;
-    font-size: 0.92em; line-height: 1.25; margin: 0 0 4px 0;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  @media (width > 768px) {
+    /* PAGE OPTIONS (FIT = 'SCREEN'): the page height is set from the viewport by rt-layout.ts. */
+    .page[data-fit="SCREEN"].active { overflow-y: auto; min-height: 0; }
+    /* The runtime sets inline display:block on the active page, so it is not a flex column here;
+       the grid takes the page height directly. */
+    .page[data-fit="SCREEN"] .page-grid { height: 100%; flex: none; gap: 12px; }
+    .page[data-fit="SCREEN"] .page-grid > div { min-height: 0; overflow: hidden; }
+    .page[data-fit="SCREEN"] .visual-card { padding: 10px 12px; min-height: 0; overflow: auto; }
+    .page[data-fit="SCREEN"] .visual-card:has(.chart-wrapper),
+    .page[data-fit="SCREEN"] .visual-card:has(.table-wrapper) { overflow: hidden; }
+    .page[data-fit="SCREEN"] .table-wrapper { flex: 1; min-height: 0; max-height: none; overflow: auto; }
+    .page[data-fit="SCREEN"] .table-wrapper th,
+    .page[data-fit="SCREEN"] .table-wrapper td { padding: 3px 8px; font-size: 0.86em; }
+    .page[data-fit="SCREEN"] .visual-card > h3 {
+      flex-shrink: 0;
+      font-size: 0.92em; line-height: 1.25; margin: 0 0 4px 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .page[data-fit="SCREEN"] .visual-card.has-visual-toolbar > h3:first-child { padding-right: 62px; }
+    .page[data-fit="SCREEN"] .visual-card:has(.table-search-row) > h3:first-child { padding-right: 224px; }
+    .page[data-fit="SCREEN"] .visual-card:has(.table-wrapper) > .visual-subtitle { display: none; }
+    .page[data-fit="SCREEN"] .visual-card:has(.table-search-row) .table-search-row {
+      position: absolute; top: 5px; right: 62px; padding: 0; z-index: 15;
+    }
+    .page[data-fit="SCREEN"] .visual-card:has(.table-search-row) .table-search-input {
+      width: 154px; height: 24px; padding: 2px 7px; font-size: 0.78em;
+    }
+    .page[data-fit="SCREEN"] .visual-card > .visual-subtitle {
+      flex-shrink: 0;
+      font-size: 0.78em; line-height: 1.2; margin: 0 0 4px 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .page[data-fit="SCREEN"] .visual-toolbar { top: 6px; right: 6px; }
+    .page[data-fit="SCREEN"] .visual-tool-btn { width: 24px; height: 24px; }
+    .page[data-fit="SCREEN"] .chart-wrapper { min-height: 0; }
   }
-  .page[data-fit="SCREEN"] .visual-card.has-visual-toolbar > h3:first-child { padding-right: 62px; }
-  .page[data-fit="SCREEN"] .visual-card:has(.table-search-row) > h3:first-child { padding-right: 224px; }
-  .page[data-fit="SCREEN"] .visual-card:has(.table-wrapper) > .visual-subtitle { display: none; }
-  .page[data-fit="SCREEN"] .visual-card:has(.table-search-row) .table-search-row {
-    position: absolute; top: 5px; right: 62px; padding: 0; z-index: 15;
-  }
-  .page[data-fit="SCREEN"] .visual-card:has(.table-search-row) .table-search-input {
-    width: 154px; height: 24px; padding: 2px 7px; font-size: 0.78em;
-  }
-  .page[data-fit="SCREEN"] .visual-card > .visual-subtitle {
-    flex-shrink: 0;
-    font-size: 0.78em; line-height: 1.2; margin: 0 0 4px 0;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .page[data-fit="SCREEN"] .visual-toolbar { top: 6px; right: 6px; }
-  .page[data-fit="SCREEN"] .visual-tool-btn { width: 24px; height: 24px; }
-  .page[data-fit="SCREEN"] .chart-wrapper { min-height: 0; }
   .container-box { display: flex; flex-direction: column; gap: 12px; }
   .container-scroll { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
   .filter-wrapper { display: flex; flex-direction: column; gap: 6px; }

@@ -97,6 +97,73 @@ public sealed class FitPageSizingTests(DetailSurfaceHarnessFixture fixture) : ID
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task ScreenFit_ReleasesResizeListenersOnRefresh_AndShowsTableSubtitleOnMobile()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.SetViewportSizeAsync(1400, 900);
+        await page.SetContentAsync("<main id=\"root\"></main>");
+        await page.EvaluateAsync(
+            """
+            () => {
+              const resizeListeners = new Set();
+              const add = window.addEventListener.bind(window);
+              const remove = window.removeEventListener.bind(window);
+              window.addEventListener = (type, listener, options) => {
+                if (type === 'resize') resizeListeners.add(listener);
+                add(type, listener, options);
+              };
+              window.removeEventListener = (type, listener, options) => {
+                if (type === 'resize') resizeListeners.delete(listener);
+                remove(type, listener, options);
+              };
+              window.getResizeListenerCount = () => resizeListeners.size;
+              window.acquireVsCodeApi = () => ({ postMessage() {} });
+              window.__MANIFEST__ = {
+                type: 'reportManifest',
+                pages: [{ name: 'Overview', structure: 'tile', slotMap: { tile: 'Status' }, options: { FIT: 'SCREEN' } }],
+                visuals: [{
+                  name: 'Status', visualType: 'TABLE', columns: ['Status'], rows: [['Ready']],
+                  options: { SUBTITLE: 'Current status' },
+                }],
+              };
+            }
+            """);
+        var resources = Path.Combine("src", "ETL-SQL.ReportRuntime", "Resources", "Shared");
+        await page.AddStyleTagAsync(new() { Path = FindRepoFile(Path.Combine(resources, "report-runtime.css")) });
+        await page.AddScriptTagAsync(new() { Path = FindRepoFile(Path.Combine(resources, "report-runtime.bundle.js")) });
+
+        var subtitle = page.Locator(".page[data-fit='SCREEN'] .visual-subtitle");
+        await subtitle.WaitForAsync(new() { State = WaitForSelectorState.Attached });
+        Assert.False(await subtitle.IsVisibleAsync());
+        var initialListeners = await page.EvaluateAsync<int>("() => window.getResizeListenerCount()");
+        Assert.True(initialListeners > 0);
+
+        await page.EvaluateAsync(
+            """
+            async () => {
+              const root = document.getElementById('root');
+              for (let refresh = 0; refresh < 5; refresh++) {
+                await new Promise(resolve => {
+                  const observer = new MutationObserver(() => {
+                    observer.disconnect();
+                    resolve();
+                  });
+                  observer.observe(root, { childList: true });
+                  window.postMessage(window.__MANIFEST__, '*');
+                });
+              }
+            }
+            """);
+        Assert.Equal(initialListeners, await page.EvaluateAsync<int>("() => window.getResizeListenerCount()"));
+
+        await page.SetViewportSizeAsync(630, 760);
+        await subtitle.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        Assert.Equal("Current status", await subtitle.TextContentAsync());
+        Assert.Empty(session.PageErrors);
+    }
+
     private static async Task<FitGeometry> MeasureAsync(IPage page) =>
         await page.EvaluateAsync<FitGeometry>(
             """

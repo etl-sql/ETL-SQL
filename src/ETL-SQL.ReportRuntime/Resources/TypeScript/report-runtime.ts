@@ -11,7 +11,7 @@ import { applyBookmark, applySavedView, applyUserDefaultSavedView, buildViewsPic
 import { renderAutoPanel, renderFooter, renderHeader, renderNavBar, renderPipelineConsole, showRequiredParametersModal } from './rt-chrome.js';
 import { _nativeLayoutTimers, getNativeLayoutObservers, nativeLayoutTier, observeNativeLayout, renderNativeSvg, setNativeLayoutObservers } from './rt-charts.js';
 import { DESIGN_TOKENS, applyDesignTokens, getDefaultTheme, isAllowedTokenName, isSafeCssValue, resolveDesignTokens, updateBodyTheme } from './rt-theme.js';
-import { renderPage } from './rt-layout.js';
+import { disposePageFit, renderPage } from './rt-layout.js';
 import { closeMaximizedVisual, renderCard, renderVisual, resizeChartsIn } from './rt-visual.js';
 import { DETAIL_ANCHOR_GAP, DETAIL_PREFERRED_SIDE, DETAIL_VIEWPORT_MARGIN, closeOpenDetail, computeDetailPlacement, destroyDetailSurfaces, getOpenDetail } from './rt-detail.js';
 import { reApplyCrossFilterStyling } from './rt-actions.js';
@@ -300,6 +300,7 @@ export function renderManifest(inputManifest: unknown): void {
     setNativeLayoutObservers([]);
     _nativeLayoutTimers.forEach((id: ReturnType<typeof setTimeout>) => clearTimeout(id));
     _nativeLayoutTimers.clear();
+    disposePageFit();
 
     const root = document.getElementById('root');
     if (!root) {
