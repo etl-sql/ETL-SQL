@@ -213,8 +213,11 @@ assert.equal(rtVisual.shouldShowVisualToolbar('CARD', { ALLOW_MAXIMIZE: 'OFF' })
 const card1 = new MockElement('div');
 card1.className = 'visual-card';
 const maxBtn = new MockElement('button');
-maxBtn.className = 'visual-tool-btn';
-card1.appendChild(maxBtn);
+maxBtn.className = 'visual-tool-btn visual-maximize-btn';
+const toolbar1 = new MockElement('div');
+toolbar1.className = 'visual-toolbar';
+toolbar1.appendChild(maxBtn);
+card1.appendChild(toolbar1);
 const buttonIcon = () => maxBtn.querySelector('svg')?.getAttribute('data-icon');
 
 rtVisual.toggleVisualMaximize(card1, maxBtn);
@@ -262,11 +265,25 @@ assert.ok(title, 'Title element exists');
 assert.equal(title.textContent, 'Total Sales');
 
 assert.ok(visualCard.classList.contains('has-visual-toolbar'), 'Card has toolbar class');
-const cardToolBtn = visualCard.querySelector('.visual-tool-btn');
+const cardToolBtn = visualCard.querySelector('.visual-maximize-btn');
 assert.ok(cardToolBtn, 'Maximize button created in toolbar');
 assert.equal(cardToolBtn.getAttribute('aria-label'), 'Maximize visual');
 assert.equal(cardToolBtn.textContent, '', 'Maximize button carries an icon, not bracket text');
 assert.equal(cardToolBtn.querySelector('svg')?.getAttribute('data-icon'), 'maximize');
+const collapseBtn = visualCard.querySelector('.visual-collapse-btn');
+assert.equal(collapseBtn.getAttribute('aria-label'), 'Collapse visual');
+rtVisual.toggleVisualMaximize(visualCard, cardToolBtn);
+rtVisual.closeMaximizedVisual();
+assert.equal(cardToolBtn.getAttribute('aria-label'), 'Maximize visual');
+assert.equal(collapseBtn.getAttribute('aria-label'), 'Collapse visual');
+
+const inlineImage = 'data:image/png;base64,iVBORw0KGgo=';
+assert.equal(util.safeImageSrc(inlineImage), inlineImage);
+const inlineSvg = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg"/>');
+assert.equal(util.safeImageSrc(inlineSvg), inlineSvg);
+assert.equal(util.safeImageSrc('DATA:IMAGE/png;base64,iVBORw0KGgo='), inlineImage);
+assert.equal(util.safeImageSrc('/images/logo.png'), '/images/logo.png');
+assert.equal(util.safeImageSrc('data:text/plain,placeholder'), '#');
 
 // 3. renderCard (KPI Card)
 const container = new MockElement('div');

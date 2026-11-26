@@ -24,7 +24,7 @@ internal static class ChartStyleTokens
 
     /// <summary>Builds the resolved theme for a visual: its declared theme name plus every style token.</summary>
     public static ThemeSpec Theme(VisualManifest manifest) =>
-        new(manifest.Styles?.GetValueOrDefault("THEME") ?? "default", Build(manifest));
+        new(manifest.Styles?.GetValueOrDefault("THEME") ?? manifest.InheritedTheme ?? "default", Build(manifest));
 
     /// <summary>
     /// Resolves the report formatting for a visual. Precedence, most specific first:
@@ -57,6 +57,9 @@ internal static class ChartStyleTokens
         var paletteTokens = manifest.Palette is { Count: > 0 }
             ? manifest.Palette.Select((color, i) => new StyleToken($"PALETTE:{i}", color))
             : Enumerable.Empty<StyleToken>();
+
+        if (manifest.InheritedTheme is { } inheritedTheme)
+            styleTokens = styleTokens.Prepend(new StyleToken("THEME", inheritedTheme));
 
         return styleTokens
             .Concat(optionTokens)

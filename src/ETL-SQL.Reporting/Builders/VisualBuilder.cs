@@ -178,8 +178,7 @@ namespace ETL_SQL.Reporting.Builders
             var effectiveTheme = visualExplicitTheme
                 ?? (inheritedStyles != null && inheritedStyles.TryGetValue("THEME", out var inhTheme) ? inhTheme : null);
 
-            if (!string.IsNullOrEmpty(effectiveTheme))
-                resolvedStyles["THEME"] = effectiveTheme;
+            vm.InheritedTheme = visualExplicitTheme is null ? effectiveTheme : null;
 
             if (resolvedStyles.Count > 0)
                 vm.Styles = resolvedStyles;
@@ -187,8 +186,7 @@ namespace ETL_SQL.Reporting.Builders
             var resolvedPalette = styleBuilder.ResolvePalette(vStmt.StyleName, vStmt.Palette, inheritedPalette, vStmt.VisualType.ToString(), effectiveTheme);
 
             // Effective background resolution across visual and inherited styles
-            var isDark = string.Equals(resolvedStyles.GetValueOrDefault("THEME"), "DARK", StringComparison.OrdinalIgnoreCase) ||
-                         (inheritedStyles != null && inheritedStyles.TryGetValue("THEME", out var ith) && string.Equals(ith, "DARK", StringComparison.OrdinalIgnoreCase));
+            var isDark = string.Equals(effectiveTheme, "DARK", StringComparison.OrdinalIgnoreCase);
 
             string? inhBg = null;
             if (inheritedStyles != null)

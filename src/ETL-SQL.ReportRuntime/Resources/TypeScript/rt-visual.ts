@@ -187,7 +187,7 @@ function addVisualToolbar(card: MaximizedVisualCard, allowCollapse = true): void
 
     const maxBtn = document.createElement('button');
     maxBtn.type = 'button';
-    maxBtn.className = 'visual-tool-btn';
+    maxBtn.className = 'visual-tool-btn visual-maximize-btn';
     setMaximizeButtonState(maxBtn, false);
     maxBtn.addEventListener('click', e => {
         e.stopPropagation();
@@ -304,7 +304,8 @@ export function closeMaximizedVisual(): void {
     card._maxOrigBg      = null;
     card._maxOrigBgImage = null;
 
-    const button = card.querySelector<HTMLButtonElement>('.visual-tool-btn');
+    const toolbar = Array.from(card.children).find(child => child.classList.contains('visual-toolbar'));
+    const button = toolbar?.querySelector<HTMLButtonElement>('.visual-maximize-btn');
     if (button) setMaximizeButtonState(button, false);
 
     _maximizedVisualCard = null;
