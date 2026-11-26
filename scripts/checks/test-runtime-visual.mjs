@@ -277,13 +277,18 @@ rtVisual.closeMaximizedVisual();
 assert.equal(cardToolBtn.getAttribute('aria-label'), 'Maximize visual');
 assert.equal(collapseBtn.getAttribute('aria-label'), 'Collapse visual');
 
+const reportUrl = 'https://reports.example/reports/dashboard.html';
 const inlineImage = 'data:image/png;base64,iVBORw0KGgo=';
-assert.equal(util.safeImageSrc(inlineImage), inlineImage);
+assert.equal(util.safeImageSrc(inlineImage, reportUrl), inlineImage);
 const inlineSvg = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg"/>');
-assert.equal(util.safeImageSrc(inlineSvg), inlineSvg);
-assert.equal(util.safeImageSrc('DATA:IMAGE/png;base64,iVBORw0KGgo='), inlineImage);
-assert.equal(util.safeImageSrc('/images/logo.png'), '/images/logo.png');
-assert.equal(util.safeImageSrc('data:text/plain,placeholder'), '#');
+assert.equal(util.safeImageSrc(inlineSvg, reportUrl), inlineSvg);
+assert.equal(util.safeImageSrc('DATA:IMAGE/png;base64,iVBORw0KGgo=', reportUrl), inlineImage);
+assert.equal(util.safeImageSrc('/images/logo.png', reportUrl), 'https://reports.example/images/logo.png');
+assert.equal(util.safeImageSrc('http://images.example/logo.png', reportUrl), 'http://images.example/logo.png');
+assert.equal(util.safeImageSrc('./logo.png', 'file:///reports/dashboard.html'), 'file:///reports/logo.png');
+assert.equal(util.safeImageSrc('file:///reports/logo.png', reportUrl), '#');
+assert.equal(util.safeImageSrc('data:text/plain,placeholder', reportUrl), '#');
+assert.equal(util.safeImageSrc(String.fromCharCode(1), reportUrl), '');
 
 // 3. renderCard (KPI Card)
 const container = new MockElement('div');
