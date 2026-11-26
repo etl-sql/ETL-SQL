@@ -12,7 +12,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.23.1] — Draft
+## [0.23.1] — 2026-11-26
 
 ### Breaking Changes
 

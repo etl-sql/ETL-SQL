@@ -4,7 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
-| [ETL-SQL v0.23.1](v0.23.1.md) | Screen-fit report pages and external tool governance. **Status:** Draft |
+| [ETL-SQL v0.23.1](v0.23.1.md) | Screen-fit report pages and external tool governance. **Released:** 2026-11-26 |
 | [ETL-SQL v0.23.0](v0.23.0.md) | Windows service configuration, spill performance, Studio pipelines, and remote file operations. **Released:** 2026-11-26 |
 | [v0.23.0 Script and Test Review Plan](v0.23.0-script-and-test-review-plan.md) | Inventory, finding criteria, ownership, and slice estimates for `scripts/` and `tests/`. |
 | [v0.23.0 W6 Performance Gates Design](v0.23.0-w6-performance-gates-design.md) | Deterministic performance gates, paired A/B timing and hosted baselines (approved). |
