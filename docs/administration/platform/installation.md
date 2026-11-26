@@ -44,7 +44,7 @@ On macOS, use the native ZIP or Intel DMG described below.
 
 ### Windows
 
-1. Run the `ETL-SQL-Enterprise-v0.23.0.msi` installer.
+1. Run the `ETL-SQL-Enterprise-v0.23.1.msi` installer.
 2. Select the workstation and server features required for the host.
 3. The installer registers these Windows services when the server features are selected:
    - `ETL-SQL-Orchestrator`
@@ -85,7 +85,7 @@ stop the services and run `etl-sql admin purge-data --confirm` (use `--dry-run` 
 Install the package for your distribution, then enable the services you intend to run:
 
 ```bash
-sudo dpkg -i etl-sql_0.23.0_amd64.deb
+sudo dpkg -i etl-sql_0.23.1_amd64.deb
 sudo systemctl enable etl-sql-orchestrator
 sudo systemctl start etl-sql-orchestrator
 sudo systemctl enable etl-sql-portal

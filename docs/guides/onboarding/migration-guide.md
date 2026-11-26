@@ -1,4 +1,4 @@
-# ETL-SQL Migration Guide (v0.23.0)
+# ETL-SQL Migration Guide (v0.23.1)
 
 This guide covers migration checks for the current release candidate. Review the
 [release notes](../../releases/README.md) and
@@ -23,7 +23,7 @@ For current syntax, prefer [Getting Started](getting-started.md), the [Syntax In
 
 ---
 
-## v0.24.0 Upgrade Notes
+## v0.23.1 Upgrade Notes
 
 - **Federated external tools.** Upgrade the Orchestrator and its configured CLI workers together before
   accepting federated jobs. Back up the tool catalog before editing it. Use `etl-sql admin machine tool list`
@@ -40,6 +40,11 @@ For current syntax, prefer [Getting Started](getting-started.md), the [Syntax In
   store before requiring native tool approval. Inventory native aliases, publish reviewed executables
   or fixed dash script pairs, and retain older versions for in-flight runs and checkpoints. Back up the catalog before pinning
   aliases. [Native tool approval procedure](../../administration/orchestration/orchestrator-portal.md#approve-native-tools-on-a-restricted-linux-host)
+
+- **Windows native artifact approval.** Configure the Orchestrator to run under a dedicated
+  restricted virtual service account. Provision service-specific secrets and place writable state,
+  logs, and scratch outside the protected catalog and artifact roots.
+  [Restricted Windows service profile](../../administration/orchestration/orchestrator-portal.md#configure-the-restricted-windows-native-tool-profile)
 
 ## v0.23.0 Upgrade Notes
 
