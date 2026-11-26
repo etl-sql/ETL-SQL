@@ -13,7 +13,7 @@ This document records the implemented security controls, tested boundaries, and 
 ### 2. Catalog Containment & Administrative Ownership
 * **Vector**: Alias traversal (`../`), reparse-point swaps, unprivileged catalog registration, or `PATH`-hijacked native executable lookups.
 * **Control**: `LocalToolCatalogProvider` enforces strict alias validation (`ToolAliasValidator`), root containment, and reparse-point checks across resolve, store, get, list, enable, disable, and delete. `ToolAdminService` requires elevated administrator/root privileges for machine catalog mutations, `OsToolCatalogProtector` protects catalog roots/entries with read-only service ACLs (`MachineAdministrator` default; `PersonalWorkstation` explicit only), and native `EXECUTABLE` `COMMAND` / `SCRIPT_PATH` values must be fully qualified non-UNC, non-reparse paths.
-* **Non-claim**: Cryptographic artifact/hash pinning of native binaries on disk is tracked separately (see `ROADMAP.md` XT08).
+* **Non-claim**: Cryptographic artifact pinning has a separate [native artifact approval and evidence record](external-tool-use-and-artifact-approval.md#xt08--approve-and-launch-a-specific-native-artifact-version).
 
 ### 3. Dry-Run (`WHAT_IF`) Safety
 * **Control**: `ExecuteToolStatementHandler` validates catalog definitions, native path contracts, Docker/policy approvals, resource limits, and parameter roles before `context.IsWhatIf` short-circuits, returning without creating scratch directories, issuing capability tokens, recording ledger starts, or spawning processes.
