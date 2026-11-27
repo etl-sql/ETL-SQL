@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 8
         with:
           sparse-checkout: scripts
@@ -58,13 +58,13 @@ jobs:
       # Only the supervisor scripts are needed. A slow checkout gets one longer retry so the
       # supervisor itself survives the Git slowdowns it is meant to absorb.
       - id: checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 4
         continue-on-error: true
         with:
           sparse-checkout: scripts
       - if: steps.checkout.outcome == 'failure'
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 8
         with:
           sparse-checkout: scripts
