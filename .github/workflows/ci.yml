@@ -44,7 +44,7 @@ jobs:
       test_projects: ${{ steps.impact.outputs.test_projects }}
       browser_shards: ${{ steps.impact.outputs.browser_shards }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 13
         with:
           fetch-depth: 0
@@ -110,7 +110,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up browser compiler runtime
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
@@ -200,7 +200,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 15
       - uses: ./.github/actions/prepare-test-project
         with:
@@ -240,7 +240,7 @@ jobs:
       matrix:
         group: [1, 2, 3, 4]
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 15
       - uses: ./.github/actions/prepare-test-project
         with:
@@ -273,7 +273,7 @@ jobs:
       matrix:
         group: [1, 2, 3]
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 15
       - uses: ./.github/actions/prepare-test-project
         with:
@@ -321,7 +321,7 @@ jobs:
       matrix:
         group: [1, 2, 3]
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 15
       - uses: ./.github/actions/prepare-test-project
         with:
@@ -375,7 +375,7 @@ jobs:
           if ($env:PORTAL_REGRESSION_RESULT -cne $expectedPortalRegression) { throw 'Portal regression workers did not reach the required state.' }
           $expectedEngine = if ($env:CI_EVENT -ceq 'pull_request') { 'skipped' } else { 'success' }
           if ($env:ENGINE_RESULT -cne $expectedEngine) { throw 'Engine coverage workers did not reach the required state.' }
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 15
       - name: Download all retained engine group attempts
         if: github.event_name != 'pull_request'
@@ -416,7 +416,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 15
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
@@ -526,7 +526,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up browser compiler runtime
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
@@ -644,7 +644,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up browser compiler runtime
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
@@ -736,7 +736,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up browser compiler runtime
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
@@ -820,7 +820,7 @@ jobs:
     if: always() && needs.source-preflight.result == 'success' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'portal-browser-journey') && needs.source-preflight.outputs.browser_shards == '[1,2,3]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 8
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
@@ -859,7 +859,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up browser compiler runtime
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
@@ -931,7 +931,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up browser compiler runtime
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
@@ -1031,7 +1031,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up browser compiler runtime
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
@@ -1088,7 +1088,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # CI 41860496118 (2026-11-04) ran out of disk extracting the .NET SDK image. Remove
       # preinstalled toolchains this job never uses, and record free space before and after the
@@ -1244,7 +1244,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 3
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:

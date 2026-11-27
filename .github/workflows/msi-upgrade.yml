@@ -56,7 +56,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 13
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
           fetch-depth: 0
@@ -146,7 +146,7 @@ jobs:
       artifact_id: ${{ steps.payload.outputs.artifact-id }}
       manifest_sha256: ${{ steps.identity.outputs.manifest_sha256 }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 8
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
@@ -200,7 +200,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 8
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
           fetch-depth: 0
@@ -349,7 +349,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 8
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
 
@@ -439,7 +439,7 @@ jobs:
       actions: write
       checks: read
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -556,7 +556,7 @@ jobs:
       ETLSQL_MSI_DURABLE_CHECKPOINTS: '1'
       ETLSQL_MSI_CHECKPOINT_RUN_SHA: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 8
       - name: Select original successful MSI build inputs
         id: inputs
