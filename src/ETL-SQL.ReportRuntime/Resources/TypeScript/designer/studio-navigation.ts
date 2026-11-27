@@ -56,9 +56,8 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
     let catalogQuery = '';
     let catalogPage = hostContext.opts.catalogDiscovery?.page ?? 1;
     let catalogPageSize = hostContext.opts.catalogDiscovery?.pageSize ?? 50;
-    let catalogTotal = hostContext.opts.catalogDiscovery?.total ?? hostContext.state.catalogReports.length;
-    let catalogTotalPages = hostContext.opts.catalogDiscovery?.totalPages
-        ?? (catalogTotal === 0 ? 0 : Math.ceil(catalogTotal / catalogPageSize));
+    let catalogTotal = hostContext.opts.catalogDiscovery?.total ?? 0;
+    let catalogTotalPages = hostContext.opts.catalogDiscovery?.totalPages ?? 0;
     let catalogRequestSeq = 0;
     let catalogAbort: AbortController | null = null;
     let catalogNotice: string | null = null;
