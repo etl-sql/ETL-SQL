@@ -1034,6 +1034,21 @@ a catalog report uses.
 Studio reaches these through the `privateDrafts` host option. Save on an untitled document keeps it
 as a draft, Studio Home lists the caller's drafts, and Save on an open draft writes the next version.
 
+### Native hosted clients
+
+TUI and desktop Studio use the shared hosted client in `ETL-SQL.Core/Hosted`. The
+`LoopbackPkceAuthenticator` opens Portal sign-in in the system browser and listens for the
+authorization code on a loopback callback. `HostedClientSessionService` holds the session
+credentials in memory and refreshes them as needed. `HostedServerRegistryStore` persists the
+saved server addresses and display settings. The desktop .NET host keeps Portal credentials
+inside the host and serves execution status to its browser UI.
+
+`HostedPipelineClient` calls the Portal API for runnable saved revisions, submission, run status,
+recovery, and Stop. `HostedRunCoordinator` keeps the submission key across uncertain responses
+and binds Stop to the original run and session. VS Code uses a TypeScript client for the same
+server contract. Each client opens with local execution selected. See the
+[hosted client sign-in and execution contract](decisions/hosted-client-sign-in-and-execution.md).
+
 ### Studio pipeline runs
 
 A saved catalog pipeline runs in the Orchestrator, never in the Portal
