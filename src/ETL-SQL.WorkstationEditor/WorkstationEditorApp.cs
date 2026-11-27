@@ -255,7 +255,7 @@ public static class WorkstationEditorApp
         // Hosted execution (ST58): Portal access/refresh tokens stay strictly inside the .NET host's
         // HostedClientSessionService and are never returned to the browser UI.
         app.MapGet("/api/hosted/status", (WorkstationHostedService hosted) =>
-            Results.Json(hosted.GetStatus(), JsonOptions));
+            Results.Json(hosted.GetStatus(), JsonOptions)).WithName("Studio.Workspace.hostedStatus");
 
         app.MapPost("/api/hosted/servers", (HostedAddServerRequest request, WorkstationHostedService hosted) =>
         {
@@ -267,10 +267,10 @@ public static class WorkstationEditorApp
             {
                 return Results.BadRequest(new { error = hosted.Redact(ex.Message) });
             }
-        });
+        }).WithName("Studio.Workspace.saveHostedServer");
 
         app.MapDelete("/api/hosted/servers/{alias}", (string alias, WorkstationHostedService hosted) =>
-            Results.Json(hosted.RemoveServer(alias), JsonOptions));
+            Results.Json(hosted.RemoveServer(alias), JsonOptions)).WithName("Studio.Workspace.removeHostedServer");
 
         app.MapPost("/api/hosted/connect", async (HostedConnectRequest request, WorkstationHostedService hosted, CancellationToken cancellationToken) =>
         {
@@ -300,10 +300,10 @@ public static class WorkstationEditorApp
             {
                 return Results.BadRequest(new { error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
             }
-        });
+        }).WithName("Studio.Workspace.connectHostedServer");
 
         app.MapPost("/api/hosted/disconnect", async (WorkstationHostedService hosted, CancellationToken cancellationToken) =>
-            Results.Json(await hosted.DisconnectAsync(cancellationToken), JsonOptions));
+            Results.Json(await hosted.DisconnectAsync(cancellationToken), JsonOptions)).WithName("Studio.Workspace.disconnectHostedServer");
 
         app.MapGet("/api/hosted/pipelines", async (string? query, int? afterId, WorkstationHostedService hosted, CancellationToken cancellationToken) =>
         {
@@ -325,7 +325,7 @@ public static class WorkstationEditorApp
             {
                 return Results.BadRequest(new { error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
             }
-        });
+        }).WithName("Studio.Workspace.hostedPipelines");
 
         app.MapGet("/api/hosted/pipelines/{id:int}/revision", async (int id, WorkstationHostedService hosted, CancellationToken cancellationToken) =>
         {
@@ -378,7 +378,7 @@ public static class WorkstationEditorApp
             {
                 return Results.Conflict(new { code = "hosted_run_blocked", error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
             }
-        });
+        }).WithName("Studio.Workspace.startHostedRun");
 
         app.MapGet("/api/hosted/runs/{operationId}", (string operationId, WorkstationHostedService hosted) =>
         {
@@ -400,7 +400,7 @@ public static class WorkstationEditorApp
                 return Results.Json(new { code = "operation_forbidden", error = hosted.Redact(ex.Message) },
                     JsonOptions, statusCode: StatusCodes.Status403Forbidden);
             }
-        });
+        }).WithName("Studio.Workspace.hostedRunStatus");
 
         app.MapPost("/api/hosted/runs/stop", async (HostedStopRunRequest request, WorkstationHostedService hosted, CancellationToken cancellationToken) =>
         {
@@ -430,7 +430,7 @@ public static class WorkstationEditorApp
             {
                 return Results.Conflict(new { code = "operation_not_active", error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
             }
-        });
+        }).WithName("Studio.Workspace.stopHostedRun");
 
         app.MapPost("/api/hosted/runs/recover", (HostedRecoverRunRequest request, WorkstationHostedService hosted) =>
         {
@@ -448,7 +448,7 @@ public static class WorkstationEditorApp
             {
                 return Results.NotFound(new { error = hosted.Redact(ex.Message), status = hosted.GetStatus() });
             }
-        });
+        }).WithName("Studio.Workspace.recoverHostedRun");
 
         app.MapGet("/api/connections", (string? documentUri, IMetadataManager metadata) =>
         {

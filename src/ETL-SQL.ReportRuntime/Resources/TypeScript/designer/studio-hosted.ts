@@ -9,6 +9,7 @@
 /// <reference path="../../../../../types/etlsql-contracts.generated.d.ts" />
 
 import type { RunTraceEvent } from './run-results.js';
+import { STUDIO_WORKSPACE_ROUTES } from './studio-contracts.js';
 import type { StudioDom, StudioDomElement, StudioRuntimeDocument, StudioRuntimeState } from './studio-context.js';
 import { _escapeHtml, _feedback, errorMessage, queryElement, queryElements } from './studio-context.js';
 
@@ -214,7 +215,7 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
 
     async function refreshStatus(): Promise<HostedStatusDto> {
         try {
-            const response = await hostContext.authFetch(hostContext.apiBase + '/api/hosted/status');
+            const response = await hostContext.authFetch(hostContext.apiBase + STUDIO_WORKSPACE_ROUTES.hostedStatus);
             if (response.ok) {
                 const next = await response.json() as HostedStatusDto;
                 applyStatus(next);
@@ -230,7 +231,7 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
     async function connectServer(alias: string): Promise<boolean> {
         try {
             const body: HostedConnectRequest = { alias };
-            const response = await hostContext.authFetch(hostContext.apiBase + '/api/hosted/connect', {
+            const response = await hostContext.authFetch(hostContext.apiBase + STUDIO_WORKSPACE_ROUTES.connectHostedServer, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -261,7 +262,7 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
 
     async function disconnectToLocal(): Promise<void> {
         try {
-            const response = await hostContext.authFetch(hostContext.apiBase + '/api/hosted/disconnect', {
+            const response = await hostContext.authFetch(hostContext.apiBase + STUDIO_WORKSPACE_ROUTES.disconnectHostedServer, {
                 method: 'POST',
             });
             if (response.ok) {
@@ -370,7 +371,7 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
                     const alias = btn.dataset.hostedRemoveServer;
                     if (!alias) return;
                     const response = await hostContext.authFetch(
-                        hostContext.apiBase + '/api/hosted/servers/' + encodeURIComponent(alias),
+                        hostContext.apiBase + STUDIO_WORKSPACE_ROUTES.removeHostedServer(alias),
                         { method: 'DELETE' });
                     if (response.ok) {
                         applyStatus(await response.json() as HostedStatusDto);
@@ -389,7 +390,7 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
                     origin: String(formData.get('origin') || '').trim(),
                     environment: String(formData.get('environment') || '').trim() || null,
                 };
-                const response = await hostContext.authFetch(hostContext.apiBase + '/api/hosted/servers', {
+                const response = await hostContext.authFetch(hostContext.apiBase + STUDIO_WORKSPACE_ROUTES.saveHostedServer, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(addBody),
@@ -466,7 +467,7 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
         if (afterId > 0) params.set('afterId', String(afterId));
         const qs = params.toString();
         const response = await hostContext.authFetch(
-            hostContext.apiBase + '/api/hosted/pipelines' + (qs ? `?${qs}` : ''));
+            hostContext.apiBase + STUDIO_WORKSPACE_ROUTES.hostedPipelines + (qs ? `?${qs}` : ''));
 
         if (!matchesCapturedTarget(captured)) {
             _feedback.notify('Hosted target or account changed while loading pipelines. Choose again before running.', {
@@ -760,7 +761,7 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
                 if (disposed) return;
 
                 const response = await hostContext.authFetch(
-                    hostContext.apiBase + '/api/hosted/runs/' + encodeURIComponent(initialOp.operationId));
+                    hostContext.apiBase + STUDIO_WORKSPACE_ROUTES.hostedRunStatus(initialOp.operationId));
                 if (!response.ok) break;
                 current = await response.json() as HostedRunOperationDto;
                 if (doc) {
@@ -850,7 +851,7 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
             documentPath: doc.path || doc.name || null,
         };
 
-        const response = await hostContext.authFetch(hostContext.apiBase + '/api/hosted/runs', {
+        const response = await hostContext.authFetch(hostContext.apiBase + STUDIO_WORKSPACE_ROUTES.startHostedRun, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(startRequest),
@@ -881,7 +882,7 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
 
     async function recoverPendingSubmission(mode: 'check' | 'retry' = 'check'): Promise<void> {
         const body: HostedRecoverRunRequest = { mode };
-        const response = await hostContext.authFetch(hostContext.apiBase + '/api/hosted/runs/recover', {
+        const response = await hostContext.authFetch(hostContext.apiBase + STUDIO_WORKSPACE_ROUTES.recoverHostedRun, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -915,7 +916,7 @@ export function createStudioHostedExecution(hostContext: StudioHostedExecutionCo
         if (!tracking) return;
         try {
             const body: HostedStopRunRequest = { operationId: tracking.operationId };
-            const response = await hostContext.authFetch(hostContext.apiBase + '/api/hosted/runs/stop', {
+            const response = await hostContext.authFetch(hostContext.apiBase + STUDIO_WORKSPACE_ROUTES.stopHostedRun, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),

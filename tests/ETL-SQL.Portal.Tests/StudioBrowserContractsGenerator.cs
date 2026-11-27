@@ -8,7 +8,7 @@ namespace ETL_SQL.Portal.Tests;
 /// <summary>Generates Studio's browser paths from named, registered host endpoints.</summary>
 internal static class StudioBrowserContractsGenerator
 {
-    internal sealed record Route(string Key, string Path, IReadOnlyList<string> Methods);
+    internal sealed record Route(string Key, string Path, IReadOnlyList<string> Methods, string? ParameterPrefix);
 
     internal static IReadOnlyList<Route> ReadRoutes(IEnumerable<RouteEndpoint> endpoints, string group)
     {
@@ -21,13 +21,20 @@ internal static class StudioBrowserContractsGenerator
                 var key = item.Name![prefix.Length..];
                 if (key.Length == 0 || !char.IsAsciiLetter(key[0]) || !key.All(char.IsAsciiLetterOrDigit))
                     throw new InvalidOperationException($"Invalid Studio route key: {key}");
-                if (item.Endpoint.RoutePattern.Parameters.Count != 0)
-                    throw new InvalidOperationException($"Studio route {key} requires a parameter builder.");
-                var path = "/" + item.Endpoint.RoutePattern.RawText!.TrimStart('/');
+                var pattern = item.Endpoint.RoutePattern;
+                var path = "/" + pattern.RawText!.TrimStart('/');
+                string? parameterPrefix = null;
+                if (pattern.Parameters.Count != 0)
+                {
+                    var suffix = $"/{{{pattern.Parameters[0].Name}}}";
+                    if (pattern.Parameters.Count != 1 || !path.EndsWith(suffix, StringComparison.Ordinal))
+                        throw new InvalidOperationException($"Studio route {key} requires a single required path segment.");
+                    parameterPrefix = path[..^(suffix.Length - 1)];
+                }
                 var methods = item.Endpoint.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods;
                 if (methods is null || methods.Count == 0)
                     throw new InvalidOperationException($"Studio route {key} has no HTTP method contract.");
-                return new Route(key, path, methods);
+                return new Route(key, path, methods, parameterPrefix);
             })
             .OrderBy(route => route.Key, StringComparer.Ordinal)
             .ToList();
@@ -79,7 +86,12 @@ internal static class StudioBrowserContractsGenerator
         {
             builder.Append($"export const {table} = Object.freeze({{\n");
             foreach (var route in routes)
-                builder.Append($"    {route.Key}: {JsonSerializer.Serialize(route.Path)},\n");
+            {
+                var expression = route.ParameterPrefix is { } prefix
+                    ? $"(value: string) => {JsonSerializer.Serialize(prefix)} + encodeURIComponent(value)"
+                    : JsonSerializer.Serialize(route.Path);
+                builder.Append($"    {route.Key}: {expression},\n");
+            }
             builder.Append("} as const);\n\n");
         }
         return builder.ToString();

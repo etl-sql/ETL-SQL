@@ -39,7 +39,17 @@ export const STUDIO_CATALOG_ROUTES = Object.freeze({
 } as const);
 
 export const STUDIO_WORKSPACE_ROUTES = Object.freeze({
+    connectHostedServer: "/api/hosted/connect",
     connections: "/api/connections",
+    disconnectHostedServer: "/api/hosted/disconnect",
     files: "/api/files",
+    hostedPipelines: "/api/hosted/pipelines",
+    hostedRunStatus: (value: string) => "/api/hosted/runs/" + encodeURIComponent(value),
+    hostedStatus: "/api/hosted/status",
+    recoverHostedRun: "/api/hosted/runs/recover",
+    removeHostedServer: (value: string) => "/api/hosted/servers/" + encodeURIComponent(value),
+    saveHostedServer: "/api/hosted/servers",
+    startHostedRun: "/api/hosted/runs",
+    stopHostedRun: "/api/hosted/runs/stop",
 } as const);
 
