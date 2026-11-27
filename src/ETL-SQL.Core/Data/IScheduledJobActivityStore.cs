@@ -19,7 +19,8 @@ public sealed record ScheduledJobActivity(
     JobDefinition Job,
     ScheduledJobRunState RunState,
     bool CompletedToday,
-    bool FailedToday);
+    bool FailedToday,
+    bool CanExecute = false);
 
 public sealed record ScheduledJobActivityCounts(int Active, int Queued, int CompletedToday, int FailedToday);
 

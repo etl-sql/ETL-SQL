@@ -332,6 +332,49 @@ public sealed partial class ScheduledJobActivityBrowserTests : IAsyncLifetime
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task HostedRunLinkOpensExactRunOfSelectedJob()
+    {
+        await SeedAsync();
+        var job = (await Store.GetJobAsync(Tenant, "activity-idle"))!;
+        var run1Id = await AddOutcomeAsync(job, "SUCCESS", "2026-10-07T02:00:00Z");
+        await Store.SaveJobStatementMetricsAsync(run1Id, [
+            new StatementMetricsPayload { Statement = "SELECT 1 AS FirstRun", DurationMs = 10, RowsProcessed = 1, Failed = false }
+        ]);
+        var run2Id = await AddOutcomeAsync(job, "SUCCESS", "2026-10-07T03:00:00Z");
+        await Store.SaveJobStatementMetricsAsync(run2Id, [
+            new StatementMetricsPayload { Statement = "SELECT 2 AS SecondRun", DurationMs = 25, RowsProcessed = 2, Failed = false }
+        ]);
+
+        var pipelineJob = await AddJobAsync("PIPELINE:42");
+        var pipelineRunId = await AddOutcomeAsync(pipelineJob, "SUCCESS", "2026-10-07T04:00:00Z");
+        await Store.SaveJobStatementMetricsAsync(pipelineRunId, [
+            new StatementMetricsPayload { Statement = "SELECT 42 AS PipelineRunStmt", DurationMs = 15, RowsProcessed = 42, Failed = false }
+        ]);
+
+        await using var session = await browser.NewSessionAsync();
+        var page = session.Page;
+        await browser.SignInAsync(page);
+
+        // Deep link opens the exact selected run (#run2Id) and its statement log, not the earlier run (#run1Id).
+        await page.GotoWithDiagnosticsAsync($"/orchestrator.html?job=activity-idle&run={run2Id}");
+        await Expect(page.Locator("#runWaterfallModal")).ToBeVisibleAsync();
+        await Expect(page.Locator("#runWaterfallTitle")).ToHaveTextAsync($"Run #{run2Id} \u2014 activity-idle");
+        await Expect(page.Locator("#runWaterfallBody")).ToContainTextAsync("SecondRun");
+        await Expect(page.Locator("#runWaterfallBody")).Not.ToContainTextAsync("FirstRun");
+
+        // Deep link with URL-encoded PIPELINE:42 job name opens that exact pipeline run.
+        await page.GotoWithDiagnosticsAsync($"/orchestrator.html?job=PIPELINE%3A42&run={pipelineRunId}");
+        await Expect(page.Locator("#runWaterfallModal")).ToBeVisibleAsync();
+        await Expect(page.Locator("#runWaterfallTitle")).ToHaveTextAsync($"Run #{pipelineRunId} \u2014 PIPELINE:42");
+        await Expect(page.Locator("#runWaterfallBody")).ToContainTextAsync("PipelineRunStmt");
+
+        // Wrong job refuses to display another job's run.
+        await page.GotoWithDiagnosticsAsync($"/orchestrator.html?job=activity-complete&run={run2Id}");
+        await Expect(page.Locator("#runWaterfallBody")).ToContainTextAsync("This run does not belong to the selected job.");
+        Assert.Empty(session.PageErrors);
+    }
+
     private static ILocator Rows(IPage page) => page.Locator("#jobsTableWrap tr.job-row");
 
     private static async Task OpenAsync(IPage page)

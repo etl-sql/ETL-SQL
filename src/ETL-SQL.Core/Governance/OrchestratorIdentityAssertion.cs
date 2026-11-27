@@ -16,6 +16,7 @@ namespace ETL_SQL.Core.Governance;
 public static class OrchestratorIdentityAssertion
 {
     public const string HeaderName = "X-Orchestrator-Identity";
+    public const string RequireVerifiedCallerHeader = "X-Orchestrator-Require-Verified-Caller";
     public const string Issuer = "etl-sql-portal";
     public const string Audience = "etl-sql-orchestrator-api";
 

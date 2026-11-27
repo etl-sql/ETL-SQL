@@ -183,15 +183,7 @@ public static partial class JobApiEndpoints
 
             // MANAGE stops any run of the job. EXECUTE stops only the run that caller submitted:
             // being allowed to start work is not being allowed to stop a colleague's.
-            var manages = await authorization.CanAsync(
-                caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
-                OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted);
-            var ownsRun = !manages
-                && string.Equals(scheduler.GetRunSubmitter(historyId), caller.PrincipalKey, StringComparison.OrdinalIgnoreCase)
-                && await authorization.CanAsync(
-                    caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
-                    OrchestratorObjectPermission.Execute, job.CreatedBy, ctx.RequestAborted);
-            if (!manages && !ownsRun)
+            if (!await CanCancelRunAsync(ctx, scheduler, authorization, caller, job, historyId))
                 return Results.Json(
                     new RunRefusal("cancel_denied",
                         $"This caller did not submit run {historyId} and holds no MANAGE grant on job '{job.Name}'."),
@@ -472,6 +464,15 @@ public static partial class JobApiEndpoints
         if (job is null || (history.JobId.IsAssigned && job.Id != history.JobId)) return (null, null);
         return (history, job);
     }
+
+    private static async Task<bool> CanCancelRunAsync(
+        HttpContext ctx, SchedulerService scheduler, OrchestratorObjectAuthorizationService authorization,
+        OrchestratorCaller caller, JobDefinition job, long historyId) =>
+        await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
+            OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted)
+        || (string.Equals(scheduler.GetRunSubmitter(historyId), caller.PrincipalKey, StringComparison.OrdinalIgnoreCase)
+            && await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                OrchestratorObjectPermission.Execute, job.CreatedBy, ctx.RequestAborted));
 
     private static bool IsTerminalRunStatus(JobHistoryEntry history) =>
         history.EndTime is not null

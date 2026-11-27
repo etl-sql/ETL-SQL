@@ -9,7 +9,7 @@ namespace ETL_SQL.Portal.BrowserTests;
 
 [Trait("Category", "Browser")]
 [Collection(StudioAuthoringCollection.Name)]
-public sealed class DesktopStudioJourneyTests(StudioAuthoringFixture fixture)
+public sealed partial class DesktopStudioJourneyTests(StudioAuthoringFixture fixture)
 {
     private const string InitialScript = """
         CREATE CONNECTION sample_data AS MOCKDB();

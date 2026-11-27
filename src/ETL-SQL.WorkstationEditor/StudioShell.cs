@@ -237,6 +237,7 @@ internal static class StudioShell
         workspaceFolders: workspaceFolders,
         apiBase: '',
         authFetch,
+        hostedExecution: true,
         onExit: exitStudio,
         // Recovery drafts go to the host's app-data folder, never to browser storage.
         onLoadDraft: async document => {

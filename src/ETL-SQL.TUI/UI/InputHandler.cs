@@ -198,13 +198,12 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            // F5 - Run. Fire-and-forget: execution runs on a background task so this loop stays
-            // responsive (live updates, Esc to stop). The run task is intentionally not awaited.
+            // Let hosted confirmation own input before starting execution in the background.
             if (key.Key == ConsoleKey.F5)
             {
                 if (key.Modifiers.HasFlag(ConsoleModifiers.Shift)) _ = _editor.RunStatementAtCursor();
                 else if (key.Modifiers.HasFlag(ConsoleModifiers.Control)) _ = _editor.RunSelectedText();
-                else _ = _editor.RunScript();
+                else await _editor.HandleRunKeyAsync();
                 return;
             }
 
@@ -241,6 +240,7 @@ namespace ETL_SQL.TUI.UI
                 _editor.SwitchToTab(nextIndex);
                 return;
             }
+            if (key.Key == ConsoleKey.H && key.Modifiers.HasFlag(ConsoleModifiers.Alt)) { await _editor.SelectHostedTarget(); return; }
             // Alt+P is the default (Windows Terminal grabs Ctrl+Shift+P for its own palette);
             // Ctrl+Shift+P still works in terminals that don't intercept it.
             if (key.Key == ConsoleKey.P && (key.Modifiers.HasFlag(ConsoleModifiers.Alt) || (key.Modifiers.HasFlag(ConsoleModifiers.Control) && key.Modifiers.HasFlag(ConsoleModifiers.Shift)))) { await _editor.ShowCommandPalette(); return; }
@@ -548,7 +548,7 @@ namespace ETL_SQL.TUI.UI
                     _renderer.AutocompleteVisible = false;
 
                     // If no report has been built yet, try running the script automatically
-                    if (_renderer.CurrentReportManifest == null)
+                    if (_renderer.CurrentReportManifest == null && !_editor.Hosted.IsHosted)
                     {
                         _renderer.ShowStatus("Initializing report preview...");
                         await _editor.RunScript();

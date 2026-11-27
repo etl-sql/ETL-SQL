@@ -92,23 +92,66 @@ public sealed partial class StudioController(
         return Ok(visible);
     }
 
+    public const int DefaultCatalogPageSize = 50;
+    public const int MaxCatalogPageSize = 50;
+
     [HttpGet("catalog")]
     [RequireStudioCapability(StudioCapabilities.ScriptRead,
         StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
     public async Task<ActionResult<StudioCatalogPageDto>> SearchCatalog(
-        CancellationToken ct, [FromQuery] string? query = null, [FromQuery] int afterId = 0)
+        CancellationToken ct,
+        [FromQuery] string? query = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = DefaultCatalogPageSize)
     {
         query = query?.Trim() ?? string.Empty;
-        if (query.Length > 160 || afterId < 0) return BadRequest(new { error = "Invalid catalog search or cursor." });
-        var candidates = await CatalogScope.Documents.AsNoTracking().Include(report => report.Folder)
-            .Where(report => !report.IsDeleted && report.Id > afterId
-                && (query == "" || report.Name.Contains(query) || report.Folder.Path.Contains(query)))
-            .OrderBy(report => report.Id).Take(51).ToListAsync(ct);
-        var inspected = candidates.Take(50).ToList();
-        var permissions = await folderPermissions.GetEffectiveReportPermissionsAsync(inspected, User, ct);
-        var visible = inspected.Where(report => permissions[report.Id].AtLeast(FolderPermission.Author)).Select(ToDto).ToList();
-        return Ok(new StudioCatalogPageDto(visible, candidates.Count > 50 ? inspected[^1].Id : null));
+        if (query.Length > 160)
+            return BadRequest(new { error = "Invalid catalog search query." });
+
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, MaxCatalogPageSize);
+
+        var baseQuery = CatalogScope.Documents
+            .AsNoTracking()
+            .Where(report => !report.IsDeleted);
+
+        var visibleQuery = await folderPermissions.FilterVisibleReportsAsync(
+            baseQuery, FolderPermission.Author, User, ct);
+
+        if (query.Length > 0)
+        {
+            var pattern = LikePattern(query);
+            visibleQuery = visibleQuery.Where(report =>
+                EF.Functions.Like(report.Name, pattern, @"\")
+                || EF.Functions.Like(report.Folder.Path, pattern, @"\")
+                || (report.Description != null && EF.Functions.Like(report.Description, pattern, @"\")));
+        }
+
+        var total = await visibleQuery.CountAsync(ct);
+        var totalPages = total == 0 ? 0 : ((total - 1) / pageSize) + 1;
+        var effectivePage = total == 0 ? 1 : Math.Clamp(page, 1, totalPages);
+
+        var items = total == 0
+            ? []
+            : await visibleQuery
+                .Include(report => report.Folder)
+                .OrderBy(report => report.Folder.Path)
+                .ThenBy(report => report.Name)
+                .ThenBy(report => report.Id)
+                .Skip((effectivePage - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(ct);
+
+        return Ok(new StudioCatalogPageDto(
+            items.Select(ToDto).ToList(),
+            total,
+            effectivePage,
+            pageSize,
+            totalPages));
     }
+
+    private static string LikePattern(string query) =>
+        $"%{query.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_")}%";
 
     [HttpGet("reports/{id:int}/summary")]
     [RequireStudioCapability(StudioCapabilities.ScriptRead,
@@ -118,7 +161,7 @@ public sealed partial class StudioController(
         var report = await CatalogScope.Documents.AsNoTracking().Include(report => report.Folder)
             .FirstOrDefaultAsync(report => report.Id == id && !report.IsDeleted, ct);
         if (report is null || !(await folderPermissions.GetEffectiveReportPermissionAsync(report, User)).AtLeast(FolderPermission.Author))
-            return NotFound(new { error = "The document is unavailable or outside your catalog permissions. Refresh Studio Home." });
+            return NotFound(new { error = "The document is unavailable or outside your catalog permissions. Refresh Studio Home. Your open drafts are unchanged." });
         return Ok(ToDto(report));
     }
 

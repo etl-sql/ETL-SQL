@@ -71,6 +71,8 @@ public sealed class AuthorshipPermissionBoundaryTests
                 + "fallback that system-published datasets depend on.",
             ["FolderPermissionService.cs|.Where(f => ids.Contains(f.Id) && f.OwnerId == userId)"] =
                 "Batch form of the folder-ownership rule above.",
+            ["FolderPermissionService.cs|Folders.Any(folder => folder.Id == report.FolderId && folder.OwnerId == userId)"] =
+                "Studio catalog paging applies the existing ownership grant within the tenant before counting.",
             ["CatalogController.cs|catalogScope.Folders.Any(f => f.Id == r.FolderId && f.OwnerId == userId)"] =
                 "Catalog visibility follows the same folder-ownership rule.",
             ["CatalogController.cs|return catalogScope.Folders.Where(f => f.OwnerId == userId"] =
@@ -86,6 +88,8 @@ public sealed class AuthorshipPermissionBoundaryTests
             ["FolderPermissionService.cs|return reports.ToDictionary(report => report.Id, report => CombineReportPermission(report.CreatedBy == userId,"] =
                 "The bounded catalog's batch of the same answer, through the same CombineReportPermission "
                 + "rule, so a page of reports cannot resolve authorship differently from one report.",
+            ["FolderPermissionService.cs||| (report.CreatedBy == userId && ("] =
+                "Studio catalog paging requires a surviving folder or direct report ACL before authorship can upgrade access.",
             ["FolderPermissionService.cs|if (report.CreatedBy == userId)"] =
                 "DescribeReportGrantsAsync — names the grants behind an answer for the access "
                 + "simulator. Explains a permission, never resolves one; the permission itself comes "

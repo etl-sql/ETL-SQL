@@ -21,6 +21,12 @@ namespace ETL_SQL.TUI.UI
 
         public static IReadOnlyList<PaletteCommand> Commands { get; } = new[]
         {
+            // ── Hosted execution (ST57) ──
+            new PaletteCommand("Hosted: Select execution target (Local / Hosted)", "Alt+H", e => e.SelectHostedTarget()),
+            new PaletteCommand("Hosted: Connect to Portal", null, e => e.SelectHostedTarget()),
+            new PaletteCommand("Hosted: Disconnect (return to Local)", null, e => e.DisconnectHostedPortal()),
+            new PaletteCommand("Hosted: Check unconfirmed submission", null, e => e.CheckPendingHostedSubmission()),
+
             // ── Report ──
             new PaletteCommand("Serve report in browser", "Ctrl+Shift+R", e => e.ServeInBrowser()),
             new PaletteCommand("Serve folder (all reports)", null, e => e.ServeFolderInBrowser()),

@@ -74,6 +74,8 @@ public sealed class EngineSubsystemCoverageTests
             "Normalized, bounded statement metrics shared by every job execution transport."),
         ["ETL-SQL.Core/Execution"] = new("engine.md", "IExecutionContext",
             "Execution context contracts."),
+        ["ETL-SQL.Core/Hosted"] = new("portal.md", "HostedClientSessionService",
+            "Shared native sign-in, session lifecycle, and saved pipeline execution for TUI and desktop Studio."),
         ["ETL-SQL.Core/Formatting"] = new("language-server.md", "FormattingProvider",
             "AST serialization behind the LSP formatting path."),
         ["ETL-SQL.Core/Statements"] = new("parser-lexer.md", "Statement",

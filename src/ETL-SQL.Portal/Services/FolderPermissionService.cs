@@ -77,6 +77,49 @@ public class FolderPermissionService(
             folders[report.FolderId], direct.GetValueOrDefault(report.Id)));
     }
 
+    /// <summary>
+    /// Restricts a document query to rows on which <paramref name="user"/> holds at least
+    /// <paramref name="required"/> effective permission, using the same tenant-scoped folder
+    /// ownership, ranked ACL, and authorship-upgrade rules as
+    /// <see cref="GetEffectiveReportPermissionAsync(Report, ClaimsPrincipal)"/>.
+    /// </summary>
+    public async Task<IQueryable<Report>> FilterVisibleReportsAsync(
+        IQueryable<Report> reports,
+        FolderPermission required,
+        ClaimsPrincipal user,
+        CancellationToken ct = default)
+    {
+        if (IsAdmin(user))
+            return reports;
+
+        var userId = GetUserId(user);
+        var groupIds = (await GetUserGroupIdsAsync(user, ct)).ToArray();
+        var qualifying = Enum.GetValues<FolderPermission>()
+            .Where(permission => permission.AtLeast(required))
+            .ToArray();
+        var hasGroups = groupIds.Length > 0;
+
+        return reports.Where(report =>
+            Folders.Any(folder => folder.Id == report.FolderId && folder.OwnerId == userId)
+            || (hasGroups && FolderAcls.Any(acl =>
+                acl.FolderId == report.FolderId
+                && groupIds.Contains(acl.GroupId)
+                && qualifying.Contains(acl.Permission)))
+            || ReportAcls.Any(acl =>
+                acl.ReportId == report.Id
+                && ((acl.UserId.HasValue && acl.UserId == userId)
+                    || (hasGroups && acl.GroupId.HasValue && groupIds.Contains(acl.GroupId.Value)))
+                && qualifying.Contains(acl.Permission))
+            || (report.CreatedBy == userId && (
+                (hasGroups && FolderAcls.Any(acl =>
+                    acl.FolderId == report.FolderId
+                    && groupIds.Contains(acl.GroupId)))
+                || ReportAcls.Any(acl =>
+                    acl.ReportId == report.Id
+                    && ((acl.UserId.HasValue && acl.UserId == userId)
+                        || (hasGroups && acl.GroupId.HasValue && groupIds.Contains(acl.GroupId.Value)))))));
+    }
+
     private static FolderPermission? CombineReportPermission(bool isAuthor, FolderPermission? folderPerm, FolderPermission? directPerm)
     {
         if (isAuthor && (folderPerm.HasValue || directPerm.HasValue)) return FolderPermission.Manage;

@@ -21,15 +21,22 @@ try {
         columns: { Revenue: ['Region', 'Revenue'] }, metadata: { isSampled: false, rlsEnforced: false, totalRows: 2, returnedRows: 2 } };
     assert.deepEqual(responses.readStudioSession(session), { ...session, privateDrafts: false, maxScriptCharacters: 200_000 });
     assert.equal(responses.readStudioSession({ ...session, maxScriptCharacters: 10_000 }).maxScriptCharacters, 10_000);
-    assert.deepEqual(responses.readStudioCatalogPage({ items: [report], nextAfterId: 7 }), { items: [report], nextAfterId: 7 });
-    assert.throws(() => responses.readStudioCatalogPage({ items: Array(51).fill(report), nextAfterId: null }), /exceeded/);
-    assert.throws(() => responses.readStudioCatalogPage({ items: [report], nextAfterId: 'bad' }), /Invalid/);
+    assert.deepEqual(responses.readStudioCatalogPage({ items: [report], total: 1, page: 1, pageSize: 50, totalPages: 1 }),
+        { items: [report], total: 1, page: 1, pageSize: 50, totalPages: 1 });
+    assert.throws(() => responses.readStudioCatalogPage({ items: Array(51).fill(report), total: 51, page: 1, pageSize: 50, totalPages: 2 }), /exceeded/);
+    assert.throws(() => responses.readStudioCatalogPage({ items: [report], total: 1, page: 1, pageSize: 51, totalPages: 1 }), /Invalid/);
+    assert.throws(() => responses.readStudioCatalogPage({ items: [report], total: 0, page: 1, pageSize: 50, totalPages: 0 }), /Invalid/);
+    assert.throws(() => responses.readStudioCatalogPage({ items: [report], total: 1, page: 1, pageSize: 50, totalPages: 2 }), /Invalid/);
     assert.equal(responses.readStudioSession({ ...session, privateDrafts: true }).privateDrafts, true);
     assert.deepEqual(responses.readStudioReports([report]), [report]);
     assert.deepEqual(responses.readStudioFolders([{ id: 3, path: '/Authors', name: 'Authors' }]), [{ id: 3, path: '/Authors', name: 'Authors' }]);
     assert.deepEqual(responses.readScriptContent(script), script);
     assert.deepEqual(responses.readDesignerLease(lease), lease);
     assert.deepEqual(responses.readStudioDraft(draft), draft);
+    const runReceipt = { runId: 11, pipelineId: 7, version: 4, scriptHash: 'sha256:fixture', jobName: 'PIPELINE:7' };
+    assert.deepEqual(responses.readPipelineRunSubmitted(runReceipt), { ...runReceipt, replayed: false });
+    assert.deepEqual(responses.readPipelineRunSubmitted({ ...runReceipt, replayed: true }), { ...runReceipt, replayed: true });
+    assert.throws(() => responses.readPipelineRunSubmitted({ ...runReceipt, replayed: 'true' }), /Invalid/);
     const normalized = responses.readDesignerParse({ designState: state, error: null });
     assert.equal(normalized.pages[0].visuals[0].formatting.title.text, undefined);
     assert.equal(normalized.pages[0].visuals[0].formatting.fields.Revenue.format, undefined);
@@ -97,6 +104,13 @@ try {
     assert.deepEqual(requests.slice(before).map(request => request.url), ['/api/studio/reports/7/summary', '/api/reports/7/script-content'],
         'A read-only author validates discovery and reads text without requesting an edit lease.');
     await assert.rejects(host.onOpenDocument({ ...report, folderId: 99 }), /moved since the catalog was loaded/);
+    await assert.rejects(host.onOpenDocument({ ...report, name: 'RenamedReport' }), /renamed since the catalog was loaded/);
+    const missingHost = hostModule.module.createPortalStudioHost(session, async url =>
+        url.endsWith('/summary')
+            ? Response.json({ error: 'The document is unavailable or outside your catalog permissions. Refresh Studio Home. Your open drafts are unchanged.' }, { status: 404 })
+            : fetch(url),
+    async () => report);
+    await assert.rejects(missingHost.onOpenDocument(report), /unavailable or outside your catalog permissions/);
     assert.equal('onLoadDraft' in readOnlyHost, false);
     await assert.rejects(host.onCreateDocument({ folderId: 'bad', name: 'Report', scriptText: '' }), /Invalid/);
     assert.equal((await host.onCreateDocument({ folderId: '3', name: 'New', scriptText: 'SELECT 1;' })).name, 'New');

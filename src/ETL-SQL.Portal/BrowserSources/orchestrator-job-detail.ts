@@ -496,6 +496,9 @@ export function createJobDetail(options: JobDetailOptions) {
         try {
             const detail = readRunDetail(await read(`/api/orchestrator/runs/${encodeURIComponent(runId)}`, wfScope));
             if (wfScope.signal.aborted || !live(opened) || waterfallScope !== wfScope) return;
+            if (String(detail.runId) !== runId || detail.jobName !== selected?.name) {
+                throw new Error('This run does not belong to the selected job.');
+            }
             waterfallRun = { id: String(detail.runId), jobName: detail.jobName };
             if (waterfallTitle) waterfallTitle.textContent = `Run #${detail.runId} — ${detail.jobName}`;
             if (waterfallSubtitle) waterfallSubtitle.textContent = `${detail.status} · Started ${fmtDt(detail.startTime)}`;
@@ -740,7 +743,7 @@ export function createJobDetail(options: JobDetailOptions) {
         options.selectionChanged(null);
     }
 
-    function open(value: Job) {
+    function open(value: Job, runId?: string) {
         if (lifetime.signal.aborted) return;
         scope.abort();
         scope = new AbortController();
@@ -755,6 +758,7 @@ export function createJobDetail(options: JobDetailOptions) {
         void loadSchedules(value.name); void loadNotifications(value.name); void loadStates(value.name);
         void loadAccess(value); void loadHistory(value.name);
         loadTab(value.name);
+        if (runId) void openWaterfall(runId);
     }
 
     get('closeDetailBtn', HTMLButtonElement).addEventListener('click', close, { signal: lifetime.signal });

@@ -47,6 +47,7 @@
     <Compile Remove="ScheduledJobActivityApiTests.cs" />
     <Compile Remove="PortalMultiProcessPostgresTests.cs" />
     <Compile Remove="RuntimeSecretRotationTests.cs" />
+    <Compile Remove="St57TuiHostedLiveTests.cs" />
     <Compile Remove="SubscriptionIntegrationTests.cs" />
   </ItemGroup>
 

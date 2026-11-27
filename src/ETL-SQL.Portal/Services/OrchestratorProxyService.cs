@@ -37,6 +37,17 @@ public class OrchestratorProxyService(
 {
     public bool IsConfigured => !string.IsNullOrWhiteSpace(settings.ApiUrl);
 
+    public async Task<bool> RequiresFederatedIdentityAsync(CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(portalConfig?.Orchestrator.IdentitySigningSecret))
+            return false;
+
+        var health = await ReadJsonAsync<OrchestratorHealth>("health", "authorization mode", ct);
+        return health.Value?.RequiresCallerIdentity == true;
+    }
+
+    private sealed record OrchestratorHealth(bool RequiresCallerIdentity);
+
     public async Task<bool> IsOnlineAsync()
     {
         try
@@ -73,13 +84,14 @@ public class OrchestratorProxyService(
     }
 
     public async Task<HttpResponseMessage?> GetJobActivityAsync(
-        string filter, string status, string? search, int limit, int offset, CancellationToken ct = default)
+        string filter, string status, string? search, int limit, int offset, CancellationToken ct = default,
+        bool requireVerifiedCaller = false)
     {
         try
         {
             var path = $"api/scheduled-jobs/activity?filter={Uri.EscapeDataString(filter)}"
                 + $"&status={Uri.EscapeDataString(status)}&search={Uri.EscapeDataString(search ?? "")}&limit={limit}&offset={offset}";
-            return await SendAsync(HttpMethod.Get, path, cancellationToken: ct);
+            return await SendAsync(HttpMethod.Get, path, cancellationToken: ct, requireVerifiedCaller: requireVerifiedCaller);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -122,7 +134,8 @@ public class OrchestratorProxyService(
 
     public async Task<HttpResponseMessage?> TriggerJobAsync(
         string name,
-        IReadOnlyDictionary<string, string>? variables = null)
+        IReadOnlyDictionary<string, string>? variables = null, CancellationToken ct = default,
+        bool requireVerifiedCaller = false)
     {
         try
         {
@@ -131,9 +144,11 @@ public class OrchestratorProxyService(
                 $"api/scheduled-jobs/{Uri.EscapeDataString(name)}/trigger",
                 new TriggerJobRequest(variables is null
                     ? null
-                    : new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase)));
+                    : new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase)),
+                cancellationToken: ct, requireVerifiedCaller: requireVerifiedCaller);
         }
-        catch (Exception ex) { logger.LogWarning(ex, "Failed to trigger job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        { logger.LogWarning(ex, "Failed to trigger job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
     }
 
     public async Task<HttpResponseMessage?> ResumeRunAsync(long historyId)
@@ -195,9 +210,10 @@ public class OrchestratorProxyService(
         }
     }
 
-    public async Task<HttpResponseMessage?> GetJobRunAsync(long runId, CancellationToken ct = default)
+    public async Task<HttpResponseMessage?> GetJobRunAsync(
+        long runId, CancellationToken ct = default, bool requireVerifiedCaller = false)
     {
-        try { return await SendAsync(HttpMethod.Get, $"api/job-runs/{runId}", cancellationToken: ct); }
+        try { return await SendAsync(HttpMethod.Get, $"api/job-runs/{runId}", cancellationToken: ct, requireVerifiedCaller: requireVerifiedCaller); }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Failed to read job run {RunId}.", runId);
@@ -260,9 +276,10 @@ public class OrchestratorProxyService(
         }
     }
 
-    public async Task<HttpResponseMessage?> CancelJobRunAsync(long runId, CancellationToken ct = default)
+    public async Task<HttpResponseMessage?> CancelJobRunAsync(
+        long runId, CancellationToken ct = default, bool requireVerifiedCaller = false)
     {
-        try { return await SendAsync(HttpMethod.Post, $"api/job-runs/{runId}/cancel", cancellationToken: ct); }
+        try { return await SendAsync(HttpMethod.Post, $"api/job-runs/{runId}/cancel", cancellationToken: ct, requireVerifiedCaller: requireVerifiedCaller); }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Failed to cancel job run {RunId}.", runId);
@@ -634,9 +651,9 @@ public class OrchestratorProxyService(
 
     /// <summary>Reads a job's run history; a failed read is not an empty history.</summary>
     public Task<OrchestratorRead<List<JobHistoryEntryDto>>> ReadHistoryAsync(
-        string jobName, int limit = 50, CancellationToken ct = default) =>
+        string jobName, int limit = 50, CancellationToken ct = default, bool requireVerifiedCaller = false) =>
         ReadJsonAsync<List<JobHistoryEntryDto>>(
-            $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/history?limit={limit}", "job history", ct);
+            $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/history?limit={limit}", "job history", ct, requireVerifiedCaller);
 
     /// <summary>Reads the shared schedules attached to a job.</summary>
     public Task<OrchestratorRead<List<JobScheduleLinkDto>>> ReadJobSchedulesAsync(
@@ -842,12 +859,13 @@ public class OrchestratorProxyService(
         List<ETL_SQL.Core.Profiling.StatementMetricsPayload> Statements,
         List<JobDataQualityFailure> QualityFailures);
 
-    private async Task<OrchestratorRead<T>> ReadJsonAsync<T>(string path, string subject, CancellationToken ct)
+    private async Task<OrchestratorRead<T>> ReadJsonAsync<T>(
+        string path, string subject, CancellationToken ct, bool requireVerifiedCaller = false)
         where T : class
     {
         try
         {
-            using var resp = await SendAsync(HttpMethod.Get, path, cancellationToken: ct);
+            using var resp = await SendAsync(HttpMethod.Get, path, cancellationToken: ct, requireVerifiedCaller: requireVerifiedCaller);
             if (resp is null) return new(StatusCodes.Status503ServiceUnavailable, null);
             if (!resp.IsSuccessStatusCode) return new((int)resp.StatusCode, null);
             return new(StatusCodes.Status200OK, await resp.Content.ReadFromJsonAsync<T>(ct));
@@ -870,12 +888,19 @@ public class OrchestratorProxyService(
         string path,
         object? body = null,
         long? version = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool requireVerifiedCaller = false)
     {
         using var req = settings.CreateRequest(method, path);
         if (req is null) return null;
 
         var identityAssertion = await CurrentIdentityAssertionAsync(cancellationToken);
+        if (requireVerifiedCaller)
+        {
+            if (httpContext?.HttpContext?.User.Identity?.IsAuthenticated != true || identityAssertion is null)
+                return new HttpResponseMessage(System.Net.HttpStatusCode.Forbidden);
+            req.Headers.TryAddWithoutValidation(OrchestratorIdentityAssertion.RequireVerifiedCallerHeader, "true");
+        }
         if (identityAssertion is not null)
             req.Headers.TryAddWithoutValidation(OrchestratorIdentityAssertion.HeaderName, identityAssertion);
         if (version.HasValue)

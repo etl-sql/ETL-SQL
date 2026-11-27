@@ -73,11 +73,26 @@ export function readStudioReports(value: unknown): StudioReportDto[] {
 function studioFolder(value: unknown): value is StudioFolderDto {
     return isObject(value) && integer(value.id) && string(value.path) && string(value.name);
 }
-export function readStudioCatalogPage(value: unknown): StudioCatalogPageDto & { nextAfterId: number | null } {
-    if (!isObject(value) || !nullable(value.nextAfterId, integer)) throw new TypeError('Invalid Studio catalog page response.');
+export function readStudioCatalogPage(value: unknown): StudioCatalogPageDto {
+    if (!isObject(value)
+        || !integer(value.total) || value.total < 0
+        || !integer(value.page) || value.page < 1
+        || !integer(value.pageSize) || value.pageSize < 1 || value.pageSize > 50
+        || !integer(value.totalPages) || value.totalPages < 0)
+        throw new TypeError('Invalid Studio catalog page response.');
     const items = readStudioReports(value.items);
-    if (items.length > 50) throw new TypeError('Studio catalog page exceeded its limit.');
-    return { items, nextAfterId: value.nextAfterId ?? null };
+    if (items.length > value.pageSize) throw new TypeError('Studio catalog page exceeded its limit.');
+    if (value.total === 0 && (items.length > 0 || value.totalPages !== 0))
+        throw new TypeError('Invalid Studio catalog page response.');
+    if (value.total > 0 && value.totalPages !== Math.ceil(value.total / value.pageSize))
+        throw new TypeError('Invalid Studio catalog page response.');
+    return {
+        items,
+        total: value.total,
+        page: value.page,
+        pageSize: value.pageSize,
+        totalPages: value.totalPages
+    };
 }
 export function readStudioFolders(value: unknown): StudioFolderDto[] {
     if (!array(value, studioFolder)) throw new TypeError('Invalid Studio folder catalog response.');
@@ -117,10 +132,11 @@ export function readStudioDraft(value: unknown): StudioRecoveryDraftDto {
 
 export function readPipelineRunSubmitted(value: unknown): PipelineRunSubmittedDto {
     if (!isObject(value) || !version(value.runId) || !integer(value.pipelineId) || !version(value.version)
-        || !string(value.scriptHash) || !string(value.jobName))
+        || !string(value.scriptHash) || !string(value.jobName)
+        || ('replayed' in value && typeof value.replayed !== 'boolean'))
         throw new TypeError('Invalid pipeline run submission response.');
     return { runId: value.runId, pipelineId: value.pipelineId, version: value.version,
-        scriptHash: value.scriptHash, jobName: value.jobName };
+        scriptHash: value.scriptHash, jobName: value.jobName, replayed: value.replayed === true };
 }
 export function readPipelineRunCancelRequested(value: unknown): PipelineRunCancelRequestedDto {
     if (!isObject(value) || !version(value.runId) || !integer(value.pipelineId))

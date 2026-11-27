@@ -42,6 +42,21 @@ public class SecuritySessionService(
         foreach (var token in refreshTokens)
             token.RevokedAt = now;
 
+        var nativeSessions = await db.NativeClientSessions
+            .Where(s => s.TenantId == tenantId && ids.Contains(s.UserId) && s.RevokedAt == null)
+            .ToListAsync(ct);
+        foreach (var session in nativeSessions)
+        {
+            session.RevokedAt = now;
+            session.RevokedReason = "user_invalidated";
+        }
+
+        var nativeRefreshTokens = await db.NativeClientRefreshTokens
+            .Where(t => t.TenantId == tenantId && ids.Contains(t.UserId) && t.RevokedAt == null)
+            .ToListAsync(ct);
+        foreach (var token in nativeRefreshTokens)
+            token.RevokedAt = now;
+
         await db.SaveChangesAsync(ct);
 
         // Make in-process revocation immediate; cross-process latency stays bounded by the TTL.

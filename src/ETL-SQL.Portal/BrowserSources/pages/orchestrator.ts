@@ -410,9 +410,7 @@ function mountOrchestratorPage(): void {
     box('logoutBtn').addEventListener('click', () => { void authApi.logout(); }, { signal: lifetime.signal });
 
     // ── Start ─────────────────────────────────────────────────────────────────
-    // `?job=<name>` opens that job once the list has loaded. Studio writes a scheduled job into a
-    // script and sends the author here; a name that matches nothing leaves the list as it is, since
-    // the job may not have been run into existence yet.
+    // Studio links to a job by name. The VS Code tree can also link to a run of that job.
     async function start() {
         await loadAuthoringMode();
         if (lifetime.signal.aborted) return;
@@ -424,8 +422,11 @@ function mountOrchestratorPage(): void {
         void loadFleet();
         if (isAdmin) void unowned.refreshCount();
         await Promise.all([loadPipelineCatalog(), activity.refresh()]);
-        const requested = lifetime.signal.aborted ? null : findJob(new URLSearchParams(location.search).get('job'));
-        if (requested) detail.open(requested);
+        if (lifetime.signal.aborted) return;
+        const params = new URLSearchParams(location.search);
+        const requested = findJob(params.get('job'));
+        const runId = params.get('run');
+        if (requested) detail.open(requested, runId && /^[1-9]\d{0,18}$/.test(runId) ? runId : undefined);
     }
     const statusTimer = setInterval(() => { void activity.poll(); }, 5000);
     window.addEventListener('pagehide', () => {

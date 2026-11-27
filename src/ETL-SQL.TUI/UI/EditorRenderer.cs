@@ -538,22 +538,29 @@ namespace ETL_SQL.TUI.UI
                     }
                 }
 
-                // Layout: [Dirty Filename] [Pill] [Cursor/Time] | [StatusMessage]
+                // Layout: [Dirty Filename] [Target] [Pill] [Cursor/Time] | [StatusMessage]
+                string targetLabel = editor.Hosted.StatusLabel;
+                string targetStyle = editor.Hosted.IsHosted
+                    ? (editor.Hosted.Sessions.IsSignedIn ? "bold cyan" : "bold yellow")
+                    : "grey";
+                string targetZone = $" {targetLabel} ";
                 string leftZone = $" {dirtyDot}{fileLabel2} ";
                 string midZone = panelPill;
                 string rightZone = $" {cursor3} ";
 
                 int leftWidth = leftZone.Length;
+                int targetWidth = targetZone.Length;
                 int midWidth = ExecutionRunning ? 24 : SnippetModeActive ? 9 : PerformanceVisible ? 8 : ResultsVisible ? 11 : hasError ? 9 : ResultsFocus ? 18 : 11;
                 int rightWidth = rightZone.Length;
 
-                int availForStatus = totalWidth - leftWidth - midWidth - rightWidth - 6; // separators
+                int availForStatus = totalWidth - leftWidth - targetWidth - midWidth - rightWidth - 8; // separators
                 if (statusMsg.Length > availForStatus && availForStatus > 5)
                     statusMsg = statusMsg[..Math.Max(0, availForStatus - 3)] + "...";
 
                 string sep = $"[{TuiTheme.Instance.Ui.PanelUnfocusedBorder}]│[/]";
                 string statusMarkup =
                     $"[{TuiTheme.Instance.Ui.StatusBackground}]{Markup.Escape(leftZone)}[/]" + sep +
+                    $"[{targetStyle}]{Markup.Escape(targetZone)}[/]" + sep +
                     midZone + sep +
                     $"[{TuiTheme.Instance.Ui.StatusBackground}]{Markup.Escape(rightZone)}[/]" + sep +
                     $"[{statusZoneStyle}] {Markup.Escape(statusMsg).PadRight(Math.Max(0, availForStatus))} [/]";

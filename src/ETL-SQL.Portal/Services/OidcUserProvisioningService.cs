@@ -34,7 +34,14 @@ public sealed class OidcUserProvisioningService(
     /// federated login is rejected because the username belongs to a non-OIDC account.</summary>
     public sealed record Result(OidcSession? Session, bool Disabled, bool Refused, int? UserId);
 
-    public async Task<Result> SignInAsync(OidcIdentity identity, CancellationToken ct = default)
+    public sealed record ProvisionedUserResult(
+        PortalUser? User,
+        TenantContext? TenantContext,
+        bool Disabled,
+        bool Refused,
+        int? UserId);
+
+    public async Task<ProvisionedUserResult> ProvisionUserAsync(OidcIdentity identity, CancellationToken ct = default)
     {
         TenantContext? tenantContext = null;
         SharedIdentityPartitionStore? sharedStore = null;
@@ -59,7 +66,7 @@ public sealed class OidcUserProvisioningService(
         {
             await auditService.LogAsync(user.Id, "LOGIN_FAILED", "User", user.Id.ToString(),
                 "Account is disabled.");
-            return new Result(null, Disabled: true, Refused: false, user.Id);
+            return new ProvisionedUserResult(null, tenantContext, Disabled: true, Refused: false, user.Id);
         }
 
         // First login for this subject: the desired username must be free. If it already belongs to
@@ -74,7 +81,7 @@ public sealed class OidcUserProvisioningService(
             {
                 await auditService.LogAsync(existingByName.Id, "LOGIN_FAILED", "User", existingByName.Id.ToString(),
                     $"OIDC login refused: username belongs to a {existingByName.Provider} account.");
-                return new Result(null, Disabled: false, Refused: true, existingByName.Id);
+                return new ProvisionedUserResult(null, tenantContext, Disabled: false, Refused: true, existingByName.Id);
             }
         }
 
@@ -135,9 +142,21 @@ public sealed class OidcUserProvisioningService(
             throw;
         }
 
-        var session = await IssueSessionAsync(user, tenantContext, sharedStore, ct);
-        await auditService.LogAsync(user.Id, "LOGIN", "User", user.Id.ToString(), "OIDC");
-        return new Result(session, Disabled: false, Refused: false, user.Id);
+        return new ProvisionedUserResult(user, tenantContext, Disabled: false, Refused: false, user.Id);
+    }
+
+    public async Task<Result> SignInAsync(OidcIdentity identity, CancellationToken ct = default)
+    {
+        var provisioned = await ProvisionUserAsync(identity, ct);
+        if (provisioned.Disabled || provisioned.Refused || provisioned.User is null)
+            return new Result(null, provisioned.Disabled, provisioned.Refused, provisioned.UserId);
+
+        var sharedStore = config.SharedTenancy.Enabled && provisioned.TenantContext is not null
+            ? sharedStores.Create(provisioned.TenantContext)
+            : null;
+        var session = await IssueSessionAsync(provisioned.User, provisioned.TenantContext, sharedStore, ct);
+        await auditService.LogAsync(provisioned.User.Id, "LOGIN", "User", provisioned.User.Id.ToString(), "OIDC");
+        return new Result(session, Disabled: false, Refused: false, provisioned.User.Id);
     }
 
     /// <summary>Refreshes a returning federated user's profile from the latest token: adopts a new

@@ -33,11 +33,15 @@ import { consumePolicySave } from './saveGuard';
 import { replaceDocumentWithoutUndoHistory } from './documentWriter';
 import { analyzeSavePolicy, getSealPasswordRequirement, requiresRunPasswordPrompt } from './savePolicy';
 import { registerWalkthroughCommands } from './walkthrough';
+import { HostedSessionManager } from './hosted/hostedSessionManager';
+import { HostedExecutionController } from './hosted/hostedExecutionController';
+import { HostedJobsTreeProvider, HostedTreeNode } from './hosted/hostedJobsTreeProvider';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
 let connectionsProvider: ConnectionsProvider;
 let sidebarProvider: SidebarProvider;
+let hostedController: HostedExecutionController | undefined;
 let activeTerminals: vscode.Terminal[] = [];
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -201,11 +205,49 @@ export async function activate(context: vscode.ExtensionContext) {
     ResultsPanel.setOnMessageReceived((msg: unknown) => {
         const typedMsg = msg as { type: string; level?: string; message?: string };
         if (typedMsg.type === 'cancel') {
-            ReplManager.getInstance().cancel();
+            if (hostedController?.isRunning()) {
+                void hostedController.stopHostedRun();
+            } else {
+                ReplManager.getInstance().cancel();
+            }
         } else if (typedMsg.type === 'log') {
             logger.logWebview('Results', typedMsg.message || '', (typedMsg.level as 'info' | 'warn' | 'error') || 'info');
         }
     });
+
+    // Hosted execution manager & status bar (always defaults to Local (Offline) on startup)
+    const hostedSessions = new HostedSessionManager({
+        openBrowser: url => vscode.env.openExternal(vscode.Uri.parse(url)),
+        log: msg => outputChannel.appendLine(msg)
+    });
+    const hostedExecution = new HostedExecutionController({
+        sessions: hostedSessions,
+        log: msg => outputChannel.appendLine(msg)
+    });
+    hostedController = hostedExecution;
+    const hostedJobsTree = new HostedJobsTreeProvider({
+        sessions: hostedSessions,
+        client: hostedExecution.client,
+        runSavedPipeline: (id, version, name) => hostedExecution.runSavedPipeline(id, version, name),
+        log: msg => outputChannel.appendLine(msg)
+    });
+    const hostedJobsView = vscode.window.createTreeView('etlsql-hosted-jobs', {
+        treeDataProvider: hostedJobsTree,
+        showCollapseAll: true
+    });
+    context.subscriptions.push(
+        hostedController,
+        hostedJobsTree,
+        hostedJobsView,
+        vscode.commands.registerCommand('etlsql.hosted.selectTarget', () => hostedController?.selectTarget()),
+        vscode.commands.registerCommand('etlsql.hosted.connect', (alias?: string) => hostedController?.connect(alias)),
+        vscode.commands.registerCommand('etlsql.hosted.disconnect', () => hostedController?.disconnect()),
+        vscode.commands.registerCommand('etlsql.hostedJobs.refresh', () => hostedJobsTree.refresh()),
+        vscode.commands.registerCommand('etlsql.hostedJobs.loadMore', (node?: HostedTreeNode) => hostedJobsTree.loadMore(node)),
+        vscode.commands.registerCommand('etlsql.hostedJobs.openInPortal', (node?: HostedTreeNode) => hostedJobsTree.openInPortal(node)),
+        vscode.commands.registerCommand('etlsql.hostedJobs.run', (node?: HostedTreeNode) => hostedJobsTree.runNode(node)),
+        vscode.commands.registerCommand('etlsql.hostedJobs.stop', (node?: HostedTreeNode) => hostedJobsTree.stopNode(node))
+    );
 
     let serverPath = (config.get<string>('server.path') || '').trim();
 
@@ -341,15 +383,19 @@ export async function activate(context: vscode.ExtensionContext) {
 
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.runScript', () => {
-        runEtlSql(context);
+        return runEtlSql(context);
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.runSelection', () => {
-        runEtlSql(context, true);
+        return runEtlSql(context, true);
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('etlsql.stopScript', () => {
-        ReplManager.getInstance().cancel();
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.stopScript', async () => {
+        if (hostedController?.isRunning()) {
+            await hostedController.stopHostedRun();
+        } else {
+            ReplManager.getInstance().cancel();
+        }
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.format', async () => {
@@ -586,6 +632,17 @@ export async function activate(context: vscode.ExtensionContext) {
             await vscode.commands.executeCommand('etlsql.secureConnection', document.uri.toString());
         }
     }));
+
+    if (context.extensionMode === vscode.ExtensionMode.Test) {
+        return {
+            getHostedController: () => hostedController,
+            getHostedJobsTree: () => hostedJobsTree,
+            getHostedJobsView: () => hostedJobsView,
+            onDidResultsDelivered: ResultsPanel.onDidDeliverMessage,
+            hasLoadedResultsUi: () => ResultsPanel.hasLoadedUiHtml()
+        };
+    }
+    return undefined;
 }
 
 function syncConnectionsToLsp() {
@@ -602,6 +659,15 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
         vscode.window.showInformationMessage("Please open an ETL-SQL script to run.");
+        return;
+    }
+
+    if (hostedController?.isHostedTarget()) {
+        if (selectionOnly) {
+            hostedController.handleRunSelectionUnavailable();
+            return;
+        }
+        await hostedController.runHostedScript(editor);
         return;
     }
 
@@ -801,6 +867,12 @@ function forceKillProcesses() {
 }
 
 export async function deactivate(): Promise<void> {
+    try {
+        await hostedController?.disconnectOnShutdown();
+    } catch (err) {
+        outputChannel?.appendLine(`[Extension] Error disconnecting hosted session: ${err}`);
+    }
+
     // Force kill processes immediately to unlock files for VS Code's installer
     forceKillProcesses();
 

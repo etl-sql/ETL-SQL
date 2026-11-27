@@ -301,10 +301,27 @@ export default {
         : ['crlf-pipeline', 'pipeline-run', 'degraded-editor', 'large-document'].includes(fixtureId) ? 'doc-etl' : undefined,
       catalogReports: fixtureId === 'catalog-paging' ? catalog.slice(0, 50) : undefined,
       catalogDiscovery: fixtureId === 'catalog-paging' ? {
-        nextAfterId: 50,
-        search: async (query, afterId) => {
-          const matches = catalog.filter(report => report.id > afterId && report.name.includes(query));
-          return { items: matches.slice(0, 50), nextAfterId: matches.length > 50 ? matches[49].id : null };
+        page: 1,
+        pageSize: 50,
+        total: catalog.length,
+        totalPages: Math.ceil(catalog.length / 50),
+        search: async (query, page, pageSize) => {
+          const term = (query || '').trim().toLowerCase();
+          const matches = catalog.filter(report =>
+            !term
+            || report.name.toLowerCase().includes(term)
+            || report.folderPath.toLowerCase().includes(term));
+          const total = matches.length;
+          const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
+          const effectivePage = total === 0 ? 1 : Math.min(Math.max(1, page), totalPages);
+          const start = (effectivePage - 1) * pageSize;
+          return {
+            items: matches.slice(start, start + pageSize),
+            total,
+            page: effectivePage,
+            pageSize,
+            totalPages,
+          };
         },
       } : undefined,
       onOpenDocument: fixtureId === 'catalog-paging' ? async report => ({

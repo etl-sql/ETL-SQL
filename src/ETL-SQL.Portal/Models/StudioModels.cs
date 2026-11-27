@@ -67,8 +67,18 @@ public sealed record StudioReportDto(
 
 public sealed record StudioFolderDto(int Id, string Path, string Name);
 
-/// <summary>A bounded discovery page. NextAfterId advances past the inspected candidate rows.</summary>
-public sealed record StudioCatalogPageDto(IReadOnlyList<StudioReportDto> Items, int? NextAfterId);
+/// <summary>A bounded, visibility-filtered Studio catalog discovery page.</summary>
+public sealed record StudioCatalogPageDto(
+    IReadOnlyList<StudioReportDto> Items,
+    int Total,
+    int Page,
+    int PageSize,
+    int TotalPages);
+
+/// <summary>Saved-revision metadata visible to a caller with permission to execute a pipeline.</summary>
+public sealed record StudioRunnablePipelineDto(int Id, string Name, string FolderPath, long Version, bool CanAuthor);
+
+public sealed record StudioRunnablePipelinePageDto(IReadOnlyList<StudioRunnablePipelineDto> Items, int? NextAfterId);
 
 /// <summary>Asks the Orchestrator to run one saved pipeline revision.</summary>
 /// <param name="Version">The saved version the author is looking at; a stale one is refused.</param>
@@ -80,7 +90,8 @@ public sealed record PipelineRunSubmittedDto(
     int PipelineId,
     long Version,
     string ScriptHash,
-    string JobName);
+    string JobName,
+    bool Replayed = false);
 
 /// <summary>
 /// A refusal the author can act on. <see cref="Code"/> is stable and names whose decision it was:

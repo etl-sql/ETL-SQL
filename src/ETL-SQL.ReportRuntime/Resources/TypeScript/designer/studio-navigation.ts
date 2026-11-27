@@ -21,7 +21,7 @@ export interface StudioNavigationContext {
     readonly hasWorkspaceHost: boolean;
     readonly homeStage: StudioDomElement;
     readonly inspector: StudioDomElement;
-    readonly openCatalogReport: (report: StudioDynamic, proj?: string) => Promise<any>;
+    readonly openCatalogReport: (report: StudioDynamic, proj?: string, options?: { onError?: (message: string) => void }) => Promise<any>;
     readonly openPrivateDraft: (summary: StudioPrivateDraftSummary, proj?: string) => Promise<any>;
     readonly deletePrivateDraft: (summary: StudioPrivateDraftSummary) => Promise<boolean>;
     readonly openWorkspaceFile: (filePath: string, proj?: string) => Promise<boolean>;
@@ -46,27 +46,98 @@ export interface StudioNavigationContext {
 }
 
 export function createStudioNavigation(hostContext: StudioNavigationContext) {
-    let catalogQuery = '';
-    let catalogCursor = 0;
-    let catalogNext = hostContext.opts.catalogDiscovery?.nextAfterId ?? null;
-    const catalogPrevious: number[] = [];
-    let catalogLoading = false;
+    type CatalogFocusKind = 'query' | 'submit' | 'refresh' | 'previous' | 'next';
+    interface CatalogFocusSnapshot {
+        kind: CatalogFocusKind;
+        selectionStart?: number | null;
+        selectionEnd?: number | null;
+    }
 
-    async function loadCatalog(query: string, cursor: number, previous: number[]) {
+    let catalogQuery = '';
+    let catalogPage = hostContext.opts.catalogDiscovery?.page ?? 1;
+    let catalogPageSize = hostContext.opts.catalogDiscovery?.pageSize ?? 50;
+    let catalogTotal = hostContext.opts.catalogDiscovery?.total ?? 0;
+    let catalogTotalPages = hostContext.opts.catalogDiscovery?.totalPages ?? 0;
+    let catalogRequestSeq = 0;
+    let catalogAbort: AbortController | null = null;
+    let catalogNotice: string | null = null;
+
+    function captureCatalogFocus(): CatalogFocusSnapshot | null {
+        const active = document.activeElement;
+        if (!(active instanceof HTMLElement) || !hostContext.homeStage.contains(active)) return null;
+        if (active instanceof HTMLInputElement && active.name === 'query') {
+            return { kind: 'query', selectionStart: active.selectionStart, selectionEnd: active.selectionEnd };
+        }
+        if (active.hasAttribute('data-catalog-submit')) return { kind: 'submit' };
+        if (active.hasAttribute('data-catalog-refresh')) return { kind: 'refresh' };
+        if (active.hasAttribute('data-catalog-previous')) return { kind: 'previous' };
+        if (active.hasAttribute('data-catalog-next')) return { kind: 'next' };
+        return null;
+    }
+
+    function restoreCatalogFocus(snapshot: CatalogFocusSnapshot | null): void {
+        if (!snapshot || hostContext.state.activeDocId !== '__home__') return;
+        const active = document.activeElement;
+        if (active && active !== document.body && !hostContext.homeStage.contains(active)) return;
+
+        const selectorsByKind: Record<CatalogFocusKind, string[]> = {
+            query: ['[data-catalog-search] [name="query"]'],
+            submit: ['[data-catalog-submit]', '[data-catalog-search] [name="query"]'],
+            refresh: ['[data-catalog-refresh]', '[data-catalog-search] [name="query"]'],
+            previous: ['[data-catalog-previous]', '[data-catalog-next]', '[data-catalog-search] [name="query"]'],
+            next: ['[data-catalog-next]', '[data-catalog-previous]', '[data-catalog-search] [name="query"]']
+        };
+        for (const selector of selectorsByKind[snapshot.kind]) {
+            const target = hostContext.homeStage.querySelector<HTMLElement>(selector);
+            if (!target) continue;
+            if (target instanceof HTMLButtonElement && target.disabled) continue;
+            target.focus();
+            if (snapshot.kind === 'query' && target instanceof HTMLInputElement
+                && snapshot.selectionStart != null && snapshot.selectionEnd != null) {
+                target.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
+            }
+            return;
+        }
+    }
+
+    function renderCatalogResponse(fallbackFocus?: CatalogFocusKind) {
+        const focus = captureCatalogFocus() ?? (fallbackFocus ? { kind: fallbackFocus } : null);
+        const searchSelector = '[data-catalog-search] [name="query"]';
+        const draft = hostContext.homeStage.querySelector<HTMLInputElement>(searchSelector)?.value;
+        renderStudioHome();
+        const input = hostContext.homeStage.querySelector<HTMLInputElement>(searchSelector);
+        if (input && draft !== undefined) input.value = draft;
+        restoreCatalogFocus(focus);
+    }
+
+    async function loadCatalog(query: string, page: number, fallbackFocus?: CatalogFocusKind) {
         const discovery = hostContext.opts.catalogDiscovery;
-        if (!discovery || catalogLoading) return;
-        catalogLoading = true;
+        if (!discovery) return;
+        const requestSeq = ++catalogRequestSeq;
+        catalogAbort?.abort();
+        const abortController = new AbortController();
+        catalogAbort = abortController;
+        const targetPage = Math.max(1, page);
         try {
-            const page = await discovery.search(query, cursor);
-            hostContext.state.catalogReports = page.items;
+            const result = await discovery.search(query, targetPage, catalogPageSize, abortController.signal);
+            if (requestSeq !== catalogRequestSeq || abortController.signal.aborted) return;
+            hostContext.state.catalogReports = result.items;
             catalogQuery = query;
-            catalogCursor = cursor;
-            catalogNext = page.nextAfterId;
-            catalogPrevious.splice(0, catalogPrevious.length, ...previous);
-            renderStudioHome();
+            catalogPage = result.page;
+            catalogPageSize = result.pageSize;
+            catalogTotal = result.total;
+            catalogTotalPages = result.totalPages;
+            catalogNotice = null;
+            renderCatalogResponse(fallbackFocus);
         } catch (error) {
-            _feedback.notify(errorMessage(error), { title: 'Catalog refresh failed', tone: 'warning' });
-        } finally { catalogLoading = false; }
+            if (requestSeq !== catalogRequestSeq || abortController.signal.aborted) return;
+            const message = errorMessage(error);
+            catalogNotice = message;
+            renderCatalogResponse(fallbackFocus);
+            _feedback.notify(message, { title: 'Catalog refresh failed', tone: 'warning' });
+        } finally {
+            if (catalogAbort === abortController) catalogAbort = null;
+        }
     }
 
     function mountShell() {
@@ -113,6 +184,7 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
 
                 <!-- Global Action Controls -->
                 <div class="etlsql-studio-actions">
+                    ${hostContext.opts.hostedExecution ? `<button type="button" class="etlsql-studio-btn etlsql-hosted-target-btn" data-hosted-target-btn data-hosted-mode="local" data-hosted-signed-in="false" title="Execution Target (Local Offline or Hosted Portal)">Local (Offline)</button>` : ''}
                     <button type="button" class="etlsql-studio-btn" data-action="theme" title="Toggle Theme">
                         ${_studioIcon('theme', 14)}
                     </button>
@@ -135,6 +207,7 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
             </header>
 
             <div class="etlsql-studio-preview-banner" data-studio-preview-banner role="status" hidden></div>
+            ${hostContext.opts.hostedExecution ? '<div class="etlsql-studio-hosted-banner" data-hosted-banner role="status" hidden></div>' : ''}
 
             <!-- Workbench Body -->
             <div class="etlsql-studio-body">
@@ -477,17 +550,25 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
                 <section class="etlsql-studio-home-recent">
                     <div class="etlsql-studio-recent-header">
                         <h2>${catalogMode ? 'Catalog Documents' : 'Workspace Files'}</h2>
-                        <span class="etlsql-recent-count">${files.length} available ${catalogMode ? 'document' : 'script'}${files.length === 1 ? '' : 's'}</span>
+                        <span class="etlsql-recent-count">${hostContext.opts.catalogDiscovery ? catalogTotal : files.length} available ${catalogMode ? 'document' : 'script'}${(hostContext.opts.catalogDiscovery ? catalogTotal : files.length) === 1 ? '' : 's'}</span>
                     </div>
-                    ${hostContext.opts.catalogDiscovery ? `
+                    ${hostContext.opts.catalogDiscovery ? (() => {
+                        const rangeStart = catalogTotal === 0 ? 0 : (catalogPage - 1) * catalogPageSize + 1;
+                        const rangeEnd = catalogTotal === 0 ? 0 : Math.min(catalogTotal, rangeStart + files.length - 1);
+                        const statusText = catalogTotal === 0
+                            ? '0 matching catalog documents.'
+                            : `Showing ${rangeStart}–${rangeEnd} of ${catalogTotal} (Page ${catalogPage} of ${catalogTotalPages}).`;
+                        return `
                     <form data-catalog-search role="search">
                         <label>Search catalog <input name="query" maxlength="160" value="${_escapeHtml(catalogQuery)}" aria-label="Search catalog"></label>
-                        <button type="submit">Search</button>
+                        <button type="submit" data-catalog-submit>Search</button>
                         <button type="button" data-catalog-refresh>Refresh catalog</button>
-                        <button type="button" data-catalog-previous ${catalogPrevious.length ? '' : 'disabled'}>Previous page</button>
-                        <button type="button" data-catalog-next ${catalogNext === null ? 'disabled' : ''}>Next page</button>
-                        <p role="status">Up to 50 catalog entries inspected per page. Pages can be empty when entries are outside your permissions.</p>
-                    </form>` : ''}
+                        <button type="button" data-catalog-previous ${catalogPage > 1 ? '' : 'disabled'}>Previous page</button>
+                        <button type="button" data-catalog-next ${catalogPage < catalogTotalPages ? '' : 'disabled'}>Next page</button>
+                        <p role="status" data-catalog-status>${statusText}</p>
+                        ${catalogNotice ? `<p role="alert" data-catalog-alert style="margin:6px 0 0; color:var(--portal-danger,#f85149);">${_escapeHtml(catalogNotice)}</p>` : ''}
+                    </form>`;
+                    })() : ''}
                     ${files.length === 0 ? `
                         <div style="padding:24px; text-align:center; color:var(--portal-text-soft,#8b949e); background:var(--portal-surface,#161b22); border:1px dashed var(--portal-border,#30363d); border-radius:8px;">
                             <p style="margin:0 0 12px; font-size:0.875rem;">No existing ${catalogMode ? 'reports are available in the catalog' : 'scripts found in this workspace directory'}.</p>
@@ -549,14 +630,16 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
         queryElement(hostContext.homeStage, '[data-catalog-search]')?.addEventListener('submit', event => {
             event.preventDefault();
             const input = hostContext.homeStage.querySelector<HTMLInputElement>('[name="query"]');
-            void loadCatalog(input?.value.trim() || '', 0, []);
+            void loadCatalog(input?.value.trim() || '', 1, 'query');
         });
-        queryElement(hostContext.homeStage, '[data-catalog-refresh]')?.addEventListener('click', () => { void loadCatalog(catalogQuery, 0, []); });
+        queryElement(hostContext.homeStage, '[data-catalog-refresh]')?.addEventListener('click', () => {
+            void loadCatalog(catalogQuery, catalogPage, 'refresh');
+        });
         queryElement(hostContext.homeStage, '[data-catalog-next]')?.addEventListener('click', () => {
-            if (catalogNext !== null) void loadCatalog(catalogQuery, catalogNext, [...catalogPrevious, catalogCursor]);
+            if (catalogPage < catalogTotalPages) void loadCatalog(catalogQuery, catalogPage + 1, 'next');
         });
         queryElement(hostContext.homeStage, '[data-catalog-previous]')?.addEventListener('click', () => {
-            if (catalogPrevious.length) void loadCatalog(catalogQuery, catalogPrevious.at(-1)!, catalogPrevious.slice(0, -1));
+            if (catalogPage > 1) void loadCatalog(catalogQuery, catalogPage - 1, 'previous');
         });
 
         queryElements(hostContext.homeStage, '[data-open-file]').forEach(b => {
@@ -570,7 +653,19 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
         queryElements(hostContext.homeStage, '[data-open-report]').forEach(b => {
             b.addEventListener('click', async () => {
                 const report = hostContext.state.catalogReports.find((item: StudioDynamic) => String(item.id) === b.dataset.openReport);
-                if (report) await hostContext.openCatalogReport(report, b.dataset.openProj || 'split');
+                if (!report) return;
+                let failedMessage: string | null = null;
+                const opened = await hostContext.openCatalogReport(report, b.dataset.openProj || 'split', {
+                    onError: message => { failedMessage = message; }
+                });
+                if (failedMessage) {
+                    catalogNotice = failedMessage;
+                    if (hostContext.state.activeDocId === '__home__') {
+                        renderCatalogResponse('refresh');
+                    }
+                } else if (opened && catalogNotice) {
+                    catalogNotice = null;
+                }
             });
         });
 

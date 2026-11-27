@@ -53,6 +53,11 @@ PortalUser ──< UserGroup >── Group ──< FolderAcl >── Folder ─�
                                                                          └──< ReportJobLink
 Dataset ──< DatasetAcl
 PortalUser ──< RefreshToken
+NativeClientAuthTransaction (expiring browser sign-in and consent state)
+NativeClientAuthCode        (hashed single-use code bound to the client, Portal, tenant, and verifier)
+NativeClientSession         (revocable tenant-scoped native client session)
+NativeClientRefreshToken    (hashed rotating refresh credential linked to the native session)
+StudioRunIdempotency        (source-host run submission receipt keyed by tenant, user, pipeline, and request)
 AuditLog        (append-oriented portal event table)
 PortalExecutionJob (durable portal execution/refresh polling state)
 PortalSecret            (encrypted secret store: SECRET:name for Portal-hosted execution)
@@ -367,6 +372,13 @@ All endpoints require a `Bearer` JWT token unless marked **Public**.
 | POST | `/api/auth/refresh` | Public | Refresh access token |
 | POST | `/api/auth/change-password` | Any | Change own password |
 | POST | `/api/auth/logout` | Any | Invalidate the caller's account sessions |
+
+Native clients use `/api/auth/client`. The browser starts at `authorize` and uses `login` and
+`consent` to complete the Portal sign-in and approve the request. The client exchanges the
+short-lived code with its PKCE verifier at `POST /api/auth/client/exchange`.
+`POST /api/auth/client/refresh` rotates the native session credential.
+`POST /api/auth/client/logout` revokes that native session. Tenant backup and restore exclude
+these sign-in records and the source host's pipeline submission receipts.
 
 ### Folders
 
@@ -1034,6 +1046,31 @@ a catalog report uses.
 Studio reaches these through the `privateDrafts` host option. Save on an untitled document keeps it
 as a draft, Studio Home lists the caller's drafts, and Save on an open draft writes the next version.
 
+### Native hosted clients
+
+TUI and desktop Studio use the shared hosted client in `ETL-SQL.Core/Hosted`. The
+`LoopbackPkceAuthenticator` opens Portal sign-in in the system browser and listens for the
+authorization code on a loopback callback. `HostedClientSessionService` holds the session
+credentials in memory and refreshes them as needed. `HostedServerRegistryStore` persists the
+saved server addresses and display settings. The desktop .NET host keeps Portal credentials
+inside the host and serves execution status to its browser UI.
+
+`HostedPipelineClient` calls the Portal API for runnable saved revisions, submission, run status,
+recovery, and Stop. `HostedRunCoordinator` keeps the submission key across uncertain responses
+and binds Stop to the original run and session. VS Code uses a TypeScript client for the same
+server contract. Each client opens with local execution selected. See the
+[hosted client sign-in and execution contract](decisions/hosted-client-sign-in-and-execution.md).
+
+### Hosted jobs and recent runs
+
+The VS Code jobs view reads `GET /api/studio/hosted-jobs` with `offset` and `limit`. Portal
+combines authorized saved revisions with jobs visible to the verified Orchestrator caller
+before paging. The job's `/{jobName}/runs` and `/{jobName}/runs/{runId}` subroutes return recent
+runs and the selected run's details. `POST /{jobName}/trigger` submits an authorized Orchestrator
+job. Saved Portal pipeline revisions use the pipeline run endpoint below.
+`POST /{jobName}/runs/{runId}/cancel` requests Stop for that run. Run and Stop recheck the
+caller's permissions against the current job and run.
+
 ### Studio pipeline runs
 
 A saved catalog pipeline runs in the Orchestrator, never in the Portal
@@ -1095,14 +1132,16 @@ their existing allow-list. A lost interactive response is displayed as `Unknown`
 kept in the original document and the Portal audit. Bounded host evidence:
 [Studio execution scope](decisions/studio-execution-scope-evidence.md).
 
-Studio Home uses `GET /api/studio/catalog?query=...&afterId=...`. Each request inspects at most 50
-tenant-scoped candidate documents plus one lookahead row. Permissions are resolved in batches with
-the same ownership, authorship, and ranked ACL rules as a single report check. The response returns
-only visible summaries and a cursor past the inspected rows; pages can be empty when candidates
-are inaccessible. Search, Next/Previous, and explicit Refresh update discovery without replacing
-open documents. Direct links and new opens recheck `/api/studio/reports/{id}/summary`; deleted or
-moved selections fail with an explanation. The older report-list endpoint remains available to its
-other callers. This is request-driven discovery, not live catalog synchronization.
+Studio Home uses `GET /api/studio/catalog?query=...&page=...&pageSize=...` (default and capped at
+50 items per page). Tenant scope and effective Author-or-higher permissions (folder ownership,
+ranked folder/report ACLs, and authorship upgrade) are applied in SQL before counting and paging,
+so hidden documents never affect page results or totals. Results are ordered stably by folder path,
+name, and document ID. Studio Home tracks request generations with `AbortController` so slow
+responses to older searches cannot overwrite newer results, and preserves keyboard focus across
+search and page navigation. Search, Next/Previous, and explicit Refresh update discovery without
+replacing open documents. Direct links and new opens recheck `/api/studio/reports/{id}/summary`;
+deleted or moved selections fail with an explanation. The older report-list endpoint remains
+available to its other callers. This is request-driven discovery, not live catalog synchronization.
 
 The session response advertises `maxScriptCharacters` from the designer configuration. Shared
 Studio editor services pause above that UTF-16 character count while keeping the buffer editable;

@@ -27,6 +27,7 @@ import { createStudioGovernanceDatasets } from './studio-governance-datasets.js'
 import { createStudioGovernanceQuality } from './studio-governance-quality.js';
 import { createStudioGovernanceSecurity } from './studio-governance-security.js';
 import { createStudioGovernanceTags } from './studio-governance-tags.js';
+import { createStudioHostedExecution, type StudioHostedExecutionHandle } from './studio-hosted.js';
 import { createStudioHostAdapter } from './studio-host.js';
 import { createStudioLeaseLifecycle } from './studio-lifecycle.js';
 import { createStudioOutline } from './studio-outline.js';
@@ -83,12 +84,17 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         get workspaceTreeMarkup() { return workspaceTreeMarkup; },
     });
 
-    const { updateSnapshotPackage, setDocumentTrace, paintResults, setDocumentDiagnostics, updateRunControls, handleStopRun, executeRun, executePipelineRun, runsAsSavedPipeline } = createStudioRunSession({
+    let hostedExecution: StudioHostedExecutionHandle | null = null;
+
+    const { updateSnapshotPackage, setDocumentTrace, setDocumentTraceForTarget, repaintActiveTarget, paintResults, setDocumentDiagnostics, updateRunControls, handleStopRun, executeRun, executePipelineRun, runsAsSavedPipeline } = createStudioRunSession({
         get activeDocumentContext() { return activeDocumentContext; },
         get apiBase() { return apiBase; },
         get authFetch() { return authFetch; },
         get documentContext() { return documentContext; },
         get getActiveDoc() { return getActiveDoc; },
+        get getCurrentTargetKey() { return () => hostedExecution?.getCurrentTargetKey() || 'local'; },
+        get isHostedRunActive() { return (doc: StudioRuntimeDocument | null, targetKey: string) => Boolean(hostedExecution?.isRunActiveFor(doc, targetKey)); },
+        get stopHostedRun() { return (doc: StudioRuntimeDocument) => hostedExecution?.stopActiveRun(doc); },
         get pipelineRuns() { return opts.pipelineRuns; },
         get shell() { return shell; },
         get state() { return state; },
@@ -523,6 +529,22 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
     const modalBackdrop = queryElement(shell, '[data-modal-backdrop]');
     const modalBox = queryElement(shell, '[data-modal-box]');
 
+    if (opts.hostedExecution) {
+        hostedExecution = createStudioHostedExecution({
+            apiBase,
+            authFetch,
+            getActiveDoc,
+            modalBackdrop,
+            modalBox,
+            repaintActiveTarget,
+            setDocumentTraceForTarget,
+            setupModalAccessibility,
+            shell,
+            state,
+            updateRunControls,
+        });
+    }
+
     let currentSplitPct = 50;
 
     queryElement(inspector, '[data-properties-back]').addEventListener('click', () => {
@@ -865,6 +887,13 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
     queryElement(shell, '[data-action="run-selected"]')?.addEventListener('click', async () => {
         const doc = getActiveDoc();
         if (!doc) return;
+        if (hostedExecution?.isHostedMode()) {
+            _feedback.notify(
+                'Hosted execution runs saved Portal revisions. Use Run to execute the saved revision, or switch to Local (Offline) to run a selection locally.',
+                { title: 'Hosted Target Active', tone: 'info' }
+            );
+            return;
+        }
         const script = state.editorInstance?.getValue?.() || doc.content;
         const selectedText = String(state.editorInstance?.getSelection?.() || '').trim();
         if (selectedText) {
@@ -892,6 +921,10 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
     queryElement(shell, '[data-action="run"]')?.addEventListener('click', async () => {
         const doc = getActiveDoc();
         if (!doc) return;
+        if (hostedExecution?.isHostedMode()) {
+            await hostedExecution.runActiveDocument(doc);
+            return;
+        }
         // A saved catalog pipeline runs as its saved revision in the Orchestrator. Selection runs
         // and previews stay on the bounded read-only path.
         if (runsAsSavedPipeline(doc)) {
@@ -1004,6 +1037,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         getStoredProjectionPreference,
         storeProjectionPreference,
         dispose: () => {
+            hostedExecution?.dispose();
             document.removeEventListener('click', onOutsideClick);
             document.removeEventListener('keydown', onShellKeyDown);
             window.removeEventListener('beforeunload', onBeforeUnload);

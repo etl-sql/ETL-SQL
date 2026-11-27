@@ -43,6 +43,8 @@ export interface StudioRuntimeContext {
     /** The pipeline run this document is following, while it is following one. */
     pipelineRun?: PipelineRunTracking | null;
     resultsTrace: RunTraceEvent[];
+    resultsTraceByTarget?: Record<string, RunTraceEvent[]>;
+    activeRunTargetKey?: string | null;
     diagnostics: RunDiagnostic[];
     dagRevision: number;
     modelRevision: number;
@@ -314,13 +316,25 @@ export interface StudioPrivateDraftHost {
 export interface StudioOptions extends StudioStateOptions {
     maxScriptCharacters?: number;
     catalogDiscovery?: {
-        nextAfterId: number | null;
-        search(query: string, afterId: number): Promise<{ items: StudioCatalogReport[]; nextAfterId: number | null }>;
+        page: number;
+        pageSize: number;
+        total: number;
+        totalPages: number;
+        search(query: string, page: number, pageSize: number, signal?: AbortSignal): Promise<{
+            items: StudioCatalogReport[];
+            total: number;
+            page: number;
+            pageSize: number;
+            totalPages: number;
+        }>;
     };
     initialSnapshot?: any;
     previewUrl?: string;
+    /** Desktop Studio hosted Portal execution support (ST58). */
+    hostedExecution?: boolean;
     onSave?: (content: string, path: string, document?: any) => Promise<any> | any;
     onExit?: (options: { force: boolean; activeRuns: number; dirtyDocuments: number }) => Promise<boolean> | boolean;
+    onValidateCatalogSelection?: (report: unknown) => Promise<unknown>;
     onOpenDocument?: (report: any) => Promise<any> | any;
     /** The catalog keeps pipelines and queries (.etlsql) as well as reports. */
     catalogPipelines?: boolean;

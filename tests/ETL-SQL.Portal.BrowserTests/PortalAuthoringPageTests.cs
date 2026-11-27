@@ -134,12 +134,14 @@ public sealed class PortalAuthoringPageTests(StudioSurfaceFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        // Startup reads the first bounded catalog page, /api/studio/catalog?query=&afterId=0.
+        // Startup reads the first bounded catalog page, /api/studio/catalog?query=&page=1&pageSize=50.
         var pattern = endpoint == "catalog" ? "**/api/studio/catalog?*" : $"**/api/studio/{endpoint}";
         await page.RouteAsync(pattern, route => route.FulfillAsync(new()
         {
             ContentType = "application/json",
-            Body = endpoint == "catalog" ? """{"items":[{}],"nextAfterId":null}""" : "{}"
+            Body = endpoint == "catalog"
+                ? """{"items":[{}],"total":1,"page":1,"pageSize":50,"totalPages":1}"""
+                : "{}"
         }));
         await page.GotoWithDiagnosticsAsync("/studio.html");
         await Expect(page.Locator("#studioHost [role=alert]")).ToContainTextAsync("Invalid Studio");

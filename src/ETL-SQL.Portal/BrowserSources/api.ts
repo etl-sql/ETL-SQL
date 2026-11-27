@@ -351,7 +351,8 @@ export const navigationApi = {
 export const studioApi = {
     session: (signal?: AbortSignal) => apiJson('/api/studio/session', { signal }),
     reports: (signal?: AbortSignal) => apiJson('/api/studio/reports', { signal }),
-    catalog: (query = '', afterId = 0, signal?: AbortSignal) => apiJson(`/api/studio/catalog?query=${encodeURIComponent(query)}&afterId=${afterId}`, { signal }),
+    catalog: (query = '', page = 1, pageSize = 50, signal?: AbortSignal) =>
+        apiJson(`/api/studio/catalog?query=${encodeURIComponent(query)}&page=${page}&pageSize=${pageSize}`, { signal }),
     reportSummary: (id: number, signal?: AbortSignal) => apiJson(`/api/studio/reports/${id}/summary`, { signal }),
     folders: (signal?: AbortSignal) => apiJson('/api/studio/folders', { signal }),
     privateDrafts: (signal?: AbortSignal) => apiJson('/api/studio/private-drafts', { signal }),

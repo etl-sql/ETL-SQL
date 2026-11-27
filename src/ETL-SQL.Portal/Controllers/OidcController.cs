@@ -28,13 +28,14 @@ public sealed class OidcController(
     IOidcDiscoveryProvider discovery,
     IDataProtectionProvider dataProtection,
     AuditService auditService,
+    NativeClientAuthService nativeClientAuth,
     ILogger<OidcController> log) : ControllerBase
 {
     private const string FlowCookie = "ETLSQL_OIDC_FLOW";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private IDataProtector Protector => dataProtection.CreateProtector("ETL_SQL.Portal.Oidc.LoginFlow.v1");
 
-    private sealed record FlowState(string State, string Nonce, string CodeVerifier);
+    private sealed record FlowState(string State, string Nonce, string CodeVerifier, string? NativeTransactionId = null);
 
     /// <summary>Admin-only OIDC diagnostics (P2.1): the effective configuration with the client
     /// secret redacted to a presence flag, the startup validation errors, and a live discovery
@@ -87,7 +88,7 @@ public sealed class OidcController(
 
     [HttpGet("login")]
     [AllowAnonymous]
-    public async Task<IActionResult> Login(CancellationToken ct)
+    public async Task<IActionResult> Login([FromQuery(Name = "native_tx")] string? nativeTx = null, CancellationToken ct = default)
     {
         if (!config.SharedTenancy.Enabled && !oidc.Enabled)
             return NotFound(new { error = "oidc_not_configured" });
@@ -100,15 +101,31 @@ public sealed class OidcController(
                 var authority = await sharedAuthorities.ResolveForRequestAsync(Request, ct);
                 if (authority is null)
                     return NotFound(new { error = "oidc_not_configured" });
+
+                if (!string.IsNullOrWhiteSpace(nativeTx))
+                {
+                    var (pendingTx, _) = await nativeClientAuth.ValidatePendingLoginAsync(
+                        Request, nativeTx, authority.TenantId, ct);
+                    if (pendingTx is null)
+                        return BadRequest(new { error = "invalid_transaction" });
+                }
+
                 var request = await sharedOidc.BuildAuthorizationRequestAsync(authority, redirectUri, ct);
-                var flow = sharedFlows.Begin(authority, request, redirectUri);
+                var flow = sharedFlows.Begin(authority, request, redirectUri, nativeTx);
                 Response.Cookies.Append(FlowCookie, flow.ProtectedState, FlowCookieOptions(expires: true));
                 return Redirect(request.AuthorizationUrl);
             }
 
+            if (!string.IsNullOrWhiteSpace(nativeTx))
+            {
+                var (pendingTx, _) = await nativeClientAuth.ValidatePendingLoginAsync(Request, nativeTx, ct: ct);
+                if (pendingTx is null)
+                    return BadRequest(new { error = "invalid_transaction" });
+            }
+
             var dedicatedRequest = await oidc.BuildAuthorizationRequestAsync(redirectUri, ct);
             var payload = JsonSerializer.Serialize(
-                new FlowState(dedicatedRequest.State, dedicatedRequest.Nonce, dedicatedRequest.CodeVerifier), Json);
+                new FlowState(dedicatedRequest.State, dedicatedRequest.Nonce, dedicatedRequest.CodeVerifier, nativeTx), Json);
             Response.Cookies.Append(FlowCookie, Protector.Protect(payload), FlowCookieOptions(expires: true));
             return Redirect(dedicatedRequest.AuthorizationUrl);
         }
@@ -147,19 +164,22 @@ public sealed class OidcController(
             return Redirect("/login.html?error=sso_failed");
         }
 
-        OidcUserProvisioningService.Result result;
+        OidcIdentity identity;
+        string? nativeTx = null;
+        string? verifiedTenantId = null;
         try
         {
-            OidcIdentity identity;
             if (config.SharedTenancy.Enabled)
             {
                 var flow = await sharedFlows.ResumeAsync(cookie, state, ct);
+                nativeTx = flow.NativeTransactionId;
                 identity = await sharedOidc.CompleteAsync(
                     flow.Authority, code, flow.CodeVerifier, flow.RedirectUri, flow.Nonce, ct);
                 var tenant = sharedAuthorities.BindValidatedIssuer(
                     flow.Authority,
                     identity.Issuer ?? throw new OidcAuthenticationException(
                         "The validated identity did not carry an issuer."));
+                verifiedTenantId = tenant.Tenant.Value;
                 tenantAccessor.SetVerifiedCredential(tenant);
             }
             else
@@ -167,9 +187,53 @@ public sealed class OidcController(
                 var flow = ReadFlow(cookie);
                 if (flow is null || !CryptoEquals(state, flow.State))
                     throw new OidcAuthenticationException("OIDC callback state validation failed.");
+                nativeTx = flow.NativeTransactionId;
+                verifiedTenantId = string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId;
                 identity = await oidc.CompleteAsync(
                     code, flow.CodeVerifier, BuildRedirectUri(), flow.Nonce, ct);
             }
+        }
+        catch (Exception ex) when (ex is OidcAuthenticationException or UnauthorizedAccessException)
+        {
+            log.LogWarning(ex, "OIDC authentication failed");
+            await auditService.LogAsync(null, "LOGIN_FAILED", "User", null, "OIDC authentication failed: " + ex.Message);
+            return Redirect("/login.html?error=sso_failed");
+        }
+
+        if (!string.IsNullOrWhiteSpace(nativeTx))
+        {
+            OidcUserProvisioningService.ProvisionedUserResult provisioned;
+            try
+            {
+                provisioned = await provisioning.ProvisionUserAsync(identity, ct);
+            }
+            catch (Exception ex) when (ex is OidcAuthenticationException or UnauthorizedAccessException)
+            {
+                log.LogWarning(ex, "OIDC native client provisioning failed");
+                await auditService.LogAsync(null, "LOGIN_FAILED", "User", null, "OIDC authentication failed: " + ex.Message);
+                return Redirect("/login.html?error=sso_failed");
+            }
+
+            if (provisioned.Refused)
+                return Redirect("/login.html?error=sso_failed");
+            if (provisioned.Disabled || provisioned.User is null)
+                return Redirect("/login.html?error=account_disabled");
+
+            var updatedCookie = await nativeClientAuth.CompleteLoginAsync(
+                Request, nativeTx, provisioned.User, verifiedTenantId!, ct);
+            if (updatedCookie is null)
+                return Redirect("/login.html?error=sso_failed");
+
+            Response.Cookies.Append(
+                NativeClientAuthService.TransactionCookieName,
+                updatedCookie,
+                nativeClientAuth.BuildTransactionCookieOptions(Request, expires: true));
+            return Redirect($"/api/auth/client/consent?tx={Uri.EscapeDataString(nativeTx)}");
+        }
+
+        OidcUserProvisioningService.Result result;
+        try
+        {
             result = await provisioning.SignInAsync(identity, ct);
         }
         catch (Exception ex) when (ex is OidcAuthenticationException or UnauthorizedAccessException)

@@ -34,6 +34,11 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<AuditOutboxMessage> AuditOutboxMessages => Set<AuditOutboxMessage>();
     public DbSet<ReportJobLink> ReportJobLinks => Set<ReportJobLink>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<NativeClientAuthTransaction> NativeClientAuthTransactions => Set<NativeClientAuthTransaction>();
+    public DbSet<NativeClientAuthCode> NativeClientAuthCodes => Set<NativeClientAuthCode>();
+    public DbSet<NativeClientSession> NativeClientSessions => Set<NativeClientSession>();
+    public DbSet<NativeClientRefreshToken> NativeClientRefreshTokens => Set<NativeClientRefreshToken>();
+    public DbSet<StudioRunIdempotency> StudioRunIdempotencies => Set<StudioRunIdempotency>();
     public DbSet<Dataset> Datasets => Set<Dataset>();
     public DbSet<DatasetAcl> DatasetAcls => Set<DatasetAcl>();
     public DbSet<DatasetUserAcl> DatasetUserAcls => Set<DatasetUserAcl>();
@@ -222,6 +227,82 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasIndex(x => new { x.TenantId, x.UserId });
             e.Property(x => x.TenantId).HasMaxLength(128);
             e.HasOne(x => x.User).WithMany(u => u.RefreshTokens).HasForeignKey(x => x.UserId);
+        });
+
+        builder.Entity<NativeClientAuthTransaction>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasMaxLength(64);
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.CanonicalOrigin).HasMaxLength(512);
+            e.Property(x => x.ClientId).HasMaxLength(64);
+            e.Property(x => x.RedirectUri).HasMaxLength(512);
+            e.Property(x => x.CodeChallenge).HasMaxLength(128);
+            e.Property(x => x.CodeChallengeMethod).HasMaxLength(16);
+            e.Property(x => x.ClientState).HasMaxLength(512);
+            e.Property(x => x.RequestedScopes).HasMaxLength(256);
+            e.Property(x => x.CsrfTokenHash).HasMaxLength(64);
+            e.Property(x => x.Status).HasMaxLength(32);
+            e.HasIndex(x => x.ExpiresAt);
+            e.HasIndex(x => new { x.TenantId, x.Status });
+        });
+
+        builder.Entity<NativeClientAuthCode>(e =>
+        {
+            e.HasKey(x => x.CodeHash);
+            e.Property(x => x.CodeHash).HasMaxLength(64);
+            e.Property(x => x.TransactionId).HasMaxLength(64);
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.CanonicalOrigin).HasMaxLength(512);
+            e.Property(x => x.ClientId).HasMaxLength(64);
+            e.Property(x => x.RedirectUri).HasMaxLength(512);
+            e.Property(x => x.CodeChallenge).HasMaxLength(128);
+            e.Property(x => x.CodeChallengeMethod).HasMaxLength(16);
+            e.Property(x => x.Scopes).HasMaxLength(256);
+            e.Property(x => x.IssuedSessionId).HasMaxLength(64);
+            e.HasIndex(x => x.ExpiresAt);
+            e.HasIndex(x => new { x.TenantId, x.UserId });
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<NativeClientSession>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasMaxLength(64);
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.ClientId).HasMaxLength(64);
+            e.Property(x => x.Scopes).HasMaxLength(256);
+            e.Property(x => x.RevokedReason).HasMaxLength(128);
+            e.HasIndex(x => new { x.TenantId, x.UserId });
+            e.HasIndex(x => x.ExpiresAt);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<NativeClientRefreshToken>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.SessionId).HasMaxLength(64);
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.TokenHash).HasMaxLength(64);
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.SessionId });
+            e.HasIndex(x => x.ExpiresAt);
+            e.HasOne(x => x.Session).WithMany(s => s.RefreshTokens).HasForeignKey(x => x.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<StudioRunIdempotency>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.IdempotencyKey).HasMaxLength(36);
+            e.Property(x => x.ScriptHash).HasMaxLength(80);
+            e.Property(x => x.JobName).HasMaxLength(128);
+            e.Property(x => x.State).HasMaxLength(32);
+            e.Property(x => x.OwnerInstanceId).HasMaxLength(64);
+            e.HasIndex(x => new { x.TenantId, x.UserId, x.PipelineId, x.IdempotencyKey }).IsUnique();
+            e.HasIndex(x => x.ExpiresAt);
         });
 
         builder.Entity<ServiceAccount>(e =>

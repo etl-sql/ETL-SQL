@@ -13,7 +13,8 @@ public sealed record SharedOidcFlowResume(
     SharedIdentityAuthorityBinding Authority,
     string Nonce,
     string CodeVerifier,
-    string RedirectUri);
+    string RedirectUri,
+    string? NativeTransactionId = null);
 
 /// <summary>
 /// Pins an anonymous Shared OIDC login to the exact server-routed authority selected before the
@@ -39,26 +40,29 @@ public sealed class SharedOidcFlowStateService(
         string CodeVerifier,
         string RedirectUri,
         DateTimeOffset IssuedAtUtc,
-        DateTimeOffset ExpiresAtUtc);
+        DateTimeOffset ExpiresAtUtc,
+        string? NativeTransactionId = null);
 
     public async Task<SharedOidcFlowStart> BeginAsync(
         HttpRequest request,
         OidcAuthorizationRequest authorization,
         string redirectUri,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? nativeTransactionId = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(authorization);
         var authority = await authorities.ResolveForRequestAsync(request, ct)
             ?? throw new OidcAuthenticationException(
                 "No enabled identity authority is registered for the routed Portal host.");
-        return Begin(authority, authorization, redirectUri);
+        return Begin(authority, authorization, redirectUri, nativeTransactionId);
     }
 
     public SharedOidcFlowStart Begin(
         SharedIdentityAuthorityBinding authority,
         OidcAuthorizationRequest authorization,
-        string redirectUri)
+        string redirectUri,
+        string? nativeTransactionId = null)
     {
         ArgumentNullException.ThrowIfNull(authority);
         ArgumentNullException.ThrowIfNull(authorization);
@@ -73,7 +77,8 @@ public sealed class SharedOidcFlowStateService(
             RequireToken(authorization.CodeVerifier, "PKCE verifier"),
             normalizedRedirect,
             now,
-            now.Add(Lifetime));
+            now.Add(Lifetime),
+            string.IsNullOrWhiteSpace(nativeTransactionId) ? null : nativeTransactionId.Trim());
         return new SharedOidcFlowStart(
             _protector.Protect(JsonSerializer.Serialize(payload, Json)), authority);
     }
@@ -111,7 +116,8 @@ public sealed class SharedOidcFlowStateService(
             authority,
             RequireToken(payload.Nonce, "nonce"),
             RequireToken(payload.CodeVerifier, "PKCE verifier"),
-            redirect);
+            redirect,
+            payload.NativeTransactionId);
     }
 
     private static string RequireRedirectUri(string value, string portalHost)

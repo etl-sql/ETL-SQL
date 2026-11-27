@@ -175,6 +175,9 @@ public record JobHistoryEntry(
 {
     /// <summary>Safe API hint; the opaque session identifier itself is never serialized.</summary>
     public bool HasResumeSession => !string.IsNullOrWhiteSpace(SessionId);
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool CanCancel { get; init; }
 }
 
 /// <summary>

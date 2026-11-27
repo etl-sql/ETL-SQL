@@ -35,7 +35,9 @@ async function openStudio(): Promise<void> {
         renderSessionIdentity(getSessionIdentity(auth.getToken()), identityHost);
         const capabilities = new Set(studioSession.capabilities);
         const [reports, folders, privateDrafts] = await Promise.all([
-            capabilities.has('ScriptRead') ? studioApi.catalog('', 0, controller.signal) : Promise.resolve({ items: [], nextAfterId: null }),
+            capabilities.has('ScriptRead')
+                ? studioApi.catalog('', 1, 50, controller.signal)
+                : Promise.resolve({ items: [], total: 0, page: 1, pageSize: 50, totalPages: 0 }),
             capabilities.has('ScriptSave') ? studioApi.folders(controller.signal) : Promise.resolve([]),
             studioSession.privateDrafts && capabilities.has('ScriptRead') ? studioApi.privateDrafts(controller.signal) : Promise.resolve([])
         ]);
@@ -45,11 +47,22 @@ async function openStudio(): Promise<void> {
         const catalogFolders = readStudioFolders(folders).map(folder => ({ ...folder }));
         const studio = await createStudioWorkbench(container, {
             catalogReports, catalogFolders, privateDraftSummaries: readStudioPrivateDrafts(privateDrafts),
-            catalogDiscovery: { nextAfterId: catalogPage.nextAfterId,
-                search: async (query, afterId) => {
-                    const page = readStudioCatalogPage(await studioApi.catalog(query, afterId));
-                    return { items: page.items.map(report => ({ ...report })), nextAfterId: page.nextAfterId };
-                } },
+            catalogDiscovery: {
+                page: catalogPage.page,
+                pageSize: catalogPage.pageSize,
+                total: catalogPage.total,
+                totalPages: catalogPage.totalPages,
+                search: async (query, page, pageSize, signal) => {
+                    const nextPage = readStudioCatalogPage(await studioApi.catalog(query, page, pageSize, signal));
+                    return {
+                        items: nextPage.items.map(report => ({ ...report })),
+                        total: nextPage.total,
+                        page: nextPage.page,
+                        pageSize: nextPage.pageSize,
+                        totalPages: nextPage.totalPages
+                    };
+                }
+            },
             capabilities: studioSession.capabilities,
             maxScriptCharacters: studioSession.maxScriptCharacters,
             deploymentMode: studioSession.mode, sourceControlEnabled: studioSession.sourceControlEnabled,

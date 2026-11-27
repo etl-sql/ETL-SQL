@@ -89,6 +89,8 @@ internal static class BrowserContractsGenerator
         typeof(StudioSessionDto),
         typeof(StudioReportDto),
         typeof(StudioCatalogPageDto),
+        typeof(StudioRunnablePipelineDto),
+        typeof(StudioRunnablePipelinePageDto),
         typeof(StudioFolderDto),
         typeof(StudioRecoveryDraftDto),
         typeof(StudioPrivateDraftSummaryDto),
@@ -251,6 +253,16 @@ internal static class BrowserContractsGenerator
         typeof(ETL_SQL.Portal.Controllers.ConnectionsAdminController.ConnectionHelpDto),
         typeof(ETL_SQL.Portal.Controllers.ConnectorsController.ParseConnectionStringRequest),
         typeof(ETL_SQL.Connectors.ParsedConnectionStringResult),
+        typeof(ETL_SQL.WorkstationEditor.HostedStatusDto),
+        typeof(ETL_SQL.WorkstationEditor.HostedRunnablePipelineDto),
+        typeof(ETL_SQL.WorkstationEditor.HostedRunnablePipelinePageDto),
+        typeof(ETL_SQL.WorkstationEditor.HostedRunOperationDto),
+        typeof(ETL_SQL.WorkstationEditor.HostedAddServerRequest),
+        typeof(ETL_SQL.WorkstationEditor.HostedConnectRequest),
+        typeof(ETL_SQL.WorkstationEditor.HostedStartRunRequest),
+        typeof(ETL_SQL.WorkstationEditor.HostedStopRunRequest),
+        typeof(ETL_SQL.WorkstationEditor.HostedStopRunResponse),
+        typeof(ETL_SQL.WorkstationEditor.HostedRecoverRunRequest),
     ];
 
     /// <summary>

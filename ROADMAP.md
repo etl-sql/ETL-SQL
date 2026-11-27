@@ -709,6 +709,29 @@ learner-validated experience.
 | ST36 | **Portal staged-context helper preview.** One staged-data task and required variable preview correctly; unavailable predecessor context is explained and never silently executed. | — | M |
 | ST37 | **Desktop staged-context helper preview.** Prove the same variable/staging and unavailable-context cases on the desktop host. | ST36 fixture contract | M |
 
+#### Client sign-in and hosted execution
+
+Authors should be able to choose a local workspace or a hosted ETL-SQL runner from VS Code,
+the TUI, and desktop Studio. For a hosted run, start sign-in in the client's browser using
+the Portal's configured identity provider, including Entra ID where enabled. The client
+reuses its authenticated session for the selected host. The server verifies the caller,
+tenant, and authorization for submission, shared connections, and tool invocation.
+Script-level `PORTAL` connector authentication authorizes its own administrative operations.
+[Portal sign-in](docs/administration/portal/users.md#openid-connect-oidc) · [Portal connector](docs/reference/connectors/services/portal.md)
+
+Show the selected execution host before submission and keep local execution available offline
+under the OS account and its local catalog and vault. An expired or unavailable hosted session
+leaves the run pending user action. Keep hosted credentials in protected client storage and
+out of scripts, workspace settings, and logs.
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| ST55 | **Decide the hosted client sign-in and execution contract.** Name the trusted Portal/runner target and define the native browser sign-in handoff, audience and scopes, token storage, session expiry, sign-out, submission, result streaming and Stop. Document the local/offline path and estimate one end-to-end client fixture. | Existing Portal and federated Orchestrator identity | D |
+| ST56 | **Run on a hosted server from VS Code.** Add the first approved sign-in and run path. Prove first sign-in, session reuse, expiry, correct host and tenant, authorized and denied runs, and result/Stop behavior. | ST55 | M |
+| ST57 | **Run on a hosted server from the TUI.** Reuse the approved contract. Prove sign-in handoff, session reuse and expiry, host selection, and one authorized and denied run. | ST56 runner contract | M |
+| ST58 | **Run on a hosted server from desktop Studio.** Add explicit hosted execution to the desktop workbench and prove local offline editing and execution, hosted session recovery, and correct result ownership. | ST56 runner contract | M |
+| ST59 | **Hosted jobs and recent runs tree in VS Code.** Add a read-only sidebar view for the connected host showing authorized jobs and pipelines, last status, next scheduled run, statement logs, permitted Run/Stop actions, and an Open in Portal link. No inline job or schedule editing; declarative changes remain script-first (modify script and republish). | ST56 | M |
+
 #### Degraded editor and failed session recovery
 
 | ID | Chunk and finish line | Depends on | Size |
