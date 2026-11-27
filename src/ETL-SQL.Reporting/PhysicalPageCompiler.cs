@@ -131,13 +131,29 @@ public class PhysicalPageCompiler
 
         if (vis.VisualType.Equals("TABLE", StringComparison.OrdinalIgnoreCase))
         {
-            // Title + Column headers = ~0.75, each row ~0.25
-            return baseHeight + (vis.Rows.Count * 0.25);
+            // A table with no rows yet (deferred ON_RUN, or no data) still prints its placeholder.
+            if (vis.Rows.Count == 0) return baseHeight + 1.5;
+
+            // Title + Column headers = ~0.75, each row ~0.25; image cells make rows taller.
+            double rowHeight = HasImageCells(vis) ? 0.5 : 0.25;
+            return baseHeight + (vis.Rows.Count * rowHeight);
+        }
+
+        if (vis.VisualType.Equals("TEXT", StringComparison.OrdinalIgnoreCase))
+        {
+            // Markdown wraps, and table rows in it wrap again, so budget ~0.55 in per source line.
+            var text = ReportVisualContent.ResolveTextContent(vis) ?? string.Empty;
+            int lines = text.Split('\n').Length;
+            return Math.Max(1.0, 0.9 + (lines * 0.55));
         }
 
         // Default chart height
         return 4.0;
     }
+
+    private static bool HasImageCells(VisualManifest vis) =>
+        vis.Rows.Take(5).Any(row => row.Any(cell => cell is not null &&
+            cell.StartsWith("data:image", StringComparison.OrdinalIgnoreCase)));
 
     private bool CanSplit(List<VisualManifest> visuals)
     {
@@ -156,18 +172,25 @@ public class PhysicalPageCompiler
         int currentRow = 0;
 
         double headerHeight = 0.75; // Title + Column Headers
-        double rowHeight = 0.25;
+        double rowHeight = HasImageCells(vis) ? 0.5 : 0.25;
 
         if (totalRows == 0)
         {
-            // Empty table
+            double emptyHeight = headerHeight + 1.5;
+            if (currentY > 0 && currentY + emptyHeight > maxYForPage)
+            {
+                currentPage = new PhysicalPageModel { PageNumber = result.Count + 1, Layout = layout };
+                result.Add(currentPage);
+                currentY = 0;
+            }
+            // Empty or deferred table placeholder
             currentPage.Visuals.Add(new PlacedVisual
             {
                 Visual = vis,
                 TopOffset = currentY,
-                Height = headerHeight
+                Height = emptyHeight
             });
-            currentY += headerHeight;
+            currentY += emptyHeight;
             return;
         }
 

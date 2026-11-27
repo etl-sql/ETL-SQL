@@ -243,7 +243,8 @@ public partial class RelationalJobHistoryStore
         // resolved the id within its own tenant. Version is deliberately left alone: it is the
         // definition's optimistic-concurrency token, and reassigning an owner does not invalidate an
         // edit that someone is part-way through composing.
-        command.CommandText = $"UPDATE {ObjectTable(objectKind)} SET created_by = @owner WHERE id = @id;";
+        var clearApproval = objectKind == OrchestratorObjectKind.Job ? ", tool_approved_version = NULL" : "";
+        command.CommandText = $"UPDATE {ObjectTable(objectKind)} SET created_by = @owner{clearApproval} WHERE id = @id;";
         command.AddParam("@owner", ownerPrincipalKey);
         command.AddParam("@id", objectId);
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;

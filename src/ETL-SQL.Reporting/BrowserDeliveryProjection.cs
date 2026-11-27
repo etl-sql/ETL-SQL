@@ -36,6 +36,7 @@ namespace ETL_SQL.Reporting
                 nameof(VisualManifest.ChartSpec),
                 nameof(VisualManifest.ChartData),
                 nameof(VisualManifest.PlotPlan),
+                nameof(VisualManifest.InheritedTheme),
                 // Superseded by the compact resolved `interaction` contract. Kept on the server
                 // object for the diagnostic projection and for legacy snapshot round-trips.
                 nameof(VisualManifest.Interactions)

@@ -295,6 +295,7 @@ public class CliContext
 
     // admin tool catalog commands
     public string? ToolName { get; set; }
+    public string? ToolGrantTenant { get; set; }
     public string? ToolType { get; set; }
     public string[]? ToolOptions { get; set; }
 

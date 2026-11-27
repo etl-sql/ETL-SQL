@@ -174,6 +174,35 @@ namespace ETL_SQL.ReportHosting
             return await RebuildAsync(ct);
         }
 
+        /// <summary>Compact single-visual layout patch returned by the responsive /layout endpoint.</summary>
+        public sealed record VisualLayoutPatch(
+            [property: System.Text.Json.Serialization.JsonPropertyName("visualName")] string VisualName,
+            [property: System.Text.Json.Serialization.JsonPropertyName("nativeSvg")] string? NativeSvg,
+            [property: System.Text.Json.Serialization.JsonPropertyName("layout")] NativeChartLayoutManifest Layout);
+
+        /// <summary>
+        /// Re-resolves one native visual for a bounded layout tier and returns only that visual's
+        /// SVG and layout metadata, avoiding full-manifest cloning and serialization on resize.
+        /// </summary>
+        public async Task<VisualLayoutPatch?> ResolveVisualLayoutPatchAsync(string visualName, NativeChartLayoutTier tier)
+        {
+            if (string.IsNullOrWhiteSpace(visualName)) return null;
+            if (_manifest == null) await GetManifestAsync();
+            if (_manifest == null) return null;
+
+            await _lock.WaitAsync();
+            try
+            {
+                var source = _manifest.Visuals.FirstOrDefault(visual =>
+                    visual.Name.Equals(visualName.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (source == null || !NativeChartLayoutResolver.Supports(source)) return null;
+
+                var entry = ResolveLayoutEntryLocked(source, tier);
+                return new VisualLayoutPatch(source.Name, entry.NativeSvg, entry.Layout);
+            }
+            finally { _lock.Release(); }
+        }
+
         /// <summary>
         /// Re-resolves one native visual for a bounded layout tier without querying its data source.
         /// The returned manifest is a delivery clone; the session's canonical manifest stays at its
@@ -192,21 +221,7 @@ namespace ETL_SQL.ReportHosting
                     visual.Name.Equals(visualName.Trim(), StringComparison.OrdinalIgnoreCase));
                 if (source == null || !NativeChartLayoutResolver.Supports(source)) return null;
 
-                var key = new NativeChartLayoutCacheKey(_scriptPath, source.Name, tier, _manifest.BuiltAt.Ticks);
-                if (!_layoutCache.TryGetValue(key, out var entry))
-                {
-                    var working = CloneManifest(_manifest);
-                    var visual = working.Visuals.First(item => item.Name.Equals(source.Name, StringComparison.OrdinalIgnoreCase));
-                    visual.ResolvedMapFile = source.ResolvedMapFile;
-                    NativeChartLayoutResolver.Resolve(visual, tier, _layoutProfile);
-                    entry = new NativeChartLayoutCacheEntry(
-                        visual.NativeSvg,
-                        visual.PlotPlan,
-                        visual.Interaction,
-                        visual.Layout!);
-                    _layoutCache[key] = entry;
-                    TrimLayoutCache(_manifest.Visuals.Count);
-                }
+                var entry = ResolveLayoutEntryLocked(source, tier);
 
                 var result = CloneManifest(_manifest);
                 var target = result.Visuals.First(item => item.Name.Equals(source.Name, StringComparison.OrdinalIgnoreCase));
@@ -217,6 +232,24 @@ namespace ETL_SQL.ReportHosting
                 return result;
             }
             finally { _lock.Release(); }
+        }
+
+        private NativeChartLayoutCacheEntry ResolveLayoutEntryLocked(VisualManifest source, NativeChartLayoutTier tier)
+        {
+            var key = new NativeChartLayoutCacheKey(_scriptPath, source.Name, tier, _manifest!.BuiltAt.Ticks);
+            if (_layoutCache.TryGetValue(key, out var entry))
+                return entry;
+
+            var working = source.ShallowCloneForLayout();
+            NativeChartLayoutResolver.Resolve(working, tier, _layoutProfile);
+            entry = new NativeChartLayoutCacheEntry(
+                working.NativeSvg,
+                working.PlotPlan,
+                working.Interaction,
+                working.Layout!);
+            _layoutCache[key] = entry;
+            TrimLayoutCache(_manifest.Visuals.Count);
+            return entry;
         }
 
         /// <summary>Current parameter values (set by slicer interactions).</summary>
@@ -793,7 +826,7 @@ namespace ETL_SQL.ReportHosting
 
         private void TrimLayoutCache(int visualCount)
         {
-            var limit = Math.Max(3, visualCount * 6);
+            var limit = Math.Max(7, visualCount * 10);
             if (_layoutCache.Count <= limit) return;
             var currentTicks = _manifest?.BuiltAt.Ticks;
             foreach (var key in _layoutCache.Keys.Where(item => item.ManifestTicks != currentTicks))

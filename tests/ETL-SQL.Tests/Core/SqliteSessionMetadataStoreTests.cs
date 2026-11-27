@@ -122,6 +122,34 @@ public sealed class SqliteSessionMetadataStoreTests
     }
 
     [Fact]
+    public async Task ToolApprovalStaysBoundAcrossAttemptsAndCasing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "etlsql-tool-approval-" + Guid.NewGuid().ToString("N"));
+        var store = new ETL_SQL.Infrastructure.Sqlite.SqliteToolApprovalStore();
+        try
+        {
+            Assert.True(await store.TryBindAsync(root, "session-a", "MaskSales", "approved-v1", default));
+            Assert.False(await store.TryBindAsync(root, "session-a", "MASKSALES", "approved-v2", default));
+            Assert.False(await store.TryBindAsync(root, "session-a", "MaskSales", null, default));
+            Assert.True(await store.TryBindAsync(root, "session-a", "masksales", "approved-v1", default));
+            Assert.True(await store.TryBindAsync(root, "session-b", "MaskSales", "approved-v2", default));
+            Assert.True(await store.TryBindAsync(root, "session-a", "LegacyTool", null, default));
+            Assert.False(await store.TryBindAsync(root, "session-a", "LegacyTool", "approved-v1", default));
+
+            using (var ledger = new ETL_SQL.Infrastructure.Sqlite.SqliteOperationLedger(root, "session-c"))
+            {
+                await ledger.RecordStartAsync("prior-op", "ToolExecution", "OldTool");
+            }
+            Assert.False(await store.TryBindAsync(root, "session-c", "oldtool", "approved-v1", default));
+            Assert.True(await store.TryBindAsync(root, "session-c", "OtherTool", "approved-v1", default));
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task InitializeAsync_AllowsSemicolonInSessionRootPath()
     {
         var root = Path.Combine(Path.GetTempPath(), "etlsql-session;root-" + Guid.NewGuid().ToString("N"));

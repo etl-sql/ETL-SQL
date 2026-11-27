@@ -100,6 +100,20 @@ public class OrchestratorProxyService(
         catch (Exception ex) { logger.LogWarning(ex, "Failed to update job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
     }
 
+    public async Task<HttpResponseMessage?> SetJobToolApprovalAsync(string name, bool approved, long version)
+    {
+        try
+        {
+            return await SendAsync(HttpMethod.Put, $"api/scheduled-jobs/{Uri.EscapeDataString(name)}/tool-approval",
+                new { approved }, version);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Failed to set tool approval for job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name));
+            return null;
+        }
+    }
+
     public async Task<HttpResponseMessage?> DeleteJobAsync(string name, long version)
     {
         try { return await SendAsync(HttpMethod.Delete, $"api/scheduled-jobs/{Uri.EscapeDataString(name)}", version: version); }

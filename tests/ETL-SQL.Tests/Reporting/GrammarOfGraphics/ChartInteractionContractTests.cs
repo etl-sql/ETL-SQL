@@ -253,6 +253,7 @@ public sealed class ChartInteractionContractTests
     {
         var (_, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync("custom_crossfilter_offset_key.rptsql");
 
+        manifest.Visuals[0].InheritedTheme = "dark";
         var browser = JsonSerializer.Serialize(manifest, BrowserDeliveryProjection.Options);
         var diagnostic = JsonSerializer.Serialize(manifest, BrowserDeliveryProjection.AuthorizedDiagnosticOptions);
 
@@ -261,6 +262,8 @@ public sealed class ChartInteractionContractTests
         Assert.NotSame(BrowserDeliveryProjection.Options, BrowserDeliveryProjection.AuthorizedDiagnosticOptions);
         Assert.DoesNotContain("\"plotPlan\"", browser, StringComparison.Ordinal);
         Assert.Contains("\"plotPlan\"", diagnostic, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"inheritedTheme\"", browser, StringComparison.Ordinal);
+        Assert.Contains("\"inheritedTheme\":\"dark\"", diagnostic, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -293,7 +296,8 @@ public sealed class ChartInteractionContractTests
             .ToArray();
 
         Assert.All(known, name => Assert.Contains(name, delivered));
-        Assert.Equal(4, known.Count);
+        Assert.Contains(nameof(VisualManifest.InheritedTheme), known);
+        Assert.Equal(5, known.Count);
     }
 
     // ── Interaction refresh ───────────────────────────────────────────────────────────────

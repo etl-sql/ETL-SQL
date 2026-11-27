@@ -117,6 +117,42 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task SavedToolApprovalMigratesAndInvalidatesOnEditOrOwnershipTransfer()
+        {
+            var original = NewStore();
+            await original.SaveJobAsync(Job("approved") with
+            {
+                Script = "SELECT 1;",
+                TenantId = "tenant-a",
+                CreatedBy = "user:owner"
+            });
+            await using (var connection = new NpgsqlConnection(_pg.GetConnectionString()))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = "ALTER TABLE jobs DROP COLUMN tool_approved_version;";
+                await command.ExecuteNonQueryAsync();
+            }
+
+            var store = NewStore();
+            var current = (await store.GetJobAsync("tenant-a", "approved"))!;
+            Assert.False(await store.HasToolApprovalAsync(current, default));
+            Assert.True(await store.SetToolApprovalAsync(current, approved: true, default));
+            Assert.True(await store.HasToolApprovalAsync(current, default));
+            Assert.False(await store.HasToolApprovalAsync(current with { TenantId = "tenant-b" }, default));
+
+            Assert.True(await store.TrySaveJobAsync(current with { Script = "SELECT 2;" }, current.Version));
+            Assert.False(await store.HasToolApprovalAsync(current, default));
+            Assert.False(await store.SetToolApprovalAsync(current, approved: true, default));
+
+            current = (await store.GetJobAsync("tenant-a", "approved"))!;
+            Assert.True(await store.SetToolApprovalAsync(current, approved: true, default));
+            Assert.True(await store.SetObjectOwnerAsync(current.Id.Value, OrchestratorObjectKind.Job, "user:other"));
+            Assert.True(await store.SetObjectOwnerAsync(current.Id.Value, OrchestratorObjectKind.Job, "user:owner"));
+            Assert.False(await store.HasToolApprovalAsync(current, default));
+        }
+
+        [Fact]
         public async Task SaveAndGet_IsCaseInsensitive_OnPostgres()
         {
             var store = NewStore();

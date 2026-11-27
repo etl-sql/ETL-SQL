@@ -240,8 +240,11 @@ public class RepresentativeVisualConformanceTests
             Assert.Equal(visual.ChartSpec.Id, visual.PlotPlan.SpecId);
             Assert.Equal(visual.ChartData.RowCount, visual.Rows.Count);
             Assert.Null(visual.ChartConfig);
-            Assert.Equal(new SvgChartRenderer().Render(visual.PlotPlan), visual.NativeSvg);
-            Assert.Contains("role='img'", new SvgChartRenderer().Render(visual.PlotPlan));
+            var renderer = new SvgChartRenderer();
+            var cardSvg = renderer.Render(visual.PlotPlan, PlotSvgRenderOptions.Card);
+            Assert.Equal(cardSvg, visual.NativeSvg);
+            Assert.Contains("role='img'", cardSvg);
+            Assert.Contains("role='img'", renderer.Render(visual.PlotPlan));
             Assert.NotNull(TerminalRenderer.RenderVisual(visual));
         }
     }

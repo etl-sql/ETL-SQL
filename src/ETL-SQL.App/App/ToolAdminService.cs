@@ -7,6 +7,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Orchestrator;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -21,25 +22,8 @@ internal static class ToolAdminService
 
         try
         {
-            var providerName = config?["Governance:Tools:Provider"];
-            var localRoot = config?["Governance:Tools:LocalRoot"] ?? config?["Governance:Tools:OsStoreRoot"];
-
-            if (!string.IsNullOrWhiteSpace(providerName))
-            {
-                var ownershipMode = Enum.TryParse<ToolCatalogOwnershipMode>(
-                    config?["Governance:Tools:OwnershipMode"], ignoreCase: true, out var parsed)
-                    ? parsed
-                    : ToolCatalogOwnershipMode.MachineAdministrator;
-
-                catalog = ToolCatalogProviderFactory.Create(new ToolCatalogOptions
-                {
-                    Provider = providerName,
-                    LocalRoot = localRoot,
-                    OwnershipMode = ownershipMode,
-                    ServiceIdentity = config?["Governance:Tools:ServiceIdentity"],
-                    ValidateOwnership = config?.GetValue<bool?>("Governance:Tools:ValidateOwnership") ?? true
-                });
-            }
+            if (config is not null)
+                catalog = ToolCatalogProviderFactory.Create(DependencyInjectionExtensions.BuildToolCatalogOptions(config));
         }
         catch (Exception ex)
         {
@@ -81,6 +65,10 @@ internal static class ToolAdminService
                 return await SetAsync(ctx, catalog, logger, ct, isElevated ?? AdministrativePrivilege.IsElevated);
             case "admin-machine-tool-delete":
                 return await DeleteAsync(ctx, catalog, logger, ct, isElevated ?? AdministrativePrivilege.IsElevated);
+            case "admin-machine-tool-grant":
+            case "admin-machine-tool-revoke":
+                return await ChangeUseGrantAsync(ctx, catalog, logger, ct,
+                    isElevated ?? AdministrativePrivilege.IsElevated, allow: action == "admin-machine-tool-grant");
             default:
                 logger.WriteLine($"Unknown tool command: {action}", ConsoleColor.Red);
                 return 1;
@@ -244,6 +232,70 @@ internal static class ToolAdminService
         catch (Exception ex)
         {
             logger.WriteLine(SecretRedactor.Redact(ex.Message) ?? "Tool deletion failed.", ConsoleColor.Red);
+            return 1;
+        }
+    }
+
+    private static async Task<int> ChangeUseGrantAsync(
+        CliContext ctx,
+        IToolCatalogProvider? catalog,
+        ILogger logger,
+        CancellationToken ct,
+        Func<bool> isElevated,
+        bool allow)
+    {
+        if (catalog is not IWritableToolCatalogProvider writable)
+            return LifecycleUnsupported(catalog, logger);
+
+        var toolName = ctx.ToolName?.Trim();
+        if (string.IsNullOrWhiteSpace(toolName) || string.IsNullOrWhiteSpace(ctx.ToolGrantTenant)
+            || string.IsNullOrWhiteSpace(ctx.GrantPrincipalId))
+        {
+            logger.WriteLine("--name, --tenant, and --principal are required.", ConsoleColor.Red);
+            return 1;
+        }
+
+        var kind = ctx.GrantPrincipalKind?.Trim().ToUpperInvariant() switch
+        {
+            "USER" => ToolPrincipalKind.User,
+            "GROUP" => ToolPrincipalKind.Group,
+            "SERVICE" => ToolPrincipalKind.Service,
+            _ => (ToolPrincipalKind?)null
+        };
+        if (kind is null)
+        {
+            logger.WriteLine("--principal-kind must be USER, GROUP, or SERVICE.", ConsoleColor.Red);
+            return 1;
+        }
+
+        try
+        {
+            ToolAliasValidator.Validate(toolName);
+            if (!AuthorizeCatalogMutation(toolName, catalog, logger, isElevated))
+                return 1;
+
+            var grant = new ToolUseGrant(ctx.ToolGrantTenant.Trim(), kind.Value, ctx.GrantPrincipalId.Trim());
+            if (await writable.SetUseGrantAsync(toolName, grant, allow, ct))
+            {
+                var actor = ProcessActor.Current;
+                var change = allow ? "granted" : "revoked";
+                var message = $"Tool use {change} for {grant.Kind}:{grant.PrincipalId}.";
+                SecurityEventRuntime.Emit(SecurityEventContract.Create(
+                    SecurityEventSeverity.Information, SecurityEventType.CatalogMutation, actor, actor,
+                    $"Tool:{toolName}", SecurityEventDecision.Allowed, message) with
+                { TenantId = grant.TenantId });
+                logger.WriteLine(message);
+            }
+            else
+            {
+                logger.WriteLine("The tool's grants are already in the requested state.");
+            }
+
+            return 0;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.WriteLine(SecretRedactor.Redact(ex.Message) ?? "Tool grant update failed.", ConsoleColor.Red);
             return 1;
         }
     }

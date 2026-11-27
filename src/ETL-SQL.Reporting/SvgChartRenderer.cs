@@ -25,15 +25,24 @@ public class SvgChartRenderer
 
     public string Render(PlotPlan plan) => _plotPlan.Render(plan);
 
+    internal string Render(PlotPlan plan, PlotSvgRenderOptions options) => _plotPlan.Render(plan, options);
+
     public string? RenderFocused(VisualManifest visual, PlotBounds bounds) =>
         _specialized.Render(visual, bounds);
 
-    public string? Render(VisualManifest v)
+    internal string? RenderFocusedForCard(VisualManifest visual, PlotBounds bounds) =>
+        _specialized.Render(visual, bounds, embedInCard: true);
+
+    public string? RenderForCard(VisualManifest v) => RenderCore(v, embedInCard: true);
+
+    public string? Render(VisualManifest v) => RenderCore(v, embedInCard: false);
+
+    private string? RenderCore(VisualManifest v, bool embedInCard)
     {
         ArgumentNullException.ThrowIfNull(v);
 
         if (v.PlotPlan is not null)
-            return _plotPlan.Render(v.PlotPlan);
+            return _plotPlan.Render(v.PlotPlan, new PlotSvgRenderOptions(EmbedInCard: embedInCard));
 
         var visualType = (v.VisualType ?? string.Empty).Trim().ToUpperInvariant();
         switch (visualType)
@@ -44,7 +53,7 @@ public class SvgChartRenderer
             case "NETWORK":
             case "MAP":
             case "MATRIX":
-                return _specialized.Render(v);
+                return _specialized.Render(v, embedInCard: embedInCard);
             case "CARD":
             case "TABLE":
             case "SLICER":

@@ -18,6 +18,14 @@ EXECUTE TOOL '<ToolAlias>'
 - **INTO TargetTable** — the table to store output rows in. Output is parsed from the tool's standard output. If this is a new temporary table, it is dynamically created.
 - **EXPECT SCHEMA ( ... )** — declares the output schema expected from the tool. Essential when writing to a new `#temp` table so the engine can construct the columns and types correctly.
 
+Federated Orchestrator runs require a [tool use grant](../../cli/admin-machine-tool-grant.md)
+for the effective caller in the same tenant. That grant is checked when planning with `SET WHAT_IF ON`
+and when executing. `SHARED:` connector permissions and tool grants are evaluated independently.
+A restricted Linux host can [require native artifact approval](../../../administration/orchestration/orchestrator-portal.md#approve-native-tools-on-a-restricted-linux-host).
+The [restricted Windows profile](../../../administration/orchestration/orchestrator-portal.md#configure-the-restricted-windows-native-tool-profile) verifies direct x64 executables and requires a dedicated virtual service account.
+The host verifies the reviewed executable and any approved fixed script before launch.
+Resume a persistent session with its original tool approval.
+
 ## Examples
 ```sql
 -- Execute a tool with parameters and data streaming

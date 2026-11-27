@@ -4,7 +4,7 @@
  *
  * Table rendering and Tabulator integration.
  */
-import { formatValue, interpolateColor, noDataEl, renderSafeSvgInto, safeUrl } from './rt-util.js';
+import { formatValue, interpolateColor, noDataEl, renderSafeSvgInto, safeImageSrc } from './rt-util.js';
 import { actionsFor, applyPageCrossFilter, executeAction, showCtxMenu } from './rt-actions.js';
 import { crossFilterActive, resolveInteraction } from './rt-charts.js';
 import { _uiStates } from './rt-state.js';
@@ -521,7 +521,7 @@ export function renderTable(container: EtlSqlVisualHost, visual: TableVisual, ma
                     // IMAGE: render <img> from URL value
                     if (rawVal) {
                         const img = document.createElement('img');
-                        img.src = safeUrl(rawVal);
+                        img.src = safeImageSrc(rawVal);
                         img.alt = '';
                         img.style.maxHeight = (meta.imageWidth || 32) + 'px';
                         img.style.maxWidth  = (meta.imageWidth ? meta.imageWidth * 3 : 96) + 'px';

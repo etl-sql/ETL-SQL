@@ -86,81 +86,23 @@ that does not schedule their proposed implementation.
 
 ### Release Engineering — Routine, GitHub-Built Releases
 
-**Status:** Completed for v0.23.0 (W1 and W4 complete)
+**Status:** Incremental
+**Horizon:** Later
+**Authoritative design:** [Release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md).
 
-**Horizon:** Next (v0.23.0)  
-**Authoritative design:** [Release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md)
+**Problem and intended outcome:** Keep the GitHub-built release process reliable and reduce the
+time it takes to find and recover from a failed check.
 
-**Problem and intended outcome:** v0.22.0 took seven candidates on 2026-11-04. Five restarts came
-from release-only tooling that had been tested on invented data and first ran for real on release
-day; one came from the MSI Portal uninstall losing its hosted runner. The earlier goal (release in
-four hours with the same evidence) optimized the length of a good run while restarts dominated.
-The outcome now: releases are routine, built and published only by GitHub Actions, and kept
-healthy by a nightly release rehearsal rather than by another sprint. v0.22.0 is the first public
-release (VS Code Marketplace via OIDC Trusted Publishing), so the owner's machine must not be a
-source of truth for anything a user installs.
+**Remaining work:** The fast pre-push follow-up is tracked as RG03 in [TODO.md](TODO.md).
+Open VSX publishing is deferred. The older timing, runner-capacity, watchdog, and rehearsal
+improvements remain parked in the reliability plan until selected.
 
-**Why foundation:** the owner delayed v0.22.0 until this is done (2026-11-04) so the team can return
-to feature work without a release sprint every month.
+**Boundaries and dependencies:** Reuse the hosted release, installer, and Marketplace workflows.
+Keep certification receipts tied to the candidate and verify changes to any publishing path
+through its own rehearsal.
 
-**Boundaries:**
-- Default to common practice; anything heavier needs a stated reason tied to a real user or claim.
-- Remove before adding: a new gate must replace or simplify an existing one.
-- No waivers: a failing gate is fixed, re-baselined with a stated reason, or made report-only.
-- Shared SaaS and ETL-SQL Studio ship as alpha; evidence that only backs them can be deferred.
-- Not in scope: the full script and test review (selected for v0.23.0 in `TODO.md`) and Open VSX
-  publishing (owner: v0.23.0 or v0.24.0, after the Marketplace path proves out). The VS Code AI
-  key needs no SecretStorage migration: since `2724f3ce9` (v0.22.0) the extension uses VS Code chat
-  models and stores no key.
-
-**Dependencies:** the existing `nightly-release.yml` and its scheduler, the candidate supervisor,
-`release.yml` and its `publish-marketplace` job, and the MSI and DEB certification workflows.
-
-**Vertical delivery slices** (plan section 4; W6–W7 move to the backlog if the two-week timebox
-runs out):
-1. W0: failure census since v0.21.0, to confirm the order below with data.
-2. W1: extend the nightly run into a full release rehearsal (native packages, every post-tag
-   collector, operator validator, dry-run release up to the publish call).
-3. W2: reuse a lane's result when its inputs are unchanged (design note first).
-4. W3: MSI Portal uninstall runner loss fixed at the cause; installers certified nightly.
-5. W4: release tooling tested on recorded real outputs.
-6. W4b/W4c: remove the workstation from the release path; tag and publish from GitHub only, with
-   the Marketplace job hardened (pinned `vsce`, safe reruns).
-7. W5: flaky tests fixed at the cause, including the pre-push fixtures that inherit `GIT_DIR`.
-8. W8 (required for v0.22.0, owner 2026-11-15): every operator certification as a hosted Release
-   Evidence job and the six reviews as a `release-approval` environment approval.
-9. Below the cut line: W6 performance certification redesign (deterministic hard gates, same-host
-   A/B timing), W7 fast pre-push hook and local gate hygiene.
-
-**Acceptance evidence** (two weeks from 2026-11-07, with a re-plan check at the end of week 1):
-the nightly rehearsal is green five nights running with no manual help; the v0.22.0 candidate
-passes every certification on its first attempt; no gate is passed by waiver; a script or docs fix
-reruns only the lanes whose inputs changed; and a release reaches the Marketplace with one approval
-and no command on the owner's machine.
-
-**State after the v0.22.0 release (2026-11-16):** W0, W2, W3, W4b, W4c, W5 and W8 are done;
-v0.22.0 was tagged, released and published to the Marketplace from GitHub (timeline in the
-[v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md)). The post-release fixes are on
-`main`: Release calls `publish-marketplace.yml` (vsce 4.1.1), every release-branch push certifies
-MSI, native and DEB packages, and dispatch-only workflows are registered on `main` when created.
-W1 and W4 carried into v0.23.0. The owner confirmed that the nightly rehearsal passed five nights
-in a row before the later feature additions. The W4 replay now covers the native Windows and macOS
-collectors and the draft manifest using recorded GitHub outputs.
-W6 (performance certification redesign) shipped in v0.23.0: hosted baselines gate correctness,
-exact work counters and allocations (+5%); the *Paired timing* Release Evidence job gates elapsed
-time (10% against the previous release, 15% against the release before last); GC and peak memory
-are report-only ([design note](docs/releases/v0.23.0-w6-performance-gates-design.md)).
-Picked up only when selected:
-- W7 fast pre-push hook and local gate hygiene (overlaps RG03's docs-only skip).
-- Parked from the earlier "release in four hours" goal: fail fast on candidate failures;
-  impact-selected CI and targeted fix rounds; broad package PRs in about 30 minutes; longest CI job
-  at about 20 minutes; hosted watchdog/upload proof for every long step; build once, publish the
-  same bytes; one release gate owns publication; protect runner capacity; freeze metadata before
-  certification; recovery rehearsal timings.
-
-**Lessons kept from v0.21.0:** defects surfaced only at certification (shift installer and Portal
-lanes to nightly); hosted runners lost mid-step need watchdogs that upload evidence first; local
-memory pressure made the workstation a bottleneck; release metadata edits must be one command.
+**Acceptance evidence:** Record the docs-only push timing in RG03. If Open VSX is selected,
+verify one publication and a safe retry against the agreed extension bytes.
 
 ### Release Engineering — Enforced Merge Gates and a GitHub-First Contributor Workflow
 
@@ -228,177 +170,6 @@ on `windows-2022`). Proven feasible on branch `diag/nested-virt-probe` (run 4241
 Manager fixes, so the gain no longer pays for the cost (pinned `windows-2022`, a less realistic
 install). Pick it up again if a real MSI runner loss recurs.
 
-### Data Preparation — `TRANSFORM` Reliability, Schema/Lineage Integration, and Analyst Operations
-
-**Status:** Completed in v0.23.0 (TR01–TR09 all shipped)  
-**Horizon:** Next (v0.23.0)  
-**Scheduling:** Completed in v0.23.0.
-
-**Authoritative design:** [TRANSFORM Statement Reference](docs/reference/statements/dml/transform.md),
-[Data Prep Helpers](docs/reference/statements/data-prep.md),
-[Standard Library Functions](docs/reference/functions/README.md), and
-[Engine Architecture](docs/architecture/engine.md).
-
-**Implemented baseline:** `TransformStatementHandler` implements nine `TRANSFORM <target> [FROM <source>] USING <algorithm> (...)`
-operations (`FILL_DATES`, `INTERPOLATE`, `DEDUPLICATE`, `PIVOT`, `TOP_N_OTHERS`, `PERIOD_COMPARISON`,
-`SHARE_OF_TOTAL`, `NORMALIZE`, `ROLLING_AGGREGATE`), alongside `GENERATE CALENDAR` and
-`COMPARE DATASETS`.
-
-**Problem and intended outcome:** The v0.22.0 `TRANSFORM` review (2026-11-10) found silent data
-corruption on `NULL` and duplicate-date inputs, missing Zero-Trust / schema / lineage integration,
-and missing high-value analyst operations:
-1. **Silent `NULL` corruption and date/grain bugs in existing algorithms (`TransformStatementHandler.cs`):**
-   - `NORMALIZE` (`MIN_MAX` and `Z_SCORE`), `PERIOD_COMPARISON`, `SHARE_OF_TOTAL`, and `TOP_N_OTHERS`
-     call `Convert.ToDecimal(GetValue(row[valueCol]))` / `Convert.ToDouble(...)` without checking for
-     `null`, turning SQL `NULL` into `0m` / `0.0`. In `NORMALIZE`, a single `NULL` shifts a positive
-     group's `min` to `0` and corrupts `mean`/`stddev` for every row in the group; in
-     `PERIOD_COMPARISON`, a `NULL` current value outputs `Diff = -prior` and `Pct = -100%` instead of
-     `NULL`.
-   - `INTERPOLATE` and `ROLLING_AGGREGATE` sort via `GetNumericOrderValue`, which returns `0m` for
-     `NULL` and throws on ISO date strings (`'2026-01-01'`) because it does not call `TryGetDate`.
-   - When multiple rows in a group share a calendar date, `FILL_DATES` silently overwrites `byDate[date.Date]`
-     (dropping earlier rows), while `PERIOD_COMPARISON` crashes with an unhandled `ArgumentException`
-     in `ToDictionary` and misses month-end prior dates (`2026-02-28` vs `2026-01-31`).
-   - `TOP_N_OTHERS` emits unaggregated detail rows for the top $N$ categories alongside a single
-     aggregated `'Others'` row, mixing two row grains in one output table.
-   - `SHARE_OF_TOTAL` outputs a `0..1` fraction while `PERIOD_COMPARISON` outputs a `0..100`
-     percentage, contradicting `docs/reference/transform/share_of_total.md`.
-2. **Engine, schema, `WHAT_IF`, and tooling gaps:**
-   - `TransformStatementHandler` never checks `context.IsWhatIf`, truncating and overwriting target
-     tables even under `SET WHAT_IF ON`.
-   - `DataParser.ParseTransform` and `docs/grammar.ebnf` allow omitting `FROM <sourceTable>` for
-     in-place transforms (and `docs/guides/patterns/sample-guide.md` teaches that syntax), but
-     `StageSourceRows` always throws if `SourceTable` is `null` instead of defaulting to `TargetTable`.
-   - Every algorithm calls `output.SetColumns(columns)` with string names only, resetting all output
-     column schema types to `"OBJECT"`.
-   - `BY_GROUP` columns are not validated in 5 of 9 algorithms (`TOP_N_OTHERS`, `PERIOD_COMPARISON`,
-     `SHARE_OF_TOTAL`, `NORMALIZE`, `ROLLING_AGGREGATE`), silently collapsing groups on a column typo;
-     unrecognized option keys in `stmt.Options` are silently ignored across all 9 algorithms; and
-     `BuildGroupKey` conflates `DBNull.Value` with `""`.
-   - `LineageAnalyzer` has no `TransformStatement` handling, and `ScriptScopeService` registers
-     `TRANSFORM` target tables with an empty column list `[]`.
-3. **Analyst "easy button" extensions and missing operations:**
-   - Existing algorithms are single-column (`INTERPOLATE`, `NORMALIZE`), 1-day-only (`FILL_DATES`),
-     and lack duplicate quarantine routing (`DEDUPLICATE`).
-   - High-frequency analyst operations — `UNPIVOT` (`MELT`), `CLEAN` / `STANDARDIZE` (both as a
-     scalar `SELECT` function and a multi-column `TRANSFORM`), `OUTLIERS` (clip/flag/filter), `BIN` /
-     `BUCKETIZE` (producing `Bin_Start`/`Bin_End` for GoG histograms), `IMPUTE`, `SPLIT` / `EXPLODE`,
-     `SCD2`, and `MASK_PII` — are not yet available under `TRANSFORM`.
-
-The outcome is null-safe, schema-preserving, `WHAT_IF`-compliant `TRANSFORM` execution with full
-lineage/LSP visibility, plus shared scalar/table hygiene functions and analyst reshape/bucketing
-algorithms.
-
-**Why next:** Identified during the v0.22.0 `TRANSFORM` review (2026-11-10) and held for v0.23.0 to
-keep the v0.22.0 release candidate frozen.
-
-**Boundaries:** Keep `TRANSFORM` memory-bounded via `OperatorMemoryGrantMB` and `MemoryArbiter`.
-Reuse the same underlying C# evaluation logic when an operation exists in both scalar `SELECT` and
-table-level `TRANSFORM` forms.
-
-**Dependencies:** `TransformStatementHandler`, `DataParser`, `LineageAnalyzer`, `ScriptScopeService`,
-`FunctionRegistry`, and `docs/reference/transform/`.
-
-**Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
-Select individual IDs into `TODO.md` when scheduling.
-
-#### Correctness, `NULL` safety, and engine/tooling integration
-
-Selected for v0.23.0 (owner, 2026-11-16): these task rows moved to [`TODO.md`](TODO.md).
-
-#### New analyst `TRANSFORM` algorithms and shared `SELECT` functions
-
-TR05–TR09 all shipped in v0.23.0 (see `CHANGELOG.md`).
-
-**Acceptance evidence:** All `TRANSFORM` algorithms preserve `NULL` semantics, column data types,
-`SET WHAT_IF ON` non-mutation, and lineage/LSP scope schemas; `CLEAN_TEXT`/`STANDARDIZE` work both
-in `SELECT` expressions and table-wide `TRANSFORM ... USING CLEAN`; and positive + `statement error`
-SLT tests in `tests/slt_data/transform.test` pass.
-
-### Standard Library — File and Path Function Completeness
-
-**Status:** Completed in v0.23.0 (FN01–FN03, FN07–FN10 shipped in v0.22.0; FN04–FN06 shipped in v0.23.0)
-
-**Horizon:** Later  
-**Authoritative design:** none yet; [File and path functions](docs/reference/functions/file-path/README.md)
-is the reference contract.
-
-**Problem and intended outcome:** The file and path functions cover existence, size, last write time,
-hash, listing, and three path parts. Scripts that move or archive files still need workarounds for
-common needs: the creation time, the name without its extension, and a changed extension. The
-`DIRECTORY` connector already exposes `CreationTime` and `IsReadOnly` as columns, but no scalar
-function returns them. Remote listings (`REMOTE_FILE_LIST`) return only `Name`, `FullPath`, `Size`,
-`LastModified`, and `IsDirectory`, and the only remote scalar is `REMOTE_FILE_EXISTS`. The outcome:
-a script author finds the obvious file function without writing string surgery.
-
-**Why later:** Every gap has a working alternative (`SUBSTRING`/`REPLACE` on `PATH_FILENAME`, or a
-`SELECT` over `FILE_LIST`). None blocks a profile or launch claim.
-
-**Boundaries:**
-- Local functions go through `AuthorizeLocalPath`; remote functions go through the connection's
-  `IRemoteFileSystem`. No new path-policy rules.
-- Pure path functions (`PATH_*`) do no I/O and do not resolve or authorize the path.
-- Names follow the existing `FILE_*`, `PATH_*`, `DIRECTORY_*`, `REMOTE_FILE_*` families. No aliases.
-- Remote metadata a protocol does not provide (for example SFTP creation time) returns `NULL`,
-  not an error.
-- **Every function in this entry ships with documentation.** Each gets its own reference page built
-  from the [function reference template](docs/templates/function-reference-template.md) and the
-  [help and snippet standards](docs/architecture/standards/help-and-snippet-standards.md): full
-  signature, parameters, return type, `NULL` behavior, a copy-pasteable example, and a
-  `References` section. The page, its hub link, the `RegisterWithHelp` text, and the
-  `LanguageMetadata` entry land in the same change as the function. No function merges without
-  them.
-
-**Dependencies:** none for the local functions. Remote size and modified time reuse
-`IRemoteFileSystem.ListFilesAsync`; a remote creation time needs a new metadata field and is
-out of this entry unless a connector exposes it.
-
-Backlog: FN04, FN05, and FN06 shipped in v0.23.0 (`PATH_NORMALIZE` was dropped because `CAST(... AS PATH)` is a plain `ToString()` pass-through).
-
-**Acceptance evidence:** Each function has a reference page that follows the function reference
-template (signature, parameters, return type, `NULL` behavior, a copy-pasteable example,
-references) and is linked from the file-path hub; a registry test covers every name; `NULL` and missing-file behavior is
-tested and matches its neighbors; and the docs-versus-registry check passes.
-
-### File Operations — `ENCRYPT FILE` / `DECRYPT FILE` Match Their Documentation
-
-**Status:** Completed in v0.23.0 (FO05, FO07, FO08, and FO12 all shipped; remote `TO <connection>` stays refused by decision, encrypt or compress locally then transfer)  
-**Horizon:** Next  
-**Authoritative design:** none yet; [ENCRYPT / DECRYPT FILE](docs/reference/file-operations/encrypt-file.md)
-is the reference page, and [`ExtensionParser.cs`](src/ETL-SQL.Core/Parser/Components/ExtensionParser.cs)
-and [`FileOperationStatementHandler.cs`](src/ETL-SQL.Engine/Handlers/FileOperationStatementHandler.cs)
-are what runs today.
-
-**Problem and intended outcome:** v0.22.0 made the documented statement the working statement:
-the reference page matches the parser, an unknown `WITH` key is an error, `DELETE_SOURCE` and the
-default destination work, failures name their cause, and PGP encrypt-and-sign and decrypt-and-verify
-ship. What is left is one design decision each on `ALGORITHM` and `TO DIRECTORY`, documenting the
-connector write-time options, and detached signatures. The outcome: the two-step encrypt or decrypt
-has the options users expect and every connector page says how to encrypt on write.
-
-**Why next:** FO07 is documentation of a working feature; the rest are small and independent.
-
-**Boundaries:**
-- Encrypting on write through a connector (`ENCRYPT = ON`) is separate and already works for
-  `FLATFILE` and `EXCEL`; this entry only documents it (FO07).
-- Compress before encrypt stays the rule; `CompressAfterEncryptRule` is unchanged.
-- No new cryptographic algorithms. Key handling stays in `CryptoUtils`.
-- Any new option must pass `FileSystemPolicyAuthorizer`. Deleting a source goes through the same
-  delete authorization and script-file protections as `DELETE FILE`.
-
-**Dependencies:** none.
-
-FO05, FO07, FO08, and FO12 all shipped in v0.23.0:
-
-- **FO05 decision (approved 2026-11-23, closed in v0.23.0):** Leave `ALGORITHM` out of `ENCRYPT FILE` / `DECRYPT FILE`. The method is selected by `PASSWORD` / `KEYFILE` / `PGP_KEY` with fixed modern primitives (AES-256-CBC + PBKDF2-SHA256 600k + HMAC-SHA256, RSA-OAEP-SHA256, OpenPGP), and the v2 file header does not record a KDF hash; `encrypt-file.md` and `FileOperationWithOptionTests` match.
-
-- **FO08 decision (approved 2026-11-23, shipped in v0.23.0):** Support `TO DIRECTORY` for `ENCRYPT FILE`, `DECRYPT FILE`, `COMPRESS FILE`, and `DECOMPRESS FILE` using each operation's default filename/extraction semantics; keep `DATE_SUFFIX` restricted to `COPY`, `MOVE`, and `RENAME` with operation-specific errors.
-
-**Acceptance evidence:** `ALGORITHM` and `TO DIRECTORY` each have a recorded decision and the
-reference states it; every file connector page that takes `COMPRESS`/`ENCRYPT` documents both with a
-runnable example; a detached signature verifies, and a wrong signer, a tampered file and a missing
-signature each fail with no key material in the error.
-
 ### File Operations — Managing Remote File Trees over SFTP, FTP, and Cloud Connections
 
 **Status:** In Progress (RT03–RT09 shipped in v0.23.0; RT11 decision proposal awaiting owner approval)
@@ -456,63 +227,6 @@ and the directory operations work with `AT conn` on SFTP, FTP, and one cloud con
 `SYNC DIRECTORY` plan under `WHAT_IF` matches what the real run does; and the transfer verification
 option fails a truncated download.
 
-### File Connectors — Multi-Sheet Excel Workbooks, Sheet Discovery, and Banner-Row Skipping
-
-**Status:** Completed in v0.23.0 (XL01–XL03 all shipped)
-
-**Horizon:** Later  
-**Authoritative design:** [Excel Connector Reference](docs/reference/connectors/files/excel.md),
-[`ExcelConnector.cs`](src/ETL-SQL.Connectors.Files/Excel/ExcelConnector.cs), and
-[`ExcelDataSource.cs`](src/ETL-SQL.Connectors.Files/Excel/ExcelDataSource.cs).
-
-**Implemented baseline:** `ExcelConnector` and `ExcelDataSource` already read single worksheets by
-name (`SHEET = 'Sales'`), cell range (`RANGE = 'A1:F500'`), and header mode (`HEADER = ON | OFF`)
-with schema-drift handling (`STRICT_SCHEMA`, `IGNORE_EXTRA_COLUMNS`, `NULL_MISSING_COLUMNS`,
-`MAP_BY_HEADER_NAME`), and stream single-sheet `.xlsx` writes via `MiniExcel.SaveAsAsync`.
-
-**Problem and intended outcome:** Checked against source on 2026-11-14:
-1. **Writing a sheet destroys other sheets in the workbook.** `ExcelDataSource.WriteBatchesCore`
-   (`ExcelDataSource.cs` lines 485–496) opens `FileMode.Create` and writes a single-entry dictionary
-   `new Dictionary<string, object> { [sheetName] = ... }`, wiping out any other worksheets that
-   already existed in the `.xlsx` file.
-2. **No table-qualified sheet addressing (`xl_conn.<SheetName>`) or SQL sheet discovery.**
-   `ExcelDataSource.WithTable(string tableName)` (line 39) returns `this` and ignores `tableName`, so
-   scripts must declare a separate `CREATE CONNECTION` for each worksheet instead of querying or
-   inserting into `xl_conn.Summary` and `xl_conn.Detail`. Although `ExcelDataSource.GetTablesAsync()`
-   (line 631) already enumerates worksheet names via `ExcelDataReader`, scripts have no
-   `EXCEL_SHEET_LIST(path)` function or `xl_conn._sheets` metadata view to loop over dynamic tabs
-   with `FOREACH`.
-3. **`START_ROW` and `SHEET_INDEX` are documented in `excel.md` but unimplemented in code.**
-   `docs/reference/connectors/files/excel.md` (lines 50–51) instructs users to set `SHEET_INDEX` and
-   `START_ROW` to skip title banners above the header row, but `ExcelConnector.AllowedOptions` and
-   `ExcelDataSource` reject or ignore both keys.
-
-The outcome is non-destructive multi-sheet `.xlsx` writes, `xl_conn.<SheetName>` addressing,
-`START_ROW` / `SHEET_INDEX` support matching the documentation, and script-accessible sheet
-discovery.
-
-**Why later:** Single-sheet `.xlsx` read/write and `RANGE = 'A4:Z1000'` already cover standard tabular
-workbooks; multi-sheet workbook preservation and dynamic tab discovery are ergonomic "nice to have"
-improvements for finance/accounting workbooks.
-
-**Boundaries:**
-- Keep `ExcelDataReader` + `MiniExcel` as the streaming reader/writer foundation; do not introduce a
-  DOM-heavy Excel library that loads entire multi-hundred-thousand-row sheets into memory.
-- Formulas, pivot caches, macros (`.xlsm`), and cell styling remain out of scope for ETL data
-  writebacks.
-
-**Dependencies:** `ExcelConnector`, `ExcelDataSource`, and `FunctionRegistry`.
-
-**Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
-Select individual IDs into `TODO.md` when scheduling.
-
-Selected for v0.23.0 (owner, 2026-11-23): XL01, XL02, and XL03 shipped in v0.23.0.
-
-**Acceptance evidence:** Writing two tables to `xl_conn.Summary` and `xl_conn.Detail` produces a
-single `.xlsx` file containing both worksheets; `START_ROW = 5` and `SHEET_INDEX = 2` read messy
-workbooks as documented in `excel.md`; and a `FOREACH` loop over `EXCEL_SHEET_LIST` ingests all tabs
-from a multi-sheet fixture.
-
 ### Database Connectors — Documentation Parity, Write-Path Clarity, and Credential Gaps
 
 **Status:** In Progress. DB01–DB06, DB09, DB10, DB12, DB13, DB14, and DB15a–c shipped in v0.23.0.
@@ -549,14 +263,12 @@ through `#temp`) and are Later.
 - `TEST CONNECTION` and `MERGE` already ship and are not roadmap work. Per-connector `MERGE` pushdown
   behavior is documented under DB04, not rebuilt.
 
-**Dependencies:** none for DB01–DB05. DB07 and DB08 follow the third-party dependency policy for any
-new package.
+**Dependencies:** DB08 follows the third-party dependency policy for any new package.
 
 **Backlog (select IDs, not the family):**
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| DB07 | **Postgres bulk load.** The Postgres data source has no binary `COPY` import, unlike MSSQL, Oracle, and MySQL. Add one behind the existing write path, with the same transaction and `WHAT_IF` behavior, and measure it against the current batch insert on a fixture before claiming a speedup. **Measured and not adopted (2026-11-24):** on a 25,000-row, 5-column fixture binary `COPY` took 104 ms and the text `COPY` loader 92 ms. Binary also typed string values (every flat-file value is a string) with .NET parsers instead of PostgreSQL's input functions, and refused enum, `inet`, array and other unmapped column types that text `COPY` loads. The owner kept text `COPY`; reopen only with a fixture that shows a real speedup. | DB04 | M |
 | DB08 | **Decision: credential providers.** No source references Azure Key Vault or AWS Secrets Manager; secrets come from `ENC:`, `SECRET:`, and allow-listed environment variables. Decide whether a vault-backed `SECRET:` source belongs in the product and under which trust rules. Output is a proposal and an estimate only. | — | D |
 | DB11 | **Decision: native warehouse connectors.** Whether Databricks or Redshift justify a native connector over `ODBC`, given that `ODBC` needs a vendor driver installed on the host. Gather evidence (install friction, feature loss through the bridge, type fidelity) and propose or reject. | — | D |
 
@@ -806,6 +518,79 @@ resize/reversal and missing-data cases; and unchanged payload, render-time and b
 Update the capability matrix and focused reference for only the accepted form. Finish that increment
 before selecting the next; preserve all existing fixtures for earlier supported forms.
 
+### Reporting & Presentation — Fixed-Canvas Report Pages
+
+**Status:** Exploring
+**Horizon:** Later
+**Authoritative design:** [Page options](docs/reference/visuals-reporting/report/page.md#page-options-and-styling)
+describe the existing screen-fit behavior.
+
+**Problem and intended outcome:** Authors who need a fixed design aspect ratio could use
+`FIT = 'CANVAS'` and `CANVAS_SIZE` to scale a whole grid uniformly to the available window.
+The proposed default is 1280×720, with explicit dimensions and 16:9 or 4:3 presets.
+
+**Why later:** This is separate from the screen-fit page sizing prepared for v0.23.1.
+
+**Boundaries and dependencies:** Keep the existing screen-fit behavior. Reuse the report grid
+and resize lifecycle. A CSS transform is one option to evaluate.
+
+**Delivery and acceptance:** Expose the fixed-size option and verify proportional scaling and
+letterboxing at different viewport sizes. Confirm that tooltips, popups, and dragging use the
+correct coordinates when the canvas is scaled.
+
+### Reporting & Presentation — Client-Side 1:1 GoG Chart Painter (Fluid Resize without Letterboxing)
+
+**Status:** Exploring
+**Horizon:** Later
+**Authoritative design:** none yet; builds on the existing `ChartSpec` → `PlotPlanResolver` → `PlotPlan` boundary in [Reporting Architecture](docs/architecture/reporting.md) and [Reporting Semantic Contracts](docs/architecture/reporting-semantic-contracts.md).
+
+**Problem and intended outcome:** Native charts currently render server-side through `PlotPlanSvgRenderer` onto a bounded set of fixed canvases (`Compact`, `Standard`, `Wide`, plus aspect-aware variants such as `StandardShort`, `WideShort`, and `UltraWideShort`). When a chart tile is resized to an arbitrary aspect ratio or container size, scaling a static `<svg viewBox="0 0 W H">` scales fonts, stroke widths, margins, and aspect ratio together, producing either letterboxing or undersized text between discrete tiers. The intended outcome is fluid, zero-letterboxing chart rendering at any container `width × height` — readable CSS-pixel typography (`11–12px`), crisp `1px` gridlines, native wrapping HTML/CSS legends (including click-to-toggle series), smooth animated transitions on slicer/cross-filter updates, and zero `/layout` server round-trips on resize — pairing GoG's script-first composability with modern presentation polish that stands clearly apart from rigid legacy BI visuals.
+
+**Why later:** Aspect-aware server canvases, grid-aware initial layout selection (`ApplyFitPageInitialLayouts`), and single-visual `/layout` patches cover the immediate `FIT = 'SCREEN'` pain without duplicating renderer code. This entry captures the next architectural step for review before committing to a second (TypeScript) painter while GoG semantics are still maturing.
+
+**Boundaries:**
+- **Avoid parity tax:** Keep all GoG semantics (`ChartSpec`, `PlotPlanResolver`, stacking, scale domains, ticks, formatting, palettes, aggregations, interaction contracts, and Zero-Trust data shaping) in C#. The client painter must stay a stateless, dumb coordinate mapper with zero data or aggregation logic.
+- **Keep Phase 1 narrow:** Scope the initial client painter strictly to the 5 core composable Cartesian primitives (`Rect`, `Line`, `Area`, `Point`, `Rule`) plus `Arc`, which cover ~80–85% of real dashboards (BAR, HBAR, LINE, AREA, COMBO, SCATTER, BUBBLE, PIE, DONUT, overlays, and reference bands).
+- Keep `PlotPlanSvgRenderer.cs` as the authoritative renderer for PDF, Markdown, offline static exports, and deterministic golden tests.
+- Do not use `preserveAspectRatio="none"` stretching on server SVGs (distorts circles, text, and corners).
+- Any visual type not yet supported by the client painter (`MAP`, `SANKEY`, `SUNBURST`, `NETWORK`, `GANTT`, etc.) falls back to `visual.nativeSvg` until demand justifies porting it.
+
+**Dependencies:** Compact, versioned browser-safe `PlotPlan` render DTO (scales, ticks, legend entries, and normalized mark data without baked pixel coordinates), `ReportRuntime` `ResizeObserver` lifecycle, and existing `rt-detail.ts` / cross-filter `[data-row-index]` interaction hooks.
+
+**Delivery slices:**
+1. **Decision & DTO design (D):** Define the minimal browser-safe `PlotPlan` render payload and measure payload size vs. pre-rendered SVG on the kitchen-sink fixture.
+2. **Cartesian + Arc 1:1 painter (M):** Paint `Rect`, `Line`, `Area`, `Point`, `Rule`, and `Arc` marks into an `<svg width="W" height="H" viewBox="0 0 W H">` sized to the tile's exact `ResizeObserver` box, with HTML/CSS legends, theme tokens, dynamic margin/tick thinning, and existing `[data-row-index]` hover/click/detail wiring.
+3. **Host parity & high-density follow-up (S/M):** Verify parity across Portal, ReportPlayer, Studio Preview, and VS Code; evaluate optional `<canvas>` mark layer only if high-cardinality scatter/line fixtures (50k+ points) require it.
+
+**Acceptance evidence:** Browser geometry tests asserting `1:1` SVG-to-container fit (zero letterboxing) and readable computed font sizes across narrow, square, and ultra-wide tiles; zero `/layout` network requests during window resize; preserved cross-filtering, hover detail popovers, and dark/light theme parity; unchanged golden/PDF/Markdown outputs for `PlotPlanSvgRenderer.cs`.
+
+### Reporting & Presentation — Composable Visual Card Shell, CSS Token Cascade & Bookshelf Collapse
+
+**Status:** Exploring
+**Horizon:** Later
+**Authoritative design:** none yet; extends [Reporting Architecture](docs/architecture/reporting.md) and the card shell in `src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-visual.ts`.
+
+**Problem and intended outcome:** Today `.visual-card` places `<h3>`, `.visual-subtitle`, `.visual-toolbar`, and `.chart-wrapper` as flat siblings with an absolutely positioned toolbar and hardcoded `padding-right` offsets, writes RptSQL `STYLE (...)` properties as inline styles that override `SET REPORT CSS`, and emits literal hex colors inside card SVGs. Authors who want custom card layouts (such as a vertical left-side header bar with custom background/border, or a "bookshelf" side rail that folds horizontally into a vertical spine to give adjacent charts more width) have to fight the DOM and CSS cascade. The intended outcome is a clean semantic card shell (`.visual-header` + `.visual-body`) backed by scoped CSS custom properties that flow into both HTML chrome and GoG SVG marks, plus horizontal bookshelf collapse and container-query density steps so small KPI cards stay legible at any size.
+
+**Why later:** Current `FIT = 'SCREEN'` vertical collapse and inline table headers handle immediate layout density. Refactoring `.visual-card` DOM and CSS tokens should be designed once alongside the 1:1 client painter so existing Playwright/CSS selectors migrate cleanly.
+
+**Boundaries:**
+- Keep existing `.visual-card[data-name]` and `[data-tag]` hooks working for `SET REPORT CSS` and tests.
+- Keep `var(--etl-chart-*, #hex)` fallbacks in SVG attributes so static PDF/Markdown/offline exports render identically without a stylesheet.
+- Do not break `CARD`/`KPI` maximize or existing `COLLAPSIBLE` container behavior.
+
+**Dependencies:** `rt-visual.ts`, `rt-layout.ts`, `report-runtime.css`, and `PlotPlanSvgRenderer.cs` (for `var(--etl-chart-*, #fallback)` token emission).
+
+**Delivery slices:**
+1. **Semantic card shell & token cascade (S):** Group title, subtitle, and in-flow toolbar inside `.visual-header` and content inside `.visual-body`; expose `HEADER_POSITION = 'TOP' | 'LEFT' | 'BOTTOM' | 'NONE'` and scoped `--visual-*` / `--etl-chart-*` CSS variables instead of hard inline style overrides.
+2. **Bookshelf horizontal collapse (S):** Allow left-header or side-column cards to collapse horizontally into a slim vertical spine (`writing-mode: vertical-rl` title + expand toggle), switching that grid column to `auto` so neighboring visuals expand across the freed width.
+3. **Container-query responsive KPI cards (S):** Add `@container` size breakpoints on `.visual-card` with fluid `clamp()` typography so small KPI cards step down cleanly instead of clipping:
+   - **Full (`>= 180px × 120px`):** label, subtitle, large number, target/goal, delta, and progress ring/bar.
+   - **Compact (`< 180px` wide or `< 110px` tall):** scaled-down tabular value, label, and compact delta; hide subtitle and progress ring.
+   - **Micro (`< 120px` wide or `< 70px` tall):** single-line label and tabular value only, with full goal/delta details available in the hover tooltip.
+
+**Acceptance evidence:** Browser geometry tests verifying `HEADER_POSITION = 'LEFT'` vertical headers with custom CSS colors/borders, bookshelf column collapse/expand reflowing sibling widths, CSS variable theming propagating into GoG SVG axes/gridlines, and zero text/ring clipping on small KPI cards (down to ~120×70px).
+
 ### Presentation & Workspaces — Studio Authoring for Mobile Page Layouts
 
 **Status:** Exploring
@@ -980,51 +765,6 @@ must complete before the unified beginner experience can be accepted.
 ---
 
 ## Platform, SaaS, and Governance
-
-### Security — External Tool Permissions, Artifact Identity, and Launch Contracts
-
-**Status:** Accepted (XT09 shipped in v0.23.0; XT07–XT08 open for future scheduling)
-
-**Horizon:** Next
-
-**Authoritative design:** [Deployment profiles](docs/architecture/deployment-profiles.md) and
-[machine-tool contract](docs/reference/statements/ddl/create-tool.md). The
-[existing certification record](docs/architecture/decisions/governed-custom-tool-runner-certification.md)
-needs the evidence correction tracked in TODO XT06; it is not proof of the missing controls below.
-
-**Problem and intended outcome:** The 2026-11-14 Codex/Gemini review found that the local tool
-catalog accepts an execution identity but does not authorize individual callers, native tools are
-not pinned to reviewed binary/script contents, and native `WORKING_DIR` is silently replaced by a
-temporary scratch directory. The outcome is explicit permission to use a tool, verifiable approved
-artifacts, and predictable launch behavior. Immediate catalog traversal, `WHAT_IF`, Docker approval,
-administrator ownership/lookup, argument safety and resource-bound fixes shipped in v0.22.0
-(XT01–XT06, `6d0de6aa6`).
-
-**Why next:** Per-principal grants and artifact versioning require catalog and execution contracts.
-They extend the immediate administrator-owned allowlist boundary. Working-directory behavior is a
-separate correctness fix; do not delay the immediate security fixes for that redesign.
-
-**Boundaries:** Approval is permission to invoke a defined operation, not proof that the executable
-is harmless. Local processes under the same OS account still share that account's authority.
-`RUN SCRIPT` executes ETL-SQL under engine/file/bundle policy, not arbitrary OS scripts through the
-tool catalog. Do not introduce a general shell, weaken argument separation, or claim ordinary
-containers/native child processes are a hostile-tenant boundary. The typed parameter checks needed
-to close unsafe invocations are XT05, not deferred to this initiative.
-
-**Dependencies:** `IToolCatalogProvider`, `ExecutionIdentity`, `ToolAdminService`,
-`ExecuteToolStatementHandler`, and the host identity/sandbox contracts. Reuse the existing identity
-propagation work; decide catalog storage and grant representation before implementing a new provider.
-
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| XT07 | **Per-tool use permissions.** Define grants for users/groups/service identities on shared hosts; keep administration separate from invocation. Resolve under the verified effective caller, deny missing/unauthorized identities for restricted tools, and audit denial/revocation. Document the explicit owner-account model for standalone catalogs. Prove two callers can use different approved tools and that scheduled/spawned runs retain the intended principal. | XT01, XT04; host identity propagation | M |
-| XT08 | **Pin reviewed native artifacts and control updates.** Bind approval to executable and fixed script content/version, including interpreter identity where applicable. Validate changes before launch, fail closed on mismatch, and define administrator reapproval/rotation. Address replacement between verification and execution through protected artifact storage or an equivalent enforceable launch contract; hash checking alone is insufficient. Test changed binaries/scripts and approved upgrades. | XT04, XT05 | M |
-
-**Acceptance evidence:** Restricted tools deny ungranted callers even when the alias is known;
-revocation takes effect on subsequent invocations; changed native artifacts require reapproval;
-valid paths/arguments remain intact; and working-directory/cleanup tests prove approved assets are
-never removed as scratch. Apply the breaking-change protocol when existing scripts/configuration
-change behavior. No production claim closes on a source inspection or a mocked process test alone.
 
 ### Product Coverage — Measure the Need for External ETL Tools
 

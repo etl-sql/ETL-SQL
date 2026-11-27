@@ -24,8 +24,12 @@ internal static class CartesianPlotLayout
         ImmutableArray<ResolvedMarkLayer> layers,
         ImmutableArray<ResolvedSeries> series,
         ResolvedScale? xScale,
-        int legendCount) =>
-        ResolveCartesianMetrics(frame, style, layers, series, xScale, legendCount).Area;
+        int legendCount,
+        decimal topMargin = TopMargin,
+        decimal bottomMargin = BottomMargin,
+        string? legendPositionOverride = null,
+        decimal leftMargin = BaseLeftMargin) =>
+        ResolveCartesianMetrics(frame, style, layers, series, xScale, legendCount, topMargin, bottomMargin, legendPositionOverride, leftMargin).Area;
 
     internal static (PlotBounds Area, decimal SideLabelsGutter, decimal SideLabelsRight) ResolveCartesianMetrics(
         PlotBounds frame,
@@ -33,13 +37,17 @@ internal static class CartesianPlotLayout
         ImmutableArray<ResolvedMarkLayer> layers,
         ImmutableArray<ResolvedSeries> series,
         ResolvedScale? xScale,
-        int legendCount)
+        int legendCount,
+        decimal topMargin = TopMargin,
+        decimal bottomMargin = BottomMargin,
+        string? legendPositionOverride = null,
+        decimal leftMargin = BaseLeftMargin)
     {
         var totalWidth = frame.Width;
         var minPlotWidth = totalWidth >= 180m ? MinimumPlotWidth : Math.Max(30m, totalWidth - 40m);
 
         var legendEnabled = LegendEnabled(style);
-        var legendPos = LegendPosition(style);
+        var legendPos = legendPositionOverride ?? LegendPosition(style);
         var hasRightLegend = legendEnabled && legendPos == "RIGHT" && legendCount > 1;
         var legendWidth = hasRightLegend ? 120m : 0m;
         var hasLeftLegend = legendEnabled && legendPos == "LEFT" && legendCount > 1;
@@ -73,13 +81,13 @@ internal static class CartesianPlotLayout
             .DefaultIfEmpty(0m)
             .Max();
 
-        var remainingWidth = Math.Max(0m, totalWidth - minPlotWidth - BaseLeftMargin - BaseRightMargin - legendWidth - leftLegendWidth);
+        var remainingWidth = Math.Max(0m, totalWidth - minPlotWidth - leftMargin - BaseRightMargin - legendWidth - leftLegendWidth);
 
-        var plotLeft = BaseLeftMargin + leftLegendWidth;
+        var plotLeft = leftMargin + leftLegendWidth;
         if (seriesLabelsEnabled && isStartPos && maxSeriesLabelWidth > 0m)
         {
             var startGutter = Math.Min(maxSeriesLabelWidth, remainingWidth);
-            plotLeft = BaseLeftMargin + startGutter;
+            plotLeft = leftMargin + startGutter;
             remainingWidth = Math.Max(0m, remainingWidth - startGutter);
         }
 
@@ -93,9 +101,9 @@ internal static class CartesianPlotLayout
         var plotRight = BaseRightMargin + legendWidth + sideLabelsGutter;
 
         var plotWidth = Math.Max(minPlotWidth, totalWidth - plotLeft - plotRight);
-        var plotHeight = frame.Height - TopMargin - BottomMargin;
+        var plotHeight = Math.Max(20m, frame.Height - topMargin - bottomMargin);
         var sideLabelsRight = totalWidth - BaseRightMargin - legendWidth;
-        return (new PlotBounds(plotLeft, TopMargin, plotWidth, plotHeight), sideLabelsGutter, sideLabelsRight);
+        return (new PlotBounds(plotLeft, topMargin, plotWidth, plotHeight), sideLabelsGutter, sideLabelsRight);
     }
 
     internal static bool HasRenderablePoints(ResolvedMarkLayer layer, ResolvedScale? xScale)

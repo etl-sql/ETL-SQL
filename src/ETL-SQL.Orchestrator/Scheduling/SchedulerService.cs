@@ -95,6 +95,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly ETL_SQL.Core.Execution.ISessionStateManager _sessionManager;
         private readonly INodeCapacityMonitor _capacityMonitor;
         private readonly ITenantMeteringLedger? _meteringLedger;
+        private readonly IScheduledToolPrincipalLookup? _toolPrincipalLookup;
         // Decides when a schedule link is due and where it is armed next. Leases and history
         // stamps stay on the system clock.
         private readonly TimeProvider _clock;
@@ -118,7 +119,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
             ETL_SQL.Core.Execution.ISessionStateManager sessionManager,
             INodeCapacityMonitor? capacityMonitor = null,
             ITenantMeteringLedger? meteringLedger = null,
-            TimeProvider? clock = null)
+            TimeProvider? clock = null,
+            IScheduledToolPrincipalLookup? toolPrincipalLookup = null)
         {
             _clock = clock ?? TimeProvider.System;
             _serviceProvider = serviceProvider;
@@ -129,6 +131,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             _sessionManager = sessionManager;
             _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor(configuration);
             _meteringLedger = meteringLedger;
+            _toolPrincipalLookup = toolPrincipalLookup;
         }
 
         /// <summary>Process-unique owner id for the maintenance lease, matching the heartbeat's form.</summary>
@@ -789,7 +792,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 return;
             }
 
-            await ExecuteAdmittedJobAsync(job, variableOverrides, initialSessionId, resumeFromCheckpoint);
+            await ExecuteAdmittedJobAsync(job, variableOverrides, initialSessionId, resumeFromCheckpoint,
+                scheduledOccurrence: !resumeFromCheckpoint && variableOverrides is not { Count: > 0 });
         }
 
         /// <summary>
@@ -803,7 +807,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
             string? initialSessionId = null,
             bool resumeFromCheckpoint = false,
             RevisionRun? revision = null,
-            ExecutionIdentity? callerIdentity = null)
+            ExecutionIdentity? callerIdentity = null,
+            bool scheduledOccurrence = false)
         {
             // P1.1: claim the per-job execution lease before doing anything observable. This is the
             // single choke point for both scheduled and manually triggered runs — another scheduler
@@ -832,7 +837,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             {
                 await ExecuteLeasedJobAsync(
                     job, leaseDuration, fenceToken.Value, variableOverrides,
-                    initialSessionId, resumeFromCheckpoint, revision, callerIdentity);
+                    initialSessionId, resumeFromCheckpoint, revision, callerIdentity, scheduledOccurrence);
             }
             finally
             {
@@ -887,6 +892,41 @@ namespace ETL_SQL.Orchestrator.Scheduling
             return explicitIdentity;
         }
 
+        internal async Task<ExecutionIdentity?> ResolveAttemptIdentityAsync(
+            JobDefinition job, ExecutionIdentity? caller, RevisionRun? revision, CancellationToken ct,
+            bool scheduledOccurrence = false)
+        {
+            var identity = ResolveJobExecutionIdentity(job, caller, revision?.Identity);
+            if (_toolPrincipalLookup is null || revision is not null || identity is null
+                || string.IsNullOrWhiteSpace(job.CreatedBy) || string.IsNullOrWhiteSpace(job.TenantId))
+                return identity;
+
+            if (scheduledOccurrence && caller is null)
+            {
+                if (_store is not IJobToolApprovalStore approvals || !await approvals.HasToolApprovalAsync(job, ct))
+                    return identity;
+
+                var approvedOwner = await _toolPrincipalLookup.ResolveAsync(job.TenantId, job.CreatedBy, ct);
+                if (approvedOwner is null || !await approvals.HasToolApprovalAsync(job, ct))
+                    return identity;
+
+                return identity with { ToolPrincipal = approvedOwner with { ApprovedSavedScriptOnly = true } };
+            }
+
+            if (identity.ToolPrincipal is not { WithinExecutionScope: true } verified
+                || !string.Equals(verified.TenantId, job.TenantId, StringComparison.Ordinal))
+                return identity;
+
+            var current = await _store.GetJobByIdAsync(job.Id);
+            if (current is null || current.Version != job.Version
+                || !string.Equals(current.TenantId, job.TenantId, StringComparison.Ordinal)
+                || !string.Equals(current.CreatedBy, job.CreatedBy, StringComparison.OrdinalIgnoreCase))
+                return identity with { ToolPrincipal = null };
+
+            var principal = await _toolPrincipalLookup.ResolveAsync(job.TenantId, job.CreatedBy, ct);
+            return identity with { ToolPrincipal = principal };
+        }
+
         private async Task ExecuteLeasedJobAsync(
             JobDefinition job,
             TimeSpan leaseDuration,
@@ -895,7 +935,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
             string? initialSessionId,
             bool resumeFromCheckpoint,
             RevisionRun? revision = null,
-            ExecutionIdentity? callerIdentity = null)
+            ExecutionIdentity? callerIdentity = null,
+            bool scheduledOccurrence = false)
         {
             _logger.LogInformation("Job runner: {JobName} starting execution cycle (MaxRetries={Max}).", job.Name, job.MaxRetries);
 
@@ -1011,7 +1052,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         if (attemptCts is not null)
                             attemptCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds!.Value));
                         var attemptToken = (attemptCts ?? cycleCts).Token;
-                        var effectiveIdentity = ResolveJobExecutionIdentity(job, callerIdentity, revision?.Identity);
+                        var effectiveIdentity = await ResolveAttemptIdentityAsync(
+                            job, callerIdentity, revision, attemptToken, scheduledOccurrence);
                         var sandboxExecutor = scope.ServiceProvider.GetService<ISandboxScheduledJobExecutor>();
                         if (sandboxExecutor is not null)
                         {

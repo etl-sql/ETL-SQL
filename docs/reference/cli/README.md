@@ -59,7 +59,9 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin machine secret verify`](admin-machine-secret-verify.md) | Resolve a machine-local secret without printing the value |
 | [`etl-sql admin machine tool`](admin-machine-tool.md) | Manage the machine-local tool catalog |
 | [`etl-sql admin machine tool delete`](admin-machine-tool-delete.md) | Permanently remove a machine-local tool |
+| [`etl-sql admin machine tool grant`](admin-machine-tool-grant.md) | Grant use of a machine-local tool |
 | [`etl-sql admin machine tool list`](admin-machine-tool-list.md) | List machine-local tools |
+| [`etl-sql admin machine tool revoke`](admin-machine-tool-revoke.md) | Revoke use of a machine-local tool |
 | [`etl-sql admin machine tool set`](admin-machine-tool-set.md) | Store a machine-local tool |
 | [`etl-sql admin migrate-database`](admin-migrate-database.md) | Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment |
 | [`etl-sql admin orchestrator`](admin-orchestrator.md) | Manage per-object Orchestrator grants and ownership |
