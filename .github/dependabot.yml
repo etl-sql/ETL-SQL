@@ -24,6 +24,10 @@ updates:
     directory: "/scripts/typecheck"
     schedule:
       interval: "weekly"
+    # The browser build embeds the compiler API. Review major upgrades separately.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/scripts/lint"
