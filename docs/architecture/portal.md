@@ -53,6 +53,11 @@ PortalUser ──< UserGroup >── Group ──< FolderAcl >── Folder ─�
                                                                          └──< ReportJobLink
 Dataset ──< DatasetAcl
 PortalUser ──< RefreshToken
+NativeClientAuthTransaction (expiring browser sign-in and consent state)
+NativeClientAuthCode        (hashed single-use code bound to the client, Portal, tenant, and verifier)
+NativeClientSession         (revocable tenant-scoped native client session)
+NativeClientRefreshToken    (hashed rotating refresh credential linked to the native session)
+StudioRunIdempotency        (source-host run submission receipt keyed by tenant, user, pipeline, and request)
 AuditLog        (append-oriented portal event table)
 PortalExecutionJob (durable portal execution/refresh polling state)
 PortalSecret            (encrypted secret store: SECRET:name for Portal-hosted execution)
@@ -367,6 +372,13 @@ All endpoints require a `Bearer` JWT token unless marked **Public**.
 | POST | `/api/auth/refresh` | Public | Refresh access token |
 | POST | `/api/auth/change-password` | Any | Change own password |
 | POST | `/api/auth/logout` | Any | Invalidate the caller's account sessions |
+
+Native clients use `/api/auth/client`. The browser starts at `authorize` and uses `login` and
+`consent` to complete the Portal sign-in and approve the request. The client exchanges the
+short-lived code with its PKCE verifier at `POST /api/auth/client/exchange`.
+`POST /api/auth/client/refresh` rotates the native session credential.
+`POST /api/auth/client/logout` revokes that native session. Tenant backup and restore exclude
+these sign-in records and the source host's pipeline submission receipts.
 
 ### Folders
 
@@ -1048,6 +1060,16 @@ recovery, and Stop. `HostedRunCoordinator` keeps the submission key across uncer
 and binds Stop to the original run and session. VS Code uses a TypeScript client for the same
 server contract. Each client opens with local execution selected. See the
 [hosted client sign-in and execution contract](decisions/hosted-client-sign-in-and-execution.md).
+
+### Hosted jobs and recent runs
+
+The VS Code jobs view reads `GET /api/studio/hosted-jobs` with `offset` and `limit`. Portal
+combines authorized saved revisions with jobs visible to the verified Orchestrator caller
+before paging. The job's `/{jobName}/runs` and `/{jobName}/runs/{runId}` subroutes return recent
+runs and the selected run's details. `POST /{jobName}/trigger` submits an authorized Orchestrator
+job. Saved Portal pipeline revisions use the pipeline run endpoint below.
+`POST /{jobName}/runs/{runId}/cancel` requests Stop for that run. Run and Stop recheck the
+caller's permissions against the current job and run.
 
 ### Studio pipeline runs
 
