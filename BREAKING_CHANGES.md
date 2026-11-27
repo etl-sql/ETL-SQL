@@ -17,6 +17,20 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.23.1 — Runtime: enforced native tools require an approved artifact
+- **What changed**: With `Governance:Tools:RequireArtifactApproval` enabled, native tools require a verified executable in protected storage. Restricted Linux workers support direct ELF executables and fixed dash scripts with an additional script digest. Restricted Windows workers support direct x64 PE executables under the dedicated virtual service account. Persistent sessions reject a change to a bound approval.
+- **Who is affected**: Operators enabling native artifact approval for `EXECUTE TOOL`.
+- **Migration**: Publish each reviewed executable, then activate it with `ARTIFACT_SHA256` using the [Linux approval procedure](docs/administration/orchestration/orchestrator-portal.md#approve-native-tools-on-a-restricted-linux-host) or the [Windows service profile](docs/administration/orchestration/orchestrator-portal.md#configure-the-restricted-windows-native-tool-profile). Keep the original version for existing checkpoints. Back up the catalog so older workers can use it if you roll back the upgrade.
+- **Diagnostic**: The tool fails before launch if its required approval is missing, invalid, or different from the session binding.
+- **Earliest removal**: N/A
+
+### v0.23.1 — Runtime: federated tool use requires an explicit grant
+- **What changed**: Federated Orchestrator execution authorizes each `EXECUTE TOOL` call against a tenant-scoped grant. Unattended runs require owner approval of the saved version and a live lookup of that owner.
+- **Who is affected**: Federated jobs that currently invoke a tool from a machine-local catalog.
+- **Migration**: Upgrade the Orchestrator and CLI workers together. Use [tool grant](docs/reference/cli/admin-machine-tool-grant.md) for intended users, groups, or services by stable principal key and tenant. Retain a pre-upgrade catalog backup for rollback because older workers cannot read edited entries.
+- **Diagnostic**: The caller receives a tool-unavailable execution error. The host records an operation denial.
+- **Earliest removal**: N/A
+
 ### v0.23.0 — Runtime: MSI release defaults move to appsettings.defaults.json
 - **What changed**: The Windows MSI installs the full release defaults as `appsettings.defaults.json` and no longer replaces `appsettings.json`, which holds only the operator's settings (`{}` on a fresh install). The services, not the installer, generate secrets on first start. An upgrade from v0.22.0 removes, once, every value in `appsettings.json` that equals the v0.22.0 default.
 - **Who is affected**: Windows operators and scripts that read release defaults from the installed `appsettings.json`, or that call the removed `configure-portal-jwt.ps1`.

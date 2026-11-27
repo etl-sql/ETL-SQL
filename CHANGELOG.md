@@ -12,7 +12,24 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.23.0] — 2026-11-29
+## [0.23.1] — 2026-11-26
+
+### Breaking Changes
+
+- Federated jobs that invoke external tools now need a tenant-scoped tool grant. Scheduled runs also need the owner's approval of the current saved inline script and a live owner lookup. Back up the machine tool catalog and upgrade Orchestrator and its CLI workers together. See the [v0.23.1 upgrade notes](docs/guides/onboarding/migration-guide.md#v0231-upgrade-notes).
+
+### Added
+
+- Report authors can fit dashboard pages to the available screen height with `FIT = 'SCREEN'` and adjust the minimum height and row weights. Native charts adapt to their tiles, and long tables scroll within their own cards.
+- Administrators can require digest verification for approved native tools on restricted Linux and Windows workers. Retained artifact versions support rotation and rollback.
+
+### Fixed
+
+- Screen-fit reports release resize listeners when refreshed and show table subtitles on mobile.
+
+[Full v0.23.1 notes](docs/releases/v0.23.1.md).
+
+## [0.23.0] — 2026-11-26
 
 ### Breaking Changes
 

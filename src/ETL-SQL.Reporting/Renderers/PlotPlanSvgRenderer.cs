@@ -11,12 +11,116 @@ using ETL_SQL.Reporting.Semantics.Runtime;
 
 namespace ETL_SQL.Reporting.Renderers;
 
+internal sealed record PlotSvgRenderOptions(bool EmbedInCard = false, bool? SuppressTitle = null)
+{
+    public static PlotSvgRenderOptions Standalone { get; } = new(EmbedInCard: false);
+    public static PlotSvgRenderOptions Card { get; } = new(EmbedInCard: true);
+    public bool EffectiveSuppressTitle => SuppressTitle ?? EmbedInCard;
+}
+
 internal sealed class PlotPlanSvgRenderer
 {
     private const decimal Left = 60m;
     private const decimal Right = 20m;
-    private const decimal Top = 40m;
-    private const decimal Bottom = 60m;
+    private readonly decimal Top;
+    private readonly decimal Bottom;
+    private readonly PlotSvgRenderOptions _options;
+    private readonly SvgThemePalette _theme;
+    private readonly bool _compactCanvas;
+
+    private readonly record struct SvgThemePalette(
+        bool IsDark,
+        string Background,
+        string TitleColor,
+        string TextSecondary,
+        string TextMuted,
+        string AxisLine,
+        string GridLine,
+        string OverlayBg,
+        string OverlayBorder,
+        string WhiskerStroke,
+        string MedianStroke,
+        string GroupHeaderBg,
+        string GroupHeaderBorder,
+        string GroupHeaderText,
+        string ArcBorder,
+        string RadarRing,
+        string MapNullFill)
+    {
+        public static SvgThemePalette From(PlotPlan plan, PlotSvgRenderOptions options)
+        {
+            var themeName = Style(plan, "THEME") ?? string.Empty;
+            var isDark = themeName.Contains("dark", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(Style(plan, "MODE"), "DARK", StringComparison.OrdinalIgnoreCase);
+            var authoredBg = Style(plan, "BACKGROUND");
+            var background = options.EmbedInCard
+                ? (authoredBg is not null && SafePaint(authoredBg, string.Empty) is { Length: > 0 } safeBg ? safeBg : "transparent")
+                : SafePaint(authoredBg, isDark ? "#1f2430" : "white");
+            return new SvgThemePalette(
+                IsDark: isDark,
+                Background: background,
+                TitleColor: isDark ? "#e6e8ee" : "#333",
+                TextSecondary: isDark ? "#cbd5e1" : "#444",
+                TextMuted: isDark ? "#94a3b8" : "#666",
+                AxisLine: isDark ? "#475569" : "#bbb",
+                GridLine: isDark ? "#334155" : "#e5e7eb",
+                OverlayBg: isDark ? "#1e293b" : "white",
+                OverlayBorder: isDark ? "#334155" : "#e5e7eb",
+                WhiskerStroke: isDark ? "#94a3b8" : "#374151",
+                MedianStroke: isDark ? "#e0e7ff" : "#1e3a8a",
+                GroupHeaderBg: isDark ? "#2b3242" : "#f1f5f9",
+                GroupHeaderBorder: isDark ? "#334155" : "#e2e8f0",
+                GroupHeaderText: isDark ? "#e2e8f0" : "#334155",
+                ArcBorder: isDark ? "#1e293b" : "white",
+                RadarRing: isDark ? "#475569" : "#d1d5db",
+                MapNullFill: isDark ? "#2b3242" : "#e5e7eb");
+        }
+    }
+
+    public PlotPlanSvgRenderer()
+    {
+        Top = 40m;
+        Bottom = 60m;
+        _options = PlotSvgRenderOptions.Standalone;
+        _theme = new SvgThemePalette(false, "white", "#333", "#444", "#666", "#bbb", "#e5e7eb", "white", "#e5e7eb", "#374151", "#1e3a8a", "#f1f5f9", "#e2e8f0", "#334155", "white", "#d1d5db", "#e5e7eb");
+        _compactCanvas = false;
+    }
+
+    private PlotPlanSvgRenderer(PlotPlan plan, PlotSvgRenderOptions options)
+    {
+        _options = options;
+        _theme = SvgThemePalette.From(plan, options);
+        _compactCanvas = options.EmbedInCard && (plan.Bounds.Height <= 340m || plan.Bounds.Width <= 480m);
+
+        if (!options.EffectiveSuppressTitle)
+        {
+            Top = 40m;
+        }
+        else
+        {
+            var hasContinuousColor = plan.Scales.Any(s => s.ColorRange is not null);
+            var hasTopLegend = LegendEnabled(plan) && !hasContinuousColor && plan.Legend.Length > 1
+                && ResolveEffectiveLegendPosition(plan, options) == "TOP";
+            Top = hasContinuousColor ? 36m : hasTopLegend ? 32m : 14m;
+        }
+
+        if (!options.EmbedInCard)
+        {
+            Bottom = 60m;
+        }
+        else if (plan.Bounds.Height <= 340m)
+        {
+            var hasBottomLegend = LegendEnabled(plan) && plan.Legend.Length > 1
+                && ResolveEffectiveLegendPosition(plan, options) == "BOTTOM";
+            var xScale = plan.Scales.FirstOrDefault(s => s.Channel == FieldChannel.X);
+            var hasRotation = !string.IsNullOrWhiteSpace(xScale?.LabelRotation) && xScale.LabelRotation != "0";
+            Bottom = hasBottomLegend ? 52m : hasRotation ? 48m : 38m;
+        }
+        else
+        {
+            Bottom = 56m;
+        }
+    }
 
     private sealed record OverlayLabel(decimal EndpointX, decimal EndpointY, string Text, string Color, int ZIndex);
     private sealed record PositionedOverlayLabel(OverlayLabel Label, decimal Y);
@@ -25,10 +129,11 @@ internal sealed class PlotPlanSvgRenderer
     private sealed record SmartLabel(int RowIndex, decimal X, decimal Y, string Text, string Color, int Priority, decimal FontSize = 9m, decimal? Opacity = null);
     private sealed record LabelBox(decimal Left, decimal Top, decimal Right, decimal Bottom);
 
-    public string Render(PlotPlan plan)
+    public string Render(PlotPlan plan, PlotSvgRenderOptions? options = null)
     {
         plan.Validate();
-        return RenderValidated(plan);
+        var renderer = new PlotPlanSvgRenderer(plan, options ?? PlotSvgRenderOptions.Standalone);
+        return renderer.RenderValidated(plan);
     }
 
     // Facet copies adapt indices for rendering after the authoritative full plan has been validated.
@@ -78,8 +183,10 @@ internal sealed class PlotPlanSvgRenderer
             return builder.ToString();
         }
 
-        builder.AppendLine($"<rect width='{N(width)}' height='{N(height)}' fill='{Esc(SafePaint(Style(plan, "BACKGROUND"), "white"))}'/>");
-        builder.AppendLine($"<text x='{N(width / 2)}' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>{Esc(plan.Title ?? plan.SpecId)}</text>");
+        if (!string.Equals(_theme.Background, "transparent", StringComparison.OrdinalIgnoreCase))
+            builder.AppendLine($"<rect width='{N(width)}' height='{N(height)}' fill='{Esc(_theme.Background)}'/>");
+        if (!_options.EffectiveSuppressTitle)
+            builder.AppendLine($"<text x='{N(width / 2)}' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='{Esc(_theme.TitleColor)}'>{Esc(plan.Title ?? plan.SpecId)}</text>");
 
         var standardLayout = plan.Layers.Select(layer => LayerStyle(layer, "layout")).FirstOrDefault(value => value is not null);
         if (standardLayout is not null)
@@ -125,7 +232,8 @@ internal sealed class PlotPlanSvgRenderer
                         : ConnectedMarkResolver.SelectFacet(layer, facet.Id, rows)).ToImmutableArray(),
                     Facets = []
                 };
-                var nested = new PlotPlanSvgRenderer().RenderValidated(panel);
+                var facetOptions = _options with { SuppressTitle = false };
+                var nested = new PlotPlanSvgRenderer(panel, facetOptions).RenderValidated(panel);
                 builder.AppendLine($"<g transform='translate({N(facet.Bounds.X)},{N(facet.Bounds.Y)})'>{nested}</g>");
             }
             builder.AppendLine("</svg>");
@@ -192,7 +300,7 @@ internal sealed class PlotPlanSvgRenderer
     private static int OffsetCategoryCount(PlotPlan plan, FieldChannel channel) =>
         Math.Max(1, plan.Scales.FirstOrDefault(scale => scale.Channel == channel)?.Categories.Length ?? 1);
 
-    private static void RenderCartesian(StringBuilder builder, PlotPlan plan, bool transposedPointAxes = false)
+    private void RenderCartesian(StringBuilder builder, PlotPlan plan, bool transposedPointAxes = false)
     {
         if (plan.Coordinate?.Kind == CoordinateKind.TransposedCartesian)
         {
@@ -246,8 +354,19 @@ internal sealed class PlotPlanSvgRenderer
             string.Equals(layer.AreaRibbonScaleId, sharedRibbonScaleId, StringComparison.OrdinalIgnoreCase)))
             yScale = plan.Scales.Single(scale => scale.Id.Equals(sharedRibbonScaleId, StringComparison.OrdinalIgnoreCase));
 
+        var effectiveLegendPos = ResolveEffectiveLegendPosition(plan, _options);
+        var dynamicLeftMargin = CartesianPlotLayout.BaseLeftMargin;
+        if (_options.EmbedInCard && yScale is not null && !yScale.Ticks.IsDefaultOrEmpty)
+        {
+            var yTitleForMargin = yScale.Title ?? Style(plan, "axis:y:label") ?? Style(plan, "axis:y:title");
+            var maxTickChars = yScale.Ticks.Max(t => t.Label?.Length ?? 0);
+            var charWidth = _compactCanvas ? 6.2m : 5.6m;
+            var titleGutter = string.IsNullOrWhiteSpace(yTitleForMargin) ? 14m : 28m;
+            dynamicLeftMargin = Math.Clamp(maxTickChars * charWidth + titleGutter, CartesianPlotLayout.BaseLeftMargin, 112m);
+        }
         var (areaBounds, sideLabelsGutter, sideLabelsRight) = CartesianPlotLayout.ResolveCartesianMetrics(
-            plan.Bounds, plan.Style, plan.Layers, plan.Series, xScale, plan.Legend.Length);
+            plan.Bounds, plan.Style, plan.Layers, plan.Series, xScale, plan.Legend.Length,
+            Top, Bottom, effectiveLegendPos, dynamicLeftMargin);
         var plotLeft = areaBounds.X;
         var plotWidth = areaBounds.Width;
         var plotHeight = areaBounds.Height;
@@ -267,9 +386,9 @@ internal sealed class PlotPlanSvgRenderer
 
         RenderPlotPanel(builder, plan, area.Left, area.Top, area.Width, area.Height);
         if (AxisLineEnabled(plan, "y"))
-            builder.AppendLine($"<line class='plot-axis-line' x1='{N(area.Left)}' y1='{N(area.Top)}' x2='{N(area.Left)}' y2='{N(area.Bottom)}' stroke='#bbb'/>");
+            builder.AppendLine($"<line class='plot-axis-line' x1='{N(area.Left)}' y1='{N(area.Top)}' x2='{N(area.Left)}' y2='{N(area.Bottom)}' stroke='{Esc(_theme.AxisLine)}'/>");
         if (AxisLineEnabled(plan, "x"))
-            builder.AppendLine($"<line class='plot-axis-line' x1='{N(area.Left)}' y1='{N(area.Bottom)}' x2='{N(area.Right)}' y2='{N(area.Bottom)}' stroke='#bbb'/>");
+            builder.AppendLine($"<line class='plot-axis-line' x1='{N(area.Left)}' y1='{N(area.Bottom)}' x2='{N(area.Right)}' y2='{N(area.Bottom)}' stroke='{Esc(_theme.AxisLine)}'/>");
 
         var rectLayers = plan.Layers.Where(layer => layer.Mark == MarkKind.Rect && LayerStyle(layer, "overlayType") is null).ToList();
         var lineLayers = plan.Layers.Where(layer => layer.Mark == MarkKind.Line &&
@@ -411,7 +530,7 @@ internal sealed class PlotPlanSvgRenderer
             {
                 var tick = xScale.Ticks[index];
                 var x = MapX(PositionNumber(tick.Value) ?? 0m, xScale, area);
-                builder.AppendLine($"<line x1='{N(x)}' y1='{N(area.Bottom)}' x2='{N(x)}' y2='{N(area.Bottom + 4m)}' stroke='#bbb'/>");
+                builder.AppendLine($"<line x1='{N(x)}' y1='{N(area.Bottom)}' x2='{N(x)}' y2='{N(area.Bottom + 4m)}' stroke='{Esc(_theme.AxisLine)}'/>");
                 if (!SkipTickLabel(xScale, index))
                 {
                     var angle = AxisLabelAngle(xScale.LabelRotation, 0);
@@ -424,24 +543,32 @@ internal sealed class PlotPlanSvgRenderer
         }
         if (yScale is not null)
         {
+            var autoYStride = _options.EmbedInCard && area.Height < 200m && yScale.LabelSkip is null && yScale.Ticks.Length > 5
+                ? Math.Max(2, (int)Math.Ceiling(yScale.Ticks.Length / 4.0))
+                : 1;
             for (var index = 0; index < yScale.Ticks.Length; index++)
             {
                 var tick = yScale.Ticks[index];
                 var y = MapY(PositionNumber(tick.Value) ?? 0m, yScale, area.Height);
-                builder.AppendLine($"<line x1='{N(area.Left - 4)}' y1='{N(y)}' x2='{N(area.Left)}' y2='{N(y)}' stroke='#bbb'/>");
-                if (!SkipTickLabel(yScale, index))
+                builder.AppendLine($"<line x1='{N(area.Left - 4)}' y1='{N(y)}' x2='{N(area.Left)}' y2='{N(y)}' stroke='{Esc(_theme.AxisLine)}'/>");
+                var skipCompact = autoYStride > 1 && index % autoYStride != 0 && index != yScale.Ticks.Length - 1;
+                if (!SkipTickLabel(yScale, index) && !skipCompact)
                     builder.AppendLine($"<text x='{N(area.Left - 6)}' y='{N(y + 4)}' text-anchor='end' {AxisLabelFont(plan)}>{Esc(tick.Label)}</text>");
             }
             RenderVerticalMinorTicks(builder, yScale, area.Height, area.Left, -4m);
         }
         if (y2Scale is not null)
         {
+            var autoY2Stride = _options.EmbedInCard && area.Height < 200m && y2Scale.LabelSkip is null && y2Scale.Ticks.Length > 5
+                ? Math.Max(2, (int)Math.Ceiling(y2Scale.Ticks.Length / 4.0))
+                : 1;
             for (var index = 0; index < y2Scale.Ticks.Length; index++)
             {
                 var tick = y2Scale.Ticks[index];
                 var y = MapY(PositionNumber(tick.Value) ?? 0m, y2Scale, area.Height);
-                builder.AppendLine($"<line x1='{N(area.Right)}' y1='{N(y)}' x2='{N(area.Right + 4m)}' y2='{N(y)}' stroke='#bbb'/>");
-                if (!SkipTickLabel(y2Scale, index))
+                builder.AppendLine($"<line x1='{N(area.Right)}' y1='{N(y)}' x2='{N(area.Right + 4m)}' y2='{N(y)}' stroke='{Esc(_theme.AxisLine)}'/>");
+                var skipCompact = autoY2Stride > 1 && index % autoY2Stride != 0 && index != y2Scale.Ticks.Length - 1;
+                if (!SkipTickLabel(y2Scale, index) && !skipCompact)
                     builder.AppendLine($"<text x='{N(area.Right + 6m)}' y='{N(y + 4m)}' {AxisLabelFont(plan)}>{Esc(tick.Label)}</text>");
             }
             RenderVerticalMinorTicks(builder, y2Scale, area.Height, area.Right, 4m);
@@ -457,7 +584,7 @@ internal sealed class PlotPlanSvgRenderer
         RenderLegend(builder, plan);
     }
 
-    private static void RenderTransposedCartesian(StringBuilder builder, PlotPlan plan)
+    private void RenderTransposedCartesian(StringBuilder builder, PlotPlan plan)
     {
         var plotWidth = plan.Bounds.Width - Left - Right;
         var plotHeight = plan.Bounds.Height - Top - Bottom;
@@ -480,9 +607,9 @@ internal sealed class PlotPlanSvgRenderer
             transposedValueScale = plan.Scales.Single(scale => scale.Id.Equals(sharedRibbonScaleId, StringComparison.OrdinalIgnoreCase));
         RenderPlotPanel(builder, plan, Left, Top, plotWidth, plotHeight);
         if (AxisLineEnabled(plan, "x"))
-            builder.AppendLine($"<line class='plot-axis-line' x1='{N(Left)}' y1='{N(Top)}' x2='{N(Left)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
+            builder.AppendLine($"<line class='plot-axis-line' x1='{N(Left)}' y1='{N(Top)}' x2='{N(Left)}' y2='{N(Top + plotHeight)}' stroke='{Esc(_theme.AxisLine)}'/>");
         if (AxisLineEnabled(plan, "y"))
-            builder.AppendLine($"<line class='plot-axis-line' x1='{N(Left)}' y1='{N(Top + plotHeight)}' x2='{N(Left + plotWidth)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
+            builder.AppendLine($"<line class='plot-axis-line' x1='{N(Left)}' y1='{N(Top + plotHeight)}' x2='{N(Left + plotWidth)}' y2='{N(Top + plotHeight)}' stroke='{Esc(_theme.AxisLine)}'/>");
         if (IsEnabledByDefault(plan.Style, "GRID_LINES"))
         {
             var gridScale = transposedValueScale;
@@ -707,7 +834,7 @@ internal sealed class PlotPlanSvgRenderer
                         var positive = end >= start;
                         var labelX = endX + (positive ? 4m : -4m);
                         var anchor = positive ? "start" : "end";
-                        var labelColor = SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#333");
+                        var labelColor = SafePaint(Style(plan, "DATA_LABELS:COLOR"), _theme.TitleColor);
                         if (position.Contains("INSIDE", StringComparison.OrdinalIgnoreCase))
                         {
                             var ratio = position.Contains("MIDDLE", StringComparison.OrdinalIgnoreCase) ? .5m
@@ -885,7 +1012,26 @@ internal sealed class PlotPlanSvgRenderer
         return title;
     }
 
-    private static void RenderLegend(StringBuilder builder, PlotPlan plan)
+    private static string ResolveEffectiveLegendPosition(PlotPlan plan, PlotSvgRenderOptions options)
+    {
+        var authored = Style(plan, "LEGEND_POSITION")
+            ?? (Style(plan, "LEGEND") is "TOP" or "BOTTOM" or "LEFT" or "RIGHT" or "INSIDE" ? Style(plan, "LEGEND") : null);
+        var pos = LegendPosition(plan);
+        if (options.EmbedInCard && plan.Legend.Length > 1 && LegendEnabled(plan))
+        {
+            if (plan.Layers.Any(l => l.Mark == MarkKind.Arc)
+                && authored is null
+                && plan.Bounds.Width >= plan.Bounds.Height * 1.9m)
+                return "RIGHT";
+            if (pos == "RIGHT" && plan.Bounds.Width <= 420m)
+                return "BOTTOM";
+            if (pos == "BOTTOM" && plan.Bounds.Height <= 280m && plan.Bounds.Width >= 560m)
+                return "TOP";
+        }
+        return pos;
+    }
+
+    private void RenderLegend(StringBuilder builder, PlotPlan plan)
     {
         if (!LegendEnabled(plan)) return;
         var continuous = plan.Scales.FirstOrDefault(scale => scale.ColorRange is not null);
@@ -893,11 +1039,12 @@ internal sealed class PlotPlanSvgRenderer
         {
             var gradientId = $"{plan.SpecId}-continuous-color";
             var colorbarX = plan.Bounds.Width - 140m;
-            var colorbarY = 28m;
+            var colorbarY = _options.EffectiveSuppressTitle ? 8m : 28m;
             builder.AppendLine($"<defs><linearGradient id='{Esc(gradientId)}'><stop offset='0%' stop-color='{Esc(range.Low)}'/>{(range.Mid is null ? string.Empty : $"<stop offset='{N(ColorMidOffset(continuous, range) * 100m)}%' stop-color='{Esc(range.Mid)}'/>")}<stop offset='100%' stop-color='{Esc(range.High)}'/></linearGradient></defs>");
             builder.AppendLine($"<rect class='plot-colorbar' x='{N(colorbarX)}' y='{N(colorbarY)}' width='110' height='9' fill='url(#{Esc(gradientId)})'><title>{Esc(range.AccessibleDescription)}</title></rect>");
-            builder.AppendLine($"<text x='{N(colorbarX)}' y='{N(colorbarY + 19m)}' font-size='8' fill='#555'>{Esc(continuous.Ticks[0].Label)}</text>");
-            builder.AppendLine($"<text x='{N(colorbarX + 110m)}' y='{N(colorbarY + 19m)}' text-anchor='end' font-size='8' fill='#555'>{Esc(continuous.Ticks[^1].Label)}</text>");
+            var colorbarText = _theme.IsDark ? _theme.TextMuted : "#555";
+            builder.AppendLine($"<text x='{N(colorbarX)}' y='{N(colorbarY + 19m)}' font-size='8' fill='{Esc(colorbarText)}'>{Esc(continuous.Ticks[0].Label)}</text>");
+            builder.AppendLine($"<text x='{N(colorbarX + 110m)}' y='{N(colorbarY + 19m)}' text-anchor='end' font-size='8' fill='{Esc(colorbarText)}'>{Esc(continuous.Ticks[^1].Label)}</text>");
             return;
         }
 
@@ -910,18 +1057,18 @@ internal sealed class PlotPlanSvgRenderer
             ? plan.Legend.Reverse().ToArray()
             : plan.Legend.ToArray();
 
-        var fontSizeStr = Style(plan, "LEGEND_FONT_SIZE") ?? "9";
-        var fontColor = Style(plan, "LEGEND_FONT_COLOR") ?? "#444";
+        var fontSizeStr = Style(plan, "LEGEND_FONT_SIZE") ?? (_compactCanvas ? "10" : "9");
+        var fontColor = Style(plan, "LEGEND_FONT_COLOR") ?? _theme.TextSecondary;
         var fontWeight = Style(plan, "LEGEND_FONT_WEIGHT");
         var weightAttr = !string.IsNullOrWhiteSpace(fontWeight) ? $" font-weight='{Esc(fontWeight)}'" : "";
 
-        decimal fontSizeVal = 9m;
+        decimal fontSizeVal = _compactCanvas ? 10m : 9m;
         var trimmedSize = fontSizeStr.Trim().TrimEnd('p', 'x', 'P', 'X', 't', 'T');
         if (decimal.TryParse(trimmedSize, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedSize) && parsedSize > 0)
             fontSizeVal = parsedSize;
 
-        var rowHeight = Math.Max(16m, fontSizeVal + 7m);
-        var position = LegendPosition(plan);
+        var rowHeight = _compactCanvas ? Math.Max(14m, fontSizeVal + 5m) : Math.Max(16m, fontSizeVal + 7m);
+        var position = ResolveEffectiveLegendPosition(plan, _options);
         var isInside = position == "INSIDE";
         var anchor = isInside ? LegendAnchor(plan) : "TOP_RIGHT";
         var isVertical = LegendIsVertical(plan, position);
@@ -942,7 +1089,7 @@ internal sealed class PlotPlanSvgRenderer
         RenderHorizontalLegend(builder, plan, entries, legendTitle, fontSizeStr, fontSizeVal, fontColor, fontWeight, weightAttr, rowHeight, position, columns);
     }
 
-    private static void RenderInsideLegend(
+    private void RenderInsideLegend(
         StringBuilder builder,
         PlotPlan plan,
         LegendEntry[] entries,
@@ -989,7 +1136,7 @@ internal sealed class PlotPlanSvgRenderer
         };
 
         builder.AppendLine("<g class='plot-legend plot-legend-inside'>");
-        builder.AppendLine($"<rect class='plot-legend-bg' x='{N(boxX)}' y='{N(boxY)}' width='{N(boxWidth)}' height='{N(boxHeight)}' fill='white' fill-opacity='0.88' stroke='#e5e7eb' stroke-width='1' rx='4'/>");
+        builder.AppendLine($"<rect class='plot-legend-bg' x='{N(boxX)}' y='{N(boxY)}' width='{N(boxWidth)}' height='{N(boxHeight)}' fill='{Esc(_theme.OverlayBg)}' fill-opacity='0.88' stroke='{Esc(_theme.OverlayBorder)}' stroke-width='1' rx='4'/>");
 
         decimal contentX = boxX + 8m;
         decimal currentY = boxY + 6m + fontSizeVal;
@@ -1015,7 +1162,7 @@ internal sealed class PlotPlanSvgRenderer
         builder.AppendLine("</g>");
     }
 
-    private static void RenderVerticalLegend(
+    private void RenderVerticalLegend(
         StringBuilder builder,
         PlotPlan plan,
         LegendEntry[] entries,
@@ -1031,7 +1178,8 @@ internal sealed class PlotPlanSvgRenderer
     {
         var titleWeight = !string.IsNullOrWhiteSpace(fontWeight) ? $" font-weight='{Esc(fontWeight)}'" : " font-weight='bold'";
         decimal x = position == "RIGHT" ? plan.Bounds.Width - 105m : (position == "LEFT" ? 8m : Left);
-        decimal y = position == "TOP" ? 29m : (position == "BOTTOM" ? plan.Bounds.Height - 12m - (entries.Length - 1) * rowHeight : Top);
+        decimal topY = _options.EffectiveSuppressTitle ? 14m : 29m;
+        decimal y = position == "TOP" ? topY : (position == "BOTTOM" ? plan.Bounds.Height - 12m - (entries.Length - 1) * rowHeight : Top);
 
         if (legendTitle is not null)
         {
@@ -1057,7 +1205,7 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderHorizontalLegend(
+    private void RenderHorizontalLegend(
         StringBuilder builder,
         PlotPlan plan,
         LegendEntry[] entries,
@@ -1075,13 +1223,14 @@ internal sealed class PlotPlanSvgRenderer
         decimal startX = position == "RIGHT" ? plan.Bounds.Width - 105m : (position == "LEFT" ? 8m : Left);
         decimal maxX = position == "RIGHT" ? plan.Bounds.Width - 10m : (position == "LEFT" ? Left : plan.Bounds.Width - Right);
         decimal availableWidth = Math.Max(100m, maxX - startX);
+        decimal topY = _options.EffectiveSuppressTitle ? 14m : 29m;
 
         if (columns.HasValue)
         {
             int cols = columns.Value;
             int totalRows = (int)Math.Ceiling((double)entries.Length / cols);
             decimal colWidth = Math.Max(65m, availableWidth / cols);
-            decimal startY = position == "TOP" ? 29m : (position == "BOTTOM" ? plan.Bounds.Height - 12m - (totalRows - 1) * rowHeight : Top);
+            decimal startY = position == "TOP" ? topY : (position == "BOTTOM" ? plan.Bounds.Height - 12m - (totalRows - 1) * rowHeight : Top);
 
             if (legendTitle is not null)
             {
@@ -1118,7 +1267,7 @@ internal sealed class PlotPlanSvgRenderer
             curX += itemWidth;
         }
 
-        decimal renderStartY = position == "TOP" ? 29m : (position == "BOTTOM" ? plan.Bounds.Height - 12m - (simRows - 1) * rowHeight : Top);
+        decimal renderStartY = position == "TOP" ? topY : (position == "BOTTOM" ? plan.Bounds.Height - 12m - (simRows - 1) * rowHeight : Top);
         curX = startX;
         decimal renderCurrentY = renderStartY;
 
@@ -1244,7 +1393,7 @@ internal sealed class PlotPlanSvgRenderer
         builder.AppendLine($"<rect x='1' y='3' width='{N(Math.Max(0m, (width - 2m) * ratio))}' height='{N(Math.Max(1m, height - 6m))}' rx='{N(Math.Min(5m, height / 4m))}' fill='{Esc(color)}'/>");
     }
 
-    private static void RenderHorizontalArea(StringBuilder builder, ResolvedMarkLayer layer, ResolvedScale? verticalScale,
+    private void RenderHorizontalArea(StringBuilder builder, ResolvedMarkLayer layer, ResolvedScale? verticalScale,
         Func<decimal, decimal> horizontal, Func<ResolvedDatum, int, decimal> vertical, string color, bool transposedAxes)
     {
         var ribbon = layer.AreaRibbon || layer.Data.Any(datum => Channel(datum, transposedAxes ? FieldChannel.XStart : FieldChannel.YStart) is not null);
@@ -1291,7 +1440,7 @@ internal sealed class PlotPlanSvgRenderer
         Flush();
     }
 
-    private static void RenderArea(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
+    private void RenderArea(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
         in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? scale, string color)
     {
         if (scale is null || layer.Data.IsDefaultOrEmpty) return;
@@ -1432,7 +1581,7 @@ internal sealed class PlotPlanSvgRenderer
 
     private static string Anchor(MarkExtentAnchor anchor) => anchor == MarkExtentAnchor.End ? "end" : "start";
 
-    private static void RenderRects(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, IReadOnlyList<ResolvedMarkLayer> layers, bool stacked,
+    private void RenderRects(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, IReadOnlyList<ResolvedMarkLayer> layers, bool stacked,
         int categoryCount, in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? scale, string color, bool showLabels, bool transposedAspect)
     {
         if (scale is null) return;
@@ -1574,7 +1723,7 @@ internal sealed class PlotPlanSvgRenderer
                 var labelX = x + width / 2m;
                 var labelY = top - 4m;
                 var anchor = "middle";
-                var labelColor = SafePaint(labelColorToken, "#444");
+                var labelColor = SafePaint(labelColorToken, _theme.TextSecondary);
                 if (position.Contains("OUTSIDE", StringComparison.OrdinalIgnoreCase))
                 {
                     labelY = (end >= start ? top - 4m : top + barHeight + 12m);
@@ -1602,7 +1751,7 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderTicks(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
+    private void RenderTicks(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
         in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? yScale, string color)
     {
         var continuousX = categoryCount == 0 && xScale is not null && Continuous(xScale);
@@ -1639,7 +1788,7 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderTransposedConnections(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
+    private void RenderTransposedConnections(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
         in CartesianPlotArea area, ResolvedScale horizontalScale, ResolvedScale verticalScale, string color, bool showLabels,
         ICollection<SmartLabel> labels, ICollection<SeriesLabelPlacement> seriesLabels)
     {
@@ -1706,7 +1855,7 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderInterpolatedConnections(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
+    private void RenderInterpolatedConnections(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
         in CartesianPlotArea area, ResolvedScale horizontalScale, ResolvedScale verticalScale, string color, bool transposed)
     {
         var frame = area;
@@ -1746,7 +1895,7 @@ internal sealed class PlotPlanSvgRenderer
         builder.AppendLine($"<g class='plot-connected-layer' role='group' aria-label='{Esc(owner)}'{line}>");
     }
 
-    private static void RenderDecoratedConnectionPath(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
+    private void RenderDecoratedConnectionPath(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
         ResolvedMarkConnection connection, string geometry, string paint, decimal opacity)
     {
         var area = layer.Mark == MarkKind.Area;
@@ -1755,7 +1904,7 @@ internal sealed class PlotPlanSvgRenderer
         builder.AppendLine($"<path class='{(area ? "plot-conditional-area" : "plot-conditional-connection")}' d='{geometry}' fill='{(area ? Esc(paint) : "none")}' stroke='{(area ? "none" : Esc(paint))}'{line}{alpha}><title>{Esc(ConnectedMarkResolver.Describe(connection, plan, layer, includeOwner: false, includeInterpolation: layer.ConnectionInterpolation is null))}</title></path>");
     }
 
-    private static void RenderConnectionDecorations(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
+    private void RenderConnectionDecorations(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
         in CartesianPlotArea area, ResolvedScale horizontalScale, ResolvedScale verticalScale, string color, bool showLabels,
         ICollection<SmartLabel> labels, ICollection<SeriesLabelPlacement> seriesLabels, bool transposed)
     {
@@ -1793,7 +1942,7 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderConnectedLine(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
+    private void RenderConnectedLine(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
         in CartesianPlotArea area, ResolvedScale xScale, ResolvedScale yScale, string color)
     {
         var points = layer.Data.Select(datum => ResolvedMarkConnection.Coordinates(datum, false)).ToArray();
@@ -1814,7 +1963,7 @@ internal sealed class PlotPlanSvgRenderer
         if (layer.ConnectionDecorations) builder.AppendLine("</g>");
     }
 
-    private static void RenderLine(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
+    private void RenderLine(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
         in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? scale, string color, bool showLabels,
         ICollection<OverlayLabel> overlayLabels, ICollection<SmartLabel> smartLabels,
         ICollection<SeriesLabelPlacement> seriesLabelPlacements, bool transposedAspect)
@@ -2033,7 +2182,7 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderStackedLine(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
+    private void RenderStackedLine(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
         IReadOnlyList<ResolvedMarkLayer> layers, int categoryCount, in CartesianPlotArea area,
         ResolvedScale? xScale, ResolvedScale? scale, string color, bool showLabels,
         ICollection<SeriesLabelPlacement> seriesLabelPlacements)
@@ -2201,7 +2350,7 @@ internal sealed class PlotPlanSvgRenderer
         return builder.ToString();
     }
 
-    private static void RenderPoints(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
+    private void RenderPoints(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
         in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? yScale, string color,
         ICollection<SmartLabel> smartLabels, bool horizontalErrors = false)
     {
@@ -2369,7 +2518,7 @@ internal sealed class PlotPlanSvgRenderer
     private static string LineWidth(ResolvedMarkLayer layer, string fallback) =>
         LineSeriesWidth.TryNormalize(LayerStyle(layer, "LINE_WIDTH"), out var width) ? width : fallback;
 
-    private static void RenderAnnotationPoint(
+    private void RenderAnnotationPoint(
         StringBuilder builder,
         PlotPlan plan,
         ResolvedMarkLayer layer,
@@ -2488,7 +2637,7 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderPointSymbol(
+    private void RenderPointSymbol(
         StringBuilder builder,
         string? shape,
         decimal x,
@@ -2542,7 +2691,7 @@ internal sealed class PlotPlanSvgRenderer
         return string.Join(" ", points);
     }
 
-    private static void RenderFunnel(StringBuilder builder, PlotPlan plan)
+    private void RenderFunnel(StringBuilder builder, PlotPlan plan)
     {
         var firstLayer = plan.Layers.FirstOrDefault();
         var data = (firstLayer?.Data ?? []).Where(datum => !datum.IsGap).ToList();
@@ -2669,7 +2818,7 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderGauge(StringBuilder builder, PlotPlan plan)
+    private void RenderGauge(StringBuilder builder, PlotPlan plan)
     {
         var datum = plan.Layers.First().Data.FirstOrDefault(item => !item.IsGap);
         if (datum is null) return;
@@ -2711,12 +2860,12 @@ internal sealed class PlotPlanSvgRenderer
         var start = semiCircle ? Math.PI : Math.PI * .75d;
         var end = semiCircle ? Math.PI * 2d : Math.PI * 2.25d;
         var valueEnd = start + (end - start) * (double)ratio;
-        builder.AppendLine($"<path d='{ArcPath(cx, cy, radius, start, end)}' fill='none' stroke='#e5e7eb' stroke-width='24' stroke-linecap='round'/>");
+        builder.AppendLine($"<path d='{ArcPath(cx, cy, radius, start, end)}' fill='none' stroke='{Esc(_theme.GridLine)}' stroke-width='24' stroke-linecap='round'/>");
         builder.AppendLine($"<path class='plot-gauge-value' data-gauge-style='{Esc(style)}' d='{ArcPath(cx, cy, radius, start, valueEnd)}' fill='none' stroke='{Esc(color)}' stroke-width='24' stroke-linecap='round'/>");
         if (style == "NEEDLE")
         {
             var needle = PointCoordinates(cx, cy, radius - 14m, valueEnd);
-            builder.AppendLine($"<line class='plot-gauge-needle' x1='{N(cx)}' y1='{N(cy)}' x2='{N(needle.X)}' y2='{N(needle.Y)}' stroke='#374151' stroke-width='3'/><circle cx='{N(cx)}' cy='{N(cy)}' r='6' fill='#374151'/>");
+            builder.AppendLine($"<line class='plot-gauge-needle' x1='{N(cx)}' y1='{N(cy)}' x2='{N(needle.X)}' y2='{N(needle.Y)}' stroke='{Esc(_theme.WhiskerStroke)}' stroke-width='3'/><circle cx='{N(cx)}' cy='{N(cy)}' r='6' fill='{Esc(_theme.WhiskerStroke)}'/>");
         }
         if (goal.HasValue)
         {
@@ -2724,7 +2873,7 @@ internal sealed class PlotPlanSvgRenderer
             var goalAngle = start + (end - start) * (double)goalRatio;
             var goalInner = PointCoordinates(cx, cy, radius - 18m, goalAngle);
             var goalOuter = PointCoordinates(cx, cy, radius + 18m, goalAngle);
-            builder.AppendLine($"<line class='plot-gauge-goal' x1='{N(goalInner.X)}' y1='{N(goalInner.Y)}' x2='{N(goalOuter.X)}' y2='{N(goalOuter.Y)}' stroke='#111827' stroke-width='3'><title>{Esc(goalLabel)}: {N(goal.Value)}</title></line>");
+            builder.AppendLine($"<line class='plot-gauge-goal' x1='{N(goalInner.X)}' y1='{N(goalInner.Y)}' x2='{N(goalOuter.X)}' y2='{N(goalOuter.Y)}' stroke='{Esc(_theme.IsDark ? _theme.TitleColor : "#111827")}' stroke-width='3'><title>{Esc(goalLabel)}: {N(goal.Value)}</title></line>");
         }
         if (goal2.HasValue)
         {
@@ -2742,29 +2891,30 @@ internal sealed class PlotPlanSvgRenderer
             _ => semiCircle ? cy - 18m : cy + 5m
         };
         var formattedVal = FormatGaugeValue(value, plan);
-        builder.AppendLine($"<text class='plot-gauge-value-label' data-label-position='{Esc(labelPos)}' x='{N(cx)}' y='{N(valueY)}' text-anchor='middle' font-size='18' font-weight='bold' fill='#333'>{Esc(formattedVal)}</text>");
-        if (!string.IsNullOrWhiteSpace(label)) builder.AppendLine($"<text x='{N(cx)}' y='{N(valueY + 18m)}' text-anchor='middle' font-size='10' fill='#666'>{Esc(label)}</text>");
+        builder.AppendLine($"<text class='plot-gauge-value-label' data-label-position='{Esc(labelPos)}' x='{N(cx)}' y='{N(valueY)}' text-anchor='middle' font-size='18' font-weight='bold' fill='{Esc(_theme.TitleColor)}'>{Esc(formattedVal)}</text>");
+        if (!string.IsNullOrWhiteSpace(label)) builder.AppendLine($"<text x='{N(cx)}' y='{N(valueY + 18m)}' text-anchor='middle' font-size='10' fill='{Esc(_theme.TextMuted)}'>{Esc(label)}</text>");
         if (semiCircle)
         {
-            builder.AppendLine($"<text x='{N(cx - radius)}' y='{N(cy + 20m)}' text-anchor='middle' font-size='8' fill='#6b7280'>{N(minimum)}</text>");
-            builder.AppendLine($"<text x='{N(cx + radius)}' y='{N(cy + 20m)}' text-anchor='middle' font-size='8' fill='#6b7280'>{N(maximum)}</text>");
+            var minMaxFill = _theme.IsDark ? _theme.TextMuted : "#6b7280";
+            builder.AppendLine($"<text x='{N(cx - radius)}' y='{N(cy + 20m)}' text-anchor='middle' font-size='8' fill='{Esc(minMaxFill)}'>{N(minimum)}</text>");
+            builder.AppendLine($"<text x='{N(cx + radius)}' y='{N(cy + 20m)}' text-anchor='middle' font-size='8' fill='{Esc(minMaxFill)}'>{N(maximum)}</text>");
         }
     }
 
-    private static void RenderGaugeRing(StringBuilder builder, PlotPlan plan, decimal value, decimal ratio, string color,
+    private void RenderGaugeRing(StringBuilder builder, PlotPlan plan, decimal value, decimal ratio, string color,
         string? label, decimal minimum, decimal maximum, decimal? goal, string? goalLabel = null, decimal? goal2 = null, string? goal2Label = null)
     {
         var cx = plan.Bounds.Width / 2m;
         var cy = plan.Bounds.Height * .53m;
         var radius = Math.Min(plan.Bounds.Width, plan.Bounds.Height) * .31m;
         var circumference = 2m * (decimal)Math.PI * radius;
-        builder.AppendLine($"<circle cx='{N(cx)}' cy='{N(cy)}' r='{N(radius)}' fill='none' stroke='#e5e7eb' stroke-width='24'/>");
+        builder.AppendLine($"<circle cx='{N(cx)}' cy='{N(cy)}' r='{N(radius)}' fill='none' stroke='{Esc(_theme.GridLine)}' stroke-width='24'/>");
         builder.AppendLine($"<circle class='plot-gauge-value' data-gauge-style='RING' cx='{N(cx)}' cy='{N(cy)}' r='{N(radius)}' fill='none' stroke='{Esc(color)}' stroke-width='24' stroke-linecap='round' stroke-dasharray='{N(circumference * ratio)} {N(circumference)}' transform='rotate(-90 {N(cx)} {N(cy)})'/>");
         if (goal.HasValue)
         {
             var goalRatio = maximum <= minimum ? 0m : Math.Clamp((goal.Value - minimum) / (maximum - minimum), 0m, 1m);
             var goalPoint = PointCoordinates(cx, cy, radius, -Math.PI / 2d + 2d * Math.PI * (double)goalRatio);
-            builder.AppendLine($"<circle class='plot-gauge-goal' cx='{N(goalPoint.X)}' cy='{N(goalPoint.Y)}' r='4' fill='#111827'><title>{Esc(goalLabel ?? "Goal")}: {N(goal.Value)}</title></circle>");
+            builder.AppendLine($"<circle class='plot-gauge-goal' cx='{N(goalPoint.X)}' cy='{N(goalPoint.Y)}' r='4' fill='{Esc(_theme.IsDark ? _theme.TitleColor : "#111827")}'><title>{Esc(goalLabel ?? "Goal")}: {N(goal.Value)}</title></circle>");
         }
         if (goal2.HasValue)
         {
@@ -2775,23 +2925,23 @@ internal sealed class PlotPlanSvgRenderer
         var labelPos = (Style(plan, "LABEL_POSITION") ?? Style(plan, "DATA_LABELS:POSITION") ?? "CENTER").Trim().ToUpperInvariant();
         var valueY = labelPos == "BOTTOM" ? cy + radius + 18m : cy + 5m;
         var formattedVal = FormatGaugeValue(value, plan);
-        builder.AppendLine($"<text class='plot-gauge-value-label' data-label-position='{Esc(labelPos)}' x='{N(cx)}' y='{N(valueY)}' text-anchor='middle' font-size='20' font-weight='bold' fill='#333'>{Esc(formattedVal)}</text>");
-        if (!string.IsNullOrWhiteSpace(label)) builder.AppendLine($"<text x='{N(cx)}' y='{N(valueY + 18m)}' text-anchor='middle' font-size='10' fill='#666'>{Esc(label)}</text>");
+        builder.AppendLine($"<text class='plot-gauge-value-label' data-label-position='{Esc(labelPos)}' x='{N(cx)}' y='{N(valueY)}' text-anchor='middle' font-size='20' font-weight='bold' fill='{Esc(_theme.TitleColor)}'>{Esc(formattedVal)}</text>");
+        if (!string.IsNullOrWhiteSpace(label)) builder.AppendLine($"<text x='{N(cx)}' y='{N(valueY + 18m)}' text-anchor='middle' font-size='10' fill='{Esc(_theme.TextMuted)}'>{Esc(label)}</text>");
     }
 
-    private static void RenderGaugeBar(StringBuilder builder, PlotPlan plan, decimal value, decimal ratio, string color,
+    private void RenderGaugeBar(StringBuilder builder, PlotPlan plan, decimal value, decimal ratio, string color,
         string? label, decimal minimum, decimal maximum, decimal? goal, string? goalLabel = null, decimal? goal2 = null, string? goal2Label = null)
     {
         var x = 62m;
         var width = plan.Bounds.Width - 124m;
         var y = plan.Bounds.Height * .48m;
-        builder.AppendLine($"<rect x='{N(x)}' y='{N(y)}' width='{N(width)}' height='24' rx='12' fill='#e5e7eb'/>");
+        builder.AppendLine($"<rect x='{N(x)}' y='{N(y)}' width='{N(width)}' height='24' rx='12' fill='{Esc(_theme.GridLine)}'/>");
         builder.AppendLine($"<rect class='plot-gauge-value' data-gauge-style='BAR' x='{N(x)}' y='{N(y)}' width='{N(width * ratio)}' height='24' rx='12' fill='{Esc(color)}'/>");
         if (goal.HasValue)
         {
             var goalRatio = maximum <= minimum ? 0m : Math.Clamp((goal.Value - minimum) / (maximum - minimum), 0m, 1m);
             var goalX = x + width * goalRatio;
-            builder.AppendLine($"<line class='plot-gauge-goal' x1='{N(goalX)}' y1='{N(y - 7m)}' x2='{N(goalX)}' y2='{N(y + 31m)}' stroke='#111827' stroke-width='3'><title>{Esc(goalLabel ?? "Goal")}: {N(goal.Value)}</title></line>");
+            builder.AppendLine($"<line class='plot-gauge-goal' x1='{N(goalX)}' y1='{N(y - 7m)}' x2='{N(goalX)}' y2='{N(y + 31m)}' stroke='{Esc(_theme.IsDark ? _theme.TitleColor : "#111827")}' stroke-width='3'><title>{Esc(goalLabel ?? "Goal")}: {N(goal.Value)}</title></line>");
         }
         if (goal2.HasValue)
         {
@@ -2806,15 +2956,16 @@ internal sealed class PlotPlanSvgRenderer
             "INSIDE" => y + 17m,
             _ => y - 18m
         };
-        var valueColor = labelPos == "INSIDE" ? "#ffffff" : "#333333";
+        var valueColor = labelPos == "INSIDE" ? "#ffffff" : (_theme.IsDark ? _theme.TitleColor : "#333333");
         var formattedVal = FormatGaugeValue(value, plan);
+        var minMaxFill = _theme.IsDark ? _theme.TextMuted : "#6b7280";
         builder.AppendLine($"<text class='plot-gauge-value-label' data-label-position='{Esc(labelPos)}' x='{N(plan.Bounds.Width / 2m)}' y='{N(valueY)}' text-anchor='middle' font-size='20' font-weight='bold' fill='{valueColor}'>{Esc(formattedVal)}</text>");
-        if (!string.IsNullOrWhiteSpace(label)) builder.AppendLine($"<text x='{N(plan.Bounds.Width / 2m)}' y='{N(y + 52m)}' text-anchor='middle' font-size='10' fill='#666'>{Esc(label)}</text>");
-        builder.AppendLine($"<text x='{N(x)}' y='{N(y + 42m)}' text-anchor='start' font-size='8' fill='#6b7280'>{N(minimum)}</text>");
-        builder.AppendLine($"<text x='{N(x + width)}' y='{N(y + 42m)}' text-anchor='end' font-size='8' fill='#6b7280'>{N(maximum)}</text>");
+        if (!string.IsNullOrWhiteSpace(label)) builder.AppendLine($"<text x='{N(plan.Bounds.Width / 2m)}' y='{N(y + 52m)}' text-anchor='middle' font-size='10' fill='{Esc(_theme.TextMuted)}'>{Esc(label)}</text>");
+        builder.AppendLine($"<text x='{N(x)}' y='{N(y + 42m)}' text-anchor='start' font-size='8' fill='{Esc(minMaxFill)}'>{N(minimum)}</text>");
+        builder.AppendLine($"<text x='{N(x + width)}' y='{N(y + 42m)}' text-anchor='end' font-size='8' fill='{Esc(minMaxFill)}'>{N(maximum)}</text>");
     }
 
-    private static void RenderHeatMap(StringBuilder builder, PlotPlan plan)
+    private void RenderHeatMap(StringBuilder builder, PlotPlan plan)
     {
         var layer = plan.Layers.First();
         var xCategories = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.X)?.Categories ?? [];
@@ -2927,7 +3078,7 @@ internal sealed class PlotPlanSvgRenderer
             builder.AppendLine($"<text x='{N(Left - 6m)}' y='{N(Top + (index + .5m) * cellHeight + 4m)}' text-anchor='end' font-size='9' fill='#666'>{Esc(Truncate(yCategories[index], 12))}</text>");
     }
 
-    private static void RenderBoxPlot(StringBuilder builder, PlotPlan plan)
+    private void RenderBoxPlot(StringBuilder builder, PlotPlan plan)
     {
         var layer = plan.Layers.First();
         var plotWidth = plan.Bounds.Width - Left - Right;
@@ -3122,7 +3273,7 @@ internal sealed class PlotPlanSvgRenderer
             builder.AppendLine($"<text x='12' y='{N(Top + plotHeight / 2m)}' text-anchor='middle' {AxisTitleFont(plan)} transform='rotate(-90 12 {N(Top + plotHeight / 2m)})'>{Esc(yTitle)}</text>");
     }
 
-    private static void RenderWaterfall(StringBuilder builder, PlotPlan plan)
+    private void RenderWaterfall(StringBuilder builder, PlotPlan plan)
     {
         var layer = plan.Layers.First();
         var scale = plan.Scales.First(item => item.Channel == FieldChannel.Y);
@@ -3247,7 +3398,7 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderCandlestick(StringBuilder builder, PlotPlan plan)
+    private void RenderCandlestick(StringBuilder builder, PlotPlan plan)
     {
         var candleLayer = plan.Layers.FirstOrDefault(l => IsCandlestickLayer(l)) ?? plan.Layers.First();
         var volumeLayer = plan.Layers.FirstOrDefault(l => l.Id == "volume" || l.Style.Any(s => s.Name == "volumeLayer"));
@@ -3385,7 +3536,7 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderGantt(StringBuilder builder, PlotPlan plan)
+    private void RenderGantt(StringBuilder builder, PlotPlan plan)
     {
         var data = plan.Layers.SelectMany(layer => layer.Data).Where(datum => !datum.IsGap)
             .GroupBy(datum => datum.RowIndex).Select(group => group.First()).OrderBy(datum => datum.RowIndex).ToList();
@@ -3528,7 +3679,7 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderRadar(StringBuilder builder, PlotPlan plan)
+    private void RenderRadar(StringBuilder builder, PlotPlan plan)
     {
         var dimensions = plan.Scales.First(scale => scale.Channel == FieldChannel.Theta).Categories;
         var radiusScale = plan.Scales.First(scale => scale.Channel == FieldChannel.Radius);
@@ -3589,13 +3740,13 @@ internal sealed class PlotPlanSvgRenderer
             var ringRadius = outer * ring / 4m;
             if (shape == "CIRCLE")
             {
-                builder.AppendLine($"<circle cx='{N(cx)}' cy='{N(cy)}' r='{N(ringRadius)}' fill='none' stroke='#d1d5db'/>");
+                builder.AppendLine($"<circle cx='{N(cx)}' cy='{N(cy)}' r='{N(ringRadius)}' fill='none' stroke='{Esc(_theme.RadarRing)}'/>");
             }
             else
             {
                 var points = Enumerable.Range(0, dimensions.Length)
                     .Select(index => Point(cx, cy, ringRadius, -Math.PI / 2d + 2d * Math.PI * index / dimensions.Length));
-                builder.AppendLine($"<polygon points='{string.Join(" ", points)}' fill='none' stroke='#d1d5db'/>");
+                builder.AppendLine($"<polygon points='{string.Join(" ", points)}' fill='none' stroke='{Esc(_theme.RadarRing)}'/>");
             }
         }
         for (var index = 0; index < dimensions.Length; index++)
@@ -3603,13 +3754,13 @@ internal sealed class PlotPlanSvgRenderer
             var angle = -Math.PI / 2d + 2d * Math.PI * index / dimensions.Length;
             var edge = PointCoordinates(cx, cy, outer, angle);
             var label = PointCoordinates(cx, cy, outer + 18m, angle);
-            builder.AppendLine($"<line x1='{N(cx)}' y1='{N(cy)}' x2='{N(edge.X)}' y2='{N(edge.Y)}' stroke='#e5e7eb'/>");
+            builder.AppendLine($"<line x1='{N(cx)}' y1='{N(cy)}' x2='{N(edge.X)}' y2='{N(edge.Y)}' stroke='{Esc(_theme.GridLine)}'/>");
             var axisRangeTitle = isIndependentAxes ? $" [{N(axisScales[index].Min)}..{N(axisScales[index].Max)}]" : "";
-            builder.AppendLine($"<text x='{N(label.X)}' y='{N(label.Y + 3m)}' text-anchor='middle' font-size='9' fill='#4b5563'><title>{Esc(dimensions[index])}{axisRangeTitle}</title>{Esc(Truncate(dimensions[index], 13))}</text>");
+            builder.AppendLine($"<text x='{N(label.X)}' y='{N(label.Y + 3m)}' text-anchor='middle' font-size='9' fill='{Esc(_theme.IsDark ? _theme.TextSecondary : "#4b5563")}'><title>{Esc(dimensions[index])}{axisRangeTitle}</title>{Esc(Truncate(dimensions[index], 13))}</text>");
         }
         var showDataLabels = IsEnabled(plan.Style, "DATA_LABELS") || IsEnabled(plan.Style, "SHOW_VALUES");
         var labelFormat = DataFormat(plan);
-        var labelColor = SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#333");
+        var labelColor = SafePaint(Style(plan, "DATA_LABELS:COLOR"), _theme.TitleColor);
         var labelFontSize = FontSize(Style(plan, "DATA_LABELS:FONT_SIZE"));
 
         foreach (var layer in plan.Layers)
@@ -3669,7 +3820,7 @@ internal sealed class PlotPlanSvgRenderer
         return minRadius + ((value.Value - minimum) / (maximum - minimum) * (maxRadius - minRadius));
     }
 
-    private static void RenderRule(StringBuilder builder, ResolvedMarkLayer layer, in CartesianPlotArea area,
+    private void RenderRule(StringBuilder builder, ResolvedMarkLayer layer, in CartesianPlotArea area,
         ResolvedScale? xScale, ResolvedScale? yScale, ICollection<OverlayLabel> overlayLabels, bool transposedAspect = false)
     {
         var xVal = layer.Data.Select(datum => Channel(datum, FieldChannel.X)).FirstOrDefault(item => item is not null && item.Kind != ChartValueKind.Null);
@@ -3776,7 +3927,7 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderReferenceBand(StringBuilder builder, ResolvedMarkLayer layer,
+    private void RenderReferenceBand(StringBuilder builder, ResolvedMarkLayer layer,
         in CartesianPlotArea area, ResolvedScale? scale, ICollection<OverlayLabel> overlayLabels)
     {
         if (scale is null || layer.Data.IsDefaultOrEmpty) return;
@@ -3794,7 +3945,7 @@ internal sealed class PlotPlanSvgRenderer
             overlayLabels.Add(new OverlayLabel(area.Right, top + height / 2m, label, color, layer.ZIndex));
     }
 
-    private static void RenderTransposedReferenceBand(StringBuilder builder, ResolvedMarkLayer layer,
+    private void RenderTransposedReferenceBand(StringBuilder builder, ResolvedMarkLayer layer,
         ResolvedScale scale, decimal plotWidth, decimal plotHeight, ICollection<OverlayLabel> overlayLabels)
     {
         if (layer.Data.IsDefaultOrEmpty) return;
@@ -3824,7 +3975,7 @@ internal sealed class PlotPlanSvgRenderer
         decimal TargetY
     );
 
-    private static void RenderSideLabels(
+    private void RenderSideLabels(
         StringBuilder builder,
         CartesianPlotArea area,
         IReadOnlyCollection<OverlayLabel> overlayLabels,
@@ -3957,7 +4108,7 @@ internal sealed class PlotPlanSvgRenderer
                 var labelWidth = Math.Min(maxAllowedRightWidth, displayText.Length * overlayCharWidth + 8m);
                 var centerY = item.TargetY - 3.5m;
                 builder.AppendLine($"<path class='plot-overlay-label-leader' d='M {N(item.EndpointX + 3m)} {N(item.EndpointY)} L {N(labelX - 3m)} {N(centerY)}' fill='none' stroke='{Esc(item.Color)}' stroke-width='1'/>");
-                builder.AppendLine($"<rect class='plot-overlay-label-bg' x='{N(labelX - 3m)}' y='{N(item.TargetY - 11m)}' width='{N(labelWidth)}' height='14' rx='2' fill='white' fill-opacity='.94'/>");
+                builder.AppendLine($"<rect class='plot-overlay-label-bg' x='{N(labelX - 3m)}' y='{N(item.TargetY - 11m)}' width='{N(labelWidth)}' height='14' rx='2' fill='{Esc(_theme.OverlayBg)}' fill-opacity='.94'/>");
                 builder.AppendLine($"<text class='plot-overlay-label' title='{Esc(item.FullLabel)}' x='{N(labelX)}' y='{N(item.TargetY)}' text-anchor='start' font-size='9' font-weight='600' fill='{Esc(item.Color)}'>{Esc(displayText)}</text>");
             }
             else
@@ -3988,7 +4139,7 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderOverlayLabels(StringBuilder builder, IReadOnlyCollection<OverlayLabel> labels, decimal plotHeight)
+    private void RenderOverlayLabels(StringBuilder builder, IReadOnlyCollection<OverlayLabel> labels, decimal plotHeight)
     {
         if (labels.Count == 0) return;
         const decimal lineHeight = 15m;
@@ -4012,7 +4163,7 @@ internal sealed class PlotPlanSvgRenderer
             var labelWidth = Math.Min(150m, item.Label.Text.Length * 5.4m + 8m);
             var centerY = item.Y - 3.5m;
             builder.AppendLine($"<path class='plot-overlay-label-leader' d='M {N(item.Label.EndpointX + 3m)} {N(item.Label.EndpointY)} L {N(labelX - 3m)} {N(centerY)}' fill='none' stroke='{Esc(item.Label.Color)}' stroke-width='1'/>");
-            builder.AppendLine($"<rect class='plot-overlay-label-bg' x='{N(labelX - 3m)}' y='{N(item.Y - 11m)}' width='{N(labelWidth)}' height='14' rx='2' fill='white' fill-opacity='.94'/>");
+            builder.AppendLine($"<rect class='plot-overlay-label-bg' x='{N(labelX - 3m)}' y='{N(item.Y - 11m)}' width='{N(labelWidth)}' height='14' rx='2' fill='{Esc(_theme.OverlayBg)}' fill-opacity='.94'/>");
             builder.AppendLine($"<text class='plot-overlay-label' x='{N(labelX)}' y='{N(item.Y)}' text-anchor='start' font-size='9' font-weight='600' fill='{Esc(item.Label.Color)}'>{Esc(item.Label.Text)}</text>");
         }
     }
@@ -4156,20 +4307,20 @@ internal sealed class PlotPlanSvgRenderer
         return kept.ToImmutable();
     }
 
-    private static string AxisLabelFont(PlotPlan plan) =>
-        $"font-size='{N(Math.Clamp(FontSize(Style(plan, "AXIS_FONT_SIZE"), 9m), 5m, 48m))}' " +
-        $"fill='{Esc(SafePaint(Style(plan, "AXIS_FONT_COLOR"), "#666"))}'";
+    private string AxisLabelFont(PlotPlan plan) =>
+        $"font-size='{N(Math.Clamp(FontSize(Style(plan, "AXIS_FONT_SIZE"), _compactCanvas ? 10m : 9m), 5m, 48m))}' " +
+        $"fill='{Esc(SafePaint(Style(plan, "AXIS_FONT_COLOR"), _theme.TextMuted))}'";
 
     /// <summary>Axis-title typography; see <see cref="AxisLabelFont"/> for the default-preserving contract.</summary>
-    private static string AxisTitleFont(PlotPlan plan) =>
-        $"font-size='{N(Math.Clamp(FontSize(Style(plan, "AXIS_TITLE_FONT_SIZE"), 10m), 5m, 48m))}' " +
-        $"fill='{Esc(SafePaint(Style(plan, "AXIS_FONT_COLOR"), "#444"))}'";
+    private string AxisTitleFont(PlotPlan plan) =>
+        $"font-size='{N(Math.Clamp(FontSize(Style(plan, "AXIS_TITLE_FONT_SIZE"), _compactCanvas ? 10.5m : 10m), 5m, 48m))}' " +
+        $"fill='{Esc(SafePaint(Style(plan, "AXIS_FONT_COLOR"), _theme.TextSecondary))}'";
 
     /// <summary>
     /// Paints <c>PLOT_BACKGROUND</c> and <c>PLOT_BORDER</c> over the region bounded by the axes.
     /// Emits nothing when neither option is present, so existing goldens are untouched.
     /// </summary>
-    private static void RenderPlotPanel(StringBuilder builder, PlotPlan plan,
+    private void RenderPlotPanel(StringBuilder builder, PlotPlan plan,
         decimal left, decimal top, decimal width, decimal height)
     {
         var background = Style(plan, "PLOT_BACKGROUND");
@@ -4219,10 +4370,10 @@ internal sealed class PlotPlanSvgRenderer
             !value.Equals("FALSE", StringComparison.OrdinalIgnoreCase) && value != "0";
     }
 
-    private static void RenderGridLine(StringBuilder builder, PlotPlan plan,
+    private void RenderGridLine(StringBuilder builder, PlotPlan plan,
         decimal x1, decimal y1, decimal x2, decimal y2, bool minor = false)
     {
-        var color = SafePaint(Style(plan, "GRID_LINE_COLOR"), "#e5e7eb");
+        var color = SafePaint(Style(plan, "GRID_LINE_COLOR"), _theme.GridLine);
         var width = SafeLineWidth(Style(plan, "GRID_LINE_WIDTH"), "1");
         var dash = DashAttribute(Style(plan, "GRID_LINE_DASH"));
         var opacity = minor ? " stroke-opacity='.55'" : string.Empty;
@@ -4241,7 +4392,7 @@ internal sealed class PlotPlanSvgRenderer
             ? Math.Clamp(parsed, 7m, 24m)
             : 9m;
 
-    private static void RenderSmartLabels(
+    private void RenderSmartLabels(
         StringBuilder builder,
         PlotPlan plan,
         IReadOnlyCollection<SmartLabel> labels,
@@ -4255,7 +4406,7 @@ internal sealed class PlotPlanSvgRenderer
     /// Higher-priority author TEXT wins, lower-priority labels try stable offsets, and labels that
     /// cannot fit remain in the SVG description instead of overflowing the viewBox.
     /// </summary>
-    private static void RenderSmartLabels(
+    private void RenderSmartLabels(
         StringBuilder builder,
         PlotPlan plan,
         IReadOnlyCollection<SmartLabel> labels,
@@ -4326,7 +4477,7 @@ internal sealed class PlotPlanSvgRenderer
     private static bool IsCandlestickLayer(ResolvedMarkLayer layer) =>
         layer.Data.Any(datum => Channel(datum, FieldChannel.Open) is not null || Channel(datum, FieldChannel.Close) is not null);
 
-    private static void RenderBoxPlotLayer(StringBuilder builder, ResolvedMarkLayer layer, ImmutableArray<string> categories,
+    private void RenderBoxPlotLayer(StringBuilder builder, ResolvedMarkLayer layer, ImmutableArray<string> categories,
         in CartesianPlotArea area, ResolvedScale? scale, string color)
     {
         if (scale is null) return;
@@ -4412,7 +4563,7 @@ internal sealed class PlotPlanSvgRenderer
         builder.AppendLine("</g>");
     }
 
-    private static void RenderCandlestickLayer(StringBuilder builder, ResolvedMarkLayer layer, ImmutableArray<string> categories,
+    private void RenderCandlestickLayer(StringBuilder builder, ResolvedMarkLayer layer, ImmutableArray<string> categories,
         in CartesianPlotArea area, ResolvedScale? scale)
     {
         if (scale is null) return;
@@ -4455,7 +4606,7 @@ internal sealed class PlotPlanSvgRenderer
             decimal.TryParse(parts[1], NumberStyles.Number, CultureInfo.InvariantCulture, out lon);
     }
 
-    private static void RenderGeographic(StringBuilder builder, PlotPlan plan)
+    private void RenderGeographic(StringBuilder builder, PlotPlan plan)
     {
         var geography = plan.Geography ?? throw new InvalidOperationException("Geographic PlotPlan has no resolved geometry.");
         var plotWidth = plan.Bounds.Width - Left - Right;
@@ -4617,7 +4768,7 @@ internal sealed class PlotPlanSvgRenderer
         RenderSmartLabels(builder, plan, labels, plotWidth, plotHeight);
     }
 
-    private static (decimal X, decimal Y)? GeographicDatum(ResolvedDatum datum, GeographicProjectionKind projection, decimal width, decimal height, decimal zoom = 1m, decimal centerLat = 0m, decimal centerLon = 0m, bool insets = false)
+    private (decimal X, decimal Y)? GeographicDatum(ResolvedDatum datum, GeographicProjectionKind projection, decimal width, decimal height, decimal zoom = 1m, decimal centerLat = 0m, decimal centerLon = 0m, bool insets = false)
     {
         var longitude = Number(Channel(datum, FieldChannel.Longitude));
         var latitude = Number(Channel(datum, FieldChannel.Latitude));
@@ -4669,7 +4820,7 @@ internal sealed class PlotPlanSvgRenderer
         return ((decimal)zoom, (decimal)centerLat, (minLon + maxLon) / 2m);
     }
 
-    private static (decimal X, decimal Y) ProjectGeographic(decimal longitude, decimal latitude, GeographicProjectionKind projection, decimal width, decimal height, decimal zoom = 1m, decimal centerLat = 0m, decimal centerLon = 0m)
+    private (decimal X, decimal Y) ProjectGeographic(decimal longitude, decimal latitude, GeographicProjectionKind projection, decimal width, decimal height, decimal zoom = 1m, decimal centerLat = 0m, decimal centerLon = 0m)
     {
         var cx = Left + width / 2m;
         var cy = Top + height / 2m;
@@ -4704,7 +4855,7 @@ internal sealed class PlotPlanSvgRenderer
         left.Left < right.Right + 2m && left.Right + 2m > right.Left
         && left.Top < right.Bottom + 2m && left.Bottom + 2m > right.Top;
 
-    private static void RenderHorizontalCategoryAxisLabels(
+    private void RenderHorizontalCategoryAxisLabels(
         StringBuilder builder,
         PlotPlan plan,
         ImmutableArray<string> categories,
@@ -4735,7 +4886,7 @@ internal sealed class PlotPlanSvgRenderer
             builder.AppendLine($"<desc class='plot-axis-label-occluded'>Additional categories: {Esc(string.Join(", ", hidden))}</desc>");
     }
 
-    private static void RenderVerticalCategoryAxisLabels(
+    private void RenderVerticalCategoryAxisLabels(
         StringBuilder builder,
         PlotPlan plan,
         ImmutableArray<string> categories,
@@ -4761,7 +4912,7 @@ internal sealed class PlotPlanSvgRenderer
             builder.AppendLine($"<desc class='plot-axis-label-occluded'>Additional categories: {Esc(string.Join(", ", hidden))}</desc>");
     }
 
-    private static void RenderText(ResolvedMarkLayer layer, int categoryCount,
+    private void RenderText(ResolvedMarkLayer layer, int categoryCount,
         in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? scale,
         string color, ICollection<SmartLabel> smartLabels, bool transposedAspect = false, ResolvedScale? colorScale = null, ResolvedScale? opacityScale = null)
     {
@@ -4792,15 +4943,16 @@ internal sealed class PlotPlanSvgRenderer
 
     private sealed record ArcItem(ResolvedDatum Datum, string Label, decimal Value, bool IsOther = false);
 
-    private static void RenderRadialStacks(StringBuilder builder, PlotPlan plan)
+    private void RenderRadialStacks(StringBuilder builder, PlotPlan plan)
     {
-        var side = LegendPosition(plan);
+        var side = ResolveEffectiveLegendPosition(plan, _options);
         var left = LegendEnabled(plan) && plan.Legend.Length > 1 && side == "LEFT" ? 125m : 16m;
         var right = LegendEnabled(plan) && plan.Legend.Length > 1 && side == "RIGHT" ? 125m : 16m;
         var bottom = LegendEnabled(plan) && plan.Legend.Length > 1 && side == "BOTTOM" ? 34m : 16m;
+        var chartTop = _options.EffectiveSuppressTitle ? 10m : 32m;
         var cx = (left + plan.Bounds.Width - right) / 2m;
-        var cy = (32m + plan.Bounds.Height - bottom) / 2m;
-        var outer = Math.Max(1m, Math.Min(plan.Bounds.Width - left - right, plan.Bounds.Height - bottom - 32m) / 2m - 8m);
+        var cy = (chartTop + plan.Bounds.Height - bottom) / 2m;
+        var outer = Math.Max(1m, Math.Min(plan.Bounds.Width - left - right, plan.Bounds.Height - bottom - chartTop) / 2m - 8m);
         var inner = (plan.Coordinate?.InnerRadius ?? 0m) * outer;
         foreach (var layer in plan.Layers)
             foreach (var datum in layer.Data)
@@ -4817,11 +4969,11 @@ internal sealed class PlotPlanSvgRenderer
                     ? $" L {Point(cx, cy, r0, b)} A {N(r0)} {N(r0)} 0 0 0 {Point(cx, cy, r0, mid)} A {N(r0)} {N(r0)} 0 0 0 {Point(cx, cy, r0, a)} Z"
                     : $" L {N(cx)} {N(cy)} Z";
                 var color = SafePaint(LayerStyle(layer, "COLOR") ?? plan.Series.FirstOrDefault(series => series.Key == layer.SeriesKey)?.Color, "#5470c6");
-                builder.AppendLine($"<path class='plot-radial-stack' data-row-index='{datum.RowIndex}' data-radius-start='{N(interval.Start)}' data-radius-end='{N(interval.End)}' d='{path}' fill='{Esc(color)}' stroke='white' stroke-width='1'><title>{Esc(RadialStackResolver.Description(datum))}</title></path>");
+                builder.AppendLine($"<path class='plot-radial-stack' data-row-index='{datum.RowIndex}' data-radius-start='{N(interval.Start)}' data-radius-end='{N(interval.End)}' d='{path}' fill='{Esc(color)}' stroke='{Esc(_theme.ArcBorder)}' stroke-width='1'><title>{Esc(RadialStackResolver.Description(datum))}</title></path>");
             }
     }
 
-    private static void RenderArcs(StringBuilder builder, PlotPlan plan)
+    private void RenderArcs(StringBuilder builder, PlotPlan plan)
     {
         if (plan.Layers.Any(item => item.Mark == MarkKind.Arc && item.Stack != StackMode.None))
         {
@@ -4878,7 +5030,7 @@ internal sealed class PlotPlanSvgRenderer
             }
         }
 
-        var legendPosition = LegendPosition(plan);
+        var legendPosition = ResolveEffectiveLegendPosition(plan, _options);
         var rightReserve = LegendEnabled(plan) && plan.Legend.Length > 1 && legendPosition == "RIGHT" ? 125m : 16m;
         var leftReserve = LegendEnabled(plan) && plan.Legend.Length > 1 && legendPosition == "LEFT" ? 125m : 16m;
         var showLabels = IsEnabled(plan.Style, "DATA_LABELS");
@@ -4887,7 +5039,7 @@ internal sealed class PlotPlanSvgRenderer
         var chartRight = plan.Bounds.Width - rightReserve;
         var cx = (chartLeft + chartRight) / 2m;
         var bottomReserve = LegendEnabled(plan) && plan.Legend.Length > 1 && legendPosition == "BOTTOM" ? 34m : 16m;
-        var chartTop = 32m;
+        var chartTop = _options.EffectiveSuppressTitle ? 10m : 32m;
         var chartBottom = plan.Bounds.Height - bottomReserve;
         var cy = (chartTop + chartBottom) / 2m;
         var outer = Math.Max(20m, Math.Min((chartRight - chartLeft - labelGutter * 2m) / 2m, (chartBottom - chartTop - 16m) / 2m));
@@ -4907,7 +5059,7 @@ internal sealed class PlotPlanSvgRenderer
         var angle = -Math.PI / 2d + (double)(startAngleDeg ?? 0m) * Math.PI / 180d;
 
         // 4. Slice borders
-        var borderColor = Style(plan, "SLICE_BORDER_COLOR") ?? "white";
+        var borderColor = Style(plan, "SLICE_BORDER_COLOR") ?? _theme.ArcBorder;
         var borderWidthStr = Style(plan, "SLICE_BORDER_WIDTH");
         var borderWidth = 2m;
         if (!string.IsNullOrWhiteSpace(borderWidthStr) &&
@@ -4997,7 +5149,7 @@ internal sealed class PlotPlanSvgRenderer
         RenderLegend(builder, plan);
     }
 
-    private static void RenderArcLabels(StringBuilder builder, PlotPlan plan, IReadOnlyCollection<ArcLabel> labels,
+    private void RenderArcLabels(StringBuilder builder, PlotPlan plan, IReadOnlyCollection<ArcLabel> labels,
         decimal cx, decimal outer, decimal chartTop, decimal chartBottom)
     {
         if (labels.Count == 0) return;
@@ -5033,12 +5185,12 @@ internal sealed class PlotPlanSvgRenderer
                 }
                 RenderDataLabelBackground(builder, plan, null, textX, item.Y + 3m,
                     item.Label.IsRight ? "start" : "end", FontSize(Style(plan, "DATA_LABELS:FONT_SIZE")), item.Label.Text);
-                builder.AppendLine($"<text class='plot-arc-label' x='{N(textX)}' y='{N(item.Y + 3m)}' text-anchor='{(item.Label.IsRight ? "start" : "end")}' font-size='{Esc(Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9")}' fill='{Esc(SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#333"))}'>{Esc(item.Label.Text)}</text>");
+                builder.AppendLine($"<text class='plot-arc-label' x='{N(textX)}' y='{N(item.Y + 3m)}' text-anchor='{(item.Label.IsRight ? "start" : "end")}' font-size='{Esc(Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9")}' fill='{Esc(SafePaint(Style(plan, "DATA_LABELS:COLOR"), _theme.TitleColor))}'>{Esc(item.Label.Text)}</text>");
             }
         }
     }
 
-    private static void RenderArcCenter(StringBuilder builder, PlotPlan plan, decimal total, decimal cx, decimal cy, decimal inner)
+    private void RenderArcCenter(StringBuilder builder, PlotPlan plan, decimal total, decimal cx, decimal cy, decimal inner)
     {
         if (inner <= 0m) return;
         var centerLabel = Style(plan, "CENTER_LABEL");
@@ -5049,10 +5201,10 @@ internal sealed class PlotPlanSvgRenderer
             centerValue = centerValue.Equals("TOTAL", StringComparison.OrdinalIgnoreCase)
                 ? N(total)
                 : centerValue.Replace("{total}", N(total), StringComparison.OrdinalIgnoreCase);
-            builder.AppendLine($"<text class='plot-arc-center-value' x='{N(cx)}' y='{N(cy + (string.IsNullOrWhiteSpace(centerLabel) ? 6m : 1m))}' text-anchor='middle' font-size='18' font-weight='700' fill='#1f2937'>{Esc(centerValue)}</text>");
+            builder.AppendLine($"<text class='plot-arc-center-value' x='{N(cx)}' y='{N(cy + (string.IsNullOrWhiteSpace(centerLabel) ? 6m : 1m))}' text-anchor='middle' font-size='18' font-weight='700' fill='{Esc(_theme.IsDark ? _theme.TitleColor : "#1f2937")}'>{Esc(centerValue)}</text>");
         }
         if (!string.IsNullOrWhiteSpace(centerLabel))
-            builder.AppendLine($"<text class='plot-arc-center-label' x='{N(cx)}' y='{N(cy + (string.IsNullOrWhiteSpace(centerValue) ? 4m : 18m))}' text-anchor='middle' font-size='9' fill='#6b7280'>{Esc(centerLabel)}</text>");
+            builder.AppendLine($"<text class='plot-arc-center-label' x='{N(cx)}' y='{N(cy + (string.IsNullOrWhiteSpace(centerValue) ? 4m : 18m))}' text-anchor='middle' font-size='9' fill='{Esc(_theme.IsDark ? _theme.TextMuted : "#6b7280")}'>{Esc(centerLabel)}</text>");
     }
 
     private static decimal MapX(decimal value, ResolvedScale scale, decimal plotWidth, decimal plotLeft = Left)
@@ -5066,14 +5218,14 @@ internal sealed class PlotPlanSvgRenderer
         MapX(value, scale, area.Width, area.Left);
 
     /// <summary>Maps a transposed positional value onto the vertical axis in category order, top to bottom.</summary>
-    private static decimal MapVertical(decimal value, ResolvedScale scale, decimal plotHeight)
+    private decimal MapVertical(decimal value, ResolvedScale scale, decimal plotHeight)
     {
         var (minimum, maximum) = Domain(scale);
         var ratio = Ratio(value, minimum, maximum, scale.Kind);
         return Top + (scale.Reverse ? 1m - ratio : ratio) * plotHeight;
     }
 
-    private static decimal MapY(decimal value, ResolvedScale scale, decimal plotHeight)
+    private decimal MapY(decimal value, ResolvedScale scale, decimal plotHeight)
     {
         var (minimum, maximum) = Domain(scale);
         var ratio = Ratio(value, minimum, maximum, scale.Kind);
@@ -5185,33 +5337,33 @@ internal sealed class PlotPlanSvgRenderer
     private static bool SkipTickLabel(ResolvedScale scale, int index) =>
         scale.LabelSkip is { } skip && skip > 0 && index % (skip + 1) != 0 && index != scale.Ticks.Length - 1;
 
-    private static void RenderHorizontalMinorTicks(StringBuilder builder, ResolvedScale scale, decimal width, decimal y, decimal plotLeft = Left)
+    private void RenderHorizontalMinorTicks(StringBuilder builder, ResolvedScale scale, decimal width, decimal y, decimal plotLeft = Left)
     {
         if (!scale.MinorTicks) return;
         foreach (var value in MinorTickValues(scale))
         {
             var x = MapX(value, scale, width, plotLeft);
-            builder.AppendLine($"<line class='plot-minor-tick' x1='{N(x)}' y1='{N(y)}' x2='{N(x)}' y2='{N(y + 2m)}' stroke='#bbb'/>");
+            builder.AppendLine($"<line class='plot-minor-tick' x1='{N(x)}' y1='{N(y)}' x2='{N(x)}' y2='{N(y + 2m)}' stroke='{Esc(_theme.AxisLine)}'/>");
         }
     }
 
-    private static void RenderHorizontalMinorTicks(StringBuilder builder, ResolvedScale scale, in CartesianPlotArea area)
+    private void RenderHorizontalMinorTicks(StringBuilder builder, ResolvedScale scale, in CartesianPlotArea area)
     {
         if (!scale.MinorTicks) return;
         foreach (var value in MinorTickValues(scale))
         {
             var x = MapX(value, scale, area);
-            builder.AppendLine($"<line class='plot-minor-tick' x1='{N(x)}' y1='{N(area.Bottom)}' x2='{N(x)}' y2='{N(area.Bottom + 2m)}' stroke='#bbb'/>");
+            builder.AppendLine($"<line class='plot-minor-tick' x1='{N(x)}' y1='{N(area.Bottom)}' x2='{N(x)}' y2='{N(area.Bottom + 2m)}' stroke='{Esc(_theme.AxisLine)}'/>");
         }
     }
 
-    private static void RenderVerticalMinorTicks(StringBuilder builder, ResolvedScale scale, decimal height, decimal x, decimal length)
+    private void RenderVerticalMinorTicks(StringBuilder builder, ResolvedScale scale, decimal height, decimal x, decimal length)
     {
         if (!scale.MinorTicks) return;
         foreach (var value in MinorTickValues(scale))
         {
             var y = MapY(value, scale, height);
-            builder.AppendLine($"<line class='plot-minor-tick' x1='{N(x)}' y1='{N(y)}' x2='{N(x + length / 2m)}' y2='{N(y)}' stroke='#bbb'/>");
+            builder.AppendLine($"<line class='plot-minor-tick' x1='{N(x)}' y1='{N(y)}' x2='{N(x + length / 2m)}' y2='{N(y)}' stroke='{Esc(_theme.AxisLine)}'/>");
         }
     }
 
@@ -5485,7 +5637,7 @@ internal sealed class PlotPlanSvgRenderer
         return (width.Value, style, color, dash);
     }
 
-    private static void RenderDataLabelBackground(
+    private void RenderDataLabelBackground(
         StringBuilder builder,
         PlotPlan plan,
         int? rowIndex,

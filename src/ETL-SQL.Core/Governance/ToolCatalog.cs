@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
+using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -25,7 +26,10 @@ public sealed record ToolDefinition(
     string Name,
     string ToolType,
     IReadOnlyDictionary<string, string> Options,
-    bool Disabled);
+    bool Disabled)
+{
+    public NativeToolArtifact? NativeArtifact { get; init; }
+}
 
 public interface IToolCatalogProvider
 {
@@ -44,6 +48,7 @@ public interface IWritableToolCatalogProvider : IToolCatalogProvider
     Task DisableAsync(string name, CancellationToken cancellationToken = default);
     Task EnableAsync(string name, CancellationToken cancellationToken = default);
     Task DeleteAsync(string name, CancellationToken cancellationToken = default);
+    Task<bool> SetUseGrantAsync(string name, ToolUseGrant grant, bool allow, CancellationToken cancellationToken = default);
 }
 
 public interface IToolCatalogProtector
@@ -327,6 +332,36 @@ public static partial class ToolAliasValidator
 
 public static class ToolPathGuard
 {
+    public static bool IsInterpreterCommand(string command)
+    {
+        var exe = Path.GetFileNameWithoutExtension(command.Trim());
+        return exe.Equals("python", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("python3", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("python2", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("py", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("node", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("nodejs", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("bash", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("sh", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("dash", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("zsh", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("ash", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("ksh", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("pwsh", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("powershell", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("cmd", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("ruby", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("perl", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("php", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("lua", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("awk", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("gawk", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("env", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("xargs", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("cscript", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("wscript", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static void EnsureNotReparsePoint(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -585,15 +620,21 @@ public sealed class LocalToolCatalogProvider(
     ToolCatalogOwnershipMode ownershipMode = ToolCatalogOwnershipMode.MachineAdministrator,
     IToolCatalogProtector? protector = null,
     bool validateOwnership = true,
-    string? serviceIdentity = null) : IWritableToolCatalogProvider
+    string? serviceIdentity = null,
+    bool requireUseGrants = false,
+    string? artifactRoot = null,
+    bool requireArtifactApproval = false) : IWritableToolCatalogProvider
 {
+    private const string EntryV1Prefix = "TOOL-CATALOG-1:";
+    private const string EntryV2Prefix = "TOOL-CATALOG-2:";
     private readonly IToolCatalogProtector _protector = protector ?? new OsToolCatalogProtector();
 
     public string ProviderName => "LocalToolCatalog";
     public ToolCatalogOwnershipMode OwnershipMode => ownershipMode;
 
     private sealed record EntryPayload(
-        string ToolType, Dictionary<string, string> Options);
+        string ToolType, Dictionary<string, string> Options,
+        int SchemaVersion = 0, long Revision = 0, ToolUseGrant[]? UseGrants = null);
 
     public async Task<ToolDefinition> ResolveAsync(
         string name,
@@ -601,8 +642,56 @@ public sealed class LocalToolCatalogProvider(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ToolAliasValidator.Validate(name);
+        var principal = identity?.ToolPrincipal;
+        // COMPAT_BREAK: 0.24. Federated use requires an explicit tool grant.
+        var requireVerifiedCaller = requireUseGrants || principal is not null || !string.IsNullOrWhiteSpace(identity?.TenantId);
+        EntryPayload payload;
+        if (requireVerifiedCaller)
+        {
+            if (principal is null || !principal.WithinExecutionScope
+                || !string.Equals(identity!.TenantId, principal.TenantId, StringComparison.Ordinal))
+                throw DenyUse(name, identity);
+            try
+            {
+                var root = GetValidatedRootDirectory();
+                var path = ResolveContainedPath(root, name, disabled: false);
+                payload = await ReadEntryAsync(path, name, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                or CryptographicException or FormatException or InvalidOperationException)
+            {
+                throw DenyUse(name, identity);
+            }
+        }
+        else
+        {
+            var root = GetValidatedRootDirectory();
+            var path = ResolveContainedPath(root, name, disabled: false);
+            payload = await ReadActiveEntryAsync(root, path, name, cancellationToken).ConfigureAwait(false);
+        }
+        if ((requireVerifiedCaller || payload.UseGrants is not null)
+            && (principal is null || payload.UseGrants?.Any(principal.CanUse) != true))
+            throw DenyUse(name, identity);
+
+        if (requireArtifactApproval && payload.SchemaVersion != 2
+            && payload.ToolType.Equals("EXECUTABLE", StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException($"Native tool '{name}' requires an approved executable version.");
+
+        return ToDefinition(name, payload);
+    }
+
+    public async Task<ToolDefinition> GetDefinitionAsync(string name, CancellationToken cancellationToken = default)
+    {
         var root = GetValidatedRootDirectory();
         var path = ResolveContainedPath(root, name, disabled: false);
+        var payload = await ReadActiveEntryAsync(root, path, name, cancellationToken).ConfigureAwait(false);
+        return ToDefinition(name, payload);
+    }
+
+    private async Task<EntryPayload> ReadActiveEntryAsync(
+        string root, string path, string name, CancellationToken cancellationToken)
+    {
         if (!File.Exists(path))
         {
             var disabledPath = ResolveContainedPath(root, name, disabled: true);
@@ -610,20 +699,71 @@ public sealed class LocalToolCatalogProvider(
             {
                 if (validateOwnership)
                     _protector.VerifyFileWriteBoundary(disabledPath, ownershipMode);
-                throw new InvalidOperationException(
-                    $"Tool '{name}' is disabled. Re-enable it by storing it again.");
+                throw new InvalidOperationException($"Tool '{name}' is disabled. Re-enable it by storing it again.");
             }
 
             throw new KeyNotFoundException($"Tool '{name}' was not found in the tool catalog.");
         }
 
+        return await ReadEntryAsync(path, name, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<EntryPayload> ReadEntryAsync(string path, string name, CancellationToken cancellationToken)
+    {
         if (validateOwnership)
             _protector.VerifyFileWriteBoundary(path, ownershipMode);
 
-        var protectedValue = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-        var payload = Deserialize(name, CryptoUtils.Unprotect(protectedValue, name));
-        return new ToolDefinition(
-            name, payload.ToolType, payload.Options, Disabled: false);
+        await using var file = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.Read | FileShare.Delete, bufferSize: 4096, useAsync: true);
+        using var reader = new StreamReader(file);
+        var protectedValue = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        var version = 0;
+        if (protectedValue.StartsWith(EntryV2Prefix, StringComparison.Ordinal))
+        {
+            version = 2;
+            protectedValue = protectedValue[EntryV2Prefix.Length..];
+        }
+        else if (protectedValue.StartsWith(EntryV1Prefix, StringComparison.Ordinal))
+        {
+            version = 1;
+            protectedValue = protectedValue[EntryV1Prefix.Length..];
+        }
+
+        if (!protectedValue.StartsWith("DPAPI-M:", StringComparison.Ordinal)
+            && !protectedValue.StartsWith("MACHINE:", StringComparison.Ordinal))
+            throw new InvalidOperationException($"The catalog entry for tool '{name}' lacks machine protection.");
+
+        var entropy = version == 0 ? name : name.ToLowerInvariant();
+        return Deserialize(name, CryptoUtils.Unprotect(protectedValue, entropy), version);
+    }
+
+    private ToolDefinition ToDefinition(string name, EntryPayload payload) =>
+        new(name, payload.ToolType, payload.Options, Disabled: false)
+        {
+            NativeArtifact = payload.SchemaVersion == 2
+                ? ResolveArtifact(name, payload.ToolType, payload.Options)
+                : null
+        };
+
+    private NativeToolArtifact ResolveArtifact(string name, string type, IReadOnlyDictionary<string, string> options)
+    {
+        if (!validateOwnership || ownershipMode != ToolCatalogOwnershipMode.MachineAdministrator)
+            throw new InvalidOperationException("Native artifact approval requires an ownership-verified machine catalog.");
+        var entry = OperatingSystem.IsWindows() ? ResolveContainedPath(Path.GetFullPath(rootDirectory), name, disabled: false) : null;
+        return NativeToolArtifact.Resolve(artifactRoot, name, type, options, serviceIdentity, entry);
+    }
+
+    private static UnauthorizedAccessException DenyUse(string name, ExecutionIdentity? identity)
+    {
+        SecurityEventRuntime.Emit(SecurityEventContract.Create(
+            SecurityEventSeverity.Warning, SecurityEventType.OperationDenied,
+            string.IsNullOrWhiteSpace(identity?.RealUser) ? "unknown" : identity.RealUser,
+            string.IsNullOrWhiteSpace(identity?.EffectiveUser) ? "unknown" : identity.EffectiveUser,
+            $"Tool:{name}", SecurityEventDecision.Denied, "Tool use denied by the catalog.") with
+        {
+            TenantId = identity?.TenantId
+        });
+        return new UnauthorizedAccessException($"Tool '{name}' is unavailable to this caller.");
     }
 
     public async Task StoreAsync(ToolDefinition definition, CancellationToken cancellationToken = default)
@@ -634,10 +774,18 @@ public sealed class LocalToolCatalogProvider(
             throw new ArgumentException("A tool type is required.", nameof(definition));
 
         var toolType = definition.ToolType.Trim().ToUpperInvariant();
+        var options = new Dictionary<string, string>(definition.Options, StringComparer.OrdinalIgnoreCase);
+        var artifact = options.ContainsKey(NativeToolArtifact.DigestOption) || options.ContainsKey(NativeToolArtifact.ScriptDigestOption)
+            ? ResolveArtifact(definition.Name, toolType, options)
+            : null;
+        // COMPAT_BREAK: 0.24. Enforced native approval refuses unversioned executables.
+        if (requireArtifactApproval && toolType == "EXECUTABLE" && artifact is null)
+            throw new InvalidOperationException("Native tools require ARTIFACT_SHA256 in this catalog.");
+
         string? validatedWorkingDir = null;
         if (toolType == "EXECUTABLE")
         {
-            if (definition.Options.TryGetValue("COMMAND", out var nativeCommand)
+            if (artifact is null && options.TryGetValue("COMMAND", out var nativeCommand)
                 && !string.IsNullOrWhiteSpace(nativeCommand))
             {
                 ToolPathGuard.ValidateNativeCommandPath(
@@ -647,7 +795,7 @@ public sealed class LocalToolCatalogProvider(
                     verifyWriteBoundary: validateOwnership);
             }
 
-            if (definition.Options.TryGetValue("WORKING_DIR", out var workingDir)
+            if (options.TryGetValue("WORKING_DIR", out var workingDir)
                 && !string.IsNullOrWhiteSpace(workingDir))
             {
                 validatedWorkingDir = ToolPathGuard.ValidateNativeDirectoryPath(
@@ -658,7 +806,7 @@ public sealed class LocalToolCatalogProvider(
             }
         }
 
-        if (definition.Options.TryGetValue("SCRIPT_PATH", out var scriptPath) && !string.IsNullOrWhiteSpace(scriptPath))
+        if (artifact is null && options.TryGetValue("SCRIPT_PATH", out var scriptPath) && !string.IsNullOrWhiteSpace(scriptPath))
         {
             ToolPathGuard.ValidateNativeScriptPath(
                 scriptPath,
@@ -682,23 +830,110 @@ public sealed class LocalToolCatalogProvider(
             _protector.VerifyDirectoryWriteBoundary(root, ownershipMode);
         }
 
+        await using var mutation = await AcquireMutationLockAsync(path, cancellationToken).ConfigureAwait(false);
+        var previousPath = File.Exists(path) ? path : disabledPath;
+        var previous = File.Exists(previousPath)
+            ? await ReadEntryAsync(previousPath, definition.Name, cancellationToken).ConfigureAwait(false)
+            : null;
+        if (previous?.SchemaVersion == 2 && artifact is null)
+            throw new InvalidOperationException("An approved native alias must be updated to another approved version.");
+        if (artifact is not null)
+            await artifact.VerifyFilesAsync(cancellationToken).ConfigureAwait(false);
+
         var payload = new EntryPayload(
             definition.ToolType.Trim(),
-            new Dictionary<string, string>(definition.Options, StringComparer.OrdinalIgnoreCase));
-        var protectedValue = CryptoUtils.ProtectMachine(JsonSerializer.Serialize(payload), definition.Name);
-        await File.WriteAllTextAsync(path, protectedValue, cancellationToken).ConfigureAwait(false);
-        _protector.ProtectFile(path, ownershipMode, serviceIdentity);
-        if (validateOwnership)
-            _protector.VerifyFileWriteBoundary(path, ownershipMode);
+            options,
+            SchemaVersion: artifact is null ? 1 : 2,
+            Revision: checked((previous?.Revision ?? 0) + 1),
+            UseGrants: previous?.UseGrants);
+        await WriteEntryAsync(path, definition.Name, payload, cancellationToken).ConfigureAwait(false);
 
         if (File.Exists(disabledPath))
-        {
-            ToolPathGuard.EnsureNotReparsePoint(disabledPath);
             File.Delete(disabledPath);
+    }
+
+    public async Task<bool> SetUseGrantAsync(
+        string name, ToolUseGrant grant, bool allow, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(grant);
+        if (!grant.IsValid())
+            throw new ArgumentException("A tool grant requires a valid tenant, principal kind, and principal ID.", nameof(grant));
+
+        var root = GetValidatedRootDirectory();
+        var active = ResolveContainedPath(root, name, disabled: false);
+        await using var mutation = await AcquireMutationLockAsync(active, cancellationToken).ConfigureAwait(false);
+        var path = File.Exists(active) ? active : ResolveContainedPath(root, name, disabled: true);
+        if (!File.Exists(path))
+            throw new KeyNotFoundException($"Tool '{name}' was not found in the tool catalog.");
+
+        var payload = await ReadEntryAsync(path, name, cancellationToken).ConfigureAwait(false);
+        var grants = payload.UseGrants?.ToList() ?? [];
+        var index = grants.FindIndex(grant.SameAs);
+        if (allow == (index >= 0))
+            return false;
+        if (allow)
+            grants.Add(grant);
+        else
+            grants.RemoveAt(index);
+
+        await WriteEntryAsync(path, name, payload with
+        {
+            SchemaVersion = Math.Max(1, payload.SchemaVersion),
+            Revision = checked(payload.Revision + 1),
+            UseGrants = grants.ToArray()
+        }, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task WriteEntryAsync(string path, string name, EntryPayload payload, CancellationToken cancellationToken)
+    {
+        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        var created = false;
+        try
+        {
+            using (new FileStream(temporary, FileMode.CreateNew, FileAccess.Write))
+                created = true;
+            _protector.ProtectFile(temporary, ownershipMode, serviceIdentity);
+            if (validateOwnership)
+                _protector.VerifyFileWriteBoundary(temporary, ownershipMode);
+
+            // The prefix makes older runners fail to deserialize the entry.
+            var prefix = payload.SchemaVersion == 2 ? EntryV2Prefix : EntryV1Prefix;
+            var protectedValue = prefix + CryptoUtils.ProtectMachine(
+                JsonSerializer.Serialize(payload), name.ToLowerInvariant());
+            await File.WriteAllTextAsync(temporary, protectedValue, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (OperatingSystem.IsWindows() && payload.SchemaVersion == 2)
+                WindowsNativeToolBoundary.ReplaceCatalogEntry(temporary, path);
+            else
+                File.Move(temporary, path, overwrite: true);
+        }
+        finally
+        {
+            if (created)
+                File.Delete(temporary);
         }
     }
 
-    public Task<ToolDefinition> GetDefinitionAsync(string name, CancellationToken cancellationToken = default) => ResolveAsync(name, null, cancellationToken);
+    private static async Task<FileStream> AcquireMutationLockAsync(string entryPath, CancellationToken cancellationToken)
+    {
+        var lockPath = Path.ChangeExtension(entryPath, ".lock");
+        ToolPathGuard.EnsureNotReparsePoint(lockPath);
+        var wait = Stopwatch.StartNew();
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                // Keep the lock file in place so every process contends for the same file.
+                return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
+            }
+            catch (IOException) when (wait.Elapsed < TimeSpan.FromSeconds(5))
+            {
+                await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
 
     public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default)
     {
@@ -729,12 +964,14 @@ public sealed class LocalToolCatalogProvider(
         return Task.FromResult<IReadOnlyList<string>>(entries);
     }
 
-    public Task DisableAsync(string name, CancellationToken cancellationToken = default)
+    public async Task DisableAsync(string name, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var root = GetValidatedRootDirectory();
         var active = ResolveContainedPath(root, name, disabled: false);
         var disabled = ResolveContainedPath(root, name, disabled: true);
+        if (!Directory.Exists(root)) return;
+        await using var mutation = await AcquireMutationLockAsync(active, cancellationToken).ConfigureAwait(false);
         if (File.Exists(active))
         {
             if (validateOwnership)
@@ -742,15 +979,16 @@ public sealed class LocalToolCatalogProvider(
             File.Move(active, disabled, overwrite: true);
             _protector.ProtectFile(disabled, ownershipMode, serviceIdentity);
         }
-        return Task.CompletedTask;
     }
 
-    public Task EnableAsync(string name, CancellationToken cancellationToken = default)
+    public async Task EnableAsync(string name, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var root = GetValidatedRootDirectory();
         var disabled = ResolveContainedPath(root, name, disabled: true);
         var active = ResolveContainedPath(root, name, disabled: false);
+        if (!Directory.Exists(root)) return;
+        await using var mutation = await AcquireMutationLockAsync(active, cancellationToken).ConfigureAwait(false);
         if (File.Exists(disabled))
         {
             if (validateOwnership)
@@ -758,15 +996,16 @@ public sealed class LocalToolCatalogProvider(
             File.Move(disabled, active, overwrite: true);
             _protector.ProtectFile(active, ownershipMode, serviceIdentity);
         }
-        return Task.CompletedTask;
     }
 
-    public Task DeleteAsync(string name, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(string name, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var root = GetValidatedRootDirectory();
         var active = ResolveContainedPath(root, name, disabled: false);
         var disabled = ResolveContainedPath(root, name, disabled: true);
+        if (!Directory.Exists(root)) return;
+        await using var mutation = await AcquireMutationLockAsync(active, cancellationToken).ConfigureAwait(false);
         if (File.Exists(active))
         {
             if (validateOwnership)
@@ -779,7 +1018,6 @@ public sealed class LocalToolCatalogProvider(
                 _protector.VerifyFileWriteBoundary(disabled, ownershipMode);
             File.Delete(disabled);
         }
-        return Task.CompletedTask;
     }
 
     private string GetValidatedRootDirectory(bool requireBoundaryIfMissing = true)
@@ -820,13 +1058,21 @@ public sealed class LocalToolCatalogProvider(
             && string.Equals(Path.GetDirectoryName(fullFile), trimmedRoot, comparison);
     }
 
-    private static EntryPayload Deserialize(string name, string json)
+    private static EntryPayload Deserialize(string name, string json, int expectedVersion)
     {
         try
         {
-            return JsonSerializer.Deserialize<EntryPayload>(json) ?? throw new InvalidOperationException("Null payload.");
+            var payload = JsonSerializer.Deserialize<EntryPayload>(json) ?? throw new JsonException("Null tool catalog entry.");
+            if (payload.SchemaVersion != expectedVersion || string.IsNullOrWhiteSpace(payload.ToolType) || payload.Options is null
+                || (expectedVersion == 0 && (payload.Revision != 0 || payload.UseGrants is not null))
+                || (expectedVersion >= 1 && payload.Revision < 1)
+                || (expectedVersion == 2) != payload.Options.Keys.Contains(NativeToolArtifact.DigestOption, StringComparer.OrdinalIgnoreCase)
+                || (expectedVersion != 2 && payload.Options.Keys.Contains(NativeToolArtifact.ScriptDigestOption, StringComparer.OrdinalIgnoreCase))
+                || payload.UseGrants?.Any(grant => grant is null || !grant.IsValid()) == true)
+                throw new JsonException("Unsupported or invalid tool catalog entry.");
+            return payload with { Options = new(payload.Options, StringComparer.OrdinalIgnoreCase) };
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
             throw new InvalidOperationException($"The catalog entry for tool '{name}' is corrupt or unreadable.", ex);
         }
@@ -840,6 +1086,9 @@ public sealed class ToolCatalogOptions
     public ToolCatalogOwnershipMode OwnershipMode { get; set; } = ToolCatalogOwnershipMode.MachineAdministrator;
     public string? ServiceIdentity { get; set; }
     public bool ValidateOwnership { get; set; } = true;
+    public bool RequireUseGrants { get; set; }
+    public string? ArtifactRoot { get; set; }
+    public bool RequireArtifactApproval { get; set; }
 }
 
 public static class ToolCatalogProviderFactory
@@ -849,6 +1098,20 @@ public static class ToolCatalogProviderFactory
         ArgumentNullException.ThrowIfNull(options);
         if (string.IsNullOrWhiteSpace(options.Provider))
             return null;
+        if (options.RequireUseGrants && (!options.ValidateOwnership
+                || options.OwnershipMode != ToolCatalogOwnershipMode.MachineAdministrator))
+            throw new InvalidOperationException("Required tool grants need an ownership-verified machine catalog.");
+
+        if (options.RequireArtifactApproval && ((!OperatingSystem.IsLinux() && !OperatingSystem.IsWindows())
+                || !options.ValidateOwnership || options.OwnershipMode != ToolCatalogOwnershipMode.MachineAdministrator
+                || string.IsNullOrWhiteSpace(options.ArtifactRoot) || !Path.IsPathFullyQualified(options.ArtifactRoot)))
+            throw new InvalidOperationException("Required native artifact approval needs an ownership-verified Linux or Windows machine catalog and absolute artifact root.");
+
+        if (OperatingSystem.IsWindows() && options.RequireArtifactApproval)
+        {
+            WindowsNativeToolBoundary.RequireProfile(options.ServiceIdentity);
+            WindowsNativeToolBoundary.RequireLocalNtfsPath(options.ArtifactRoot!);
+        }
 
         return options.Provider.Trim().ToUpperInvariant() switch
         {
@@ -856,7 +1119,10 @@ public static class ToolCatalogProviderFactory
                 options.LocalRoot ?? throw new InvalidOperationException("Tool catalog local root is required."),
                 options.OwnershipMode,
                 validateOwnership: options.ValidateOwnership,
-                serviceIdentity: options.ServiceIdentity),
+                serviceIdentity: options.ServiceIdentity,
+                requireUseGrants: options.RequireUseGrants,
+                artifactRoot: options.ArtifactRoot,
+                requireArtifactApproval: options.RequireArtifactApproval),
             "PORTAL" => throw new InvalidOperationException(
                 "The Portal tool catalog provider is only available inside the Portal host."),
             _ => throw new InvalidOperationException($"Tool catalog provider '{options.Provider}' is not supported.")

@@ -1463,7 +1463,9 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql admin machine secret verify` | Resolve a machine-local secret without printing the value | [admin machine secret verify](reference/cli/admin-machine-secret-verify.md) |
 | `etl-sql admin machine secret` | Manage the machine-local Governance:Secrets provider | [admin machine secret](reference/cli/admin-machine-secret.md) |
 | `etl-sql admin machine tool delete` | Permanently remove a machine-local tool | [admin machine tool delete](reference/cli/admin-machine-tool-delete.md) |
+| `etl-sql admin machine tool grant` | Grant use of a machine-local tool | [admin machine tool grant](reference/cli/admin-machine-tool-grant.md) |
 | `etl-sql admin machine tool list` | List machine-local tools | [admin machine tool list](reference/cli/admin-machine-tool-list.md) |
+| `etl-sql admin machine tool revoke` | Revoke use of a machine-local tool | [admin machine tool revoke](reference/cli/admin-machine-tool-revoke.md) |
 | `etl-sql admin machine tool set` | Store a machine-local tool | [admin machine tool set](reference/cli/admin-machine-tool-set.md) |
 | `etl-sql admin machine tool` | Manage the machine-local tool catalog | [admin machine tool](reference/cli/admin-machine-tool.md) |
 | `etl-sql admin machine` | Manage machine-local governance stores | [admin machine](reference/cli/admin-machine.md) |

@@ -88,6 +88,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     lease_owner TEXT,
                     lease_expires_at TEXT,
                     version INTEGER NOT NULL DEFAULT 1,
+                    tool_approved_version BIGINT,
                     lease_fence_token INTEGER NOT NULL DEFAULT 0,
                     run_state TEXT NOT NULL DEFAULT 'Idle',
                     job_type TEXT NOT NULL DEFAULT 'Script',
@@ -538,6 +539,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     using var command = connection.CreateCommand();
                     command.CommandText = schema;
                     await command.ExecuteNonQueryAsync();
+                    await EnsureToolApprovalColumnAsync(connection);
 
                     await ExecuteOptionalSqlAsync(
                         connection,
@@ -560,6 +562,22 @@ namespace ETL_SQL.Orchestrator.Storage
             finally
             {
                 _initLock.Release();
+            }
+        }
+
+        private async Task EnsureToolApprovalColumnAsync(DbConnection connection)
+        {
+            var columns = await _dialect.GetColumnNamesAsync(connection, "jobs");
+            if (columns.Contains("tool_approved_version")) return;
+            try
+            {
+                await ExecuteOptionalSqlAsync(connection, "ALTER TABLE jobs ADD COLUMN tool_approved_version BIGINT;");
+            }
+            catch (DbException)
+            {
+                // SQLite peers may both discover an older schema. Accept the other peer's migration.
+                if (!(await _dialect.GetColumnNamesAsync(connection, "jobs")).Contains("tool_approved_version"))
+                    throw;
             }
         }
 

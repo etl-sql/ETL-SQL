@@ -23,6 +23,29 @@ For current syntax, prefer [Getting Started](getting-started.md), the [Syntax In
 
 ---
 
+## v0.23.1 Upgrade Notes
+
+- **Federated external tools.** Upgrade the Orchestrator and its configured CLI workers together before
+  accepting federated jobs. Back up the tool catalog before editing it. Use `etl-sql admin machine tool list`
+  to inventory affected tools. Use the original registered casing when modifying a legacy entry. For example,
+  `etl-sql admin machine tool grant --name MaskSales --tenant portal-host --principal-kind GROUP --principal <group-key>`
+  grants the group in the dedicated Portal's default tenant. Use the tenant ID and stable principal key
+  from your deployment. For unattended jobs, configure the Portal lookup and have the job owner
+  approve the current saved inline script version. Configure the machine catalog on
+  the Orchestrator host so spawned workers use the same settings. Edited entries use the new catalog
+  format. Restore the catalog backup if rolling back the worker binaries.
+  [Tool grant reference](../../reference/cli/admin-machine-tool-grant.md) · [Scheduled job approval](../../administration/orchestration/orchestrator-portal.md#refresh-tool-identity-for-saved-jobs)
+
+- **Linux native artifact approval.** Set up a restricted worker and an administrator-owned version
+  store before requiring native tool approval. Inventory native aliases, publish reviewed executables
+  or fixed dash script pairs, and retain older versions for in-flight runs and checkpoints. Back up the catalog before pinning
+  aliases. [Native tool approval procedure](../../administration/orchestration/orchestrator-portal.md#approve-native-tools-on-a-restricted-linux-host)
+
+- **Windows native artifact approval.** Configure the Orchestrator to run under a dedicated
+  restricted virtual service account. Provision service-specific secrets and place writable state,
+  logs, and scratch outside the protected catalog and artifact roots.
+  [Restricted Windows service profile](../../administration/orchestration/orchestrator-portal.md#configure-the-restricted-windows-native-tool-profile)
+
 ## v0.23.0 Upgrade Notes
 
 - **Windows MSI configuration (`appsettings.defaults.json`):** The MSI no longer runs script custom actions (`configure-portal-jwt.ps1` and `installer-actions.js` are removed) and no longer overwrites `appsettings.json`. Release defaults live in `appsettings.defaults.json` (do not edit); `appsettings.json` holds only operator overrides, and the services bootstrap `appsettings.secrets.json` on first start. Upgrades from v0.22.0 strip values equal to v0.22.0 defaults from `appsettings.json` once. Uninstall keeps runtime data; use `etl-sql admin restore --in-place` for rollback and `etl-sql admin purge-data --confirm` for cleanup.

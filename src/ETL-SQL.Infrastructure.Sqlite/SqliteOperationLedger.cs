@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Execution;
@@ -20,7 +21,7 @@ public class SqliteOperationLedger : IOperationLedger, IDisposable
             throw new ArgumentException("Session ledger path escapes the configured session root.", nameof(sessionId));
     }
 
-    public async Task InitializeAsync()
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         var dir = Path.GetDirectoryName(_dbPath);
         if (dir != null && !Directory.Exists(dir))
@@ -30,7 +31,7 @@ public class SqliteOperationLedger : IOperationLedger, IDisposable
 
         var builder = new SqliteConnectionStringBuilder { DataSource = _dbPath };
         _connection = new SqliteConnection(builder.ConnectionString);
-        await _connection.OpenAsync();
+        await _connection.OpenAsync(cancellationToken);
 
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = @"
@@ -44,8 +45,39 @@ public class SqliteOperationLedger : IOperationLedger, IDisposable
                 started_at TEXT,
                 completed_at TEXT
             );
+            CREATE TABLE IF NOT EXISTS tool_approvals (
+                tool_alias TEXT PRIMARY KEY COLLATE NOCASE,
+                approval TEXT NOT NULL
+            );
         ";
-        await cmd.ExecuteNonQueryAsync();
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<bool> TryBindToolApprovalAsync(string alias, string? approval, CancellationToken cancellationToken)
+    {
+        if (_connection == null) await InitializeAsync(cancellationToken);
+
+        // Record a legacy launch too, so a concurrent attempt cannot adopt a pinned contract
+        // while an unpinned launch for the same alias is in flight.
+        using var cmd = _connection!.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO tool_approvals (tool_alias, approval)
+            SELECT @alias, @approval
+            WHERE @legacy OR NOT EXISTS (
+                SELECT 1 FROM operations WHERE operation_type = 'ToolExecution'
+                    AND payload = @alias COLLATE NOCASE
+            )
+            ON CONFLICT(tool_alias) DO NOTHING;
+            """;
+        var binding = approval ?? "legacy";
+        cmd.Parameters.AddWithValue("@alias", alias);
+        cmd.Parameters.AddWithValue("@approval", binding);
+        cmd.Parameters.AddWithValue("@legacy", approval is null);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // Bindings are insert-only. Rotation and retries cannot replace the winner.
+        cmd.CommandText = "SELECT approval FROM tool_approvals WHERE tool_alias = @alias";
+        return (await cmd.ExecuteScalarAsync(cancellationToken) as string) == binding;
     }
 
     public async Task RecordStartAsync(string operationId, string operationType, string payload)
@@ -115,6 +147,16 @@ public class SqliteOperationLedger : IOperationLedger, IDisposable
     public void Dispose()
     {
         _connection?.Dispose();
+    }
+}
+
+public sealed class SqliteToolApprovalStore : IToolApprovalStore
+{
+    public async Task<bool> TryBindAsync(string sessionRoot, string sessionId, string alias, string? approval,
+        CancellationToken cancellationToken)
+    {
+        using var ledger = new SqliteOperationLedger(sessionRoot, sessionId);
+        return await ledger.TryBindToolApprovalAsync(alias, approval, cancellationToken);
     }
 }
 

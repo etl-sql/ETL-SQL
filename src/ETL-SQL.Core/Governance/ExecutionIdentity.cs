@@ -27,6 +27,9 @@ public sealed record ExecutionIdentity
     /// <summary>Server-verified tenant binding for host-managed catalog and execution authority.</summary>
     public string? TenantId { get; init; }
 
+    /// <summary>Stable tool grant authority projected by the trusted execution host.</summary>
+    public ToolExecutionPrincipal? ToolPrincipal { get; init; }
+
     /// <summary>The actual actor; differs from <see cref="EffectiveUser"/> only under impersonation.</summary>
     public required string RealUser { get; init; }
 

@@ -6781,10 +6781,14 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.Equal("", await InlineCssVariableAsync(overrideCard, "--etl-unknown"));
         Assert.Equal("", await InlineCssVariableAsync(overrideCard, "--portal-private"));
 
-        await inheritedCard.Locator(":scope > .visual-toolbar .visual-tool-btn").ClickAsync();
+        var maximize = inheritedCard.Locator(":scope > .visual-toolbar > .visual-maximize-btn");
+        await Expect(maximize).ToHaveAttributeAsync("aria-label", "Maximize visual");
+        await maximize.ClickAsync();
         Assert.Equal("12px", await CssVariableAsync(inheritedCard, "--etl-radius-md"));
         Assert.Equal("#94a3b8", await CssVariableAsync(inheritedCard, "--etl-border"));
-        await inheritedCard.Locator(":scope > .visual-toolbar .visual-tool-btn").ClickAsync();
+        await Expect(maximize).ToHaveAttributeAsync("aria-label", "Restore visual");
+        await maximize.ClickAsync();
+        await Expect(maximize).ToHaveAttributeAsync("aria-label", "Maximize visual");
         Assert.Equal("12px", await CssVariableAsync(inheritedCard, "--etl-radius-md"));
         Assert.Equal("#94a3b8", await CssVariableAsync(inheritedCard, "--etl-border"));
 
