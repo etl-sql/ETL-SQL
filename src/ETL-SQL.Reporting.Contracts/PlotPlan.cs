@@ -50,10 +50,15 @@ public sealed record ResolvedScale(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? LabelSkip = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] decimal OuterPadding = 0m,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TickFormat = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TimeUnit = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TimeUnit = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Title = null)
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ResolvedColorRange? ColorRange { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NumericRangeSpec? NumericRange { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public ImmutableArray<PaletteAssignment> DiscreteColors { get; init; }
 }
 
 public sealed record ResolvedSeries(string Key, string Label, int Order, string Color);

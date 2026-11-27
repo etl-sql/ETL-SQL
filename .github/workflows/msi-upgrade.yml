@@ -56,13 +56,13 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 13
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
           fetch-depth: 0
 
       - name: Set up source-check runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -77,7 +77,7 @@ jobs:
 
       - name: Upload source preflight logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: msi-preflight-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/preflight/
@@ -146,15 +146,15 @@ jobs:
       artifact_id: ${{ steps.payload.outputs.artifact-id }}
       manifest_sha256: ${{ steps.identity.outputs.manifest_sha256 }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 8
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
           fetch-depth: 0
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Install payload browser compiler
@@ -169,7 +169,7 @@ jobs:
         if: always()
         continue-on-error: true
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: windows-payload-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/windows-payload-build/
@@ -178,7 +178,7 @@ jobs:
       - name: Retain immutable Windows payload
         id: payload
         timeout-minutes: 8
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: windows-payload-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/windows-payload/
@@ -200,7 +200,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 8
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
           fetch-depth: 0
@@ -229,7 +229,7 @@ jobs:
       - name: Restore cached previous MSI
         id: previous-cache
         if: steps.versions.outputs.previous_tag != ''
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .upgrade-cache
           key: previous-msi-${{ steps.versions.outputs.previous_tag }}-x64
@@ -250,7 +250,7 @@ jobs:
 
       # build-msi.ps1 prepares browser assets, which needs the pinned compiler.
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -264,7 +264,7 @@ jobs:
         run: choco install wixtoolset -y --no-progress --skip-if-installed
 
       - name: Download original Windows payload
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.publish-windows-payload.outputs.artifact_id }}
           path: artifacts/windows-payload-input
@@ -282,7 +282,7 @@ jobs:
         timeout-minutes: 5
         # Keep candidate retention independent of diagnostic transport.
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: msi-build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/msi-build/
@@ -325,7 +325,7 @@ jobs:
       - name: Upload certification inputs
         id: inputs
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: msi-inputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: candidate/
@@ -349,12 +349,12 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 8
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
 
       - name: Download pinned certification inputs
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.build-msi.outputs.artifact_id }}
           path: candidate
@@ -366,7 +366,7 @@ jobs:
         run: ./scripts/MsiCandidate.ps1 -Mode Verify -Directory candidate -SourceSha $env:CERTIFICATION_SHA
 
       - name: Set up browser verification runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -402,7 +402,7 @@ jobs:
       - name: Upload profile diagnostics first
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: msi-diagnostics-${{ matrix.profile }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -417,7 +417,7 @@ jobs:
       - name: Upload upgrade evidence
         if: always()
         timeout-minutes: 20
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: msi-upgrade-${{ matrix.profile }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -439,11 +439,11 @@ jobs:
       actions: write
       checks: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Observe MSI progress from an independent runner
@@ -457,7 +457,7 @@ jobs:
       - name: Retain independent progress evidence before cancellation
         if: always()
         timeout-minutes: 2
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: msi-progress-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/msi-progress/
@@ -533,7 +533,7 @@ jobs:
       - name: Save successful certification receipt
         id: receipt
         if: needs.detect-upgrade-impact.outputs.should_run == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: msi-certified-${{ github.run_id }}-${{ github.run_attempt }}
           path: certification.json
@@ -556,7 +556,7 @@ jobs:
       ETLSQL_MSI_DURABLE_CHECKPOINTS: '1'
       ETLSQL_MSI_CHECKPOINT_RUN_SHA: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 8
       - name: Select original successful MSI build inputs
         id: inputs
@@ -565,7 +565,7 @@ jobs:
         env:
           INPUT_ARTIFACT_ID: ${{ inputs.diagnostic_artifact_id }}
         run: ./scripts/Prepare-MsiPortalDiagnostic.ps1 -ArtifactId $env:INPUT_ARTIFACT_ID
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         timeout-minutes: 5
         with:
           artifact-ids: ${{ steps.inputs.outputs.artifact_id }}
@@ -587,7 +587,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Retained MSI hash verification failed.' }
           "CERTIFICATION_SHA=$($manifest.sourceSha)" >> $env:GITHUB_ENV
           Copy-Item candidate/candidate.json release-validation/msi-portal-diagnostic/candidate.json
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Prepare diagnostic browser inventory
@@ -612,7 +612,7 @@ jobs:
       - name: Retain diagnostic reports without certification receipt
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: msi-portal-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/msi-portal-diagnostic/

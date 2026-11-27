@@ -28,6 +28,10 @@ using Microsoft.IdentityModel.Tokens;
 ETL_SQL.Core.Governance.SecurityEventRuntime.ConfigureLocalOutboxFactory(
     new ETL_SQL.Core.Governance.SqliteSecurityEventOutboxFactory());
 await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
+// An MSI install: create missing secrets and the first-run sign-in before configuration loads.
+// Elsewhere this does nothing, so a missing secret still fails fast.
+if (OperatingSystem.IsWindows())
+    ETL_SQL.Common.InstalledConfigurationBootstrap.Ensure(System.AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
 #if WINDOWS
 // Running as a Windows Service, the working directory defaults to System32, which sends every
@@ -41,6 +45,8 @@ if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindows
 // this also sets the content root to the executable's directory.
 builder.Host.UseWindowsService(o => o.ServiceName = "ETL-SQL Portal");
 #endif
+// An MSI install keeps the release defaults and the installer's choices below appsettings.json.
+builder.Configuration.AddInstallerLayers(System.AppContext.BaseDirectory);
 // Installed service secrets sit beside the executable, in a file only the service can read.
 builder.Configuration.AddInstalledSecrets(System.AppContext.BaseDirectory);
 builder.Configuration.AddSecureConfiguration();
@@ -71,7 +77,9 @@ builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(services => service
 builder.Logging.ClearProviders();
 builder.Services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider, ApplicationLoggerProvider>();
 
-builder.Services.AddEtlSqlEngine(builder.Configuration);
+builder.Services.AddEtlSqlEngine(builder.Configuration,
+    requireToolUseGrants: portalConfig.SharedTenancy.Enabled
+        || !string.IsNullOrWhiteSpace(portalConfig.Orchestrator.IdentitySigningSecret));
 
 // Shared connection-diagnostic core behind the admin "Test connection" button. Stateless; depends
 // only on the IConnectorRegistry registered by AddEtlSqlEngine.
@@ -613,6 +621,7 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalTenantJobEvidenceStore>
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetAtRestKeyRotationService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalSecretStoreService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalConnectionCatalogService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.OrchestratorGovernanceSyncService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DesignerAnalysisService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DesignerScriptGenerationService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DesignerScriptPatcher>();
@@ -1112,6 +1121,7 @@ app.Use(async (context, next) =>
 app.UseAuthorization();
 app.UseMiddleware<MustChangePasswordMiddleware>();
 app.MapControllers();
+app.MapScheduledToolPrincipalLookup();
 
 app.Map("/api/gateway/broker", async context =>
 {

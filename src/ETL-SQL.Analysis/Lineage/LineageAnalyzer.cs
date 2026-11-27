@@ -4,6 +4,7 @@ using System.Linq;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Services;
 
 namespace ETL_SQL.Analysis.Lineage;
 
@@ -644,7 +645,139 @@ public class LineageAnalyzer
                 }
             }
         }
+        else if (stmt is TransformStatement transform)
+        {
+            AnalyzeTransform(transform);
+        }
     }
+
+    private void AnalyzeTransform(TransformStatement stmt)
+    {
+        string target = stmt.TargetTable.FullyQualifiedName;
+        string source = (stmt.SourceTable ?? stmt.TargetTable).FullyQualifiedName;
+        string algorithm = stmt.Algorithm.ToUpperInvariant();
+        string[] sourceTables = [source];
+
+        Tracker.Record(
+            target,
+            sourceTables,
+            "TRANSFORM",
+            line: stmt.Line,
+            column: stmt.Column,
+            endLine: stmt.EndLine,
+            endColumn: stmt.EndColumn,
+            functionsApplied: [algorithm]);
+
+        var knownSourceCols = new List<string>();
+        var seenCols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in Tracker.GetFullLineage())
+        {
+            if (string.Equals(entry.TargetTable, source, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrEmpty(entry.TargetColumn) &&
+                seenCols.Add(entry.TargetColumn))
+            {
+                knownSourceCols.Add(entry.TargetColumn);
+            }
+        }
+
+        foreach (var refCol in TransformSchemaProjection.GetReferencedSourceColumns(stmt))
+        {
+            if (seenCols.Add(refCol))
+                knownSourceCols.Add(refCol);
+        }
+
+        var computedSpecs = TransformSchemaProjection.GetComputedColumns(stmt);
+        var replacedCols = new HashSet<string>(
+            computedSpecs.Where(c => c.ReplacesExisting).Select(c => c.TargetColumn),
+            StringComparer.OrdinalIgnoreCase);
+
+        var passThroughCols = algorithm == "PIVOT"
+            ? TransformSchemaProjection.GetOptionColumnList(stmt.Options, "ROW_FIELDS")
+            : algorithm is "UNPIVOT" or "MELT"
+                ? TransformSchemaProjection.GetOptionColumnList(stmt.Options, "ID_COLS")
+                : knownSourceCols.Where(c => !replacedCols.Contains(c)).ToList();
+
+        foreach (var col in passThroughCols)
+        {
+            var inherited = Tracker.InheritMetadata(sourceTables, [col], out var derived)
+                ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Tracker.Record(
+                target,
+                sourceTables,
+                "TRANSFORM",
+                targetColumn: col,
+                sourceColumns: [col],
+                metadata: inherited,
+                derivedFromDescriptions: derived,
+                line: stmt.Line,
+                column: stmt.Column,
+                endLine: stmt.EndLine,
+                endColumn: stmt.EndColumn,
+                transformationKind: TransformationKind.PassThrough);
+        }
+
+        var computedKind = ClassifyTransformAlgorithm(algorithm);
+        foreach (var spec in computedSpecs)
+        {
+            var inherited = Tracker.InheritMetadata(sourceTables, spec.SourceColumns, out var derived)
+                ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Tracker.Record(
+                target,
+                sourceTables,
+                "TRANSFORM",
+                targetColumn: spec.TargetColumn,
+                sourceColumns: spec.SourceColumns,
+                metadata: inherited,
+                derivedFromDescriptions: derived,
+                line: stmt.Line,
+                column: stmt.Column,
+                endLine: stmt.EndLine,
+                endColumn: stmt.EndColumn,
+                transformationKind: computedKind,
+                functionsApplied: [algorithm]);
+        }
+
+        if (TransformSchemaProjection.TryGetRejectIntoTable(stmt, out var rejectTarget))
+        {
+            Tracker.Record(
+                rejectTarget,
+                sourceTables,
+                "TRANSFORM",
+                line: stmt.Line,
+                column: stmt.Column,
+                endLine: stmt.EndLine,
+                endColumn: stmt.EndColumn,
+                functionsApplied: [algorithm, "REJECT_INTO"]);
+
+            foreach (var col in knownSourceCols)
+            {
+                var inherited = Tracker.InheritMetadata(sourceTables, [col], out var derived)
+                    ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                Tracker.Record(
+                    rejectTarget,
+                    sourceTables,
+                    "TRANSFORM",
+                    targetColumn: col,
+                    sourceColumns: [col],
+                    metadata: inherited,
+                    derivedFromDescriptions: derived,
+                    line: stmt.Line,
+                    column: stmt.Column,
+                    endLine: stmt.EndLine,
+                    endColumn: stmt.EndColumn,
+                    transformationKind: TransformationKind.PassThrough);
+            }
+        }
+    }
+
+    private static TransformationKind ClassifyTransformAlgorithm(string algorithm) => algorithm switch
+    {
+        "ROLLING_AGGREGATE" => TransformationKind.WindowFunction,
+        "TOP_N_OTHERS" or "PIVOT" => TransformationKind.Aggregation,
+        "PERIOD_COMPARISON" or "SHARE_OF_TOTAL" or "NORMALIZE" => TransformationKind.Arithmetic,
+        _ => TransformationKind.FunctionCall
+    };
 
     private static readonly HashSet<string> _aggregateFunctions = new(StringComparer.OrdinalIgnoreCase)
     {

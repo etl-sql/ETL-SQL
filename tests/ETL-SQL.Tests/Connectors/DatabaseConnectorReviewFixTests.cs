@@ -164,6 +164,75 @@ public sealed class DatabaseConnectorReviewFixTests
         Assert.Equal(expected, SnowflakeDataSource.ReplaceConnectionStringValue(input, "private_key_file", "new"));
     }
 
+    [Fact]
+    public void Snowflake_ReplaceConnectionStringValue_QuotesValuesAndSkipsQuotedSemicolons()
+    {
+        // A quoted earlier value containing ';' and the key name must not be split or replaced.
+        var cs = "account=a;password=\"x;private_key_pwd=fake\";private_key_pwd=old";
+        var result = SnowflakeDataSource.ReplaceConnectionStringValue(cs, "private_key_pwd", "p;w=d\"q");
+        var parsed = new System.Data.Common.DbConnectionStringBuilder { ConnectionString = result };
+        Assert.Equal("x;private_key_pwd=fake", parsed["password"]);
+        Assert.Equal("p;w=d\"q", parsed["private_key_pwd"]);
+        Assert.Equal(3, parsed.Count);
+    }
+
+    [Theory]
+    // COPY text format: backslash escapes, \N is NULL, \t \n \r are control characters.
+    [InlineData(@"C:\temp\new", @"C:\\temp\\new")]
+    [InlineData(@"\N", @"\\N")]
+    [InlineData("a\tb", @"a\tb")]
+    [InlineData("line1\r\nline2", @"line1\r\nline2")]
+    [InlineData("plain", "plain")]
+    public void Postgres_EscapeCopyText_KeepsValuesExact(string value, string expected)
+    {
+        var escaped = PostgresDataSource.EscapeCopyText(value);
+        Assert.Equal(expected, escaped);
+        Assert.DoesNotContain('\t', escaped);
+        Assert.DoesNotContain('\n', escaped);
+        Assert.DoesNotContain('\r', escaped);
+    }
+
+    [Fact]
+    public void Snowflake_GetHost_IgnoresHostHiddenInQuotedPassword()
+    {
+        // The policy check must see the host the driver uses, not one smuggled inside a quoted value.
+        var cs = "password=\"x;host=allowed.example.com\";account=realacct;user=u";
+        Assert.Equal("realacct", SnowflakeConnector.GetHostStatic(cs, null));
+        Assert.Null(SnowflakeConnector.ParseValueFromConnectionString(cs, "host"));
+        Assert.Throws<ExecutionException>(() => SnowflakeConnector.ParseValueFromConnectionString("password=\"unterminated", "host"));
+    }
+
+    [Fact]
+    public void Snowflake_BuildConnectionString_SecretsWithSeparatorsRoundTripAndRoleIsValidated()
+    {
+        var connector = new ETL_SQL.Connectors.Snowflake.SnowflakeConnector();
+        var cs = connector.BuildConnectionString(new Dictionary<string, string>
+        {
+            ["ACCOUNT"] = "acct",
+            ["USERNAME"] = "alice",
+            ["PRIVATE_KEY_FILE"] = "/keys/rsa;key.p8",
+            ["PRIVATE_KEY_PASSPHRASE"] = "pa;ss=host=evil",
+            ["ROLE"] = "ETL_LOADER_ROLE"
+        });
+        var parsed = new System.Data.Common.DbConnectionStringBuilder { ConnectionString = cs };
+        Assert.Equal("pa;ss=host=evil", parsed["private_key_pwd"]);
+        Assert.Equal("/keys/rsa;key.p8", parsed["private_key_file"]);
+        Assert.False(parsed.ContainsKey("host"));
+        Assert.DoesNotContain("pa;ss", ETL_SQL.Core.Common.SecretRedactor.Redact(cs));
+
+        var withPassword = connector.BuildConnectionString(new Dictionary<string, string>
+        {
+            ["ACCOUNT"] = "acct",
+            ["USERNAME"] = "alice",
+            ["PASSWORD"] = "a;b"
+        });
+        Assert.Equal("a;b", new System.Data.Common.DbConnectionStringBuilder { ConnectionString = withPassword }["password"]);
+
+        var ex = Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => connector.BuildConnectionString(
+            new Dictionary<string, string> { ["ACCOUNT"] = "acct", ["USERNAME"] = "alice", ["PASSWORD"] = "p", ["ROLE"] = "R;host=evil" }));
+        Assert.Contains("ROLE", ex.Message);
+    }
+
     // ── Oracle / SQL Server / Postgres connectors wrap provider failures; Oracle quoting ──
 
     [Fact]

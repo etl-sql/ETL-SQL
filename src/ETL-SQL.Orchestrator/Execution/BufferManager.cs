@@ -4,22 +4,28 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Execution;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace ETL_SQL.Orchestrator.Execution
 {
     /// <summary>
-    /// Centralized coordinator for global engine resources (RAM, Database Cursors).
-    /// Implements FIFO queuing with timeouts and periodic visual feedback.
+    /// Centralized coordinator for global engine resources (RAM, Streaming Cursors, and synchronous
+    /// operator memory grants). Consolidates <see cref="BufferManagerOptions"/> limits, hysteresis,
+    /// and system-memory floor with the <see cref="IMemoryGrantArbiter"/> contract so all execution
+    /// paths reserve against one shared pool.
     /// </summary>
-    public class BufferManager : IBufferManager, IDisposable
+    public class BufferManager : IBufferManager, IMemoryGrantArbiter, IDisposable
     {
         private readonly ILogger<BufferManager> _logger;
         private readonly BufferManagerOptions _options;
         private readonly ISystemResources _systemResources;
         private readonly SemaphoreSlim _cursorSemaphore;
+        private readonly long _effectiveMaxMemoryBytes;
 
         private long _currentMemoryBytes;
         private int _isMemoryExhausted; // 0=false, 1=true
@@ -33,6 +39,25 @@ namespace ETL_SQL.Orchestrator.Execution
         private int _activeCursors;
         private int _queuedCursors;
 
+        internal int ActiveCursors => Volatile.Read(ref _activeCursors);
+        internal int QueuedCursors => Volatile.Read(ref _queuedCursors);
+        internal int AvailableCursorSlots => _cursorSemaphore.CurrentCount;
+        internal bool IsMemoryExhausted => Volatile.Read(ref _isMemoryExhausted) == 1;
+        internal bool IsSystemMemoryExhausted => Volatile.Read(ref _isSystemMemoryExhausted) == 1;
+        internal TimeSpan? SystemCheckIntervalOverride { get; set; }
+
+        /// <summary>Total global budget in bytes enforced across both async reservations and operator leases.</summary>
+        public long TotalBudgetBytes => _effectiveMaxMemoryBytes;
+
+        /// <summary>Currently reserved bytes across active async reservations and synchronous operator leases.</summary>
+        public long ReservedBytes => Interlocked.Read(ref _currentMemoryBytes);
+
+        /// <summary>Active system-memory floor refusal state, if host available RAM is below <c>SystemMemoryFloorMB</c>.</summary>
+        public SystemMemoryFloorPressure? CurrentSystemMemoryFloorPressure
+            => Volatile.Read(ref _isSystemMemoryExhausted) == 1
+                ? new SystemMemoryFloorPressure(Interlocked.Read(ref _cachedSystemAvailableBytes), _options.SystemMemoryFloorMB)
+                : null;
+
         /// <summary>Tracks active reservations per session to prevent 'Zombie References'.</summary>
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, IResourceReservation>> _sessionReservations = new();
 
@@ -45,23 +70,54 @@ namespace ETL_SQL.Orchestrator.Execution
 
         private readonly Timer? _zombieSweepTimer;
 
-        public BufferManager(IOptions<BufferManagerOptions> options, ILogger<BufferManager> logger, ISystemResources systemResources)
+        [ActivatorUtilitiesConstructor]
+        public BufferManager(
+            IOptions<BufferManagerOptions> options,
+            ILogger<BufferManager> logger,
+            ISystemResources systemResources,
+            IConfiguration? configuration = null)
         {
             _options = options.Value;
             _logger = logger;
             _systemResources = systemResources;
 
+            int effectiveMaxMB;
+            if (configuration != null)
+            {
+                var engineGrant = configuration.GetValue<int?>("Engine:TotalMemoryGrantMB");
+                effectiveMaxMB = MemoryCoordinatorPolicy.ResolveEffectiveGlobalMemoryMB(
+                    engineGrant,
+                    _options.MaxGlobalMemoryMB,
+                    systemResources.GetTotalMemoryBytes());
+            }
+            else
+            {
+                effectiveMaxMB = Math.Max(0, _options.MaxGlobalMemoryMB);
+            }
+
+            _effectiveMaxMemoryBytes = (long)effectiveMaxMB * 1024L * 1024L;
+
             var maxCursors = _options.MaxStreamingCursors > 0 ? _options.MaxStreamingCursors : 50;
             _cursorSemaphore = new SemaphoreSlim(maxCursors, maxCursors);
 
-            _logger.LogInformation("BufferManager initialized: MaxMemory={MaxMem}MB, SystemFloor={Floor}MB, MaxCursors={MaxCursors}, Timeout={Timeout}s",
-                _options.MaxGlobalMemoryMB, _options.SystemMemoryFloorMB, maxCursors, _options.ResourceWaitTimeoutSeconds);
+            _logger.LogInformation(
+                "BufferManager initialized: MaxMemory={MaxMem}MB (Configured={ConfiguredMax}MB), Hysteresis={Hyst}MB, SystemFloor={Floor}MB, MaxCursors={MaxCursors}, Timeout={Timeout}s",
+                effectiveMaxMB, _options.MaxGlobalMemoryMB, _options.HysteresisMemoryMB, _options.SystemMemoryFloorMB, maxCursors, _options.ResourceWaitTimeoutSeconds);
 
-            // Start the zombie protection sweep
             _zombieSweepTimer = new Timer(PruneZombies, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
         }
 
-        #region Memory Management
+        #region Memory Management & IMemoryGrantArbiter
+
+        public IMemoryGrantLease AcquireLease() => AcquireMemoryLease(sessionId: null, owner: null);
+
+        public IMemoryGrantLease AcquireMemoryLease(string? sessionId = null, object? owner = null)
+        {
+            var lease = new ArbiterLease(this, sessionId ?? string.Empty, owner);
+            if (!string.IsNullOrEmpty(sessionId) || owner != null)
+                RegisterReservation(lease);
+            return lease;
+        }
 
         public Task<IDisposable> ReserveMemoryAsync(string sessionId, long bytes, bool isOverride = false, object? owner = null)
             => ReserveMemoryAsync(sessionId, bytes, CancellationToken.None, isOverride, owner);
@@ -77,38 +133,25 @@ namespace ETL_SQL.Orchestrator.Execution
                 return RegisterReservation(new MemoryRelease(this, sessionId, bytes, ownerRef: owner));
             }
 
-            long maxBytes = (long)_options.MaxGlobalMemoryMB * 1024 * 1024;
-
-            // FAST PATH: If no one is waiting and we have space, grab it without a lock
-            if (_memoryQueue.IsEmpty && CanAcquireMemoryInternal(bytes, maxBytes))
-            {
-                // Optimistically increment
-                var newTotal = Interlocked.Add(ref _currentMemoryBytes, bytes);
-
-                // Re-verify after increment to ensure we didn't just cross the line
-                if (newTotal <= maxBytes || maxBytes <= 0)
-                {
-                    return RegisterReservation(new MemoryRelease(this, sessionId, bytes, ownerRef: owner));
-                }
-
-                // Rollback if we exceeded while another thread was doing the same
-                Interlocked.Add(ref _currentMemoryBytes, -bytes);
-            }
-
-            // SLOW PATH: Use queueing logic
-            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var request = new MemoryRequest(bytes, tcs);
+            long maxBytes = _effectiveMaxMemoryBytes;
+            MemoryRequest? request = null;
+            TaskCompletionSource<bool>? tcs = null;
 
             lock (_memLock)
             {
-                // One more check inside the lock just in case someone released while we were entering
-                if (_memoryQueue.IsEmpty && CanAcquireMemoryInternal(bytes, maxBytes))
+                long spillAmount = 0;
+                if (_memoryQueue.IsEmpty && CanAcquireMemoryLocked(bytes, maxBytes, out spillAmount))
                 {
                     Interlocked.Add(ref _currentMemoryBytes, bytes);
                     return RegisterReservation(new MemoryRelease(this, sessionId, bytes, ownerRef: owner));
                 }
+                else if (_memoryQueue.IsEmpty && spillAmount > 0)
+                {
+                    _ = Task.Run(() => TriggerSpillsUnderPressureAsync(spillAmount));
+                }
 
-                // Queue the request
+                tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                request = new MemoryRequest(bytes, tcs);
                 _memoryQueue.Enqueue(request);
             }
 
@@ -121,16 +164,14 @@ namespace ETL_SQL.Orchestrator.Execution
                     if (request.TryTransitionToAbandoned())
                     {
                         request.Tcs.TrySetCanceled(cancellationToken);
-                        ProcessMemoryQueue();
+                        ProcessMemoryQueueLocked();
                     }
                 }
             });
 
-            var granted = false;
             try
             {
-                granted = await WaitWithFeedback(sessionId, "Memory", tcs.Task, cancellationToken);
-                if (granted)
+                if (await WaitWithFeedback(sessionId, "Memory", tcs.Task, cancellationToken, pollMemoryRecovery: true))
                 {
                     return RegisterReservation(new MemoryRelease(this, sessionId, bytes, ownerRef: owner));
                 }
@@ -153,24 +194,34 @@ namespace ETL_SQL.Orchestrator.Execution
                 if (request.TryTransitionToAbandoned())
                 {
                     request.Tcs.TrySetCanceled();
-                    ProcessMemoryQueue();
+                    ProcessMemoryQueueLocked();
                     return;
                 }
 
-                // Wait for the granting thread to publish its byte reservation before release.
                 if (request.IsGranted)
-                    ReleaseMemory(request.Bytes);
+                    ReleaseMemoryLocked(request.Bytes);
             }
         }
 
-        private bool CanAcquireMemoryInternal(long bytes, long maxBytes)
+        private bool CheckSystemMemoryFloorLocked()
         {
-            // 1. System Memory Floor Check (Throttled)
+            long floorBytes = (long)_options.SystemMemoryFloorMB * 1024 * 1024;
+            if (floorBytes <= 0)
+            {
+                if (Interlocked.CompareExchange(ref _isSystemMemoryExhausted, 0, 1) == 1)
+                    _logger.LogInformation("[SYSTEM_MEMORY_PRESSURE_RELIEF] System memory floor disabled.");
+                return true;
+            }
+
             long now = DateTime.UtcNow.Ticks;
             long lastCheck = Interlocked.Read(ref _lastSystemCheckTicks);
-            long systemAvailable;
+            long intervalTicks = SystemCheckIntervalOverride?.Ticks
+                ?? (Volatile.Read(ref _isSystemMemoryExhausted) == 1
+                    ? TimeSpan.FromMilliseconds(10).Ticks
+                    : TimeSpan.FromMilliseconds(20).Ticks);
 
-            if (now - lastCheck > TimeSpan.FromMilliseconds(500).Ticks)
+            long systemAvailable;
+            if (intervalTicks <= 0 || now - lastCheck >= intervalTicks)
             {
                 systemAvailable = _systemResources.GetAvailableMemoryBytes();
                 Interlocked.Exchange(ref _cachedSystemAvailableBytes, systemAvailable);
@@ -181,64 +232,91 @@ namespace ETL_SQL.Orchestrator.Execution
                 systemAvailable = Interlocked.Read(ref _cachedSystemAvailableBytes);
             }
 
-            long floorBytes = (long)_options.SystemMemoryFloorMB * 1024 * 1024;
-
             if (systemAvailable < floorBytes)
             {
                 if (Interlocked.CompareExchange(ref _isSystemMemoryExhausted, 1, 0) == 0)
                 {
-                    _logger.LogWarning("[SYSTEM_MEMORY_PRESSURE] System available RAM ({Current} MB) is below safe floor ({Floor} MB). Suspending requests.",
+                    _logger.LogWarning(
+                        "[SYSTEM_MEMORY_PRESSURE] System available RAM ({Current} MB) is below safe floor ({Floor} MB). Suspending requests.",
                         systemAvailable / 1024 / 1024, _options.SystemMemoryFloorMB);
                 }
                 return false;
             }
-            else if (Interlocked.CompareExchange(ref _isSystemMemoryExhausted, 0, 1) == 1)
+
+            if (Interlocked.CompareExchange(ref _isSystemMemoryExhausted, 0, 1) == 1)
             {
                 _logger.LogInformation("[SYSTEM_MEMORY_PRESSURE_RELIEF] System memory recovered above safe floor. Resuming requests.");
             }
 
-            // 2. Engine Global Limit Check
-            if (maxBytes <= 0) return true;
+            return true;
+        }
 
-            // If currently exhausted, we must wait until hysteresis threshold is reached
+        private long ComputeSafeLevel(long maxBytes)
+        {
+            long hysteresisBytes = (long)Math.Max(0, _options.HysteresisMemoryMB) * 1024 * 1024;
+            long safeLevel = maxBytes - hysteresisBytes;
+            if (safeLevel < maxBytes / 2) safeLevel = maxBytes / 2;
+            return safeLevel;
+        }
+
+        private bool CanAcquireMemoryLocked(long bytes, long maxBytes, out long spillTriggerBytes)
+        {
+            spillTriggerBytes = 0;
+
+            if (!CheckSystemMemoryFloorLocked())
+                return false;
+
+            if (maxBytes <= 0)
+                return true;
+
+            long current = Interlocked.Read(ref _currentMemoryBytes);
+
             if (Volatile.Read(ref _isMemoryExhausted) == 1)
             {
-                long hysteresisBytes = (long)_options.HysteresisMemoryMB * 1024 * 1024;
-                long safeLevel = maxBytes - hysteresisBytes;
-
-                // Sanity check: Ensure safeLevel is at least 50% of capacity if hysteresis is too aggressive
-                if (safeLevel < maxBytes / 2) safeLevel = maxBytes / 2;
-
-                if (Interlocked.Read(ref _currentMemoryBytes) + bytes > safeLevel) return false;
+                long safeLevel = ComputeSafeLevel(maxBytes);
+                if (current + bytes > safeLevel)
+                    return false;
 
                 _logger.LogInformation("[HYSTERESIS] Safe memory level reached. Resuming queue processing.");
                 Interlocked.Exchange(ref _isMemoryExhausted, 0);
             }
 
-            if (Interlocked.Read(ref _currentMemoryBytes) + bytes <= maxBytes)
-            {
+            if (current + bytes <= maxBytes)
                 return true;
-            }
 
             if (Interlocked.CompareExchange(ref _isMemoryExhausted, 1, 0) == 0)
             {
-                _logger.LogWarning("[RESOURCE_EXHAUSTION] Global memory limit reached ({Max}MB). Suspending requests until hysteresis cooldown.", _options.MaxGlobalMemoryMB);
-
-                // Trigger proactive spill to disk to relieve pressure if possible
-                _ = Task.Run(() => TriggerSpillsUnderPressureAsync(bytes));
+                _logger.LogWarning(
+                    "[RESOURCE_EXHAUSTION] Global memory limit reached ({Max}MB). Suspending requests until hysteresis cooldown.",
+                    _effectiveMaxMemoryBytes / (1024 * 1024));
+                spillTriggerBytes = bytes;
             }
+
             return false;
         }
 
-        public void RegisterSpillable(ISpillable spillable)
+        private bool TryReserveDeltaForLease(long deltaBytes)
         {
-            _spillables.TryAdd(spillable, 0);
+            if (deltaBytes <= 0) return true;
+
+            long spillBytes = 0;
+            bool admitted;
+            lock (_memLock)
+            {
+                admitted = CanAcquireMemoryLocked(deltaBytes, _effectiveMaxMemoryBytes, out spillBytes);
+                if (admitted)
+                    Interlocked.Add(ref _currentMemoryBytes, deltaBytes);
+            }
+
+            if (!admitted && spillBytes > 0)
+                _ = Task.Run(() => TriggerSpillsUnderPressureAsync(spillBytes));
+
+            return admitted;
         }
 
-        public void UnregisterSpillable(ISpillable spillable)
-        {
-            _spillables.TryRemove(spillable, out _);
-        }
+        public void RegisterSpillable(ISpillable spillable) => _spillables.TryAdd(spillable, 0);
+
+        public void UnregisterSpillable(ISpillable spillable) => _spillables.TryRemove(spillable, out _);
 
         public async Task<long> TriggerSpillsUnderPressureAsync(long requiredBytes)
         {
@@ -256,13 +334,12 @@ namespace ETL_SQL.Orchestrator.Execution
 
                 try
                 {
-                    _logger.LogWarning("[MEMORY_PRESSURE_RELIEF] Proactively spilling {Token} to disk ({Size} MB) to alleviate global memory pressure.",
+                    _logger.LogWarning(
+                        "[MEMORY_PRESSURE_RELIEF] Proactively spilling {Token} to disk ({Size} MB) to alleviate global memory pressure.",
                         spillable.SpillToken, sizeBefore / 1024 / 1024);
 
                     if (await spillable.SpillAsync())
-                    {
                         reclaimed += sizeBefore;
-                    }
                 }
                 catch (Exception ex)
                 {
@@ -272,38 +349,42 @@ namespace ETL_SQL.Orchestrator.Execution
 
             if (reclaimed > 0)
             {
-                _logger.LogInformation("[MEMORY_PRESSURE_RELIEF] Proactive spill complete. Reclaimed {Size} MB from {Count} sources.",
-                    reclaimed / 1024 / 1024, candidates.Count(c => c.MemoryUsageBytes == 0)); // This count is a bit loose but works
+                _logger.LogInformation(
+                    "[MEMORY_PRESSURE_RELIEF] Proactive spill complete. Reclaimed {Size} MB from {Count} sources.",
+                    reclaimed / 1024 / 1024, candidates.Count(c => c.MemoryUsageBytes == 0));
             }
 
             return reclaimed;
         }
 
-        private bool CanAcquireMemory(long bytes, long maxBytes)
-        {
-            lock (_memLock)
-            {
-                return CanAcquireMemoryInternal(bytes, maxBytes);
-            }
-        }
-
         private void ReleaseMemory(long bytes)
         {
-            Interlocked.Add(ref _currentMemoryBytes, -bytes);
-
-            // Only enter the lock if there are actually waiters to process
-            if (!_memoryQueue.IsEmpty)
+            if (bytes <= 0) return;
+            lock (_memLock)
             {
-                lock (_memLock)
-                {
-                    ProcessMemoryQueue();
-                }
+                ReleaseMemoryLocked(bytes);
             }
         }
 
-        private void ProcessMemoryQueue()
+        private void ReleaseMemoryLocked(long bytes)
         {
-            long maxBytes = (long)_options.MaxGlobalMemoryMB * 1024 * 1024;
+            var newTotal = Interlocked.Add(ref _currentMemoryBytes, -bytes);
+            if (newTotal < 0)
+                Interlocked.Exchange(ref _currentMemoryBytes, 0);
+
+            if (Interlocked.Read(ref _currentMemoryBytes) == 0)
+            {
+                if (Interlocked.CompareExchange(ref _isMemoryExhausted, 0, 1) == 1)
+                    _logger.LogInformation("[HYSTERESIS] All reserved memory released; exhaustion cleared.");
+            }
+
+            if (!_memoryQueue.IsEmpty)
+                ProcessMemoryQueueLocked();
+        }
+
+        private void ProcessMemoryQueueLocked()
+        {
+            long maxBytes = _effectiveMaxMemoryBytes;
             while (_memoryQueue.TryPeek(out var next))
             {
                 if (next.IsAbandoned)
@@ -312,18 +393,12 @@ namespace ETL_SQL.Orchestrator.Execution
                     continue;
                 }
 
-                // We use Internal call because we are already holding the lock
-                if (CanAcquireMemoryInternal(next.Bytes, maxBytes))
+                if (CanAcquireMemoryLocked(next.Bytes, maxBytes, out _))
                 {
-                    if (_memoryQueue.TryDequeue(out _))
+                    if (_memoryQueue.TryDequeue(out _) && next.TryTransitionToGranted())
                     {
-                        if (next.TryTransitionToGranted())
-                        {
-                            // Note: We increment the counter here while holding the lock to ensure CanAcquireMemory
-                            // consistency for the next item in the queue.
-                            Interlocked.Add(ref _currentMemoryBytes, next.Bytes);
-                            next.Tcs.TrySetResult(true);
-                        }
+                        Interlocked.Add(ref _currentMemoryBytes, next.Bytes);
+                        next.Tcs.TrySetResult(true);
                     }
                 }
                 else
@@ -342,6 +417,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
         private void UnregisterReservation(IResourceReservation reservation)
         {
+            if (string.IsNullOrEmpty(reservation.SessionId) && reservation.Owner == null) return;
             if (_sessionReservations.TryGetValue(reservation.SessionId, out var dict))
             {
                 dict.TryRemove(reservation.Id, out _);
@@ -361,16 +437,56 @@ namespace ETL_SQL.Orchestrator.Execution
                     _logger.LogWarning("[ZOMBIE_PROTECTION] Session {SessionId} finished with {Count} unreleased resource reservations. Forcefully reclaiming...", sessionId, count);
                     foreach (var reservation in dict.Values)
                     {
-                        try
-                        {
-                            reservation.Dispose();
-                        }
+                        try { reservation.Dispose(); }
                         catch (Exception ex)
                         {
                             _logger.LogError(ex, "Error during forced reclamation of reservation {Id} for session {SessionId}", reservation.Id, sessionId);
                         }
                     }
                 }
+            }
+        }
+
+        private sealed class ArbiterLease(BufferManager owner, string sessionId, object? ownerRef) : IMemoryGrantLease, IResourceReservation
+        {
+            private readonly object _leaseGate = new();
+            private long _reported;
+            private bool _disposed;
+
+            public Guid Id { get; } = Guid.NewGuid();
+            public string SessionId { get; } = sessionId;
+            public WeakReference? Owner { get; } = ownerRef != null ? new WeakReference(ownerRef) : null;
+
+            public bool RegisterAndCheckSpill(long bytes)
+            {
+                lock (_leaseGate)
+                {
+                    if (_disposed) return true;
+                    if (bytes <= _reported) return false;
+
+                    long delta = bytes - _reported;
+                    if (!owner.TryReserveDeltaForLease(delta))
+                        return true;
+
+                    _reported = bytes;
+                    return false;
+                }
+            }
+
+            public void Dispose()
+            {
+                long toRelease;
+                lock (_leaseGate)
+                {
+                    if (_disposed) return;
+                    _disposed = true;
+                    toRelease = _reported;
+                    _reported = 0;
+                }
+
+                owner.UnregisterReservation(this);
+                if (toRelease > 0)
+                    owner.ReleaseMemory(toRelease);
             }
         }
 
@@ -395,7 +511,7 @@ namespace ETL_SQL.Orchestrator.Execution
         {
             private readonly BufferManager _owner;
             private readonly long _bytes;
-            private bool _disposed;
+            private int _disposed;
 
             public Guid Id { get; } = Guid.NewGuid();
             public string SessionId { get; }
@@ -411,8 +527,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
             public void Dispose()
             {
-                if (_disposed) return;
-                _disposed = true;
+                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
                 _owner.UnregisterReservation(this);
                 _owner.ReleaseMemory(_bytes);
             }
@@ -444,7 +559,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
                 try
                 {
-                    if (await WaitWithFeedback(sessionId, "Streaming Cursor", waitTask, cancellationToken))
+                    if (await WaitWithFeedback(sessionId, "Streaming Cursor", waitTask, cancellationToken, pollMemoryRecovery: false))
                     {
                         Interlocked.Increment(ref _activeCursors);
                         return RegisterReservation(new CursorRelease(this, sessionId, owner));
@@ -472,12 +587,10 @@ namespace ETL_SQL.Orchestrator.Execution
             try
             {
                 await waitTask;
-                // ReleaseCursor granted the semaphore permit concurrently with timeout/cancellation.
                 _cursorSemaphore.Release();
             }
             catch (OperationCanceledException) when (waitCts.IsCancellationRequested)
             {
-                // Expected when wait was cancelled before receiving a permit.
             }
         }
 
@@ -490,7 +603,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private class CursorRelease : IResourceReservation
         {
             private readonly BufferManager _owner;
-            private bool _disposed;
+            private int _disposed;
 
             public Guid Id { get; } = Guid.NewGuid();
             public string SessionId { get; }
@@ -505,8 +618,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
             public void Dispose()
             {
-                if (_disposed) return;
-                _disposed = true;
+                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
                 _owner.UnregisterReservation(this);
                 _owner.ReleaseCursor();
             }
@@ -515,18 +627,41 @@ namespace ETL_SQL.Orchestrator.Execution
         #endregion
 
         internal Task<bool> WaitWithFeedbackForTestAsync(string sessionId, string resourceName, Task waitTask, CancellationToken cancellationToken = default)
-            => WaitWithFeedback(sessionId, resourceName, waitTask, cancellationToken);
+            => WaitWithFeedback(sessionId, resourceName, waitTask, cancellationToken, pollMemoryRecovery: false);
 
-        private async Task<bool> WaitWithFeedback(string sessionId, string resourceName, Task waitTask, CancellationToken cancellationToken = default)
+        private async Task<bool> WaitWithFeedback(
+            string sessionId,
+            string resourceName,
+            Task waitTask,
+            CancellationToken cancellationToken = default,
+            bool pollMemoryRecovery = false)
         {
-            int timeoutSeconds = _options.ResourceWaitTimeoutSeconds > 0 ? _options.ResourceWaitTimeoutSeconds : int.MaxValue;
-            int elapsed = 0;
+            long timeoutMs = _options.ResourceWaitTimeoutSeconds > 0
+                ? (long)_options.ResourceWaitTimeoutSeconds * 1000L
+                : long.MaxValue;
+            long elapsedMs = 0;
+            long nextLogMs = 1000;
 
-            while (elapsed < timeoutSeconds)
+            while (elapsedMs < timeoutMs)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                int nextWait = Math.Min(1, timeoutSeconds - elapsed);
-                var delayTask = Task.Delay(TimeSpan.FromSeconds(nextWait), cancellationToken);
+
+                if (pollMemoryRecovery && Volatile.Read(ref _isSystemMemoryExhausted) == 1)
+                {
+                    lock (_memLock)
+                    {
+                        ProcessMemoryQueueLocked();
+                    }
+                    if (waitTask.IsCompleted)
+                    {
+                        await waitTask;
+                        return true;
+                    }
+                }
+
+                long stepLimit = pollMemoryRecovery && Volatile.Read(ref _isSystemMemoryExhausted) == 1 ? 100L : 1000L;
+                int nextWaitMs = (int)Math.Min(stepLimit, timeoutMs - elapsedMs);
+                var delayTask = Task.Delay(nextWaitMs, cancellationToken);
                 var completed = await Task.WhenAny(waitTask, delayTask);
 
                 if (completed == waitTask)
@@ -535,13 +670,16 @@ namespace ETL_SQL.Orchestrator.Execution
                     return true;
                 }
 
-                // Propagate caller cancellation from delayTask immediately.
                 await delayTask;
+                elapsedMs += nextWaitMs;
 
-                elapsed += nextWait;
-                int remainingMinutes = (timeoutSeconds - elapsed) / 60;
-                _logger.LogInformation("Session {SessionId} still waiting for {Resource}... ({Remaining} min remaining)",
-                    sessionId, resourceName, remainingMinutes > 0 ? remainingMinutes : 0);
+                if (elapsedMs >= nextLogMs)
+                {
+                    nextLogMs += 1000;
+                    int remainingMinutes = timeoutMs == long.MaxValue ? 0 : (int)((timeoutMs - elapsedMs) / 60000L);
+                    _logger.LogInformation("Session {SessionId} still waiting for {Resource}... ({Remaining} min remaining)",
+                        sessionId, resourceName, remainingMinutes > 0 ? remainingMinutes : 0);
+                }
             }
 
             return false;
@@ -566,9 +704,7 @@ namespace ETL_SQL.Orchestrator.Execution
                         foreach (var reservation in dict.Values.ToArray())
                         {
                             if (reservation.Owner != null && !reservation.Owner.IsAlive)
-                            {
                                 toReclaim.Add(reservation);
-                            }
                         }
 
                         if (toReclaim.Count > 0)

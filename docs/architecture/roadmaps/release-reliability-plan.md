@@ -117,6 +117,9 @@ last job starts the item 3 dry run on the same candidate once the collectors pas
 First real rehearsal: nightly 42477960507 on `c136127e5` passed (all four runs and all six
 collectors), 2026-11-08.
 
+**Complete for v0.23.0:** The owner confirmed five consecutive green rehearsals before the later
+feature additions. The final candidate still requires its own release evidence and dry run.
+
 ### W2. Reuse evidence when inputs did not change
 Each lane declares its input paths. Its result is reused when the fingerprint of those inputs is
 unchanged since a passing run. Release drivers and the supervisor accept reused evidence.
@@ -147,10 +150,16 @@ package-origin check replay real recordings from dry run 42699535102
 (`scripts/checks/test-real-release-output.mjs`); the native and draft-manifest collectors remain
 (package bytes too large to keep) and the release-evidence collector (no real dispatch yet).
 
+**Complete for v0.23.0:** Release Evidence replays the v0.22.0 candidate `0a1507282`. Native Windows
+and both macOS architectures replay run `45227143269` for candidate `906128b33`, and the draft
+manifest replays dry run `45240642685`. The replay uses recorded digests for large files and hashes
+the retained evidence and metadata files directly. The replay, both native collectors, both package
+checks, and the draft-manifest check passed with Node 22.23.5 and PowerShell 7.7.0.
+
 ### W4b. Remove the workstation from the release path (owner decided 2026-11-04)
 **Status 2026-11-09: done, unpushed.** The hosted Engine Certification job in `ci.yml` runs the
 EBNF and SLT lanes, 10M-row spill and Smoke/Standard scale; scale timing is report-only
-(`Compare-CertBaseline -PerformanceReportOnly`). Build Verification checks third-party drift and
+(`Compare-CertBaseline`). Build Verification checks third-party drift and
 Docker Integration Tests runs local/container smoke parity. `release.yml` and both drivers no longer
 need workstation evidence, and the workstation and hosted-local tooling is deleted. The first CI
 run on hosted runners still has to prove the new job and smoke parity.
@@ -430,3 +439,8 @@ script now sets the Windows Installer machine policy `DisableAutomaticApplicatio
 hosted runners only (it reaches nested sessions). After every `msiexec` call it fails if the log
 shows Restart Manager attempting a shutdown, so a pass shows the policy held. The installer source
 check requires both.
+
+**2026-11-23:** no runner loss since. The 11-22 "loss" (45002373338, attempt 1) was the Release
+Candidate Supervisor cancelling after Spill 1/3 went red. Five nightly MSI runs passed on the first
+attempt (44559721960, 44764667334, 44915547031, 45034184840, 45227061165), which closes MI05 by
+evidence; the Hyper-V container is deferred unless losses return.

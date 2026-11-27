@@ -29,7 +29,7 @@ public sealed class PlotPlanResolver
         var columns = data.Columns.ToDictionary(column => column.Name, StringComparer.OrdinalIgnoreCase);
         var formatter = new ChartValueFormatter(spec.Formatting);
         var facets = ResolveFacets(spec, columns, plan.Scales, bounds, formatter);
-        var layers = ResolveDisplayOffsets(spec, data, columns, plan.Layers, plan.Scales, facets, bounds, plan.Legend.Length);
+        var layers = ResolveDisplayOffsets(spec, data, columns, plan.Layers, plan.Scales, plan.Series, facets, bounds, plan.Legend.Length);
         layers = ResolveMarkExtents(spec, layers);
         var summary = BuildSummary(spec, data, plan.Series, layers, plan.Scales, facets,
             plan.Nulls.GapRows, plan.Nulls.SkippedRows);
@@ -76,7 +76,7 @@ public sealed class PlotPlanResolver
         var radial = spec.Coordinate.Kind == CoordinateKind.Polar && layers.Any(layer => layer.Stack != StackMode.None);
         layers = radial ? RadialStackResolver.Resolve(spec, layers.Select((layer, index) => layer with { ZIndex = index }).ToImmutableArray()) : ResolveStacking(layers);
         var axes = spec.ResolveCartesianAxes();
-        var scaleSpec = spec.Layers.Any(layer => (layer.Mark == MarkKind.Area && (!layer.Conditions.IsDefaultOrEmpty || spec.IsTransposedAreaAspect || spec.IsTransposedConnected) || layer.Mark == MarkKind.Line && !layer.Conditions.IsDefaultOrEmpty && layer.Style.Any(token => token.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && token.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase))) && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Y))
+        var scaleSpec = spec.Layers.Any(layer => (layer.Mark == MarkKind.Area && (ChartSpec.IsConnectedConditionLayer(spec.Coordinate, layer) || spec.IsTransposedAreaAspect || spec.IsTransposedConnected) || layer.Mark == MarkKind.Line && ChartSpec.IsConnectedConditionLayer(spec.Coordinate, layer) && layer.Style.Any(token => token.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && token.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase))) && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Y))
             ? spec with { Scales = spec.Scales.Select(scale => scale.Channel == FieldChannel.Y && (axes is null || scale.Id.Equals(axes.YScaleId, StringComparison.OrdinalIgnoreCase)) ? scale with { IncludeZero = true } : scale).ToImmutableArray() }
             : spec;
         var scales = ResolveScales(scaleSpec, columns, categories, layers, formatter).ToImmutableArray();
@@ -155,7 +155,7 @@ public sealed class PlotPlanResolver
         // `gapRows.Contains` on an ImmutableArray made the skipped-row scan O(rows x gap rows).
         var gapRowSet = new HashSet<int>();
         var usedRows = new HashSet<int>();
-        var conditionedConnection = spec.Layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty);
+        var conditionedConnection = spec.Layers.Any(layer => ChartSpec.IsConnectedConditionLayer(spec.Coordinate, layer));
         foreach (var layer in layers)
         {
             if (!layer.Style.IsDefault && layer.Style.Any(token => token.Name == "overlayType")) continue;
@@ -188,7 +188,7 @@ public sealed class PlotPlanResolver
     {
         var facets = ResolveFacets(spec, independent.Columns, independent.Scales, bounds, independent.Formatter);
         var layers = ResolveDisplayOffsets(spec, data, independent.Columns, independent.Layers,
-            independent.Scales, facets, bounds, independent.Legend.Length);
+            independent.Scales, independent.Series, facets, bounds, independent.Legend.Length);
         if (spec.HasOrdinaryInterpolation)
             layers = layers.Select(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && layer.Connections.IsDefault
                 ? layer with { PathInterpolation = ResolvedConnectionGeometry.Kind(layer.Style) } : layer).ToImmutableArray();
@@ -222,7 +222,7 @@ public sealed class PlotPlanResolver
             plan = plan with { Schema = ChartContractVersions.ScaledRibbonPlotPlanSchema, Version = ChartContractVersions.ScaledRibbonPlotPlanVersion };
         if (spec.IsTransposedAreaAspect)
             plan = plan with { Schema = ChartContractVersions.TransposedAreaPlotPlanSchema, Version = ChartContractVersions.TransposedAreaPlotPlanVersion };
-        if (spec.Layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty))
+        if (spec.Layers.Any(layer => ChartSpec.IsConnectedConditionLayer(spec.Coordinate, layer)))
             plan = ConnectedMarkResolver.Attach(plan);
         if (spec.HasOrdinaryInterpolation)
             plan = plan with { Schema = ChartContractVersions.OrdinaryInterpolationPlotPlanSchema, Version = ChartContractVersions.OrdinaryInterpolationPlotPlanVersion };
@@ -339,23 +339,52 @@ public sealed class PlotPlanResolver
         if (spec.IsConnectedComposition)
             return spec.Layers.SelectMany(layer =>
             {
-                var color = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color && binding.SemanticKind is DataSemanticKind.Nominal or DataSemanticKind.Ordinal);
-                return color?.Field is { } field && columns.TryGetValue(field, out var column)
-                    ? column.Values.Select(CompositionSeriesKey)
-                    : layer.Mark == MarkKind.Rule ? [] : new[] { "layer:" + layer.Id };
+                var colorBinding = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color && binding.SemanticKind is DataSemanticKind.Nominal or DataSemanticKind.Ordinal);
+                if (colorBinding?.Field is { } field && columns.TryGetValue(field, out var column))
+                    return column.Values.Select(CompositionSeriesKey);
+                if (colorBinding?.SourceKind == BindingSourceKind.Datum && colorBinding.Constant is { } constant)
+                    return [CompositionSeriesKey(constant)];
+                return layer.Mark == MarkKind.Rule ? [] : new[] { "layer:" + layer.Id };
             }).Distinct(StringComparer.Ordinal).ToImmutableArray();
         if (spec.Coordinate.Kind == CoordinateKind.Polar && !spec.Layers.Any(layer => layer.Bindings.Any(binding => binding.Stack != StackMode.None)) && spec.Bindings.Any(binding => binding.Channel == FieldChannel.Theta)) return categories;
-        var color = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color);
-        if (color?.SemanticKind is not DataSemanticKind.Quantitative && color?.Field is { } colorField && columns.TryGetValue(colorField, out var colorColumn))
-            return colorColumn.Values.Select(ValueKey).Where(value => value is not null).Cast<string>().Distinct(StringComparer.Ordinal).ToImmutableArray();
 
-        var namedLayers = spec.Layers.Where(layer => layer.Mark is not MarkKind.Rule &&
-            !layer.Style.Any(token => token.Name == "overlayType") &&
-            layer.Style.Any(token => token.Name == "series"))
-            .Select(layer => layer.Style.First(token => token.Name == "series").Value)
-            .Distinct(StringComparer.Ordinal)
-            .ToImmutableArray();
-        if (!namedLayers.IsDefaultOrEmpty) return namedLayers;
+        var collected = new List<string>();
+        foreach (var layer in spec.Layers)
+        {
+            if (layer.Style.Any(token => token.Name == "overlayType")) continue;
+            var layerColor = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color);
+            if (layerColor is not null && layerColor.SemanticKind is not DataSemanticKind.Quantitative)
+            {
+                if (layerColor.Field is { } layerField && columns.TryGetValue(layerField, out var layerColumn))
+                {
+                    collected.AddRange(layerColumn.Values.Select(ValueKey).Where(value => value is not null).Cast<string>());
+                    continue;
+                }
+                if (layerColor.SourceKind == BindingSourceKind.Datum && layerColor.Constant is { } datumConstant && ValueKey(datumConstant) is { } datumKey)
+                {
+                    collected.Add(datumKey);
+                    continue;
+                }
+            }
+            if (layer.Mark is not MarkKind.Rule &&
+                layer.Style.FirstOrDefault(token => token.Name == "series") is { } seriesToken)
+            {
+                collected.Add(seriesToken.Value);
+            }
+        }
+        if (collected.Count > 0)
+            return collected.Distinct(StringComparer.Ordinal).ToImmutableArray();
+
+        foreach (var color in spec.Bindings.Where(binding => binding.Channel == FieldChannel.Color && binding.SemanticKind is not DataSemanticKind.Quantitative))
+        {
+            if (color.Field is { } colorField && columns.TryGetValue(colorField, out var colorColumn))
+                collected.AddRange(colorColumn.Values.Select(ValueKey).Where(value => value is not null).Cast<string>());
+            else if (color.SourceKind == BindingSourceKind.Datum && color.Constant is { } constant && ValueKey(constant) is { } constantKey)
+                collected.Add(constantKey);
+        }
+        if (collected.Count > 0)
+            return collected.Distinct(StringComparer.Ordinal).ToImmutableArray();
+
         var measure = spec.Bindings.FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Radius);
         return [measure?.Field ?? spec.Id];
     }
@@ -378,7 +407,8 @@ public sealed class PlotPlanResolver
             var bindings = spec.Bindings.Concat(spec.Layers.SelectMany(layer => layer.Bindings))
                 .Where(binding => string.Equals(binding.ScaleId, scale.Id, StringComparison.OrdinalIgnoreCase) &&
                     (binding.SourceKind != BindingSourceKind.Field || binding.Field is not null && columns.ContainsKey(binding.Field))).ToList();
-            if (scale.Kind is ScaleKind.Band or ScaleKind.Point or ScaleKind.Ordinal)
+            if (scale.Kind is ScaleKind.Band or ScaleKind.Point or ScaleKind.Ordinal ||
+                (scale.Kind == ScaleKind.Identity && scale.Channel == FieldChannel.Color && bindings.Any(b => b.SemanticKind is DataSemanticKind.Nominal or DataSemanticKind.Ordinal)))
             {
                 var inferred = bindings.SelectMany(binding => BindingValues(binding, columns))
                     .Select(ValueKey).Where(value => value is not null).Cast<string>()
@@ -446,13 +476,20 @@ public sealed class PlotPlanResolver
                     }
                 }
 
+                var discreteColors = scale.Channel == FieldChannel.Color &&
+                    (!scale.DiscreteColorMap.IsDefaultOrEmpty || !scale.DiscreteRange.IsDefaultOrEmpty || scale.Kind == ScaleKind.Identity)
+                        ? values.Select((v, idx) => new PaletteAssignment(v, ResolveColor(spec, v, idx))).ToImmutableArray()
+                        : default;
                 yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
                     values.Select(ChartValue.From).ToImmutableArray(), values,
                     values.Select(value => new PlotTick(ChartValue.From(value),
                         scale.TickFormat is not null ? (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var nv) ? formatter.Number(nv, scale.TickFormat) : value) : value)).ToImmutableArray(),
                     scale.IncludeZero,
                     scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding,
-                    scale.TickFormat, scale.TimeUnit);
+                    scale.TickFormat, scale.TimeUnit, scale.Title)
+                {
+                    DiscreteColors = discreteColors
+                };
                 continue;
             }
 
@@ -469,59 +506,63 @@ public sealed class PlotPlanResolver
                     .Select(channel => channel.Value).ToList();
                 if (boxOrWaterfallRaw.Count > 0) raw = boxOrWaterfallRaw;
             }
-            if (scale.Channel is FieldChannel.Y or FieldChannel.Y2 && resolvedLayers.Any(layer => layer.Stack != StackMode.None))
+            if (scale.Channel is FieldChannel.Y or FieldChannel.Y2)
             {
-                // Stacked baselines replace the raw measure values (NORMALIZE rescales them entirely), but a
-                // ranged layer sharing the chart still owns its authored endpoints and must stay inside the domain.
-                raw = resolvedLayers.Where(layer => layer.Stack != StackMode.None).SelectMany(layer => layer.Data)
-                    .SelectMany(datum => datum.Channels)
-                    .Where(channel => channel.Channel is FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh && channel.Value.Kind != ChartValueKind.Null)
-                    .Select(channel => channel.Value)
-                    .Concat(resolvedLayers.Where(layer => layer.Stack == StackMode.None).SelectMany(layer => layer.Data)
+                var axisLayers = resolvedLayers.Where(layer =>
+                    LayerTargetsYScale(layer, spec, scale)).ToList();
+                if (axisLayers.Any(layer => layer.Stack != StackMode.None))
+                {
+                    // Stacked baselines replace the raw measure values (NORMALIZE rescales them entirely),
+                    // while unstacked layers sharing the axis still own their point/line Y (or Y2) values
+                    // alongside ranged channels.
+                    var stacked = axisLayers.Where(layer => layer.Stack != StackMode.None)
+                        .SelectMany(layer => layer.Data)
                         .SelectMany(datum => datum.Channels)
-                        .Where(channel => channel.Channel is FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh && channel.Value.Kind != ChartValueKind.Null)
-                        .Select(channel => channel.Value))
-                    .ToList();
+                        .Where(channel => channel.Channel is FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh
+                            && channel.Value.Kind != ChartValueKind.Null)
+                        .Select(channel => channel.Value);
+                    var unstacked = axisLayers.Where(layer => layer.Stack == StackMode.None)
+                        .SelectMany(layer => layer.Data)
+                        .SelectMany(datum => datum.Channels)
+                        .Where(channel => (channel.Channel == scale.Channel
+                                || channel.Channel is FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh)
+                            && channel.Value.Kind != ChartValueKind.Null)
+                        .Select(channel => channel.Value);
+                    raw = stacked.Concat(unstacked).ToList();
+                }
             }
             if (scale.Kind == ScaleKind.Time)
             {
-                var timeUnitFormat = scale.TimeUnit?.ToUpperInvariant() switch
+                var temporalInputs = raw.ToList();
+                if (scale.Channel == FieldChannel.X)
                 {
-                    "DAY" => "yyyy-MM-dd",
-                    "WEEK" => "yyyy-MM-dd",
-                    "MONTH" => "yyyy-MM",
-                    "QUARTER" => "yyyy-Q",
-                    "YEAR" => "yyyy",
-                    _ => null
-                };
-                var effectiveTimeFormat = scale.TickFormat ?? timeUnitFormat;
-                var temporalValues = bindings.SelectMany(binding =>
-                {
-                    if (binding.Field is null || !columns.TryGetValue(binding.Field, out var column))
-                        return BindingValues(binding, columns).Select(value => new { Value = value, Display = effectiveTimeFormat != null ? formatter.FormatWithPattern(value, effectiveTimeFormat) : formatter.Format(value, binding.Field) });
-                    return column.Values.Select((value, index) => new
-                    {
-                        Value = value,
-                        Display = effectiveTimeFormat != null
-                            ? formatter.FormatWithPattern(value, effectiveTimeFormat)
-                            : (column.DisplayValues.IsDefaultOrEmpty ? formatter.Format(value, binding.Field) : column.DisplayValues[index] ?? formatter.Format(value, binding.Field))
-                    });
-                })
-                    .Where(item => item.Value.Kind != ChartValueKind.Null)
-                    .GroupBy(item => ValueKey(item.Value), StringComparer.Ordinal)
-                    .Select(group => group.First())
-                    .OrderBy(item => ValueKey(item.Value), StringComparer.Ordinal)
-                    .ToImmutableArray();
-                yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
-                    temporalValues.Select(item => item.Value).ToImmutableArray(),
-                    temporalValues.Select(item => item.Display).ToImmutableArray(),
-                    temporalValues.Select(item => new PlotTick(item.Value, item.Display)).ToImmutableArray(), scale.IncludeZero,
-                    scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding,
-                    scale.TickFormat, scale.TimeUnit);
+                    temporalInputs.AddRange(resolvedLayers
+                        .Where(layer => layer.Style.Any(token =>
+                            token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase) &&
+                            token.Value.Equals("AnnotationPoint", StringComparison.OrdinalIgnoreCase)))
+                        .SelectMany(layer => layer.Data)
+                        .Select(datum => Channel(datum, FieldChannel.X) ?? ChartValue.Null()));
+                }
+                yield return ResolveTimeScale(
+                    scale.Id, scale.Kind, scale.Channel, temporalInputs,
+                    scale.DomainMinimum, scale.DomainMaximum, scale.IncludeZero, scale.Reverse,
+                    scale.MajorTickCount, scale.TickInterval, scale.MinorTicks, scale.LabelRotation,
+                    scale.LabelSkip, scale.OuterPadding, scale.TickFormat, scale.TimeUnit, formatter, scale.Title);
                 continue;
             }
 
             var numbers = raw.Select(Number).Where(number => number.HasValue).Select(number => number!.Value).ToList();
+            if (scale.Channel == FieldChannel.X)
+            {
+                numbers.AddRange(resolvedLayers
+                    .Where(layer => layer.Style.Any(token =>
+                        token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase) &&
+                        token.Value.Equals("AnnotationPoint", StringComparison.OrdinalIgnoreCase)))
+                    .SelectMany(layer => layer.Data)
+                    .Select(datum => Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null()))
+                    .Where(number => number.HasValue)
+                    .Select(number => number!.Value));
+            }
             if (scale.Channel is FieldChannel.Y or FieldChannel.Y2)
             {
                 numbers.AddRange(resolvedLayers
@@ -538,12 +579,23 @@ public sealed class PlotPlanResolver
                     .Where(number => number.HasValue)
                     .Select(number => number!.Value));
             }
-            var minimum = scale.DomainMinimum is not null ? Number(scale.DomainMinimum) ?? 0m : numbers.DefaultIfEmpty(0m).Min();
-            var maximum = scale.DomainMaximum is not null ? Number(scale.DomainMaximum) ?? 1m : numbers.DefaultIfEmpty(1m).Max();
+            var isNormalizedOpacity = scale.Channel == FieldChannel.Opacity &&
+                scale.DomainMinimum is null && scale.DomainMaximum is null &&
+                numbers.Count > 0 && numbers.All(n => n is >= 0m and <= 1m);
+            var minimum = isNormalizedOpacity ? 0m : scale.DomainMinimum is not null ? Number(scale.DomainMinimum) ?? 0m : numbers.DefaultIfEmpty(0m).Min();
+            var maximum = isNormalizedOpacity ? 1m : scale.DomainMaximum is not null ? Number(scale.DomainMaximum) ?? 1m : numbers.DefaultIfEmpty(1m).Max();
+            if (scale.DomainMinimum is not null && scale.DomainMaximum is not null &&
+                Number(scale.DomainMinimum) is { } explicitMin && Number(scale.DomainMaximum) is { } explicitMax &&
+                explicitMin > explicitMax)
+                throw new InvalidOperationException($"MIN bound for scale '{scale.Id}' cannot exceed MAX bound.");
             if (scale.Kind == ScaleKind.Logarithmic && (minimum <= 0m || maximum <= 0m || numbers.Any(number => number <= 0m)))
                 throw new InvalidOperationException($"Logarithmic scale '{scale.Id}' requires positive values and domain bounds.");
             if (scale.IncludeZero) { minimum = Math.Min(0m, minimum); maximum = Math.Max(0m, maximum); }
-            if (scale.ColorRange?.Midpoint is { } colorMidpoint) { minimum = Math.Min(colorMidpoint, minimum); maximum = Math.Max(colorMidpoint, maximum); }
+            if (scale.ColorRange?.Midpoint is { } colorMidpoint)
+            {
+                if (scale.DomainMinimum is null) minimum = Math.Min(colorMidpoint, minimum);
+                if (scale.DomainMaximum is null) maximum = Math.Max(colorMidpoint, maximum);
+            }
             if (minimum == maximum) maximum = minimum + 1m;
             var needsMarkHeadroom = !spec.Theme.Tokens.Any(token => token.Name.Equals("MICRO_CHART", StringComparison.OrdinalIgnoreCase)) &&
                 resolvedLayers.Any(layer => !layer.Style.Any(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase)) &&
@@ -581,7 +633,10 @@ public sealed class PlotPlanResolver
                 ticks.Select(value => new PlotTick(ChartValue.From(value),
                     scale.TickFormat is not null ? formatter.Number(value, scale.TickFormat) : formatter.Number(value))).ToImmutableArray(),
                 scale.IncludeZero, scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding,
-                scale.TickFormat, scale.TimeUnit);
+                scale.TickFormat, scale.TimeUnit, scale.Title)
+            {
+                NumericRange = scale.NumericRange
+            };
             if (scale.ColorRange is { } colorRange)
             {
                 if (colorRange.Midpoint is { } midpoint && (midpoint < minimum || midpoint > maximum))
@@ -613,7 +668,7 @@ public sealed class PlotPlanResolver
             var overlayType = layer.Style.FirstOrDefault(token => token.Name == "overlayType")?.Value;
             if (overlayType is not null && layer.Bindings.IsEmpty)
             {
-                yield return ResolveOverlay(layer, spec, columns, categories, formatter);
+                yield return ResolveOverlay(layer, spec, columns, categories, series, formatter);
                 continue;
             }
 
@@ -639,7 +694,7 @@ public sealed class PlotPlanResolver
             var colorBinding = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color)
                 ?? (isolatedGeometry || spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Stack != StackMode.None) ? null : spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color));
             var explicitSeries = layer.Style.FirstOrDefault(token => token.Name == "series")?.Value;
-            var conditioned = layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty;
+            var conditioned = ChartSpec.IsConnectedConditionLayer(spec.Coordinate, layer);
             var areaConfidence = spec.HasTransposedConfidence && layer.Mark == MarkKind.Area && layer.Bindings.Any(binding => binding.Channel == FieldChannel.ConfidenceLow);
             var areaRibbon = areaConfidence || layer.Mark == MarkKind.Area && (conditioned || spec.IsTransposedAreaAspect || spec.IsConnectedComposition) && layer.Bindings.Any(binding => binding.Channel == FieldChannel.YStart);
             var ribbonScaleId = layer.Mark == MarkKind.Area &&
@@ -667,7 +722,12 @@ public sealed class PlotPlanResolver
             }
             else
             {
-                var seriesKey = spec.IsConnectedComposition ? layer.Mark == MarkKind.Rule ? null : "layer:" + layer.Id : explicitSeries ?? (spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Stack != StackMode.None) ? layer.Id : series.FirstOrDefault()?.Key);
+                var datumSeries = colorBinding?.SemanticKind is not DataSemanticKind.Quantitative &&
+                    colorBinding?.SourceKind == BindingSourceKind.Datum &&
+                    colorBinding.Constant is { } datumConstant
+                        ? ValueKey(datumConstant)
+                        : null;
+                var seriesKey = spec.IsConnectedComposition ? layer.Mark == MarkKind.Rule ? null : "layer:" + layer.Id : explicitSeries ?? datumSeries ?? (spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Stack != StackMode.None) ? layer.Id : series.FirstOrDefault()?.Key);
                 yield return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, seriesKey,
                     ResolveLayerData(layer, spec, data, columns, categories, formatter, _ => true))
                 {
@@ -924,11 +984,63 @@ public sealed class PlotPlanResolver
         } : spec.NullHandling;
         var categoryBinding = layerBindings.FirstOrDefault(binding => binding.Channel is FieldChannel.X or FieldChannel.Theta);
         var rows = new List<ResolvedDatum>();
-        var preserveRows = spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Radius && binding.Stack != StackMode.None) || layer.Style.Any(token => token.Name.Equals("preserveRows", StringComparison.OrdinalIgnoreCase)
+        var applyOrdinarySegmentStyles = layer.Mark is (MarkKind.Line or MarkKind.Area) &&
+            !layer.Conditions.IsDefaultOrEmpty &&
+            !ChartSpec.IsConnectedConditionLayer(spec.Coordinate, layer);
+        ResolvedDatum BuildDatum(int rowIndex)
+        {
+            var datum = Datum(rowIndex, layerBindings, columns, nulls, conditionGroups, formatter);
+            if (!applyOrdinarySegmentStyles || datum.Encodings.IsDefaultOrEmpty)
+                return datum;
+            var segColor = datum.Encodings.FirstOrDefault(e => e.Channel == ConditionalEncodingChannel.Color)?.Value is { Kind: ChartValueKind.Text } c ? c.Text : null;
+            var segDash = datum.Encodings.FirstOrDefault(e => e.Channel == ConditionalEncodingChannel.LineDash)?.Value is { Kind: ChartValueKind.Text } d ? d.Text : null;
+            return segColor is null && segDash is null
+                ? datum
+                : datum with
+                {
+                    SegmentColor = segColor ?? datum.SegmentColor,
+                    SegmentLineDash = segDash ?? datum.SegmentLineDash
+                };
+        }
+        var preserveRows = spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Radius && binding.Stack != StackMode.None)
+            || layerBindings.Any(binding => binding.Channel is FieldChannel.XOffset or FieldChannel.YOffset)
+            || layer.Style.Any(token => token.Name.Equals("preserveRows", StringComparison.OrdinalIgnoreCase)
             && token.Value.Equals("true", StringComparison.OrdinalIgnoreCase));
-        if (!preserveRows && categoryBinding is not null && categoryBinding.SemanticKind != DataSemanticKind.Quantitative &&
+        var xScaleIsContinuous = categoryBinding is not null &&
+            (categoryBinding.SemanticKind is DataSemanticKind.Quantitative or DataSemanticKind.Temporal ||
+             spec.Scales.Any(s => string.Equals(s.Id, categoryBinding.ScaleId, StringComparison.OrdinalIgnoreCase) &&
+                s.Kind is ScaleKind.Linear or ScaleKind.Logarithmic or ScaleKind.Time));
+        if (!preserveRows && categoryBinding is not null && !xScaleIsContinuous &&
             categoryBinding.Field is { } categoryField && columns.TryGetValue(categoryField, out var categoryColumn) && !categories.IsDefaultOrEmpty)
         {
+            var measureFields = layerBindings
+                .Where(b => b.SourceKind == BindingSourceKind.Field && b.Field is not null && columns.ContainsKey(b.Field) &&
+                    b.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd
+                        or FieldChannel.Radius or FieldChannel.Low or FieldChannel.High or FieldChannel.Open or FieldChannel.Close
+                        or FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh)
+                .Select(b => columns[b.Field!])
+                .Distinct()
+                .ToList();
+            if (measureFields.Count == 0)
+            {
+                measureFields = layerBindings
+                    .Where(b => b.SourceKind == BindingSourceKind.Field && b.Field is not null && columns.ContainsKey(b.Field) &&
+                        b.Channel == FieldChannel.Size)
+                    .Select(b => columns[b.Field!])
+                    .Distinct()
+                    .ToList();
+            }
+            bool HasMeasureValue(int rowIndex)
+            {
+                if (measureFields.Count == 0) return true;
+                for (var i = 0; i < measureFields.Count; i++)
+                {
+                    if (measureFields[i].Values[rowIndex].Kind != ChartValueKind.Null)
+                        return true;
+                }
+                return false;
+            }
+
             var facetBindings = layerBindings.Where(binding => binding.Channel is FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap)
                 .Where(binding => binding.Field is not null && columns.ContainsKey(binding.Field)).ToList();
             if (facetBindings.Count > 0)
@@ -946,12 +1058,15 @@ public sealed class PlotPlanResolver
                     var facetKey = FacetKey(facetColumns, index);
                     if (seenFacetKeys.Add(facetKey)) facetKeys.Add(facetKey);
                     if (ValueKey(categoryColumn.Values[index]) is not { } categoryKey) continue;
-                    firstRowByFacetCategory.TryAdd((facetKey, categoryKey), index);
+                    var key = (facetKey, categoryKey);
+                    if (!firstRowByFacetCategory.TryGetValue(key, out var existingIndex) ||
+                        (!HasMeasureValue(existingIndex) && HasMeasureValue(index)))
+                        firstRowByFacetCategory[key] = index;
                 }
                 foreach (var facetKey in facetKeys)
                     foreach (var category in categories)
                         if (firstRowByFacetCategory.TryGetValue((facetKey, category), out var rowIndex))
-                            rows.Add(Datum(rowIndex, layerBindings, columns, nulls, conditionGroups, formatter));
+                            rows.Add(BuildDatum(rowIndex));
                 return rows.ToImmutableArray();
             }
             // The same one-pass indexing for the unfaceted category path.
@@ -960,20 +1075,24 @@ public sealed class PlotPlanResolver
             {
                 if (!include(index)) continue;
                 if (ValueKey(categoryColumn.Values[index]) is { } categoryKey)
-                    firstRowByCategory.TryAdd(categoryKey, index);
+                {
+                    if (!firstRowByCategory.TryGetValue(categoryKey, out var existingIndex) ||
+                        (!HasMeasureValue(existingIndex) && HasMeasureValue(index)))
+                        firstRowByCategory[categoryKey] = index;
+                }
             }
             for (var categoryIndex = 0; categoryIndex < categories.Length; categoryIndex++)
             {
                 var category = categories[categoryIndex];
                 rows.Add(firstRowByCategory.TryGetValue(category, out var rowIndex)
-                    ? Datum(rowIndex, layerBindings, columns, nulls, conditionGroups, formatter)
+                    ? BuildDatum(rowIndex)
                     : GapDatum(categoryIndex, layerBindings, categoryBinding, category));
             }
             return rows.ToImmutableArray();
         }
 
         for (var rowIndex = 0; rowIndex < data.RowCount; rowIndex++)
-            if (include(rowIndex)) rows.Add(Datum(rowIndex, layerBindings, columns, nulls, conditionGroups, formatter));
+            if (include(rowIndex)) rows.Add(BuildDatum(rowIndex));
         return rows.ToImmutableArray();
     }
 
@@ -1107,11 +1226,32 @@ public sealed class PlotPlanResolver
         };
     }
 
+    private static bool LayerTargetsYScale(ResolvedMarkLayer layer, ChartSpec spec, ScaleSpec scale)
+    {
+        if (layer.Style.Any(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        var layerSpec = spec.Layers.FirstOrDefault(candidate =>
+            candidate.Id.Equals(layer.Id, StringComparison.OrdinalIgnoreCase) ||
+            layer.Id.StartsWith(candidate.Id + ":", StringComparison.OrdinalIgnoreCase));
+        if (layerSpec is not null)
+        {
+            var yBinding = layerSpec.Bindings.FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd);
+            if (yBinding is not null)
+                return string.Equals(yBinding.ScaleId, scale.Id, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (scale.Channel == FieldChannel.Y2)
+            return layer.Data.Any(datum => datum.Channels.Any(c => c.Channel == FieldChannel.Y2));
+        return layer.Data.Any(datum => datum.Channels.Any(c => c.Channel is FieldChannel.Y or FieldChannel.YStart or FieldChannel.YEnd));
+    }
+
     private static ResolvedMarkLayer ResolveOverlay(
         MarkLayerSpec layer,
         ChartSpec spec,
         IReadOnlyDictionary<string, ChartColumn> columns,
         ImmutableArray<string> categories,
+        ImmutableArray<ResolvedSeries> series,
         ChartValueFormatter formatter)
     {
         var type = layer.Style.First(token => token.Name == "overlayType").Value;
@@ -1131,68 +1271,219 @@ public sealed class PlotPlanResolver
                 ], false)])
             { Style = layer.Style, Stack = StackMode.None, BandSize = layer.BandSize };
         }
-        var xBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X);
-        var yBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y && binding.Axis != AxisRole.Secondary)
+        if (type == "AnnotationPoint")
+        {
+            var annotType = layer.Style.FirstOrDefault(token => token.Name == "annotationType")?.Value ?? "MAX";
+            var annotData = ImmutableArray<ResolvedDatum>.Empty;
+            if (annotType.Equals("COORD", StringComparison.OrdinalIgnoreCase))
+            {
+                var coordChannels = new List<ResolvedChannelValue>();
+                var coordXString = layer.Style.FirstOrDefault(token => token.Name == "coordXString")?.Value;
+                var coordXText = layer.Style.FirstOrDefault(token => token.Name == "coordX")?.Value;
+                var coordYText = layer.Style.FirstOrDefault(token => token.Name == "coordY")?.Value;
+                if (!string.IsNullOrEmpty(coordXString))
+                {
+                    coordChannels.Add(new ResolvedChannelValue(FieldChannel.X, ChartValue.From(coordXString), coordXString));
+                }
+                else if (decimal.TryParse(coordXText, NumberStyles.Number, CultureInfo.InvariantCulture, out var cx))
+                {
+                    coordChannels.Add(new ResolvedChannelValue(FieldChannel.X, ChartValue.From(cx), formatter.Number(cx, "G")));
+                }
+                if (decimal.TryParse(coordYText, NumberStyles.Number, CultureInfo.InvariantCulture, out var cy))
+                {
+                    coordChannels.Add(new ResolvedChannelValue(FieldChannel.Y, ChartValue.From(cy), formatter.Number(cy, "G")));
+                }
+                if (coordChannels.Count > 0)
+                    annotData = [new ResolvedDatum(0, coordChannels.ToImmutableArray(), false)];
+            }
+            return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, null, annotData)
+            { Style = layer.Style, Stack = StackMode.None, BandSize = layer.BandSize };
+        }
+
+        var isStatistical = type is "Average" or "MovingAvg" or "Linear" or "Polynomial" or "Exponential" or "Logarithmic" or "Power";
+        var targetSeries = layer.Style.FirstOrDefault(token => token.Name.Equals("series", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (isStatistical && series.Length > 1)
+        {
+            if (string.IsNullOrWhiteSpace(targetSeries))
+            {
+                throw new InvalidOperationException(
+                    $"Statistical overlay '{type}' requires SERIES = '<name>' when the chart has multiple series ({series.Length} series).");
+            }
+            if (!series.Any(item => item.Key.Equals(targetSeries, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException(
+                    $"Statistical overlay '{type}' referenced unknown series '{targetSeries}'.");
+            }
+        }
+        else if (isStatistical && !string.IsNullOrWhiteSpace(targetSeries) && series.Length > 0 &&
+            !series.Any(item => item.Key.Equals(targetSeries, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                $"Statistical overlay '{type}' referenced unknown series '{targetSeries}'.");
+        }
+
+        var matchingSeriesLayer = !string.IsNullOrWhiteSpace(targetSeries)
+            ? spec.Layers.FirstOrDefault(candidate =>
+                !candidate.Style.Any(token => token.Name == "overlayType") &&
+                (candidate.Id.Equals(targetSeries, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(candidate.Style.FirstOrDefault(t => t.Name == "series")?.Value, targetSeries, StringComparison.OrdinalIgnoreCase) ||
+                 candidate.Bindings.Any(b => b.Channel == FieldChannel.Color && b.SourceKind == BindingSourceKind.Datum && b.Constant is not null && string.Equals(ValueKey(b.Constant), targetSeries, StringComparison.OrdinalIgnoreCase)) ||
+                 string.Equals(candidate.Bindings.FirstOrDefault(b => b.Channel is FieldChannel.Y or FieldChannel.Y2)?.Field, targetSeries, StringComparison.OrdinalIgnoreCase)))
+            : null;
+
+        var primaryLayers = spec.Layers.Where(candidate => !candidate.Style.Any(token => token.Name == "overlayType"));
+        var xBinding = matchingSeriesLayer?.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X)
+            ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X)
+            ?? primaryLayers.SelectMany(l => l.Bindings).FirstOrDefault(binding => binding.Channel == FieldChannel.X);
+        var yBinding = matchingSeriesLayer?.Bindings.FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Close)
+            ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y && binding.Axis != AxisRole.Secondary)
             ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y)
             ?? spec.Bindings.FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2)
             ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Close)
+            ?? primaryLayers.SelectMany(l => l.Bindings).FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Close)
             ?? spec.Bindings.First(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Close);
-        var yValues = columns[yBinding.Field!].Values.Select(Number).Select(value => value ?? 0m).ToList();
+
+        var yColumn = columns[yBinding.Field!];
         var xColumn = xBinding?.Field is { } xField && columns.TryGetValue(xField, out var resolvedXColumn) ? resolvedXColumn : null;
-        var regressionX = Enumerable.Range(0, yValues.Count)
-            .Select(index => xColumn is null ? index : Number(xColumn.Values[index]) ?? index)
-            .ToList();
-        var resolvedValues = type switch
+        var colorBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color)
+            ?? spec.Layers.FirstOrDefault(candidate => !candidate.Style.Any(t => t.Name == "overlayType"))
+                ?.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color);
+        var colorColumn = colorBinding?.Field is { } colorField && columns.TryGetValue(colorField, out var resolvedColorColumn)
+            ? resolvedColorColumn
+            : null;
+
+        var rowIndices = (!string.IsNullOrWhiteSpace(targetSeries) && colorColumn is not null)
+            ? Enumerable.Range(0, yColumn.Values.Length)
+                .Where(index => string.Equals(ValueKey(colorColumn.Values[index]), targetSeries, StringComparison.OrdinalIgnoreCase))
+                .ToList()
+            : Enumerable.Range(0, yColumn.Values.Length).ToList();
+
+        var rawY = rowIndices.Select(index => Number(yColumn.Values[index])).ToList();
+        var rawX = rowIndices.Select((index, pos) =>
         {
-            "Goal" => Enumerable.Repeat(parameter, Math.Max(1, yValues.Count)).Select(value => (decimal?)value).ToList(),
-            "ReferenceLine" => Enumerable.Repeat(parameter, Math.Max(1, yValues.Count)).Select(value => (decimal?)value).ToList(),
-            "Average" => Enumerable.Repeat(yValues.DefaultIfEmpty(0m).Average(), Math.Max(1, yValues.Count)).Select(value => (decimal?)value).ToList(),
-            "MovingAvg" => MovingAverage(yValues, Math.Max(1, (int)(parameter == 0 ? 3 : parameter))),
-            "Linear" => PolynomialRegression(regressionX, yValues, 1),
-            "Polynomial" => PolynomialRegression(regressionX, yValues, Math.Max(1, (int)(parameter == 0 ? 2 : parameter))),
-            _ => Enumerable.Repeat((decimal?)null, Math.Max(1, yValues.Count)).ToList()
+            if (xColumn is null) return (decimal?)pos;
+            var xVal = xColumn.Values[index];
+            if (xVal.Kind == ChartValueKind.Null) return (decimal?)null;
+            return Number(xVal) ?? (type is "Logarithmic" or "Power" ? (decimal?)null : (decimal)pos);
+        }).ToList();
+
+        if (type is "Logarithmic" or "Power" && xColumn is not null)
+        {
+            foreach (var index in rowIndices)
+            {
+                var xVal = xColumn.Values[index];
+                if (xVal.Kind != ChartValueKind.Null && Number(xVal) is null)
+                    throw new InvalidOperationException($"{type} overlay requires positive numeric X values.");
+            }
+        }
+
+        List<decimal?> resolvedValues = type switch
+        {
+            "Goal" or "ReferenceLine" => Enumerable.Repeat((decimal?)parameter, Math.Max(1, rowIndices.Count)).ToList(),
+            "Average" => ComputeAverageOverlay(rawY),
+            "MovingAvg" => MovingAverage(rawY, Math.Max(1, (int)(parameter == 0 ? 3 : parameter))),
+            "Linear" => PolynomialRegression(rawX, rawY, 1),
+            "Polynomial" => PolynomialRegression(rawX, rawY, Math.Max(1, (int)(parameter == 0 ? 2 : parameter))),
+            "Exponential" => ExponentialRegression(rawX, rawY),
+            "Logarithmic" => LogarithmicRegression(rawX, rawY),
+            "Power" => PowerRegression(rawX, rawY),
+            _ => throw new InvalidOperationException($"Unsupported overlay type '{type}'.")
         };
-        var data = resolvedValues.Select((value, index) =>
+
+        var datumIndices = rowIndices.Count > 0 ? rowIndices : [0];
+        var data = resolvedValues.Select((value, pos) =>
         {
-            var xValue = xColumn is null || index >= xColumn.Values.Length ? ChartValue.From(index) : xColumn.Values[index];
-            var xDisplay = xColumn is null || index >= xColumn.Values.Length || xColumn.DisplayValues.IsDefaultOrEmpty
+            var sourceIndex = pos < datumIndices.Count ? datumIndices[pos] : pos;
+            var xValue = xColumn is null || sourceIndex >= xColumn.Values.Length ? ChartValue.From(pos) : xColumn.Values[sourceIndex];
+            var xDisplay = xColumn is null || sourceIndex >= xColumn.Values.Length || xColumn.DisplayValues.IsDefaultOrEmpty
                 ? formatter.Format(xValue)
-                : xColumn.DisplayValues[index] ?? formatter.Format(xValue);
-            return new ResolvedDatum(index,
+                : xColumn.DisplayValues[sourceIndex] ?? formatter.Format(xValue);
+            return new ResolvedDatum(pos,
                 [
                     new ResolvedChannelValue(FieldChannel.X, xValue, xDisplay),
                     new ResolvedChannelValue(FieldChannel.Y, value.HasValue ? ChartValue.From(value.Value) : ChartValue.Null(),
                         value.HasValue ? formatter.Number(value.Value, "G") : formatter.NullLabel)
                 ], !value.HasValue);
         }).ToImmutableArray();
-        return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, null, data)
+        return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, string.IsNullOrWhiteSpace(targetSeries) ? null : targetSeries, data)
         { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
     }
 
-    private static List<decimal?> MovingAverage(IReadOnlyList<decimal> values, int window) =>
-        values.Select((_, index) => index < window - 1 ? (decimal?)null : values.Skip(index - window + 1).Take(window).Average()).ToList();
+    private static List<decimal?> ComputeAverageOverlay(IReadOnlyList<decimal?> yValues)
+    {
+        var valid = yValues.Where(value => value.HasValue).Select(value => value!.Value).ToList();
+        if (valid.Count == 0)
+            return Enumerable.Repeat((decimal?)null, Math.Max(1, yValues.Count)).ToList();
+        var mean = valid.Average();
+        return Enumerable.Repeat((decimal?)mean, yValues.Count).ToList();
+    }
+
+    private static List<decimal?> MovingAverage(IReadOnlyList<decimal?> values, int window)
+    {
+        var result = new List<decimal?>(values.Count);
+        for (var index = 0; index < values.Count; index++)
+        {
+            if (index < window - 1)
+            {
+                result.Add(null);
+                continue;
+            }
+
+            decimal sum = 0m;
+            var count = 0;
+            for (var k = index - window + 1; k <= index; k++)
+            {
+                if (values[k] is { } v)
+                {
+                    sum += v;
+                    count++;
+                }
+            }
+            result.Add(count > 0 ? sum / count : null);
+        }
+        return result;
+    }
 
     private static List<decimal?> PolynomialRegression(
-        IReadOnlyList<decimal> xValues,
-        IReadOnlyList<decimal> yValues,
+        IReadOnlyList<decimal?> xValues,
+        IReadOnlyList<decimal?> yValues,
         int requestedDegree)
     {
         if (yValues.Count == 0 || xValues.Count != yValues.Count) return [];
-        var degree = Math.Min(requestedDegree, yValues.Count - 1);
-        var size = degree + 1;
-        var matrix = new decimal[size, size + 1];
+        var valid = CollectValidPairs(xValues, yValues);
+        if (valid.Count == 0)
+            return Enumerable.Repeat((decimal?)null, yValues.Count).ToList();
+
+        var distinctX = valid.Select(pair => pair.X).Distinct().Count();
+        if (distinctX < requestedDegree + 1)
+        {
+            throw new InvalidOperationException(
+                $"Polynomial degree {requestedDegree} requires at least {requestedDegree + 1} distinct X points (found {distinctX}).");
+        }
+
+        // Scale X into [-1, 1] before raising to powers so large domains (epoch ms, revenue)
+        // stay well within floating-point and decimal dynamic range and condition cleanly.
+        // COMPAT_BREAK: 0.23 - subtract decimal offsets before conversion so nearby large X values stay distinct.
+        var xMin = valid.Min(pair => pair.X);
+        var xMax = valid.Max(pair => pair.X);
+        var span = DecimalDifference(xMax, xMin);
+        double NormalizeX(decimal x) => span == 0d ? 0d : (2d * DecimalDifference(x, xMin) / span) - 1d;
+
+        var size = requestedDegree + 1;
+        var matrix = new double[size, size + 1];
         for (var row = 0; row < size; row++)
         {
             for (var column = 0; column < size; column++)
-                matrix[row, column] = xValues.Sum(value => Power(value, row + column));
-            matrix[row, size] = Enumerable.Range(0, yValues.Count).Sum(index => yValues[index] * Power(xValues[index], row));
+                matrix[row, column] = valid.Sum(pair => Math.Pow(NormalizeX(pair.X), row + column));
+            matrix[row, size] = valid.Sum(pair => (double)pair.Y * Math.Pow(NormalizeX(pair.X), row));
         }
 
         for (var pivot = 0; pivot < size; pivot++)
         {
             var best = Enumerable.Range(pivot, size - pivot)
                 .OrderByDescending(row => Math.Abs(matrix[row, pivot])).First();
-            if (matrix[best, pivot] == 0m) return Enumerable.Repeat((decimal?)null, yValues.Count).ToList();
+            if (Math.Abs(matrix[best, pivot]) <= 1e-12d)
+                throw new InvalidOperationException("Regression system is singular for the supplied data points.");
             if (best != pivot)
                 for (var column = pivot; column <= size; column++)
                     (matrix[pivot, column], matrix[best, column]) = (matrix[best, column], matrix[pivot, column]);
@@ -1207,16 +1498,154 @@ public sealed class PlotPlanResolver
         }
 
         var coefficients = Enumerable.Range(0, size).Select(index => matrix[index, size]).ToArray();
-        return xValues
-            .Select(value => (decimal?)coefficients.Select((coefficient, power) => coefficient * Power(value, power)).Sum())
-            .ToList();
+        return xValues.Select(x =>
+        {
+            if (!x.HasValue) return (decimal?)null;
+            var u = NormalizeX(x.Value);
+            double prediction = 0d;
+            double power = 1d;
+            for (var degree = 0; degree < coefficients.Length; degree++)
+            {
+                prediction += coefficients[degree] * power;
+                power *= u;
+            }
+            return ToFiniteDecimal(prediction);
+        }).ToList();
     }
 
-    private static decimal Power(decimal value, int exponent)
+    private static double DecimalDifference(decimal value, decimal origin) =>
+        Math.Sign(value) == Math.Sign(origin)
+            ? (double)(value - origin)
+            : (double)value - (double)origin;
+
+    private static List<decimal?> ExponentialRegression(
+        IReadOnlyList<decimal?> xValues,
+        IReadOnlyList<decimal?> yValues)
     {
-        var result = 1m;
-        for (var index = 0; index < exponent; index++) result *= value;
-        return result;
+        if (yValues.Count == 0 || xValues.Count != yValues.Count) return [];
+        foreach (var y in yValues)
+        {
+            if (y.HasValue && y.Value <= 0m)
+                throw new InvalidOperationException($"Exponential overlay requires strictly positive Y values (found {y.Value}).");
+        }
+
+        var valid = CollectValidPairs(xValues, yValues);
+        if (valid.Count == 0)
+            return Enumerable.Repeat((decimal?)null, yValues.Count).ToList();
+        var distinctX = valid.Select(pair => pair.X).Distinct().Count();
+        if (distinctX < 2)
+            throw new InvalidOperationException($"Exponential overlay requires at least 2 distinct X points (found {distinctX}).");
+
+        // Fit ln(y) = alpha + beta * (x - xMean) to avoid exp(intercept) overflow on shifted X.
+        var xMean = valid.Average(pair => (double)pair.X);
+        var (alpha, beta) = FitSimpleLinear(
+            valid.Select(pair => (X: (double)pair.X - xMean, Y: Math.Log((double)pair.Y))).ToList(),
+            "Exponential");
+
+        return xValues.Select(x =>
+            !x.HasValue ? (decimal?)null : ToFiniteDecimal(Math.Exp(alpha + beta * ((double)x.Value - xMean)))).ToList();
+    }
+
+    private static List<decimal?> LogarithmicRegression(
+        IReadOnlyList<decimal?> xValues,
+        IReadOnlyList<decimal?> yValues)
+    {
+        if (yValues.Count == 0 || xValues.Count != yValues.Count) return [];
+        foreach (var x in xValues)
+        {
+            if (x.HasValue && x.Value <= 0m)
+                throw new InvalidOperationException($"Logarithmic overlay requires strictly positive X values (found {x.Value}).");
+        }
+
+        var valid = CollectValidPairs(xValues, yValues);
+        if (valid.Count == 0)
+            return Enumerable.Repeat((decimal?)null, yValues.Count).ToList();
+        var distinctX = valid.Select(pair => pair.X).Distinct().Count();
+        if (distinctX < 2)
+            throw new InvalidOperationException($"Logarithmic overlay requires at least 2 distinct positive X points (found {distinctX}).");
+
+        var (alpha, beta) = FitSimpleLinear(
+            valid.Select(pair => (X: Math.Log((double)pair.X), Y: (double)pair.Y)).ToList(),
+            "Logarithmic");
+
+        return xValues.Select(x =>
+            !x.HasValue ? (decimal?)null : ToFiniteDecimal(alpha + beta * Math.Log((double)x.Value))).ToList();
+    }
+
+    private static List<decimal?> PowerRegression(
+        IReadOnlyList<decimal?> xValues,
+        IReadOnlyList<decimal?> yValues)
+    {
+        if (yValues.Count == 0 || xValues.Count != yValues.Count) return [];
+        foreach (var x in xValues)
+        {
+            if (x.HasValue && x.Value <= 0m)
+                throw new InvalidOperationException($"Power overlay requires strictly positive X values (found {x.Value}).");
+        }
+        foreach (var y in yValues)
+        {
+            if (y.HasValue && y.Value <= 0m)
+                throw new InvalidOperationException($"Power overlay requires strictly positive Y values (found {y.Value}).");
+        }
+
+        var valid = CollectValidPairs(xValues, yValues);
+        if (valid.Count == 0)
+            return Enumerable.Repeat((decimal?)null, yValues.Count).ToList();
+        var distinctX = valid.Select(pair => pair.X).Distinct().Count();
+        if (distinctX < 2)
+            throw new InvalidOperationException($"Power overlay requires at least 2 distinct positive X points (found {distinctX}).");
+
+        var (alpha, beta) = FitSimpleLinear(
+            valid.Select(pair => (X: Math.Log((double)pair.X), Y: Math.Log((double)pair.Y))).ToList(),
+            "Power");
+
+        return xValues.Select(x =>
+            !x.HasValue ? (decimal?)null : ToFiniteDecimal(Math.Exp(alpha + beta * Math.Log((double)x.Value)))).ToList();
+    }
+
+    private static List<(decimal X, decimal Y)> CollectValidPairs(
+        IReadOnlyList<decimal?> xValues,
+        IReadOnlyList<decimal?> yValues)
+    {
+        var pairs = new List<(decimal X, decimal Y)>(yValues.Count);
+        for (var index = 0; index < yValues.Count; index++)
+        {
+            if (xValues[index] is { } x && yValues[index] is { } y)
+                pairs.Add((x, y));
+        }
+        return pairs;
+    }
+
+    private static (double Intercept, double Slope) FitSimpleLinear(
+        IReadOnlyList<(double X, double Y)> points,
+        string overlayName)
+    {
+        var meanX = points.Average(p => p.X);
+        var meanY = points.Average(p => p.Y);
+        double sxx = 0d;
+        double sxy = 0d;
+        foreach (var (x, y) in points)
+        {
+            var dx = x - meanX;
+            sxx += dx * dx;
+            sxy += dx * (y - meanY);
+        }
+
+        if (Math.Abs(sxx) <= 1e-18d)
+            throw new InvalidOperationException($"{overlayName} overlay regression is singular for identical transformed X inputs.");
+
+        var slope = sxy / sxx;
+        var intercept = meanY - slope * meanX;
+        return (intercept, slope);
+    }
+
+    private static decimal? ToFiniteDecimal(double value)
+    {
+        if (!double.IsFinite(value))
+            throw new InvalidOperationException("Overlay regression produced a non-finite value.");
+        if (value > (double)decimal.MaxValue || value < (double)decimal.MinValue)
+            throw new InvalidOperationException("Overlay regression prediction exceeded decimal range.");
+        return (decimal)value;
     }
 
     private static string? ConfidenceIntervalDetail(ResolvedDatum datum, ChartValueFormatter formatter)
@@ -1605,16 +2034,13 @@ public sealed class PlotPlanResolver
         }
         if (scale.Kind == ScaleKind.Time)
         {
-            var temporal = bindings.SelectMany(binding => rows.Select(index => BindingValue(binding, columns, index)))
-                .Where(value => value.Kind != ChartValueKind.Null)
-                .GroupBy(ValueKey, StringComparer.Ordinal).Select(group => group.First())
-                .OrderBy(ValueKey, StringComparer.Ordinal).ToImmutableArray();
-            return scale with
-            {
-                Domain = temporal,
-                Categories = temporal.Select(value => formatter.Format(value)).ToImmutableArray(),
-                Ticks = temporal.Select(value => new PlotTick(value, formatter.Format(value))).ToImmutableArray()
-            };
+            var panelIntent = spec.Scales.Single(candidate => candidate.Id.Equals(scale.Id, StringComparison.OrdinalIgnoreCase));
+            var temporalInputs = bindings.SelectMany(binding => rows.Select(index => BindingValue(binding, columns, index)));
+            return ResolveTimeScale(
+                scale.Id, scale.Kind, scale.Channel, temporalInputs,
+                panelIntent.DomainMinimum, panelIntent.DomainMaximum, scale.IncludesZero, scale.Reverse,
+                panelIntent.MajorTickCount, panelIntent.TickInterval, scale.MinorTicks, scale.LabelRotation,
+                scale.LabelSkip, scale.OuterPadding, scale.TickFormat, scale.TimeUnit, formatter, scale.Title);
         }
         var values = bindings.SelectMany(binding => rows.Select(index => Number(BindingValue(binding, columns, index))))
             .Where(value => value.HasValue).Select(value => value!.Value).ToList();
@@ -1659,6 +2085,7 @@ public sealed class PlotPlanResolver
         IReadOnlyDictionary<string, ChartColumn> columns,
         ImmutableArray<ResolvedMarkLayer> layers,
         ImmutableArray<ResolvedScale> scales,
+        ImmutableArray<ResolvedSeries> series,
         ImmutableArray<ResolvedFacetPanel> facets,
         PlotBounds bounds,
         int legendCount)
@@ -1706,24 +2133,57 @@ public sealed class PlotPlanResolver
         }
 
         var axes = spec.ResolveCartesianAxes();
+        var cartesianViewport = spec.Coordinate.Kind == CoordinateKind.Cartesian && spec.Coordinate.AspectRatio is not null
+            ? ResolveCartesianViewport(spec.Coordinate, scales, bounds, axes)
+            : null;
+        var cartesianAreas = new Dictionary<PlotBounds, PlotBounds>();
+        PlotBounds CartesianArea(PlotBounds frame, ResolvedScale? frameXScale)
+        {
+            if (!cartesianAreas.TryGetValue(frame, out var area))
+            {
+                cartesianAreas[frame] = area = CartesianPlotLayout.ResolveCartesianArea(
+                    frame, spec.Theme.Tokens, layers, series, frameXScale, legendCount);
+            }
+            return area;
+        }
+
         return layers.Select(layer => layer with
         {
             Data = layer.Data.Select(datum =>
             {
                 var panel = panelByRow.GetValueOrDefault(datum.RowIndex);
                 var datumScales = panel?.Scales ?? scales;
-                var datumBounds = panel?.CartesianViewport ?? panel?.Bounds ?? bounds;
+                var datumBounds = panel?.CartesianViewport ?? panel?.Bounds ?? cartesianViewport ?? bounds;
                 var xScale = datumScales.FirstOrDefault(scale => axes is null ? scale.Channel == FieldChannel.X : scale.Id.Equals(axes.XScaleId, StringComparison.OrdinalIgnoreCase));
                 var yScale = datumScales.FirstOrDefault(scale => axes is null ? scale.Channel is FieldChannel.Y or FieldChannel.Y2 : scale.Id.Equals(axes.YScaleId, StringComparison.OrdinalIgnoreCase));
-                var xBand = datumBounds.Width / Math.Max(1, xScale?.Categories.Length ?? 1);
-                var yBand = datumBounds.Height / Math.Max(1, yScale?.Categories.Length ?? 1);
-                var offsetX = ResolveOffsetChannel(datum, FieldChannel.XOffset, datumScales, xBand);
-                var offsetY = ResolveOffsetChannel(datum, FieldChannel.YOffset, datumScales, yBand);
+                decimal xBand;
+                decimal yBand;
+                decimal offsetX;
+                decimal offsetY;
                 if (transposedPlacementViewport is not null)
                 {
                     var viewport = panel?.CartesianViewport ?? panel?.Bounds ?? transposedPlacementViewport;
+                    xBand = datumBounds.Width / Math.Max(1, xScale?.Categories.Length ?? 1);
+                    yBand = datumBounds.Height / Math.Max(1, yScale?.Categories.Length ?? 1);
                     offsetX = ResolveOffsetChannel(datum, FieldChannel.YOffset, datumScales, viewport.Width - 80m, respectReverse: true);
                     offsetY = -ResolveOffsetChannel(datum, FieldChannel.XOffset, datumScales, viewport.Height - 100m, respectReverse: true);
+                }
+                else if (spec.Coordinate.Kind == CoordinateKind.TransposedCartesian)
+                {
+                    var plotWidth = Math.Max(0m, datumBounds.Width - CartesianPlotLayout.BaseLeftMargin - CartesianPlotLayout.BaseRightMargin);
+                    var plotHeight = Math.Max(0m, datumBounds.Height - CartesianPlotLayout.TopMargin - CartesianPlotLayout.BottomMargin);
+                    xBand = plotHeight / Math.Max(1, xScale?.Categories.Length ?? 1);
+                    yBand = plotWidth / Math.Max(1, yScale?.Categories.Length ?? 1);
+                    offsetX = ResolveOffsetChannel(datum, FieldChannel.YOffset, datumScales, yBand, respectReverse: true);
+                    offsetY = ResolveOffsetChannel(datum, FieldChannel.XOffset, datumScales, xBand);
+                }
+                else
+                {
+                    var cartesianArea = CartesianArea(datumBounds, xScale);
+                    xBand = cartesianArea.Width / Math.Max(1, xScale?.Categories.Length ?? 1);
+                    yBand = cartesianArea.Height / Math.Max(1, yScale?.Categories.Length ?? 1);
+                    offsetX = ResolveOffsetChannel(datum, FieldChannel.XOffset, datumScales, xBand);
+                    offsetY = ResolveOffsetChannel(datum, FieldChannel.YOffset, datumScales, yBand);
                 }
                 if (layer.Position is { } position)
                 {
@@ -1875,8 +2335,42 @@ public sealed class PlotPlanResolver
         return zeroCount > 0 ? summary + $" {zeroCount} null Y values rendered at zero; raw values retained." : summary;
     }
 
-    private static string ResolveColor(ChartSpec spec, string key, int index) =>
-        ChartPalette.Resolve(spec.Theme.Tokens, key, index);
+    private static string ResolveColor(ChartSpec spec, string key, int index)
+    {
+        foreach (var scale in spec.Scales.Where(s => s.Channel == FieldChannel.Color))
+        {
+            if (!scale.DiscreteColorMap.IsDefaultOrEmpty)
+            {
+                foreach (var entry in scale.DiscreteColorMap)
+                {
+                    if (string.Equals(entry.SeriesKey, key, StringComparison.OrdinalIgnoreCase))
+                        return entry.Color;
+                }
+            }
+            if (scale.Kind == ScaleKind.Identity && key.StartsWith('#') &&
+                (key.Length is 4 or 5 or 7 or 9) &&
+                key.Skip(1).All(Uri.IsHexDigit))
+                return key;
+            if (!scale.DiscreteRange.IsDefaultOrEmpty)
+            {
+                var slot = index;
+                if (!scale.CategoryOrder.IsDefaultOrEmpty)
+                {
+                    for (var i = 0; i < scale.CategoryOrder.Length; i++)
+                    {
+                        if (string.Equals(scale.CategoryOrder[i], key, StringComparison.OrdinalIgnoreCase))
+                        {
+                            slot = i;
+                            break;
+                        }
+                    }
+                }
+                if (slot >= 0)
+                    return scale.DiscreteRange[slot % scale.DiscreteRange.Length];
+            }
+        }
+        return ChartPalette.Resolve(spec.Theme.Tokens, key, index);
+    }
 
     private static IEnumerable<ChartValue> BindingValues(FieldBinding binding, IReadOnlyDictionary<string, ChartColumn> columns)
     {
@@ -1904,6 +2398,379 @@ public sealed class PlotPlanResolver
         ChartValueKind.Decimal => value.Decimal,
         _ => null
     };
+
+    private enum TemporalValueShape { None, Date, Time, LocalDateTime, OffsetDateTime }
+
+    internal static decimal? TemporalTicks(ChartValue? value) =>
+        value is not null && TryGetTemporalShape(value, out var ticks, out _) ? (decimal)ticks : null;
+
+    internal static decimal? PositionNumber(ChartValue? value) => value is null
+        ? null
+        : Number(value) ?? TemporalTicks(value);
+
+    private static bool TryGetTemporalShape(ChartValue value, out long ticks, out TemporalValueShape shape)
+    {
+        switch (value.Kind)
+        {
+            case ChartValueKind.Date when value.Date.HasValue:
+                ticks = value.Date.Value.DayNumber * TimeSpan.TicksPerDay;
+                shape = TemporalValueShape.Date;
+                return true;
+            case ChartValueKind.Time when value.Time.HasValue:
+                ticks = value.Time.Value.Ticks;
+                shape = TemporalValueShape.Time;
+                return true;
+            case ChartValueKind.LocalDateTime when value.LocalDateTime.HasValue:
+                ticks = value.LocalDateTime.Value.Ticks;
+                shape = TemporalValueShape.LocalDateTime;
+                return true;
+            case ChartValueKind.OffsetDateTime when value.OffsetDateTime.HasValue:
+                ticks = value.OffsetDateTime.Value.UtcTicks;
+                shape = TemporalValueShape.OffsetDateTime;
+                return true;
+            case ChartValueKind.Text when !string.IsNullOrWhiteSpace(value.Text):
+                {
+                    var text = value.Text.Trim();
+                    if (DateOnly.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var dateOnly))
+                    {
+                        ticks = dateOnly.DayNumber * TimeSpan.TicksPerDay;
+                        shape = TemporalValueShape.Date;
+                        return true;
+                    }
+                    if (TimeOnly.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var timeOnly))
+                    {
+                        ticks = timeOnly.Ticks;
+                        shape = TemporalValueShape.Time;
+                        return true;
+                    }
+                    if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces, out var dt))
+                    {
+                        if (dt.Kind == DateTimeKind.Unspecified)
+                        {
+                            ticks = dt.Ticks;
+                            shape = TemporalValueShape.LocalDateTime;
+                            return true;
+                        }
+                        ticks = dt.ToUniversalTime().Ticks;
+                        shape = TemporalValueShape.OffsetDateTime;
+                        return true;
+                    }
+                    if (DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AllowWhiteSpaces, out var dto))
+                    {
+                        ticks = dto.UtcTicks;
+                        shape = TemporalValueShape.OffsetDateTime;
+                        return true;
+                    }
+                    ticks = 0;
+                    shape = TemporalValueShape.None;
+                    return false;
+                }
+            default:
+                ticks = 0;
+                shape = TemporalValueShape.None;
+                return false;
+        }
+    }
+
+    private static ResolvedScale ResolveTimeScale(
+        string scaleId,
+        ScaleKind kind,
+        FieldChannel channel,
+        IEnumerable<ChartValue> rawValues,
+        ChartValue? domainMinimum,
+        ChartValue? domainMaximum,
+        bool includeZero,
+        bool reverse,
+        int? majorTickCount,
+        decimal? tickInterval,
+        bool minorTicks,
+        string? labelRotation,
+        int? labelSkip,
+        decimal outerPadding,
+        string? tickFormat,
+        string? timeUnit,
+        ChartValueFormatter formatter,
+        string? title = null)
+    {
+        if (majorTickCount is < 2 or > 100)
+            throw new InvalidOperationException($"MAJOR_TICK_COUNT for scale '{scaleId}' must be between 2 and 100.");
+        if (tickInterval is <= 0m)
+            throw new InvalidOperationException($"TICK_INTERVAL for scale '{scaleId}' must be greater than zero.");
+
+        var parsedTicks = new List<long>();
+        bool hasDate = false, hasTime = false, hasLocal = false, hasOffset = false;
+
+        void RecordShape(TemporalValueShape shape)
+        {
+            switch (shape)
+            {
+                case TemporalValueShape.Date: hasDate = true; break;
+                case TemporalValueShape.Time: hasTime = true; break;
+                case TemporalValueShape.LocalDateTime: hasLocal = true; break;
+                case TemporalValueShape.OffsetDateTime: hasOffset = true; break;
+            }
+        }
+
+        foreach (var item in rawValues)
+        {
+            if (item.Kind == ChartValueKind.Null) continue;
+            if (TryGetTemporalShape(item, out var itemTicks, out var shape))
+            {
+                parsedTicks.Add(itemTicks);
+                RecordShape(shape);
+            }
+        }
+
+        long? minOverride = null;
+        if (domainMinimum is { Kind: not ChartValueKind.Null })
+        {
+            if (!TryGetTemporalShape(domainMinimum, out var minTickValue, out var minShape))
+                throw new InvalidOperationException($"MIN bound '{Display(domainMinimum)}' for temporal scale '{scaleId}' must be a valid date or time.");
+            minOverride = minTickValue;
+            RecordShape(minShape);
+        }
+
+        long? maxOverride = null;
+        if (domainMaximum is { Kind: not ChartValueKind.Null })
+        {
+            if (!TryGetTemporalShape(domainMaximum, out var maxTickValue, out var maxShape))
+                throw new InvalidOperationException($"MAX bound '{Display(domainMaximum)}' for temporal scale '{scaleId}' must be a valid date or time.");
+            maxOverride = maxTickValue;
+            RecordShape(maxShape);
+        }
+
+        if (minOverride.HasValue && maxOverride.HasValue && minOverride.Value > maxOverride.Value)
+            throw new InvalidOperationException($"MIN bound for scale '{scaleId}' cannot exceed MAX bound.");
+
+        if (parsedTicks.Count == 0 && !minOverride.HasValue && !maxOverride.HasValue)
+        {
+            return new ResolvedScale(scaleId, channel, kind, [], [], [], includeZero,
+                reverse, minorTicks, labelRotation, labelSkip, outerPadding, tickFormat, timeUnit);
+        }
+
+        var minTicks = minOverride ?? (parsedTicks.Count > 0 ? parsedTicks.Min() : maxOverride!.Value);
+        var maxTicks = maxOverride ?? (parsedTicks.Count > 0 ? parsedTicks.Max() : minOverride!.Value);
+        if (minTicks > maxTicks) (minTicks, maxTicks) = (maxTicks, minTicks);
+
+        var isTimeOnly = hasTime && !hasDate && !hasLocal && !hasOffset;
+        var isDateOnly = hasDate && !hasTime && !hasLocal && !hasOffset;
+
+        if (minTicks == maxTicks)
+        {
+            if (isTimeOnly)
+            {
+                if (minTicks + TimeSpan.TicksPerHour <= TimeSpan.TicksPerDay - 1L)
+                    maxTicks = minTicks + TimeSpan.TicksPerHour;
+                else
+                    minTicks = Math.Max(0L, maxTicks - TimeSpan.TicksPerHour);
+            }
+            else
+            {
+                maxTicks = minTicks + TimeSpan.TicksPerDay;
+            }
+        }
+
+        ChartValue ToChartValue(long ticks)
+        {
+            if (isTimeOnly)
+                return ChartValue.From(new TimeOnly(Math.Clamp(ticks, 0L, TimeSpan.TicksPerDay - 1L)));
+            if (hasOffset)
+                return ChartValue.From(new DateTimeOffset(ticks, TimeSpan.Zero));
+            if (isDateOnly && ticks % TimeSpan.TicksPerDay == 0L)
+                return ChartValue.From(DateOnly.FromDayNumber((int)(ticks / TimeSpan.TicksPerDay)));
+            return ChartValue.FromLocal(new DateTime(ticks, DateTimeKind.Unspecified));
+        }
+
+        var normalizedUnit = timeUnit?.Trim().ToUpperInvariant();
+        var unitFormat = normalizedUnit switch
+        {
+            "DAY" => "yyyy-MM-dd",
+            "WEEK" => "yyyy-MM-dd",
+            "MONTH" => "yyyy-MM",
+            "QUARTER" => "QUARTER",
+            "YEAR" => "yyyy",
+            _ => null
+        };
+
+        string FormatTickLabel(ChartValue tickValue, long ticks)
+        {
+            if (tickFormat is not null)
+                return formatter.FormatWithPattern(tickValue, tickFormat);
+            if (unitFormat == "QUARTER")
+            {
+                var dt = new DateTime(ticks, DateTimeKind.Unspecified);
+                return $"{dt.Year}-Q{(dt.Month - 1) / 3 + 1}";
+            }
+            if (unitFormat is not null)
+                return formatter.FormatWithPattern(tickValue, unitFormat);
+            return formatter.Format(tickValue);
+        }
+
+        List<long> GenerateFixedStepTicks(long min, long max, long stepTicks, bool alignToDay)
+        {
+            var result = new List<long>();
+            if (stepTicks <= 0L) return result;
+            long current;
+            if (alignToDay && !isTimeOnly && stepTicks % TimeSpan.TicksPerDay == 0L)
+            {
+                var startDay = new DateTime(min, DateTimeKind.Unspecified).Date;
+                if (startDay.Ticks < min) startDay = startDay.AddDays(1);
+                current = startDay.Ticks;
+            }
+            else
+            {
+                var rem = min % stepTicks;
+                current = rem == 0L ? min : min + (stepTicks - rem);
+            }
+            while (current <= max && result.Count < 100)
+            {
+                result.Add(current);
+                if (max - current < stepTicks) break;
+                current += stepTicks;
+            }
+            return result;
+        }
+
+        List<long> GenerateCalendarTicks(long min, long max, int monthsStep)
+        {
+            var result = new List<long>();
+            if (monthsStep <= 0) return result;
+            var startDt = new DateTime(min, DateTimeKind.Unspecified);
+            var startMonth = monthsStep >= 12 ? 1 : ((startDt.Month - 1) / monthsStep) * monthsStep + 1;
+            var yearsStep = monthsStep >= 12 ? monthsStep / 12 : 1;
+            var startYear = yearsStep > 1 ? Math.Max(1, (startDt.Year / yearsStep) * yearsStep) : startDt.Year;
+            var current = new DateTime(startYear, startMonth, 1, 0, 0, 0, DateTimeKind.Unspecified);
+            while (current.Ticks < min)
+            {
+                if (current > DateTime.MaxValue.AddMonths(-monthsStep)) return result;
+                current = current.AddMonths(monthsStep);
+            }
+            while (current.Ticks <= max && result.Count < 100)
+            {
+                result.Add(current.Ticks);
+                if (current > DateTime.MaxValue.AddMonths(-monthsStep)) break;
+                current = current.AddMonths(monthsStep);
+            }
+            return result;
+        }
+
+        List<long> tickPositions;
+        if (tickInterval is { } interval)
+        {
+            tickPositions = normalizedUnit switch
+            {
+                "YEAR" => GenerateCalendarTicks(minTicks, maxTicks, Math.Max(1, (int)Math.Round(interval)) * 12),
+                "QUARTER" => GenerateCalendarTicks(minTicks, maxTicks, Math.Max(1, (int)Math.Round(interval)) * 3),
+                "MONTH" => GenerateCalendarTicks(minTicks, maxTicks, Math.Max(1, (int)Math.Round(interval))),
+                "WEEK" => GenerateFixedStepTicks(minTicks, maxTicks, Math.Max(1L, (long)Math.Round((double)interval * 7d * TimeSpan.TicksPerDay)), alignToDay: true),
+                "DAY" => GenerateFixedStepTicks(minTicks, maxTicks, Math.Max(1L, (long)Math.Round((double)interval * TimeSpan.TicksPerDay)), alignToDay: true),
+                _ when isTimeOnly => GenerateFixedStepTicks(
+                    minTicks, maxTicks,
+                    (maxTicks - minTicks) / ((decimal)interval * TimeSpan.TicksPerHour) >= 1m
+                        ? Math.Max(1L, (long)Math.Round((double)interval * TimeSpan.TicksPerHour))
+                        : (maxTicks - minTicks) / ((decimal)interval * TimeSpan.TicksPerMinute) >= 1m
+                            ? Math.Max(1L, (long)Math.Round((double)interval * TimeSpan.TicksPerMinute))
+                            : Math.Max(1L, (long)Math.Round((double)interval * TimeSpan.TicksPerSecond)),
+                    alignToDay: false),
+                _ => GenerateFixedStepTicks(minTicks, maxTicks, Math.Max(1L, (long)Math.Round((double)interval * TimeSpan.TicksPerDay)), alignToDay: true)
+            };
+            if (tickPositions.Count == 0) tickPositions = [minTicks, maxTicks];
+        }
+        else
+        {
+            var targetCount = majorTickCount ?? 5;
+            var span = maxTicks - minTicks;
+            var candidates = new List<List<long>>();
+            var minStepFloor = span / 120L;
+
+            if (!isDateOnly && normalizedUnit is null or "AUTO")
+            {
+                long[] subDaySteps =
+                [
+                    TimeSpan.TicksPerSecond,
+                    5L * TimeSpan.TicksPerSecond,
+                    15L * TimeSpan.TicksPerSecond,
+                    30L * TimeSpan.TicksPerSecond,
+                    TimeSpan.TicksPerMinute,
+                    2L * TimeSpan.TicksPerMinute,
+                    5L * TimeSpan.TicksPerMinute,
+                    10L * TimeSpan.TicksPerMinute,
+                    15L * TimeSpan.TicksPerMinute,
+                    30L * TimeSpan.TicksPerMinute,
+                    TimeSpan.TicksPerHour,
+                    2L * TimeSpan.TicksPerHour,
+                    3L * TimeSpan.TicksPerHour,
+                    4L * TimeSpan.TicksPerHour,
+                    6L * TimeSpan.TicksPerHour,
+                    12L * TimeSpan.TicksPerHour
+                ];
+                foreach (var step in subDaySteps)
+                {
+                    if (step < minStepFloor || step > span) continue;
+                    candidates.Add(GenerateFixedStepTicks(minTicks, maxTicks, step, alignToDay: false));
+                }
+            }
+
+            if (!isTimeOnly && normalizedUnit is null or "AUTO" or "DAY" or "WEEK")
+            {
+                int[] daySteps = normalizedUnit == "WEEK" ? [7, 14, 28] : [1, 2, 3, 4, 5, 7, 10, 14];
+                foreach (var days in daySteps)
+                {
+                    var step = days * TimeSpan.TicksPerDay;
+                    if (step < minStepFloor || step > span) continue;
+                    candidates.Add(GenerateFixedStepTicks(minTicks, maxTicks, step, alignToDay: true));
+                }
+            }
+
+            if (!isTimeOnly && normalizedUnit is not "DAY" and not "WEEK")
+            {
+                int[] monthSteps = normalizedUnit switch
+                {
+                    "YEAR" => [12, 24, 60, 120, 240, 600, 1200],
+                    "QUARTER" => [3, 6, 12, 24, 60, 120],
+                    "MONTH" => [1, 2, 3, 6, 12, 24, 60, 120],
+                    _ => [1, 2, 3, 6, 12, 24, 60, 120, 240, 600, 1200]
+                };
+                foreach (var months in monthSteps)
+                    candidates.Add(GenerateCalendarTicks(minTicks, maxTicks, months));
+            }
+
+            var best = candidates
+                .Where(list => list.Count >= 2 && list.Count <= Math.Max(2, targetCount + 2))
+                .OrderBy(list => Math.Abs(list.Count - targetCount))
+                .ThenByDescending(list => list.Count)
+                .FirstOrDefault();
+
+            if (best is not null)
+            {
+                tickPositions = best;
+            }
+            else
+            {
+                var count = Math.Clamp(targetCount, 2, 100);
+                tickPositions = Enumerable.Range(0, count)
+                    .Select(index => minTicks + (long)Math.Round((decimal)span * index / (count - 1m)))
+                    .Distinct()
+                    .ToList();
+                if (tickPositions.Count < 2) tickPositions = [minTicks, maxTicks];
+            }
+        }
+
+        var ticks = tickPositions
+            .Select(tick =>
+            {
+                var value = ToChartValue(tick);
+                return new PlotTick(value, FormatTickLabel(value, tick));
+            })
+            .ToImmutableArray();
+
+        return new ResolvedScale(
+            scaleId, channel, kind,
+            [ToChartValue(minTicks), ToChartValue(maxTicks)],
+            [],
+            ticks,
+            includeZero, reverse, minorTicks, labelRotation, labelSkip, outerPadding, tickFormat, timeUnit, title);
+    }
 
     internal static string Display(ChartValue value) => value.Kind switch
     {

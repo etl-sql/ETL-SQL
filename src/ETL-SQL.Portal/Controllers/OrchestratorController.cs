@@ -1,9 +1,15 @@
+using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text.Json;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.Portal.Controllers;
 
@@ -14,8 +20,16 @@ public class OrchestratorController(
     OrchestratorProxyService proxy,
     AuditService audit,
     ScriptDagProjectionService scriptDag,
-    OperationsTriageService triage) : ControllerBase
+    OperationsTriageService triage,
+    PortalDbContext? db = null,
+    IArtifactStorage? artifacts = null,
+    PortalConfig? portalConfig = null,
+    DatasetTenantScope? tenantScope = null,
+    StudioAuthorizationService? studioAuthorization = null,
+    OrchestratorGovernanceSyncService? governanceSync = null,
+    FolderPermissionService? folderPermissions = null) : ControllerBase
 {
+    private static readonly JsonSerializerOptions CatalogJson = new(JsonSerializerDefaults.Web);
     /// <summary>Upper bound on one bulk re-run, so a mis-click cannot enqueue the whole estate.</summary>
     private const int MaxRerunBatch = 50;
 
@@ -57,9 +71,25 @@ public class OrchestratorController(
         return await RelayAsync(() => proxy.GetJobActivityAsync(filter, status, search, limit, offset, ct));
     }
 
+    [HttpGet("authoring-mode")]
+    public ActionResult<OrchestratorAuthoringModeDto> GetAuthoringMode()
+    {
+        var auth = ResolveStudioAuthorization();
+        var studioMode = auth?.Mode ?? StudioDeploymentMode.SourceControlled;
+        var canIngress = CanUseExternalScriptIngress(out _);
+        return Ok(new OrchestratorAuthoringModeDto(studioMode.ToString(), canIngress, canIngress));
+    }
+
     [HttpPost("jobs")]
     public async Task<IActionResult> CreateJob([FromBody] CreateJobRequest req)
     {
+        if (!CanUseExternalScriptIngress(out var blockedByMode)
+            && !IsAllowedCatalogOnlyCreateRequest(req))
+        {
+            return RejectExternalScriptIngress(
+                blockedByMode,
+                "Raw server scripts and unreviewed inline script jobs are disabled in this deployment mode. Create a job targeting a Studio catalog Pipeline, a catalog Report, or a published orch:// bundle.");
+        }
         using var resp = await proxy.CreateJobAsync(req);
         if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
         if (!resp.IsSuccessStatusCode)
@@ -73,6 +103,22 @@ public class OrchestratorController(
     [HttpPut("jobs/{name}")]
     public async Task<IActionResult> UpdateJob(string name, [FromBody] UpdateJobRequest req)
     {
+        var unescaped = Uri.UnescapeDataString(name);
+        if (IsCatalogPipelineSlot(unescaped) && req.ScriptText is not null)
+        {
+            return Conflict(new
+            {
+                Code = "catalog_managed_script",
+                Error = $"Job '{unescaped}' is backed by a Studio catalog pipeline. Edit its script in Studio so catalog and Orchestrator scripts stay aligned."
+            });
+        }
+        if (!CanUseExternalScriptIngress(out var blockedByMode)
+            && (req.ScriptText is not null || (req.TargetPath is not null && !IsPublishedBundleUri(req.TargetPath))))
+        {
+            return RejectExternalScriptIngress(
+                blockedByMode,
+                "Inline script edits and raw server script targets are disabled in this deployment mode. Use a Studio catalog Pipeline or published orch:// bundle.");
+        }
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
@@ -88,6 +134,21 @@ public class OrchestratorController(
             await audit.LogAsync(CurrentUserId, "JobScriptEdited", "Job", name, null);
         }
         return NoContent();
+    }
+
+    [HttpPut("jobs/{name}/tool-approval")]
+    public async Task<IActionResult> SetJobToolApproval(string name, SavedJobToolApprovalRequest request)
+    {
+        if (request.Approved is not { } approved)
+            return BadRequest(new { Error = "Approved is required." });
+
+        var version = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (version is null) return OptimisticConcurrency.MissingVersion(this);
+
+        using var response = await proxy.SetJobToolApprovalAsync(name, approved, version.Value);
+        if (response is null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (response.IsSuccessStatusCode) return NoContent();
+        return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
     }
 
     [HttpDelete("jobs/{name}")]
@@ -164,6 +225,25 @@ public class OrchestratorController(
             "ResumeMode=NamedCheckpoint");
         return Accepted(body);
     }
+
+    [HttpGet("runs/{historyId:long}")]
+    public Task<IActionResult> GetJobRun(long historyId, CancellationToken ct) =>
+        RelayAsync(() => proxy.GetJobRunAsync(historyId, ct));
+
+    [HttpPost("runs/{historyId:long}/cancel")]
+    public Task<IActionResult> CancelJobRun(long historyId, CancellationToken ct) =>
+        RelayAsync(
+            () => proxy.CancelJobRunAsync(historyId, ct),
+            () => audit.LogAsync(
+                CurrentUserId,
+                "JobRunCancelled",
+                "JobRun",
+                historyId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                null));
+
+    [HttpGet("fleet")]
+    public Task<IActionResult> GetFleetStatus(CancellationToken ct) =>
+        RelayAsync(() => proxy.GetFleetNodesAndSandboxesAsync(ct));
 
     // ── Operations triage ─────────────────────────────────────────────────────
 
@@ -522,131 +602,12 @@ public class OrchestratorController(
     // ── Cross-Job Dependencies ─────────────────────────────────────────────────
 
     [HttpGet("jobs/{name}/dependencies")]
-    public async Task<IActionResult> GetJobDependencies(string name)
+    public async Task<IActionResult> GetJobDependencies(string name, CancellationToken ct = default)
     {
-        var allJobs = await proxy.GetJobsAsync();
-        var currentJob = allJobs.FirstOrDefault(j => j.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-        if (currentJob == null) return NotFound(new { Error = $"Job '{name}' not found." });
-
-        var jobOutputs = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-        var jobInputs = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-        var jobTriggers = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var job in allJobs)
-        {
-            var outs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var ins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var trigs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            if (!string.IsNullOrWhiteSpace(job.Script))
-            {
-                var projection = scriptDag.Project(job.Script);
-                if (projection.Parsed && projection.Dag != null)
-                {
-                    foreach (var edge in projection.Dag.Edges)
-                    {
-                        if (edge.Label != null && edge.Label.Contains("writes", StringComparison.OrdinalIgnoreCase))
-                            outs.Add(edge.Target);
-                        else if (edge.Label != null && edge.Label.Contains("reads", StringComparison.OrdinalIgnoreCase))
-                            ins.Add(edge.Source);
-                    }
-                    foreach (var node in projection.Dag.Nodes)
-                    {
-                        if (node.Type == "table" || node.Type == "io")
-                        {
-                            if (node.Label.StartsWith("INTO", StringComparison.OrdinalIgnoreCase) ||
-                                node.Label.StartsWith("MERGE", StringComparison.OrdinalIgnoreCase))
-                                outs.Add(node.Label);
-                            else if (node.Label.StartsWith("FROM", StringComparison.OrdinalIgnoreCase))
-                                ins.Add(node.Label);
-                        }
-                    }
-                }
-
-                // Look for direct trigger statements or script references
-                foreach (var other in allJobs)
-                {
-                    if (other.Name.Equals(job.Name, StringComparison.OrdinalIgnoreCase)) continue;
-                    if (job.Script.Contains(other.Name, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrWhiteSpace(other.TargetPath) && job.Script.Contains(other.TargetPath, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        trigs.Add(other.Name);
-                    }
-                }
-            }
-
-            jobOutputs[job.Name] = outs;
-            jobInputs[job.Name] = ins;
-            jobTriggers[job.Name] = trigs;
-        }
-
-        var upstreamJobs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var downstreamJobs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var edges = new List<JobDependencyEdgeDto>();
-
-        // Find upstreams (jobs that produce data currentJob consumes or trigger currentJob)
-        var myInputs = jobInputs.GetValueOrDefault(currentJob.Name, []);
-        foreach (var other in allJobs)
-        {
-            if (other.Name.Equals(currentJob.Name, StringComparison.OrdinalIgnoreCase)) continue;
-            var otherOuts = jobOutputs.GetValueOrDefault(other.Name, []);
-            var matching = otherOuts.Intersect(myInputs, StringComparer.OrdinalIgnoreCase).ToList();
-            if (matching.Count > 0)
-            {
-                upstreamJobs.Add(other.Name);
-                edges.Add(new JobDependencyEdgeDto(other.Name, currentJob.Name, "Data", $"Writes {string.Join(", ", matching)}"));
-            }
-            if (jobTriggers.GetValueOrDefault(other.Name, []).Contains(currentJob.Name))
-            {
-                upstreamJobs.Add(other.Name);
-                edges.Add(new JobDependencyEdgeDto(other.Name, currentJob.Name, "Trigger", "Direct execution trigger"));
-            }
-        }
-
-        // Find downstreams (jobs that consume data currentJob produces or that currentJob triggers)
-        var myOuts = jobOutputs.GetValueOrDefault(currentJob.Name, []);
-        foreach (var other in allJobs)
-        {
-            if (other.Name.Equals(currentJob.Name, StringComparison.OrdinalIgnoreCase)) continue;
-            var otherIns = jobInputs.GetValueOrDefault(other.Name, []);
-            var matching = myOuts.Intersect(otherIns, StringComparer.OrdinalIgnoreCase).ToList();
-            if (matching.Count > 0)
-            {
-                downstreamJobs.Add(other.Name);
-                edges.Add(new JobDependencyEdgeDto(currentJob.Name, other.Name, "Data", $"Reads {string.Join(", ", matching)}"));
-            }
-            if (jobTriggers.GetValueOrDefault(currentJob.Name, []).Contains(other.Name))
-            {
-                downstreamJobs.Add(other.Name);
-                edges.Add(new JobDependencyEdgeDto(currentJob.Name, other.Name, "Trigger", "Direct execution trigger"));
-            }
-        }
-
-        var neighborNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { currentJob.Name };
-        foreach (var u in upstreamJobs) neighborNames.Add(u);
-        foreach (var d in downstreamJobs) neighborNames.Add(d);
-
-        var nodes = allJobs
-            .Where(j => neighborNames.Contains(j.Name))
-            .Select(j => new JobDependencyNodeDto(
-                j.Name,
-                j.Name,
-                j.DisplayName,
-                j.IsEnabled,
-                j.LastRun,
-                j.NextRun,
-                j.Name.Equals(currentJob.Name, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
-
-        var chain = new JobDependencyChainDto(
-            currentJob.Name,
-            nodes,
-            edges,
-            upstreamJobs.ToList(),
-            downstreamJobs.ToList(),
-            []);
-
-        return Ok(chain);
+        var chain = await new JobDependencyGraphBuilder(proxy).BuildAsync(name, ct);
+        return chain == null
+            ? NotFound(new { Error = $"Job '{name}' not found." })
+            : Ok(chain);
     }
 
     // ── Bundles, Data Quality & Stewardship ────────────────────────────────────
@@ -675,6 +636,10 @@ public class OrchestratorController(
     public Task<IActionResult> GetBundleVersions(string name, CancellationToken ct) =>
         RelayAsync(() => proxy.GetBundleVersionsResponseAsync(name, ct));
 
+    [HttpGet("bundles/{name}/versions/{version:int}/files")]
+    public Task<IActionResult> GetBundleFiles(string name, int version, CancellationToken ct) =>
+        RelayAsync(() => proxy.GetBundleFilesResponseAsync(name, version, ct));
+
     [HttpGet("bundles/{name}/versions/{version:int}/dependencies")]
     public Task<IActionResult> GetBundleDependencies(string name, int version, CancellationToken ct) =>
         RelayAsync(() => proxy.GetBundleDependenciesResponseAsync(name, version, ct));
@@ -684,6 +649,8 @@ public class OrchestratorController(
     [HttpGet("scripts")]
     public async Task<IActionResult> GetScripts()
     {
+        if (!CanUseExternalScriptIngress(out var blockedByMode))
+            return RejectExternalScriptIngress(blockedByMode, "Server script browsing is disabled in this deployment mode.");
         var scripts = await proxy.GetScriptsAsync();
         if (scripts == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
         return Ok(scripts);
@@ -692,6 +659,8 @@ public class OrchestratorController(
     [HttpGet("scripts/content")]
     public async Task<IActionResult> GetScriptContent([FromQuery] string path)
     {
+        if (!CanUseExternalScriptIngress(out var blockedByMode))
+            return RejectExternalScriptIngress(blockedByMode, "Server script reading is disabled in this deployment mode.");
         if (string.IsNullOrWhiteSpace(path)) return BadRequest(new { Error = "path is required." });
         var content = await proxy.GetScriptContentAsync(path);
         if (content == null) return StatusCode(503, new { Error = "Script unavailable." });
@@ -809,6 +778,269 @@ public class OrchestratorController(
 
         Response.StatusCode = (int)response.StatusCode;
         return Content(body, "application/json");
+    }
+
+    // ── Studio pipeline catalog & run-slot provisioning ───────────────────────
+
+    [HttpGet("pipelines/catalog")]
+    public async Task<ActionResult<IReadOnlyList<CatalogPipelineLinkDto>>> GetPipelineCatalog(
+        CancellationToken ct = default)
+    {
+        if (db is null || portalConfig is null)
+            return Ok(Array.Empty<CatalogPipelineLinkDto>());
+
+        var scope = tenantScope ?? new DatasetTenantScope(portalConfig);
+        var pipelines = await new PortalTenantCatalogScope(db, scope).Documents.AsNoTracking()
+            .Include(doc => doc.Folder)
+            .Where(doc => !doc.IsDeleted && doc.Kind == CatalogDocumentKind.Pipeline)
+            .OrderBy(doc => doc.Folder.Path)
+            .ThenBy(doc => doc.Name)
+            .ToListAsync(ct);
+
+        if (pipelines.Count == 0)
+            return Ok(Array.Empty<CatalogPipelineLinkDto>());
+
+        var permissions = folderPermissions ?? new FolderPermissionService(db, new PortalTenantCatalogScope(db, scope));
+        var readable = await permissions.GetEffectiveReportPermissionsAsync(pipelines, User, ct);
+        pipelines = pipelines.Where(doc => readable[doc.Id].AtLeast(FolderPermission.Read)).ToList();
+        if (pipelines.Count == 0)
+            return Ok(Array.Empty<CatalogPipelineLinkDto>());
+
+        var jobs = await proxy.GetJobsAsync();
+        var jobsByName = jobs
+            .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        var ownerIds = pipelines
+            .Select(doc => doc.CreatedBy)
+            .Distinct()
+            .ToList();
+        var owners = ownerIds.Count == 0
+            ? new Dictionary<int, (string? PrincipalKey, string? DisplayName)>()
+            : await db.Users.AsNoTracking()
+                .Where(user => ownerIds.Contains(user.Id))
+                .ToDictionaryAsync(
+                    user => user.Id,
+                    user => (user.PrincipalKey, DisplayName: FormatOwnerDisplayName(user)),
+                    ct);
+
+        var result = pipelines.Select(doc =>
+        {
+            var jobName = StudioPipelineRunsController.JobName(doc.Id);
+            jobsByName.TryGetValue(jobName, out var job);
+            owners.TryGetValue(doc.CreatedBy, out var owner);
+
+            return new CatalogPipelineLinkDto(
+                doc.Id,
+                jobName,
+                doc.Name,
+                doc.Description,
+                doc.FolderId,
+                doc.Folder?.Path ?? "/",
+                owner.PrincipalKey,
+                owner.DisplayName,
+                doc.Version,
+                job is not null,
+                job?.CreatedBy);
+        }).ToList();
+
+        return Ok(result);
+    }
+
+    [HttpPost("pipelines/{id:int}/provision")]
+    [Authorize(Roles = "Admin,OrchestratorManager")]
+    public async Task<ActionResult<ProvisionPipelineSlotResultDto>> ProvisionPipelineSlot(
+        int id, CancellationToken ct = default)
+    {
+        if (db is null || artifacts is null || portalConfig is null)
+            return StatusCode(503, new { Error = "Catalog storage is unavailable." });
+
+        var scope = tenantScope ?? new DatasetTenantScope(portalConfig);
+        var document = await new PortalTenantCatalogScope(db, scope).Documents.AsNoTracking()
+            .Include(doc => doc.Folder)
+            .FirstOrDefaultAsync(doc => doc.Id == id && !doc.IsDeleted && doc.Kind == CatalogDocumentKind.Pipeline, ct);
+        if (document is null)
+            return NotFound(new { Error = $"Catalog pipeline '{id}' not found." });
+
+        // COMPAT_BREAK: 0.23 - Orchestrator administration does not grant access to private Studio content.
+        var permissions = folderPermissions ?? new FolderPermissionService(db, new PortalTenantCatalogScope(db, scope));
+        if (!(await permissions.GetEffectiveReportPermissionAsync(document, User)).AtLeast(FolderPermission.Read))
+            return Forbid();
+
+        var scriptKey = PortalPathGuard.ToScriptKey(portalConfig, document.ScriptPath);
+        if (scriptKey is null || !await artifacts.ExistsAsync(ArtifactArea.Scripts, scriptKey, ct))
+            return StatusCode(503, new { Error = "The saved revision of this pipeline could not be read." });
+
+        var scriptText = await artifacts.ReadAllTextAsync(ArtifactArea.Scripts, scriptKey, ct);
+        if (string.IsNullOrWhiteSpace(scriptText))
+            return UnprocessableEntity(new
+            {
+                Code = "empty_revision",
+                Error = "The saved revision of this pipeline is empty; save a script in Studio before provisioning its Orchestrator slot."
+            });
+
+        var jobName = StudioPipelineRunsController.JobName(document.Id);
+        var folderPath = document.Folder?.Path ?? "/";
+        using var provisionResp = await proxy.ProvisionJobSlotAsync(
+            jobName, scriptText, document.Name, $"Portal pipeline {folderPath}/{document.Name}", ct);
+        if (provisionResp is null)
+            return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!provisionResp.IsSuccessStatusCode)
+        {
+            var body = await provisionResp.Content.ReadAsStringAsync(ct);
+            return string.IsNullOrWhiteSpace(body)
+                ? StatusCode((int)provisionResp.StatusCode)
+                : new ContentResult
+                {
+                    StatusCode = (int)provisionResp.StatusCode,
+                    ContentType = "application/json",
+                    Content = body
+                };
+        }
+
+        var provisioned = await provisionResp.Content.ReadFromJsonAsync<ProvisionSlotProxyResponse>(CatalogJson, ct);
+        var slotCreated = provisioned?.Created ?? false;
+
+        var ownerPrincipalKey = await db.Users.AsNoTracking()
+            .Where(user => user.Id == document.CreatedBy)
+            .Select(user => user.PrincipalKey)
+            .FirstOrDefaultAsync(ct);
+
+        var executeGrantApplied = false;
+        if (!string.IsNullOrWhiteSpace(ownerPrincipalKey))
+        {
+            var alreadyPermitted = false;
+            using var existingGrantsResp = await proxy.GetObjectGrantsAsync("JOB", jobName, ct);
+            if (existingGrantsResp is { IsSuccessStatusCode: true })
+            {
+                var existingGrants = await existingGrantsResp.Content
+                    .ReadFromJsonAsync<List<ObjectGrantEntry>>(CatalogJson, ct);
+                alreadyPermitted = existingGrants?.Any(entry =>
+                    string.Equals(entry.PrincipalKind, "USER", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(entry.PrincipalId, ownerPrincipalKey, StringComparison.OrdinalIgnoreCase)
+                    && (string.Equals(entry.Permission, "EXECUTE", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(entry.Permission, "MANAGE", StringComparison.OrdinalIgnoreCase))) == true;
+            }
+
+            if (!alreadyPermitted)
+            {
+                using var grantResp = await proxy.SetObjectGrantAsync(
+                    "JOB", jobName, "USER", ownerPrincipalKey, "EXECUTE", ct);
+                if (grantResp is null)
+                    return StatusCode(503, new { Error = "Orchestrator service unavailable while applying author grant." });
+                if (!grantResp.IsSuccessStatusCode)
+                {
+                    var body = await grantResp.Content.ReadAsStringAsync(ct);
+                    return string.IsNullOrWhiteSpace(body)
+                        ? StatusCode((int)grantResp.StatusCode)
+                        : new ContentResult
+                        {
+                            StatusCode = (int)grantResp.StatusCode,
+                            ContentType = "application/json",
+                            Content = body
+                        };
+                }
+
+                executeGrantApplied = true;
+                await audit.LogAsync(CurrentUserId, "ORCHESTRATOR_GRANT", "OrchestratorJOB", jobName,
+                    $"USER:{ownerPrincipalKey}=EXECUTE");
+            }
+        }
+
+        await audit.LogAsync(
+            CurrentUserId,
+            "PIPELINE_SLOT_PROVISIONED",
+            "Job",
+            jobName,
+            $"pipelineId={document.Id}; slotCreated={slotCreated}; executeGranted={executeGrantApplied}; principal={ownerPrincipalKey ?? "none"}");
+
+        var message = slotCreated && executeGrantApplied
+            ? $"Provisioned '{jobName}' and granted EXECUTE to pipeline owner."
+            : slotCreated
+                ? $"Provisioned '{jobName}' as a manual run slot."
+                : executeGrantApplied
+                    ? $"Granted EXECUTE on existing slot '{jobName}' to pipeline owner."
+                    : $"Run slot '{jobName}' is already provisioned and executable by its owner.";
+
+        return Ok(new ProvisionPipelineSlotResultDto(
+            document.Id,
+            jobName,
+            slotCreated,
+            executeGrantApplied,
+            ownerPrincipalKey,
+            message));
+    }
+
+    private StudioAuthorizationService? ResolveStudioAuthorization() =>
+        studioAuthorization ?? HttpContext?.RequestServices.GetService<StudioAuthorizationService>();
+
+    private bool CanUseExternalScriptIngress(out bool blockedByDeploymentMode)
+    {
+        var auth = ResolveStudioAuthorization();
+        if (auth is null)
+        {
+            blockedByDeploymentMode = false;
+            return true;
+        }
+
+        blockedByDeploymentMode = auth.Mode != StudioDeploymentMode.SourceControlled;
+        if (blockedByDeploymentMode) return false;
+        return auth.HasCapability(User, StudioCapabilities.ScriptIngress);
+    }
+
+    private static bool IsPublishedBundleUri(string? targetPath) =>
+        !string.IsNullOrWhiteSpace(targetPath) && BundleUri.TryParse(targetPath, out _);
+
+    private static bool IsAllowedCatalogOnlyCreateRequest(CreateJobRequest req)
+    {
+        if (!string.IsNullOrWhiteSpace(req.ScriptText)) return false;
+        if (string.Equals(req.JobType, "REPORT", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(req.JobType, nameof(JobTargetKind.Report), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(req.JobType, "1", StringComparison.Ordinal))
+        {
+            return !string.IsNullOrWhiteSpace(req.TargetPath);
+        }
+        return IsPublishedBundleUri(req.TargetPath);
+    }
+
+    private IActionResult RejectExternalScriptIngress(bool blockedByMode, string message) =>
+        blockedByMode
+            ? NotFound(new { Code = "script_ingress_disabled", Error = message })
+            : StatusCode(StatusCodes.Status403Forbidden, new { Code = "script_ingress_forbidden", Error = message });
+
+    private static bool IsCatalogPipelineSlot(string jobName) =>
+        jobName.StartsWith("PIPELINE:", StringComparison.OrdinalIgnoreCase)
+        && int.TryParse(jobName.AsSpan("PIPELINE:".Length), out var pipelineId)
+        && pipelineId > 0;
+
+    private static string? FormatOwnerDisplayName(PortalUser user)
+    {
+        var fullName = string.Join(" ", new[] { user.FirstName, user.LastName }.Where(part => !string.IsNullOrWhiteSpace(part))).Trim();
+        return string.IsNullOrWhiteSpace(fullName) ? user.UserName : fullName;
+    }
+
+    private sealed record ProvisionSlotProxyResponse(string JobName, bool Created);
+
+    private sealed record ObjectGrantEntry(string PrincipalKind, string PrincipalId, string Permission);
+
+    [HttpPost("sync-governance")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> SyncGovernance(CancellationToken ct = default)
+    {
+        if (governanceSync is null || !governanceSync.IsRemoteOrchestratorConfigured)
+            return StatusCode(503, new { Error = "Remote Orchestrator service is not configured." });
+
+        var summary = await governanceSync.SyncAllAsync(ct);
+        if (summary is null)
+            return StatusCode(503, new { Error = "Orchestrator governance synchronization failed." });
+
+        await audit.LogAsync(
+            CurrentUserId,
+            "ORCHESTRATOR_GOVERNANCE_SYNC",
+            "OrchestratorService",
+            "governance",
+            $"secrets={summary.SecretsSynced}; connections={summary.ConnectionsSynced}; warnings={summary.Warnings.Count}");
+        return Ok(summary);
     }
 
     // ── Service control ───────────────────────────────────────────────────────

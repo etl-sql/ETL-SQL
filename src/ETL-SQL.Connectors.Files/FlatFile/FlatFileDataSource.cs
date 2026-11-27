@@ -718,6 +718,8 @@ namespace ETL_SQL.Connectors.FlatFile
 
             var currentBatch = new DataTable();
             currentBatch.SetColumns(actualHeaders);
+            long targetBytes = _context?.EffectiveBatchTargetBytes ?? ETL_SQL.Core.Spill.SpillFanOut.DefaultTargetBatchBytes;
+            long currentBatchBytes = 0;
             var ignoredExtraColumnCount = Math.Max(0, sourceColumnCount - sourceMapping.Where(i => i >= 0).Distinct().Count());
             var nullFilledMissingColumnCount = sourceMapping.Count(i => i < 0);
             var emitResilienceDiagnostics = ignoredExtraColumnCount > 0 || nullFilledMissingColumnCount > 0;
@@ -726,8 +728,17 @@ namespace ETL_SQL.Connectors.FlatFile
             if (!_hasHeader)
             {
                 effectiveCancellationToken.ThrowIfCancellationRequested();
-                await currentBatch.AddRowAsync(CreateRow(headers, currentBatch, sourceMapping));
+                var headerRow = CreateRow(headers, currentBatch, sourceMapping);
+                await currentBatch.AddRowAsync(headerRow);
+                currentBatchBytes += headerRow.EstimateHeapBytes();
                 affectedRowCount++;
+                if (currentBatch.Rows.Count >= batchSize || (targetBytes > 0 && currentBatchBytes >= targetBytes))
+                {
+                    yield return currentBatch;
+                    currentBatch = new DataTable();
+                    currentBatch.SetColumns(actualHeaders);
+                    currentBatchBytes = 0;
+                }
             }
 
             int totalRowsRead = 0;
@@ -742,14 +753,17 @@ namespace ETL_SQL.Connectors.FlatFile
                 {
                     var dataLine = lineQueue.Dequeue();
                     await ProcessDataLine(dataLine, currentBatch, actualHeaders, sourceMapping, effectiveCancellationToken);
+                    if (currentBatch.Rows.Count > 0)
+                        currentBatchBytes += currentBatch.Rows[^1].EstimateHeapBytes();
                     totalRowsRead++;
                     affectedRowCount++;
 
-                    if (currentBatch.Rows.Count >= batchSize)
+                    if (currentBatch.Rows.Count >= batchSize || (targetBytes > 0 && currentBatchBytes >= targetBytes))
                     {
                         yield return currentBatch;
                         currentBatch = new DataTable();
                         currentBatch.SetColumns(actualHeaders);
+                        currentBatchBytes = 0;
                     }
                 }
             }

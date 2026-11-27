@@ -37,42 +37,83 @@ public class OrchestratorPollerService(
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         using var activity = BackgroundServiceObservability.StartRun("portal", "orchestrator-poller", "poll");
-        var orchDbPath = dbLocator.Resolve();
-
-        if (storeFactory.Provider == DatabaseProvider.Sqlite
-            && (orchDbPath is null || !File.Exists(orchDbPath)))
-        {
-            log.LogDebug("OrchestratorPoller: Orchestrator DB not found at {Path} — degraded mode", orchDbPath);
-            CompletePoll(activity, sw, "degraded");
-            return;
-        }
 
         List<(string JobName, DateTime EndTime)> completions;
         var pollUpperBound = DateTime.UtcNow;
-        try
+
+        await using var pollScope = scopes.CreateAsyncScope();
+        var proxy = pollScope.ServiceProvider.GetService<OrchestratorProxyService>();
+        if (proxy is { IsConfigured: true })
         {
-            var store = storeFactory.Create(orchDbPath);
-            await store.InitializeAsync();
-            const int pageSize = 1000;
-            var completedRows = new List<ETL_SQL.Core.Data.JobHistoryEntry>();
-            for (var offset = 0; ; offset += pageSize)
+            try
             {
-                var page = (await store.GetCompletedHistoryAsync(
-                    _lastPollTime, pollUpperBound, pageSize, offset)).ToList();
-                completedRows.AddRange(page);
-                if (page.Count < pageSize) break;
+                const int pageSize = 1000;
+                var completedRows = new List<ETL_SQL.Core.Data.JobHistoryEntry>();
+                for (var offset = 0; ; offset += pageSize)
+                {
+                    var page = await proxy.GetCompletedHistoryAsync(
+                        _lastPollTime, pollUpperBound, pageSize, offset, ct);
+                    if (page is null)
+                    {
+                        log.LogWarning("OrchestratorPoller: Orchestrator HTTP completions unavailable — degraded mode");
+                        CompletePoll(activity, sw, "degraded");
+                        return;
+                    }
+                    completedRows.AddRange(page);
+                    if (page.Count < pageSize) break;
+                }
+
+                completions = completedRows
+                    .Where(entry => string.Equals(entry.Status, "SUCCESS", StringComparison.OrdinalIgnoreCase)
+                        && entry.EndTime.HasValue)
+                    .Select(entry => (entry.JobName, EndTime: entry.EndTime!.Value.ToUniversalTime()))
+                    .ToList();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                log.LogWarning("OrchestratorPoller: Orchestrator HTTP completions query failed — {FailureType}",
+                    ex.GetType().Name);
+                CompletePoll(activity, sw, "degraded");
+                return;
+            }
+        }
+        else
+        {
+            var orchDbPath = dbLocator.Resolve();
+
+            if (storeFactory.Provider == DatabaseProvider.Sqlite
+                && (orchDbPath is null || !File.Exists(orchDbPath)))
+            {
+                log.LogDebug("OrchestratorPoller: Orchestrator DB not found at {Path} — degraded mode", orchDbPath);
+                CompletePoll(activity, sw, "degraded");
+                return;
             }
 
-            completions = completedRows
-                .Where(entry => string.Equals(entry.Status, "SUCCESS", StringComparison.OrdinalIgnoreCase))
-                .Select(entry => (entry.JobName, EndTime: entry.EndTime!.Value.ToUniversalTime()))
-                .ToList();
-        }
-        catch (Exception ex)
-        {
-            log.LogWarning("OrchestratorPoller: Orchestrator DB query failed — {Message}", ex.Message);
-            CompletePoll(activity, sw, "degraded");
-            return;
+            try
+            {
+                var store = storeFactory.Create(orchDbPath);
+                await store.InitializeAsync();
+                const int pageSize = 1000;
+                var completedRows = new List<ETL_SQL.Core.Data.JobHistoryEntry>();
+                for (var offset = 0; ; offset += pageSize)
+                {
+                    var page = (await store.GetCompletedHistoryAsync(
+                        _lastPollTime, pollUpperBound, pageSize, offset)).ToList();
+                    completedRows.AddRange(page);
+                    if (page.Count < pageSize) break;
+                }
+
+                completions = completedRows
+                    .Where(entry => string.Equals(entry.Status, "SUCCESS", StringComparison.OrdinalIgnoreCase))
+                    .Select(entry => (entry.JobName, EndTime: entry.EndTime!.Value.ToUniversalTime()))
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                log.LogWarning("OrchestratorPoller: Orchestrator DB query failed — {Message}", ex.Message);
+                CompletePoll(activity, sw, "degraded");
+                return;
+            }
         }
 
         if (!completions.Any())

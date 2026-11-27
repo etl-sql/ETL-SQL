@@ -23,6 +23,7 @@ etl-sql admin <subcommand>
 | [`orchestrator`](admin-orchestrator.md) | Manage per-object Orchestrator grants and ownership |
 | [`portal-whoami`](admin-portal-whoami.md) | Resolve Portal credentials and print the identity, roles, and scopes (never a secret) |
 | [`promotion`](admin-promotion.md) | Inspect and prepare deployment-profile promotions |
+| [`purge-data`](admin-purge-data.md) | Delete all installed ETL-SQL runtime data (reports, snapshots, databases, logs, sessions, secrets) |
 | [`restore`](admin-restore.md) | Validate and restore a backup (data + keys archives) |
 | [`service-account`](admin-service-account.md) | Manage Portal service accounts |
 | [`session`](admin-session.md) | Inspect and disconnect Portal sign-in sessions |

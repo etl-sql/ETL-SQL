@@ -80,7 +80,7 @@ public static class EngineCatalog
     public static readonly List<string> Tables = new()
     {
         "connections", "tables", "views", "columns", "variables", "version", "safe_zones",
-        "profile", "connection_config", "jobs", "job_history", "job_state", "host_metrics",
+        "profile", "connection_config", "datasets", "jobs", "job_history", "job_state", "host_metrics",
         "bundles", "bundle_files", "bundle_dependencies", "tags",
         "lineage", "locks", "sessions", "lineage_history", "missing_tags",
         "protected_data", "protected_data_suggestions", "data_quality_rules", "stewardship_score", "stewardship_gaps",
@@ -97,8 +97,9 @@ public static class EngineCatalog
         ["version"] = new() { new("component", "VARCHAR"), new("version", "VARCHAR"), new("metadata", "VARCHAR") },
         ["safe_zones"] = new() { new("path", "VARCHAR"), new("is_system_path", "VARCHAR"), new("resolution", "VARCHAR") },
         ["connection_config"] = new() { new("connection_name", "VARCHAR"), new("option", "VARCHAR"), new("value", "VARCHAR") },
+        ["datasets"] = new() { new("name", "VARCHAR"), new("folder_path", "VARCHAR"), new("access_level", "VARCHAR"), new("row_count", "VARCHAR"), new("last_refresh", "VARCHAR"), new("is_stale", "VARCHAR"), new("refresh_interval", "VARCHAR"), new("ttl", "VARCHAR") },
         ["jobs"] = new() { new("name", "VARCHAR"), new("schedule", "VARCHAR"), new("last_run", "VARCHAR"), new("next_run", "VARCHAR"), new("script", "VARCHAR"), new("enabled", "VARCHAR") },
-        ["job_history"] = new() { new("id", "VARCHAR"), new("job_name", "VARCHAR"), new("start_time", "VARCHAR"), new("end_time", "VARCHAR"), new("status", "VARCHAR"), new("rows_processed", "VARCHAR"), new("peak_ram_mb", "VARCHAR"), new("cpu_time_s", "VARCHAR"), new("error_message", "VARCHAR") },
+        ["job_history"] = new() { new("id", "VARCHAR"), new("job_name", "VARCHAR"), new("start_time", "VARCHAR"), new("end_time", "VARCHAR"), new("status", "VARCHAR"), new("rows_processed", "VARCHAR"), new("rows_warned", "VARCHAR"), new("rows_quarantined", "VARCHAR"), new("failed_rule_counts", "VARCHAR"), new("peak_ram_mb", "VARCHAR"), new("cpu_time_s", "VARCHAR"), new("error_message", "VARCHAR") },
         ["job_state"] = new() { new("job_name", "VARCHAR"), new("state_key", "VARCHAR"), new("state_value", "VARCHAR"), new("updated_at", "VARCHAR") },
         ["host_metrics"] = new() { new("node_id", "VARCHAR"), new("captured_at", "VARCHAR"), new("memory_load_percent", "VARCHAR"), new("process_cpu_percent", "VARCHAR"), new("host_cpu_percent", "VARCHAR"), new("state_disk_free_mb", "VARCHAR"), new("spill_disk_free_mb", "VARCHAR") },
         ["bundles"] = new() { new("bundle_name", "VARCHAR"), new("version", "VARCHAR"), new("entry_path", "VARCHAR"), new("content_hash", "VARCHAR"), new("published_at", "VARCHAR"), new("publisher", "VARCHAR"), new("description", "VARCHAR") },
@@ -120,7 +121,7 @@ public static class EngineCatalog
         ["missing_tags"] = new() { new("target_table", "VARCHAR"), new("target_column", "VARCHAR"), new("missing_tags", "VARCHAR"), new("present_tags", "VARCHAR"), new("run_at", "VARCHAR"), new("job_name", "VARCHAR"), new("script_path", "VARCHAR") },
         ["protected_data"] = new() { new("id", "VARCHAR"), new("run_at", "VARCHAR"), new("job_name", "VARCHAR"), new("target_table", "VARCHAR"), new("target_column", "VARCHAR"), new("source_tables", "VARCHAR"), new("operation", "VARCHAR"), new("protection_tags", "VARCHAR"), new("protection_reason", "VARCHAR"), new("owner", "VARCHAR"), new("steward", "VARCHAR"), new("contact", "VARCHAR"), new("domain", "VARCHAR"), new("classification", "VARCHAR"), new("quality", "VARCHAR"), new("tags", "VARCHAR"), new("source_file", "VARCHAR"), new("line", "VARCHAR") },
         ["protected_data_suggestions"] = new() { new("id", "VARCHAR"), new("run_at", "VARCHAR"), new("job_name", "VARCHAR"), new("target_table", "VARCHAR"), new("target_column", "VARCHAR"), new("source_tables", "VARCHAR"), new("source_columns", "VARCHAR"), new("suggested_tag", "VARCHAR"), new("suggested_value", "VARCHAR"), new("confidence", "VARCHAR"), new("evidence_kind", "VARCHAR"), new("evidence", "VARCHAR"), new("reason", "VARCHAR"), new("existing_tags", "VARCHAR"), new("source_file", "VARCHAR"), new("line", "VARCHAR") },
-        ["data_quality_rules"] = new() { new("target_table", "VARCHAR"), new("target_column", "VARCHAR"), new("rule_tag", "VARCHAR"), new("rule", "VARCHAR"), new("action", "VARCHAR"), new("source_file", "VARCHAR"), new("line", "VARCHAR") },
+        ["data_quality_rules"] = new() { new("target_table", "VARCHAR"), new("target_column", "VARCHAR"), new("rule_clause", "VARCHAR"), new("rule", "VARCHAR"), new("action", "VARCHAR"), new("source_file", "VARCHAR"), new("line", "VARCHAR") },
         ["stewardship_score"] = new() { new("scope_type", "VARCHAR"), new("scope_name", "VARCHAR"), new("component", "VARCHAR"), new("numerator", "INT"), new("denominator", "INT"), new("percentage", "DECIMAL"), new("asset_count", "INT"), new("column_count", "INT"), new("weight", "DECIMAL"), new("evaluated_at_utc", "DATETIME"), new("definition_version", "VARCHAR") },
         ["stewardship_gaps"] = new() { new("scope_type", "VARCHAR"), new("scope_name", "VARCHAR"), new("component", "VARCHAR"), new("target_table", "VARCHAR"), new("target_column", "VARCHAR"), new("requirement", "VARCHAR"), new("source_file", "VARCHAR"), new("line", "INT"), new("evaluated_at_utc", "DATETIME"), new("definition_version", "VARCHAR") },
         ["job_statement_metrics"] = new()
@@ -141,7 +142,11 @@ public static class EngineCatalog
             new("timestamp", "VARCHAR"), new("statement", "VARCHAR"), new("rows_processed", "VARCHAR"), new("index_used", "VARCHAR"), new("duration_ms", "VARCHAR"), new("memory_kb", "VARCHAR"),
             new("spilled_bytes", "VARCHAR"), new("subquery_hits", "VARCHAR"), new("subquery_misses", "VARCHAR"), new("subquery_spilled_bytes", "VARCHAR"), new("partitions", "VARCHAR"),
             new("queue_wait_ms", "VARCHAR"), new("lock_wait_ms", "VARCHAR"), new("plan_decisions", "VARCHAR"), new("plan_accepted", "VARCHAR"), new("plan_fallbacks", "VARCHAR"),
-            new("plan_rejected", "VARCHAR"), new("plan_degraded", "VARCHAR"), new("plan_fallback_summary", "VARCHAR")
+            new("plan_rejected", "VARCHAR"), new("plan_degraded", "VARCHAR"), new("plan_fallback_summary", "VARCHAR"),
+            new("dq_rows_validated", "VARCHAR"), new("dq_rows_quarantined", "VARCHAR"), new("dq_rows_warned", "VARCHAR"), new("dq_validation_ms", "VARCHAR"),
+            new("spill_read_bytes", "VARCHAR"), new("spill_extents", "VARCHAR"), new("partition_passes", "VARCHAR"), new("aggregate_groups", "VARCHAR"),
+            new("aggregate_expansion_ratio", "VARCHAR"), new("sort_spills", "VARCHAR"), new("cpu_time_ms", "VARCHAR"), new("spill_write_ms_per_mb", "VARCHAR"),
+            new("storage_pressure_events", "VARCHAR")
         }
     };
 }

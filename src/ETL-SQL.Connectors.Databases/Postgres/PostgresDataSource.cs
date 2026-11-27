@@ -38,6 +38,19 @@ namespace ETL_SQL.Connectors.Postgres
         {
             _context = context;
             _logger = context.Logger;
+            if (options != null && options.TryGetValue("SEARCH_PATH", out var searchPath))
+            {
+                var normalizedSearchPath = DatabaseConnectionStringBuilder.ValidateAndNormalizePostgresSearchPath(searchPath);
+                if (!string.IsNullOrWhiteSpace(connectionString))
+                {
+                    var builder = new NpgsqlConnectionStringBuilder(connectionString);
+                    if (string.IsNullOrEmpty(builder.SearchPath))
+                    {
+                        builder.SearchPath = normalizedSearchPath;
+                        connectionString = builder.ConnectionString;
+                    }
+                }
+            }
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;
@@ -177,7 +190,7 @@ namespace ETL_SQL.Connectors.Postgres
             if (!append) await TruncateAsync(effectiveCancellationToken);
 
             var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
-            System.IO.TextWriter? writer = null;
+            NpgsqlCopyTextWriter? writer = null;
             try
             {
                 await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
@@ -189,7 +202,7 @@ namespace ETL_SQL.Connectors.Postgres
                         // A column name is data here. An embedded quote is doubled so it stays
                         // inside the identifier.
                         var cols = string.Join(", ", batch.ColumnNames.Select(c => $"\"{c.Replace("\"", "\"\"")}\""));
-                        writer = await conn.BeginTextImportAsync(
+                        writer = (NpgsqlCopyTextWriter)await conn.BeginTextImportAsync(
                             $"COPY {QuoteIdentifier(_tableName)} ({cols}) FROM STDIN",
                             effectiveCancellationToken);
                     }
@@ -201,11 +214,24 @@ namespace ETL_SQL.Connectors.Postgres
                             var val = row[key];
                             if (val == null || val == DBNull.Value) return "\\N";
                             var s = FormatCopyValue(val);
-                            return s.Replace("\t", " ").Replace("\n", " ").Replace("\r", " ");
+                            return EscapeCopyText(s);
                         });
                         await writer.WriteLineAsync(string.Join("\t", values).AsMemory(), effectiveCancellationToken);
                     }
                 }
+
+                if (writer != null)
+                {
+                    // Disposing completes the COPY; the server reports bad values here.
+                    var completing = writer;
+                    writer = null;
+                    await completing.DisposeAsync();
+                }
+            }
+            catch (PostgresException pg) when (!string.IsNullOrEmpty(pg.Where))
+            {
+                // Where names the COPY line and column ("COPY orders, line 2, column id: ...").
+                throw ConnectorExceptionWrapper.Wrap("PostgreSQL", new InvalidOperationException($"{pg.Message} ({pg.Where})"));
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -213,7 +239,18 @@ namespace ETL_SQL.Connectors.Postgres
             }
             finally
             {
-                if (writer != null) await writer.DisposeAsync();
+                if (writer != null)
+                {
+                    // Still open means the source or a value failed partway. Disposing would complete
+                    // the COPY and commit the rows already sent, so cancel first and nothing lands.
+                    try { await writer.CancelAsync(); }
+                    catch (Exception cancelEx) when (cancelEx is NpgsqlException or InvalidOperationException)
+                    {
+                        // A broken connection cannot commit the COPY either. Keep the original
+                        // failure as the one the caller sees.
+                    }
+                    await writer.DisposeAsync();
+                }
                 if (!isShared) await conn.DisposeAsync();
             }
         }
@@ -344,8 +381,20 @@ namespace ETL_SQL.Connectors.Postgres
             return value;
         }
 
+        // COPY text format treats backslash as an escape: \N is NULL and \t, \n, \r are control
+        // characters. Escape the backslash first, then the delimiter and line breaks, so every value
+        // (a Windows path, text with tabs or newlines, a literal \N) arrives exactly as written.
+        internal static string EscapeCopyText(string value) => value
+            .Replace("\\", "\\\\")
+            .Replace("\t", "\\t")
+            .Replace("\n", "\\n")
+            .Replace("\r", "\\r");
+
         private static string FormatCopyValue(object value) => value switch
         {
+            // bytea hex input format. EscapeCopyText then doubles the backslash for COPY.
+            byte[] bytes => "\\x" + Convert.ToHexString(bytes),
+            ReadOnlyMemory<byte> memory => "\\x" + Convert.ToHexString(memory.Span),
             DateTimeOffset offset => offset.UtcDateTime.ToString(
                 "yyyy-MM-dd HH:mm:ss.ffffff+00", System.Globalization.CultureInfo.InvariantCulture),
             DateOnly dateOnly => dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),

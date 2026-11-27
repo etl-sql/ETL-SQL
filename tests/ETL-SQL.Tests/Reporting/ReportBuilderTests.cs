@@ -41,7 +41,8 @@ namespace ETL_SQL.Tests.Reporting.Reporting
                         Name        = "SalesChart",
                         VisualType  = "BAR",
                         Columns     = new List<string> { "Month", "Revenue" },
-                        Rows        = new List<List<string?>> { new List<string?> { "Jan", "1000" } }
+                        Rows        = new List<List<string?>> { new List<string?> { "Jan", "1000" } },
+                        PlotPlan    = GrammarOfGraphics.GrammarOfGraphicsContractFixtures.PlotPlan()
                     }
                 }
             };

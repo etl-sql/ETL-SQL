@@ -34,11 +34,13 @@ using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Engine.Services;
+using ETL_SQL.Infrastructure.Sqlite;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace ETL_SQL.Orchestrator
 {
@@ -49,27 +51,12 @@ namespace ETL_SQL.Orchestrator
         /// options. Shared with hosts (e.g. the Portal) that override the provider at
         /// resolve time but fall back to the factory-based default for non-host-specific kinds.
         /// </summary>
-        public static SecretProviderOptions BuildSecretProviderOptions(IConfiguration configuration) => new()
-        {
-            Provider = configuration["Governance:Secrets:Provider"]
-                ?? configuration["Secrets:Provider"]
-                ?? "Environment",
-            EnvironmentPrefix = configuration["Governance:Secrets:EnvironmentPrefix"]
-                ?? configuration["Secrets:EnvironmentPrefix"],
-            OsStoreRoot = configuration["Governance:Secrets:OsStoreRoot"]
-                ?? configuration["Secrets:OsStoreRoot"],
-            VaultEndpoint = configuration["Governance:Secrets:VaultEndpoint"]
-                ?? configuration["Secrets:VaultEndpoint"],
-            VaultBearerToken = configuration["Governance:Secrets:VaultBearerToken"]
-                ?? configuration["Secrets:VaultBearerToken"]
-        };
+        public static SecretProviderOptions BuildSecretProviderOptions(IConfiguration configuration) =>
+            SecretProviderOptions.FromConfiguration(key => configuration[key]);
 
         /// <summary>Maps the Governance:ConnectionCatalog configuration section to catalog options.</summary>
-        public static ConnectionCatalogOptions BuildConnectionCatalogOptions(IConfiguration configuration) => new()
-        {
-            Provider = configuration["Governance:ConnectionCatalog:Provider"],
-            LocalRoot = configuration["Governance:ConnectionCatalog:LocalRoot"]
-        };
+        public static ConnectionCatalogOptions BuildConnectionCatalogOptions(IConfiguration configuration) =>
+            ConnectionCatalogOptions.FromConfiguration(key => configuration[key]);
 
         public static ToolCatalogOptions BuildToolCatalogOptions(IConfiguration configuration)
         {
@@ -84,11 +71,15 @@ namespace ETL_SQL.Orchestrator
                 LocalRoot = configuration["Governance:Tools:LocalRoot"] ?? configuration["Governance:Tools:OsStoreRoot"],
                 OwnershipMode = ownershipMode,
                 ServiceIdentity = configuration["Governance:Tools:ServiceIdentity"],
-                ValidateOwnership = configuration.GetValue<bool?>("Governance:Tools:ValidateOwnership") ?? true
+                ValidateOwnership = configuration.GetValue<bool?>("Governance:Tools:ValidateOwnership") ?? true,
+                RequireUseGrants = configuration.GetValue<bool>("Governance:Tools:RequireUseGrants"),
+                ArtifactRoot = configuration["Governance:Tools:ArtifactRoot"],
+                RequireArtifactApproval = configuration.GetValue<bool>("Governance:Tools:RequireArtifactApproval")
             };
         }
 
-        public static IServiceCollection AddEtlSqlEngine(this IServiceCollection services, IConfiguration configuration)
+        public static IServiceCollection AddEtlSqlEngine(this IServiceCollection services, IConfiguration configuration,
+            bool requireToolUseGrants = false)
         {
             // 1. Core Services
             services.AddSingleton<CliContext>(new CliContext());
@@ -112,9 +103,13 @@ namespace ETL_SQL.Orchestrator
             if (connectionCatalog != null)
                 services.AddSingleton(connectionCatalog);
 
-            var toolCatalog = ToolCatalogProviderFactory.Create(BuildToolCatalogOptions(configuration));
+            var toolOptions = BuildToolCatalogOptions(configuration);
+            toolOptions.RequireUseGrants |= requireToolUseGrants;
+            var toolCatalog = ToolCatalogProviderFactory.Create(toolOptions);
             if (toolCatalog != null)
                 services.AddSingleton(toolCatalog);
+            if (!string.IsNullOrWhiteSpace(toolOptions.ArtifactRoot))
+                services.TryAddSingleton<IToolApprovalStore, SqliteToolApprovalStore>();
 
             services.AddSingleton<ICapabilityTokenIssuer, ETL_SQL.Engine.Governance.DefaultCapabilityTokenIssuer>();
 
@@ -130,9 +125,10 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<ETL_SQL.Core.Interfaces.ILanguageHelpRegistry>(helpRegistry);
 
             services.AddSingleton<ISystemResources, DefaultSystemResources>();
-            services.AddSingleton<IBufferManager, BufferManager>();
-            services.AddSingleton<BufferManager>();
             services.Configure<BufferManagerOptions>(configuration.GetSection("Orchestration:ResourceManagement"));
+            services.AddSingleton<BufferManager>();
+            services.AddSingleton<IBufferManager>(sp => sp.GetRequiredService<BufferManager>());
+            services.AddSingleton<IMemoryGrantArbiter>(sp => sp.GetRequiredService<BufferManager>());
 
             services.AddSingleton<ETL_SQL.Core.Execution.ISessionStateManager>(sp =>
             {
@@ -181,6 +177,9 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IConnector, MongodbConnector>();
             services.AddSingleton<IConnector, Neo4jConnector>();
             services.AddSingleton<IConnector, KafkaConnector>();
+            // The database connectors' retry policy is process-wide; Connectors:Retry configures it.
+            ETL_SQL.Connectors.Shared.ConnectorRetryPolicy.Initialize(
+                ETL_SQL.Connectors.Shared.ConnectorRetryPolicy.OptionsFrom(configuration));
 
             services.AddSingleton<IConnector>(sp => new FtpConnector(
                 configuration["Connectors:Ftp:Host"] ?? "localhost",
@@ -239,7 +238,12 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<ITenantJobEvidenceStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IJobCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IOrchestratorAuthorizationStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
+            services.AddSingleton<IOrchestratorObjectAuthorizer>(sp =>
+                new OrchestratorObjectAuthorizer(
+                    sp.GetRequiredService<IOrchestratorAuthorizationStore>(),
+                    allowAnonymousWhenUnbound: true));
             services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
+            services.AddSingleton<ITenantBundleStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<ILineageCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<ITenantLineageCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<INodeRegistryStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
@@ -264,6 +268,7 @@ namespace ETL_SQL.Orchestrator
                     sp.GetRequiredService<IJobHistoryStore>(),
                     sp.GetRequiredService<IClusterLockStore>()));
             services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
+            services.TryAddSingleton<ChildProcessTracker>();
             services.AddSingleton<INodeCapacityMonitor, NodeCapacityMonitor>();
             services.AddSingleton<JobThrottle>();
             services.AddSingleton<NotificationDispatchService>();

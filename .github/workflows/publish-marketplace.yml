@@ -85,12 +85,15 @@ jobs:
         run: |
           set -euo pipefail
           listed() { # $1 version, $2 target -> exit 0 when the gallery lists that version+target validated
-            curl -fsS -X POST "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery" \
+            curl -fsS --connect-timeout 10 --max-time 30 -X POST "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery" \
               -H "Content-Type: application/json" -H "Accept: application/json;api-version=7.2-preview.1" \
               -d "{\"filters\":[{\"criteria\":[{\"filterType\":7,\"value\":\"$EXT_ID\"}]}],\"flags\":1}" \
             | jq -e --arg v "$1" --arg t "$2" \
               '[.results[0].extensions[]?.versions[]? | select(.version==$v and .targetPlatform==$t and ((.flags // "") | test("validated")))] | length > 0' >/dev/null
           }
+          # Four 45-minute waits exceed this step's 150-minute budget. Stop with a useful
+          # diagnostic before Actions kills the job, leaving time for an in-flight upload.
+          publish_deadline=$((SECONDS + 140 * 60))
           for vsix in dist/*.vsix; do
             name=$(basename "$vsix")
             if [[ ! "$name" =~ ^(.+)-([0-9]+\.[0-9]+\.[0-9]+)-([a-z0-9]+-[a-z0-9]+)\.vsix$ ]]; then
@@ -101,13 +104,18 @@ jobs:
             if listed "$version" "$target"; then
               echo "$EXT_ID $version ($target) is already live; skipping."; continue
             fi
+            if (( SECONDS >= publish_deadline )); then
+              echo "::error::Marketplace publication exhausted its total wait budget. Re-run to continue with unpublished targets."
+              exit 1
+            fi
             echo "Publishing $name to Visual Studio Marketplace via OIDC..."
-            npx --yes @vscode/vsce@4.1.1 publish --oidc --skip-duplicate --packagePath "$vsix"
+            timeout 5m npx --yes @vscode/vsce@4.1.1 publish --oidc --skip-duplicate --packagePath "$vsix"
             echo "Waiting for the Marketplace to validate $target..."
             deadline=$((SECONDS + 45 * 60))
+            if (( deadline > publish_deadline )); then deadline=$publish_deadline; fi
             until listed "$version" "$target"; do
               if (( SECONDS > deadline )); then
-                echo "::error::$EXT_ID $version ($target) was uploaded but is not listed after 45 minutes. Check View status in the publisher hub."
+                echo "::error::$EXT_ID $version ($target) was uploaded but is not listed before the validation deadline. Check View status in the publisher hub; re-run to continue."
                 exit 1
               fi
               sleep 60

@@ -41,13 +41,14 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       lanes: ${{ steps.impact.outputs.lanes }}
+      test_projects: ${{ steps.impact.outputs.test_projects }}
       browser_shards: ${{ steps.impact.outputs.browser_shards }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 13
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       # Event values are passed as data, never interpolated into shell source.
@@ -80,6 +81,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $selection = Get-Content release-validation/preflight/ci-impact.json -Raw | ConvertFrom-Json
           "lanes=$($selection.lanes | ConvertTo-Json -Compress -AsArray)" >> $env:GITHUB_OUTPUT
+          "test_projects=$(ConvertTo-Json -InputObject @($selection.testProjects | Where-Object { $_ }) -Compress)" >> $env:GITHUB_OUTPUT
           "browser_shards=$($selection.browserShards | ConvertTo-Json -Compress -AsArray)" >> $env:GITHUB_OUTPUT
       - name: Prepare pinned workflow checker
         timeout-minutes: 13
@@ -91,7 +93,7 @@ jobs:
         run: node scripts/release-preflight.mjs --release-branch "$ETLSQL_RELEASE_BRANCH"
       - name: Upload preflight logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: source-preflight-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/preflight/
@@ -103,15 +105,15 @@ jobs:
     if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
     name: Build Verification
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 135
 
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -167,8 +169,14 @@ jobs:
           DOTNET_GCHeapHardLimit: '200000000'
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-smoke.ps1 -ScriptArguments @('-Lane', 'all', '-ProjectGroup', 'engine', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/build/engine-smoke -TimeoutSeconds 1200
 
-      - name: Run language server tests (Pull Requests)
-        if: github.event_name == 'pull_request'
+      - name: Run engine regression tests (Pull Requests)
+        if: github.event_name == 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.test_projects || '["engine"]'), 'engine')
+        shell: pwsh
+        timeout-minutes: 45
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'engine', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-ResultsDirectory', 'release-validation/build/engine-regression') -EvidenceDirectory release-validation/build/engine-regression-process -TimeoutSeconds 2580
+
+      - name: Run language server tests
+        if: contains(fromJSON(needs.source-preflight.outputs.test_projects || '["language-server"]'), 'language-server')
         shell: pwsh
         timeout-minutes: 22
         env:
@@ -177,7 +185,7 @@ jobs:
 
       - name: Retain build diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -192,7 +200,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
       - uses: ./.github/actions/prepare-test-project
         with:
@@ -211,10 +219,46 @@ jobs:
       - name: Retain Portal smoke diagnostics
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: portal-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/portal-smoke/
+          if-no-files-found: error
+          retention-days: 30
+
+  # The Portal regression lane's twelve shards ran past one job's budget in sequence (33 min at shard
+  # 8), so they are split across four workers of three shards; a shard takes 7-10 minutes on a
+  # hosted runner. Group 1 also runs the HostedServices process and the lineage UI smoke.
+  portal-regression:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test') && contains(fromJSON(needs.source-preflight.outputs.test_projects || '["portal"]'), 'portal')
+    name: Portal Regression (${{ matrix.group }}/4)
+    runs-on: windows-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        timeout-minutes: 15
+      - uses: ./.github/actions/prepare-test-project
+        with:
+          project: tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj
+          evidence: release-validation/portal-regression/prepare
+      - name: Run assigned Portal regression shards
+        shell: pwsh
+        timeout-minutes: 42
+        env:
+          PORTAL_GROUP: ${{ matrix.group }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'portal', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-PortalShardGroup', $env:PORTAL_GROUP, '-PortalShardGroupCount', '4', '-ResultsDirectory', 'release-validation/portal-regression/results') -EvidenceDirectory release-validation/portal-regression/process -TimeoutSeconds 2400
+      - name: Retain Portal regression diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: portal-regression-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/portal-regression/
           if-no-files-found: error
           retention-days: 30
 
@@ -229,7 +273,7 @@ jobs:
       matrix:
         group: [1, 2, 3]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
       - uses: ./.github/actions/prepare-test-project
         with:
@@ -244,7 +288,7 @@ jobs:
       - name: Retain engine group results
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: engine-coverage-group-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/engine-coverage/
@@ -253,7 +297,7 @@ jobs:
       - name: Retain engine group diagnostics
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: engine-coverage-diagnostics-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -277,7 +321,7 @@ jobs:
       matrix:
         group: [1, 2, 3]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
       - uses: ./.github/actions/prepare-test-project
         with:
@@ -297,7 +341,7 @@ jobs:
       - name: Retain spill group diagnostics
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: spill-certification-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -308,7 +352,7 @@ jobs:
           retention-days: 30
 
   build-and-test:
-    needs: [source-preflight, build-verification, portal-smoke, engine-coverage]
+    needs: [source-preflight, build-verification, portal-smoke, portal-regression, engine-coverage]
     if: always() && needs.source-preflight.result == 'success' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
     name: Build & Test
     runs-on: windows-latest
@@ -320,17 +364,22 @@ jobs:
         env:
           BUILD_RESULT: ${{ needs.build-verification.result }}
           PORTAL_RESULT: ${{ needs.portal-smoke.result }}
+          PORTAL_REGRESSION_RESULT: ${{ needs.portal-regression.result }}
+          TEST_PROJECTS: ${{ needs.source-preflight.outputs.test_projects }}
           ENGINE_RESULT: ${{ needs.engine-coverage.result }}
           CI_EVENT: ${{ github.event_name }}
         run: |
           if ($env:BUILD_RESULT -cne 'success' -or $env:PORTAL_RESULT -cne 'success') { throw 'Build or Portal smoke worker did not pass.' }
+          $portalSelected = [string]::IsNullOrWhiteSpace($env:TEST_PROJECTS) -or @($env:TEST_PROJECTS | ConvertFrom-Json) -ccontains 'portal'
+          $expectedPortalRegression = if ($portalSelected) { 'success' } else { 'skipped' }
+          if ($env:PORTAL_REGRESSION_RESULT -cne $expectedPortalRegression) { throw 'Portal regression workers did not reach the required state.' }
           $expectedEngine = if ($env:CI_EVENT -ceq 'pull_request') { 'skipped' } else { 'success' }
           if ($env:ENGINE_RESULT -cne $expectedEngine) { throw 'Engine coverage workers did not reach the required state.' }
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
       - name: Download all retained engine group attempts
         if: github.event_name != 'pull_request'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: engine-coverage-group-*-${{ github.run_id }}-*
           path: release-validation/engine-groups
@@ -350,7 +399,7 @@ jobs:
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-CoverageGate.ps1 -ScriptArguments @('-CoverageDirectory', 'coverage', '-MinimumLineCoverage', '70') -EvidenceDirectory release-validation/coverage-aggregate -TimeoutSeconds 300
       - name: Retain aggregate coverage evidence
         if: always() && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: engine-coverage-aggregate-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -367,12 +416,12 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
       - name: Install browser compiler
@@ -389,7 +438,7 @@ jobs:
         run: node scripts/verify-source-only-preparation.mjs --evidence artifacts/browser-assets-source-only.json
 
       - name: Upload browser asset ownership and hashes
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: browser-asset-ownership-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -439,7 +488,7 @@ jobs:
 
       - name: Retain consumer contract diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: consumer-contracts-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/consumer-contracts/
@@ -459,7 +508,7 @@ jobs:
 
       - name: Retain HA contract diagnostics
         if: always() && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ha-contracts-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/ha-contracts/
@@ -477,10 +526,10 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -570,7 +619,7 @@ jobs:
 
       - name: Retain extension CI diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: vscode-checks-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/vscode/
@@ -595,10 +644,10 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -611,7 +660,7 @@ jobs:
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
 
@@ -663,7 +712,7 @@ jobs:
 
       - name: Retain sample diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sample-diagnostics-${{ matrix.platform }}-${{ github.run_attempt }}
           path: release-validation/samples
@@ -687,10 +736,10 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -707,7 +756,7 @@ jobs:
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/sync-assets.js') -EvidenceDirectory artifacts/browser-shard/preparation -TimeoutSeconds 360
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
 
@@ -726,7 +775,7 @@ jobs:
       # Keyed on the Microsoft.Playwright version in Directory.Packages.props: bumping the package
       # must fetch a matching browser build rather than reuse the previous one.
       - name: Cache Playwright browsers
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~\AppData\Local\ms-playwright
           key: playwright-windows-${{ hashFiles('Directory.Packages.props') }}
@@ -757,7 +806,7 @@ jobs:
 
       - name: Retain browser shard diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: browser-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/browser-shard/
@@ -771,9 +820,9 @@ jobs:
     if: always() && needs.source-preflight.result == 'success' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'portal-browser-journey') && needs.source-preflight.outputs.browser_shards == '[1,2,3]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 8
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Require all browser jobs to pass
@@ -781,7 +830,7 @@ jobs:
         env:
           SHARD_RESULT: ${{ needs.portal-browser-journey.result }}
         run: test "$SHARD_RESULT" = success
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: browser-shard-*-${{ github.run_id }}-*
           path: browser-evidence
@@ -810,10 +859,10 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -830,12 +879,12 @@ jobs:
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/sync-assets.js') -EvidenceDirectory "release-validation/studio-performance/$env:STUDIO_PLATFORM/preparation" -TimeoutSeconds 360
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
 
       - name: Cache Playwright Chromium
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ runner.temp }}/ms-playwright
           key: playwright-chromium-${{ matrix.platform }}-${{ hashFiles('Directory.Packages.props') }}
@@ -855,7 +904,7 @@ jobs:
 
       - name: Retain Studio performance diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: studio-performance-diagnostics-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/studio-performance/
@@ -863,16 +912,16 @@ jobs:
 
       - name: Upload Studio performance evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: studio-performance-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/studio-performance/${{ matrix.platform }}.json
           if-no-files-found: error
 
   # The engine checks that ran only on the owner's workstation before v0.22.0 (release reliability
-  # W4b). Row counts, checksums, failed scenarios and spill allocation gate; timing against the
-  # workstation baseline is report-only here because Compare-CertBaseline suppresses performance
-  # failures when the hardware differs.
+  # W4b). Against the hosted baselines (W6): correctness, work counters (spill bytes, extents,
+  # partition passes, plan counts) and allocations gate; elapsed time, GC pause and peak memory
+  # are report-only. Timing is gated only by the paired A/B job in release evidence.
   engine-certification:
     needs: source-preflight
     if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'engine-certification')
@@ -882,10 +931,10 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -898,7 +947,7 @@ jobs:
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
 
@@ -941,24 +990,24 @@ jobs:
         timeout-minutes: 12
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ScaleCertification.ps1 -ScriptArguments @('-Tier', 'Smoke', '-SkipBuild', '-OutDir', 'release-validation/engine-certification/scale-smoke') -EvidenceDirectory release-validation/engine-certification/scale-smoke-process -TimeoutSeconds 660
 
-      - name: Scale correctness against baseline (smoke)
+      - name: Scale correctness, work and allocation against baseline (smoke)
         shell: pwsh
         timeout-minutes: 3
-        run: ./scripts/Compare-CertBaseline.ps1 -NewReport release-validation/engine-certification/scale-smoke/cert-report.json -Baseline certification-results/baseline-smoke.json -PerformanceReportOnly -MarkdownReport release-validation/engine-certification/baseline-smoke.md
+        run: ./scripts/Compare-CertBaseline.ps1 -NewReport release-validation/engine-certification/scale-smoke/cert-report.json -Baseline certification-results/baseline-smoke.json -MarkdownReport release-validation/engine-certification/baseline-smoke.md
 
       - name: Scale certification (standard)
         shell: pwsh
         timeout-minutes: 20
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ScaleCertification.ps1 -ScriptArguments @('-Tier', 'Standard', '-SkipBuild', '-OutDir', 'release-validation/engine-certification/scale-standard') -EvidenceDirectory release-validation/engine-certification/scale-standard-process -TimeoutSeconds 1140
 
-      - name: Scale correctness against baseline (standard)
+      - name: Scale correctness, work and allocation against baseline (standard)
         shell: pwsh
         timeout-minutes: 3
-        run: ./scripts/Compare-CertBaseline.ps1 -NewReport release-validation/engine-certification/scale-standard/cert-report.json -Baseline certification-results/baseline-standard.json -PerformanceReportOnly -MarkdownReport release-validation/engine-certification/baseline-standard.md
+        run: ./scripts/Compare-CertBaseline.ps1 -NewReport release-validation/engine-certification/scale-standard/cert-report.json -Baseline certification-results/baseline-standard.json -MarkdownReport release-validation/engine-certification/baseline-standard.md
 
       - name: Retain engine certification evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: engine-certification-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/engine-certification/
@@ -982,10 +1031,10 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -998,7 +1047,7 @@ jobs:
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
 
@@ -1013,7 +1062,7 @@ jobs:
 
       - name: Retain enterprise process diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: enterprise-diagnostics-${{ matrix.platform }}-${{ github.run_attempt }}
           path: release-validation/enterprise
@@ -1022,7 +1071,7 @@ jobs:
 
       - name: Retain enterprise certification evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: enterprise-certification-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: certification-results/enterprise-hardening/ci-${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.platform }}
@@ -1039,7 +1088,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       # CI 41860496118 (2026-11-04) ran out of disk extracting the .NET SDK image. Remove
       # preinstalled toolchains this job never uses, and record free space before and after the
@@ -1053,7 +1102,7 @@ jobs:
           df -h /
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -1066,7 +1115,7 @@ jobs:
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
 
@@ -1161,8 +1210,8 @@ jobs:
 
       - name: Run Docker Integration Tests
         shell: pwsh
-        timeout-minutes: 42
-        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'integration', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/integration/tests -TimeoutSeconds 2400
+        timeout-minutes: 52
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'integration', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/integration/tests -TimeoutSeconds 3000
 
       - name: Local and container smoke parity
         shell: pwsh
@@ -1176,7 +1225,7 @@ jobs:
 
       - name: Retain Docker integration diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: integration-diagnostics-${{ github.run_attempt }}
           # test-lane-results holds the TRX files and any flaky-tests.jsonl from retry-once.
@@ -1185,3 +1234,40 @@ jobs:
             release-validation/test-lane-results
           if-no-files-found: warn
           retention-days: 30
+
+  merge-gate:
+    # Manual diagnostics can omit affected lanes or browser shards. Give them a distinct
+    # check name so their success cannot satisfy the required Merge Gate check.
+    name: ${{ github.event_name == 'workflow_dispatch' && !inputs.release_certification && 'Diagnostic Gate' || 'Merge Gate' }}
+    if: always()
+    needs: [source-preflight, build-and-test, browser-consumer-contracts, build-vscode, sample-scripts, portal-browser-journey, portal-browser-gate, studio-performance-budgets, enterprise-certification, docker-integration-tests, engine-certification, spill-certification]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        timeout-minutes: 3
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+      - name: Verify every selected lane passed
+        timeout-minutes: 2
+        env:
+          CI_EVENT: ${{ github.event_name }}
+          PREFLIGHT_RESULT: ${{ needs.source-preflight.result }}
+          SELECTED_LANES: ${{ needs.source-preflight.outputs.lanes }}
+          BROWSER_SHARDS: ${{ needs.source-preflight.outputs.browser_shards }}
+          LANE_RESULTS: |
+            {
+              "build-and-test": "${{ needs.build-and-test.result }}",
+              "browser-consumer-contracts": "${{ needs.browser-consumer-contracts.result }}",
+              "build-vscode": "${{ needs.build-vscode.result }}",
+              "sample-scripts": "${{ needs.sample-scripts.result }}",
+              "portal-browser-journey": "${{ needs.portal-browser-journey.result }}",
+              "portal-browser-gate": "${{ needs.portal-browser-gate.result }}",
+              "studio-performance-budgets": "${{ needs.studio-performance-budgets.result }}",
+              "enterprise-certification": "${{ needs.enterprise-certification.result }}",
+              "docker-integration-tests": "${{ needs.docker-integration-tests.result }}",
+              "engine-certification": "${{ needs.engine-certification.result }}",
+              "spill-certification": "${{ needs.spill-certification.result }}"
+            }
+        run: node scripts/verify-merge-gate.mjs

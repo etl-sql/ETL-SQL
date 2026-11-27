@@ -14,117 +14,146 @@ namespace ETL_SQL.Engine.Planning
     /// </summary>
     public static class RequiredColumnAnalyzer
     {
-        public static HashSet<string>? Analyze(SelectStatement stmt)
+        public static HashSet<string>? Analyze(SelectStatement stmt, bool includeWhere = true)
         {
             // Wildcard columns make pruning unsafe — we don't know which columns are needed.
-            if (stmt.Columns.Any(c => c.Expression is IdentifierExpression { Name: "*" }
+            if (stmt.Columns.Any(c => c.Expression is StarExpression
+                                   || c.Expression is IdentifierExpression { Name: "*" }
                                    || (c.Expression is IdentifierExpression id2 && id2.Name.EndsWith(".*"))))
                 return null;
 
+            // APPLY / LATERAL joins evaluate correlated right-side sources that can reference any left column.
+            if (stmt.Joins != null && stmt.Joins.Any(j => j.IsApply))
+                return null;
+
             var required = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            bool hasUnsafeNode = false;
 
             foreach (var col in stmt.Columns)
-                Collect(col.Expression, required);
+                Collect(col.Expression, required, ref hasUnsafeNode);
 
-            Collect(stmt.WhereClause, required);
-            Collect(stmt.HavingClause, required);
-            Collect(stmt.QualifyClause, required);
+            if (includeWhere)
+                Collect(stmt.WhereClause, required, ref hasUnsafeNode);
+            Collect(stmt.HavingClause, required, ref hasUnsafeNode);
+            Collect(stmt.QualifyClause, required, ref hasUnsafeNode);
 
             foreach (var g in stmt.GroupBy ?? Enumerable.Empty<Expression>())
-                Collect(g, required);
+                Collect(g, required, ref hasUnsafeNode);
+
+            if (stmt.GroupingSet != null)
+            {
+                foreach (var set in stmt.GroupingSet.GroupSets)
+                {
+                    foreach (var g in set)
+                        Collect(g, required, ref hasUnsafeNode);
+                }
+            }
 
             foreach (var o in stmt.OrderBy ?? Enumerable.Empty<OrderByClause>())
-                Collect(o.Expression, required);
+                Collect(o.Expression, required, ref hasUnsafeNode);
 
             foreach (var join in stmt.Joins ?? Enumerable.Empty<JoinClause>())
-                Collect(join.Condition, required);
+                Collect(join.Condition, required, ref hasUnsafeNode);
 
-            return required;
+            return hasUnsafeNode ? null : required;
         }
 
-        private static void Collect(Expression? expr, HashSet<string> required)
+        private static void Collect(Expression? expr, HashSet<string> required, ref bool hasUnsafeNode)
         {
-            if (expr == null) return;
+            if (expr == null || hasUnsafeNode) return;
 
             switch (expr)
             {
+                case StarExpression:
+                case SubqueryExpression:
+                case ExistsExpression:
+                    // Correlated subqueries or nested wildcards can reference arbitrary outer columns.
+                    hasUnsafeNode = true;
+                    break;
+
                 case IdentifierExpression id:
                     required.Add(id.Name.Contains('.') ? id.Name.Split('.')[^1] : id.Name);
                     break;
 
                 case BinaryExpression bin:
-                    Collect(bin.Left, required);
-                    Collect(bin.Right, required);
+                    Collect(bin.Left, required, ref hasUnsafeNode);
+                    Collect(bin.Right, required, ref hasUnsafeNode);
                     break;
 
                 case MemberAccessExpression mem:
                     required.Add(mem.MemberName);
-                    Collect(mem.Expression, required);
+                    Collect(mem.Expression, required, ref hasUnsafeNode);
                     break;
 
                 case CaseExpression caseExpr:
-                    Collect(caseExpr.InputExpression, required);
+                    Collect(caseExpr.InputExpression, required, ref hasUnsafeNode);
                     foreach (var (cond, result) in caseExpr.WhenClauses)
                     {
-                        Collect(cond, required);
-                        Collect(result, required);
+                        Collect(cond, required, ref hasUnsafeNode);
+                        Collect(result, required, ref hasUnsafeNode);
                     }
-                    Collect(caseExpr.ElseResult, required);
+                    Collect(caseExpr.ElseResult, required, ref hasUnsafeNode);
                     break;
 
                 case IsNullExpression isNull:
-                    Collect(isNull.Expression, required);
+                    Collect(isNull.Expression, required, ref hasUnsafeNode);
                     break;
 
                 case IsDistinctFromExpression idf:
-                    Collect(idf.Left, required);
-                    Collect(idf.Right, required);
+                    Collect(idf.Left, required, ref hasUnsafeNode);
+                    Collect(idf.Right, required, ref hasUnsafeNode);
                     break;
 
                 case InExpression inExp:
-                    Collect(inExp.Left, required);
-                    Collect(inExp.Right, required);
+                    Collect(inExp.Left, required, ref hasUnsafeNode);
+                    Collect(inExp.Right, required, ref hasUnsafeNode);
                     break;
 
                 case BetweenExpression bet:
-                    Collect(bet.Left, required);
-                    Collect(bet.Start, required);
-                    Collect(bet.End, required);
+                    Collect(bet.Left, required, ref hasUnsafeNode);
+                    Collect(bet.Start, required, ref hasUnsafeNode);
+                    Collect(bet.End, required, ref hasUnsafeNode);
                     break;
 
                 case LikeExpression like:
-                    Collect(like.Left, required);
-                    Collect(like.Pattern, required);
-                    Collect(like.EscapeChar, required);
+                    Collect(like.Left, required, ref hasUnsafeNode);
+                    Collect(like.Pattern, required, ref hasUnsafeNode);
+                    Collect(like.EscapeChar, required, ref hasUnsafeNode);
                     break;
 
                 case UnaryExpression un:
-                    Collect(un.Expression, required);
+                    Collect(un.Expression, required, ref hasUnsafeNode);
                     break;
 
                 case ListExpression list:
-                    foreach (var item in list.Items) Collect(item, required);
+                    foreach (var item in list.Items) Collect(item, required, ref hasUnsafeNode);
                     break;
 
                 case AtTimeZoneExpression atz:
-                    Collect(atz.Left, required);
-                    Collect(atz.TimeZone, required);
+                    Collect(atz.Left, required, ref hasUnsafeNode);
+                    Collect(atz.TimeZone, required, ref hasUnsafeNode);
                     break;
 
                 case FunctionCallExpression func:
-                    foreach (var arg in func.Arguments) Collect(arg, required);
-                    if (func.Filter != null) Collect(func.Filter, required);
+                    foreach (var arg in func.Arguments)
+                    {
+                        // COUNT(*) does not require all columns.
+                        if (func.FunctionName.Equals("COUNT", StringComparison.OrdinalIgnoreCase)
+                            && (arg is StarExpression || arg is IdentifierExpression { Name: "*" }))
+                            continue;
+                        Collect(arg, required, ref hasUnsafeNode);
+                    }
+                    if (func.Filter != null) Collect(func.Filter, required, ref hasUnsafeNode);
                     if (func.Window != null)
                     {
-                        foreach (var p in func.Window.PartitionBy) Collect(p, required);
-                        foreach (var o in func.Window.OrderBy) Collect(o.Expression, required);
+                        foreach (var p in func.Window.PartitionBy) Collect(p, required, ref hasUnsafeNode);
+                        foreach (var o in func.Window.OrderBy) Collect(o.Expression, required, ref hasUnsafeNode);
                     }
                     if (func.WithinGroupOrderBy != null)
-                        foreach (var o in func.WithinGroupOrderBy) Collect(o.Expression, required);
+                        foreach (var o in func.WithinGroupOrderBy) Collect(o.Expression, required, ref hasUnsafeNode);
                     break;
 
-                    // Subqueries, literals, variables, parameters reference their own scope
-                    // or carry no column names — skip.
+                    // Literals, variables, and parameters carry no column names.
             }
         }
 

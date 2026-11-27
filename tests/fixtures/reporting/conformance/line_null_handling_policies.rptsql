@@ -1,0 +1,38 @@
+-- Conformance Fixture: Line Null Handling Policies (ZERO, CONNECT/SKIP, GAP)
+-- Validates NULL_HANDLING = ZERO, CONNECT (NullValuePolicy.Skip), and GAP on LINE visuals.
+
+SET REPORT TITLE = 'Conformance: Line Null Handling Policies';
+
+SELECT 'Jan' AS Month, 40.0 AS Score INTO #gapped_series
+UNION ALL SELECT 'Feb', 65.0
+UNION ALL SELECT 'Mar', CAST(NULL AS DECIMAL(10, 2))
+UNION ALL SELECT 'Apr', 55.0
+UNION ALL SELECT 'May', 80.0;
+
+CREATE VISUAL NullZeroLine AS LINE (
+    TITLE = 'NULL_HANDLING = ZERO',
+    SOURCE = #gapped_series,
+    MAPPINGS (X = Month, Y = Score),
+    OPTIONS (NULL_HANDLING = ZERO)
+);
+
+CREATE VISUAL NullConnectLine AS LINE (
+    TITLE = 'NULL_HANDLING = CONNECT (Skip)',
+    SOURCE = #gapped_series,
+    MAPPINGS (X = Month, Y = Score),
+    OPTIONS (NULL_HANDLING = CONNECT)
+);
+
+CREATE VISUAL NullGapLine AS LINE (
+    TITLE = 'NULL_HANDLING = GAP',
+    SOURCE = #gapped_series,
+    MAPPINGS (X = Month, Y = Score),
+    OPTIONS (NULL_HANDLING = GAP)
+);
+
+CREATE PAGE NullPolicyDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B C',
+        MAP ('A' = NullZeroLine, 'B' = NullConnectLine, 'C' = NullGapLine)
+    )
+);

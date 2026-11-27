@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Orchestrator.Execution;
@@ -78,7 +79,8 @@ namespace ETL_SQL.Tests.Orchestration
             Dictionary<string, string?>? config = null,
             Mock<ISessionStateManager>? sessionManager = null,
             Mock<ISandboxScheduledJobExecutor>? sandboxExecutor = null,
-            Mock<ITenantMeteringLedger>? meteringLedger = null)
+            Mock<ITenantMeteringLedger>? meteringLedger = null,
+            IScheduledToolPrincipalLookup? toolPrincipalLookup = null)
         {
             capacityMonitor ??= new FixedCapacityMonitor(isOverloaded: false);
             // IServiceProvider.CreateScope() is an extension that calls
@@ -125,7 +127,7 @@ namespace ETL_SQL.Tests.Orchestration
                 configuration,
                 sessionManager.Object,
                 capacityMonitor,
-                meteringLedger?.Object);
+                meteringLedger?.Object, toolPrincipalLookup: toolPrincipalLookup);
         }
 
         public void Dispose()
@@ -947,6 +949,147 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("resume_here", result.CheckpointLabel);
             executor.Verify(e => e.ResumeTextAsync(
                 script, "session-42", It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>(), null), Times.Once());
+        }
+
+        [Fact]
+        public void SubmittedRevisionText_RunsAsItsSubmitterNotTheJobOwner()
+        {
+            // Studio practice text is the learner's, not the operator's: running it as the job owner
+            // would hand the learner the owner's rights (ST21b). The tenant stays the job's.
+            var job = new JobDefinition(
+                "PIPELINE:7", "SELECT 1;", 1, "DAY", null, null, null,
+                CreatedBy: "user:operator", TenantId: "tenant-a", Id: JobId.From("job-pipeline-7"));
+            var learner = new ETL_SQL.Core.Governance.ExecutionIdentity
+            {
+                EffectiveUser = "user:learner",
+                RealUser = "user:learner",
+                TenantId = "tenant-b",
+                IsAdmin = false
+            };
+
+            var identity = SchedulerService.ResolveJobExecutionIdentity(job, submitterIdentity: learner);
+
+            Assert.NotNull(identity);
+            Assert.Equal("user:learner", identity!.EffectiveUser);
+            Assert.Equal("user:learner", identity.RealUser);
+            Assert.Equal("tenant-a", identity.TenantId);
+            Assert.False(identity.IsAdmin);
+        }
+
+        [Fact]
+        public async Task OwnedScheduledTriggeredAndResumedJobs_BindOwningExecutionIdentity()
+        {
+            var scheduledJob = new JobDefinition(
+                "AliceScheduledJob", "SELECT 1;", 1, "HOUR", null, null, null,
+                CreatedBy: "user:alice", TenantId: "tenant-a", Id: JobId.From("job-alice-sched"));
+
+            var scheduledExecutor = new Mock<IScriptExecutor>();
+            scheduledExecutor.Setup(e => e.ExecuteTextAsync(
+                    scheduledJob.Script, It.IsAny<string>(), It.IsAny<CancellationToken>(),
+                    scheduledJob.Name, It.IsAny<long>(),
+                    It.IsAny<ETL_SQL.Core.Governance.ExecutionIdentity?>()))
+                .ReturnsAsync(new ScriptExecutionResult(true, 1));
+
+            var (schedService, _, _) = Build([scheduledJob], new ScriptExecutionResult(true, 0));
+            var schedStore = new Mock<IJobHistoryStore>();
+            schedStore.Setup(s => s.InitializeAsync()).Returns(Task.CompletedTask);
+            schedStore.Setup(s => s.GetActiveJobsAsync()).ReturnsAsync([scheduledJob]);
+            schedStore.Setup(s => s.LogJobStartAsync(scheduledJob.Id)).ReturnsAsync(10L);
+            schedStore.Setup(s => s.AcquireJobLeaseAsync(scheduledJob.Id, It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(1L);
+            schedStore.Setup(s => s.TryUpdateJobLastRunFencedAsync(scheduledJob.Id, It.IsAny<DateTime>(), It.IsAny<DateTime?>(), 1L)).ReturnsAsync(true);
+            schedStore.Setup(s => s.ReleaseJobLeaseAsync(scheduledJob.Id, It.IsAny<string>())).Returns(Task.CompletedTask);
+            schedStore.Setup(s => s.GetHistoryAsync(scheduledJob.Id, It.IsAny<int>())).ReturnsAsync([]);
+            schedStore.Setup(s => s.GetJobByIdAsync(scheduledJob.Id)).ReturnsAsync(scheduledJob);
+
+            var ownedService = BuildService(schedStore, scheduledExecutor);
+            ownedService.Start();
+            await WaitUntilAsync(() => Invoked(scheduledExecutor, nameof(IScriptExecutor.ExecuteTextAsync)));
+            await ownedService.StopAsync();
+
+            scheduledExecutor.Verify(e => e.ExecuteTextAsync(
+                scheduledJob.Script, It.IsAny<string>(), It.IsAny<CancellationToken>(),
+                scheduledJob.Name, It.IsAny<long>(),
+                It.Is<ETL_SQL.Core.Governance.ExecutionIdentity?>(id =>
+                    id != null &&
+                    id.EffectiveUser == "user:alice" &&
+                    id.RealUser == "user:alice" &&
+                    id.TenantId == "tenant-a" &&
+                    !id.IsAdmin)), Times.AtLeastOnce());
+
+            // Manual trigger by a different admin caller still runs under the job's owner (no privilege escalation).
+            var triggerExecutor = new Mock<IScriptExecutor>();
+            triggerExecutor.Setup(e => e.ExecuteTextAsync(
+                    scheduledJob.Script, It.IsAny<string>(), It.IsAny<CancellationToken>(),
+                    scheduledJob.Name, It.IsAny<long>(),
+                    It.IsAny<ETL_SQL.Core.Governance.ExecutionIdentity?>()))
+                .ReturnsAsync(new ScriptExecutionResult(true, 1));
+            var triggerStore = new Mock<IJobHistoryStore>();
+            triggerStore.Setup(s => s.InitializeAsync()).Returns(Task.CompletedTask);
+            triggerStore.Setup(s => s.GetJobByIdAsync(scheduledJob.Id)).ReturnsAsync(scheduledJob);
+            triggerStore.Setup(s => s.LogJobStartAsync(scheduledJob.Id)).ReturnsAsync(11L);
+            triggerStore.Setup(s => s.AcquireJobLeaseAsync(scheduledJob.Id, It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(2L);
+            triggerStore.Setup(s => s.TryUpdateJobLastRunFencedAsync(scheduledJob.Id, It.IsAny<DateTime>(), It.IsAny<DateTime?>(), 2L)).ReturnsAsync(true);
+            triggerStore.Setup(s => s.ReleaseJobLeaseAsync(scheduledJob.Id, It.IsAny<string>())).Returns(Task.CompletedTask);
+            triggerStore.Setup(s => s.GetHistoryAsync(scheduledJob.Id, It.IsAny<int>())).ReturnsAsync([]);
+
+            var triggerService = BuildService(triggerStore, triggerExecutor);
+            var adminTriggerer = new ETL_SQL.Core.Governance.ExecutionIdentity
+            {
+                EffectiveUser = "user:admin-bob",
+                RealUser = "user:admin-bob",
+                TenantId = "tenant-a",
+                IsAdmin = true
+            };
+            var triggerResult = await triggerService.TriggerJobWithOverridesAsync(scheduledJob.Id, null, adminTriggerer);
+            Assert.Equal(ManualTriggerResult.Accepted, triggerResult);
+            await WaitUntilAsync(() => Invoked(triggerExecutor, nameof(IScriptExecutor.ExecuteTextAsync)));
+            await triggerService.StopAsync();
+
+            triggerExecutor.Verify(e => e.ExecuteTextAsync(
+                scheduledJob.Script, It.IsAny<string>(), It.IsAny<CancellationToken>(),
+                scheduledJob.Name, It.IsAny<long>(),
+                It.Is<ETL_SQL.Core.Governance.ExecutionIdentity?>(id =>
+                    id != null &&
+                    id.EffectiveUser == "user:alice" &&
+                    id.TenantId == "tenant-a" &&
+                    !id.IsAdmin)), Times.Once());
+        }
+
+        [Fact]
+        public async Task ToolLookupRefreshesVerifiedOwnerWithoutElevatingAnUnattendedRun()
+        {
+            var job = new JobDefinition("OwnerRun", "SELECT 1;", 1, "HOUR", null, null, null,
+                CreatedBy: "user:alice", TenantId: "tenant-a", Id: JobId.From("job-alice-owner-run"));
+            var store = new Mock<IJobHistoryStore>();
+            var current = job;
+            store.Setup(s => s.GetJobByIdAsync(job.Id)).ReturnsAsync(() => current);
+            var lookup = new Mock<IScheduledToolPrincipalLookup>(MockBehavior.Strict);
+            var signed = new ToolExecutionPrincipal("tenant-a", ToolPrincipalKind.User, "alice", ["removed-group"], true);
+            ToolExecutionPrincipal? live = signed with { GroupIds = ["current-group"] };
+            lookup.Setup(value => value.ResolveAsync("tenant-a", "user:alice", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => live);
+            var scheduler = BuildService(store, new Mock<IScriptExecutor>(), toolPrincipalLookup: lookup.Object);
+            var caller = new ExecutionIdentity
+            {
+                EffectiveUser = "user:alice",
+                RealUser = "user:alice",
+                TenantId = "tenant-a",
+                IsAdmin = false,
+                ToolPrincipal = signed
+            };
+
+            Assert.Null((await scheduler.ResolveAttemptIdentityAsync(job, null, null, default))?.ToolPrincipal);
+            lookup.VerifyNoOtherCalls();
+
+            var refreshed = await scheduler.ResolveAttemptIdentityAsync(job, caller, null, default);
+            Assert.Equal(live, refreshed?.ToolPrincipal);
+
+            live = null;
+            Assert.Null((await scheduler.ResolveAttemptIdentityAsync(job, caller, null, default))?.ToolPrincipal);
+
+            current = job with { Version = job.Version + 1 };
+            Assert.Null((await scheduler.ResolveAttemptIdentityAsync(job, caller, null, default))?.ToolPrincipal);
+            lookup.Verify(value => value.ResolveAsync("tenant-a", "user:alice", It.IsAny<CancellationToken>()), Times.Exactly(2));
         }
 
         private sealed class FixedCapacityMonitor(bool isOverloaded) : INodeCapacityMonitor

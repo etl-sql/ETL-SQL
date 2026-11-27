@@ -30,8 +30,8 @@ public sealed record DesignerSnapshotMetadata(bool IsSampled, bool RlsEnforced, 
 /// <c>ExecutionJobService</c> refuses to persist a shared snapshot for an identity-sensitive report —
 /// if the script references identity, or the run was impersonated, no <c>ReportSnapshot</c> row is
 /// written and the report stays per-viewer execution only. Any snapshot that exists therefore cannot
-/// vary by identity, so the folder-permission gate below is sufficient and an identity-sensitive
-/// report simply has no snapshot to show.
+/// vary by identity. Folder permission and current access to every recorded shared connection
+/// are checked below; an identity-sensitive report simply has no snapshot to show.
 /// </summary>
 public sealed class DesignerSnapshotService(
     PortalDbContext db,
@@ -40,7 +40,10 @@ public sealed class DesignerSnapshotService(
     IArtifactStorage artifacts,
     SnapshotPackageService snapshotPackages,
     DatasetTenantScope? datasetScope = null,
-    PortalTenantCatalogScope? catalogScope = null)
+    PortalTenantCatalogScope? catalogScope = null,
+    PortalExecutionIdentityService? identities = null,
+    PortalConnectionCatalogService? connectionCatalog = null,
+    AuditService? audit = null)
 {
     private readonly DatasetTenantScope _datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
     private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _datasetScope);
@@ -65,14 +68,50 @@ public sealed class DesignerSnapshotService(
         if (permission is null) return new Result(SnapshotOutcome.Forbidden, null);
 
         if (!PortalPathGuard.TryResolveScript(
-                portalConfig, _datasetScope.TenantId, report.ScriptPath, out _))
+                portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return new Result(SnapshotOutcome.Forbidden, null);
+
+        if (await ReportIdentitySensitivity.IsRunLiveAsync(resolvedScriptPath, ct))
+            return new Result(SnapshotOutcome.NoSnapshot, null);
 
         var snapshot = await CatalogScope.ReportSnapshots
             .Where(s => s.ReportId == reportId)
             .OrderByDescending(s => s.BuiltAt)
             .FirstOrDefaultAsync(ct);
         if (snapshot is null) return new Result(SnapshotOutcome.NoSnapshot, null);
+
+        // Authorization dependencies are required whenever a snapshot would be served.
+        if (connectionCatalog is null || identities is null)
+            return new Result(SnapshotOutcome.Forbidden, null);
+
+        var userIdClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim, out var userId))
+            return new Result(SnapshotOutcome.Forbidden, null);
+
+        var identity = await identities.BuildAsync(
+            userId, _datasetScope.TenantId, user.IsInRole("Admin"), impersonatedUserId: null, ct);
+        try
+        {
+            await connectionCatalog.EnsureCallerCanReadSnapshotAsync(
+                resolvedScriptPath,
+                snapshot.ScriptHashAtRunTime,
+                snapshot.SharedConnectionDependenciesJson,
+                identity,
+                ct);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            if (audit is not null)
+            {
+                await audit.LogAsync(
+                    userId,
+                    "SHARED_CONNECTION_SNAPSHOT_DENIED",
+                    "Report",
+                    reportId.ToString(),
+                    $"EffectiveUser={identity?.EffectiveUser ?? "(none)"}");
+            }
+            return new Result(SnapshotOutcome.Forbidden, null);
+        }
 
         var manifestKey = PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath);
         if (manifestKey is null) return new Result(SnapshotOutcome.Forbidden, null);

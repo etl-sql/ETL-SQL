@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Portal.Data;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
@@ -63,7 +64,7 @@ public static class ServiceAccountScopes
     {
         PortalRead, ReportsExecute,
         OrchestratorRead, OrchestratorExecute, OrchestratorPublish, OrchestratorAdmin,
-        AdminIdentity, AdminPortability
+        AdminIdentity, AdminPortability, ScheduledToolPrincipalRequest.Scope
     };
 
     /// <summary>Every orchestrator scope, narrowest first — the ladder, in order.</summary>

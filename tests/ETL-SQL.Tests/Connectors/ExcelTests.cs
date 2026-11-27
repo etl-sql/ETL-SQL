@@ -3,13 +3,17 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Excel;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using Xunit;
 
@@ -231,6 +235,408 @@ namespace ETL_SQL.Tests.Connectors
                 });
 
                 Assert.Contains("duplicate column", ex.Message, StringComparison.OrdinalIgnoreCase);
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task TestExcelStartRow_SkipsBannerRowsWithAndWithoutHeader()
+        {
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_StartRow_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                var sheets = new Dictionary<string, object>
+                {
+                    ["Report"] = new[]
+                    {
+                        new Dictionary<string, object?> { ["C1"] = "Quarterly Finance Report", ["C2"] = null },
+                        new Dictionary<string, object?> { ["C1"] = "Confidential", ["C2"] = null },
+                        new Dictionary<string, object?> { ["C1"] = "Generated 2026-11-23", ["C2"] = null },
+                        new Dictionary<string, object?> { ["C1"] = "Id", ["C2"] = "Name" },
+                        new Dictionary<string, object?> { ["C1"] = 10, ["C2"] = "Alpha" },
+                        new Dictionary<string, object?> { ["C1"] = 20, ["C2"] = "Beta" }
+                    }
+                };
+                MiniExcelLibs.MiniExcel.SaveAs(outPath, sheets, printHeader: false);
+
+                var withHeader = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "START_ROW", "4" },
+                    { "HEADER", "ON" }
+                });
+                Assert.Equal(new[] { "Id", "Name" }, (await withHeader.GetColumnsAsync()).ToArray());
+                var batches = await withHeader.ReadBatches().ToListAsync();
+                Assert.Single(batches);
+                Assert.Equal(new[] { "Id", "Name" }, batches[0].ColumnNames);
+                Assert.Equal(2, batches[0].Rows.Count);
+                Assert.Equal("10", batches[0].Rows[0]["Id"]?.ToString());
+                Assert.Equal("Alpha", batches[0].Rows[0]["Name"]?.ToString());
+                Assert.Equal("20", batches[0].Rows[1]["Id"]?.ToString());
+                Assert.Equal("Beta", batches[0].Rows[1]["Name"]?.ToString());
+
+                var withoutHeader = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "START_ROW", "5" },
+                    { "HEADER", "OFF" }
+                });
+                var noHeaderBatches = await withoutHeader.ReadBatches().ToListAsync();
+                Assert.Single(noHeaderBatches);
+                Assert.Equal(new[] { "Column1", "Column2" }, noHeaderBatches[0].ColumnNames);
+                Assert.Equal(2, noHeaderBatches[0].Rows.Count);
+                Assert.Equal("10", noHeaderBatches[0].Rows[0]["Column1"]?.ToString());
+                Assert.Equal("Alpha", noHeaderBatches[0].Rows[0]["Column2"]?.ToString());
+
+                var pastEnd = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "START_ROW", "99" },
+                    { "HEADER", "ON" }
+                });
+                Assert.Empty(await pastEnd.GetColumnsAsync());
+                Assert.Empty(await pastEnd.ReadBatches().ToListAsync());
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task TestExcelSheetIndex_ReadsTargetWorksheetAndValidatesOptions()
+        {
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_SheetIndex_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                var sheets = new Dictionary<string, object>
+                {
+                    ["FirstTab"] = new[]
+                    {
+                        new Dictionary<string, object?> { ["C1"] = "Key", ["C2"] = "Val" },
+                        new Dictionary<string, object?> { ["C1"] = "K1", ["C2"] = 1 }
+                    },
+                    ["SecondTab"] = new[]
+                    {
+                        new Dictionary<string, object?> { ["C1"] = "Title Banner", ["C2"] = null },
+                        new Dictionary<string, object?> { ["C1"] = "Code", ["C2"] = "Amount" },
+                        new Dictionary<string, object?> { ["C1"] = "X1", ["C2"] = 99 },
+                        new Dictionary<string, object?> { ["C1"] = "X2", ["C2"] = 150 }
+                    }
+                };
+                MiniExcelLibs.MiniExcel.SaveAs(outPath, sheets, printHeader: false);
+
+                var connector = new ExcelConnector();
+                var supported = connector.GetSupportedOptions();
+                Assert.True(supported.ContainsKey("SHEET_INDEX"));
+                Assert.True(supported.ContainsKey("START_ROW"));
+
+                var secondSheet = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "SHEET_INDEX", "2" },
+                    { "START_ROW", "2" },
+                    { "HEADER", "ON" }
+                });
+                Assert.Equal(new[] { "Code", "Amount" }, (await secondSheet.GetColumnsAsync()).ToArray());
+                var batches = await secondSheet.ReadBatches().ToListAsync();
+                Assert.Single(batches);
+                Assert.Equal(2, batches[0].Rows.Count);
+                Assert.Equal("X1", batches[0].Rows[0]["Code"]?.ToString());
+                Assert.Equal("99", batches[0].Rows[0]["Amount"]?.ToString());
+                Assert.Equal("X2", batches[0].Rows[1]["Code"]?.ToString());
+                Assert.Equal("150", batches[0].Rows[1]["Amount"]?.ToString());
+
+                var outOfBounds = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "SHEET_INDEX", "3" }
+                });
+                Assert.Empty(await outOfBounds.ReadBatches().ToListAsync());
+
+                Assert.Throws<ExecutionException>(() => new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "SHEET_INDEX", "0" }
+                }));
+                Assert.Throws<ExecutionException>(() => new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "START_ROW", "0" }
+                }));
+                Assert.Throws<ExecutionException>(() => new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "SHEET", "FirstTab" },
+                    { "SHEET_INDEX", "2" }
+                }));
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
+
+        [Theory]
+        [Trait("Connector", "EXCEL")]
+        [InlineData("SHEET_INDEX", "1", true)]
+        [InlineData("SHEET_INDEX", "1", false)]
+        [InlineData("START_ROW", "2", true)]
+        [InlineData("START_ROW", "2", false)]
+        public async Task TestExcelReadOnlyOptions_RejectWritesAndLeaveTheWorkbookUnchanged(string option, string value, bool append)
+        {
+            // The writer names its sheet from SHEET only, so a write through SHEET_INDEX used to
+            // move the selected sheet's rows into a new "Sheet1", and START_ROW was ignored on append.
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_ReadOnlyOpt_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                var original = new Dictionary<string, object>
+                {
+                    ["First"] = new[] { new Dictionary<string, object?> { ["Id"] = 1, ["Name"] = "one" } }
+                };
+                MiniExcelLibs.MiniExcel.SaveAs(outPath, original);
+                var before = await File.ReadAllBytesAsync(outPath);
+
+                var ds = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { option, value },
+                    { "HEADER", "ON" }
+                });
+                var dt = new DataTable();
+                dt.SetColumns(new[] { "Id", "Name" });
+                var row = dt.NewRow(); row["Id"] = 2; row["Name"] = "two"; await dt.AddRowAsync(row);
+
+                var ex = await Assert.ThrowsAsync<ExecutionException>(() => ds.WriteBatches(new[] { dt }.ToAsyncEnumerable(), append));
+                Assert.Contains(option, ex.Message);
+                Assert.Contains("read", ex.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(before, await File.ReadAllBytesAsync(outPath));
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task TestExcelWithTable_PreservesOtherSheetsAndSupportsOverwriteWorkbook()
+        {
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_MultiSheet_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                var baseDs = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "HEADER", "ON" }
+                });
+
+                // Write Summary and Detail through a single connection via WithTable (xl_conn.Summary / xl_conn.Detail)
+                var summaryDt = new DataTable();
+                summaryDt.SetColumns(new[] { "Region", "Total" });
+                var sr1 = summaryDt.NewRow(); sr1["Region"] = "North"; sr1["Total"] = 100m; await summaryDt.AddRowAsync(sr1);
+                var sr2 = summaryDt.NewRow(); sr2["Region"] = "South"; sr2["Total"] = 200m; await summaryDt.AddRowAsync(sr2);
+
+                var detailDt = new DataTable();
+                detailDt.SetColumns(new[] { "OrderId", "Item" });
+                var dr1 = detailDt.NewRow(); dr1["OrderId"] = 1m; dr1["Item"] = "Widget"; await detailDt.AddRowAsync(dr1);
+
+                await baseDs.WithTable("Summary").WriteBatches(new[] { summaryDt }.ToAsyncEnumerable(), append: false);
+                await baseDs.WithTable("Detail").WriteBatches(new[] { detailDt }.ToAsyncEnumerable(), append: false);
+
+                var tables = (await baseDs.GetTablesAsync()).ToList();
+                Assert.Equal(new[] { "Summary", "Detail" }, tables);
+
+                // Read each sheet independently via WithTable
+                var summaryRead = await baseDs.WithTable("Summary").ReadBatches().ToListAsync();
+                Assert.Single(summaryRead);
+                Assert.Equal(2, summaryRead[0].Rows.Count);
+                Assert.Equal("North", summaryRead[0].Rows[0]["Region"]?.ToString());
+                Assert.Equal("100", summaryRead[0].Rows[0]["Total"]?.ToString());
+
+                var detailRead = await baseDs.WithTable("Detail").ReadBatches().ToListAsync();
+                Assert.Single(detailRead);
+                Assert.Single(detailRead[0].Rows);
+                Assert.Equal("Widget", detailRead[0].Rows[0]["Item"]?.ToString());
+
+                // WithTable("FILE") keeps the connection's default sheet binding
+                Assert.Same(baseDs, baseDs.WithTable("FILE"));
+
+                // Replacing Summary with OVERWRITE_WORKBOOK = OFF (default) preserves Detail
+                var summaryV2 = new DataTable();
+                summaryV2.SetColumns(new[] { "Region", "Total" });
+                var sr3 = summaryV2.NewRow(); sr3["Region"] = "West"; sr3["Total"] = 300m; await summaryV2.AddRowAsync(sr3);
+                await baseDs.WithTable("Summary").WriteBatches(new[] { summaryV2 }.ToAsyncEnumerable(), append: false);
+
+                Assert.Equal(new[] { "Summary", "Detail" }, (await baseDs.GetTablesAsync()).ToList());
+                var summaryV2Read = await baseDs.WithTable("Summary").ReadBatches().ToListAsync();
+                Assert.Single(summaryV2Read[0].Rows);
+                Assert.Equal("West", summaryV2Read[0].Rows[0]["Region"]?.ToString());
+                var detailStillThere = await baseDs.WithTable("Detail").ReadBatches().ToListAsync();
+                Assert.Single(detailStillThere[0].Rows);
+                Assert.Equal("Widget", detailStillThere[0].Rows[0]["Item"]?.ToString());
+
+                // OVERWRITE_WORKBOOK = ON replaces the entire workbook with only the written sheet
+                var overwriteDs = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string>
+                {
+                    { "HEADER", "ON" },
+                    { "OVERWRITE_WORKBOOK", "ON" }
+                });
+                await overwriteDs.WithTable("OnlySheet").WriteBatches(new[] { detailDt }.ToAsyncEnumerable(), append: false);
+                Assert.Equal(new[] { "OnlySheet" }, (await overwriteDs.GetTablesAsync()).ToList());
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
+
+        private static async Task<DataTable> OneRowTable(string col, string value)
+        {
+            var dt = new DataTable();
+            dt.SetColumns(new[] { col });
+            var r = dt.NewRow(); r[col] = value; await dt.AddRowAsync(r);
+            return dt;
+        }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task ExcelWrite_UnreadableExistingWorkbook_FailsAndLeavesFileUnchanged()
+        {
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_Corrupt_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                var garbage = new byte[] { 0x50, 0x4B, 0x03, 0x04, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+                await File.WriteAllBytesAsync(outPath, garbage);
+                var ds = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string> { { "HEADER", "ON" } });
+
+                var row = await OneRowTable("A", "x");
+                var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
+                    ds.WithTable("Summary").WriteBatches(new[] { row }.ToAsyncEnumerable(), append: false));
+                Assert.Contains("OVERWRITE_WORKBOOK", ex.Message);
+                Assert.Equal(garbage, await File.ReadAllBytesAsync(outPath));
+
+                await Assert.ThrowsAsync<ExecutionException>(async () =>
+                    await ds.WithTable("_sheets").ReadBatches().ToListAsync());
+
+                // OVERWRITE_WORKBOOK = ON is the explicit way to replace it.
+                var overwrite = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string> { { "HEADER", "ON" }, { "OVERWRITE_WORKBOOK", "ON" } });
+                await overwrite.WriteBatches(new[] { await OneRowTable("A", "x") }.ToAsyncEnumerable(), append: false);
+                Assert.Single(await overwrite.GetTablesAsync());
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task ExcelWrite_WithoutSheet_ReplacesFirstSheetKeepingItsNameAndOthers()
+        {
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_NoSheet_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                MiniExcelLibs.MiniExcel.SaveAs(outPath, new Dictionary<string, object>
+                {
+                    ["Data"] = new[] { new Dictionary<string, object?> { ["A"] = "old" } },
+                    ["Sheet1"] = new[] { new Dictionary<string, object?> { ["B"] = "keep" } }
+                });
+                var ds = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string> { { "HEADER", "ON" } });
+                await ds.WriteBatches(new[] { await OneRowTable("A", "new") }.ToAsyncEnumerable(), append: false);
+
+                Assert.Equal(new[] { "Data", "Sheet1" }, (await ds.GetTablesAsync()).ToList());
+                var data = await ds.WithTable("Data").ReadBatches().ToListAsync();
+                Assert.Equal("new", data[0].Rows.Single()["A"]?.ToString());
+                var other = await ds.WithTable("Sheet1").ReadBatches().ToListAsync();
+                Assert.Equal("keep", other[0].Rows.Single()["B"]?.ToString());
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task ExcelWrite_AppendToNamedSheet_PreservesOtherSheetsAndCaseOfName()
+        {
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_Append_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                MiniExcelLibs.MiniExcel.SaveAs(outPath, new Dictionary<string, object>
+                {
+                    ["Summary"] = new[] { new Dictionary<string, object?> { ["A"] = "one" } },
+                    ["Detail"] = new[] { new Dictionary<string, object?> { ["B"] = "keep" } }
+                });
+                var ds = new ExcelDataSource(SystemExecutionContext.Instance, outPath, new Dictionary<string, string> { { "HEADER", "ON" } });
+                // Different case from the existing sheet: must not create a second "summary" sheet.
+                await ds.WithTable("summary").WriteBatches(new[] { await OneRowTable("A", "two") }.ToAsyncEnumerable(), append: true);
+
+                Assert.Equal(new[] { "Summary", "Detail" }, (await ds.GetTablesAsync()).ToList());
+                var summary = await ds.WithTable("Summary").ReadBatches().ToListAsync();
+                Assert.Equal(new[] { "one", "two" }, summary[0].Rows.Select(r => r["A"]?.ToString()).ToArray());
+                var detail = await ds.WithTable("Detail").ReadBatches().ToListAsync();
+                Assert.Equal("keep", detail[0].Rows.Single()["B"]?.ToString());
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task ExcelWrite_EncryptedWorkbook_PreservesOtherSheets()
+        {
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_Enc_{Guid.NewGuid():N}.xlsx");
+            var options = new Dictionary<string, string> { { "HEADER", "ON" }, { "ENCRYPT", "ON" }, { "PASSWORD", "Xl01-preserve-test" } };
+            var ds = new ExcelDataSource(SystemExecutionContext.Instance, outPath, options);
+            try
+            {
+                await ds.WithTable("Summary").WriteBatches(new[] { await OneRowTable("A", "s") }.ToAsyncEnumerable(), append: false);
+                await ds.WithTable("Detail").WriteBatches(new[] { await OneRowTable("B", "d") }.ToAsyncEnumerable(), append: false);
+
+                Assert.Equal(new[] { "Summary", "Detail" }, (await ds.GetTablesAsync()).ToList());
+                var summary = await ds.WithTable("Summary").ReadBatches().ToListAsync();
+                Assert.Equal("s", summary[0].Rows.Single()["A"]?.ToString());
+            }
+            finally { if (File.Exists(ds.Path)) File.Delete(ds.Path); }
+        }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task TestExcelSheetDiscovery_FunctionMetadataViewAndForeachIngest()
+        {
+            string outPath = Path.Combine(Path.GetTempPath(), $"ExcelTest_SheetList_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                var sheets = new Dictionary<string, object>
+                {
+                    ["Jan"] = new[]
+                    {
+                        new Dictionary<string, object?> { ["Item"] = "A", ["Qty"] = 10 }
+                    },
+                    ["Feb"] = new[]
+                    {
+                        new Dictionary<string, object?> { ["Item"] = "B", ["Qty"] = 20 },
+                        new Dictionary<string, object?> { ["Item"] = "C", ["Qty"] = 30 }
+                    }
+                };
+                MiniExcelLibs.MiniExcel.SaveAs(outPath, sheets);
+
+                var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                var sql = $"""
+                    SELECT SheetIndex, SheetName FROM EXCEL_SHEET_LIST('{outPath}') ORDER BY SheetIndex;
+                    """;
+                await eval.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
+
+                Assert.NotNull(eval.LastResult);
+                Assert.Equal(2, eval.LastResult!.Rows.Count);
+                Assert.Equal(1m, Convert.ToDecimal(eval.LastResult.Rows[0]["SheetIndex"]));
+                Assert.Equal("Jan", eval.LastResult.Rows[0]["SheetName"]);
+                Assert.Equal(2m, Convert.ToDecimal(eval.LastResult.Rows[1]["SheetIndex"]));
+                Assert.Equal("Feb", eval.LastResult.Rows[1]["SheetName"]);
+
+                // Query _sheets metadata view and ingest all sheets in a FOREACH loop
+                var ingestSql = $"""
+                    CREATE CONNECTION xl_book AS EXCEL(PATH = '{outPath}', HEADER = ON);
+                    CREATE TABLE #all_items (SheetName VARCHAR, Item VARCHAR, Qty INT);
+                    SELECT SheetIndex, SheetName INTO #tabs FROM xl_book._sheets ORDER BY SheetIndex;
+
+                    FOREACH @tab IN (SELECT SheetName FROM #tabs)
+                    BEGIN
+                        ALTER CONNECTION xl_book WITH (SHEET = @tab.SheetName);
+                        INSERT INTO #all_items (SheetName, Item, Qty)
+                        SELECT @tab.SheetName, Item, Qty FROM xl_book.FILE;
+                    END;
+
+                    SELECT SheetName, Item, Qty FROM #all_items ORDER BY Item;
+                    """;
+                await eval.Evaluate(new Parser(new Lexer(ingestSql).Tokenize()).Parse());
+
+                Assert.NotNull(eval.LastResult);
+                Assert.Equal(3, eval.LastResult!.Rows.Count);
+                Assert.Equal("Jan", eval.LastResult.Rows[0]["SheetName"]);
+                Assert.Equal("A", eval.LastResult.Rows[0]["Item"]);
+                Assert.Equal(10m, Convert.ToDecimal(eval.LastResult.Rows[0]["Qty"]));
+                Assert.Equal("Feb", eval.LastResult.Rows[1]["SheetName"]);
+                Assert.Equal("B", eval.LastResult.Rows[1]["Item"]);
+                Assert.Equal("Feb", eval.LastResult.Rows[2]["SheetName"]);
+                Assert.Equal("C", eval.LastResult.Rows[2]["Item"]);
+
+                Assert.Contains("EXCEL_SHEET_LIST", LanguageMetadata.Functions);
             }
             finally { if (File.Exists(outPath)) File.Delete(outPath); }
         }

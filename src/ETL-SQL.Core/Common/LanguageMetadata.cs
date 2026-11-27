@@ -20,7 +20,7 @@ public static class LanguageMetadata
         "CREATE", "TABLE", "CONNECTION", "DROP", "DECLARE", "ADD", "COLUMN", "INDEX", "UNIQUE",
         "PRIMARY", "KEY", "FOREIGN", "CHECK", "REFERENCES", "CONSTRAINT", "PROCEDURE", "FUNCTION", "RETURNS",
         "DATABASE", "DIRECTORY", "ALTER", "VIEW", "VIEWS", "SCHEMA", "TRANSACTION", "TRAN", "COMMIT", "ROLLBACK", "CLEAR", "SSH_KEY_PAIR", "PGP_KEY_PAIR",
-        "RENAME", "ENCRYPT", "DECRYPT", "DIRECTORY_CONTENTS", "TEMPLATE", "VISUAL", "PAGE", "DATASET", "CONTAINER", "NAVIGATION", "STYLE", "TAG", "LINEAGE", "SETS", "TOOL"
+        "RENAME", "ENCRYPT", "DECRYPT", "SIGN", "DIRECTORY_CONTENTS", "TEMPLATE", "VISUAL", "PAGE", "DATASET", "CONTAINER", "NAVIGATION", "STYLE", "TAG", "LINEAGE", "SETS", "TOOL"
     };
 
     public static readonly HashSet<string> ControlFlowKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -86,7 +86,7 @@ public static class LanguageMetadata
 
         "SETS", "SESSION", "SESSIONS", "CONNECTIONS", "VARIABLES", "LOCAL", "ANALYZE", "TABLES", "COLUMNS", "TAGS", "TAG", "VALUE", "BITS", "ALGORITHM", "PASSPHRASE", "COMMENT", "CONFIG", "PGP_KEY",
         "SIGNING_KEY", "SIGNING_PASSWORD", "VERIFY_KEY", "DELETE_SOURCE",
-        "VERIFY", "INTEGRITY", "SYNC", "UNLOCKED", "ENCODING", "FROM_ENCODING", "TO_ENCODING", "LIMIT_TYPE", "LIMIT_VALUE", "HASH_FILE", "EXPECTED_HASH", "DELETE_EXTRA", "FILES", "SPLIT", "TIMEOUT", "POLL_INTERVAL_MS", "CONVERT",
+        "VERIFY", "INTEGRITY", "SIGNATURE", "SYNC", "UNLOCKED", "ENCODING", "FROM_ENCODING", "TO_ENCODING", "LIMIT_TYPE", "LIMIT_VALUE", "HASH_FILE", "EXPECTED_HASH", "DELETE_EXTRA", "FILES", "SPLIT", "TIMEOUT", "POLL_INTERVAL_MS", "CONVERT",
         "SUBSTRING", "POSITION", "OVERLAY", "EXTRACT", "TRIM", "PLACING", "LEADING", "TRAILING", "BOTH",
         "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE", "REQUIRE", "SAFE", "ZONES",
         "JOIN_SPILL_THRESHOLD", "TEMP_TABLE_SPILL_THRESHOLD", "EXTERNAL_HASH_PARTITIONS", "EXTERNAL_SORT_CHUNK_SIZE", "WINDOW_SPILL_THRESHOLD",
@@ -146,7 +146,8 @@ public static class LanguageMetadata
         "PLOT_BACKGROUND", "PLOT_BORDER", "AXIS_FONT_SIZE", "AXIS_FONT_COLOR", "AXIS_TITLE_FONT_SIZE",
         "SAMPLING", "LTTB", "PROGRESSIVE", "PROGRESSIVE_CHUNK",
         "SHOW_EXPORT", "SHOW_DATA_VIEW", "ZOOM_GROUP",
-        "EMIT_FILTER", "TARGETS", "FIELDS", "PARAMS"
+        "EMIT_FILTER", "TARGETS", "FIELDS", "PARAMS",
+        "SEARCH_PATH", "JOURNAL_MODE", "BUSY_TIMEOUT_MS", "AUTH_MODE", "CLIENT_ID", "KEY_COLUMNS"
     };
 
 
@@ -177,7 +178,7 @@ public static class LanguageMetadata
         "ABS", "ROUND", "CEILING", "FLOOR", "LPAD", "RPAD", "INITCAP", "POSITION", "STRPOS",
         "NVL", "NVL2", "NULLIF", "DECODE", "LEAST", "GREATEST", "POWER", "SQRT", "EXP", "LOG", "LN", "MOD", "TRUNC",
         "APPEND_TO_LIST", "REMOVE_FROM_LIST", "LENGTH", "SORT_LIST",
-        "FILE_EXISTS", "DIRECTORY_EXISTS", "FILE_LIST",
+        "FILE_EXISTS", "DIRECTORY_EXISTS", "FILE_LIST", "ARCHIVE_LIST", "EXCEL_SHEET_LIST",
         "DATETIMEFROMPARTS", "TIMEFROMPARTS", "DATETIMEOFFSETSFROMPARTS", "HASHBYTES", "NEWID", "NEWSEQUENTIALID", "CHECKSUM", "BINARY_CHECKSUM",
         "STUFF", "STRING_ESCAPE", "STRING_SPLIT", "ASCII", "UNICODE", "CHAR", "PATINDEX", "STR", "QUOTENAME", "TRANSLATE", "DATALENGTH", "TO_STR", "REPLICATE", "TRY_CAST",
         "SIN", "COS", "TAN", "ASIN", "ACOS", "ATAN", "ATAN2", "SIGN",
@@ -198,12 +199,12 @@ public static class LanguageMetadata
         "NORMALIZE", "SIMILARITY", "LEVENSHTEIN", "SOUNDEX", "DIFFERENCE", "METAPHONE", "DMETAPHONE", "DMETAPHONE_ALT", "NGRAMS", "NGRAM_TOKENS",
         "BITAND", "BITOR", "BITXOR", "BITNOT", "BITSHIFTLEFT", "BITSHIFTRIGHT", "BIT_COUNT",
         "PI", "DEGREES", "RADIANS", "COT", "REPEAT",
-        "FILE_HASH", "FILE_SIZE", "FILE_LINE_COUNT", "FILE_CREATED", "FILE_MODIFIED",
-        "PATH_COMBINE", "PATH_FILENAME", "PATH_FILENAME_NO_EXT", "PATH_EXTENSION", "PATH_CHANGE_EXTENSION", "PATH_DIRECTORY",
+        "FILE_HASH", "FILE_SIZE", "FILE_LINE_COUNT", "FILE_CREATED", "FILE_MODIFIED", "FILE_ACCESSED", "FILE_READONLY", "DIRECTORY_SIZE", "DIRECTORY_FILE_COUNT",
+        "PATH_COMBINE", "PATH_FILENAME", "PATH_FILENAME_NO_EXT", "PATH_EXTENSION", "PATH_CHANGE_EXTENSION", "PATH_DIRECTORY", "PATH_ROOT", "PATH_IS_ABSOLUTE",
         "REMOTE_FILE_LIST", "REMOTE_FILE_EXISTS", "REMOTE_DIRECTORY_EXISTS", "REMOTE_FILE_SIZE", "REMOTE_FILE_MODIFIED",
         "CONNECTION_PROPERTY",
         "SAME_PERIOD_LAST_YEAR", "START_OF_MONTH", "END_OF_MONTH", "START_OF_QUARTER", "END_OF_QUARTER", "START_OF_WEEK", "END_OF_WEEK",
-        "SAFE_DIVIDE", "CLEAN_STRING", "MASK_EMAIL", "MASK_PHONE", "MASK_SSN", "AGE_BUCKET", "VALUE_BUCKET",
+        "SAFE_DIVIDE", "CLEAN_STRING", "CLEAN_TEXT", "STANDARDIZE", "MASK_EMAIL", "MASK_PHONE", "MASK_SSN", "AGE_BUCKET", "VALUE_BUCKET",
         "SOURCE_MIN", "SOURCE_MAX",
         "CURRENT_TENANT", "TENANT_ID", "IS_SANDBOX"
     };
@@ -242,8 +243,8 @@ public static class LanguageMetadata
     /// <summary>Default maximum size in bytes for a persisted session payload.</summary>
     public const long DefaultMaxSessionSize = 200 * 1024 * 1024; // 200 MiB
 
-    /// <summary>Default minimum OS physical memory that must remain free (4GB).</summary>
-    public const int DefaultSystemMemoryFloorMB = 4096;
+    /// <summary>Default minimum live OS/container available memory headroom (512 MB).</summary>
+    public const int DefaultSystemMemoryFloorMB = 512;
 
     public static bool IsKeyword(string word) => DmlKeywords.Contains(word) || DdlKeywords.Contains(word) || ControlFlowKeywords.Contains(word) || JoinKeywords.Contains(word) || OperatorKeywords.Contains(word) || Keywords.Contains(word) || ConnectorTypes.Contains(word) || Functions.Contains(word);
     public static bool IsFunction(string word) => Functions.Contains(word);

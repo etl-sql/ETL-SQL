@@ -78,9 +78,10 @@ namespace ETL_SQL.Tests.Statements
             var tokens = lexer.Tokenize();
             var parser = new ETL_SQL.Core.Parser.Parser(tokens);
 
-            // This should throw or have diagnostics because 'Orders' is missing
+            // This should have a syntax diagnostic because the target table name before '(' is missing
             var script = parser.Parse();
-            Assert.NotEmpty(script.Diagnostics);
+            Assert.Contains(script.Diagnostics, d => d.Message.Contains("table", StringComparison.OrdinalIgnoreCase)
+                || d.Message.Contains("expected", StringComparison.OrdinalIgnoreCase));
         }
     }
 }

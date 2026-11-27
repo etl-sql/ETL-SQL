@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Governance;
@@ -248,6 +249,98 @@ public sealed class PortalConnectionCatalogService(
         }
 
         return definition;
+    }
+
+    /// <summary>
+    /// Verifies that <paramref name="identity"/> holds <c>Use</c> permission for every catalog alias
+    /// referenced by a report before serving a cached snapshot. Does not record connection usage.
+    /// When <paramref name="sharedConnectionDependenciesJson"/> was recorded at execution time, that
+    /// alias list is authoritative even if the source script later changed or was removed; otherwise
+    /// the check falls back to verifying the recorded source hash and statically scanning the source.
+    /// </summary>
+    public async Task EnsureCallerCanReadSnapshotAsync(
+        string scriptPath,
+        string? scriptHashAtRunTime,
+        string? sharedConnectionDependenciesJson,
+        ExecutionIdentity? identity,
+        CancellationToken ct)
+    {
+        if (sharedConnectionDependenciesJson is not null)
+        {
+            List<string>? aliases;
+            try
+            {
+                aliases = JsonSerializer.Deserialize<List<string>>(sharedConnectionDependenciesJson);
+            }
+            catch (JsonException)
+            {
+                throw new UnauthorizedAccessException("Snapshot connection dependencies could not be read.");
+            }
+
+            if (aliases is null || aliases.Any(string.IsNullOrWhiteSpace))
+                throw new UnauthorizedAccessException("Snapshot connection dependencies could not be read.");
+
+            try
+            {
+                await EnsureCallerCanUseAliasesAsync(aliases, identity, ct);
+            }
+            catch (ArgumentException)
+            {
+                throw new UnauthorizedAccessException("Snapshot connection dependencies could not be read.");
+            }
+            return;
+        }
+
+        // COMPAT_BREAK: 0.23 - authorize the source that actually produced the cached data.
+        if (string.IsNullOrWhiteSpace(scriptHashAtRunTime))
+            throw new UnauthorizedAccessException("Refresh this snapshot to record its source identity.");
+
+        byte[] bytes;
+        try
+        {
+            bytes = await File.ReadAllBytesAsync(scriptPath, ct);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new UnauthorizedAccessException("Snapshot source is unavailable.");
+        }
+
+        var hash = "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        if (!string.Equals(hash, scriptHashAtRunTime, StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException("Refresh this snapshot after changing its source.");
+
+        using var reader = new StreamReader(new MemoryStream(bytes));
+        var scan = SharedConnectionReferenceScan.ExtractAliases(await reader.ReadToEndAsync(ct));
+        if (!scan.IsResolved)
+            throw new UnauthorizedAccessException("Snapshot connection dependencies could not be resolved.");
+
+        await EnsureCallerCanUseAliasesAsync(scan.Aliases, identity, ct);
+    }
+
+    public async Task EnsureCallerCanUseAliasesAsync(
+        IReadOnlyCollection<string> aliases,
+        ExecutionIdentity? identity,
+        CancellationToken cancellationToken = default)
+    {
+        if (aliases.Count == 0)
+            return;
+
+        foreach (var alias in aliases.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            SecretNameValidator.Validate(alias);
+            var entity = await db.PortalSharedConnections
+                .AsNoTracking()
+                .Include(c => c.Acls)
+                    .ThenInclude(a => a.Group)
+                .SingleOrDefaultAsync(c => c.TenantId == TenantScope && c.Alias == alias, cancellationToken);
+            if (entity is null || entity.Disabled)
+            {
+                throw new UnauthorizedAccessException(
+                    $"Identity '{identity?.EffectiveUser ?? "(none)"}' is not authorized to use shared connection '{alias}'.");
+            }
+
+            await EnforceUseAclAsync(entity, identity, cancellationToken);
+        }
     }
 
     /// <summary>
@@ -685,6 +778,83 @@ public sealed class PortalConnectionCatalogService(
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         return normalized.Count == 0 ? null : string.Join(',', normalized);
+    }
+
+    public sealed record OrchestratorSyncConnectionPayload(
+        string Alias,
+        string ConnectorType,
+        string? Target,
+        Dictionary<string, string> Options,
+        string Status,
+        IReadOnlyList<string> SensitiveFields,
+        string? OwnerPrincipal,
+        IReadOnlyList<string>? AllowedPrincipals,
+        IReadOnlyList<string>? AllowedGroups,
+        string? TenantId,
+        bool RequireAcl,
+        GatewayResourceBinding? Gateway = null);
+
+    /// <summary>
+    /// Exports tenant-scoped catalog connections together with resolved owner/group principals for
+    /// replication to remote Orchestrator workers.
+    /// </summary>
+    public async Task<IReadOnlyList<OrchestratorSyncConnectionPayload>> ExportForOrchestratorSyncAsync(
+        string? alias = null, CancellationToken cancellationToken = default)
+    {
+        var query = db.PortalSharedConnections
+            .AsNoTracking()
+            .Include(c => c.Acls).ThenInclude(a => a.Group)
+            .Where(c => c.TenantId == TenantScope);
+        if (!string.IsNullOrWhiteSpace(alias))
+            query = query.Where(c => c.Alias == alias);
+
+        var rows = await query.OrderBy(c => c.Alias).ToListAsync(cancellationToken);
+        if (rows.Count == 0) return [];
+
+        var ownerIds = rows
+            .Select(c => c.OwnerUserId ?? c.CreatedByUserId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        var owners = ownerIds.Count == 0
+            ? new Dictionary<int, string?>()
+            : await db.Users.AsNoTracking()
+                .Where(u => ownerIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.PrincipalKey, cancellationToken);
+
+        var payloads = new List<OrchestratorSyncConnectionPayload>(rows.Count);
+        foreach (var entity in rows)
+        {
+            var (options, gateway) = DeserializeOptionsAndGateway(entity);
+            var ownerId = entity.OwnerUserId ?? entity.CreatedByUserId;
+            string? ownerPrincipal = null;
+            if (ownerId.HasValue && owners.TryGetValue(ownerId.Value, out var pk) && !string.IsNullOrWhiteSpace(pk))
+                ownerPrincipal = $"user:{pk}";
+
+            var allowedGroups = entity.Acls
+                .Select(a => a.Group?.Name)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            payloads.Add(new OrchestratorSyncConnectionPayload(
+                entity.Alias,
+                entity.ConnectorType,
+                entity.Target,
+                new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase),
+                entity.Disabled ? "disabled" : "active",
+                FromCsv(entity.SensitiveFieldsCsv).ToList(),
+                ownerPrincipal,
+                AllowedPrincipals: null,
+                AllowedGroups: allowedGroups.Count == 0 ? null : allowedGroups,
+                TenantId: entity.TenantId,
+                RequireAcl: true,
+                Gateway: gateway)); // COMPAT_BREAK: 0.23 - preserve remote Gateway routing.
+        }
+
+        return payloads;
     }
 
     private static IReadOnlyList<string> FromCsv(string? csv) =>

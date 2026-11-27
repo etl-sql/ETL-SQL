@@ -96,7 +96,11 @@ public sealed class OrchestratorListPagingAndUpdateValidationTests
                      new { interval = -1 },
                      new { interval = 0 },
                      new { unit = "INVALID" },
-                     new { atTime = "25:99" }
+                     new { atTime = "25:99" },
+                     new { maxRetries = -1 },
+                     new { retryDelaySeconds = 0 },
+                     new { options = new Dictionary<string, string> { ["TimeoutSeconds"] = "0" } },
+                     new { options = new Dictionary<string, string> { ["TimeoutSeconds"] = "not-a-number" } }
                  })
         {
             using var update = Request(HttpMethod.Put, "/api/scheduled-jobs/nightly_load", null, invalid);
@@ -107,6 +111,39 @@ public sealed class OrchestratorListPagingAndUpdateValidationTests
         var job = await ReadJobAsync(client, "nightly_load");
         Assert.Equal(1, job.GetProperty("interval").GetInt32());
         Assert.Equal("DAY", job.GetProperty("unit").GetString());
+
+        using (var valid = Request(HttpMethod.Put, "/api/scheduled-jobs/nightly_load", null, new
+        {
+            targetPath = "scripts/updated_load.etlsql",
+            interval = 4,
+            unit = "HOUR",
+            atTime = "03:30",
+            maxRetries = 2,
+            retryDelaySeconds = 45,
+            hashPolicy = "Block",
+            displayName = "Nightly Load Revised",
+            description = "Updated metadata",
+            options = new Dictionary<string, string>
+            {
+                ["SandboxProfile"] = "Hardened",
+                ["TimeoutSeconds"] = "900"
+            }
+        }))
+        {
+            valid.Headers.TryAddWithoutValidation("If-Match", $"\"{version}\"");
+            Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(valid)).StatusCode);
+        }
+
+        var updated = await ReadJobAsync(client, "nightly_load");
+        Assert.Equal("scripts/updated_load.etlsql", updated.GetProperty("targetPath").GetString());
+        Assert.Equal(4, updated.GetProperty("interval").GetInt32());
+        Assert.Equal("HOUR", updated.GetProperty("unit").GetString());
+        Assert.Equal("03:30", updated.GetProperty("atTime").GetString());
+        Assert.Equal(2, updated.GetProperty("maxRetries").GetInt32());
+        Assert.Equal(45, updated.GetProperty("retryDelaySeconds").GetInt32());
+        Assert.Equal("Block", updated.GetProperty("hashPolicy").GetString());
+        Assert.Contains("\"SandboxProfile\":\"Hardened\"", updated.GetProperty("options").GetString());
+        Assert.Contains("\"TimeoutSeconds\":\"900\"", updated.GetProperty("options").GetString());
     }
 
     private static async Task<JsonElement> ReadJobAsync(HttpClient client, string name)

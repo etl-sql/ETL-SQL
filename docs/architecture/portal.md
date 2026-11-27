@@ -407,7 +407,7 @@ are deleted with the user.
 | Method | Path | Auth | Description |
 | :--- | :--- | :--- | :--- |
 | GET | `/api/folders/{folderId}/reports` | Any | List reports in folder |
-| POST | `/api/reports` | Manage + `ReportPublish` | Publish a report in SourceControlled mode |
+| POST | `/api/reports` | Manage + `ReportPublish` + `ScriptIngress` | Publish a report in SourceControlled mode |
 | POST | `/api/reports/validate` | `ScriptPreview` | Validate a report script in SourceControlled mode |
 | GET | `/api/reports/{id}` | Any | Get report metadata |
 | GET | `/api/reports/{id}/dependencies` | Any | Get report dependencies |

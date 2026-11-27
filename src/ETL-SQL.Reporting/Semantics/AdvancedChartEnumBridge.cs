@@ -66,6 +66,7 @@ internal static class AdvancedChartEnumBridge
         AdvancedChartChannel.ConfidenceLow => FieldChannel.ConfidenceLow,
         AdvancedChartChannel.ConfidenceHigh => FieldChannel.ConfidenceHigh,
         AdvancedChartChannel.Color => FieldChannel.Color,
+        AdvancedChartChannel.Opacity => FieldChannel.Opacity,
         AdvancedChartChannel.Size => FieldChannel.Size,
         AdvancedChartChannel.Shape => FieldChannel.Shape,
         AdvancedChartChannel.Theta => FieldChannel.Theta,
@@ -110,6 +111,7 @@ internal static class AdvancedChartEnumBridge
         FieldChannel.ConfidenceLow => AdvancedChartChannel.ConfidenceLow,
         FieldChannel.ConfidenceHigh => AdvancedChartChannel.ConfidenceHigh,
         FieldChannel.Color => AdvancedChartChannel.Color,
+        FieldChannel.Opacity => AdvancedChartChannel.Opacity,
         FieldChannel.Size => AdvancedChartChannel.Size,
         FieldChannel.Shape => AdvancedChartChannel.Shape,
         FieldChannel.Theta => AdvancedChartChannel.Theta,
@@ -230,6 +232,7 @@ internal static class AdvancedChartEnumBridge
         AdvancedChartConditionChannel.Size => ConditionalEncodingChannel.Size,
         AdvancedChartConditionChannel.Shape => ConditionalEncodingChannel.Shape,
         AdvancedChartConditionChannel.Text => ConditionalEncodingChannel.Text,
+        AdvancedChartConditionChannel.LineDash => ConditionalEncodingChannel.LineDash,
         _ => throw Unmapped(value)
     };
 

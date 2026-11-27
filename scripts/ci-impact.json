@@ -13,6 +13,11 @@
     "engine-certification",
     "msi-upgrade"
   ],
+  "testProjects": [
+    "engine",
+    "portal",
+    "language-server"
+  ],
   "always": ["source-preflight"],
   "rules": [
     {
@@ -58,10 +63,59 @@
       "nativePackages": false
     },
     {
+      "name": "Language server unit tests",
+      "pattern": "^tests/ETL-SQL\\.LanguageServer\\.Tests/.*\\.cs$",
+      "lanes": ["build-and-test"],
+      "nativePackages": false
+    },
+    {
+      "name": "Portal unit and integration tests",
+      "pattern": "^tests/ETL-SQL\\.Portal\\.Tests/.*\\.cs$",
+      "lanes": [
+        "build-and-test",
+        "enterprise-certification",
+        "docker-integration-tests"
+      ],
+      "nativePackages": false
+    },
+    {
+      "name": "Engine unit and integration tests",
+      "pattern": "^tests/ETL-SQL\\.Tests/.*\\.cs$",
+      "lanes": [
+        "build-and-test",
+        "enterprise-certification",
+        "docker-integration-tests",
+        "engine-certification"
+      ],
+      "nativePackages": false
+    },
+    {
       "name": "Core, runtime, shared UI, dependencies and unclassified files",
       "pattern": "^",
       "lanes": "*",
       "nativePackages": true
+    }
+  ],
+  "testProjectRules": [
+    {
+      "name": "Language server source and unit tests",
+      "pattern": "^(?:src/ETL-SQL\\.LanguageServer/|tests/ETL-SQL\\.LanguageServer\\.Tests/)",
+      "projects": ["language-server"]
+    },
+    {
+      "name": "Portal C# host and Portal unit tests",
+      "pattern": "^(?:src/ETL-SQL\\.Portal/(?!BrowserSources/|wwwroot/)|tests/ETL-SQL\\.Portal\\.Tests/)",
+      "projects": ["portal"]
+    },
+    {
+      "name": "Engine unit tests",
+      "pattern": "^tests/ETL-SQL\\.Tests/",
+      "projects": ["engine"]
+    },
+    {
+      "name": "Shared runtime, engine, and build inputs",
+      "pattern": "^",
+      "projects": "*"
     }
   ]
 }

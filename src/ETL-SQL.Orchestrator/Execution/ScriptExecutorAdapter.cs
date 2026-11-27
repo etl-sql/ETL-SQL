@@ -89,14 +89,18 @@ namespace ETL_SQL.Orchestrator.Execution
                 : null;
             using var activity = EngineExecutionObservability.StartExecutionActivity(scriptHash, jobName, CurrentCorrelationId());
 
+            // The CliContext is a DI singleton shared by every concurrent job. Each run gets its own
+            // copy carrying its session id (CQ-S2); writing the id into the shared instance let a
+            // second job overwrite the first one's before it was read, so both ran under the same
+            // session — one spill directory and ledger — and the first job reported the wrong id.
+            var runContext = _ctx.Clone();
+            if (!string.IsNullOrEmpty(sessionId))
+                runContext.SessionId = sessionId;
+
             try
             {
-                // Override the context's session ID if provided by the orchestrator (CQ-S2)
-                if (!string.IsNullOrEmpty(sessionId))
-                    _ctx.SessionId = sessionId;
-
                 await ReleaseSessionAsync();
-                var session = new ExecutionSession(_serviceProvider, _ctx, _logger);
+                var session = new ExecutionSession(_serviceProvider, runContext, _logger);
                 _session = session;
                 var result = await session.ExecuteAsync(
                     scriptText, cancellationToken, jobName, queueWaitMs, executionIdentity,
@@ -137,7 +141,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 var endCpu = process.TotalProcessorTime.TotalSeconds;
                 var output = new ScriptExecutionResult(result.Success, result.RowsProcessed,
                     result.Success ? null : string.Join("; ", result.Diagnostics.Select(d => d.Message)),
-                    process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId,
+                    process.PeakWorkingSet64, endCpu - startCpu, runContext.SessionId,
                     result.RowsQuarantined, result.RowsWarned, result.DataQualityFailures,
                     result.DataQualityColumnMetrics, result.DataQualityRuleFailures,
                     CollectStatementMetrics(runFailed: !result.Success), result.RetryAllowed);
@@ -160,7 +164,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 process.Refresh();
                 var endCpu = process.TotalProcessorTime.TotalSeconds;
                 var output = new ScriptExecutionResult(false, 0, SecretRedactor.Redact(ex.Message),
-                    process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId,
+                    process.PeakWorkingSet64, endCpu - startCpu, runContext.SessionId,
                     StatementMetrics: CollectStatementMetrics(runFailed: true));
                 sw.Stop();
                 EngineExecutionObservability.CompleteExecutionActivity(

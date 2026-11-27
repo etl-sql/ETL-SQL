@@ -1,10 +1,11 @@
-import { asError } from './http-error.js';
+import { asError, isObject } from './http-error.js';
 import type { ApiRequestOptions } from './portal-http.js';
-import { escHtml, fmtDt, renderJobAuditTrail, renderWatermarksTable } from './orchestrator-admin-ui.js';
-import { accessPanelHtml, ownerLabel } from './orchestrator-acl-ui.js';
+import { escHtml, fmtDt, renderJobAuditTrail, renderRunWaterfallHtml, renderWatermarksTable } from './orchestrator-admin-ui.js';
+import { handleObjectAccessClick, loadObjectAccessPanel, ownerLabel } from './orchestrator-acl-ui.js';
 import { jobVersion, requireMutationStatus } from './orchestrator-job-actions.js';
+import { parsePipelineJobId, studioDocumentHref, targetKindLabel } from './orchestrator-job-table.js';
 import { readCatalogJson, readNotifications, readSchedules } from './orchestrator-catalog-responses.js';
-import { readAudit, readDependencyChain, readGrants, readHistory, readJobStates, readNotificationLinks,
+import { readAudit, readDependencyChain, readHistory, readJobStates, readNotificationLinks,
     readQualityFailures, readQualityStatuses, readScheduleLinks } from './orchestrator-detail-responses.js';
 import type { HistoryRun } from './orchestrator-detail-responses.js';
 
@@ -18,7 +19,8 @@ import type { HistoryRun } from './orchestrator-detail-responses.js';
  */
 
 type Job = Pick<JobDefinition, 'name' | 'script' | 'interval' | 'unit' | 'atTime' | 'lastRun' | 'nextRun'
-    | 'version' | 'jobType' | 'targetPath' | 'displayName' | 'description' | 'options' | 'createdBy'>;
+    | 'version' | 'jobType' | 'targetPath' | 'displayName' | 'description' | 'options' | 'createdBy'
+    | 'maxRetries' | 'retryDelaySeconds' | 'hashPolicy'>;
 type Tab = 'details' | 'flow' | 'deps' | 'quality' | 'audit';
 interface Chart { setOption(option: unknown, replace?: boolean): void; dispose(): void }
 interface Editor { getValue(): string; dispose(): void }
@@ -26,6 +28,7 @@ interface Editor { getValue(): string; dispose(): void }
 export interface JobDetailOptions {
     root: Document;
     isAdmin: boolean;
+    isManager?: boolean;
     fetch(url: string, init?: ApiRequestOptions): Promise<Response>;
     notify(message: string, failed?: boolean): void;
     confirm(message: string, options: Parameters<EtlSqlFeedback['confirm']>[1]): Promise<boolean>;
@@ -37,6 +40,12 @@ export interface JobDetailOptions {
     reloadJob(name: string): Promise<Job | null>;
     selectionChanged(name: string | null): void;
     sessionExpired(): void;
+    findCatalogPipeline?(jobName: string): CatalogPipelineLinkDto | null;
+    onPipelineProvisioned?(result: ProvisionPipelineSlotResultDto): void | Promise<void>;
+    isExternalScriptIngressEnabled?(): boolean;
+    editJob?(job: Job): void;
+    runJob?(name: string): void;
+    killJob?(name: string): Promise<void> | void;
 }
 
 const TABS: Tab[] = ['details', 'flow', 'deps', 'quality', 'audit'];
@@ -295,6 +304,29 @@ export function createJobDetail(options: JobDetailOptions) {
         host.replaceChildren();
         savedScript = value.script ?? '';
         saveScript.style.display = 'none';
+        const pipelineId = parsePipelineJobId(value.name);
+        if (pipelineId !== null) {
+            // Catalog-backed pipelines are authored in Studio; never allow raw Jobs.Script mutations here.
+            host.innerHTML = `<div class="orch-catalog-script-notice" data-catalog-managed="true">
+                <div>
+                  <strong>Managed in Studio</strong>
+                  <div class="orch-link-meta">Catalog pipeline revisions live in Studio so catalog and Orchestrator scripts cannot diverge.</div>
+                </div>
+                <a class="btn btn-sm btn-primary" href="${escHtml(studioDocumentHref(pipelineId))}">Open in Studio ↗</a>
+              </div>
+              <pre class="orch-script-readonly"><code>${escHtml(savedScript || '-- No script snapshot stored on this run slot yet --')}</code></pre>`;
+            return;
+        }
+        if (options.isExternalScriptIngressEnabled && !options.isExternalScriptIngressEnabled()) {
+            host.innerHTML = `<div class="orch-catalog-script-notice" data-script-ingress-disabled="true">
+                <div>
+                  <strong>Inline script editing disabled</strong>
+                  <div class="orch-link-meta">CatalogOnly governance is active. Publish changes in Studio or deploy an <code>orch://</code> bundle.</div>
+                </div>
+              </div>
+              <pre class="orch-script-readonly"><code>${escHtml(savedScript || '-- Target definition stored externally --')}</code></pre>`;
+            return;
+        }
         try {
             const created = await options.createEditor(host, { value: savedScript,
                 onChange: text => { if (live(opened)) saveScript.style.display = text !== savedScript ? '' : 'none'; } });
@@ -307,7 +339,7 @@ export function createJobDetail(options: JobDetailOptions) {
 
     saveScript.addEventListener('click', async () => {
         const target = selected, text = editor?.getValue();
-        if (!target || text === undefined) return;
+        if (!target || parsePipelineJobId(target.name) !== null || text === undefined) return;
         const opened = scope;
         saveScript.disabled = true;
         try {
@@ -331,54 +363,47 @@ export function createJobDetail(options: JobDetailOptions) {
     }, { signal: lifetime.signal });
 
     // ── Access ────────────────────────────────────────────────────────────────
-    function loadAccess(value: Job) {
-        const host = box('accessPanelWrap');
-        const draw = (state: Parameters<typeof accessPanelHtml>[0]) => { host.innerHTML = accessPanelHtml(state, escHtml, escHtml); };
-        const opened = scope;
-        return options.fetch(`/api/orchestrator/authorization/Job/${encodeURIComponent(value.name)}`, { signal: opened.signal, cache: 'no-store' })
-            .then(async response => {
-                if (response.status === 401) { options.sessionExpired(); return; }
-                // Listing grants requires MANAGE, so a refusal is an answer about this caller, not a fault.
-                const state = response.status === 403
-                    ? { job: value, error: 'You can reach this job but are not permitted to administer its access.' }
-                    : { job: value, grants: readGrants(await readCatalogJson(response)), isAdmin: options.isAdmin };
-                if (live(opened)) draw(state);
-            })
-            .catch(failure => { if (live(opened)) draw({ job: value, error: `Access could not be loaded: ${asError(failure).message}` }); });
-    }
-
-    box('accessPanelWrap').addEventListener('click', async event => {
-        const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button') : null;
-        const target = selected;
-        if (!button || !target) return;
-        const base = `/api/orchestrator/authorization/Job/${encodeURIComponent(target.name)}`;
-        const host = box('accessPanelWrap');
-        const value = (id: string) => host.querySelector<HTMLInputElement | HTMLSelectElement>(`#${id}`)?.value.trim() ?? '';
-        const principal = (kind: string, key: string) => `${base}/${encodeURIComponent(kind)}/${encodeURIComponent(key)}`;
-        if (button.dataset.revokeKind && button.dataset.revokeKey) {
-            const kind = button.dataset.revokeKind, key = button.dataset.revokeKey;
-            if (!await options.confirm(`Revoke access for '${key}' on job '${target.name}'?`, { title: 'Revoke access',
-                confirmLabel: 'Revoke access', danger: true, auditAction: 'orchestrator.grant.revoke' })) return;
-            await write(`grant:${kind}:${key}`, signal => options.fetch(principal(kind, key), { method: 'DELETE', signal }),
-                204, `Access revoked for '${key}'.`, () => loadAccess(target));
-        } else if (button.id === 'aclGrantBtn') {
-            const kind = value('aclPrincipalKind'), key = value('aclPrincipalKey'), permission = value('aclPermission');
-            if (!key) { options.notify('Error: Enter the principal key to grant access to.', true); return; }
-            await write(`grant:${kind}:${key}`, signal => options.fetch(principal(kind, key), { method: 'PUT', body: { permission }, signal }),
-                200, `${permission} granted to '${key}'.`, () => loadAccess(target));
-        } else if (button.id === 'aclOwnerBtn') {
-            const principalKind = value('aclOwnerKind'), principalId = value('aclOwnerKey');
-            if (!principalId) { options.notify('Error: Enter the principal key of the new owner.', true); return; }
+    const accessOptions = {
+        host: box('accessPanelWrap'),
+        idPrefix: 'acl',
+        isAdmin: options.isAdmin,
+        esc: escHtml,
+        fetch: options.fetch,
+        notify: options.notify,
+        confirm: options.confirm,
+        sessionExpired: options.sessionExpired,
+        write: (key: string, send: (signal: AbortSignal) => Promise<Response>, status: number, done: string, after: () => unknown) =>
+            write(key, send, status, done, after),
+        onOwnerUpdated: async () => {
+            const target = selected;
             const opened = scope;
-            const changed = await write('owner', signal => options.fetch(`${base}/owner`, { method: 'PUT', body: { principalKind, principalId }, signal }),
-                200, `Owner of '${target.name}' updated.`, () => undefined);
-            if (!changed) return;
+            if (!target) return;
             const current = await options.reloadJob(target.name);
             if (!live(opened) || !current) return;
             selected = current;
             box('metaOwner').textContent = ownerLabel(current.createdBy);
-            void loadAccess(current);
         }
+    };
+
+    function loadAccess(value: Job) {
+        const opened = scope;
+        return loadObjectAccessPanel(
+            accessOptions,
+            { kind: 'Job', name: value.name, createdBy: value.createdBy },
+            opened.signal,
+            () => live(opened) && selected?.name === value.name);
+    }
+
+    box('accessPanelWrap').addEventListener('click', event => {
+        const target = selected;
+        const opened = scope;
+        if (!target) return;
+        void handleObjectAccessClick(
+            accessOptions,
+            event,
+            { kind: 'Job', name: target.name, createdBy: target.createdBy },
+            opened.signal,
+            () => live(opened) && selected?.name === target.name);
     }, { signal: lifetime.signal });
 
     // ── History and trend ─────────────────────────────────────────────────────
@@ -408,16 +433,104 @@ export function createJobDetail(options: JobDetailOptions) {
     function historyRow(run: HistoryRun): string {
         const succeeded = run.status === 'Success' || run.status === 'Completed';
         const eligible = run.status === 'Failed' || run.status === 'Cancelled';
+        const isActive = !run.endTime || /^(running|queued)$/i.test(run.status);
         const duration = seconds(run);
         // Recovery needs three facts; when one is missing the reader is told which, not shown a dash.
-        const action = eligible && run.hasResumeSession && run.checkpointLabel
+        const resumeAction = eligible && run.hasResumeSession && run.checkpointLabel
             ? `<button class="btn btn-sm btn-outline history-resume-btn" type="button" data-resume-id="${run.id}" data-resume-label="${escHtml(run.checkpointLabel)}" title="Resume from named checkpoint">Resume · ${escHtml(run.checkpointLabel)}</button>`
             : `<button class="btn btn-sm btn-outline history-resume-btn" type="button" disabled>Unavailable</button><span class="history-resume-reason">${
                 eligible ? 'No resumable checkpoint: this run was not persistent or never reached a top-level label.' : 'Only failed or cancelled runs can resume.'}</span>`;
-        return `<tr><td>#${run.id}</td>
-            <td><span class="badge ${succeeded ? 'badge-success' : run.status === 'Running' ? 'badge-accent' : 'badge-danger'}">${escHtml(run.status)}</span></td>
+        const cancelAction = isActive
+            ? `<button class="btn btn-sm btn-outline btn-danger-soft history-cancel-btn" type="button" data-cancel-run-id="${run.id}">Cancel Run</button>`
+            : '';
+        return `<tr class="orch-history-row" data-run-id="${run.id}" title="Click to view statement execution waterfall">
+            <td><button class="btn btn-sm btn-outline" type="button" data-inspect-run-id="${run.id}" title="View statement execution waterfall">#${run.id}</button></td>
+            <td><span class="badge ${succeeded ? 'badge-success' : isActive ? 'badge-accent' : 'badge-danger'}">${escHtml(run.status)}</span></td>
             <td>${escHtml(fmtDt(run.startTime))}</td><td>${duration === null ? '—' : `${duration}s`}</td>
-            <td>${run.rowsProcessed.toLocaleString()}</td><td>${action}</td></tr>`;
+            <td>${run.rowsProcessed.toLocaleString()}</td><td><div class="table-actions">${cancelAction}${resumeAction}</div></td></tr>`;
+    }
+
+    const waterfallModal = root.getElementById('runWaterfallModal');
+    const waterfallTitle = root.getElementById('runWaterfallTitle');
+    const waterfallSubtitle = root.getElementById('runWaterfallSubtitle');
+    const waterfallBody = root.getElementById('runWaterfallBody');
+    const waterfallCancel = root.getElementById('runWaterfallCancelBtn');
+    let waterfallScope: AbortController | null = null;
+    let waterfallRun: { id: string; jobName: string } | null = null;
+
+    function closeWaterfall() {
+        waterfallScope?.abort();
+        waterfallScope = null;
+        waterfallRun = null;
+        if (waterfallModal instanceof HTMLElement) waterfallModal.style.display = 'none';
+        if (waterfallCancel instanceof HTMLButtonElement) waterfallCancel.style.display = 'none';
+    }
+    for (const id of ['closeRunWaterfallBtn', 'runWaterfallCloseBtn']) {
+        root.getElementById(id)?.addEventListener('click', closeWaterfall, { signal: lifetime.signal });
+    }
+
+    function readRunDetail(value: unknown): JobRunDetailResponseDto {
+        if (!isObject(value) || typeof value.runId !== 'number' || typeof value.jobName !== 'string'
+            || typeof value.status !== 'string' || typeof value.startTime !== 'string'
+            || typeof value.rowsProcessed !== 'number' || !Array.isArray(value.statements)) {
+            throw new TypeError('Invalid run execution waterfall response.');
+        }
+        return value as unknown as JobRunDetailResponseDto;
+    }
+
+    async function openWaterfall(runId: string) {
+        if (!(waterfallModal instanceof HTMLElement) || !(waterfallBody instanceof HTMLElement)) return;
+        const opened = scope;
+        if (!live(opened)) return;
+        waterfallScope?.abort();
+        const wfScope = waterfallScope = new AbortController();
+        waterfallRun = null;
+        if (waterfallTitle) waterfallTitle.textContent = `Run #${runId}`;
+        if (waterfallSubtitle) waterfallSubtitle.textContent = selected?.name ? `Job: ${selected.name}` : '';
+        if (waterfallCancel instanceof HTMLButtonElement) {
+            waterfallCancel.style.display = 'none';
+            waterfallCancel.disabled = false;
+        }
+        waterfallBody.innerHTML = loading('Loading statement waterfall…');
+        waterfallModal.style.display = 'flex';
+        try {
+            const detail = readRunDetail(await read(`/api/orchestrator/runs/${encodeURIComponent(runId)}`, wfScope));
+            if (wfScope.signal.aborted || !live(opened) || waterfallScope !== wfScope) return;
+            waterfallRun = { id: String(detail.runId), jobName: detail.jobName };
+            if (waterfallTitle) waterfallTitle.textContent = `Run #${detail.runId} — ${detail.jobName}`;
+            if (waterfallSubtitle) waterfallSubtitle.textContent = `${detail.status} · Started ${fmtDt(detail.startTime)}`;
+            if (waterfallCancel instanceof HTMLButtonElement) {
+                waterfallCancel.style.display = detail.completed ? 'none' : '';
+            }
+            waterfallBody.innerHTML = renderRunWaterfallHtml(detail);
+        } catch (failure) {
+            if (!wfScope.signal.aborted && live(opened) && waterfallScope === wfScope) {
+                waterfallBody.innerHTML = failed('Run waterfall', failure);
+            }
+        }
+    }
+
+    async function cancelRunById(jobName: string, id: string, button?: HTMLButtonElement | null): Promise<boolean> {
+        if (!await options.confirm(`Cancel in-flight run #${id} of job '${jobName}'?`, {
+            title: 'Cancel active run',
+            impact: 'The orchestrator signals the running execution to stop. Work already committed externally is not rolled back.',
+            confirmLabel: 'Cancel run', danger: true, auditAction: 'orchestrator.run.cancel'
+        })) return false;
+        if (button) button.disabled = true;
+        const cancelled = await write(`cancel:${id}`,
+            signal => options.fetch(`/api/orchestrator/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST', signal }),
+            202, `Cancellation requested for run #${id}.`, () => loadHistory(jobName));
+        if (!cancelled && button?.isConnected) button.disabled = false;
+        return cancelled;
+    }
+
+    if (waterfallCancel instanceof HTMLButtonElement) {
+        waterfallCancel.addEventListener('click', async () => {
+            const target = waterfallRun;
+            if (!target) return;
+            const cancelled = await cancelRunById(target.jobName, target.id, waterfallCancel);
+            if (cancelled) void openWaterfall(target.id);
+        }, { signal: lifetime.signal });
     }
 
     function loadHistory(name: string) {
@@ -433,16 +546,33 @@ export function createJobDetail(options: JobDetailOptions) {
     }
 
     box('historyTableWrap').addEventListener('click', async event => {
-        const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-resume-id]') : null;
-        const name = selected?.name, id = button?.dataset.resumeId, label = button?.dataset.resumeLabel;
-        if (!button || !name || !id) return;
-        // Resuming re-runs everything the checkpoint did not cover; say so before doing it.
-        if (!await options.confirm(`Resume run #${id} from checkpoint '${label}'?`, { title: 'Resume from named checkpoint',
-            impact: 'Work after that label may run again.', confirmLabel: 'Resume run', auditAction: 'orchestrator.run.resume' })) return;
-        button.disabled = true;
-        const resumed = await write(`resume:${id}`, signal => options.fetch(`/api/orchestrator/runs/${encodeURIComponent(id)}/resume`, { method: 'POST', signal }),
-            202, `Run #${id} queued to resume.`, () => loadHistory(name));
-        if (!resumed && button.isConnected) button.disabled = false;
+        if (!(event.target instanceof Element)) return;
+        const resumeButton = event.target.closest<HTMLButtonElement>('[data-resume-id]');
+        const name = selected?.name;
+        if (resumeButton && name && resumeButton.dataset.resumeId) {
+            const id = resumeButton.dataset.resumeId, label = resumeButton.dataset.resumeLabel;
+            // Resuming re-runs everything the checkpoint did not cover; say so before doing it.
+            if (!await options.confirm(`Resume run #${id} from checkpoint '${label}'?`, { title: 'Resume from named checkpoint',
+                impact: 'Work after that label may run again.', confirmLabel: 'Resume run', auditAction: 'orchestrator.run.resume' })) return;
+            resumeButton.disabled = true;
+            const resumed = await write(`resume:${id}`, signal => options.fetch(`/api/orchestrator/runs/${encodeURIComponent(id)}/resume`, { method: 'POST', signal }),
+                202, `Run #${id} queued to resume.`, () => loadHistory(name));
+            if (!resumed && resumeButton.isConnected) resumeButton.disabled = false;
+            return;
+        }
+        const cancelButton = event.target.closest<HTMLButtonElement>('[data-cancel-run-id]');
+        if (cancelButton && name && cancelButton.dataset.cancelRunId) {
+            await cancelRunById(name, cancelButton.dataset.cancelRunId, cancelButton);
+            return;
+        }
+        const inspectButton = event.target.closest<HTMLButtonElement>('[data-inspect-run-id]');
+        if (inspectButton?.dataset.inspectRunId) {
+            void openWaterfall(inspectButton.dataset.inspectRunId);
+            return;
+        }
+        if (event.target.closest('button, a')) return;
+        const row = event.target.closest<HTMLElement>('tr[data-run-id]');
+        if (row?.dataset.runId) void openWaterfall(row.dataset.runId);
     }, { signal: lifetime.signal });
 
     // ── Tabs ──────────────────────────────────────────────────────────────────
@@ -528,12 +658,42 @@ export function createJobDetail(options: JobDetailOptions) {
     for (const name of TABS)
         box(`detailTab${name.charAt(0).toUpperCase() + name.slice(1)}`).addEventListener('click', () => showTab(name), { signal: lifetime.signal });
 
+    const catalogNotice = root.getElementById('detailCatalogNotice');
+    catalogNotice?.addEventListener('click', async event => {
+        const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-grant-pipeline-owner]') : null;
+        const pipelineId = button ? Number(button.dataset.grantPipelineOwner) : NaN;
+        const current = selected;
+        if (!button || !current || !Number.isSafeInteger(pipelineId) || pipelineId <= 0 || lifetime.signal.aborted) return;
+        const opened = scope;
+        if (pending.has('provision-slot') || !live(opened)) return;
+        pending.add('provision-slot');
+        button.disabled = true;
+        try {
+            const response = await options.fetch(`/api/orchestrator/pipelines/${encodeURIComponent(String(pipelineId))}/provision`, {
+                method: 'POST', signal: lifetime.signal
+            });
+            await requireMutationStatus(response, 200);
+            const result = await response.json().catch(() => null) as ProvisionPipelineSlotResultDto | null;
+            if (lifetime.signal.aborted) return;
+            options.notify(result?.message || `Updated EXECUTE access on '${current.name}'.`);
+            if (result && options.onPipelineProvisioned) await options.onPipelineProvisioned(result);
+            if (live(opened)) void loadAccess(current);
+        } catch (failure) {
+            if (!lifetime.signal.aborted) options.notify(`Error: ${asError(failure).message}`, true);
+        } finally {
+            pending.delete('provision-slot');
+            if (!lifetime.signal.aborted) button.disabled = false;
+        }
+    }, { signal: lifetime.signal });
+
     // ── Open and close ────────────────────────────────────────────────────────
     function header(value: Job) {
-        const bundle = value.jobType === 1 || (value.targetPath ?? '').startsWith('bundle://');
+        const pipelineId = parsePipelineJobId(value.name);
+        const link = pipelineId !== null ? (options.findCatalogPipeline?.(value.name) ?? null) : null;
+        const displayName = link?.name || (value.displayName && value.displayName !== value.name ? value.displayName : '');
         box('detailJobName').textContent = value.name;
-        box('detailJobDisplayName').textContent = value.displayName && value.displayName !== value.name ? value.displayName : '';
-        box('metaTargetKind').textContent = bundle ? 'Bundle' : 'Script';
+        box('detailJobDisplayName').textContent = displayName && displayName !== value.name ? displayName : '';
+        box('metaTargetKind').textContent = targetKindLabel(value.jobType, value.targetPath, value.name);
         box('metaSandboxProfile').textContent = sandboxProfile(value.options);
         box('metaVersion').textContent = `v${value.version}`;
         box('metaOwner').textContent = ownerLabel(value.createdBy);
@@ -542,10 +702,33 @@ export function createJobDetail(options: JobDetailOptions) {
         box('detailSchedule').textContent = scheduleText(value);
         box('detailLastRun').textContent = value.lastRun ? fmtDt(value.lastRun) : 'Never';
         box('detailNextRun').textContent = value.nextRun ? fmtDt(value.nextRun) : '—';
+        if (catalogNotice) {
+            if (pipelineId === null) {
+                catalogNotice.style.display = 'none';
+                catalogNotice.replaceChildren();
+            } else {
+                const canManage = options.isManager ?? options.isAdmin;
+                catalogNotice.style.display = '';
+                catalogNotice.innerHTML = `<div class="orch-catalog-banner">
+                  <div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
+                      <strong>Studio Catalog Pipeline</strong>
+                      ${link?.folderPath ? `<span class="badge" style="font-size:.75em;background:var(--portal-surface-subtle)">📁 ${escHtml(link.folderPath)}</span>` : ''}
+                      ${link?.ownerDisplayName ? `<span class="orch-link-meta">Catalog owner: ${escHtml(link.ownerDisplayName)}</span>` : ''}
+                    </div>
+                    <div class="orch-link-meta">Script edits belong in Studio. Orchestrator owns execution, grants, and run schedules.</div>
+                  </div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                    <a class="btn btn-sm btn-outline" href="${escHtml(studioDocumentHref(pipelineId))}">Open in Studio ↗</a>
+                    ${canManage && link?.ownerPrincipalKey ? `<button class="btn btn-sm btn-outline" type="button" data-grant-pipeline-owner="${pipelineId}">Grant Owner EXECUTE</button>` : ''}
+                  </div>
+                </div>`;
+            }
+        }
     }
 
     function closeDialogs() {
-        attachSchedule.close(); attachNotification.close();
+        attachSchedule.close(); attachNotification.close(); closeWaterfall();
         stateOwner = null; stateModal.style.display = 'none';
     }
 
@@ -575,6 +758,31 @@ export function createJobDetail(options: JobDetailOptions) {
     }
 
     get('closeDetailBtn', HTMLButtonElement).addEventListener('click', close, { signal: lifetime.signal });
+    const detailRunBtn = root.getElementById('detailRunBtn');
+    if (detailRunBtn instanceof HTMLButtonElement) {
+        detailRunBtn.style.display = options.runJob ? '' : 'none';
+        detailRunBtn.addEventListener('click', () => { if (selected) options.runJob?.(selected.name); }, { signal: lifetime.signal });
+    }
+    const detailKillBtn = root.getElementById('detailKillBtn');
+    if (detailKillBtn instanceof HTMLButtonElement) {
+        detailKillBtn.style.display = options.killJob ? '' : 'none';
+        detailKillBtn.addEventListener('click', async () => {
+            const current = selected;
+            if (!current || !options.killJob) return;
+            detailKillBtn.disabled = true;
+            try {
+                await options.killJob(current.name);
+                if (selected?.name === current.name && !lifetime.signal.aborted) void loadHistory(current.name);
+            } finally {
+                if (!lifetime.signal.aborted && detailKillBtn.isConnected) detailKillBtn.disabled = false;
+            }
+        }, { signal: lifetime.signal });
+    }
+    const editJobBtn = root.getElementById('editJobBtn');
+    if (editJobBtn instanceof HTMLButtonElement) {
+        editJobBtn.style.display = (options.isManager ?? options.isAdmin) && options.editJob ? '' : 'none';
+        editJobBtn.addEventListener('click', () => { if (selected) options.editJob?.(selected); }, { signal: lifetime.signal });
+    }
 
     return {
         open, close,

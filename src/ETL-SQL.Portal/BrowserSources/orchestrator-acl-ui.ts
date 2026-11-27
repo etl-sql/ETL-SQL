@@ -1,9 +1,42 @@
+import { asError } from './http-error.js';
+import type { ApiRequestOptions } from './portal-http.js';
+import { readCatalogJson } from './orchestrator-catalog-responses.js';
+import { readGrants } from './orchestrator-detail-responses.js';
+import { requireMutationStatus } from './orchestrator-job-actions.js';
+
 type Escape = (value: unknown) => string;
+export type OrchestratorAccessKind = 'Job' | 'Schedule' | 'Notification';
+export interface AccessPanelSubject {
+    name?: string | null;
+    createdBy?: string | null;
+}
 export interface AccessPanelState {
     job?: Partial<JobDefinitionDto> | null;
+    subject?: AccessPanelSubject | null;
+    objectKind?: OrchestratorAccessKind;
     grants?: Partial<ObjectGrantResponse>[] | null;
     error?: string | null;
     isAdmin?: boolean;
+}
+
+export interface ObjectAccessTarget {
+    kind: OrchestratorAccessKind;
+    name: string;
+    createdBy?: string | null;
+}
+
+export interface ObjectAccessPanelOptions {
+    host: HTMLElement;
+    idPrefix: string;
+    isAdmin: boolean;
+    esc: Escape;
+    fetch(url: string, init?: ApiRequestOptions): Promise<Response>;
+    notify(message: string, failed?: boolean): void;
+    confirm(message: string, options: Parameters<EtlSqlFeedback['confirm']>[1]): Promise<boolean>;
+    sessionExpired(): void;
+    write(key: string, send: (signal: AbortSignal) => Promise<Response>, status: number, done: string,
+        after: () => unknown): Promise<boolean>;
+    onOwnerUpdated?(target: ObjectAccessTarget): Promise<void> | void;
 }
 
 // Access panel for one Orchestrator object — its owner, and who has been granted what.
@@ -137,15 +170,15 @@ export function canReassignOwner(state: AccessPanelState | null | undefined) {
  * are the same act, so they are the same control — a separate "adopt" button would imply that
  * transferring was something else.
  */
-export function ownerFormHtml(state: AccessPanelState | null | undefined) {
+export function ownerFormHtml(state: AccessPanelState | null | undefined, idPrefix = 'acl') {
     if (!canReassignOwner(state)) return '';
     return `
         <div class="orch-acl-owner-set">
-          <select id="aclOwnerKind" class="form-select form-select-sm" aria-label="Owner kind">
+          <select id="${idPrefix}OwnerKind" class="form-select form-select-sm" aria-label="Owner kind">
             ${OWNER_KINDS.map(kind => `<option value="${kind}">${kind.charAt(0)}${kind.slice(1).toLowerCase()}</option>`).join('')}
           </select>
-          <input id="aclOwnerKey" class="param-input" type="text" placeholder="Principal key" aria-label="Owner principal key">
-          <button class="btn btn-sm btn-outline" id="aclOwnerBtn">Set owner</button>
+          <input id="${idPrefix}OwnerKey" class="param-input" type="text" placeholder="Principal key" aria-label="Owner principal key">
+          <button class="btn btn-sm btn-outline" id="${idPrefix}OwnerBtn" data-acl-action="owner" type="button">Set owner</button>
         </div>`;
 }
 
@@ -156,8 +189,9 @@ export function ownerFormHtml(state: AccessPanelState | null | undefined) {
  * things and both look like an empty table otherwise: 403 is "you may reach this object but not
  * administer it", and 404 is "no such object in your tenant".
  */
-export function accessPanelHtml(state: AccessPanelState | null | undefined, esc: Escape, escAttr: Escape) {
-    const { job, grants, error } = state || {};
+export function accessPanelHtml(state: AccessPanelState | null | undefined, esc: Escape, escAttr: Escape, idPrefix = 'acl') {
+    const { job, subject, grants, error } = state || {};
+    const owner = (subject ?? job)?.createdBy;
     const editable = canAdminister(state);
 
     if (error) {
@@ -171,14 +205,14 @@ export function accessPanelHtml(state: AccessPanelState | null | undefined, esc:
 
     const form = editable ? `
         <div class="orch-acl-add">
-          <select id="aclPrincipalKind" class="form-select form-select-sm" aria-label="Principal kind">
+          <select id="${idPrefix}PrincipalKind" class="form-select form-select-sm" aria-label="Principal kind">
             ${PRINCIPAL_KINDS.map(kind => `<option value="${kind}">${kind.charAt(0)}${kind.slice(1).toLowerCase()}</option>`).join('')}
           </select>
-          <input id="aclPrincipalKey" class="param-input" type="text" placeholder="Principal key" aria-label="Principal key">
-          <select id="aclPermission" class="form-select form-select-sm" aria-label="Permission">
+          <input id="${idPrefix}PrincipalKey" class="param-input" type="text" placeholder="Principal key" aria-label="Principal key">
+          <select id="${idPrefix}Permission" class="form-select form-select-sm" aria-label="Permission">
             ${PERMISSIONS.map(permission => `<option value="${permission}">${permission}</option>`).join('')}
           </select>
-          <button class="btn btn-sm btn-primary" id="aclGrantBtn">Grant</button>
+          <button class="btn btn-sm btn-primary" id="${idPrefix}GrantBtn" data-acl-action="grant" type="button">Grant</button>
         </div>
         <p class="orch-acl-hint">
           The principal <em>key</em>, not a username — a name can be reassigned, and a grant that
@@ -188,8 +222,8 @@ export function accessPanelHtml(state: AccessPanelState | null | undefined, esc:
     return `
         <div class="orch-acl-owner">
           <label>Owner</label>
-          <div class="orch-detail-meta"><span>${esc(ownerLabel(job?.createdBy))}</span></div>
-          ${ownerFormHtml(state)}
+          <div class="orch-detail-meta"><span>${esc(ownerLabel(owner))}</span></div>
+          ${ownerFormHtml(state, idPrefix)}
         </div>
         <table class="data-table orch-acl-table">
           <thead><tr><th>Principal</th><th>Type</th><th>Permission</th><th></th></tr></thead>
@@ -197,3 +231,83 @@ export function accessPanelHtml(state: AccessPanelState | null | undefined, esc:
         </table>
         ${form}`;
 }
+
+export async function loadObjectAccessPanel(
+    options: ObjectAccessPanelOptions,
+    target: ObjectAccessTarget,
+    signal: AbortSignal,
+    isLive: () => boolean
+): Promise<void> {
+    const draw = (state: AccessPanelState) => {
+        options.host.innerHTML = accessPanelHtml(state, options.esc, options.esc, options.idPrefix);
+    };
+    const kindLabel = target.kind.toLowerCase();
+    try {
+        const response = await options.fetch(
+            `/api/orchestrator/authorization/${encodeURIComponent(target.kind)}/${encodeURIComponent(target.name)}`,
+            { signal, cache: 'no-store' });
+        if (response.status === 401) {
+            options.sessionExpired();
+            return;
+        }
+        const state: AccessPanelState = response.status === 403
+            ? { subject: target, objectKind: target.kind, error: `You can reach this ${kindLabel} but are not permitted to administer its access.` }
+            : { subject: target, objectKind: target.kind, grants: readGrants(await readCatalogJson(response)), isAdmin: options.isAdmin };
+        if (isLive()) draw(state);
+    } catch (failure) {
+        if (isLive()) {
+            draw({ subject: target, objectKind: target.kind, error: `Access could not be loaded: ${asError(failure).message}` });
+        }
+    }
+}
+
+export async function handleObjectAccessClick(
+    options: ObjectAccessPanelOptions,
+    event: Event,
+    target: ObjectAccessTarget | null,
+    signal: AbortSignal,
+    isLive: () => boolean
+): Promise<void> {
+    const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button') : null;
+    if (!button || !target) return;
+    const base = `/api/orchestrator/authorization/${encodeURIComponent(target.kind)}/${encodeURIComponent(target.name)}`;
+    const value = (suffix: string) =>
+        options.host.querySelector<HTMLInputElement | HTMLSelectElement>(`#${options.idPrefix}${suffix}`)?.value.trim() ?? '';
+    const principal = (kind: string, key: string) => `${base}/${encodeURIComponent(kind)}/${encodeURIComponent(key)}`;
+    const kindLabel = target.kind.toLowerCase();
+
+    if (button.dataset.revokeKind && button.dataset.revokeKey) {
+        const kind = button.dataset.revokeKind, key = button.dataset.revokeKey;
+        if (!await options.confirm(`Revoke access for '${key}' on ${kindLabel} '${target.name}'?`, {
+            title: 'Revoke access', confirmLabel: 'Revoke access', danger: true, auditAction: 'orchestrator.grant.revoke' })) return;
+        await options.write(`grant:${target.kind}:${target.name}:${kind}:${key}`,
+            reqSignal => options.fetch(principal(kind, key), { method: 'DELETE', signal: reqSignal }),
+            204, `Access revoked for '${key}'.`, () => loadObjectAccessPanel(options, target, signal, isLive));
+        return;
+    }
+
+    const action = button.dataset.aclAction;
+    if (action === 'grant' || button.id === `${options.idPrefix}GrantBtn`) {
+        const kind = value('PrincipalKind'), key = value('PrincipalKey'), permission = value('Permission');
+        if (!key) { options.notify('Error: Enter the principal key to grant access to.', true); return; }
+        await options.write(`grant:${target.kind}:${target.name}:${kind}:${key}`,
+            reqSignal => options.fetch(principal(kind, key), { method: 'PUT', body: { permission }, signal: reqSignal }),
+            200, `${permission} granted to '${key}'.`, () => loadObjectAccessPanel(options, target, signal, isLive));
+        return;
+    }
+
+    if (action === 'owner' || button.id === `${options.idPrefix}OwnerBtn`) {
+        const principalKind = value('OwnerKind'), principalId = value('OwnerKey');
+        if (!principalId) { options.notify('Error: Enter the principal key of the new owner.', true); return; }
+        const changed = await options.write(`owner:${target.kind}:${target.name}`,
+            reqSignal => options.fetch(`${base}/owner`, { method: 'PUT', body: { principalKind, principalId }, signal: reqSignal }),
+            200, `Owner of '${target.name}' updated.`, () => undefined);
+        if (!changed || !isLive()) return;
+        const nextOwner = `${principalKind.toLowerCase()}:${principalId}`;
+        const updatedTarget: ObjectAccessTarget = { ...target, createdBy: nextOwner };
+        await options.onOwnerUpdated?.(updatedTarget);
+        if (isLive()) await loadObjectAccessPanel(options, updatedTarget, signal, isLive);
+    }
+}
+
+export { requireMutationStatus };

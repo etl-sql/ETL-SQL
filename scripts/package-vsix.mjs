@@ -63,7 +63,9 @@ export function packagingInputSignature(root) {
             if (/\.(?:cs|csproj|props|targets|resx|json)$/.test(file)) selected.add(file);
     }
     const extension = path.join(root, 'src/etl-sql-vscode');
-    for (const directory of ['src', 'ui', 'resources', 'syntaxes', 'snippets'])
+    // media/ is mostly prepared browser output (covered by browserInputSignature); the
+    // walkthrough pages and samples in media/walkthrough are authored.
+    for (const directory of ['src', 'ui', 'resources', 'syntaxes', 'snippets', 'media/walkthrough'])
         for (const file of files(path.join(extension, directory), excluded)) selected.add(file);
     for (const directory of ['scripts/vsix', 'build/signing', 'deploy', 'capacity-results/workloads'])
         for (const file of files(path.join(root, directory), excluded)) selected.add(file);

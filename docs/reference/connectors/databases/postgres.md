@@ -14,29 +14,55 @@ Aliases: `NPSQL`, `PG`
 | `USER` | Login username | Yes |
 | `PASSWORD` | Login password | Yes |
 | `PORT` | Listening port (default: `5432`) | No |
+| `TIMEOUT_SECONDS` | Command/query execution timeout in seconds (default: `30`) | No |
 | `TABLE` | Default table context | No |
 | `POOLING` | Enable connection pooling (`TRUE`/`FALSE`) | No |
 | `MIN_POOL_SIZE` | Minimum pool size | No |
 | `MAX_POOL_SIZE` | Maximum pool size | No |
 | `CONNECTION_IDLE_LIFETIME` | Seconds before an idle connection is pruned | No |
-| `SSL_MODE` | `DISABLE`, `PREFER`, `REQUIRE`, `VERIFY_CA`, `VERIFY_FULL` | No |
+| `SSL_MODE` | `Disable`, `Prefer`, `Require`, `VerifyCA`, `VerifyFull` | No |
 | `TRUST_SERVER_CERTIFICATE` | Bypass certificate validation (`TRUE`/`FALSE`) | No |
+| `SEARCH_PATH` | Comma-separated PostgreSQL schema search path (e.g. `'analytics, public'` or `'"$user", public'`). Each entry must be a valid unquoted or double-quoted SQL identifier | No |
+
+> [!NOTE]
+> Use either structured options (`HOST`, `DATABASE`, `USER`, `PASSWORD`, ...) or a positional
+> provider connection string, not both.
 
 ## Authentication
 
 PostgreSQL supports standard credentials and SSL authentication:
-- **Standard Authentication**: Set `USER` and `PASSWORD` options with `HOST` and `DATABASE`.
-- **SSL / TLS**: Set `SSL_MODE` (`DISABLE`, `PREFER`, `REQUIRE`, `VERIFY_CA`, `VERIFY_FULL`) and optional `TRUST_SERVER_CERTIFICATE`.
+- **Standard Authentication**: Set `USER` and `PASSWORD` options with `HOST` and `DATABASE` (supports `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'` with `Security:AllowedEnvVars`).
+- **SSL / TLS**: Set `SSL_MODE` (`Disable`, `Prefer`, `Require`, `VerifyCA`, `VerifyFull`) and optional `TRUST_SERVER_CERTIFICATE`.
 
 ## Examples
 
 ```sql
--- Structured
-CREATE CONNECTION pg_db AS POSTGRES(HOST='10.0.0.5', PORT=5432, DATABASE='inventory', USER='admin', PASSWORD='s3cr3t');
+-- Structured options using an allow-listed environment variable (Security:AllowedEnvVars)
+CREATE CONNECTION pg_db AS POSTGRES(HOST='10.0.0.5', PORT=5432, DATABASE='inventory', USER='admin', PASSWORD='${PG_PASSWORD}');
+
+-- Explicit schema search path (applied on every pooled connection)
+CREATE CONNECTION pg_analytics AS POSTGRES(HOST='10.0.0.5', DATABASE='warehouse', USER='etl', PASSWORD='${PG_PASSWORD}', SEARCH_PATH='analytics, public');
 
 -- Traditional string
 CREATE CONNECTION pg_legacy AS POSTGRES('Host=localhost;Database=mydb;Username=etl;Password=pass');
 ```
+
+## PostgreSQL SQL dialect notes
+
+| Feature | Notes |
+| :--- | :--- |
+| Row capping | Uses `LIMIT` and `OFFSET` |
+| `DUAL` | Not required — `SELECT 1;` runs without a `FROM` clause |
+| Identifiers | Double-quoted (`"schema"."table"`); unquoted identifiers fold to lowercase. The connector leaves plain alphanumeric/underscore names unquoted and double-quotes names with special characters or explicit quotes |
+| `ILIKE` / `SIMILAR` | Case-insensitive `LIKE` and SQL regex matching |
+| `ON CONFLICT` / `RETURNING` | Native upsert (`DO NOTHING`, `DO UPDATE`) and DML row return clauses |
+| `LATERAL` / `TABLESAMPLE` / `FILTER` | Lateral joins, table sampling, and aggregate `FILTER` / `WITHIN GROUP` clauses |
+| `NOW()` / `DATE_TRUNC` / `DATE_PART` / `AGE` / `EXTRACT` | Native date/time functions |
+| `STRING_AGG` / `ARRAY_AGG` / `ARRAY_TO_STRING` / `GENERATE_SERIES` | Aggregation, array, and set-returning functions |
+| `JSON_BUILD_OBJECT` / `JSON_BUILD_ARRAY` / `JSONB_SET` / `JSON_ARRAY_ELEMENTS` | JSON and JSONB construction and extraction |
+| `NULLS FIRST` / `NULLS LAST` | Supported in `ORDER BY` pushdown |
+
+The linter's `DialectKeyword` rule warns on `TOP`, `PERCENT`, `ISNULL`, `CONVERT`, `ROWNUM`, `GETDATE`, and `SYSDATE` in PostgreSQL pushdown queries. Use `LIMIT`, `COALESCE`, `CAST`, and `NOW()` instead.
 
 ## Verified Gateway viewer context
 
@@ -55,6 +81,14 @@ parameterized transaction-local `set_config` calls.
 
 See [Verified Viewer Context](../../../architecture/decisions/verified-viewer-context.md) for the
 assurance boundary, envelope, reserved keys, audit contract, and resource setup.
+
+## Write Path & Transactions
+
+- **Bulk / write path** — Cross-source `INSERT INTO` and `COPY INTO` stream rows through Npgsql's text-mode `COPY ... FROM STDIN` (`BeginTextImportAsync`, tab-delimited, `\N` for nulls; backslashes, tabs and line breaks inside values are escaped, so they arrive unchanged; `bytea` values are sent in hex format). PostgreSQL's own input functions parse each value, so enum, `inet`, array and domain columns load from their text form. If the source or a value fails partway, the `COPY` is cancelled and none of its rows are committed; a bad value's error names the `COPY` line and column. Same-connection `INSERT INTO ... SELECT` pushes down as native PostgreSQL SQL. `COPY INTO ... APPEND=FALSE` runs `TRUNCATE TABLE` first.
+- **`MERGE` behavior** — Engine-emulated. `MERGE` against a `POSTGRES` target reads both sides into bounded engine memory and rewrites the target via `TRUNCATE TABLE` + `COPY ... FROM STDIN`. For large tables, stage `#delta` into a PostgreSQL staging table and run native `INSERT ... ON CONFLICT DO UPDATE` (or PostgreSQL 15+ `MERGE`) inside `EXECUTE pg_db BEGIN ... END`.
+- **Transactions** — Full `ITransactionalDataSource` support. `BEGIN TRANSACTION` enlists `COPY`, pushed-down DML, `TRUNCATE`, and `EXECUTE ... BEGIN ... END` on the same `NpgsqlTransaction`; `COMMIT` persists and `ROLLBACK` discards.
+- **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` and `TruncateAsync` are no-ops. Pushed-down DML and `EXECUTE` blocks log the compiled SQL without executing it.
+- **Idempotent-load pattern** — Wrap `TRUNCATE` + `INSERT INTO pg_db.stage_orders SELECT * FROM #delta` and an `EXECUTE pg_db BEGIN INSERT INTO orders ... ON CONFLICT (id) DO UPDATE SET ...; END;` block inside `BEGIN TRANSACTION ... COMMIT`.
 
 ## Troubleshooting
 

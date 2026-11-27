@@ -56,6 +56,11 @@ public sealed class JobCancellationStateTests
     private static bool Finish(object entry, string outcome)
     {
         var method = EntryType.GetMethod("TryFinish")!;
-        return (bool)method.Invoke(entry, [Enum.Parse(method.GetParameters()[0].ParameterType, outcome), null, null])!;
+        // Only the outcome matters here; every later parameter (error, manifest, connection
+        // dependencies, ...) is optional detail, so pass null for however many there are.
+        var parameters = method.GetParameters();
+        var args = new object?[parameters.Length];
+        args[0] = Enum.Parse(parameters[0].ParameterType, outcome);
+        return (bool)method.Invoke(entry, args)!;
     }
 }

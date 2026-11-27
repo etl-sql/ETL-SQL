@@ -246,7 +246,7 @@ public static class RepresentativeVisualConformanceHarness
             ["line_temporal_decimals.rptsql"] = new(
                 FixtureFileName: "line_temporal_decimals.rptsql",
                 ExpectedVisualType: VisualType.Line,
-                ExpectedCategories: ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05"],
+                ExpectedCategories: [],
                 ExpectedSeriesNames: [],
                 HasExplicitDomain: false,
                 HasNullGaps: false,

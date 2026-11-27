@@ -52,6 +52,7 @@ namespace ETL_SQL.Connectors.Mongodb
             "  CONNECTION_STRING: Connection URI (e.g. mongodb://localhost:27017)\n" +
             "  DATABASE: Target database name (required)\n" +
             "  COLLECTION: Collection context\n" +
+            "  KEY_COLUMNS: Comma-separated key columns for idempotent BulkWrite upsert on INSERT/COPY INTO\n" +
             "  TIMEOUT_SECONDS: Timeout limit in seconds (default: 30)\n" +
             "  HOST: Server hostname\n" +
             "  PORT: Server port\n" +
@@ -63,6 +64,7 @@ namespace ETL_SQL.Connectors.Mongodb
             { "CONNECTION_STRING", Array.Empty<string>() },
             { "DATABASE", Array.Empty<string>() },
             { "COLLECTION", Array.Empty<string>() },
+            { "KEY_COLUMNS", Array.Empty<string>() },
             { "TIMEOUT_SECONDS", Array.Empty<string>() },
             { "HOST", Array.Empty<string>() },
             { "PORT", Array.Empty<string>() },
@@ -110,6 +112,9 @@ namespace ETL_SQL.Connectors.Mongodb
 
         public string BuildConnectionString(Dictionary<string, string> properties)
         {
+            if (properties.TryGetValue("KEY_COLUMNS", out var keyCols))
+                MongodbDataSource.ParseKeyColumns(keyCols);
+
             string connectionString = properties.GetValueOrDefault("CONNECTION_STRING", "");
             if (!string.IsNullOrEmpty(connectionString))
             {

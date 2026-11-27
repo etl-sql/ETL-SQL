@@ -31,17 +31,19 @@ Aliases: `CSV`, `TSV`
 | `FORMAT` | `DELIMITED` (default) or `FIXED` | No |
 | `TEMPLATE` | Name of a `#temp` table defining fixed-width offsets (required if `FORMAT=FIXED`) | Conditional |
 | `COMPRESS` | `ON`/`OFF` — store the file as a ZIP archive (one entry); `.zip` is added to the path if it does not end in `.zip` (default: `OFF`) | No |
-| `ENCRYPT` | `ON`/`OFF` — AES file encryption (default: `OFF`) | No |
-| `PASSWORD` | Password for encryption/decryption (required if `ENCRYPT=ON`) | Conditional |
-| `ALGORITHM` | Hash algorithm: `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |
-| `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
-| `PASSPHRASE` | Passphrase for the key file | Conditional |
+| `ENCRYPT` | `ON`/`OFF`/`PASSWORD`/`KEYFILE`/`MACHINE`/`PORTAL` — encrypt on write and decrypt on read (default: `OFF`). Adds `.pgp` when `COMPRESS=OFF` or `.zip` when `COMPRESS=ON` | No |
+| `PASSWORD` | Password for AES encryption/decryption (required for `ENCRYPT=ON`/`PASSWORD` when `KEYFILE` is not set) | Conditional |
+| `ALGORITHM` | Key-derivation hash for password encryption: `SHA2_256`/`SHA256` (default) or `SHA2_512`/`SHA512` (`MD5` and `SHA1` are rejected) | No |
+| `KEYFILE` | Path to SSH key file for key-pair encryption/decryption | Conditional |
+| `PASSPHRASE` | Passphrase for an encrypted `KEYFILE` | Conditional |
 | `TRANSACTIONAL` | `ON`/`OFF` — stage the complete output beside the target and publish with one replacement rename (default: `OFF`) | No |
 
 > [!NOTE]
-> When both `COMPRESS=ON` and `ENCRYPT=ON` are specified, the engine always applies compression first,
-> then encryption — regardless of option order. Encryption maximises entropy, making subsequent
-> compression ineffective.
+> **Write-time compression and encryption:** When both `COMPRESS=ON` and `ENCRYPT=ON` are set,
+> writes always compress (ZIP) first and then encrypt; reads reverse the order (decrypt, then
+> unzip). `PASSWORD`, `KEYFILE` (+ optional `PASSPHRASE`), `ENCRYPT=MACHINE`, and `ENCRYPT=PORTAL`
+> are alternative key sources: set one. If several are set, `MACHINE` wins over `KEYFILE`,
+> `KEYFILE` over `PASSWORD`, and a `PASSWORD` option replaces the `ENCRYPT=PORTAL` key. Enabling encryption without a key source fails closed.
 
 Schema-resilient reads require a destination/template schema (such as the destination table schema
 supplied during `BULK INSERT`). `STRICT_SCHEMA=ON` still fails on drift unless a resilience option
@@ -108,8 +110,10 @@ Flat file operations use local file system permissions or storage connector cred
 -- Pipe-delimited with explicit encoding
 CREATE CONNECTION csv_in AS FLATFILE(PATH='C:\Data\employees.csv', HEADER=ON, DELIMITER='PIPE', ENCODING='UTF8');
 
--- Encrypted and GZip-compressed
-CREATE CONNECTION secure_file AS FLATFILE(PATH='C:\Data\payroll.csv.zip', COMPRESS=ON, ENCRYPT=ON, PASSWORD='s3cr3t');
+-- Easy button: compress (ZIP) then encrypt on write, decrypt then unzip on read
+CREATE CONNECTION secure_file AS FLATFILE(PATH='C:\Data\payroll.csv', COMPRESS=ON, ENCRYPT=ON, PASSWORD='SECRET:payroll/file_key');
+INSERT INTO secure_file.FILE SELECT * FROM #payroll;
+SELECT * FROM secure_file.FILE;
 
 -- European locale with semicolon delimiter and custom date format
 CREATE CONNECTION eu_data AS FLATFILE(PATH='C:\Data\german_sales.csv', DELIMITER='SEMICOLON', CULTURE='de-DE', DATE_FORMAT='dd.MM.yyyy');

@@ -31,7 +31,8 @@ public class ExecutionController(
     PortalExecutionIdentityService identities,
     DatasetTenantScope? datasetScope = null,
     PortalTenantCatalogScope? catalogScope = null,
-    ILogger<ExecutionController>? logger = null) : ControllerBase
+    ILogger<ExecutionController>? logger = null,
+    PortalConnectionCatalogService? connectionCatalog = null) : ControllerBase
 {
     private readonly DatasetTenantScope _datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
     private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _datasetScope);
@@ -185,7 +186,6 @@ public class ExecutionController(
             return Forbid();
         if (await ReportIdentitySensitivity.IsRunLiveAsync(resolvedScriptPath, HttpContext.RequestAborted))
             return NotFound(new { error = IdentitySensitiveSnapshotRefusal });
-
         var snapshot = await CatalogScope.ReportSnapshots
             .Where(s => s.ReportId == id)
             .OrderByDescending(s => s.BuiltAt)
@@ -193,6 +193,9 @@ public class ExecutionController(
 
         if (snapshot is null)
             return NotFound(new { error = "No snapshot available. Execute the report first." });
+
+        if (await EnforceSharedConnectionSnapshotAccessAsync(id, resolvedScriptPath, snapshot) is { } connectionDenied)
+            return connectionDenied;
 
         var manifestKey = PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath);
         if (manifestKey is null)
@@ -341,7 +344,6 @@ public class ExecutionController(
         // served, whoever built it.
         if (await ReportIdentitySensitivity.IsRunLiveAsync(scriptPath, HttpContext.RequestAborted))
             return (null, null, null, NotFound(new { error = IdentitySensitiveSnapshotRefusal }));
-
         var snapshot = await CatalogScope.ReportSnapshots
             .Where(s => s.ReportId == id)
             .OrderByDescending(s => s.BuiltAt)
@@ -349,6 +351,9 @@ public class ExecutionController(
 
         if (snapshot is null)
             return (null, null, null, NotFound(new { error = "No snapshot available." }));
+
+        if (await EnforceSharedConnectionSnapshotAccessAsync(id, scriptPath, snapshot) is { } connectionDenied)
+            return (null, null, null, connectionDenied);
 
         var manifestKey = PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath);
         if (manifestKey is null)
@@ -358,6 +363,40 @@ public class ExecutionController(
             return (null, null, null, NotFound(new { error = "No snapshot available." }));
 
         return (manifestKey, report, snapshot, null);
+    }
+
+    private async Task<IActionResult?> EnforceSharedConnectionSnapshotAccessAsync(int reportId, string scriptPath, ReportSnapshot snapshot)
+    {
+        var ct = HttpContext?.RequestAborted ?? CancellationToken.None;
+        var catalog = connectionCatalog ?? HttpContext?.RequestServices?.GetService<PortalConnectionCatalogService>();
+        if (catalog is null)
+            return Forbid();
+
+        var identity = await identities.BuildAsync(
+            CurrentUserId, _datasetScope.TenantId, IsAdmin, impersonatedUserId: null, ct);
+
+        try
+        {
+            await catalog.EnsureCallerCanReadSnapshotAsync(
+                scriptPath,
+                snapshot.ScriptHashAtRunTime,
+                snapshot.SharedConnectionDependenciesJson,
+                identity,
+                ct);
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            await audit.LogAsync(
+                CurrentUserId,
+                "SHARED_CONNECTION_SNAPSHOT_DENIED",
+                "Report",
+                reportId.ToString(),
+                $"EffectiveUser={identity?.EffectiveUser ?? "(none)"}",
+                actorType: ActorType,
+                actorId: ActorId);
+            return Forbid();
+        }
     }
 
     private static string EnrichManifestMetadata(string json, Report report, ReportSnapshot snapshot)
@@ -525,14 +564,14 @@ public class ExecutionController(
         if (perm is null) return Forbid();
         if (string.IsNullOrWhiteSpace(req.VisualName)
             || !Enum.TryParse<NativeChartLayoutTier>(req.Tier, true, out var tier))
-            return BadRequest(new { error = "visualName and a COMPACT, STANDARD, or WIDE tier are required" });
+            return BadRequest(new { error = "visualName and a valid native layout tier are required" });
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
         var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
-        var manifest = await svc.ResolveVisualLayoutAsync(req.VisualName, tier);
-        return manifest is null ? NotFound() : this.BrowserManifest(manifest);
+        var patch = await svc.ResolveVisualLayoutPatchAsync(req.VisualName, tier);
+        return patch is null ? NotFound() : Ok(patch);
     }
 
     // ── 2.3b  POST /api/reports/{id}/bookmark ────────────────────────────────

@@ -123,13 +123,24 @@ namespace ETL_SQL.Tests.Statements.Statements
             }
         }
 
+        // The date suffix is the day the statement ran. A run that crosses midnight may use either day.
+        private static string? ArchivedPath(string dir, string stem, string separator, DateTime before)
+        {
+            foreach (var day in new[] { before, DateTime.Now })
+            {
+                var path = Path.Combine(dir, $"{stem}{separator}{day:yyyyMMdd}.csv");
+                if (File.Exists(path)) return path;
+            }
+            return null;
+        }
+
         [Fact]
         public async Task CopyFile_ToDirectoryWithDateSuffix_DerivesArchiveName()
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
             string src = "fs_suffix_source.csv";
             string archiveDir = "fs_suffix_archive";
-            string expected = Path.Combine(archiveDir, $"fs_suffix_source_{DateTime.Now:yyyyMMdd}.csv");
+            var before = DateTime.Now;
             await File.WriteAllTextAsync(src, "id,name\n1,Alice");
             Directory.CreateDirectory(archiveDir);
 
@@ -137,7 +148,8 @@ namespace ETL_SQL.Tests.Statements.Statements
             {
                 await ExecuteAsync($"COPY FILE '{src}' TO DIRECTORY '{archiveDir}' WITH(DATE_SUFFIX='yyyyMMdd');", evaluator);
 
-                Assert.True(File.Exists(expected));
+                var expected = ArchivedPath(archiveDir, "fs_suffix_source", "_", before);
+                Assert.NotNull(expected);
                 Assert.True(File.Exists(src));
                 Assert.Equal("id,name\n1,Alice", await File.ReadAllTextAsync(expected));
             }
@@ -154,7 +166,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
             string src = "fs_suffix_move_source.csv";
             string archiveDir = "fs_suffix_move_archive";
-            string expected = Path.Combine(archiveDir, $"fs_suffix_move_source-{DateTime.Now:yyyyMMdd}.csv");
+            var before = DateTime.Now;
             await File.WriteAllTextAsync(src, "id,name\n1,Alice");
             Directory.CreateDirectory(archiveDir);
 
@@ -162,7 +174,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             {
                 await ExecuteAsync($"MOVE FILE '{src}' TO DIRECTORY '{archiveDir}' WITH(DATE_SUFFIX='yyyyMMdd', SUFFIX_SEPARATOR='-');", evaluator);
 
-                Assert.True(File.Exists(expected));
+                Assert.NotNull(ArchivedPath(archiveDir, "fs_suffix_move_source", "-", before));
                 Assert.False(File.Exists(src));
             }
             finally
@@ -661,12 +673,11 @@ namespace ETL_SQL.Tests.Statements.Statements
                 await ExecuteAsync($"CREATE CONNECTION c_suf AS FLATFILE('{src}');", evaluator);
                 await ExecuteAsync($"CREATE CONNECTION d_suf AS DIRECTORY('{dir}');", evaluator);
 
+                var before = DateTime.Now;
                 await ExecuteAsync("MOVE FILE c_suf TO d_suf WITH (DATE_SUFFIX = 'yyyyMMdd');", evaluator);
 
                 Assert.False(File.Exists(src));
-                string dateStr = DateTime.Now.ToString("yyyyMMdd");
-                string expectedNewPath = Path.Combine(dir, $"test_conn_suf_src_{dateStr}.csv");
-                Assert.True(File.Exists(expectedNewPath));
+                Assert.NotNull(ArchivedPath(dir, "test_conn_suf_src", "_", before));
 
                 // Query c_suf to verify it reads from the date-suffixed location
                 var result = await QueryRowsAsync("SELECT * FROM c_suf;", evaluator);

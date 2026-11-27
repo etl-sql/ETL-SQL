@@ -6,7 +6,7 @@ Applies a table-level transformation algorithm to a source table, writing the ou
 
 ```sql
 TRANSFORM #target
-FROM #source
+[FROM #source]
 USING algorithm_name (
   parameter = value,
   ...
@@ -14,7 +14,7 @@ USING algorithm_name (
 ```
 
 - **#target** — The target temp table to write the output rows into.
-- **FROM #source** — The source temp table or dataset containing the input rows.
+- **FROM #source** — Optional source temp table or dataset containing the input rows. Omit `FROM` to transform `#target` in place.
 - **USING algorithm_name** — The transformation algorithm to apply (e.g., `FILL_DATES`).
 - **parameter = value** — Algorithm-specific options passed inside parentheses.
 

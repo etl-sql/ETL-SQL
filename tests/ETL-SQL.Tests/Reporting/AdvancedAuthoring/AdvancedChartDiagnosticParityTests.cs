@@ -118,6 +118,7 @@ public sealed class AdvancedChartDiagnosticParityTests
                     X = Month (TYPE = ORDINAL, SCALE = months),
                     Y = Revenue (TYPE = QUANTITATIVE, SCALE = revenue)
                   ),
+                  STYLE (INTERPOLATION = 'SMOOTH'),
                   CONDITIONS (COLOR WHEN Revenue < 0 THEN '#b91c1c')
                 ))
             """,

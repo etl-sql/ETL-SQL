@@ -27,11 +27,7 @@ namespace ETL_SQL.App
             try
             {
                 catalog = ConnectionCatalogProviderFactory.Create(
-                    new ConnectionCatalogOptions
-                    {
-                        Provider = configuration?["Governance:ConnectionCatalog:Provider"],
-                        LocalRoot = configuration?["Governance:ConnectionCatalog:LocalRoot"]
-                    });
+                    ConnectionCatalogOptions.FromConfiguration(key => configuration?[key]));
             }
             catch (Exception ex)
             {

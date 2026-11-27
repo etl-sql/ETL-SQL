@@ -122,7 +122,25 @@ public record JobDefinition(
     /// watermarks. <see cref="JobId.None"/> on a definition that has not been persisted yet.
     /// </summary>
     JobId Id = default
-);
+)
+{
+    /// <summary>
+    /// Next run of a job that runs only on request: one with no schedule link. A null next run
+    /// means "due now" to the interval path, so such a job is parked here instead.
+    /// </summary>
+    public static readonly DateTime ManualOnlyNextRun = new(9000, 1, 1, 0, 0, 0, DateTimeKind.Local);
+
+    /// <summary>True when the job runs only on request (see <see cref="ManualOnlyNextRun"/>).</summary>
+    public bool IsManualOnly => NextRun >= ManualOnlyNextRun;
+
+    /// <summary>Next run to show a person: none for a manual-only job, not the parking date.</summary>
+    public DateTime? DisplayNextRun => IsManualOnly ? null : NextRun;
+
+    /// <summary>The schedule as listings show it: <c>MANUAL</c>, or the legacy interval.</summary>
+    public string ScheduleLabel => IsManualOnly
+        ? "MANUAL"
+        : $"EVERY {Interval} {Unit}" + (AtTime != null ? $" AT {AtTime}" : "");
+}
 
 public record JobHistoryEntry(
     long Id,
@@ -434,9 +452,10 @@ public interface IJobHistoryStore
     /// <summary>Reads one durable run by identity, or null when it has expired or never existed.</summary>
     async Task<JobHistoryEntry?> GetHistoryEntryAsync(long entryId) =>
         (await GetHistoryAsync(JobId.None, 1000)).FirstOrDefault(row => row.Id == entryId);
-    /// <summary>Returns a completion-time page for bounded incremental pollers.</summary>
+    /// <summary>Returns a completion-time page, filtering by tenant before pagination when specified.</summary>
     Task<IEnumerable<JobHistoryEntry>> GetCompletedHistoryAsync(
-        DateTime completedAfter, DateTime completedThrough, int limit = 1000, int offset = 0);
+        DateTime completedAfter, DateTime completedThrough, int limit = 1000, int offset = 0,
+        string? tenantId = null);
 
     /// <summary>
     /// Deletes completed job-history rows older than <paramref name="maxAge"/> (in-flight RUNNING rows

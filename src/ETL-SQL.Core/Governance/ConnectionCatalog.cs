@@ -22,7 +22,12 @@ public sealed record SharedConnectionDefinition(
     IReadOnlyDictionary<string, string> Options,
     bool Disabled,
     IReadOnlyCollection<string>? SensitiveFields = null,
-    GatewayResourceBinding? Gateway = null);
+    GatewayResourceBinding? Gateway = null,
+    string? OwnerPrincipal = null,
+    IReadOnlyCollection<string>? AllowedPrincipals = null,
+    IReadOnlyCollection<string>? AllowedGroups = null,
+    string? TenantId = null,
+    bool RequireAcl = false);
 
 /// <summary>Resolves SHARED:alias references to cataloged connection definitions.</summary>
 public interface IConnectionCatalogProvider
@@ -57,16 +62,26 @@ public interface IWritableConnectionCatalogProvider : IConnectionCatalogProvider
 /// written by the admin CLI and read by script execution. Same trust boundary as
 /// <see cref="OsSecretStoreProvider"/>: machine-scope crypto plus filesystem ACLs.
 /// </summary>
-public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWritableConnectionCatalogProvider
+public sealed class LocalConnectionCatalogProvider(
+    string rootDirectory,
+    LocalVaultProtectionScope protectionScope = LocalVaultProtectionScope.LocalMachine,
+    string? serviceIdentity = null,
+    ILocalStoreProtector? protector = null) : IWritableConnectionCatalogProvider
 {
+    private readonly ILocalStoreProtector _protector = protector ?? new OsLocalStoreProtector();
+
+    public LocalVaultProtectionScope ProtectionScope => protectionScope;
     public string ProviderName => "LocalCatalog";
 
     private sealed record EntryPayload(
         string ConnectorType, string? Target, Dictionary<string, string> Options, List<string>? SensitiveFields = null,
-        GatewayResourceBinding? Gateway = null);
+        GatewayResourceBinding? Gateway = null,
+        string? OwnerPrincipal = null,
+        List<string>? AllowedPrincipals = null,
+        List<string>? AllowedGroups = null,
+        string? TenantId = null,
+        bool RequireAcl = false);
 
-    // The local catalog has no user model: its trust boundary is filesystem access on the single
-    // node, so the caller identity is not evaluated here.
     public async Task<SharedConnectionDefinition> ResolveAsync(
         string alias,
         ExecutionIdentity? identity = null,
@@ -84,9 +99,8 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
 
         var protectedValue = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         var payload = Deserialize(alias, CryptoUtils.Unprotect(protectedValue, alias));
-        return new SharedConnectionDefinition(
-            alias, payload.ConnectorType, payload.Target, payload.Options, Disabled: false, payload.SensitiveFields,
-            payload.Gateway);
+        EnforceAccess(alias, payload, identity);
+        return ToDefinition(alias, payload, disabled: false);
     }
 
     public async Task StoreAsync(SharedConnectionDefinition definition, CancellationToken cancellationToken = default)
@@ -99,18 +113,27 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
         GatewayBindingValidator.EnsureValid(definition.Gateway, definition.Target, definition.Options);
 
         var path = GetEntryPath(definition.Alias);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var directory = Path.GetDirectoryName(path)!;
+        Directory.CreateDirectory(directory);
+        // COMPAT_BREAK: 0.23 - secure machine stores before creation; non-admin writers must use CurrentUser.
+        _protector.ProtectDirectory(directory, protectionScope, serviceIdentity);
+        if (File.Exists(path))
+            _protector.ProtectFile(path, protectionScope, serviceIdentity);
         var payload = new EntryPayload(
             definition.ConnectorType.Trim(),
             definition.Target,
             new Dictionary<string, string>(definition.Options, StringComparer.OrdinalIgnoreCase),
             definition.SensitiveFields?.ToList(),
-            definition.Gateway);
-        var protectedValue = CryptoUtils.ProtectMachine(JsonSerializer.Serialize(payload), definition.Alias);
+            definition.Gateway,
+            NormalizePrincipal(definition.OwnerPrincipal),
+            NormalizeDistinctList(definition.AllowedPrincipals),
+            NormalizeDistinctList(definition.AllowedGroups),
+            string.IsNullOrWhiteSpace(definition.TenantId) ? null : definition.TenantId.Trim(),
+            definition.RequireAcl);
+        var protectedValue = LocalStoreProtection.ProtectValue(
+            JsonSerializer.Serialize(payload), definition.Alias, protectionScope);
         await File.WriteAllTextAsync(path, protectedValue, cancellationToken).ConfigureAwait(false);
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-
+        _protector.ProtectFile(path, protectionScope, serviceIdentity);
         // Storing an entry re-enables a previously disabled alias.
         var disabledPath = GetDisabledPath(definition.Alias);
         if (File.Exists(disabledPath))
@@ -134,9 +157,81 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
 
         var protectedValue = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         var payload = Deserialize(alias, CryptoUtils.Unprotect(protectedValue, alias));
-        return new SharedConnectionDefinition(
-            alias, payload.ConnectorType, payload.Target, payload.Options, disabled, payload.SensitiveFields,
-            payload.Gateway);
+        return ToDefinition(alias, payload, disabled);
+    }
+
+    private static SharedConnectionDefinition ToDefinition(string alias, EntryPayload payload, bool disabled) =>
+        new(
+            alias,
+            payload.ConnectorType,
+            payload.Target,
+            payload.Options,
+            disabled,
+            payload.SensitiveFields,
+            payload.Gateway,
+            payload.OwnerPrincipal,
+            payload.AllowedPrincipals,
+            payload.AllowedGroups,
+            payload.TenantId,
+            payload.RequireAcl);
+
+    private static void EnforceAccess(string alias, EntryPayload payload, ExecutionIdentity? identity)
+    {
+        bool isAclProtected = payload.RequireAcl
+            || !string.IsNullOrWhiteSpace(payload.OwnerPrincipal)
+            || payload.AllowedPrincipals is { Count: > 0 }
+            || payload.AllowedGroups is { Count: > 0 }
+            || !string.IsNullOrWhiteSpace(payload.TenantId);
+
+        if (!isAclProtected)
+            return;
+
+        if (identity is null)
+        {
+            throw new UnauthorizedAccessException(
+                $"Identity '(none)' is not authorized to use shared connection '{alias}'.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(payload.TenantId) &&
+            !string.Equals(identity.TenantId, payload.TenantId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UnauthorizedAccessException(
+                $"Identity '{identity.EffectiveUser}' is not authorized to use shared connection '{alias}'.");
+        }
+
+        if (identity.IsAdmin)
+            return;
+
+        if (!string.IsNullOrWhiteSpace(payload.OwnerPrincipal) &&
+            string.Equals(identity.EffectiveUser, payload.OwnerPrincipal, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (payload.AllowedPrincipals is { Count: > 0 } &&
+            payload.AllowedPrincipals.Contains(identity.EffectiveUser, StringComparer.OrdinalIgnoreCase))
+            return;
+
+        if (payload.AllowedGroups is { Count: > 0 } &&
+            payload.AllowedGroups.Any(identity.HasGroup))
+            return;
+
+        throw new UnauthorizedAccessException(
+            $"Identity '{identity.EffectiveUser}' is not authorized to use shared connection '{alias}'.");
+    }
+
+    private static string? NormalizePrincipal(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static List<string>? NormalizeDistinctList(IReadOnlyCollection<string>? values)
+    {
+        if (values is null || values.Count == 0)
+            return null;
+
+        var list = values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return list.Count == 0 ? null : list;
     }
 
     public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default)
@@ -171,7 +266,9 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
         if (!File.Exists(path))
             throw new KeyNotFoundException($"Shared connection '{alias}' was not found in the connection catalog.");
 
-        File.Move(path, GetDisabledPath(alias), overwrite: true);
+        var disabledPath = GetDisabledPath(alias);
+        File.Move(path, disabledPath, overwrite: true);
+        _protector.ProtectFile(disabledPath, protectionScope, serviceIdentity);
         return Task.CompletedTask;
     }
 
@@ -186,6 +283,7 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
             throw new KeyNotFoundException($"Shared connection '{alias}' was not found in the connection catalog.");
 
         File.Move(disabledPath, path);
+        _protector.ProtectFile(path, protectionScope, serviceIdentity);
         return Task.CompletedTask;
     }
 
@@ -291,6 +389,21 @@ public sealed class ConnectionCatalogOptions
 {
     public string? Provider { get; set; }
     public string? LocalRoot { get; set; }
+    public LocalVaultProtectionScope ProtectionScope { get; set; } = LocalVaultProtectionScope.LocalMachine;
+    public string? ServiceIdentity { get; set; }
+
+    public static ConnectionCatalogOptions FromConfiguration(Func<string, string?> getSetting)
+    {
+        ArgumentNullException.ThrowIfNull(getSetting);
+        return new()
+        {
+            Provider = getSetting("Governance:ConnectionCatalog:Provider"),
+            LocalRoot = getSetting("Governance:ConnectionCatalog:LocalRoot"),
+            ProtectionScope = LocalStoreProtection.ParseProtectionScope(
+                getSetting("Governance:ConnectionCatalog:ProtectionScope")),
+            ServiceIdentity = getSetting("Governance:ConnectionCatalog:ServiceIdentity")
+        };
+    }
 }
 
 public static class ConnectionCatalogProviderFactory
@@ -305,7 +418,9 @@ public static class ConnectionCatalogProviderFactory
         return options.Provider.Trim().ToUpperInvariant() switch
         {
             "LOCAL" => new LocalConnectionCatalogProvider(
-                options.LocalRoot ?? throw new InvalidOperationException("Connection catalog local root is required.")),
+                options.LocalRoot ?? throw new InvalidOperationException("Connection catalog local root is required."),
+                options.ProtectionScope,
+                options.ServiceIdentity),
             "PORTAL" => throw new InvalidOperationException(
                 "The Portal connection catalog provider is only available inside the Portal host."),
             _ => throw new InvalidOperationException($"Connection catalog provider '{options.Provider}' is not supported.")

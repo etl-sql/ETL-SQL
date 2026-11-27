@@ -1463,6 +1463,10 @@ public sealed record FileOperationStatement : Statement
     public Expression? VerifyKey { get; init; }
     /// <summary>ENCRYPT, DECRYPT, COMPRESS, DECOMPRESS: delete the source once the output is written (ROADMAP FO03).</summary>
     public Expression? DeleteSource { get; init; }
+    /// <summary>COMPRESS, DECOMPRESS: explicit archive format ('ZIP', 'GZIP', 'TAR', 'TAR_GZ').</summary>
+    public Expression? Format { get; init; }
+    /// <summary>DECOMPRESS: wildcard/glob pattern selecting archive entries to extract.</summary>
+    public Expression? Pattern { get; init; }
     public Expression? DateSuffix { get; }
     public Expression? SuffixSeparator { get; }
     public bool DestinationIsDirectory { get; }
@@ -1496,6 +1500,10 @@ public sealed record DirectoryOperationStatement : Statement
     public Expression? Password { get; }
     public Expression? KeyFile { get; }
     public Expression? PgpKey { get; }
+    /// <summary>COMPRESS, DECOMPRESS DIRECTORY: explicit archive format ('ZIP', 'TAR', 'TAR_GZ').</summary>
+    public Expression? Format { get; init; }
+    /// <summary>DECOMPRESS DIRECTORY: wildcard/glob pattern selecting archive entries to extract.</summary>
+    public Expression? Pattern { get; init; }
     public bool IfExists { get; set; }
     public string? ConnectionName { get; }
 
@@ -1523,7 +1531,7 @@ public sealed record SplitFileStatement(Expression Source, Expression Destinatio
 
 public sealed record MergeFilesStatement(Expression Source, Expression Destination, Expression? Header = null, Expression? Overwrite = null) : Statement;
 
-public sealed record SyncDirectoryStatement(Expression Source, Expression Destination, Expression? DeleteExtra = null, Expression? Overwrite = null, Expression? Recursive = null) : Statement;
+public sealed record SyncDirectoryStatement(Expression Source, Expression Destination, Expression? DeleteExtra = null, Expression? Overwrite = null, Expression? Recursive = null, string? SourceConnectionName = null, string? DestinationConnectionName = null) : Statement;
 
 public sealed record VerifyFileIntegrityStatement(Expression Source, Expression? HashFile = null, Expression? ExpectedHash = null, Expression? Algorithm = null) : Statement;
 
@@ -2513,7 +2521,7 @@ public sealed record ExplainStatement : Statement
     }
 }
 
-public enum FileOpType { Copy, Move, Rename, Delete, Compress, Decompress, Encrypt, Decrypt }
+public enum FileOpType { Copy, Move, Rename, Delete, Compress, Decompress, Encrypt, Decrypt, Sign, VerifySignature }
 public enum DirectoryOpType { Create, Delete, Rename, Move, Copy, DeleteContents, Compress, Decompress, Encrypt, Decrypt }
 
 public enum FileTransferType { Send, Receive }
@@ -2525,6 +2533,8 @@ public sealed record FileTransferStatement : Statement
     public string ConnectionName { get; set; } = "";
     public Expression RemotePath { get; set; } = null!;
     public Expression? Overwrite { get; set; }
+    public Expression? Recursive { get; set; }
+    public Expression? Verify { get; set; }
     public bool IsSqlStyle { get; set; }
 }
 

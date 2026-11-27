@@ -36,6 +36,7 @@ public enum FieldChannel
     ConfidenceLow,
     ConfidenceHigh,
     Color,
+    Opacity,
     Size,
     Shape,
     Theta,
@@ -112,7 +113,7 @@ public enum SortDirection
     Descending
 }
 
-public enum ConditionalEncodingChannel { Color, Opacity, Size, Shape, Text }
+public enum ConditionalEncodingChannel { Color, Opacity, Size, Shape, Text, LineDash }
 public enum PredicateKind { Comparison, And, Or, Not, IsNull, IsNotNull, Truthy }
 public enum ComparisonKind { Equal, NotEqual, LessThan, LessThanOrEqual, GreaterThan, GreaterThanOrEqual }
 public enum PredicateOperandKind { Field, Literal }
@@ -184,6 +185,8 @@ public sealed record ColorRangeSpec(
     string? Mid = null,
     decimal? Midpoint = null,
     string NullColor = "#9ca3af");
+
+public sealed record NumericRangeSpec(decimal Minimum, decimal Maximum);
 
 public sealed record PositionAdjustmentSpec(
     PositionAdjustmentKind Kind,
@@ -272,10 +275,17 @@ public sealed record ScaleSpec(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? LabelSkip = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] decimal OuterPadding = 0m,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TickFormat = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TimeUnit = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TimeUnit = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Title = null)
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ColorRangeSpec? ColorRange { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NumericRangeSpec? NumericRange { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public ImmutableArray<string> DiscreteRange { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public ImmutableArray<PaletteAssignment> DiscreteColorMap { get; init; }
 }
 
 public sealed record ScaleResolutionSpec(
@@ -357,8 +367,8 @@ public sealed record ChartSpec(
         ScaleResolutionSpec? scaleResolution = null,
         FacetSpec? facet = null,
         InteractionSpec? interactions = null) => new(
-            UsesTransposedConfidence(coordinate, layers) ? ChartContractVersions.TransposedConfidenceChartSpecSchema : UsesOrdinaryAreaInterpolation(coordinate, layers) ? ChartContractVersions.OrdinaryAreaInterpolationChartSpecSchema : UsesOrdinaryInterpolation(coordinate, layers) ? ChartContractVersions.OrdinaryInterpolationChartSpecSchema : UsesConnectedInterpolation(layers) ? ChartContractVersions.InterpolatedConnectedChartSpecSchema : UsesConnectedDecorations(layers) ? ChartContractVersions.DecoratedConnectedChartSpecSchema : UsesTransposedConnections(coordinate, layers) ? ChartContractVersions.TransposedConnectedChartSpecSchema : UsesZeroConditions(layers) ? ChartContractVersions.ZeroConnectedChartSpecSchema : UsesConnectedComposition(layers, facet) ? ChartContractVersions.ConnectedCompositionChartSpecSchema : UsesTransposedAreaAspect(coordinate, layers) ? ChartContractVersions.TransposedAreaChartSpecSchema : UsesConnectConditions(layers) ? ChartContractVersions.ConnectChartSpecSchema : layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty) ? ChartContractVersions.ConnectedChartSpecSchema : ChartContractVersions.ChartSpecSchema,
-            UsesTransposedConfidence(coordinate, layers) ? ChartContractVersions.TransposedConfidenceChartSpecVersion : UsesOrdinaryAreaInterpolation(coordinate, layers) ? ChartContractVersions.OrdinaryAreaInterpolationChartSpecVersion : UsesOrdinaryInterpolation(coordinate, layers) ? ChartContractVersions.OrdinaryInterpolationChartSpecVersion : UsesConnectedInterpolation(layers) ? ChartContractVersions.InterpolatedConnectedChartSpecVersion : UsesConnectedDecorations(layers) ? ChartContractVersions.DecoratedConnectedChartSpecVersion : UsesTransposedConnections(coordinate, layers) ? ChartContractVersions.TransposedConnectedChartSpecVersion : UsesZeroConditions(layers) ? ChartContractVersions.ZeroConnectedChartSpecVersion : UsesConnectedComposition(layers, facet) ? ChartContractVersions.ConnectedCompositionChartSpecVersion : UsesTransposedAreaAspect(coordinate, layers) ? ChartContractVersions.TransposedAreaChartSpecVersion : UsesConnectConditions(layers) ? ChartContractVersions.ConnectChartSpecVersion : layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty) ? ChartContractVersions.ConnectedChartSpecVersion : ChartContractVersions.ChartSpecCurrent,
+            UsesTransposedConfidence(coordinate, layers) ? ChartContractVersions.TransposedConfidenceChartSpecSchema : UsesOrdinaryAreaInterpolation(coordinate, layers) ? ChartContractVersions.OrdinaryAreaInterpolationChartSpecSchema : UsesOrdinaryInterpolation(coordinate, layers) ? ChartContractVersions.OrdinaryInterpolationChartSpecSchema : UsesConnectedInterpolation(coordinate, layers) ? ChartContractVersions.InterpolatedConnectedChartSpecSchema : UsesConnectedDecorations(coordinate, layers) ? ChartContractVersions.DecoratedConnectedChartSpecSchema : UsesTransposedConnections(coordinate, layers) ? ChartContractVersions.TransposedConnectedChartSpecSchema : UsesZeroConditions(coordinate, layers) ? ChartContractVersions.ZeroConnectedChartSpecSchema : UsesConnectedComposition(coordinate, layers, facet) ? ChartContractVersions.ConnectedCompositionChartSpecSchema : UsesTransposedAreaAspect(coordinate, layers) ? ChartContractVersions.TransposedAreaChartSpecSchema : UsesConnectConditions(coordinate, layers) ? ChartContractVersions.ConnectChartSpecSchema : layers.Any(layer => IsConnectedConditionLayer(coordinate, layer)) ? ChartContractVersions.ConnectedChartSpecSchema : ChartContractVersions.ChartSpecSchema,
+            UsesTransposedConfidence(coordinate, layers) ? ChartContractVersions.TransposedConfidenceChartSpecVersion : UsesOrdinaryAreaInterpolation(coordinate, layers) ? ChartContractVersions.OrdinaryAreaInterpolationChartSpecVersion : UsesOrdinaryInterpolation(coordinate, layers) ? ChartContractVersions.OrdinaryInterpolationChartSpecVersion : UsesConnectedInterpolation(coordinate, layers) ? ChartContractVersions.InterpolatedConnectedChartSpecVersion : UsesConnectedDecorations(coordinate, layers) ? ChartContractVersions.DecoratedConnectedChartSpecVersion : UsesTransposedConnections(coordinate, layers) ? ChartContractVersions.TransposedConnectedChartSpecVersion : UsesZeroConditions(coordinate, layers) ? ChartContractVersions.ZeroConnectedChartSpecVersion : UsesConnectedComposition(coordinate, layers, facet) ? ChartContractVersions.ConnectedCompositionChartSpecVersion : UsesTransposedAreaAspect(coordinate, layers) ? ChartContractVersions.TransposedAreaChartSpecVersion : UsesConnectConditions(coordinate, layers) ? ChartContractVersions.ConnectChartSpecVersion : layers.Any(layer => IsConnectedConditionLayer(coordinate, layer)) ? ChartContractVersions.ConnectedChartSpecVersion : ChartContractVersions.ChartSpecCurrent,
             id,
             title,
             dataReference,
@@ -376,10 +386,10 @@ public sealed record ChartSpec(
 
     public void Validate()
     {
-        var connected = Layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty);
-        var connect = UsesConnectConditions(Layers);
-        ChartContractValidation.RequireVersion(Schema, Version, HasTransposedConfidence ? ChartContractVersions.TransposedConfidenceChartSpecSchema : HasOrdinaryAreaInterpolation ? ChartContractVersions.OrdinaryAreaInterpolationChartSpecSchema : HasOrdinaryInterpolation ? ChartContractVersions.OrdinaryInterpolationChartSpecSchema : HasConnectedInterpolation ? ChartContractVersions.InterpolatedConnectedChartSpecSchema : HasConnectedDecorations ? ChartContractVersions.DecoratedConnectedChartSpecSchema : IsTransposedConnected ? ChartContractVersions.TransposedConnectedChartSpecSchema : UsesZeroConditions(Layers) ? ChartContractVersions.ZeroConnectedChartSpecSchema : IsConnectedComposition ? ChartContractVersions.ConnectedCompositionChartSpecSchema : IsTransposedAreaAspect ? ChartContractVersions.TransposedAreaChartSpecSchema : connect ? ChartContractVersions.ConnectChartSpecSchema : connected ? ChartContractVersions.ConnectedChartSpecSchema : ChartContractVersions.ChartSpecSchema,
-            HasTransposedConfidence ? ChartContractVersions.TransposedConfidenceChartSpecVersion : HasOrdinaryAreaInterpolation ? ChartContractVersions.OrdinaryAreaInterpolationChartSpecVersion : HasOrdinaryInterpolation ? ChartContractVersions.OrdinaryInterpolationChartSpecVersion : HasConnectedInterpolation ? ChartContractVersions.InterpolatedConnectedChartSpecVersion : HasConnectedDecorations ? ChartContractVersions.DecoratedConnectedChartSpecVersion : IsTransposedConnected ? ChartContractVersions.TransposedConnectedChartSpecVersion : UsesZeroConditions(Layers) ? ChartContractVersions.ZeroConnectedChartSpecVersion : IsConnectedComposition ? ChartContractVersions.ConnectedCompositionChartSpecVersion : IsTransposedAreaAspect ? ChartContractVersions.TransposedAreaChartSpecVersion : connect ? ChartContractVersions.ConnectChartSpecVersion : connected ? ChartContractVersions.ConnectedChartSpecVersion : ChartContractVersions.ChartSpecCurrent, nameof(ChartSpec));
+        var connected = Layers.Any(layer => IsConnectedConditionLayer(Coordinate, layer));
+        var connect = UsesConnectConditions(Coordinate, Layers);
+        ChartContractValidation.RequireVersion(Schema, Version, HasTransposedConfidence ? ChartContractVersions.TransposedConfidenceChartSpecSchema : HasOrdinaryAreaInterpolation ? ChartContractVersions.OrdinaryAreaInterpolationChartSpecSchema : HasOrdinaryInterpolation ? ChartContractVersions.OrdinaryInterpolationChartSpecSchema : HasConnectedInterpolation ? ChartContractVersions.InterpolatedConnectedChartSpecSchema : HasConnectedDecorations ? ChartContractVersions.DecoratedConnectedChartSpecSchema : IsTransposedConnected ? ChartContractVersions.TransposedConnectedChartSpecSchema : UsesZeroConditions(Coordinate, Layers) ? ChartContractVersions.ZeroConnectedChartSpecSchema : IsConnectedComposition ? ChartContractVersions.ConnectedCompositionChartSpecSchema : IsTransposedAreaAspect ? ChartContractVersions.TransposedAreaChartSpecSchema : connect ? ChartContractVersions.ConnectChartSpecSchema : connected ? ChartContractVersions.ConnectedChartSpecSchema : ChartContractVersions.ChartSpecSchema,
+            HasTransposedConfidence ? ChartContractVersions.TransposedConfidenceChartSpecVersion : HasOrdinaryAreaInterpolation ? ChartContractVersions.OrdinaryAreaInterpolationChartSpecVersion : HasOrdinaryInterpolation ? ChartContractVersions.OrdinaryInterpolationChartSpecVersion : HasConnectedInterpolation ? ChartContractVersions.InterpolatedConnectedChartSpecVersion : HasConnectedDecorations ? ChartContractVersions.DecoratedConnectedChartSpecVersion : IsTransposedConnected ? ChartContractVersions.TransposedConnectedChartSpecVersion : UsesZeroConditions(Coordinate, Layers) ? ChartContractVersions.ZeroConnectedChartSpecVersion : IsConnectedComposition ? ChartContractVersions.ConnectedCompositionChartSpecVersion : IsTransposedAreaAspect ? ChartContractVersions.TransposedAreaChartSpecVersion : connect ? ChartContractVersions.ConnectChartSpecVersion : connected ? ChartContractVersions.ConnectedChartSpecVersion : ChartContractVersions.ChartSpecCurrent, nameof(ChartSpec));
         ChartContractValidation.RequireName(Id, nameof(Id));
         ChartContractValidation.RequireName(DataReference, nameof(DataReference));
         ChartContractValidation.RequireUnique(Layers.Select(layer => layer.Id), "layer id");
@@ -547,6 +557,25 @@ public sealed record ChartSpec(
                 if (!Bindings.Concat(Layers.SelectMany(layer => layer.Bindings)).Any(binding =>
                     binding.ScaleId == scale.Id && (binding.Channel == FieldChannel.Color || binding.Channel == FieldChannel.Size) && binding.SemanticKind == DataSemanticKind.Quantitative))
                     throw new InvalidDataException($"Scale '{scale.Id}' color RANGE requires a quantitative COLOR binding.");
+            }
+            if (scale.NumericRange is { } numRange)
+            {
+                if (scale.Channel is not (FieldChannel.Size or FieldChannel.Opacity) || scale.Kind is not (ScaleKind.Linear or ScaleKind.Logarithmic))
+                    throw new InvalidDataException($"Scale '{scale.Id}' numeric RANGE requires a linear/logarithmic SIZE or OPACITY scale.");
+                if (numRange.Minimum < 0m || (scale.Channel == FieldChannel.Opacity && numRange.Maximum > 1m) || numRange.Maximum < numRange.Minimum)
+                    throw new InvalidDataException($"Scale '{scale.Id}' numeric RANGE bounds are invalid.");
+            }
+            if (!scale.DiscreteRange.IsDefaultOrEmpty)
+            {
+                if (scale.Channel != FieldChannel.Color || scale.Kind is not (ScaleKind.Ordinal or ScaleKind.Band or ScaleKind.Point))
+                    throw new InvalidDataException($"Scale '{scale.Id}' discrete RANGE requires a categorical COLOR scale.");
+                foreach (var color in scale.DiscreteRange) ValidatePortableColor(color, scale.Id);
+            }
+            if (!scale.DiscreteColorMap.IsDefaultOrEmpty)
+            {
+                if (scale.Channel != FieldChannel.Color || scale.Kind is not (ScaleKind.Ordinal or ScaleKind.Band or ScaleKind.Point))
+                    throw new InvalidDataException($"Scale '{scale.Id}' discrete color map requires a categorical COLOR scale.");
+                foreach (var entry in scale.DiscreteColorMap) ValidatePortableColor(entry.Color, scale.Id);
             }
         }
         foreach (var binding in Bindings.Concat(Layers.SelectMany(layer => layer.Bindings)))
@@ -756,7 +785,7 @@ public sealed record ChartSpec(
                     throw new InvalidDataException($"RULE layer '{layer.Id}' requires Y with Y2.");
             }
             if (!layer.Style.IsDefault) ChartContractValidation.RequireUnique(layer.Style.Select(token => token.Name), $"style token in layer '{layer.Id}'");
-            if (!layer.Conditions.IsDefaultOrEmpty && layer.Mark is MarkKind.Line or MarkKind.Area)
+            if (IsConnectedConditionLayer(Coordinate, layer))
             {
                 var positions = layer.Bindings.Where(binding => binding.Channel is not (FieldChannel.Color or FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap)).ToArray();
                 var ribbon = layer.Mark == MarkKind.Area && positions.Select(binding => binding.Channel).ToHashSet()
@@ -818,13 +847,13 @@ public sealed record ChartSpec(
     public bool IsTransposedAreaAspect => UsesTransposedAreaAspect(Coordinate, Layers);
 
     [JsonIgnore]
-    public bool IsConnectedComposition => IsTransposedConnected || UsesConnectedComposition(Layers, Facet);
+    public bool IsConnectedComposition => IsTransposedConnected || UsesConnectedComposition(Coordinate, Layers, Facet);
 
     [JsonIgnore]
-    public bool HasConnectedDecorations => UsesConnectedDecorations(Layers);
+    public bool HasConnectedDecorations => UsesConnectedDecorations(Coordinate, Layers);
 
     [JsonIgnore]
-    public bool HasConnectedInterpolation => UsesConnectedInterpolation(Layers);
+    public bool HasConnectedInterpolation => UsesConnectedInterpolation(Coordinate, Layers);
 
     [JsonIgnore]
     public bool HasOrdinaryInterpolation => UsesOrdinaryInterpolation(Coordinate, Layers);
@@ -834,6 +863,21 @@ public sealed record ChartSpec(
 
     [JsonIgnore]
     public bool HasTransposedConfidence => UsesTransposedConfidence(Coordinate, Layers);
+
+    public static bool IsConnectedConditionLayer(CoordinateSpec coordinate, MarkLayerSpec layer)
+    {
+        if (layer.Mark is not (MarkKind.Line or MarkKind.Area) || layer.Conditions.IsDefaultOrEmpty)
+            return false;
+        if (layer.Bindings.Any(binding =>
+            binding.Channel is FieldChannel.X or FieldChannel.X2 or FieldChannel.XStart or FieldChannel.XEnd or
+                FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd &&
+            binding.SemanticKind != DataSemanticKind.Quantitative))
+            return false;
+        var hasExplicitInterpolation = layer.Style.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase));
+        var hasConnectedNullPolicy = layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) &&
+            (style.Value.Equals("CONNECT", StringComparison.OrdinalIgnoreCase) || style.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase)));
+        return coordinate.Kind == CoordinateKind.TransposedCartesian || hasExplicitInterpolation || hasConnectedNullPolicy;
+    }
 
     private static bool UsesTransposedConfidence(CoordinateSpec coordinate, ImmutableArray<MarkLayerSpec> layers) =>
         coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } && layers.Any(layer =>
@@ -847,24 +891,24 @@ public sealed record ChartSpec(
         coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } && layers.Any(layer =>
             layer.Mark is (MarkKind.Line or MarkKind.Area) && layer.Conditions.IsDefaultOrEmpty && ResolvedConnectionGeometry.Kind(layer.Style) is not null);
 
-    private static bool UsesConnectedInterpolation(ImmutableArray<MarkLayerSpec> layers) => layers.Any(layer =>
-        layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty && ResolvedConnectionGeometry.Kind(layer.Style) is not null);
+    private static bool UsesConnectedInterpolation(CoordinateSpec coordinate, ImmutableArray<MarkLayerSpec> layers) => layers.Any(layer =>
+        IsConnectedConditionLayer(coordinate, layer) && ResolvedConnectionGeometry.Kind(layer.Style) is not null);
 
-    private static bool UsesConnectedDecorations(ImmutableArray<MarkLayerSpec> layers) => layers.Any(layer =>
-        layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty && layer.Conditions.Any(condition => ResolvedConnectionDecoration.IsDecorationChannel(condition.Channel)));
+    private static bool UsesConnectedDecorations(CoordinateSpec coordinate, ImmutableArray<MarkLayerSpec> layers) => layers.Any(layer =>
+        IsConnectedConditionLayer(coordinate, layer) && layer.Conditions.Any(condition => ResolvedConnectionDecoration.IsDecorationChannel(condition.Channel)));
 
     [JsonIgnore]
     public bool IsTransposedConnected => UsesTransposedConnections(Coordinate, Layers);
 
     private static bool UsesTransposedConnections(CoordinateSpec coordinate, ImmutableArray<MarkLayerSpec> layers) =>
-        coordinate.Kind == CoordinateKind.TransposedCartesian && layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty);
+        coordinate.Kind == CoordinateKind.TransposedCartesian && layers.Any(layer => IsConnectedConditionLayer(coordinate, layer));
 
-    private static bool UsesConnectedComposition(ImmutableArray<MarkLayerSpec> layers, FacetSpec? facet) =>
-        layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty) &&
-        (UsesConnectedInterpolation(layers) || UsesConnectedDecorations(layers) || UsesZeroConditions(layers) || layers.Length > 1 || facet is not null || layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Color)));
+    private static bool UsesConnectedComposition(CoordinateSpec coordinate, ImmutableArray<MarkLayerSpec> layers, FacetSpec? facet) =>
+        layers.Any(layer => IsConnectedConditionLayer(coordinate, layer)) &&
+        (UsesConnectedInterpolation(coordinate, layers) || UsesConnectedDecorations(coordinate, layers) || UsesZeroConditions(coordinate, layers) || layers.Length > 1 || facet is not null || layers.Any(layer => IsConnectedConditionLayer(coordinate, layer) && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Color)));
 
-    private static bool UsesZeroConditions(ImmutableArray<MarkLayerSpec> layers) => layers.Any(layer =>
-        layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty &&
+    private static bool UsesZeroConditions(CoordinateSpec coordinate, ImmutableArray<MarkLayerSpec> layers) => layers.Any(layer =>
+        IsConnectedConditionLayer(coordinate, layer) &&
         layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase)));
 
     public ResolvedCartesianAxes? ResolveCartesianAxes() => ResolveConnectedAxes() ?? ResolveTransposedAreaAxes();
@@ -903,8 +947,8 @@ public sealed record ChartSpec(
         return new ResolvedCartesianAxes(Axis(FieldChannel.X), Axis(FieldChannel.Y));
     }
 
-    private static bool UsesConnectConditions(ImmutableArray<MarkLayerSpec> layers) => layers.Any(layer =>
-        layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty &&
+    private static bool UsesConnectConditions(CoordinateSpec coordinate, ImmutableArray<MarkLayerSpec> layers) => layers.Any(layer =>
+        IsConnectedConditionLayer(coordinate, layer) &&
         layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("CONNECT", StringComparison.OrdinalIgnoreCase)));
 
     private static void ValidateIntervalPair(MarkLayerSpec layer, FieldChannel start, FieldChannel end, string name)

@@ -1,4 +1,4 @@
-<# Validate authored installer inputs without publishing applications or installing WiX. #>
+﻿<# Validate authored installer inputs without publishing applications or installing WiX. #>
 [CmdletBinding()]
 param([string]$Root = (Split-Path $PSScriptRoot -Parent))
 
@@ -10,6 +10,12 @@ foreach ($relative in @('scripts/install.ps1', 'scripts/install.sh',
     'src/ETL-SQL.Orchestrator.Service/install-service-linux.sh')) {
     if (Test-Path -LiteralPath (Join-Path $Root $relative)) {
         $findings.Add("Retired installer helper: $relative. Use the maintained MSI or Linux package installer.")
+    }
+}
+# COMPAT_BREAK: 0.23 — the MSI runs no script custom actions (MI01); the services configure themselves.
+foreach ($relative in @('src/ETL-SQL.Installer/configure-portal-jwt.ps1', 'src/ETL-SQL.Installer/installer-actions.js')) {
+    if (Test-Path -LiteralPath (Join-Path $Root $relative)) {
+        $findings.Add("Retired installer script: $relative. The Orchestrator and Portal create their configuration on first start.")
     }
 }
 $installer = Join-Path $Root 'src/ETL-SQL.Installer'
@@ -27,6 +33,16 @@ try {
     if ($restartManager.Count -ne 1 -or $restartManager[0].Value -cne 'Disable') {
         $findings.Add('MSI must not let Restart Manager shut down other software: author MSIRESTARTMANAGERCONTROL=Disable exactly once.')
     }
+    if ($manifest.SelectNodes('//*[local-name()="CloseApplication" or namespace-uri()="http://schemas.microsoft.com/wix/UtilExtension"] | //@TerminateProcess').Count -gt 0 -or
+        $manifest.DocumentElement.GetAttribute('xmlns:util') -eq 'http://schemas.microsoft.com/wix/UtilExtension') {
+        $findings.Add('MSI must not force-kill processes with CloseApplication or TerminateProcess; use ServiceControl Stop="both" Wait="yes".')
+    }
+    foreach ($serviceName in @('ETL-SQL-Orchestrator', 'ETL-SQL-Portal')) {
+        $stopControls = $manifest.SelectNodes("//w:ServiceControl[@Name='$serviceName' and @Stop='both' and @Remove='uninstall' and @Wait='yes']", $namespaces)
+        if ($stopControls.Count -ne 1) {
+            $findings.Add("MSI must stop and remove $serviceName via one ServiceControl with Stop=""both"", Remove=""uninstall"", and Wait=""yes"".")
+        }
+    }
     foreach ($attribute in $manifest.SelectNodes('//@Source | //@SourceFile')) {
         $source = $attribute.Value
         # Published binaries are checked after publish; heat generates wwwroot.wxs then too.
@@ -42,11 +58,14 @@ try {
     }
 } catch { $findings.Add("Installer.wxs: $($_.Exception.Message)") }
 
-foreach ($relative in @('scripts/build-msi.ps1', 'src/ETL-SQL.Installer/configure-portal-jwt.ps1')) {
+foreach ($relative in @('scripts/build-msi.ps1')) {
     $file = Join-Path $Root $relative
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
         $findings.Add("Missing PowerShell source: $relative")
         continue
+    }
+    if ($relative -ceq 'scripts/build-msi.ps1' -and (Get-Content -LiteralPath $file -Raw).Contains('WixUtilExtension')) {
+        $findings.Add('scripts/build-msi.ps1 must not link WixUtilExtension.')
     }
     $tokens = $null
     $parseErrors = $null
@@ -56,12 +75,8 @@ foreach ($relative in @('scripts/build-msi.ps1', 'src/ETL-SQL.Installer/configur
     }
 }
 
-try {
-    # Parse only. The installer JScript must never execute on the preflight host.
-    $output = & node --check (Join-Path $installer 'installer-actions.js') 2>&1
-    if ($LASTEXITCODE -ne 0) { $findings.Add("installer-actions.js syntax: $($output -join [Environment]::NewLine)") }
-} catch { $findings.Add("installer-actions.js: $($_.Exception.Message)") }
-
 foreach ($finding in $findings) { Write-Output "FAIL $finding" }
 if ($findings.Count -gt 0) { exit 1 }
-Write-Output 'Installer source checks passed: XML, static source files, retired-helper policy and PowerShell/JavaScript syntax. WiX compilation and installation remain required.'
+Write-Output 'Installer source checks passed: XML, static source files, retired-helper and retired-script policy and PowerShell syntax. WiX compilation and installation remain required.'
+# Callers read $LASTEXITCODE; no native command runs above to set it.
+exit 0

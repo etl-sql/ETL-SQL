@@ -339,7 +339,7 @@ public sealed class StudioPipelineRunsController(
             (_, "job_not_provisioned") => StatusCode(StatusCodes.Status403Forbidden, new PipelineRunRefusalDto(
                 "job_not_provisioned",
                 $"No Orchestrator job is provisioned for this pipeline yet, and this account may not create one. "
-                + $"An Orchestrator manager runs it once to create '{jobName}', then grants EXECUTE on it.")),
+                + $"An Orchestrator manager provisions '{jobName}' in Orchestrator (or runs it once) and grants EXECUTE on it.")),
             (_, "run_grant_denied") => StatusCode(StatusCodes.Status403Forbidden, new PipelineRunRefusalDto(
                 "run_grant_denied",
                 $"This account holds no EXECUTE grant on Orchestrator job '{jobName}'. An owner or manager of the job grants it.")),

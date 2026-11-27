@@ -12,7 +12,7 @@ namespace ETL_SQL.Connectors
     /// </summary>
     internal static class FileListingBatches
     {
-        internal static readonly string[] Columns = { "Name", "FullPath", "Size", "LastModified", "IsDirectory" };
+        internal static readonly string[] Columns = FileMetaData.StandardColumns;
 
         internal static async IAsyncEnumerable<DataTable> ReadAsync(
             IAsyncEnumerable<FileMetaData> files,
@@ -32,7 +32,11 @@ namespace ETL_SQL.Connectors
                     // COMPAT_BREAK: 0.22.0 — Size was long; listings also arrived as one batch.
                     ["Size"] = (decimal)f.Size,
                     ["LastModified"] = f.LastModified,
-                    ["IsDirectory"] = f.IsDirectory
+                    ["IsDirectory"] = f.IsDirectory,
+                    ["CreationTime"] = f.CreationTime,
+                    ["Permissions"] = f.Permissions,
+                    ["Owner"] = f.Owner,
+                    ["IsSymlink"] = f.IsSymlink
                 });
                 if (table.Rows.Count >= batchSize)
                 {

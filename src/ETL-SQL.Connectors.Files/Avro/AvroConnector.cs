@@ -26,16 +26,20 @@ namespace ETL_SQL.Connectors.Avro
         {
             { "PATH", Array.Empty<string>() },
             { "SCHEMA_FILE", Array.Empty<string>() },
-            { "ENCRYPT", new[] { "ON", "OFF" } },
+            { "ENCRYPT", new[] { "ON", "OFF", "MACHINE", "PASSWORD", "KEYFILE", "PORTAL" } },
             { "PASSWORD", Array.Empty<string>() }
         };
 
-        public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "ENCRYPT", new[] { "ON", "OFF", "MACHINE", "PASSWORD", "KEYFILE", "PORTAL" } }
+        };
 
         public string GetHelp() =>
             "Avro Connector: Connects to Apache Avro files.\n" +
             "Options:\n" +
-            "  SCHEMA_FILE: Optional path to an Avro schema (.avsc) file.";
+            "  SCHEMA_FILE: Optional path to an Avro schema (.avsc) file.\n" +
+            "  ENCRYPT: ON | OFF | MACHINE | PASSWORD | KEYFILE | PORTAL (AES encryption for the file)";
 
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
             => new AvroDataSource(context, connectionString, options);

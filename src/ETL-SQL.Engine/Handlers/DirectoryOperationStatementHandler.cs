@@ -9,6 +9,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Services;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.Engine.Handlers;
 
@@ -39,13 +40,42 @@ public class DirectoryOperationStatementHandler(
             }
 
             string remotePath = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "";
+            string? remoteDest = stmt.Destination != null ? (await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() : null;
+
+            bool remoteOverwrite = true;
+            if (stmt.Overwrite != null)
+            {
+                var ovVal = await context.EvaluateValue(stmt.Overwrite, new Row());
+                if (ovVal is bool ob) remoteOverwrite = ob;
+                else if (ovVal != null)
+                {
+                    var s = ovVal.ToString()?.Trim();
+                    if (string.Equals(s, "ON", StringComparison.OrdinalIgnoreCase) || string.Equals(s, "TRUE", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = true;
+                    else if (string.Equals(s, "OFF", StringComparison.OrdinalIgnoreCase) || string.Equals(s, "FALSE", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = false;
+                }
+            }
+
+            bool remoteRecursive = false;
+            if (stmt.Recursive != null)
+            {
+                var recVal = await context.EvaluateValue(stmt.Recursive, new Row());
+                if (recVal is bool rb) remoteRecursive = rb;
+                else if (recVal != null)
+                {
+                    var s = recVal.ToString()?.Trim();
+                    remoteRecursive = string.Equals(s, "ON", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(s, "TRUE", StringComparison.OrdinalIgnoreCase)
+                        || s == "1";
+                }
+            }
 
             // Security Hardening: Count this as a directory operation
             context.IncrementOperationCount(OperationType.FileSystem, remotePath);
 
             if (context.IsWhatIf)
             {
-                _logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_DIRECTORY on connection '{stmt.ConnectionName}': {remotePath}", ConsoleColor.Yellow);
+                var destInfo = remoteDest != null ? $" -> {remoteDest}" : "";
+                _logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_DIRECTORY on connection '{stmt.ConnectionName}': {remotePath}{destInfo}{(remoteRecursive ? " (RECURSIVE=ON)" : "")}", ConsoleColor.Yellow);
                 return;
             }
 
@@ -58,14 +88,154 @@ public class DirectoryOperationStatementHandler(
                         _logger.WriteLine($"Remote directory created: {stmt.ConnectionName}:{remotePath}", ConsoleColor.Green);
                         break;
                     case DirectoryOpType.Delete:
-                        await remoteFs.DeleteDirectoryAsync(remotePath);
+                        if (stmt.IfExists && !await remoteFs.DirectoryExistsAsync(remotePath))
+                        {
+                            _logger.WriteLine($"Remote directory does not exist (IF EXISTS): {stmt.ConnectionName}:{remotePath}", ConsoleColor.Yellow);
+                            break;
+                        }
+
+                        if (!remoteRecursive)
+                        {
+                            bool hasChildren = false;
+                            await foreach (var child in remoteFs.ListFilesAsync(remotePath).WithCancellation(context.CancellationToken))
+                            {
+                                if (child.Name is "." or "..") continue;
+                                hasChildren = true;
+                                break;
+                            }
+
+                            if (hasChildren)
+                            {
+                                throw new ExecutionException(
+                                    $"Remote directory '{remotePath}' is not empty. Specify WITH (RECURSIVE = ON) to delete a non-empty directory.");
+                            }
+
+                            await remoteFs.DeleteDirectoryAsync(remotePath);
+                        }
+                        else
+                        {
+                            var filesToDelete = new List<string>();
+                            var dirsToDelete = new List<(string Path, int Depth)>();
+
+                            await foreach (var entry in RemoteDirectoryWalker.WalkAsync(
+                                remoteFs, remotePath, recursive: true, context, context.CancellationToken))
+                            {
+                                if (entry.Meta.IsDirectory && entry.Meta.IsSymlink != true)
+                                {
+                                    dirsToDelete.Add((entry.Meta.FullPath, entry.Depth));
+                                }
+                                else
+                                {
+                                    filesToDelete.Add(entry.Meta.FullPath);
+                                }
+                            }
+
+                            foreach (var file in filesToDelete)
+                            {
+                                context.IncrementOperationCount(OperationType.FileSystem, file);
+                                await remoteFs.DeleteFileAsync(file);
+                            }
+
+                            dirsToDelete.Sort((a, b) => b.Depth.CompareTo(a.Depth));
+                            foreach (var (dirPath, _) in dirsToDelete)
+                            {
+                                context.IncrementOperationCount(OperationType.FileSystem, dirPath);
+                                await remoteFs.DeleteDirectoryAsync(dirPath);
+                            }
+
+                            await remoteFs.DeleteDirectoryAsync(remotePath);
+                        }
+
                         _logger.WriteLine($"Remote directory deleted: {stmt.ConnectionName}:{remotePath}", ConsoleColor.Green);
+                        break;
+                    case DirectoryOpType.Rename:
+                    case DirectoryOpType.Move:
+                        if (string.IsNullOrWhiteSpace(remoteDest))
+                            throw new ExecutionException($"{stmt.Type.ToString().ToUpperInvariant()} DIRECTORY requires a destination path.");
+
+                        string finalDirDest = remoteDest;
+                        if (stmt.Type == DirectoryOpType.Rename && !remoteDest.Contains('/') && !remoteDest.Contains('\\'))
+                        {
+                            var normalizedSrc = RemoteDirectoryWalker.NormalizeRemoteDir(remotePath);
+                            var lastSlash = normalizedSrc.LastIndexOf('/');
+                            if (lastSlash >= 0)
+                            {
+                                finalDirDest = normalizedSrc[..(lastSlash + 1)] + remoteDest;
+                            }
+                        }
+
+                        try
+                        {
+                            await remoteFs.RenameDirectoryAsync(remotePath, finalDirDest, remoteOverwrite, context.CancellationToken);
+                        }
+                        catch (NotSupportedException)
+                        {
+                            throw new ExecutionException(
+                                $"Remote {stmt.Type.ToString().ToUpperInvariant()} DIRECTORY is not supported on {ds.ConnectorType}.");
+                        }
+                        _logger.WriteLine($"Remote directory {(stmt.Type == DirectoryOpType.Move ? "moved" : "renamed")}: {stmt.ConnectionName}:{remotePath} -> {finalDirDest}", ConsoleColor.Green);
+                        break;
+                    case DirectoryOpType.Copy:
+                        if (string.IsNullOrWhiteSpace(remoteDest))
+                            throw new ExecutionException("COPY DIRECTORY requires a destination path.");
+
+                        var walked = new List<RemoteWalkEntry>();
+                        await foreach (var entry in RemoteDirectoryWalker.WalkAsync(
+                            remoteFs, remotePath, recursive: true, context, context.CancellationToken))
+                        {
+                            walked.Add(entry);
+                        }
+
+                        await remoteFs.CreateDirectoryAsync(remoteDest);
+                        foreach (var dirEntry in walked)
+                        {
+                            if (dirEntry.Meta.IsDirectory && dirEntry.Meta.IsSymlink != true)
+                            {
+                                var targetSubDir = RemoteDirectoryWalker.CombineRemotePath(remoteDest, dirEntry.RelativePath);
+                                context.IncrementOperationCount(OperationType.FileSystem, targetSubDir);
+                                await remoteFs.CreateDirectoryAsync(targetSubDir);
+                            }
+                        }
+
+                        var copiedFiles = new List<string>();
+                        foreach (var fileEntry in walked)
+                        {
+                            if (fileEntry.Meta.IsDirectory || fileEntry.Meta.IsSymlink == true)
+                                continue;
+
+                            var targetFile = RemoteDirectoryWalker.CombineRemotePath(remoteDest, fileEntry.RelativePath);
+                            context.IncrementOperationCount(OperationType.FileSystem, targetFile);
+                            try
+                            {
+                                await FileOperationStatementHandler.CopyRemoteFileAsync(
+                                    remoteFs,
+                                    fileEntry.Meta.FullPath,
+                                    remoteFs,
+                                    targetFile,
+                                    remoteOverwrite,
+                                    FileOperationStatementHandler.DefaultRemoteTempRoot,
+                                    context.CancellationToken);
+                                copiedFiles.Add(targetFile);
+                            }
+                            catch (Exception copyEx)
+                            {
+                                var summary = copiedFiles.Count > 0
+                                    ? $" Already copied ({copiedFiles.Count}): [{string.Join(", ", copiedFiles)}]. Partially copied files were not deleted."
+                                    : " No files had been copied yet.";
+                                throw new ExecutionException(
+                                    $"Remote COPY DIRECTORY failed on '{fileEntry.Meta.FullPath}': {copyEx.Message}.{summary}",
+                                    copyEx, null, stmt.Line, stmt.Column);
+                            }
+                        }
+
+                        _logger.WriteLine($"Remote directory copied ({copiedFiles.Count} file(s)): {stmt.ConnectionName}:{remotePath} -> {remoteDest}", ConsoleColor.Green);
                         break;
                     default:
                         throw new ExecutionException($"Directory operation '{stmt.Type}' is not supported on remote systems.");
                 }
             }
             catch (ExecutionException) { throw; }
+            catch (SecurityException) { throw; }
             catch (Exception ex)
             {
                 throw new ExecutionException($"Remote directory operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
@@ -93,6 +263,10 @@ public class DirectoryOperationStatementHandler(
         string pathVal = sourceDs != null ? sourceDs.Path : ((await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "");
         string path = context.ResolvePath(pathVal);
 
+        string? formatOpt = stmt.Format != null ? (await context.EvaluateValue(stmt.Format, new Row()))?.ToString() : null;
+        string? patternOpt = stmt.Pattern != null ? (await context.EvaluateValue(stmt.Pattern, new Row()))?.ToString() : null;
+        ArchiveFormat? archiveFormat = null;
+
         string? destVal = null;
         if (stmt.Destination != null)
         {
@@ -117,6 +291,32 @@ public class DirectoryOperationStatementHandler(
             : FileSystemAccessKind.Read;
         path = pathAuthorizer.Authorize(context, path, sourceAccess,
             validateFileType: stmt.Type == DirectoryOpType.Decompress).CanonicalPath;
+
+        if (stmt.Type == DirectoryOpType.Compress)
+        {
+            archiveFormat = SafeArchiveService.ResolveFormat(formatOpt, dest, defaultToZipIfUnknown: true);
+            if (archiveFormat == ArchiveFormat.Gzip)
+            {
+                throw new ExecutionException("GZIP format compresses a single file only. Use ZIP, TAR, or TAR_GZ to compress a directory.");
+            }
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = SafeArchiveService.DeriveDefaultCompressDestination(path, archiveFormat.Value, isDirectory: true);
+            }
+        }
+        else if (stmt.Type == DirectoryOpType.Decompress)
+        {
+            archiveFormat = SafeArchiveService.ResolveFormat(formatOpt, path, defaultToZipIfUnknown: false);
+            if (archiveFormat == ArchiveFormat.Gzip)
+            {
+                throw new ExecutionException("GZIP is a single-file format. Use DECOMPRESS FILE for .gz files.");
+            }
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = SafeArchiveService.DeriveDefaultDecompressDestination(path, pathVal);
+            }
+        }
+
         if (dest != null && stmt.Type != DirectoryOpType.Rename)
         {
             var destinationAccess = stmt.Type == DirectoryOpType.Decompress
@@ -244,6 +444,7 @@ public class DirectoryOperationStatementHandler(
                 case DirectoryOpType.Compress:
                     if (dest != null)
                     {
+                        var compressFormat = archiveFormat ?? SafeArchiveService.ResolveFormat(formatOpt, dest, defaultToZipIfUnknown: true);
                         var compressDest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write,
                             validateFileType: true);
                         // Security Hardening: Block writing to script files
@@ -259,21 +460,33 @@ public class DirectoryOperationStatementHandler(
                             context.SecurityService.ValidateWriteAccess(deleteDest.CanonicalPath);
                             pathAuthorizer.DeleteValidatedFile(context, deleteDest);
                         }
+                        if (!Directory.Exists(path))
+                        {
+                            throw new ExecutionException($"Source directory for COMPRESS DIRECTORY does not exist: {path}");
+                        }
                         await using var destStream = pathAuthorizer.OpenValidatedWrite(context, compressDest,
                             truncate: true, failIfExists: true);
-                        System.IO.Compression.ZipFile.CreateFromDirectory(path, destStream);
+                        await SafeArchiveService.CompressDirectoryAsync(path, destStream, compressFormat, context.CancellationToken);
                         _logger.WriteLine($"Directory compressed: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
                 case DirectoryOpType.Decompress:
                     if (dest != null)
                     {
+                        var decompressFormat = archiveFormat ?? SafeArchiveService.ResolveFormat(formatOpt, path, defaultToZipIfUnknown: false);
                         // Security Hardening: Block writing to script files
                         context.SecurityService.ValidateWriteAccess(dest);
 
                         if (File.Exists(path))
                         {
-                            SafeZipExtractor.Extract(path, dest, overwrite, context, pathAuthorizer);
+                            SafeArchiveService.ExtractArchive(
+                                path,
+                                dest,
+                                decompressFormat,
+                                overwrite,
+                                context,
+                                pathAuthorizer,
+                                patternOpt);
                             _logger.WriteLine($"Directory decompressed: {path} -> {dest}", ConsoleColor.Green);
                         }
                         else

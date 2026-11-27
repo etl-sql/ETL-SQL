@@ -32,6 +32,14 @@ Statements are the top-level actions in an ETL-SQL script.
 | `ROLLING_AGGREGATE` | Transform | [Transform](reference/transform/rolling_aggregate.md) | [rolling_aggregate.md](reference/transform/rolling_aggregate.md) |
 | `SHARE_OF_TOTAL` | Transform | [Transform](reference/transform/share_of_total.md) | [share_of_total.md](reference/transform/share_of_total.md) |
 | `TOP_N_OTHERS` | Transform | [Transform](reference/transform/top_n_others.md) | [top_n_others.md](reference/transform/top_n_others.md) |
+| `UNPIVOT` | Transform | [Transform](reference/transform/unpivot.md) | [unpivot.md](reference/transform/unpivot.md) |
+| `CLEAN` | Transform | [Transform](reference/transform/clean.md) | [clean.md](reference/transform/clean.md) |
+| `BIN` | Transform | [Transform](reference/transform/bin.md) | [bin.md](reference/transform/bin.md) |
+| `OUTLIERS` | Transform | [Transform](reference/transform/outliers.md) | [outliers.md](reference/transform/outliers.md) |
+| `IMPUTE` | Transform | [Transform](reference/transform/impute.md) | [impute.md](reference/transform/impute.md) |
+| `SPLIT` | Transform | [Transform](reference/transform/split.md) | [split.md](reference/transform/split.md) |
+| `MASK_PII` | Transform | [Transform](reference/transform/mask_pii.md) | [mask_pii.md](reference/transform/mask_pii.md) |
+| `SCD2` | Transform | [Transform](reference/transform/scd2.md) | [scd2.md](reference/transform/scd2.md) |
 | `COMPARE DATASETS` | Data Prep / CDC | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md#compare-datasets](reference/statements/data-prep.md#compare-datasets) |
 | `CREATE CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
 | `ALTER CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |
@@ -79,6 +87,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `eng.variables` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.variables](reference/eng/variables.md) |
 | `eng.connection_config` | Diagnostics| [Engine Catalog](reference/eng/README.md) | [eng.connection_config](reference/eng/connection-config.md) |
 | `eng.connections` | Diagnostics| [Engine Catalog](reference/eng/README.md) | [eng.connections](reference/eng/connections.md) |
+| `eng.datasets` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.datasets](reference/eng/datasets.md) |
 | `eng.locks` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.locks](reference/eng/locks.md) |
 | `CLEAR SESSION` | Session | [Statement Reference](reference/statements/README.md) | [CLEAR.md](reference/statements/session-control/clear.md) |
 | `USE PASSWORD` | Session / Security | [Statement Reference](reference/statements/README.md) | [USE.md](reference/variables-parameters/use.md) |
@@ -91,6 +100,8 @@ Statements are the top-level actions in an ETL-SQL script.
 | `MOVE FILE` | File IO | [File Operations](reference/file-operations/README.md) | [move-file.md](reference/file-operations/move-file.md) |
 | `DELETE FILE` | File IO | [File Operations](reference/file-operations/README.md) | [DELETE.md](reference/statements/dml/delete.md) |
 | `ENCRYPT FILE` | File IO | [File Operations](reference/file-operations/README.md) | [ENCRYPT.md](reference/file-operations/encrypt-file.md) |
+| `SIGN FILE` | File IO | [File Operations](reference/file-operations/README.md) | [SIGN FILE](reference/file-operations/sign-file.md) |
+| `VERIFY FILE SIGNATURE` | File IO | [File Operations](reference/file-operations/README.md) | [SIGN FILE](reference/file-operations/sign-file.md) |
 | `SEND FILE` | File IO / Conn | [File Operations](reference/file-operations/README.md) (see also [TRANSFER.md](reference/file-operations/transfer.md)) | [SEND/FILE.md](reference/file-operations/file.md) |
 | `RECEIVE FILE` | File IO / Conn | [File Operations](reference/file-operations/README.md) (see also [TRANSFER.md](reference/file-operations/transfer.md)) | [RECEIVE/FILE.md](reference/file-operations/file.md) |
 | `SEND EMAIL` | Notifications | [File Operations](reference/file-operations/README.md) | [SEND/EMAIL.md](reference/file-operations/send-email.md) |
@@ -273,6 +284,7 @@ Connectors define how to communicate with external data sources.
 | `BIGQUERY` | SQL | [BIGQUERY.md](reference/connectors/databases/bigquery.md) | PROJECT_ID, DATASET_ID, KEY_FILE, ... |
 | `MONGODB` | NoSQL Document | [MONGODB.md](reference/connectors/databases/mongodb.md) | CONNECTION_STRING, DATABASE, COLLECTION, HOST, PORT, USER, PASSWORD, TIMEOUT_SECONDS |
 | `NEO4J` | Graph Database | [NEO4J.md](reference/connectors/databases/neo4j.md) | CONNECTION_STRING, URI, DATABASE, USER, PASSWORD, TIMEOUT_SECONDS, HOST, PORT, PROTOCOL, KEY_COLUMNS, FROM_LABEL, TO_LABEL, FROM_KEY_COLUMN, TO_KEY_COLUMN, SKIP_MISSING_ENDPOINTS, SCHEMA_SAMPLE_SIZE |
+| `Type Mapping` | Database Types | [Type Mapping](reference/connectors/type-mapping.md) | Native database column types to engine types, per connector |
 | `FLATFILE` | File | [FLATFILE.md](reference/connectors/files/flatfile.md) | PATH, FORMAT, DELIMITER, HEADER, ENCODING, ... |
 | `EXCEL` | File | [EXCEL.md](reference/connectors/files/excel.md) | PATH, SHEET, RANGE, HEADER, ... |
 | `JSON` | File | [JSON.md](reference/connectors/files/json.md) | PATH, ROOT_PATH, ENCODING, ... |
@@ -359,6 +371,8 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `STUFF(string, start, length, replacement)` | String | [STUFF.md](reference/functions/string/stuff.md) | Deletes part of string and inserts replacement |
 | `STR(number, [length], [decimals])` | String | [STR.md](reference/functions/string/str.md) | Formats number as string |
 | `CLEAN_STRING(string)` | String | [CLEAN_STRING.md](reference/functions/string/clean_string.md) | Clean string |
+| `CLEAN_TEXT(value [, rules])` | String | [CLEAN_TEXT.md](reference/functions/string/clean_text.md) | Applies ordered text cleaning rules (`TRIM`, `COLLAPSE_WHITESPACE`, `STRIP_CONTROL`, `NULL_IF_EMPTY`, case folding, `PHONE`, `EMAIL`, `POSTAL_CODE`) |
+| `STANDARDIZE(value, format)` | String | [STANDARDIZE.md](reference/functions/string/standardize.md) | Standardizes text into `PHONE`, `EMAIL`, or `POSTAL_CODE` format |
 | `MASK_EMAIL(string)` | String | [MASK_EMAIL.md](reference/functions/string/mask_email.md) | Mask email |
 | `MASK_PHONE(string)` | String | [MASK_PHONE.md](reference/functions/string/mask_phone.md) | Mask phone |
 | `MASK_SSN(string)` | String | [MASK_SSN.md](reference/functions/string/mask_ssn.md) | Mask SSN |
@@ -496,10 +510,16 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `FILE_SIZE(path)` | File | [FILE_SIZE.md](reference/functions/file-path/file_size.md) | Returns local file size in bytes |
 | `FILE_CREATED(path)` | File | [FILE_CREATED.md](reference/functions/file-path/file_created.md) | Returns local file creation timestamp |
 | `FILE_MODIFIED(path)` | File | [FILE_MODIFIED.md](reference/functions/file-path/file_modified.md) | Returns local file last modified timestamp |
+| `FILE_ACCESSED(path)` | File | [FILE_ACCESSED.md](reference/functions/file-path/file_accessed.md) | Returns local file last access timestamp |
+| `FILE_READONLY(path)` | File | [FILE_READONLY.md](reference/functions/file-path/file_readonly.md) | Returns 1 if local file is read-only, 0 otherwise |
 | `FILE_LINE_COUNT(path, [header_rows])` | File | [FILE_LINE_COUNT.md](reference/functions/file-path/file_line_count.md) | Counts lines in a local file with optional header exclusion |
 | `FILE_HASH(path, [algorithm])` | File | [FILE_HASH.md](reference/functions/file-path/file_hash.md) | Computes cryptographic hash of a file |
 | `DIRECTORY_EXISTS(path)` | File | [DIRECTORY_EXISTS.md](reference/functions/file-path/directory_exists.md) | 1 if directory exists, 0 otherwise |
+| `DIRECTORY_SIZE(path, [recursive])` | File | [DIRECTORY_SIZE.md](reference/functions/file-path/directory_size.md) | Total size in bytes of files in a local directory |
+| `DIRECTORY_FILE_COUNT(path, [recursive])` | File | [DIRECTORY_FILE_COUNT.md](reference/functions/file-path/directory_file_count.md) | Number of files in a local directory |
 | `FILE_LIST(path, [mask])` | File | [FILE_LIST.md](reference/functions/file-path/file_list.md) | Returns table of files in path |
+| `ARCHIVE_LIST(path)` | File | [ARCHIVE_LIST.md](reference/functions/file-path/archive_list.md) | Lists archive entries without extracting |
+| `EXCEL_SHEET_LIST(path_or_connection)` | File | [EXCEL_SHEET_LIST.md](reference/functions/file-path/excel_sheet_list.md) | Lists worksheets (`SheetIndex`, `SheetName`) in an Excel workbook |
 | `REMOTE_FILE_LIST(connection, path)` | File | [REMOTE_FILE_LIST.md](reference/functions/file-path/remote_file_list.md) | Table of files on remote connection |
 | `REMOTE_FILE_EXISTS(connection, path)` | File | [REMOTE_FILE_EXISTS.md](reference/functions/file-path/remote_file_exists.md) | 1 if remote file exists, 0 otherwise |
 | `REMOTE_DIRECTORY_EXISTS(connection, path)` | File | [REMOTE_DIRECTORY_EXISTS.md](reference/functions/file-path/remote_directory_exists.md) | 1 if remote directory exists, 0 otherwise |
@@ -512,6 +532,8 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `PATH_FILENAME(path)` | File | [PATH_FILENAME.md](reference/functions/file-path/path_filename.md) | Extracts filename from a full path |
 | `PATH_FILENAME_NO_EXT(path)` | File | [PATH_FILENAME_NO_EXT.md](reference/functions/file-path/path_filename_no_ext.md) | Extracts filename without its extension |
 | `PATH_CHANGE_EXTENSION(path, extension)` | File | [PATH_CHANGE_EXTENSION.md](reference/functions/file-path/path_change_extension.md) | Replaces or removes the file extension in a path |
+| `PATH_ROOT(path)` | File | [PATH_ROOT.md](reference/functions/file-path/path_root.md) | Extracts the root directory portion of a path |
+| `PATH_IS_ABSOLUTE(path)` | File | [PATH_IS_ABSOLUTE.md](reference/functions/file-path/path_is_absolute.md) | Returns 1 if a path is fully qualified (absolute), 0 otherwise |
 | `SUM(expression)` | Aggregate | [SUM.md](reference/functions/aggregate/sum.md) | Sum of values |
 | `COUNT(expression)` | Aggregate | [COUNT.md](reference/functions/aggregate/count.md) | Count of non-null values |
 | `AVG(expression)` | Aggregate | [AVG.md](reference/functions/aggregate/avg.md) | Average of values |
@@ -1096,7 +1118,7 @@ see the [Lifecycle Capability Matrix](reference/statements/lifecycle-matrix.md).
 - [Report Runtime Contract](reference/visuals-reporting/report-runtime-contract.md) — The report canvas is shared infrastructure. ReportPlayer, Portal, and the VS Code previ...
 - [Report-SQL](reference/visuals-reporting/report/index.md) — Report-SQL extends ETL-SQL with components for building interactive dashboards: dataset...
 - [CREATE THEME](reference/visuals-reporting/report/theme.md) — Defines a renderer-neutral color theme applied to visuals or pages with `STYLE (THEME = name)`.
-- [ETL-SQL Performance Reference](reference/performance/performance.md) — **Applies to ETL-SQL 0.22.0**
+- [ETL-SQL Performance Reference](reference/performance/performance.md) — **Applies to ETL-SQL 0.23.1**
 - [Large Data Certification](reference/performance/large-data-certification.md) — This document describes which large-data scenarios are certified, at which scale tiers,...
 
 ## 9. Portal & Orchestrator Admin
@@ -1188,6 +1210,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `eng.columns` | Diagnostics | Queryable virtual table for session and connection column metadata |
 | `eng.connections` | Diagnostics | Queryable virtual table for active session connections |
 | `eng.connection_config` | Diagnostics | Queryable virtual table for redacted active connection configuration |
+| `eng.datasets` | Diagnostics | Queryable virtual table for the datasets visible to the caller |
 | `eng.effective_permissions` | Governance | Queryable virtual table for effective principal permissions |
 | `eng.tables` | Diagnostics | Queryable virtual table for session and connection table metadata |
 | `eng.tenant_context` | Governance | Queryable virtual table for verified tenant identity and isolation |
@@ -1440,7 +1463,9 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql admin machine secret verify` | Resolve a machine-local secret without printing the value | [admin machine secret verify](reference/cli/admin-machine-secret-verify.md) |
 | `etl-sql admin machine secret` | Manage the machine-local Governance:Secrets provider | [admin machine secret](reference/cli/admin-machine-secret.md) |
 | `etl-sql admin machine tool delete` | Permanently remove a machine-local tool | [admin machine tool delete](reference/cli/admin-machine-tool-delete.md) |
+| `etl-sql admin machine tool grant` | Grant use of a machine-local tool | [admin machine tool grant](reference/cli/admin-machine-tool-grant.md) |
 | `etl-sql admin machine tool list` | List machine-local tools | [admin machine tool list](reference/cli/admin-machine-tool-list.md) |
+| `etl-sql admin machine tool revoke` | Revoke use of a machine-local tool | [admin machine tool revoke](reference/cli/admin-machine-tool-revoke.md) |
 | `etl-sql admin machine tool set` | Store a machine-local tool | [admin machine tool set](reference/cli/admin-machine-tool-set.md) |
 | `etl-sql admin machine tool` | Manage the machine-local tool catalog | [admin machine tool](reference/cli/admin-machine-tool.md) |
 | `etl-sql admin machine` | Manage machine-local governance stores | [admin machine](reference/cli/admin-machine.md) |
@@ -1462,6 +1487,7 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql admin promotion saas-upgrade` | Drain and upgrade one Managed Dedicated tenant boundary | [admin promotion saas upgrade](reference/cli/admin-promotion-saas-upgrade.md) |
 | `etl-sql admin promotion validate` | Validate mappings and collisions without changing the target | [admin promotion validate](reference/cli/admin-promotion-validate.md) |
 | `etl-sql admin promotion` | Inspect and prepare deployment-profile promotions | [admin promotion](reference/cli/admin-promotion.md) |
+| `etl-sql admin purge-data` | Delete all installed ETL-SQL runtime data (reports, snapshots, databases, logs, sessions, secrets) | [admin purge data](reference/cli/admin-purge-data.md) |
 | `etl-sql admin restore` | Validate and restore a backup (data + keys archives) | [admin restore](reference/cli/admin-restore.md) |
 | `etl-sql admin service-account create` | Create a Portal service account | [admin service account create](reference/cli/admin-service-account-create.md) |
 | `etl-sql admin service-account list` | List Portal service accounts | [admin service account list](reference/cli/admin-service-account-list.md) |
@@ -1627,6 +1653,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `ROLLBACK` | DDL | Canonical language token |
 | `SCHEMA` | DDL | Canonical language token |
 | `SETS` | DDL | Canonical language token |
+| `SIGN` | DDL | Canonical language token |
 | `SSH_KEY_PAIR` | DDL | Canonical language token |
 | `STYLE` | DDL | Canonical language token |
 | `TABLE` | DDL | Canonical language token |
@@ -2064,6 +2091,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `ALPHA` | General | Canonical language token |
 | `ANALYZE` | General | Canonical language token |
 | `ANNOTATIONS` | General | Canonical language token |
+| `AUTH_MODE` | General | Canonical language token |
 | `AXIS_FONT_COLOR` | General | Canonical language token |
 | `AXIS_FONT_SIZE` | General | Canonical language token |
 | `AXIS_TITLE_FONT_SIZE` | General | Canonical language token |
@@ -2076,6 +2104,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `BOX_STYLE` | General | Canonical language token |
 | `BREAKPOINT` | General | Canonical language token |
 | `BULK` | General | Canonical language token |
+| `BUSY_TIMEOUT_MS` | General | Canonical language token |
 | `BUTTON` | General | Canonical language token |
 | `BUTTON_BAR` | General | Canonical language token |
 | `CASCADE` | General | Canonical language token |
@@ -2089,6 +2118,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `CIRCLE` | General | Canonical language token |
 | `CIRCULAR` | General | Canonical language token |
 | `CLEAR_ALL_LABEL` | General | Canonical language token |
+| `CLIENT_ID` | General | Canonical language token |
 | `CLIP` | General | Canonical language token |
 | `CLOSE` | General | Canonical language token |
 | `COLLAPSIBLE` | General | Canonical language token |
@@ -2180,8 +2210,10 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `JITTER` | General | Canonical language token |
 | `JITTER_HEIGHT` | General | Canonical language token |
 | `JITTER_WIDTH` | General | Canonical language token |
+| `JOURNAL_MODE` | General | Canonical language token |
 | `JUSTIFY` | General | Canonical language token |
 | `KEEP_TOGETHER` | General | Canonical language token |
+| `KEY_COLUMNS` | General | Canonical language token |
 | `LABEL_MIN_SIZE` | General | Canonical language token |
 | `LABEL_OVERFLOW` | General | Canonical language token |
 | `LEADING` | General | Canonical language token |
@@ -2290,6 +2322,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `SAFE` | General | Canonical language token |
 | `SAMPLE` | General | Canonical language token |
 | `SAMPLING` | General | Canonical language token |
+| `SEARCH_PATH` | General | Canonical language token |
 | `SEARCHABLE` | General | Canonical language token |
 | `SELECT_ALL_LABEL` | General | Canonical language token |
 | `SESSION` | General | Canonical language token |
@@ -2306,6 +2339,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `SHOW_VIOLIN` | General | Canonical language token |
 | `SHUTDOWN` | General | Canonical language token |
 | `SIGMA` | General | Canonical language token |
+| `SIGNATURE` | General | Canonical language token |
 | `SIGNING_KEY` | General | Canonical language token |
 | `SIGNING_PASSWORD` | General | Canonical language token |
 | `SIZE_RANGE` | General | Canonical language token |
@@ -2411,6 +2445,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `ACOS` | Function | Canonical built-in function |
 | `AGE_BUCKET` | Function | Canonical built-in function |
 | `APPEND_TO_LIST` | Function | Canonical built-in function |
+| `ARCHIVE_LIST` | Function | Canonical built-in function |
 | `ASCII` | Function | Canonical built-in function |
 | `ASIN` | Function | Canonical built-in function |
 | `ATAN` | Function | Canonical built-in function |
@@ -2430,6 +2465,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `CHARINDEX` | Function | Canonical built-in function |
 | `CHECKSUM` | Function | Canonical built-in function |
 | `CLEAN_STRING` | Function | Canonical built-in function |
+| `CLEAN_TEXT` | Function | Canonical built-in function |
 | `COALESCE` | Function | Canonical built-in function |
 | `CONCAT` | Function | Canonical built-in function |
 | `CONNECTION_PROPERTY` | Function | Canonical built-in function |
@@ -2453,19 +2489,24 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `DENSE_RANK` | Function | Canonical built-in function |
 | `DIFFERENCE` | Function | Canonical built-in function |
 | `DIRECTORY_EXISTS` | Function | Canonical built-in function |
+| `DIRECTORY_FILE_COUNT` | Function | Canonical built-in function |
+| `DIRECTORY_SIZE` | Function | Canonical built-in function |
 | `DMETAPHONE` | Function | Canonical built-in function |
 | `DMETAPHONE_ALT` | Function | Canonical built-in function |
 | `END_OF_MONTH` | Function | Canonical built-in function |
 | `END_OF_QUARTER` | Function | Canonical built-in function |
 | `END_OF_WEEK` | Function | Canonical built-in function |
+| `EXCEL_SHEET_LIST` | Function | Canonical built-in function |
 | `EXP` | Function | Canonical built-in function |
 | `EXTRACTVALUE` | Function | Canonical built-in function |
+| `FILE_ACCESSED` | Function | Canonical built-in function |
 | `FILE_CREATED` | Function | Canonical built-in function |
 | `FILE_EXISTS` | Function | Canonical built-in function |
 | `FILE_HASH` | Function | Canonical built-in function |
 | `FILE_LINE_COUNT` | Function | Canonical built-in function |
 | `FILE_LIST` | Function | Canonical built-in function |
 | `FILE_MODIFIED` | Function | Canonical built-in function |
+| `FILE_READONLY` | Function | Canonical built-in function |
 | `FILE_SIZE` | Function | Canonical built-in function |
 | `FIRST_VALUE` | Function | Canonical built-in function |
 | `FLOOR` | Function | Canonical built-in function |
@@ -2525,6 +2566,8 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `PATH_EXTENSION` | Function | Canonical built-in function |
 | `PATH_FILENAME` | Function | Canonical built-in function |
 | `PATH_FILENAME_NO_EXT` | Function | Canonical built-in function |
+| `PATH_IS_ABSOLUTE` | Function | Canonical built-in function |
+| `PATH_ROOT` | Function | Canonical built-in function |
 | `PATINDEX` | Function | Canonical built-in function |
 | `PERCENT_RANK` | Function | Canonical built-in function |
 | `PERCENTILE_CONT` | Function | Canonical built-in function |
@@ -2572,6 +2615,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `SOURCE_MAX` | Function | Canonical built-in function |
 | `SOURCE_MIN` | Function | Canonical built-in function |
 | `SQRT` | Function | Canonical built-in function |
+| `STANDARDIZE` | Function | Canonical built-in function |
 | `START_OF_MONTH` | Function | Canonical built-in function |
 | `START_OF_QUARTER` | Function | Canonical built-in function |
 | `START_OF_WEEK` | Function | Canonical built-in function |

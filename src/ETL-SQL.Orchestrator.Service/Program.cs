@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors;
 using ETL_SQL.Connectors.Avro;
@@ -54,6 +56,23 @@ try
     ETL_SQL.Core.Governance.SecurityEventRuntime.ConfigureLocalOutboxFactory(
         new ETL_SQL.Core.Governance.SqliteSecurityEventOutboxFactory());
     await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
+    var restrictedInstalledService = false;
+    if (OperatingSystem.IsWindows())
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var principal = new WindowsPrincipal(identity);
+        var serviceSid = new SecurityIdentifier(WellKnownSidType.ServiceSid, null);
+        restrictedInstalledService = principal.IsInRole(serviceSid)
+            && !identity.IsSystem
+            && !principal.IsInRole(WindowsBuiltInRole.Administrator)
+            && InstallerRegistry.MatchingInstallFolder(
+                WindowsInstallerRegistry.Instance.ReadInstallValues(), AppContext.BaseDirectory) is not null;
+
+        // The restricted host receives its own credentials. Bootstrap manages a shared file
+        // that also contains Portal credentials and is writable only by SYSTEM and administrators.
+        if (!restrictedInstalledService)
+            InstalledConfigurationBootstrap.Ensure(AppContext.BaseDirectory);
+    }
     var builder = WebApplication.CreateBuilder(args);
 
     // ── Windows Service / systemd integration ────────────────────────────
@@ -67,12 +86,15 @@ try
     builder.Configuration
         .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
         .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+        .AddInstallerLayers(AppDomain.CurrentDomain.BaseDirectory)
         .AddInstalledSecrets(AppDomain.CurrentDomain.BaseDirectory)
         .AddEnvironmentVariables()
         .AddSecureConfiguration()
         .AddEnterprisePolicy();
 
     var cfg = builder.Configuration;
+    if (restrictedInstalledService && OrchestratorStartup.IsKeyless(cfg))
+        throw new InvalidOperationException("A restricted installed Orchestrator service requires a separately provisioned Orchestrator API key.");
 
     // ── Engine services (centralized in Orchestrator extension) ─────────
     builder.Services.AddSingleton<LoggerService>(services =>
@@ -87,7 +109,20 @@ try
     builder.Logging.ClearProviders();
     builder.Services.AddSingleton<ILoggerProvider, ApplicationLoggerProvider>();
 
-    builder.Services.AddEtlSqlEngine(cfg);
+    var requireToolUseGrants = OrchestratorAuthorizationMode.RequiresFederatedIdentity(cfg);
+    builder.Services.AddEtlSqlEngine(cfg, requireToolUseGrants);
+    if (requireToolUseGrants && !string.IsNullOrWhiteSpace(cfg[$"{ScheduledToolPrincipalRequest.ConfigurationSection}:PortalUrl"]))
+    {
+        builder.Services.AddHttpClient("scheduled-tool-principal", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(5);
+            client.MaxResponseContentBufferSize = 1024 * 1024;
+        }).ConfigurePrimaryHttpMessageHandler(() => PolicyBoundHttp.CreateHandler());
+        builder.Services.AddSingleton<IScheduledToolPrincipalLookup>(services =>
+            new PortalScheduledToolPrincipalLookup(
+                services.GetRequiredService<System.Net.Http.IHttpClientFactory>().CreateClient("scheduled-tool-principal"),
+                cfg, services.GetRequiredService<ILogger<PortalScheduledToolPrincipalLookup>>()));
+    }
     builder.Services.AddSandboxAdmissionHosting(cfg);
     builder.Services.AddHardenedSandboxExecution(cfg);
     builder.Services.AddSingleton<OrchestratorObjectAuthorizationService>();
@@ -101,8 +136,19 @@ try
     // "Jobs:UseProcessSpawning": false → run in-process via ScriptExecutorAdapter (dev / fallback)
     builder.Services.Configure<ETL_SQL.Orchestrator.Execution.ProcessJobExecutorOptions>(
         cfg.GetSection("Jobs"));
+    if (requireToolUseGrants)
+    {
+        builder.Services.PostConfigure<ETL_SQL.Orchestrator.Execution.ProcessJobExecutorOptions>(
+            options => options.RequireToolUseGrants = true);
+    }
 
-    builder.Services.AddSingleton<ETL_SQL.Orchestrator.Execution.ChildProcessTracker>();
+    if (restrictedInstalledService)
+    {
+        var logDirectory = cfg["Logging:AppLog:Directory"] ?? "logs/orchestrator";
+        builder.Services.AddSingleton(services => new ChildProcessTracker(
+            services.GetRequiredService<ILogger<ChildProcessTracker>>(),
+            Path.Combine(logDirectory, "child-pids.json")));
+    }
 
     var useProcessSpawning = cfg.GetValue<bool>("Jobs:UseProcessSpawning");
     if (useProcessSpawning)

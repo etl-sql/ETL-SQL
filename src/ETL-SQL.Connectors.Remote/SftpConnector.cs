@@ -412,19 +412,38 @@ namespace ETL_SQL.Connectors
             path = NormalizeRemotePath(path);
             var files = await RunClientOperationAsync(client =>
                 client.ListDirectory(path)
+                    .Where(i => i.Name is not ("." or ".."))
                     .Select(i => new FileMetaData
                     {
                         Name = i.Name,
                         FullPath = i.FullName,
                         Size = i.Attributes.Size,
                         LastModified = i.LastWriteTime,
-                        IsDirectory = i.IsDirectory
+                        IsDirectory = i.IsDirectory,
+                        CreationTime = null,
+                        Permissions = FormatPosixPermissions(i.Attributes),
+                        Owner = i.Attributes.UserId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        IsSymlink = i.IsSymbolicLink
                     })
                     .ToList());
 
             foreach (var file in files)
                 yield return file;
         }
+
+        private static string FormatPosixPermissions(Renci.SshNet.Sftp.SftpFileAttributes attrs) =>
+            new string(new[]
+            {
+                attrs.OwnerCanRead ? 'r' : '-',
+                attrs.OwnerCanWrite ? 'w' : '-',
+                attrs.OwnerCanExecute ? 'x' : '-',
+                attrs.GroupCanRead ? 'r' : '-',
+                attrs.GroupCanWrite ? 'w' : '-',
+                attrs.GroupCanExecute ? 'x' : '-',
+                attrs.OthersCanRead ? 'r' : '-',
+                attrs.OthersCanWrite ? 'w' : '-',
+                attrs.OthersCanExecute ? 'x' : '-'
+            });
 
         private bool RemoteFileExistsNormalized(SftpClient client, string remotePath) =>
             client.Exists(remotePath) && !client.Get(remotePath).IsDirectory;
@@ -496,7 +515,8 @@ namespace ETL_SQL.Connectors
             {
                 foreach (var entry in client.ListDirectory(directory))
                 {
-                    if (entry.IsDirectory
+                    if (entry.Name is "." or ".."
+                        || entry.IsDirectory
                         || !entry.Name.StartsWith(prefix, StringComparison.Ordinal)
                         || entry.LastWriteTimeUtc > cutoff)
                     {
@@ -540,7 +560,30 @@ namespace ETL_SQL.Connectors
             try
             {
                 remotePath = NormalizeRemotePath(remotePath);
-                await RunClientOperationAsync(client => client.DeleteFile(remotePath));
+                await RunClientOperationAsync(client =>
+                {
+                    try
+                    {
+                        client.DeleteFile(remotePath);
+                    }
+                    catch (SshException)
+                    {
+                        // SSH.NET's DeleteFile resolves the target via RealPath; for a symlink
+                        // pointing at a directory that resolves to the directory and fails.
+                        // Unlink the symlink entry directly via its listing handle instead.
+                        var slash = remotePath.LastIndexOf('/');
+                        var parentDir = slash <= 0 ? "/" : remotePath[..slash];
+                        var name = slash < 0 ? remotePath : remotePath[(slash + 1)..];
+                        var link = client.ListDirectory(parentDir)
+                            .FirstOrDefault(e => e.IsSymbolicLink && string.Equals(e.Name, name, StringComparison.Ordinal));
+                        if (link != null)
+                        {
+                            link.Delete();
+                            return;
+                        }
+                        throw;
+                    }
+                });
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -591,12 +634,53 @@ namespace ETL_SQL.Connectors
             }
         }
 
+        public async Task RenameDirectoryAsync(string remoteSource, string remoteDest, bool overwrite = true, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                remoteSource = NormalizeRemotePath(remoteSource);
+                remoteDest = NormalizeRemotePath(remoteDest);
+                await RunClientOperationAsync(client =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!overwrite && client.Exists(remoteDest))
+                        throw new ExecutionException($"Remote destination directory already exists (OVERWRITE=OFF): {remoteDest}");
+                    client.RenameFile(remoteSource, remoteDest);
+                    return Task.CompletedTask;
+                }, cancellationToken);
+            }
+            catch (ExecutionException) { throw; }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SFTP", ex);
+            }
+        }
+
         public async Task CreateDirectoryAsync(string remotePath)
         {
             try
             {
                 remotePath = NormalizeRemotePath(remotePath);
                 await RunClientOperationAsync(client => client.CreateDirectory(remotePath));
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SFTP", ex);
+            }
+        }
+
+        public async Task<RemoteFileVerificationInfo?> GetFileVerificationInfoAsync(string remotePath, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                remotePath = NormalizeRemotePath(remotePath);
+                return await RunClientOperationAsync(client =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!client.Exists(remotePath)) return (RemoteFileVerificationInfo?)null;
+                    var attrs = client.GetAttributes(remotePath);
+                    return new RemoteFileVerificationInfo(attrs.Size, Md5Hex: null);
+                });
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -623,7 +707,7 @@ namespace ETL_SQL.Connectors
         private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             var table = new DataTable();
-            table.SetColumns(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+            table.SetColumns(FileMetaData.StandardColumns);
             await foreach (var f in ListFilesAsync(""))
             {
                 await table.AddRowAsync(new Row
@@ -632,14 +716,18 @@ namespace ETL_SQL.Connectors
                     ["FullPath"] = f.FullPath,
                     ["Size"] = f.Size,
                     ["LastModified"] = f.LastModified,
-                    ["IsDirectory"] = f.IsDirectory
+                    ["IsDirectory"] = f.IsDirectory,
+                    ["CreationTime"] = f.CreationTime,
+                    ["Permissions"] = f.Permissions,
+                    ["Owner"] = f.Owner,
+                    ["IsSymlink"] = f.IsSymlink
                 });
             }
             yield return table;
         }
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Writing batches to SFTP directly is not supported. Use SEND FILE.");
-        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)FileMetaData.StandardColumns);
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
         public IDataSource WithTable(string tableName) => this;

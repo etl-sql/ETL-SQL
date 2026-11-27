@@ -6,6 +6,7 @@ Copies a local file or directory from one sandboxed location to another.
 COPY FILE 'source/report.csv' TO 'archive/report.csv';
 COPY FILE 'source/report.csv' TO DIRECTORY 'archive';
 COPY FILE 'source/report.csv' TO DIRECTORY 'archive' WITH (DATE_SUFFIX = 'yyyyMMdd', SUFFIX_SEPARATOR = '_');
+COPY FILE '/incoming/report.csv' TO '/archive/report.csv' AT sftp_conn WITH (OVERWRITE = OFF);
 ```
 
 ## Examples
@@ -25,6 +26,9 @@ WITH (
   DATE_SUFFIX = 'yyyyMMdd',
   SUFFIX_SEPARATOR = '_'
 );
+
+-- Copy a file on a remote connection (SFTP, FTP, S3, AZURE_BLOB, SHAREPOINT)
+COPY FILE '/incoming/daily.csv' TO '/archive/daily.csv' AT sftp_conn WITH (OVERWRITE = OFF);
 ```
 
 ## COPY DIRECTORY Syntax
@@ -32,6 +36,8 @@ WITH (
 COPY DIRECTORY 'output/' TO 'archive/2024/';
 
 COPY DIRECTORY 'reports/' TO 'archive/reports/' WITH (OVERWRITE = ON);
+
+COPY DIRECTORY '/incoming/batch' TO '/archive/batch' AT sftp_conn WITH (OVERWRITE = OFF);
 ```
 
 ## Options
@@ -42,7 +48,10 @@ COPY DIRECTORY 'reports/' TO 'archive/reports/' WITH (OVERWRITE = ON);
 | SUFFIX_SEPARATOR | String separator before the date suffix | `_` |
 
 ## Notes
-- `COPY` is a local sandboxed file operation. Use `SEND FILE` or `RECEIVE FILE` for connector transfers.
+- `COPY FILE` works on local sandboxed paths or on a remote connection via `AT <connection>` (`SFTP`, `FTP`, `S3`, `AZURE_BLOB`, `SHAREPOINT`). Use `SEND FILE` or `RECEIVE FILE` for explicit local↔remote transfers.
+- On `S3` (`CopyObject`), `AZURE_BLOB` (`StartCopyFromUri`), and `SHAREPOINT` (`CopyTo`), same-connection `COPY FILE ... AT conn` runs server-side. On `SFTP` and `FTP` (and cross-connection copies), the engine downloads to a temporary file under the engine temp root, uploads to the target, and deletes the temporary file on both success and failure.
+- `OVERWRITE` defaults to `ON`. With `OVERWRITE = OFF`, an existing target fails before any byte moves.
+- Under `SET WHAT_IF ON`, `COPY FILE ... AT conn` logs the plan without touching the remote server.
 - `TO DIRECTORY` derives the destination file name from the source file name. With `DATE_SUFFIX = 'yyyyMMdd'`, `vendor.csv` becomes `vendor_20260722.csv` on July 22, 2026.
 - `DATE_SUFFIX` is appended before the file extension and is most useful for archive copies after a send/export step.
 - Paths are resolved via `ResolvePath()` — relative paths are anchored to the script's location.

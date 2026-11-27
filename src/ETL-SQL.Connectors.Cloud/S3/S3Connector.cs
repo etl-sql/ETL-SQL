@@ -258,7 +258,12 @@ namespace ETL_SQL.Connectors.S3
                         FullPath = obj.Key,
                         Size = obj.Size ?? 0L,
                         LastModified = obj.LastModified,
-                        IsDirectory = false
+                        IsDirectory = false,
+                        CreationTime = null,
+                        Permissions = null,
+                        Owner = !string.IsNullOrWhiteSpace(obj.Owner?.DisplayName) ? obj.Owner.DisplayName
+                            : (!string.IsNullOrWhiteSpace(obj.Owner?.Id) ? obj.Owner.Id : null),
+                        IsSymlink = null
                     };
                 }
 
@@ -406,6 +411,63 @@ namespace ETL_SQL.Connectors.S3
             }
         }
 
+        public async Task<RemoteFileVerificationInfo?> GetFileVerificationInfoAsync(string remotePath, CancellationToken cancellationToken = default)
+        {
+            var client = GetClient();
+            string key = remotePath.Replace('\\', '/').TrimStart('/');
+            try
+            {
+                var meta = await client.GetObjectMetadataAsync(_bucketName, key, cancellationToken);
+                string? etag = meta.ETag?.Trim('"');
+                // Single-part S3 uploads use the 32-char hex MD5 as ETag; multipart ETags include "-<parts>".
+                // With SSE-KMS or SSE-C the ETag is not an MD5 even for a single part; treating it as
+                // one would fail a good transfer and delete the downloaded file. Verify size only then.
+                bool etagIsMd5 = meta.ServerSideEncryptionMethod != ServerSideEncryptionMethod.AWSKMS
+                    && meta.ServerSideEncryptionMethod != ServerSideEncryptionMethod.AWSKMSDSSE
+                    && (meta.ServerSideEncryptionCustomerMethod == null
+                        || meta.ServerSideEncryptionCustomerMethod == ServerSideEncryptionCustomerMethod.None);
+                string? md5Hex = etagIsMd5 && etag != null && etag.Length == 32 && !etag.Contains('-')
+                    ? etag.ToLowerInvariant()
+                    : null;
+                return new RemoteFileVerificationInfo(meta.ContentLength, md5Hex);
+            }
+            catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("S3", ex);
+            }
+        }
+
+        public async Task CopyFileAsync(string remoteSource, string remoteDest, bool overwrite = true, CancellationToken cancellationToken = default)
+        {
+            var client = GetClient();
+            string srcKey = remoteSource.Replace('\\', '/').TrimStart('/');
+            string destKey = remoteDest.Replace('\\', '/').TrimStart('/');
+
+            if (!overwrite && await FileExistsAsync(destKey))
+                throw new ExecutionException($"Remote destination file already exists (overwrite=OFF): {destKey}");
+
+            var copyRequest = new CopyObjectRequest
+            {
+                SourceBucket = _bucketName,
+                SourceKey = srcKey,
+                DestinationBucket = _bucketName,
+                DestinationKey = destKey
+            };
+
+            try
+            {
+                await client.CopyObjectAsync(copyRequest, cancellationToken);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("S3", ex);
+            }
+        }
+
         public async Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true)
         {
             var client = GetClient();
@@ -495,7 +557,7 @@ namespace ETL_SQL.Connectors.S3
                 _context?.CancellationToken ?? System.Threading.CancellationToken.None);
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Writing batches to S3 directly is not supported. Use SEND FILE.");
-        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)FileMetaData.StandardColumns);
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
         public IDataSource WithTable(string tableName) => this;

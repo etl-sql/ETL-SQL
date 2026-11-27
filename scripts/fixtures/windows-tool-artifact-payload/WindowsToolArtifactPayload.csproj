@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>WindowsToolArtifactPayload-$(FixtureGeneration)</AssemblyName>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="FixtureGeneration" Value="$(FixtureGeneration)" />
+  </ItemGroup>
+  <Target Name="ValidateFixtureGeneration" BeforeTargets="BeforeBuild"
+          Condition="'$(FixtureGeneration)' != '1' and '$(FixtureGeneration)' != '2'">
+    <Error Text="Set FixtureGeneration to 1 or 2." />
+  </Target>
+</Project>

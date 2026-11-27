@@ -32,6 +32,7 @@ import { generateScriptFromSpec } from './generateScriptFromSpec';
 import { consumePolicySave } from './saveGuard';
 import { replaceDocumentWithoutUndoHistory } from './documentWriter';
 import { analyzeSavePolicy, getSealPasswordRequirement, requiresRunPasswordPrompt } from './savePolicy';
+import { registerWalkthroughCommands } from './walkthrough';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -116,6 +117,9 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         })
     );
+
+    // Get Started walkthrough sample commands (contributes.walkthroughs)
+    registerWalkthroughCommands(context);
 
     // Welcome Page registration
     context.subscriptions.push(
@@ -922,7 +926,7 @@ async function launchReport(context: vscode.ExtensionContext, mode: 'file' | 'di
     activeTerminals.push(terminal);
     terminal.show();
 
-    const args = [...reportExe.baseArgs, 'serve'];
+    const args = [...reportExe.baseArgs, 'serve', '--port', '0'];
     const dir = path.dirname(targetPath);
 
     if (mode === 'dir') {

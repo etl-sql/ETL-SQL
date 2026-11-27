@@ -1,6 +1,7 @@
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Services;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.Analysis.Services;
@@ -260,8 +261,25 @@ public sealed class ScriptScopeService : IScriptScopeProjection
                     break;
 
                 case TransformStatement transform when IsTemp(transform.TargetTable):
-                    AddTemp(transform.TargetTable.TableName, [], transform.Line, "TRANSFORM");
-                    break;
+                    {
+                        var sourceRef = transform.SourceTable ?? transform.TargetTable;
+                        var sourceKey = sourceRef.TableName.StartsWith('#') ? sourceRef.TableName : "#" + sourceRef.TableName;
+                        IReadOnlyList<ColumnMetadata> sourceMeta = _tempTables.TryGetValue(sourceKey, out var srcTable)
+                            ? srcTable.Columns.Select(c => new ColumnMetadata(c.Name, c.Type ?? "ANY")).ToList()
+                            : [];
+                        var projected = TransformSchemaProjection.ProjectColumns(transform, sourceMeta)
+                            .Select(c => new ScopeColumn(c.Name, c.DataType))
+                            .ToList();
+                        AddTemp(transform.TargetTable.TableName, projected, transform.Line, "TRANSFORM");
+
+                        if (TransformSchemaProjection.TryGetRejectIntoTable(transform, out var rejectTable) &&
+                            rejectTable.StartsWith('#'))
+                        {
+                            var rejectCols = sourceMeta.Select(c => new ScopeColumn(c.Name, c.DataType)).ToList();
+                            AddTemp(rejectTable, rejectCols, transform.Line, "TRANSFORM");
+                        }
+                        break;
+                    }
 
                 case BulkInsertStatement bulk when IsTemp(bulk.TargetTable):
                     AddTemp(bulk.TargetTable.TableName, [], bulk.Line, "BULK INSERT");

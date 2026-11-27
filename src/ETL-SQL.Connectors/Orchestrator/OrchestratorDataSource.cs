@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text;
@@ -136,11 +138,20 @@ namespace ETL_SQL.Connectors.Orchestrator
                 case DropPortalRefreshJobStatement s: await DropJobAsync(s, context); break;
                 case CreateJobStatement s: await CreateScriptJobAsync(s, context); break;
                 case AlterJobStatement s: await AlterScriptJobAsync(s, context); break;
+                case DropJobStatement s: await DropScriptJobAsync(s, context); break;
+                case KillJobStatement s: await KillJobAsync(s, context); break;
                 case CreateScheduleStatement s: await CreateScheduleAsync(s, context); break;
+                case CreateNotificationStatement s: await CreateNotificationAsync(s, context); break;
+                case AlterCatalogObjectStatement s: await AlterCatalogObjectAsync(s, context); break;
+                case DropCatalogObjectStatement s: await DropCatalogObjectAsync(s, context); break;
+                case SetCatalogObjectEnabledStatement s: await SetCatalogObjectEnabledAsync(s, context); break;
                 case AlterJobAttachmentStatement s when s.Kind == CatalogObjectKind.Schedule: await AlterJobScheduleAsync(s, context); break;
+                case AlterJobAttachmentStatement s when s.Kind == CatalogObjectKind.Notification: await AlterJobNotificationAsync(s, context); break;
                 case EnableJobStatement s: await EnableDisableJobAsync(s.Name, enable: true, context); break;
                 case DisableJobStatement s: await EnableDisableJobAsync(s.Name, enable: false, context); break;
                 case TriggerJobStatement s: await TriggerJobAsync(s.Name, context); break;
+                case ShowJobStateStatement s: await FetchJobStateAsync(s, context); break;
+                case AssertJobStatement s: await AssertJobAsync(s, context); break;
                 case PublishBundleStatement s: await PublishBundleAsync(s, context); break;
                 case ValidateBundleStatement s: await ValidateBundleAsync(s, context); break;
                 case ExportScriptStatement s: await ExportScriptAsync(s, context); break;
@@ -272,23 +283,183 @@ namespace ETL_SQL.Connectors.Orchestrator
 
         private async Task AlterJobScheduleAsync(AlterJobAttachmentStatement stmt, IExecutionContext context)
         {
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine(
+                    $"WHAT IF: Would {(stmt.Action == JobAttachmentAction.Add ? "attach" : "detach")} schedule '{stmt.TargetName}' {(stmt.Action == JobAttachmentAction.Add ? "to" : "from")} job '{stmt.JobName}'.",
+                    ConsoleColor.Yellow);
+                return;
+            }
+
             var encodedJob = Uri.EscapeDataString(stmt.JobName);
             var encodedSchedule = Uri.EscapeDataString(stmt.TargetName);
+            var resp = stmt.Action == JobAttachmentAction.Add
+                ? await SendHttpAsync(() => _http.PostAsync($"api/scheduled-jobs/{encodedJob}/schedules/{encodedSchedule}", null))
+                : await SendHttpAsync(() => _http.DeleteAsync($"api/scheduled-jobs/{encodedJob}/schedules/{encodedSchedule}"));
+            await EnsureSuccessAsync(resp);
+            _logger.WriteLine($"Schedule '{stmt.TargetName}' {(stmt.Action == JobAttachmentAction.Add ? "attached to" : "detached from")} job '{stmt.JobName}'.", ConsoleColor.Green);
+        }
+
+        private async Task AlterJobNotificationAsync(AlterJobAttachmentStatement stmt, IExecutionContext context)
+        {
+            if (!Enum.TryParse<NotificationTrigger>(stmt.Trigger, ignoreCase: true, out var trigger))
+                throw new ExecutionException(
+                    $"'{stmt.Trigger}' is not a notification trigger. Use SUCCESS, FAILURE, or COMPLETION.",
+                    null, stmt.Line, stmt.Column);
+
+            var triggerName = trigger.ToString().ToUpperInvariant();
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine(
+                    $"WHAT IF: Would {(stmt.Action == JobAttachmentAction.Add ? "attach" : "detach")} notification '{stmt.TargetName}' ON {triggerName} {(stmt.Action == JobAttachmentAction.Add ? "to" : "from")} job '{stmt.JobName}'.",
+                    ConsoleColor.Yellow);
+                return;
+            }
+
+            var encodedJob = Uri.EscapeDataString(stmt.JobName);
+            var encodedNotification = Uri.EscapeDataString(stmt.TargetName);
             HttpResponseMessage resp;
             if (stmt.Action == JobAttachmentAction.Add)
             {
-                resp = await SendHttpAsync(() => _http.PostAsync($"api/scheduled-jobs/{encodedJob}/schedules/{encodedSchedule}", null));
+                var content = JsonContent(new { Trigger = triggerName });
+                resp = await SendHttpAsync(() => _http.PostAsync($"api/scheduled-jobs/{encodedJob}/notifications/{encodedNotification}", content));
             }
             else
             {
-                resp = await SendHttpAsync(() => _http.DeleteAsync($"api/scheduled-jobs/{encodedJob}/schedules/{encodedSchedule}"));
+                resp = await SendHttpAsync(() => _http.DeleteAsync(
+                    $"api/scheduled-jobs/{encodedJob}/notifications/{encodedNotification}?trigger={Uri.EscapeDataString(triggerName)}"));
             }
-            if (!resp.IsSuccessStatusCode)
+
+            await EnsureSuccessAsync(resp);
+            _logger.WriteLine(
+                $"Notification '{stmt.TargetName}' ON {triggerName} {(stmt.Action == JobAttachmentAction.Add ? "attached to" : "detached from")} job '{stmt.JobName}'.",
+                ConsoleColor.Green);
+        }
+
+        private async Task CreateNotificationAsync(CreateNotificationStatement stmt, IExecutionContext context)
+        {
+            if (context.IsWhatIf)
             {
-                var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
+                _logger.WriteLine(
+                    $"WHAT IF: Would create notification '{stmt.Name}' using connection '{stmt.ConnectionName}'.",
+                    ConsoleColor.Yellow);
+                return;
             }
-            _logger.WriteLine($"Schedule '{stmt.TargetName}' {(stmt.Action == JobAttachmentAction.Add ? "attached to" : "detached from")} job '{stmt.JobName}'.", ConsoleColor.Green);
+
+            var req = new
+            {
+                stmt.Name,
+                stmt.ConnectionName,
+                stmt.Recipient,
+                IsEnabled = true,
+                DisplayName = stmt.Metadata.DisplayName ?? stmt.Name,
+                stmt.Metadata.Description,
+                stmt.Metadata.Options
+            };
+            var resp = await SendHttpAsync(() => _http.PostAsync("api/notifications", JsonContent(req)));
+            if (resp.StatusCode == HttpStatusCode.Conflict &&
+                (stmt.Mode == ObjectCreationMode.CreateOrAlter || stmt.Mode == ObjectCreationMode.CreateOrReplace))
+            {
+                var encoded = Uri.EscapeDataString(stmt.Name);
+                resp = await SendHttpAsync(() => _http.PutAsync($"api/notifications/{encoded}", JsonContent(req)));
+            }
+
+            await EnsureSuccessAsync(resp);
+            _logger.WriteLine($"Notification '{stmt.Name}' created in Orchestrator.", ConsoleColor.Green);
+        }
+
+        private async Task AlterCatalogObjectAsync(AlterCatalogObjectStatement stmt, IExecutionContext context)
+        {
+            var kind = stmt.Kind.ToString().ToUpperInvariant();
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine($"WHAT IF: Would alter {kind.ToLowerInvariant()} '{stmt.Name}' in Orchestrator.", ConsoleColor.Yellow);
+                return;
+            }
+
+            var encoded = Uri.EscapeDataString(stmt.Name);
+            HttpResponseMessage resp;
+            if (stmt.Kind == CatalogObjectKind.Schedule)
+            {
+                var req = new
+                {
+                    stmt.Cron,
+                    stmt.TimeZone,
+                    stmt.Metadata.DisplayName,
+                    stmt.Metadata.Description,
+                    stmt.Metadata.Options
+                };
+                resp = await SendHttpAsync(() => _http.PutAsync($"api/schedules/{encoded}", JsonContent(req)));
+            }
+            else
+            {
+                var req = new
+                {
+                    stmt.ConnectionName,
+                    stmt.Recipient,
+                    stmt.Metadata.DisplayName,
+                    stmt.Metadata.Description,
+                    stmt.Metadata.Options
+                };
+                resp = await SendHttpAsync(() => _http.PutAsync($"api/notifications/{encoded}", JsonContent(req)));
+            }
+
+            if (resp.StatusCode == HttpStatusCode.NotFound)
+                throw new ExecutionException($"ALTER {kind} failed: {kind.ToLowerInvariant()} '{stmt.Name}' not found.", null, stmt.Line, stmt.Column);
+            await EnsureSuccessAsync(resp);
+            _logger.WriteLine($"{kind} '{stmt.Name}' updated in Orchestrator.", ConsoleColor.Green);
+        }
+
+        private async Task DropCatalogObjectAsync(DropCatalogObjectStatement stmt, IExecutionContext context)
+        {
+            var kind = stmt.Kind.ToString().ToUpperInvariant();
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine($"WHAT IF: Would drop {kind.ToLowerInvariant()} '{stmt.Name}' from Orchestrator.", ConsoleColor.Yellow);
+                return;
+            }
+
+            var encoded = Uri.EscapeDataString(stmt.Name);
+            var url = stmt.Kind == CatalogObjectKind.Schedule
+                ? $"api/schedules/{encoded}"
+                : $"api/notifications/{encoded}";
+            var resp = await SendHttpAsync(() => _http.DeleteAsync(url));
+            if (resp.StatusCode == HttpStatusCode.NotFound)
+            {
+                if (stmt.IfExists)
+                {
+                    _logger.WriteLine($"{kind} '{stmt.Name}' did not exist (IF EXISTS specified).");
+                    return;
+                }
+                throw new ExecutionException($"DROP {kind} failed: {kind.ToLowerInvariant()} '{stmt.Name}' not found.", null, stmt.Line, stmt.Column);
+            }
+
+            await EnsureSuccessAsync(resp);
+            _logger.WriteLine($"{kind} '{stmt.Name}' dropped from Orchestrator.", ConsoleColor.Green);
+        }
+
+        private async Task SetCatalogObjectEnabledAsync(SetCatalogObjectEnabledStatement stmt, IExecutionContext context)
+        {
+            var kind = stmt.Kind.ToString().ToUpperInvariant();
+            var verb = stmt.IsEnabled ? "ENABLE" : "DISABLE";
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine(
+                    $"WHAT IF: Would {(stmt.IsEnabled ? "enable" : "disable")} {kind.ToLowerInvariant()} '{stmt.Name}' in Orchestrator.",
+                    ConsoleColor.Yellow);
+                return;
+            }
+
+            var encoded = Uri.EscapeDataString(stmt.Name);
+            var url = stmt.Kind == CatalogObjectKind.Schedule
+                ? $"api/schedules/{encoded}"
+                : $"api/notifications/{encoded}";
+            var resp = await SendHttpAsync(() => _http.PutAsync(url, JsonContent(new { IsEnabled = (bool?)stmt.IsEnabled })));
+            if (resp.StatusCode == HttpStatusCode.NotFound)
+                throw new ExecutionException($"{verb} {kind} failed: {kind.ToLowerInvariant()} '{stmt.Name}' not found.", null, stmt.Line, stmt.Column);
+
+            await EnsureSuccessAsync(resp);
+            _logger.WriteLine($"{kind} '{stmt.Name}' {(stmt.IsEnabled ? "enabled" : "disabled")} in Orchestrator.", ConsoleColor.Green);
         }
 
         private async Task CreateSharedConnectionAsync(CreateConnectionStatement stmt, IExecutionContext context)
@@ -527,9 +698,9 @@ namespace ETL_SQL.Connectors.Orchestrator
             {
                 var row = new Row();
                 row["Name"] = job.Name;
-                row["Schedule"] = $"EVERY {job.Interval} {job.Unit}" + (job.AtTime != null ? $" AT {job.AtTime}" : "");
+                row["Schedule"] = job.ScheduleLabel;
                 row["LastRun"] = job.LastRun;
-                row["NextRun"] = job.NextRun;
+                row["NextRun"] = job.DisplayNextRun;
                 row["Script"] = job.Script;
                 row["Enable"] = job.IsEnabled ? 1 : 0;
                 await table.AddRowAsync(row);
@@ -994,14 +1165,90 @@ namespace ETL_SQL.Connectors.Orchestrator
 
         private async Task DropJobAsync(DropPortalRefreshJobStatement stmt, IExecutionContext context)
         {
-            var jobName = Uri.EscapeDataString($"REFRESH:{stmt.ReportName}");
-            var resp = await SendHttpAsync(() => _http.DeleteAsync($"api/scheduled-jobs/{jobName}"));
-            if (!resp.IsSuccessStatusCode && resp.StatusCode != System.Net.HttpStatusCode.NotFound)
+            var jobName = $"REFRESH:{stmt.ReportName}";
+            var existing = await TryFindScheduledJobAsync(jobName);
+            if (existing is null)
+                return;
+
+            var resp = await SendDeleteWithVersionAsync($"api/scheduled-jobs/{Uri.EscapeDataString(existing.Name)}", existing.Version);
+            if (!resp.IsSuccessStatusCode && resp.StatusCode != HttpStatusCode.NotFound)
             {
                 var body = await resp.Content.ReadAsStringAsync();
                 throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             _logger.WriteLine($"Refresh job for '{stmt.ReportName}' removed from Orchestrator.", ConsoleColor.Green);
+        }
+
+        private async Task DropScriptJobAsync(DropJobStatement stmt, IExecutionContext context)
+        {
+            var existing = await TryFindScheduledJobAsync(stmt.Name);
+            if (existing is null)
+            {
+                if (stmt.IfExists)
+                {
+                    _logger.WriteLine($"Job '{stmt.Name}' did not exist (IF EXISTS specified).");
+                    return;
+                }
+                throw new ExecutionException($"DROP JOB failed: job '{stmt.Name}' not found.", null, stmt.Line, stmt.Column);
+            }
+
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine($"WHAT IF: Would drop job '{stmt.Name}' from Orchestrator.", ConsoleColor.Yellow);
+                return;
+            }
+
+            var resp = await SendDeleteWithVersionAsync($"api/scheduled-jobs/{Uri.EscapeDataString(existing.Name)}", existing.Version);
+            if (resp.StatusCode == HttpStatusCode.NotFound)
+            {
+                if (stmt.IfExists)
+                {
+                    _logger.WriteLine($"Job '{stmt.Name}' did not exist (IF EXISTS specified).");
+                    return;
+                }
+                throw new ExecutionException($"DROP JOB failed: job '{stmt.Name}' not found.", null, stmt.Line, stmt.Column);
+            }
+
+            await EnsureSuccessAsync(resp);
+            _logger.WriteLine($"Job '{stmt.Name}' dropped from Orchestrator.", ConsoleColor.Yellow);
+        }
+
+        private async Task KillJobAsync(KillJobStatement stmt, IExecutionContext context)
+        {
+            var target = stmt.JobIdExpr is IdentifierExpression ident
+                ? ident.Name
+                : (await context.EvaluateValue(stmt.JobIdExpr, new Row()))?.ToString()?.Trim();
+
+            if (string.IsNullOrWhiteSpace(target))
+                throw new ExecutionException("KILL JOB requires a job name or numeric HistoryId.", null, stmt.Line, stmt.Column);
+
+            if (long.TryParse(target, NumberStyles.Integer, CultureInfo.InvariantCulture, out var historyId))
+            {
+                if (context.IsWhatIf)
+                {
+                    _logger.WriteLine($"WHAT IF: Would cancel job run {historyId} in Orchestrator.", ConsoleColor.Yellow);
+                    return;
+                }
+
+                var runResp = await SendHttpAsync(() => _http.PostAsync($"api/job-runs/{historyId}/cancel", null));
+                if (runResp.StatusCode == HttpStatusCode.NotFound)
+                    throw new ExecutionException($"KILL JOB failed: run '{historyId}' not found.", null, stmt.Line, stmt.Column);
+                await EnsureSuccessAsync(runResp);
+                _logger.WriteLine($"Cancellation requested for job run {historyId} in Orchestrator.", ConsoleColor.Yellow);
+                return;
+            }
+
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine($"WHAT IF: Would kill active execution of job '{target}' in Orchestrator.", ConsoleColor.Yellow);
+                return;
+            }
+
+            var jobResp = await SendHttpAsync(() => _http.PostAsync($"api/scheduled-jobs/{Uri.EscapeDataString(target)}/kill", null));
+            if (jobResp.StatusCode == HttpStatusCode.NotFound)
+                throw new ExecutionException($"KILL JOB failed: no running instance of job '{target}' was found.", null, stmt.Line, stmt.Column);
+            await EnsureSuccessAsync(jobResp);
+            _logger.WriteLine($"Kill signal sent for job '{target}' in Orchestrator.", ConsoleColor.Yellow);
         }
 
         private async Task AlterScriptJobAsync(AlterJobStatement stmt, IExecutionContext context)
@@ -1017,32 +1264,26 @@ namespace ETL_SQL.Connectors.Orchestrator
                 stmt.Metadata.Options,
                 HashPolicy = context.ScriptHashPolicy
             };
-            var encoded = Uri.EscapeDataString(stmt.JobName);
-            var content = new StringContent(JsonSerializer.Serialize(req, _json), Encoding.UTF8, "application/json");
-            var resp = await SendHttpAsync(() => _http.PutAsync($"api/scheduled-jobs/{encoded}", content));
-            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+            var existing = await TryFindScheduledJobAsync(stmt.JobName)
+                ?? throw new ExecutionException($"ALTER JOB failed: job '{stmt.JobName}' not found in Orchestrator. Use CREATE JOB to create it.");
+            var encoded = Uri.EscapeDataString(existing.Name);
+            var resp = await SendPutWithVersionAsync($"api/scheduled-jobs/{encoded}", req, existing.Version);
+            if (resp.StatusCode == HttpStatusCode.NotFound)
                 throw new ExecutionException($"ALTER JOB failed: job '{stmt.JobName}' not found in Orchestrator. Use CREATE JOB to create it.");
-            if (!resp.IsSuccessStatusCode)
-            {
-                var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
-            }
+            await EnsureSuccessAsync(resp);
             _logger.WriteLine($"Job '{stmt.JobName}' altered in Orchestrator.", ConsoleColor.Green);
         }
 
         private async Task EnableDisableJobAsync(string jobName, bool enable, IExecutionContext context)
         {
             var req = new { IsEnabled = (bool?)enable };
-            var encoded = Uri.EscapeDataString(jobName);
-            var content = new StringContent(JsonSerializer.Serialize(req, _json), Encoding.UTF8, "application/json");
-            var resp = await SendHttpAsync(() => _http.PutAsync($"api/scheduled-jobs/{encoded}", content));
-            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+            var existing = await TryFindScheduledJobAsync(jobName)
+                ?? throw new ExecutionException($"{(enable ? "ENABLE" : "DISABLE")} JOB failed: job '{jobName}' not found.");
+            var encoded = Uri.EscapeDataString(existing.Name);
+            var resp = await SendPutWithVersionAsync($"api/scheduled-jobs/{encoded}", req, existing.Version);
+            if (resp.StatusCode == HttpStatusCode.NotFound)
                 throw new ExecutionException($"{(enable ? "ENABLE" : "DISABLE")} JOB failed: job '{jobName}' not found.");
-            if (!resp.IsSuccessStatusCode)
-            {
-                var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
-            }
+            await EnsureSuccessAsync(resp);
             _logger.WriteLine($"Job '{jobName}' {(enable ? "enabled" : "disabled")} in Orchestrator.", ConsoleColor.Green);
         }
 
@@ -1050,14 +1291,243 @@ namespace ETL_SQL.Connectors.Orchestrator
         {
             var encoded = Uri.EscapeDataString(jobName);
             var resp = await SendHttpAsync(() => _http.PostAsync($"api/scheduled-jobs/{encoded}/trigger", null));
-            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+            if (resp.StatusCode == HttpStatusCode.NotFound)
                 throw new ExecutionException($"TRIGGER JOB failed: job '{jobName}' not found.");
-            if (!resp.IsSuccessStatusCode)
-            {
-                var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
-            }
+            await EnsureSuccessAsync(resp);
             _logger.WriteLine($"Job '{jobName}' triggered for immediate execution.", ConsoleColor.Green);
+        }
+
+        private async Task FetchJobStateAsync(ShowJobStateStatement stmt, IExecutionContext context)
+        {
+            var entries = new List<JobStateEntry>();
+            if (!string.IsNullOrWhiteSpace(stmt.JobName))
+            {
+                var encoded = Uri.EscapeDataString(stmt.JobName);
+                var resp = await SendHttpAsync(() => _http.GetAsync($"api/scheduled-jobs/{encoded}/state"));
+                if (resp.StatusCode == HttpStatusCode.NotFound)
+                    throw new ExecutionException($"Job '{stmt.JobName}' does not exist.", null, stmt.Line, stmt.Column);
+                await EnsureSuccessAsync(resp);
+                entries.AddRange(await resp.Content.ReadFromJsonAsync<JobStateEntry[]>(_json) ?? []);
+            }
+            else
+            {
+                var jobs = await FetchAllScheduledJobsAsync();
+                foreach (var job in jobs)
+                {
+                    var resp = await SendHttpAsync(() => _http.GetAsync($"api/scheduled-jobs/{Uri.EscapeDataString(job.Name)}/state"));
+                    if (resp.StatusCode == HttpStatusCode.NotFound || resp.StatusCode == HttpStatusCode.Forbidden)
+                        continue;
+                    await EnsureSuccessAsync(resp);
+                    entries.AddRange(await resp.Content.ReadFromJsonAsync<JobStateEntry[]>(_json) ?? []);
+                }
+            }
+
+            var table = new DataTable();
+            table.AddColumn("JobName");
+            table.AddColumn("StateKey");
+            table.AddColumn("StateValue");
+            table.AddColumn("UpdatedAt");
+
+            foreach (var entry in entries)
+            {
+                var row = new Row();
+                row["JobName"] = entry.JobName;
+                row["StateKey"] = entry.StateKey;
+                row["StateValue"] = entry.StateValue;
+                row["UpdatedAt"] = entry.UpdatedAt;
+                await table.AddRowAsync(row);
+            }
+
+            await WriteResultAsync(table, stmt.IntoTable, context);
+        }
+
+        private async Task AssertJobAsync(AssertJobStatement stmt, IExecutionContext context)
+        {
+            var handler = new AssertJobStatementHandler(_logger);
+            var metrics = new OrchestratorHttpJobMetricsProvider(this);
+            await handler.ExecuteWithMetricsProviderAsync(
+                stmt,
+                context,
+                metrics,
+                (_, statement, message) => SendRemoteAlertAsync(statement, message));
+        }
+
+        private async Task<bool> SendRemoteAlertAsync(
+            AssertJobStatement stmt,
+            AssertJobStatementHandler.AssertAlertMessage message)
+        {
+            try
+            {
+                var req = new
+                {
+                    SourceKind = "ALERT",
+                    message.Title,
+                    message.Text,
+                    JobName = stmt.JobName,
+                    AlertName = message.NotificationName,
+                    Status = message.AlertKind,
+                    RowsProcessed = (long)message.RowsValidated
+                };
+                var encoded = Uri.EscapeDataString(message.NotificationName);
+                var resp = await SendHttpAsync(() => _http.PostAsync($"api/notifications/{encoded}/dispatch", JsonContent(req)));
+                if (!resp.IsSuccessStatusCode)
+                {
+                    var body = await resp.Content.ReadAsStringAsync();
+                    _logger.Warning(
+                        "ASSERT JOB {JobName}: remote notification delivery through '{Notification}' failed ({StatusCode}): {Body}",
+                        stmt.JobName, message.NotificationName, (int)resp.StatusCode, SanitizeBody(body));
+                    return false;
+                }
+                return true;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.Warning(
+                    "ASSERT JOB {JobName}: remote notification delivery through '{Notification}' failed: {Message}",
+                    stmt.JobName, message.NotificationName, SecretRedactor.Redact(ex.Message));
+                return false;
+            }
+        }
+
+        private async Task<List<JobDefinition>> FetchAllScheduledJobsAsync()
+        {
+            const int pageSize = 1000;
+            var all = new List<JobDefinition>();
+            for (var offset = 0; ; offset += pageSize)
+            {
+                var page = await GetJsonAsync<JobDefinition[]>($"api/scheduled-jobs?limit={pageSize}&offset={offset}") ?? [];
+                all.AddRange(page);
+                if (page.Length < pageSize)
+                    return all;
+            }
+        }
+
+        private async Task<JobDefinition?> TryFindScheduledJobAsync(string jobName)
+        {
+            const int pageSize = 1000;
+            for (var offset = 0; ; offset += pageSize)
+            {
+                var page = await GetJsonAsync<JobDefinition[]>($"api/scheduled-jobs?limit={pageSize}&offset={offset}") ?? [];
+                var match = page.FirstOrDefault(j => string.Equals(j.Name, jobName, StringComparison.OrdinalIgnoreCase));
+                if (match is not null)
+                    return match;
+                if (page.Length < pageSize)
+                    return null;
+            }
+        }
+
+        private async Task<HttpResponseMessage> SendPutWithVersionAsync<T>(string url, T body, long version) =>
+            await SendHttpAsync(() =>
+            {
+                var request = new HttpRequestMessage(HttpMethod.Put, url)
+                {
+                    Content = JsonContent(body)
+                };
+                request.Headers.TryAddWithoutValidation("If-Match", $"\"{version}\"");
+                return _http.SendAsync(request);
+            });
+
+        private async Task<HttpResponseMessage> SendDeleteWithVersionAsync(string url, long version) =>
+            await SendHttpAsync(() =>
+            {
+                var request = new HttpRequestMessage(HttpMethod.Delete, url);
+                request.Headers.TryAddWithoutValidation("If-Match", $"\"{version}\"");
+                return _http.SendAsync(request);
+            });
+
+        private static StringContent JsonContent<T>(T value) =>
+            new(JsonSerializer.Serialize(value, _json), Encoding.UTF8, "application/json");
+
+        private static async Task EnsureSuccessAsync(HttpResponseMessage resp)
+        {
+            if (resp.IsSuccessStatusCode) return;
+            var body = await resp.Content.ReadAsStringAsync();
+            throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
+        }
+
+        private sealed class OrchestratorHttpJobMetricsProvider(OrchestratorDataSource owner) : IJobMetricsProvider
+        {
+            private const string AlertStatePrefix = "dq:assert-alert:";
+
+            public async Task<IReadOnlyList<JobRunMetrics>> GetRecentRunMetricsAsync(
+                string? tenantId, string jobName, int limit, CancellationToken cancellationToken = default)
+            {
+                var take = Math.Clamp(limit * 4, limit, 1000);
+                var encoded = Uri.EscapeDataString(jobName);
+                var resp = await owner.SendHttpAsync(() =>
+                    owner._http.GetAsync($"api/scheduled-jobs/{encoded}/history?limit={take}", cancellationToken));
+                if (resp.StatusCode == HttpStatusCode.NotFound)
+                    return Array.Empty<JobRunMetrics>();
+
+                await EnsureSuccessAsync(resp);
+                var history = await resp.Content.ReadFromJsonAsync<JobHistoryEntry[]>(_json, cancellationToken) ?? [];
+                return history
+                    .Where(h => h.EndTime.HasValue && (
+                        h.Status.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase)
+                        || h.Status.Equals("COMPLETED", StringComparison.OrdinalIgnoreCase)))
+                    .OrderByDescending(h => h.EndTime ?? h.StartTime)
+                    .Take(limit)
+                    .Select(h => new JobRunMetrics(h.RowsProcessed, h.RowsQuarantined, h.RowsWarned))
+                    .ToList();
+            }
+
+            public Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(
+                string? tenantId,
+                string jobName,
+                string? targetTable,
+                string columnName,
+                int limit,
+                CancellationToken cancellationToken = default) =>
+                throw new ExecutionException(
+                    $"ASSERT JOB {jobName}: historical NULL_PERCENT({columnName}) requires column run history, " +
+                    "which is not exposed over an ORCHESTRATOR HTTP connection.");
+
+            public async Task<AssertJobAlertState?> GetAssertJobAlertStateAsync(
+                string? tenantId,
+                string jobName,
+                string assertionKey,
+                CancellationToken cancellationToken = default)
+            {
+                var encoded = Uri.EscapeDataString(jobName);
+                var resp = await owner.SendHttpAsync(() =>
+                    owner._http.GetAsync($"api/scheduled-jobs/{encoded}/state", cancellationToken));
+                if (resp.StatusCode == HttpStatusCode.NotFound)
+                    return null;
+
+                await EnsureSuccessAsync(resp);
+                var entries = await resp.Content.ReadFromJsonAsync<JobStateEntry[]>(_json, cancellationToken) ?? [];
+                var match = entries.FirstOrDefault(e =>
+                    string.Equals(e.StateKey, AlertStatePrefix + assertionKey, StringComparison.OrdinalIgnoreCase));
+                if (match is null || string.IsNullOrWhiteSpace(match.StateValue))
+                    return null;
+
+                try
+                {
+                    return JsonSerializer.Deserialize<AssertJobAlertState>(match.StateValue);
+                }
+                catch (JsonException)
+                {
+                    return null;
+                }
+            }
+
+            public async Task SaveAssertJobAlertStateAsync(
+                string? tenantId,
+                string jobName,
+                string assertionKey,
+                AssertJobAlertState state,
+                CancellationToken cancellationToken = default)
+            {
+                var encodedJob = Uri.EscapeDataString(jobName);
+                var encodedKey = Uri.EscapeDataString(AlertStatePrefix + assertionKey);
+                var payload = JsonContent(new { Value = JsonSerializer.Serialize(state) });
+                var resp = await owner.SendHttpAsync(() =>
+                    owner._http.PutAsync($"api/scheduled-jobs/{encodedJob}/state/{encodedKey}", payload, cancellationToken));
+                if (resp.StatusCode == HttpStatusCode.NotFound)
+                    return;
+
+                await EnsureSuccessAsync(resp);
+            }
         }
 
         private async Task<HttpResponseMessage> SendHttpAsync(Func<Task<HttpResponseMessage>> send)

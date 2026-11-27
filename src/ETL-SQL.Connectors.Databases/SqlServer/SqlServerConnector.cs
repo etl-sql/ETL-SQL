@@ -33,7 +33,9 @@ namespace ETL_SQL.Connectors.SqlServer
             "  SERVER: The target server.\n" +
             "  PORT: The port number (default 1433).\n" +
             "  DATABASE: The target database.\n" +
-            "  USER/PASS: Standard credentials.\n" +
+            "  AUTH_MODE: SQL (default), WINDOWS, ENTRA_DEFAULT, ENTRA_MANAGED_IDENTITY, or ENTRA_SERVICE_PRINCIPAL.\n" +
+            "  USER/PASSWORD: Standard SQL credentials (or client secret for ENTRA_SERVICE_PRINCIPAL).\n" +
+            "  CLIENT_ID: Optional user-assigned identity client ID (ENTRA_MANAGED_IDENTITY) or app client ID (ENTRA_SERVICE_PRINCIPAL).\n" +
             "  TRUSTED_CONNECTION: Set to TRUE for Windows Auth.\n" +
             "  ENCRYPT / USE_SSL: Set to TRUE for encrypted transit.\n" +
             "  TRUST_SERVER_CERTIFICATE: Set to TRUE to skip cert validation.\n" +
@@ -50,8 +52,10 @@ namespace ETL_SQL.Connectors.SqlServer
             { "SERVER", Array.Empty<string>() },
             { "PORT", Array.Empty<string>() },
             { "DATABASE", Array.Empty<string>() },
+            { "AUTH_MODE", new[] { "SQL", "WINDOWS", "ENTRA_DEFAULT", "ENTRA_MANAGED_IDENTITY", "ENTRA_SERVICE_PRINCIPAL" } },
             { "USER", Array.Empty<string>() },
             { "PASSWORD", Array.Empty<string>() },
+            { "CLIENT_ID", Array.Empty<string>() },
             { "TRUSTED_CONNECTION", new[] { "TRUE", "FALSE" } },
             { "ENCRYPT", new[] { "TRUE", "FALSE" } },
             { "USE_SSL", new[] { "TRUE", "FALSE" } },

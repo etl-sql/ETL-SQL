@@ -18,6 +18,12 @@ public static class SpillFanOut
     /// <summary>Smallest flush size a partition writer uses, unless the batch is smaller.</summary>
     public const int MinimumFlushRows = 256;
 
+    /// <summary>Default target byte footprint per batch before flushing or splitting.</summary>
+    public const long DefaultTargetBatchBytes = 4L * 1024 * 1024;
+
+    /// <summary>Smallest byte flush size a partition writer uses, unless the target batch is smaller.</summary>
+    public const long MinimumFlushBytes = 64L * 1024;
+
     /// <summary>Rows each of <paramref name="partitionCount"/> open writers buffers before flushing.</summary>
     public static int FlushRows(int batchRows, int partitionCount)
     {
@@ -25,5 +31,14 @@ public static class SpillFanOut
         if (partitionCount <= 1) return batchRows;
         var shared = (long)batchRows * BufferedBatches / partitionCount;
         return (int)Math.Clamp(shared, Math.Min(MinimumFlushRows, batchRows), batchRows);
+    }
+
+    /// <summary>Bytes each of <paramref name="partitionCount"/> open writers buffers before flushing.</summary>
+    public static long FlushBytes(long batchBytes, int partitionCount)
+    {
+        if (batchBytes <= 0) return 0;
+        if (partitionCount <= 1) return batchBytes;
+        long scaled = (batchBytes * BufferedBatches) / partitionCount;
+        return Math.Clamp(scaled, Math.Min(MinimumFlushBytes, batchBytes), batchBytes);
     }
 }

@@ -1,0 +1,131 @@
+-- Negative Conformance Corpus: Semantic Validator Errors in CUSTOM CHART
+
+-- statement ok
+SELECT 'Jan' AS Month, 'North' AS Region, 100.0 AS Revenue, 20.0 AS Radius INTO #metrics
+UNION ALL SELECT 'Feb', 'South', -15.0, 35.0;
+
+-- statement error semantic references undeclared scale
+CREATE VISUAL UndeclaredScale AS CUSTOM (
+  SOURCE = #metrics,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (x = BAND (CHANNEL = X)),
+    LAYERS (bars = RECT (ENCODE (X = Month (TYPE = ORDINAL, SCALE = x), Y = Revenue (TYPE = QUANTITATIVE, SCALE = missing))))
+  )
+);
+
+-- statement error semantic declared for a different channel
+CREATE VISUAL MismatchedChannel AS CUSTOM (
+  SOURCE = #metrics,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (x = BAND (CHANNEL = X), y = LINEAR (CHANNEL = Y)),
+    LAYERS (bars = RECT (ENCODE (X = Month (TYPE = ORDINAL, SCALE = y), Y = Revenue (TYPE = QUANTITATIVE, SCALE = y))))
+  )
+);
+
+-- statement error semantic TYPE and scale kind are incompatible
+CREATE VISUAL IncompatibleTypeAndScale AS CUSTOM (
+  SOURCE = #metrics,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (x = BAND (CHANNEL = X), y = LINEAR (CHANNEL = Y)),
+    LAYERS (bars = RECT (ENCODE (X = Month (TYPE = ORDINAL, SCALE = x), Y = Month (TYPE = ORDINAL, SCALE = y))))
+  )
+);
+
+-- statement error semantic INCLUDE_ZERO
+CREATE VISUAL LogWithIncludeZero AS CUSTOM (
+  SOURCE = #metrics,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (y = LOGARITHMIC (CHANNEL = Y, INCLUDE_ZERO = ON)),
+    LAYERS (pts = POINT (ENCODE (X = Month (TYPE = NOMINAL), Y = Radius (TYPE = QUANTITATIVE, SCALE = y))))
+  )
+);
+
+-- statement error semantic cannot use outer X_AXIS
+CREATE VISUAL CustomWithOuterAxis AS CUSTOM (
+  SOURCE = #metrics,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    LAYERS (bars = RECT (ENCODE (X = Month (TYPE = NOMINAL), Y = Revenue (TYPE = QUANTITATIVE))))
+  ),
+  OPTIONS (X_AXIS (LABEL = 'Month'))
+);
+
+-- statement error semantic 0 <= min <= max
+CREATE VISUAL InvertedSizeRange AS CUSTOM (
+  SOURCE = #metrics,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (sz = LINEAR (CHANNEL = SIZE, RANGE = (24, 6))),
+    LAYERS (pts = POINT (ENCODE (X = Month (TYPE = NOMINAL), Y = Revenue (TYPE = QUANTITATIVE), SIZE = Radius (TYPE = QUANTITATIVE, SCALE = sz))))
+  )
+);
+
+-- statement error semantic OPACITY VALUE must be between 0 and 1
+CREATE VISUAL OpacityOutOfRange AS CUSTOM (
+  SOURCE = #metrics,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    LAYERS (pts = POINT (ENCODE (X = Month (TYPE = NOMINAL), Y = Revenue (TYPE = QUANTITATIVE), OPACITY = VALUE(1.5) (TYPE = QUANTITATIVE))))
+  )
+);
+
+-- statement error semantic ARC layers require POLAR coordinates
+CREATE VISUAL ArcOutsidePolar AS CUSTOM (
+  SOURCE = #metrics,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    LAYERS (slices = ARC (ENCODE (X = Month (TYPE = NOMINAL), Y = Revenue (TYPE = QUANTITATIVE))))
+  )
+);
+
+-- statement error semantic POLAR charts require THETA and RADIUS
+CREATE VISUAL PolarMissingThetaRadius AS CUSTOM (
+  SOURCE = #metrics,
+  CHART (
+    COORDINATE (TYPE = POLAR),
+    LAYERS (pts = POINT (ENCODE (X = Month (TYPE = NOMINAL), Y = Revenue (TYPE = QUANTITATIVE))))
+  )
+);
+
+-- statement error semantic Independent scale resolution requires FACET
+CREATE VISUAL ResolveWithoutFacet AS CUSTOM (
+  SOURCE = #metrics,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    LAYERS (bars = RECT (ENCODE (X = Month (TYPE = NOMINAL), Y = Revenue (TYPE = QUANTITATIVE)))),
+    RESOLVE (Y = INDEPENDENT)
+  )
+);
+
+-- statement error semantic connected LINE marks
+CREATE VISUAL SmoothConditionsOnCategoricalX AS CUSTOM (
+  SOURCE = #metrics,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    LAYERS (
+      trend = LINE (
+        ENCODE (X = Month (TYPE = NOMINAL), Y = Revenue (TYPE = QUANTITATIVE)),
+        STYLE (INTERPOLATION = 'SMOOTH'),
+        CONDITIONS (COLOR WHEN Revenue < 0 THEN '#dc2626')
+      )
+    )
+  )
+);
+
+-- statement error semantic 0 <= min <= max
+CREATE VISUAL NegativeSizeRange AS CUSTOM (
+  SOURCE = #metrics,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (s = LINEAR (CHANNEL = SIZE, RANGE = (-1, 10))),
+    LAYERS (
+      pts = POINT (
+        ENCODE (X = Month (TYPE = NOMINAL), Y = Revenue (TYPE = QUANTITATIVE), SIZE = Revenue (TYPE = QUANTITATIVE, SCALE = s))
+      )
+    )
+  )
+);

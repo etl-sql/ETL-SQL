@@ -82,7 +82,7 @@ public class StatementParser
         _dispatchMap[TokenType.CONVERT] = () => { var t = _parser.Previous; return ExtensionParser.ParseConvertFileEncoding(t); };
         _dispatchMap[TokenType.SPLIT] = () => { var t = _parser.Previous; return ExtensionParser.ParseSplitFile(t); };
         _dispatchMap[TokenType.SYNC] = () => { var t = _parser.Previous; return ExtensionParser.ParseSyncDirectory(t); };
-        _dispatchMap[TokenType.VERIFY] = () => { var t = _parser.Previous; return ExtensionParser.ParseVerifyFileIntegrity(t); };
+        _dispatchMap[TokenType.VERIFY] = () => { var t = _parser.Previous; return ExtensionParser.ParseVerifyFile(t); };
         _dispatchMap[TokenType.RAISEERROR] = () => FlowParser.ParseRaiseError();
         _dispatchMap[TokenType.ASSERT] = () => { var t = _parser.Previous; return FlowParser.ParseAssert(t); };
         _dispatchMap[TokenType.EXPECT] = () => { var t = _parser.Previous; return FlowParser.ParseExpectSchema(t); };
@@ -321,11 +321,11 @@ public class StatementParser
 
         if (type == TokenType.COPY || type == TokenType.MOVE || type == TokenType.RENAME ||
             type == TokenType.DELETE || type == TokenType.COMPRESS || type == TokenType.DECOMPRESS ||
-            type == TokenType.ENCRYPT || type == TokenType.DECRYPT)
+            type == TokenType.ENCRYPT || type == TokenType.DECRYPT || type == TokenType.SIGN)
         {
             var opToken = _parser.Advance();
             if (_parser.Match(TokenType.FILE)) return ExtensionParser.ParseFileOperation(opToken);
-            if (_parser.Match(TokenType.DIRECTORY)) return ExtensionParser.ParseDirectoryOperation(opToken);
+            if (type != TokenType.SIGN && _parser.Match(TokenType.DIRECTORY)) return ExtensionParser.ParseDirectoryOperation(opToken);
             _parser.Backtrack();
         }
 

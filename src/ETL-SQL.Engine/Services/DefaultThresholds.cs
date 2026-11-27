@@ -24,6 +24,9 @@ public static class DefaultThresholds
     public static int BatchSize(IConfiguration? config)
         => config?.GetValue<int?>("Engine:BatchSize") ?? 10000;
 
+    public static long BatchTargetBytes(IConfiguration? config)
+        => config?.GetValue<long?>("Engine:BatchTargetBytes") ?? Core.Spill.SpillFanOut.DefaultTargetBatchBytes;
+
     public static int MaxLastResultRows(IConfiguration? config)
         => config?.GetValue<int?>("Engine:MaxLastResultRows") ?? LanguageMetadata.DefaultMaxLastResultRows;
 
@@ -62,13 +65,17 @@ public static class DefaultThresholds
     /// a 128 GB server without per-host tuning.
     /// </summary>
     internal static int AutoMemoryGrantMB()
+        => MemoryCoordinatorPolicy.ComputeAutoMemoryGrantMB();
+
+    /// <summary>
+    /// Consolidated global ceiling in MB resolving <c>Engine:TotalMemoryGrantMB</c> against
+    /// <c>Orchestration:ResourceManagement:MaxGlobalMemoryMB</c>.
+    /// </summary>
+    public static int ResolveGlobalMemoryGrantMB(IConfiguration? config, int? maxGlobalMemoryMB = null)
     {
-        long totalBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
-        if (totalBytes <= 0) return 4096; // unknown environment — safe fallback
-        long autoMB = (long)(totalBytes * 0.80 / (1024 * 1024));
-        if (autoMB < 512) autoMB = 512;
-        if (autoMB > int.MaxValue) autoMB = int.MaxValue;
-        return (int)autoMB;
+        var engineConfigured = config?.GetValue<int?>("Engine:TotalMemoryGrantMB");
+        var orchConfigured = maxGlobalMemoryMB ?? config?.GetValue<int?>("Orchestration:ResourceManagement:MaxGlobalMemoryMB");
+        return MemoryCoordinatorPolicy.ResolveEffectiveGlobalMemoryMB(engineConfigured, orchConfigured);
     }
 
     /// <summary>
@@ -96,6 +103,9 @@ public static class DefaultThresholds
 
     public static bool SpillCompressionEnabled(IConfiguration? config)
         => config?.GetValue<bool>("Security:SpillCompressionEnabled") ?? true;
+
+    public static string SpillCompressionLevel(IConfiguration? config)
+        => config?.GetValue<string>("Security:SpillCompressionLevel") ?? "Adaptive";
 
     /// <summary>
     /// Free space, in MB, the spill volume keeps in reserve: a new extent is refused below it, so a

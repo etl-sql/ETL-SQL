@@ -10,6 +10,7 @@ using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Services;
 using ETL_SQL.Data;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -514,6 +515,25 @@ namespace ETL_SQL.LSP
                     }
                     _metadata.RegisterTempTable(uri, tableName, columns.Distinct().ToList());
                     activeTempTables.Add(tableName);
+                }
+            }
+            else if (stmt is TransformStatement tr && tr.TargetTable.TableName.StartsWith("#"))
+            {
+                var tableName = tr.TargetTable.TableName;
+                var sourceTable = tr.SourceTable ?? tr.TargetTable;
+                var conn = sourceTable.ConnectionName
+                    ?? (sourceTable.TableName.StartsWith("#") ? "TEMP" : _metadata.GetConnections(uri).FirstOrDefault(c => c.IsDocument)?.Name)
+                    ?? "DEFAULT";
+                var sourceCols = (await _metadata.GetColumnDetailsAsync(conn, sourceTable.TableName, uri)).ToList();
+                var projected = TransformSchemaProjection.ProjectColumns(tr, sourceCols).ToList();
+                _metadata.RegisterTempTable(uri, tableName, projected);
+                activeTempTables.Add(tableName);
+
+                if (TransformSchemaProjection.TryGetRejectIntoTable(tr, out var rejectTable) &&
+                    rejectTable.StartsWith("#"))
+                {
+                    _metadata.RegisterTempTable(uri, rejectTable, sourceCols);
+                    activeTempTables.Add(rejectTable);
                 }
             }
             else if (stmt is DockerStatement ds)

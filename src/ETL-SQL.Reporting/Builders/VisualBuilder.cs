@@ -178,14 +178,15 @@ namespace ETL_SQL.Reporting.Builders
             var effectiveTheme = visualExplicitTheme
                 ?? (inheritedStyles != null && inheritedStyles.TryGetValue("THEME", out var inhTheme) ? inhTheme : null);
 
+            vm.InheritedTheme = visualExplicitTheme is null ? effectiveTheme : null;
+
             if (resolvedStyles.Count > 0)
                 vm.Styles = resolvedStyles;
 
             var resolvedPalette = styleBuilder.ResolvePalette(vStmt.StyleName, vStmt.Palette, inheritedPalette, vStmt.VisualType.ToString(), effectiveTheme);
 
             // Effective background resolution across visual and inherited styles
-            var isDark = string.Equals(resolvedStyles.GetValueOrDefault("THEME"), "DARK", StringComparison.OrdinalIgnoreCase) ||
-                         (inheritedStyles != null && inheritedStyles.TryGetValue("THEME", out var ith) && string.Equals(ith, "DARK", StringComparison.OrdinalIgnoreCase));
+            var isDark = string.Equals(effectiveTheme, "DARK", StringComparison.OrdinalIgnoreCase);
 
             string? inhBg = null;
             if (inheritedStyles != null)
@@ -547,7 +548,10 @@ namespace ETL_SQL.Reporting.Builders
                             Mappings = vStmt.Mappings.Select(mapping =>
                                 mapping.Role.Equals("X", StringComparison.OrdinalIgnoreCase)
                                     ? mapping with { Column = currentLevel }
-                                    : mapping).ToList()
+                                    : mapping).ToList(),
+                            AdvancedChart = vStmt.AdvancedChart is null
+                                ? null
+                                : RewriteAdvancedChartDrillLevel(vStmt.AdvancedChart, drillState.Hierarchy, currentLevel)
                         };
                     }
 
@@ -577,7 +581,7 @@ namespace ETL_SQL.Reporting.Builders
                         vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData, geography: vm.GeographicGeometry);
                         if (chartStatement.AdvancedChart is null && vm.RowStyles is { Count: > 0 })
                             vm.PlotPlan = ApplyChartFormatting(vm.PlotPlan, vm.RowStyles);
-                        if (chartStatement.AdvancedChart is null && vm.SegmentRowStyles is { Count: > 0 })
+                        if (vm.SegmentRowStyles is { Count: > 0 })
                             vm.PlotPlan = ApplySegmentStyles(vm.PlotPlan, vm.SegmentRowStyles);
                     }
                     if (vm.PlotPlan?.Series is { Length: > 0 } planSeries &&
@@ -616,7 +620,7 @@ namespace ETL_SQL.Reporting.Builders
                     vm.ChartConfig = vStmt.VisualType == VisualType.Matrix
                         ? MatrixPivotBuilder.Build(vm)
                         : null;
-                    vm.NativeSvg = new SvgChartRenderer().Render(vm);
+                    vm.NativeSvg = new SvgChartRenderer().RenderForCard(vm);
                 }
                 catch (AdvancedChartSemanticException ex)
                 {
@@ -770,6 +774,57 @@ namespace ETL_SQL.Reporting.Builders
                 .ToList();
 
             return (grouped, columns);
+        }
+
+        private static AdvancedChartDefinition RewriteAdvancedChartDrillLevel(
+            AdvancedChartDefinition chart,
+            string[] hierarchy,
+            string currentLevel)
+        {
+            ImmutableArray<AdvancedChartEncoding> RewriteEncodings(ImmutableArray<AdvancedChartEncoding> encodings)
+            {
+                if (encodings.IsDefaultOrEmpty) return encodings;
+                return encodings.Select(encoding =>
+                {
+                    if (encoding.Source.Kind != AdvancedChartBindingSourceKind.Field)
+                        return encoding;
+                    var isDrillCategory = encoding.Channel is AdvancedChartChannel.X or AdvancedChartChannel.Theta
+                        || (!string.IsNullOrWhiteSpace(encoding.Source.Field)
+                            && hierarchy.Contains(encoding.Source.Field, StringComparer.OrdinalIgnoreCase));
+                    return isDrillCategory
+                        ? encoding with { Source = encoding.Source with { Field = currentLevel } }
+                        : encoding;
+                }).ToImmutableArray();
+            }
+
+            return chart with
+            {
+                Encodings = RewriteEncodings(chart.Encodings),
+                Layers = chart.Layers.IsDefaultOrEmpty
+                    ? chart.Layers
+                    : chart.Layers.Select(layer =>
+                    {
+                        var rewrittenPosition = layer.Position.Kind == AdvancedChartPositionKind.Jitter
+                            && !string.IsNullOrWhiteSpace(layer.Position.KeyField)
+                            && hierarchy.Contains(layer.Position.KeyField, StringComparer.OrdinalIgnoreCase)
+                            ? layer.Position with { KeyField = currentLevel }
+                            : layer.Position;
+                        return layer with
+                        {
+                            Encodings = RewriteEncodings(layer.Encodings),
+                            Position = rewrittenPosition
+                        };
+                    }).ToImmutableArray(),
+                Facet = chart.Facet is null ? null : chart.Facet with
+                {
+                    RowField = chart.Facet.RowField is not null && hierarchy.Contains(chart.Facet.RowField, StringComparer.OrdinalIgnoreCase)
+                        ? currentLevel : chart.Facet.RowField,
+                    ColumnField = chart.Facet.ColumnField is not null && hierarchy.Contains(chart.Facet.ColumnField, StringComparer.OrdinalIgnoreCase)
+                        ? currentLevel : chart.Facet.ColumnField,
+                    WrapField = chart.Facet.WrapField is not null && hierarchy.Contains(chart.Facet.WrapField, StringComparer.OrdinalIgnoreCase)
+                        ? currentLevel : chart.Facet.WrapField
+                }
+            };
         }
 
         private static void ResolveSetParameterAction(VisualActionManifest action, List<string> columns)
@@ -1709,7 +1764,7 @@ namespace ETL_SQL.Reporting.Builders
         {
             Layers = plan.Layers.Select(layer =>
             {
-                if (layer.Mark != MarkKind.Line) return layer;
+                if (layer.Mark is not (MarkKind.Line or MarkKind.Area)) return layer;
                 return layer with
                 {
                     Data = layer.Data.Select(datum =>
@@ -1719,8 +1774,8 @@ namespace ETL_SQL.Reporting.Builders
                         if (style == null) return datum;
                         return datum with
                         {
-                            SegmentLineDash = style.LineDash,
-                            SegmentColor = style.Color
+                            SegmentLineDash = style.LineDash ?? datum.SegmentLineDash,
+                            SegmentColor = style.Color ?? datum.SegmentColor
                         };
                     }).ToImmutableArray()
                 };

@@ -33,9 +33,25 @@ internal static class MemoryGovernor
     /// </summary>
     public static void EnforcePolicy(IExecutionContext ctx, string message)
     {
-        if (ctx.MemoryGovernorPolicy == MemoryGovernorPolicy.SpillOrFail)
-            throw new ExecutionException(message);
+        if (ctx.MemoryGovernorPolicy != MemoryGovernorPolicy.SpillOrFail)
+            return;
+
+        if (ctx.MemoryArbiter?.CurrentSystemMemoryFloorPressure is { } floor)
+        {
+            long availableMB = floor.AvailableMemoryBytes / (1024 * 1024);
+            throw new ExecutionException(
+                $"Memory grant refused because host available RAM ({availableMB} MB) is below the configured " +
+                $"system memory floor (Orchestration:ResourceManagement:SystemMemoryFloorMB = {floor.SystemMemoryFloorMB} MB). " +
+                $"Free host memory, lower SystemMemoryFloorMB, or set Engine:MemoryGovernorPolicy = SpillOnly. " +
+                $"Operator context: {message}");
+        }
+
+        throw new ExecutionException(message);
     }
+
+    public static bool IsNativeAggregateMemoryRejection(ExecutionException ex)
+        => ex.Message.StartsWith("Native ", StringComparison.Ordinal)
+           && ex.Message.Contains("GROUP BY requires", StringComparison.Ordinal);
 }
 
 /// <summary>

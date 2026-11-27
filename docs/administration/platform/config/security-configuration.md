@@ -51,7 +51,21 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 | :--- | :--- | :--- | :--- | :--- |
 | `Security:SpillEncryptionEnabled` | boolean | `true` | `SET SPILL_ENCRYPTION ON\|OFF` | Encrypts buffers spilled to local disk during heavy queries. |
 | `Security:SpillCompressionEnabled` | boolean | `true` | `SET SPILL_COMPRESSION ON\|OFF` | Compresses spilled buffers to reduce disk usage. |
+| `Security:SpillCompressionLevel` | string | `Adaptive` | — | Compression trade-off (`Adaptive`, `Fastest`, `Optimal`, `SmallestSize`); `Adaptive` uses `Fastest` under high CPU or concurrent writer pressure and `Optimal` when disk reserve headroom tightens. |
 | `Security:SpillFormat` | string | `Arrow` | `SET SPILL_FORMAT = 'AUTO'\|'JSON'\|'PARQUET'` | Serialization format for data spills. |
+
+### Memory Hygiene, Swap Encryption, and Crash-Dump Hardening
+
+ETL-SQL clears pooled columnar batch buffers (`ColumnBatch`), reused row-packing scratch streams (`RowPacker`, capped at 64 KiB retained scratch), packed join/distinct hash-table blobs, and cached spill session keys when those buffers are returned or disposed. Managed `.NET` buffer zeroing reduces window-of-exposure in reused process memory, **not** protection against privileged host administrators, kernel debuggers, unencrypted swap/pagefile writes, or full-memory crash dumps.
+
+On hosts processing sensitive workloads, configure OS-level controls alongside disk spill encryption:
+
+- **Swap / Pagefile Encryption**:
+  - **Linux**: Back swap partitions/files with `dm-crypt` using per-boot ephemeral keys, or disable swap (`swapoff -a`) on dedicated worker nodes when container/cgroup memory limits already enforce hard ceilings.
+  - **Windows**: Enable OS drive encryption (BitLocker) and enable pagefile encryption (`fsutil behavior set EncryptPagingFile 1` or Group Policy *Clear virtual memory pagefile* on shutdown).
+- **Crash-Dump Hardening**:
+  - **Linux**: Restrict core dumps (`RLIMIT_CORE=0` / `ulimit -c 0` in the service unit, `Storage=none` in `systemd-coredump`, and `fs.suid_dumpable=0`) and unset `DOTNET_DbgEnableMiniDump` / `COMPlus_DbgEnableMiniDump`.
+  - **Windows**: Restrict Windows Error Reporting `LocalDumps` and service account dump permissions so unmanaged or .NET crash dumps are disabled or stored only on ACL-restricted encrypted volumes.
 
 ---
 

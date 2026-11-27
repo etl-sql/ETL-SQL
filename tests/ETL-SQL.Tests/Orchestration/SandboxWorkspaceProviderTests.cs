@@ -55,12 +55,21 @@ public sealed class SandboxWorkspaceProviderTests
         await using var assignment = await provider.AssignAsync(Identity("tenant-a", "run-1", "attempt-1"));
 
         // The sandbox runs as a uid unrelated to this process, so it must be able to write its own
-        // output and scratch, or the workload cannot produce anything.
+        // output and scratch, or the workload cannot produce anything. It reaches them through this
+        // process's group when there is one to share, and only as "other" when there is not.
+        var shared = ETL_SQL.Orchestrator.Execution.SandboxFilePermissions.CurrentSharedGroupId is not null;
         foreach (var writable in new[] { assignment.OutputPath, assignment.ScratchPath })
         {
             var mode = File.GetUnixFileMode(writable);
-            Assert.True(mode.HasFlag(UnixFileMode.OtherWrite), $"{writable} must accept sandbox writes.");
-            Assert.True(mode.HasFlag(UnixFileMode.OtherExecute), $"{writable} must be traversable.");
+            if (shared)
+            {
+                Assert.Equal(ETL_SQL.Orchestrator.Execution.SandboxFilePermissions.SharedLeafMode, mode);
+            }
+            else
+            {
+                Assert.True(mode.HasFlag(UnixFileMode.OtherWrite), $"{writable} must accept sandbox writes.");
+                Assert.True(mode.HasFlag(UnixFileMode.OtherExecute), $"{writable} must be traversable.");
+            }
         }
 
         // That is only safe because nothing else on the host can reach them.

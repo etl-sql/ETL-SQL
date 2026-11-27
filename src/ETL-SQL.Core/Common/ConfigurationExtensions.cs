@@ -17,8 +17,8 @@ public static class ConfigurationExtensions
 
     /// <summary>
     /// The settings the installers move into <see cref="InstalledSecretsFileName"/>, as
-    /// colon-separated paths. Keep in sync with build-linux-packages.sh and configure-portal-jwt.ps1
-    /// (InstallerConfigurationScriptTests compares all three).
+    /// colon-separated paths. The MSI bootstrap (InstalledConfigurationBootstrap) uses this list; keep
+    /// build-linux-packages.sh in sync (InstallerConfigurationScriptTests compares them).
     /// </summary>
     public static readonly IReadOnlyList<string> InstalledSecretPaths =
     [
@@ -59,12 +59,64 @@ public static class ConfigurationExtensions
         return builder;
     }
 
+    /// <summary>
+    /// The release defaults in an MSI install. The MSI replaces this file on every upgrade and never
+    /// touches appsettings.json, which holds only the operator's settings there.
+    /// </summary>
+    public const string DefaultsFileName = "appsettings.defaults.json";
+
+    /// <summary>
+    /// Layers <see cref="DefaultsFileName"/> and then the installer's registry values from
+    /// <paramref name="directory"/> directly below the first appsettings*.json source, so the
+    /// operator's appsettings.json overrides both. Outside an MSI install neither exists and nothing
+    /// changes.
+    /// </summary>
+    public static IConfigurationBuilder AddInstallerLayers(this IConfigurationBuilder builder, string directory, IInstallerRegistry? registry = null)
+    {
+        var defaults = new Microsoft.Extensions.Configuration.Json.JsonConfigurationSource
+        {
+            Path = System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, DefaultsFileName)),
+            Optional = true,
+            ReloadOnChange = true,
+        };
+        defaults.ResolveFileProvider();
+        var installer = new InstallerRegistryConfigurationSource(directory, registry ?? WindowsInstallerRegistry.Instance);
+
+        var sources = builder.Sources;
+        var firstAppSettings = sources.Count;
+        for (var i = 0; i < sources.Count; i++)
+        {
+            if (sources[i] is Microsoft.Extensions.Configuration.Json.JsonConfigurationSource json
+                && IsAppSettingsFile(json.Path))
+            {
+                firstAppSettings = i;
+                break;
+            }
+        }
+        sources.Insert(firstAppSettings, installer);
+        sources.Insert(firstAppSettings, defaults);
+        return builder;
+    }
+
+    /// <summary>
+    /// The settings of the host installed in <paramref name="directory"/>, layered as the host reads
+    /// them (defaults, installer values, appsettings.json, secrets) without this process's
+    /// environment variables. Used by admin commands that act on an install folder.
+    /// </summary>
+    public static IConfiguration BuildInstalledSettings(string directory, IInstallerRegistry? registry = null) =>
+        new ConfigurationBuilder()
+            .AddJsonFile(System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, "appsettings.json")), optional: true)
+            .AddInstallerLayers(directory, registry)
+            .AddInstalledSecrets(directory)
+            .Build();
+
     private static bool IsAppSettingsFile(string? path)
     {
         var name = System.IO.Path.GetFileName(path ?? string.Empty);
         return name.StartsWith("appsettings", StringComparison.OrdinalIgnoreCase)
             && name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(name, InstalledSecretsFileName, StringComparison.OrdinalIgnoreCase);
+            && !string.Equals(name, InstalledSecretsFileName, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(name, DefaultsFileName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool CanRead(string path)

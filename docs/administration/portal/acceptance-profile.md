@@ -72,10 +72,11 @@ Publishing a report requires the `.rptsql` file to already exist under the Porta
 
 ---
 
-## Publishing a report needs two settings people miss
+## Publishing a report needs settings people miss
 
 The profile's report is published by **script path**, which goes through
-`RequireStudioCapability(ReportPublish, SourceControlled)`. In any other Studio mode that filter
+`RequireStudioCapability(ReportPublish, SourceControlled)` and, since v0.23.0, also needs
+`ScriptIngress` (without it the publish answers 403). In any other Studio mode that filter
 answers **404**, so the report is silently not seeded and three checks disappear from the run —
 which looks like a pass:
 
@@ -83,6 +84,7 @@ which looks like a pass:
 Portal__Studio__Mode=SourceControlled
 Portal__Studio__RoleCapabilities__Admin__0=StudioAccess
 Portal__Studio__RoleCapabilities__Admin__1=ReportPublish
+Portal__Studio__RoleCapabilities__Admin__2=ScriptIngress
 ```
 
 Without them the profile still exits 0, having checked less. That is precisely why smoke **parity**

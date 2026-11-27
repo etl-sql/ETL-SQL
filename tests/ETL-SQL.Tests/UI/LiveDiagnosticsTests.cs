@@ -28,7 +28,7 @@ namespace ETL_SQL.Tests.UI
         public async Task AnalyzeAsync_ProducesDiagnostics_ForProblemScript()
         {
             var (_, diags) = await NewEditor().AnalyzeAsync("SELECT @missing;", logToMessages: false);
-            Assert.NotEmpty(diags);
+            Assert.Contains(diags, d => d.Message.Contains("@missing", StringComparison.Ordinal));
         }
 
         [Fact]
@@ -45,7 +45,8 @@ namespace ETL_SQL.Tests.UI
         public async Task AnalyzeAsync_FeedsTheGutterMap()
         {
             var (_, diags) = await NewEditor().AnalyzeAsync("SELECT @missing;", logToMessages: false);
-            Assert.NotEmpty(DiagnosticGutter.BuildLineMap(diags));
+            var map = DiagnosticGutter.BuildLineMap(diags);
+            Assert.True(map.ContainsKey(1), "Expected gutter marker on line 1 for undeclared @missing");
         }
 
         [Fact]
@@ -64,7 +65,7 @@ namespace ETL_SQL.Tests.UI
             var (_, diags) = await NewEditor().AnalyzeAsync("SELECT 1;\nSELECT @missing;", logToMessages: false);
             var onLine2 = diags.FirstOrDefault(d => d.Line == 2);
             Assert.NotNull(onLine2);
-            Assert.False(string.IsNullOrEmpty(onLine2!.Message));
+            Assert.Contains("@missing", onLine2!.Message, StringComparison.Ordinal);
         }
 
         [Fact]

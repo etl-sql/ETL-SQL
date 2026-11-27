@@ -41,11 +41,13 @@ namespace ETL_SQL.Tests.Operations
 
             // Test primary name
             await eval.Evaluate(new Parser(new Lexer("CREATE CONNECTION TestSql1 AS MSSQL('server=localhost');").Tokenize()).Parse());
-            Assert.True(eval.Connections.ContainsKey("TestSql1"), "Failed to create connection with MSSQL");
+            Assert.True(eval.Connections.TryGetValue("TestSql1", out var conn1), "Failed to create connection with MSSQL");
+            Assert.Equal("MSSQL", conn1.ConnectorType);
 
             // Test alias
             await eval.Evaluate(new Parser(new Lexer("CREATE CONNECTION TestSql2 AS SQLSERVER('server=localhost');").Tokenize()).Parse());
-            Assert.True(eval.Connections.ContainsKey("TestSql2"), "Failed to create connection with SQLSERVER alias");
+            Assert.True(eval.Connections.TryGetValue("TestSql2", out var conn2), "Failed to create connection with SQLSERVER alias");
+            Assert.Equal("MSSQL", conn2.ConnectorType);
         }
     }
 }

@@ -8,13 +8,16 @@ const mod = await import(
     pathToFileURL(path.resolve('src/ETL-SQL.Portal/wwwroot/js/orchestrator-admin-ui.js')).href);
 
 const {
-    escHtml, fmtDt, fmtTimeAgo,
+    escHtml, fmtDt, fmtTimeAgo, formatBytes,
     filterAndPaginateJobs,
     renderSchedulesTable,
     renderNotificationsTable,
     renderWatermarksTable,
     renderJobAuditTrail,
-    renderCalendarTimeline
+    renderCalendarTimeline,
+    renderRunWaterfallHtml,
+    renderFleetNodesHtml,
+    renderSandboxPoolsHtml
 } = mod;
 
 function assert(cond, msg) { if (!cond) throw new Error('FAIL: ' + msg); }
@@ -82,6 +85,7 @@ assert(schedulesHtml.includes('3 jobs'), 'renders linked jobs count');
 const uncountedSchedulesHtml = renderSchedulesTable(schedules);
 assert(!uncountedSchedulesHtml.includes('Linked Jobs') && !/\d+ jobs?/.test(uncountedSchedulesHtml), 'uncounted schedule links are not shown as zero');
 assert(schedulesHtml.includes('data-action="edit-schedule"'), 'renders edit action');
+assert(schedulesHtml.includes('data-action="acl-schedule"'), 'renders access action');
 assert(schedulesHtml.includes('data-action="delete-schedule"'), 'renders delete action');
 
 // ── 5. Notifications Table Rendering tests ────────────────────────────────────
@@ -89,13 +93,17 @@ const emptyNotifsHtml = renderNotificationsTable([]);
 assert(emptyNotifsHtml.includes('empty-state'), 'empty notifications list renders empty state');
 
 const notifications = [
-    { Name: 'slack_ops', DisplayName: 'Ops Slack Channel', ConnectionName: 'slack_webhook', Recipient: '#ops-data', IsEnabled: true, CreatedBy: 'user:admin' }
+    { Name: 'slack_ops', DisplayName: 'Ops Slack Channel', ConnectionName: 'slack_webhook', Recipient: '#ops-data', IsEnabled: true, CreatedBy: 'user:admin', Version: 2 }
 ];
 const notifsHtml = renderNotificationsTable(notifications, { slack_ops: 2 });
 assert(notifsHtml.includes('Ops Slack Channel'), 'renders notification display name');
 assert(notifsHtml.includes('slack_webhook'), 'renders connection name');
 assert(notifsHtml.includes('#ops-data'), 'renders recipient');
+assert(notifsHtml.includes('v2'), 'renders notification version');
 assert(notifsHtml.includes('data-action="dispatch-notification"'), 'renders test dispatch action button');
+assert(notifsHtml.includes('data-action="edit-notification"'), 'renders edit notification action button');
+assert(notifsHtml.includes('data-action="acl-notification"'), 'renders notification access action button');
+assert(notifsHtml.includes('data-action="toggle-notification"'), 'renders notification enable/disable action button');
 assert(notifsHtml.includes('2 jobs'), 'renders counted notification links');
 assert(!/\d+ jobs?/.test(renderNotificationsTable(notifications)), 'uncounted notification links are not shown as zero');
 
@@ -131,6 +139,46 @@ assert(auditHtml.includes('Attached nightly_utc'), 'renders detail text');
 const calendarHtml = renderCalendarTimeline(sampleJobs, 7);
 assert(calendarHtml.includes('orch-calendar-grid'), 'renders calendar grid container');
 assert(calendarHtml.includes('Today'), 'renders Today badge on current day');
+
+// ── 9. Run Waterfall & Fleet Telemetry Rendering tests ───────────────────────
+assert(formatBytes(1536) === '1.50 KB', 'formats bytes cleanly');
+const waterfallHtml = renderRunWaterfallHtml({
+    runId: 42, jobName: 'daily_sales', status: 'Failed', completed: true,
+    startTime: '2026-10-09T02:00:00Z', endTime: '2026-10-09T02:00:41Z',
+    errorMessage: 'Timeout waiting for warehouse', rowsProcessed: 1200,
+    scriptHashAtRunTime: 'sha256:abc', statementsTruncated: false,
+    statements: [
+        { statement: 'SELECT 1;', durationMs: 25, rowsProcessed: 1, failed: false },
+        { statement: 'MERGE INTO target;', durationMs: 4000, rowsProcessed: 0, failed: true }
+    ]
+});
+assert(waterfallHtml.includes('Timeout waiting for warehouse'), 'renders run error output');
+assert(waterfallHtml.includes('MERGE INTO target;'), 'renders statement SQL in waterfall');
+assert(waterfallHtml.includes('4,000 ms') || waterfallHtml.includes('4000 ms'), 'renders statement duration');
+
+const nodesHtml = renderFleetNodesHtml([{
+    nodeId: 'orch-1:100', role: 'Orchestrator', isLive: true,
+    firstSeenUtc: '2026-10-08T00:00:00Z', lastHeartbeatUtc: '2026-10-09T12:00:00Z', expiresAtUtc: '2026-10-09T12:00:30Z',
+    machine: 'WIN-NODE-1', pid: 100, startedUtc: '2026-10-08T00:00:00Z',
+    capacity: {
+        workingSetBytes: 104857600, gcHeapBytes: 52428800, totalAvailableMemoryBytes: 8589934592,
+        memoryLoadPercent: 42.5, processCpuPercent: 12.5, hostCpuPercent: 31.0, processorCount: 4,
+        isOverloaded: false, stateDiskFreeBytes: 1073741824, spillDiskFreeBytes: 2147483648
+    }
+}]);
+assert(nodesHtml.includes('orch-1:100') && nodesHtml.includes('WIN-NODE-1'), 'renders node heartbeat identity');
+assert(nodesHtml.includes('12.5% / 31.0%'), 'renders CPU metrics');
+
+const poolsHtml = renderSandboxPoolsHtml([{
+    poolId: 'standard', capacity: 8, queuedCount: 1, activeCount: 2, retainedCount: 0, availableSlots: 6,
+    openAdmissions: [{
+        admissionId: 'adm-1', poolId: 'standard', tenantId: 'portal-host', state: 'Active', weight: 100,
+        leaseOwner: 'orch-1:100', enqueuedUtc: '2026-10-09T11:58:00Z', leaseExpiresUtc: '2026-10-09T12:02:00Z'
+    }]
+}], true);
+assert(poolsHtml.includes('Distributed Admission Ledger Active'), 'renders active ledger mode badge');
+assert(poolsHtml.includes('2 / 8 occupied'), 'renders pool occupancy');
+assert(poolsHtml.includes('adm-1'), 'renders open admission row');
 
 // Job mutations must have explicit server confirmation, including when the HTTP status is 2xx.
 const { createJobActionController, jobVersion, requireMutationStatus } = await import(

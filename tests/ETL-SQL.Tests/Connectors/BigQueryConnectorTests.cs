@@ -64,11 +64,12 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void BuildConnectionString_MinimalProperties_DoesNotThrow()
+        public void BuildConnectionString_MinimalProperties_ProducesProjectPart()
         {
             var props = new Dictionary<string, string> { { "PROJECT_ID", "proj" } };
             var cs = _connector.BuildConnectionString(props);
-            Assert.NotEmpty(cs);
+            Assert.Contains("project=proj", cs);
+            Assert.DoesNotContain("credential_file", cs);
         }
 
         // ── ParseField ───────────────────────────────────────────────────────
@@ -137,10 +138,11 @@ namespace ETL_SQL.Tests.Connectors
         public void GetSupportedOptions_ContainsAllExpectedKeys()
         {
             var opts = _connector.GetSupportedOptions();
-            Assert.True(opts.ContainsKey("PROJECT_ID"));
-            Assert.True(opts.ContainsKey("DATASET"));
-            Assert.True(opts.ContainsKey("CREDENTIAL_FILE"));
-            Assert.True(opts.ContainsKey("LOCATION"));
+            Assert.Contains("PROJECT_ID", opts.Keys);
+            Assert.Contains("DATASET", opts.Keys);
+            Assert.Contains("CREDENTIAL_FILE", opts.Keys);
+            Assert.Contains("LOCATION", opts.Keys);
+            Assert.Contains("TIMEOUT_SECONDS", opts.Keys);
         }
 
         [Fact]
@@ -259,14 +261,5 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Contains("qualify", BigQuerySyntax.Additions);
             Assert.Contains("top", BigQuerySyntax.Exclusions);
         }
-
-        [Fact]
-        public void Functions_NotEmpty() => Assert.NotEmpty(BigQuerySyntax.Functions);
-
-        [Fact]
-        public void Additions_NotEmpty() => Assert.NotEmpty(BigQuerySyntax.Additions);
-
-        [Fact]
-        public void Exclusions_NotEmpty() => Assert.NotEmpty(BigQuerySyntax.Exclusions);
     }
 }

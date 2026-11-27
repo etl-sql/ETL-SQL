@@ -58,16 +58,21 @@ public class RunScriptStatementHandler : IStatementHandler
             string cacheStamp;
             if (BundleUri.TryParse(scriptPath, out var uri) && uri != null)
             {
-                var store = context.ServiceProvider.GetService<IBundleStore>()
-                    ?? throw new ExecutionException("RUN SCRIPT orch:// failed: no bundle store is registered.");
-                var version = uri.Version ?? (await store.GetLatestVersionAsync(uri.BundleName))?.Version
+                var store = context.ServiceProvider.GetService<IBundleStore>();
+                var tenantStore = context.ServiceProvider.GetService<ITenantBundleStore>();
+                if (store == null && tenantStore == null)
+                    throw new ExecutionException("RUN SCRIPT orch:// failed: no bundle store is registered.");
+                var version = uri.Version ?? (await BundleStoreAccessor.GetLatestVersionAsync(store, context, uri.BundleName))?.Version
                     ?? throw new ExecutionException($"RUN SCRIPT orch:// failed: bundle '{uri.BundleName}' was not found.");
-                var file = await store.GetFileAsync(uri.BundleName, version, uri.Path)
+                var file = await BundleStoreAccessor.GetFileAsync(store, context, uri.BundleName, version, uri.Path)
                     ?? throw new ExecutionException($"RUN SCRIPT orch:// failed: script '{uri.Path}' was not found in bundle '{uri.BundleName}' version {version}.");
                 source = file.Content;
                 currentPathForContext = uri.ToPinnedString(version);
-                cacheKey = currentPathForContext;
-                cacheStamp = $"{file.Content.Length}";
+                var tenant = BundleStoreAccessor.ResolveTenant(context);
+                cacheKey = tenant is not null
+                    ? tenant.ScopeKey(currentPathForContext)
+                    : currentPathForContext;
+                cacheStamp = $"{file.ContentHash}:{file.Content.Length}";
             }
             else
             {
@@ -83,7 +88,10 @@ public class RunScriptStatementHandler : IStatementHandler
                 var fileInfo = new FileInfo(scriptPath);
                 source = await File.ReadAllTextAsync(scriptPath);
                 currentPathForContext = fileInfo.FullName;
-                cacheKey = currentPathForContext;
+                var fileTenant = BundleStoreAccessor.ResolveTenant(context);
+                cacheKey = fileTenant is not null
+                    ? fileTenant.ScopeKey(currentPathForContext)
+                    : currentPathForContext;
                 cacheStamp = $"{fileInfo.LastWriteTimeUtc.Ticks}:{fileInfo.Length}";
             }
 

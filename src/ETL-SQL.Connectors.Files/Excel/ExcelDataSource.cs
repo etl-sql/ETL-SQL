@@ -21,6 +21,8 @@ namespace ETL_SQL.Connectors.Excel
     {
         private readonly string _filePath;
         private readonly string? _sheetName;
+        private readonly int? _sheetIndex;
+        private readonly int? _startRow;
         private readonly bool _hasHeader;
         private readonly bool _compress;
         private readonly EncryptionOptions _encryption;
@@ -33,10 +35,30 @@ namespace ETL_SQL.Connectors.Excel
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private readonly bool _transactional = false;
+        private readonly bool _overwriteWorkbook = false;
 
         public string Path => _filePath;
         public Dictionary<string, string>? Options => _options;
-        public IDataSource WithTable(string tableName) => this;
+        public IDataSource WithTable(string tableName)
+        {
+            if (string.IsNullOrWhiteSpace(tableName)
+                || tableName.Equals("FILE", StringComparison.OrdinalIgnoreCase))
+            {
+                return this;
+            }
+
+            if (tableName.Equals("_sheets", StringComparison.OrdinalIgnoreCase))
+            {
+                return new ExcelSheetsMetadataDataSource(this);
+            }
+
+            var derived = _options != null
+                ? new Dictionary<string, string>(_options, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            derived["SHEET"] = tableName;
+            derived.Remove("SHEET_INDEX");
+            return new ExcelDataSource(_context!, _filePath, derived, _templateSchema);
+        }
         public string ConnectorType => "EXCEL";
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
@@ -53,6 +75,21 @@ namespace ETL_SQL.Connectors.Excel
             if (options != null)
             {
                 if (options.TryGetValue("SHEET", out var s)) _sheetName = s;
+                if (options.TryGetValue("SHEET_INDEX", out var si) && !string.IsNullOrWhiteSpace(si))
+                {
+                    if (!int.TryParse(si.Trim(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsedSheetIndex) || parsedSheetIndex < 1)
+                        throw new ExecutionException($"EXCEL option SHEET_INDEX must be a positive 1-based integer, not '{si}'.");
+                    _sheetIndex = parsedSheetIndex;
+                }
+                if (!string.IsNullOrEmpty(_sheetName) && _sheetIndex.HasValue)
+                    throw new ExecutionException("EXCEL options SHEET and SHEET_INDEX are mutually exclusive.");
+
+                if (options.TryGetValue("START_ROW", out var sr) && !string.IsNullOrWhiteSpace(sr))
+                {
+                    if (!int.TryParse(sr.Trim(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsedStartRow) || parsedStartRow < 1)
+                        throw new ExecutionException($"EXCEL option START_ROW must be a positive 1-based integer, not '{sr}'.");
+                    _startRow = parsedStartRow;
+                }
                 if (options.TryGetValue("HEADER", out var h)) _hasHeader = h.ToUpperInvariant() == "ON";
                 if (options.TryGetValue("RANGE", out var r)) _range = r;
                 if (options.TryGetValue("COMPRESS", out var comp)) _compress = comp.ToUpperInvariant() == "ON";
@@ -60,6 +97,7 @@ namespace ETL_SQL.Connectors.Excel
                 if (options.TryGetValue("NULL_MISSING_COLUMNS", out var nmc)) _nullMissingColumns = nmc.ToUpperInvariant() == "ON" || nmc.ToUpperInvariant() == "TRUE";
                 if (options.TryGetValue("MAP_BY_HEADER_NAME", out var mbh)) _mapByHeaderName = mbh.ToUpperInvariant() == "ON" || mbh.ToUpperInvariant() == "TRUE";
                 if (options.TryGetValue("TRANSACTIONAL", out var tx)) _transactional = tx.ToUpperInvariant() == "ON" || tx.ToUpperInvariant() == "TRUE";
+                if (options.TryGetValue("OVERWRITE_WORKBOOK", out var ow)) _overwriteWorkbook = ow.ToUpperInvariant() == "ON" || ow.ToUpperInvariant() == "TRUE";
             }
 
             _encryption = new EncryptionOptions(options);
@@ -100,12 +138,15 @@ namespace ETL_SQL.Connectors.Excel
             if (!PrepareSelectedSheet(reader, effectiveCancellationToken, out var rowCount)) yield break;
             var range = ExcelRange.Parse(_range, rowCount, reader.FieldCount);
 
-            int startRow = Math.Min(range.StartRow, rowCount - 1);
+            int requestedStartRow = _startRow.HasValue
+                ? Math.Max(range.StartRow, _startRow.Value - 1)
+                : range.StartRow;
             int endRow = Math.Min(range.EndRow, rowCount - 1);
+            int startRow = _startRow.HasValue ? requestedStartRow : Math.Min(requestedStartRow, rowCount - 1);
             int startCol = Math.Min(range.StartCol, reader.FieldCount - 1);
             int endCol = Math.Min(range.EndCol, reader.FieldCount - 1);
 
-            if (startRow < 0 || startRow > endRow || startCol < 0 || startCol > endCol) yield break;
+            if (startRow < 0 || startRow > endRow || startRow >= rowCount || startCol < 0 || startCol > endCol) yield break;
 
             var excelCols = new List<string>();
             int dataStartRow = startRow;
@@ -292,6 +333,18 @@ namespace ETL_SQL.Connectors.Excel
 
         private bool MoveToSelectedSheet(IExcelDataReader reader, CancellationToken cancellationToken)
         {
+            if (_sheetIndex.HasValue)
+            {
+                int current = 1;
+                while (current < _sheetIndex.Value)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!reader.NextResult()) return false;
+                    current++;
+                }
+                return true;
+            }
+
             if (string.IsNullOrEmpty(_sheetName)) return true;
             var sanitizedName = SanitizeSheetName(_sheetName);
             do
@@ -388,6 +441,13 @@ namespace ETL_SQL.Connectors.Excel
             bool append,
             CancellationToken cancellationToken)
         {
+            // SHEET_INDEX and START_ROW select what to read. The writer names its sheet from SHEET
+            // and always writes from row 1, so honoring them on write would rename or misread a sheet.
+            if (_sheetIndex.HasValue)
+                throw new ExecutionException("EXCEL option SHEET_INDEX applies to reads only; use SHEET to name the sheet to write.");
+            if (_startRow.HasValue)
+                throw new ExecutionException("EXCEL option START_ROW applies to reads only; writes start at row 1.");
+
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
             try
             {
@@ -404,12 +464,22 @@ namespace ETL_SQL.Connectors.Excel
             bool append,
             CancellationToken effectiveCancellationToken)
         {
+            string sheetName = string.IsNullOrWhiteSpace(_sheetName) ? "Sheet1" : _sheetName;
+            sheetName = SanitizeSheetName(sheetName);
 
             var existingRows = new List<Dictionary<string, object?>>();
             var existingColumns = new List<string>();
+            var book = new Dictionary<string, object>();
+            bool targetInserted = false;
 
-            if (append && System.IO.File.Exists(_filePath))
+            var existingInfo = new System.IO.FileInfo(_filePath);
+            if ((append || !_overwriteWorkbook) && existingInfo.Exists && existingInfo.Length > 0)
             {
+                // Sheets in workbook order: (name, whether its rows were loaded). The target sheet's rows
+                // are loaded only for an append; other sheets only when they are preserved.
+                var sheets = new List<(string Name, bool Loaded)>();
+                int targetIndex = -1;
+                System.Data.DataSet result;
                 try
                 {
                     effectiveCancellationToken.ThrowIfCancellationRequested();
@@ -417,73 +487,70 @@ namespace ETL_SQL.Connectors.Excel
                     using (var stream = GetSeekableStream(baseStream))
                     using (var reader = ExcelReaderFactory.CreateReader(stream))
                     {
-                        var result = reader.AsDataSet(new ExcelDataSetConfiguration()
+                        result = reader.AsDataSet(new ExcelDataSetConfiguration()
                         {
-                            ConfigureDataTable = (_) => new ExcelDataTableConfiguration() { UseHeaderRow = false }
-                        });
-                        effectiveCancellationToken.ThrowIfCancellationRequested();
-
-                        // Match the sheet we would have written to (the writer sanitizes the name);
-                        // ResolveSheet tries the raw then sanitized name so append preserves rows.
-                        System.Data.DataTable? sheet = ResolveSheet(result);
-
-                        if (sheet != null)
-                        {
-                            var range = ExcelRange.Parse(_range, sheet.Rows.Count, sheet.Columns.Count);
-                            int startRow = Math.Min(range.StartRow, sheet.Rows.Count - 1);
-                            int endRow = Math.Min(range.EndRow, sheet.Rows.Count - 1);
-                            int startCol = Math.Min(range.StartCol, sheet.Columns.Count - 1);
-                            int endCol = Math.Min(range.EndCol, sheet.Columns.Count - 1);
-
-                            if (startCol >= 0 && startCol <= endCol && startRow >= 0)
+                            ConfigureDataTable = (_) => new ExcelDataTableConfiguration() { UseHeaderRow = false },
+                            FilterSheet = (sheetReader, index) =>
                             {
-                                int dataStartRow = startRow;
-                                if (_hasHeader && startRow < sheet.Rows.Count)
+                                effectiveCancellationToken.ThrowIfCancellationRequested();
+                                bool load;
+                                if (targetIndex < 0 && IsTargetSheet(sheetReader.Name, index))
                                 {
-                                    var headerRow = sheet.Rows[startRow];
-                                    for (int c = startCol; c <= endCol; c++)
-                                    {
-                                        existingColumns.Add(headerRow[c]?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
-                                    }
-                                    dataStartRow++;
+                                    targetIndex = index;
+                                    load = append;
                                 }
                                 else
                                 {
-                                    for (int c = startCol; c <= endCol; c++)
-                                    {
-                                        existingColumns.Add($"Column{c - startCol + 1}");
-                                    }
+                                    load = !_overwriteWorkbook;
                                 }
-
-                                for (int r = dataStartRow; r <= endRow; r++)
-                                {
-                                    effectiveCancellationToken.ThrowIfCancellationRequested();
-                                    var row = sheet.Rows[r];
-                                    var rowDict = new Dictionary<string, object?>();
-                                    for (int c = startCol; c <= endCol; c++)
-                                    {
-                                        string colName = existingColumns[c - startCol];
-                                        rowDict[colName] = row[c] == DBNull.Value ? null : row[c];
-                                    }
-                                    existingRows.Add(rowDict);
-                                }
+                                sheets.Add((sheetReader.Name, load));
+                                return load;
                             }
-                        }
+                        });
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    _logger.Debug("[ExcelDataSource.WriteBatches] Failed to read existing Excel file for append: {Message}", ex.Message);
+                    // Writing anyway would drop the rows being appended to, or every other worksheet.
+                    throw new ExecutionException(
+                        $"EXCEL could not read the existing workbook '{System.IO.Path.GetFileName(_filePath)}' to " +
+                        (append ? "append to it" : "preserve its other worksheets") +
+                        "; nothing was written. Fix or remove the file" +
+                        (append ? "." : ", or set OVERWRITE_WORKBOOK = ON to replace the whole workbook.") +
+                        $" ({ex.Message})", ex);
+                }
+
+                effectiveCancellationToken.ThrowIfCancellationRequested();
+                int loadedIndex = 0;
+                for (int i = 0; i < sheets.Count; i++)
+                {
+                    var (name, loaded) = sheets[i];
+                    System.Data.DataTable? table = loaded ? result.Tables[loadedIndex++] : null;
+                    if (i == targetIndex)
+                    {
+                        // Keep the existing sheet's own name (and position), so a write without SHEET does
+                        // not rename the first sheet and a case difference does not create a duplicate.
+                        sheetName = name;
+                        if (table != null)
+                        {
+                            ExtractSheetRows(table, existingColumns, existingRows, effectiveCancellationToken);
+                        }
+                        book[sheetName] = SheetRows(existingRows, existingColumns, batches, effectiveCancellationToken);
+                        targetInserted = true;
+                    }
+                    else if (table != null)
+                    {
+                        book[name] = BuildPreservedSheetTable(table, _hasHeader, effectiveCancellationToken);
+                    }
                 }
             }
 
-            string sheetName = string.IsNullOrWhiteSpace(_sheetName) ? "Sheet1" : _sheetName;
-            sheetName = SanitizeSheetName(sheetName);
-
-            // New rows go to the workbook as they arrive. Only an append holds rows in memory, and
-            // only the sheet it has to rewrite.
-            var book = new Dictionary<string, object>();
-            book[sheetName] = SheetRows(existingRows, existingColumns, batches, effectiveCancellationToken);
+            if (!targetInserted)
+            {
+                // New rows go to the workbook as they arrive. Only an append holds rows in memory, and
+                // only the sheet it has to rewrite.
+                book[sheetName] = SheetRows(existingRows, existingColumns, batches, effectiveCancellationToken);
+            }
             string tempFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
             string? publicationFile = null;
             string? zippedTemp = null;
@@ -541,6 +608,111 @@ namespace ETL_SQL.Connectors.Excel
             }
         }
 
+        private bool IsTargetSheet(string name, int index)
+        {
+            if (_sheetIndex.HasValue) return index == _sheetIndex.Value - 1;
+            if (string.IsNullOrEmpty(_sheetName)) return index == 0;
+            // Excel sheet names are unique case-insensitively; the writer sanitizes the requested name.
+            return name.Equals(_sheetName, StringComparison.OrdinalIgnoreCase)
+                || name.Equals(SanitizeSheetName(_sheetName), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void ExtractSheetRows(
+            System.Data.DataTable sheet,
+            List<string> existingColumns,
+            List<Dictionary<string, object?>> existingRows,
+            CancellationToken effectiveCancellationToken)
+        {
+            var range = ExcelRange.Parse(_range, sheet.Rows.Count, sheet.Columns.Count);
+            int startRow = Math.Min(range.StartRow, sheet.Rows.Count - 1);
+            int endRow = Math.Min(range.EndRow, sheet.Rows.Count - 1);
+            int startCol = Math.Min(range.StartCol, sheet.Columns.Count - 1);
+            int endCol = Math.Min(range.EndCol, sheet.Columns.Count - 1);
+
+            if (startCol < 0 || startCol > endCol || startRow < 0) return;
+
+            int dataStartRow = startRow;
+            if (_hasHeader && startRow < sheet.Rows.Count)
+            {
+                var headerRow = sheet.Rows[startRow];
+                for (int c = startCol; c <= endCol; c++)
+                {
+                    existingColumns.Add(headerRow[c]?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
+                }
+                dataStartRow++;
+            }
+            else
+            {
+                for (int c = startCol; c <= endCol; c++)
+                {
+                    existingColumns.Add($"Column{c - startCol + 1}");
+                }
+            }
+
+            for (int r = dataStartRow; r <= endRow; r++)
+            {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
+                var row = sheet.Rows[r];
+                var rowDict = new Dictionary<string, object?>();
+                for (int c = startCol; c <= endCol; c++)
+                {
+                    string colName = existingColumns[c - startCol];
+                    rowDict[colName] = row[c] == DBNull.Value ? null : row[c];
+                }
+                existingRows.Add(rowDict);
+            }
+        }
+
+        private static System.Data.DataTable BuildPreservedSheetTable(
+            System.Data.DataTable source,
+            bool hasHeader,
+            CancellationToken effectiveCancellationToken)
+        {
+            var preserved = new System.Data.DataTable(source.TableName);
+            int colCount = source.Columns.Count;
+            int dataStartRow = 0;
+            var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (hasHeader && source.Rows.Count > 0)
+            {
+                var headerRow = source.Rows[0];
+                for (int c = 0; c < colCount; c++)
+                {
+                    var baseName = headerRow[c]?.ToString()?.Trim();
+                    if (string.IsNullOrEmpty(baseName)) baseName = $"Column{c + 1}";
+                    var name = baseName;
+                    int suffix = 2;
+                    while (!usedNames.Add(name))
+                    {
+                        name = $"{baseName}_{suffix++}";
+                    }
+                    preserved.Columns.Add(name, typeof(object));
+                }
+                dataStartRow = 1;
+            }
+            else
+            {
+                for (int c = 0; c < colCount; c++)
+                {
+                    preserved.Columns.Add($"Column{c + 1}", typeof(object));
+                }
+            }
+
+            for (int r = dataStartRow; r < source.Rows.Count; r++)
+            {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
+                var srcRow = source.Rows[r];
+                var destRow = preserved.NewRow();
+                for (int c = 0; c < colCount; c++)
+                {
+                    destRow[c] = srcRow[c] == DBNull.Value ? DBNull.Value : CoerceValue(srcRow[c]) ?? DBNull.Value;
+                }
+                preserved.Rows.Add(destRow);
+            }
+
+            return preserved;
+        }
+
         private static object? CoerceValue(object? raw)
         {
             if (raw is null || raw == DBNull.Value) return null;
@@ -561,6 +733,11 @@ namespace ETL_SQL.Connectors.Excel
         // merge an unrelated sheet on append. A null/empty name means "the first sheet".
         private System.Data.DataTable? ResolveSheet(System.Data.DataSet result)
         {
+            if (_sheetIndex.HasValue)
+            {
+                int idx = _sheetIndex.Value - 1;
+                return idx >= 0 && idx < result.Tables.Count ? result.Tables[idx] : null;
+            }
             if (!string.IsNullOrEmpty(_sheetName))
                 return result.Tables[_sheetName] ?? result.Tables[SanitizeSheetName(_sheetName)];
             return result.Tables.Count > 0 ? result.Tables[0] : null;
@@ -595,9 +772,13 @@ namespace ETL_SQL.Connectors.Excel
                     var range = ExcelRange.Parse(_range, rowCount, reader.FieldCount);
                     int startCol = Math.Min(range.StartCol, reader.FieldCount - 1);
                     int endCol = Math.Min(range.EndCol, reader.FieldCount - 1);
-                    int startRow = Math.Min(range.StartRow, rowCount - 1);
+                    int requestedStartRow = _startRow.HasValue
+                        ? Math.Max(range.StartRow, _startRow.Value - 1)
+                        : range.StartRow;
+                    int endRow = Math.Min(range.EndRow, rowCount - 1);
+                    int startRow = _startRow.HasValue ? requestedStartRow : Math.Min(requestedStartRow, rowCount - 1);
 
-                    if (startCol < 0 || startCol > endCol || startRow < 0) return Enumerable.Empty<string>();
+                    if (startCol < 0 || startCol > endCol || startRow < 0 || startRow > endRow || startRow >= rowCount) return Enumerable.Empty<string>();
 
                     if (!_hasHeader)
                     {
@@ -628,11 +809,24 @@ namespace ETL_SQL.Connectors.Excel
 
         public Task<IEnumerable<string>> GetTablesAsync() => GetTablesAsync(CancellationToken.None);
 
-        public async Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
+        public Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken) =>
+            ListSheetNamesAsync(cancellationToken, throwOnError: false);
+
+        /// <summary>
+        /// Worksheet names in workbook order. Catalog callers get an empty list for an unreadable
+        /// workbook; <c>_sheets</c> and <c>EXCEL_SHEET_LIST</c> pass <paramref name="throwOnError"/> so a
+        /// script never mistakes a bad file for a workbook with no sheets.
+        /// </summary>
+        internal async Task<IEnumerable<string>> ListSheetNamesAsync(CancellationToken cancellationToken, bool throwOnError)
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             effectiveCancellationToken.ThrowIfCancellationRequested();
-            if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
+            if (!System.IO.File.Exists(_filePath))
+            {
+                if (throwOnError)
+                    throw new ExecutionException($"EXCEL workbook not found: {System.IO.Path.GetFileName(_filePath)}");
+                return Enumerable.Empty<string>();
+            }
 
             try
             {
@@ -650,8 +844,9 @@ namespace ETL_SQL.Connectors.Excel
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.Debug("[ExcelDataSource.GetTablesAsync] Failed to read sheets: {Message}",
-                    ConnectorExceptionWrapper.Wrap("Excel", ex).Message);
+                var wrapped = ConnectorExceptionWrapper.Wrap("Excel", ex);
+                if (throwOnError) throw wrapped;
+                _logger.Debug("[ExcelDataSource.GetTablesAsync] Failed to read sheets: {Message}", wrapped.Message);
                 return Enumerable.Empty<string>();
             }
         }
@@ -681,6 +876,7 @@ namespace ETL_SQL.Connectors.Excel
                 ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, string>(_options, StringComparer.OrdinalIgnoreCase);
             options["SHEET"] = sheet;
+            options.Remove("SHEET_INDEX");
             options.Remove("RANGE");
             return await new ExcelDataSource(_context, _filePath, options, _templateSchema).GetColumnsAsync(cancellationToken);
         }
@@ -795,6 +991,54 @@ namespace ETL_SQL.Connectors.Excel
             }
             ms.Position = 0;
             return new ChainedStream(ms, stream);
+        }
+
+        private sealed class ExcelSheetsMetadataDataSource(ExcelDataSource parent) : IDataSource
+        {
+            public string ConnectorType => "EXCEL";
+            public string Path => parent.Path;
+            public Dictionary<string, string>? Options => parent.Options;
+            public IDataSource WithTable(string tableName) => parent.WithTable(tableName);
+            public object? Snapshot() => null;
+            public void Restore(object? snapshot) { }
+
+            public IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatches(int batchSize = 10000) =>
+                ReadBatches(batchSize, CancellationToken.None);
+
+            public async IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatches(
+                int batchSize,
+                [EnumeratorCancellation] CancellationToken cancellationToken)
+            {
+                var sheets = (await parent.ListSheetNamesAsync(cancellationToken, throwOnError: true)).ToList();
+                var table = new ETL_SQL.Data.DataTable();
+                table.SetColumns(new[] { "SheetIndex", "SheetName" });
+                for (int i = 0; i < sheets.Count; i++)
+                {
+                    var row = table.NewRow();
+                    row["SheetIndex"] = (decimal)(i + 1);
+                    row["SheetName"] = sheets[i];
+                    await table.AddRowAsync(row);
+                }
+                yield return table;
+            }
+
+            public Task WriteBatches(IAsyncEnumerable<ETL_SQL.Data.DataTable> batches, bool append = false) =>
+                WriteBatches(batches, append, CancellationToken.None);
+
+            public Task WriteBatches(IAsyncEnumerable<ETL_SQL.Data.DataTable> batches, bool append, CancellationToken cancellationToken) =>
+                throw new ExecutionException("EXCEL metadata view '_sheets' is read-only.");
+
+            public Task<IEnumerable<string>> GetColumnsAsync() =>
+                Task.FromResult<IEnumerable<string>>(new[] { "SheetIndex", "SheetName" });
+
+            public Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken) =>
+                GetColumnsAsync();
+
+            public Task<IEnumerable<string>> GetTablesAsync() => parent.GetTablesAsync();
+            public Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken) => parent.GetTablesAsync(cancellationToken);
+            public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
+            public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => parent.GetColumnsAsync(tableName);
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
     }
 }

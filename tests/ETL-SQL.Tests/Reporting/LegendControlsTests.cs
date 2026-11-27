@@ -110,7 +110,18 @@ public class LegendControlsTests
             new StyleToken("LEGEND_TITLE", "Products"));
 
         var renderable = PlotPlanTerminalRenderer.Render(plan, 80);
-        Assert.NotNull(renderable);
+        using var writer = new System.IO.StringWriter();
+        var console = Spectre.Console.AnsiConsole.Create(new Spectre.Console.AnsiConsoleSettings
+        {
+            Ansi = Spectre.Console.AnsiSupport.No,
+            ColorSystem = Spectre.Console.ColorSystemSupport.NoColors,
+            Out = new Spectre.Console.AnsiConsoleOutput(writer)
+        });
+        console.Write(renderable);
+        var text = writer.ToString();
+        Assert.Contains("Products", text);
+        Assert.Contains("Alpha", text);
+        Assert.Contains("Beta", text);
     }
 
     [Fact]

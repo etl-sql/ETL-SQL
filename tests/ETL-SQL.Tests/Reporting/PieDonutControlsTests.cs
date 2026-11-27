@@ -206,8 +206,74 @@ public class PieDonutControlsTests
             new StyleToken("OTHER_LABEL", "Rest"));
 
         var renderable = PlotPlanTerminalRenderer.Render(plan, 80);
-        Assert.NotNull(renderable);
-        Assert.IsAssignableFrom<IRenderable>(renderable);
+        using var writer = new System.IO.StringWriter();
+        var console = Spectre.Console.AnsiConsole.Create(new Spectre.Console.AnsiConsoleSettings
+        {
+            Ansi = Spectre.Console.AnsiSupport.No,
+            ColorSystem = Spectre.Console.ColorSystemSupport.NoColors,
+            Out = new Spectre.Console.AnsiConsoleOutput(writer)
+        });
+        console.Write(renderable);
+        var text = writer.ToString();
+        var breakdownLines = text.Split('\n').Where(l => l.Contains('%')).ToList();
+        Assert.Equal(3, breakdownLines.Count);
+        Assert.Contains(breakdownLines, l => l.Contains("SegmentA", StringComparison.Ordinal) && l.Contains("(100)", StringComparison.Ordinal));
+        Assert.Contains(breakdownLines, l => l.Contains("SegmentB", StringComparison.Ordinal) && l.Contains("(80)", StringComparison.Ordinal));
+        Assert.Contains(breakdownLines, l => l.Contains("Rest", StringComparison.Ordinal) && l.Contains("(5)", StringComparison.Ordinal));
+        Assert.DoesNotContain(breakdownLines, l => l.Contains("TinyA", StringComparison.Ordinal) || l.Contains("TinyB", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void MinSlicePct_TerminalRenderer_PreservesFullPrecisionOnOtherTotal()
+    {
+        var items = new[]
+        {
+            ("BigA", 10m),
+            ("BigB", 10m),
+            ("MicroA", 0.123m),
+            ("MicroB", 0.002m)
+        };
+
+        var plan = CreatePiePlan(items, null,
+            new StyleToken("MIN_SLICE_PCT", "5"),
+            new StyleToken("OTHER_LABEL", "Rest"));
+
+        var renderable = PlotPlanTerminalRenderer.Render(plan, 80);
+        using var writer = new System.IO.StringWriter();
+        var console = Spectre.Console.AnsiConsole.Create(new Spectre.Console.AnsiConsoleSettings
+        {
+            Ansi = Spectre.Console.AnsiSupport.No,
+            ColorSystem = Spectre.Console.ColorSystemSupport.NoColors,
+            Out = new Spectre.Console.AnsiConsoleOutput(writer)
+        });
+        console.Write(renderable);
+        var text = writer.ToString();
+        Assert.Contains("(0.125)", text);
+    }
+
+    [Fact]
+    public void Pie_TerminalRenderer_UnparseableRows_ShowsNoDataMessage()
+    {
+        var data = ImmutableArray.Create(
+            new ResolvedDatum(0, ImmutableArray.Create(
+                new ResolvedChannelValue(FieldChannel.Theta, ChartValue.From("A"), "A"),
+                new ResolvedChannelValue(FieldChannel.Radius, ChartValue.From("not-a-number"), "not-a-number")), false),
+            new ResolvedDatum(1, ImmutableArray.Create(
+                new ResolvedChannelValue(FieldChannel.Theta, ChartValue.From("B"), "B"),
+                new ResolvedChannelValue(FieldChannel.Radius, ChartValue.From("also-bad"), "also-bad")), false));
+        var basePlan = CreatePiePlan([("A", 1m), ("B", 1m)]);
+        var unparseableLayer = basePlan.Layers[0] with { Data = data };
+        var plan = basePlan with { Layers = ImmutableArray.Create(unparseableLayer) };
+        var renderable = PlotPlanTerminalRenderer.Render(plan, 80);
+        using var writer = new System.IO.StringWriter();
+        var console = Spectre.Console.AnsiConsole.Create(new Spectre.Console.AnsiConsoleSettings
+        {
+            Ansi = Spectre.Console.AnsiSupport.No,
+            ColorSystem = Spectre.Console.ColorSystemSupport.NoColors,
+            Out = new Spectre.Console.AnsiConsoleOutput(writer)
+        });
+        console.Write(renderable);
+        Assert.Contains("No data available for this chart.", writer.ToString());
     }
 
     // ── 3. Slice Explosion Tests ────────────────────────────────────────────

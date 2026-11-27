@@ -28,21 +28,24 @@ namespace ETL_SQL.Connectors.Xml
             { "PATH", Array.Empty<string>() },
             { "ROOT_PATH", Array.Empty<string>() },
             { "COMPRESS", new[] { "ON", "OFF" } },
-            { "ENCRYPT", new[] { "ON", "OFF" } },
+            { "ENCRYPT", new[] { "ON", "OFF", "MACHINE", "PASSWORD", "KEYFILE", "PORTAL" } },
             { "PASSWORD", Array.Empty<string>() },
             { "ENCODING", new[] { "UTF8", "ANSI", "UTF16", "UNICODE", "LATIN1" } },
             { "TRIM", new[] { "ON", "OFF" } },
             { "TRANSACTIONAL", new[] { "ON", "OFF", "TRUE", "FALSE" } }
         };
 
-        public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "ENCRYPT", new[] { "ON", "OFF", "MACHINE", "PASSWORD", "KEYFILE", "PORTAL" } }
+        };
 
         public string GetHelp() =>
             "XML Connector: Connects to XML files.\n" +
             "Options:\n" +
             "  ROOT_PATH: XPath to the repeating element (e.g. '/Catalog/Book')\n" +
             "  COMPRESS: ON | OFF (ZIP archive; adds .zip to the path)\n" +
-            "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
+            "  ENCRYPT: ON | OFF | MACHINE | PASSWORD | KEYFILE | PORTAL (AES encryption for the file)\n" +
             "  PASSWORD: Password for encryption/decryption\n" +
             "  TRANSACTIONAL: ON | OFF (Stage write locally and rename atomically)";
 

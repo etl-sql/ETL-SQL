@@ -44,6 +44,9 @@ internal static class RowExpressionCompiler
             return true;
         }
 
+        if (TryCompileBoolPredicate(context, expression, out compiled))
+            return true;
+
         if (!TryCompile(context, expression, out var value))
         {
             compiled = static _ => false;
@@ -52,6 +55,125 @@ internal static class RowExpressionCompiler
 
         compiled = row => ToPredicate(value(row));
         return true;
+    }
+
+    private static bool TryCompileBoolPredicate(IExecutionContext context, Expression expression, out RowPredicate compiled)
+    {
+        switch (expression)
+        {
+            case BinaryExpression binary:
+                switch (binary.Operator)
+                {
+                    case TokenType.AND:
+                        if (TryCompileBoolPredicate(context, binary.Left, out var leftAnd)
+                            && TryCompileBoolPredicate(context, binary.Right, out var rightAnd))
+                        {
+                            compiled = row => leftAnd(row) && rightAnd(row);
+                            return true;
+                        }
+                        break;
+                    case TokenType.OR:
+                        if (TryCompileBoolPredicate(context, binary.Left, out var leftOr)
+                            && TryCompileBoolPredicate(context, binary.Right, out var rightOr))
+                        {
+                            compiled = row => leftOr(row) || rightOr(row);
+                            return true;
+                        }
+                        break;
+                    case TokenType.EQUALS:
+                        if (TryCompile(context, binary.Left, out var eqLeft)
+                            && TryCompile(context, binary.Right, out var eqRight))
+                        {
+                            compiled = row =>
+                            {
+                                var l = eqLeft(row);
+                                var r = eqRight(row);
+                                return !IsNull(l) && !IsNull(r) && context.IsSoftEqual(l, r);
+                            };
+                            return true;
+                        }
+                        break;
+                    case TokenType.NOT_EQUALS:
+                        if (TryCompile(context, binary.Left, out var neqLeft)
+                            && TryCompile(context, binary.Right, out var neqRight))
+                        {
+                            compiled = row =>
+                            {
+                                var l = neqLeft(row);
+                                var r = neqRight(row);
+                                return !IsNull(l) && !IsNull(r) && !context.IsSoftEqual(l, r);
+                            };
+                            return true;
+                        }
+                        break;
+                    case TokenType.GREATER_THAN:
+                        if (TryCompile(context, binary.Left, out var gtLeft)
+                            && TryCompile(context, binary.Right, out var gtRight))
+                        {
+                            compiled = row => CompareBool(context, gtLeft(row), gtRight(row)) > 0;
+                            return true;
+                        }
+                        break;
+                    case TokenType.LESS_THAN:
+                        if (TryCompile(context, binary.Left, out var ltLeft)
+                            && TryCompile(context, binary.Right, out var ltRight))
+                        {
+                            compiled = row => CompareBool(context, ltLeft(row), ltRight(row)) < 0;
+                            return true;
+                        }
+                        break;
+                    case TokenType.GREATER_EQUALS:
+                        if (TryCompile(context, binary.Left, out var geLeft)
+                            && TryCompile(context, binary.Right, out var geRight))
+                        {
+                            compiled = row =>
+                            {
+                                var l = geLeft(row);
+                                var r = geRight(row);
+                                return !IsNull(l) && !IsNull(r) && context.CompareConstants(l, r) >= 0;
+                            };
+                            return true;
+                        }
+                        break;
+                    case TokenType.LESS_EQUALS:
+                        if (TryCompile(context, binary.Left, out var leLeft)
+                            && TryCompile(context, binary.Right, out var leRight))
+                        {
+                            compiled = row =>
+                            {
+                                var l = leLeft(row);
+                                var r = leRight(row);
+                                return !IsNull(l) && !IsNull(r) && context.CompareConstants(l, r) <= 0;
+                            };
+                            return true;
+                        }
+                        break;
+                }
+                break;
+
+            case IsNullExpression isNull:
+                if (TryCompile(context, isNull.Expression, out var inner))
+                {
+                    compiled = row =>
+                    {
+                        var value = inner(row);
+                        var result = value == null
+                            || value == DBNull.Value
+                            || (value is string s
+                                && string.IsNullOrEmpty(s)
+                                && context.VarContext.GetVariable("NULL_AS_EMPTY")?.ToString() == "TRUE");
+                        return isNull.Not ? !result : result;
+                    };
+                    return true;
+                }
+                break;
+        }
+
+        compiled = static _ => false;
+        return false;
+
+        static int CompareBool(IExecutionContext ctx, object? l, object? r)
+            => IsNull(l) || IsNull(r) ? 0 : ctx.CompareConstants(l, r);
     }
 
     private static bool TryCompile(IExecutionContext context, Expression expression, out RowValue compiled)
@@ -237,8 +359,19 @@ internal static class RowExpressionCompiler
     {
         if (row.TryGetValue(name, out var value)) return value;
 
-        var names = row.GetColumnNames();
-        var nameList = names as IReadOnlyList<string> ?? new List<string>(names);
+        var schema = row.Schema;
+        IReadOnlyList<string> nameList;
+        if (schema != null)
+        {
+            nameList = !row.HasDynamicColumns
+                ? schema.GetNamesWithAliases()
+                : schema.GetNamesWithAliases().Concat(row.GetColumnNames().Skip(schema.ColumnCount)).ToList();
+        }
+        else
+        {
+            var names = row.GetColumnNames();
+            nameList = names as IReadOnlyList<string> ?? new List<string>(names);
+        }
         var match = FindMatch(name, nameList);
         if (match.IsAmbiguous)
             throw new ExecutionException($"Ambiguous identifier '{name}'. Matches: {string.Join(", ", match.Candidates)}");
@@ -250,7 +383,7 @@ internal static class RowExpressionCompiler
         throw EvaluationUtils.UnknownName(name, row);
     }
 
-    private readonly struct MatchResult
+    internal readonly struct MatchResult
     {
         public string? ResolvedKey { get; init; }
         public bool IsAmbiguous { get; init; }
@@ -263,7 +396,7 @@ internal static class RowExpressionCompiler
             => new() { ResolvedKey = key, Candidates = Array.Empty<string>() };
     }
 
-    private static MatchResult FindMatch(string name, IReadOnlyList<string> allNames)
+    internal static MatchResult FindMatch(string name, IReadOnlyList<string> allNames)
     {
         if (string.IsNullOrEmpty(name)) return MatchResult.NoMatch;
 

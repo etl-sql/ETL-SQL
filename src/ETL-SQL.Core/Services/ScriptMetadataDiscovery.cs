@@ -81,6 +81,24 @@ public sealed class ScriptMetadataDiscovery(IMetadataManager metadata)
                     break;
                 }
 
+            case TransformStatement transform when IsTempTable(transform.TargetTable.TableName):
+                {
+                    var tableName = transform.TargetTable.TableName;
+                    var sourceTable = transform.SourceTable ?? transform.TargetTable;
+                    var sourceCols = await ResolveTransformSourceColumnsAsync(sourceTable, documentUri);
+                    var projected = TransformSchemaProjection.ProjectColumns(transform, sourceCols).ToList();
+                    metadata.RegisterTempTable(documentUri, tableName, projected);
+                    activeTempTables.Add(tableName);
+
+                    if (TransformSchemaProjection.TryGetRejectIntoTable(transform, out var rejectTable) &&
+                        IsTempTable(rejectTable))
+                    {
+                        metadata.RegisterTempTable(documentUri, rejectTable, sourceCols);
+                        activeTempTables.Add(rejectTable);
+                    }
+                    break;
+                }
+
             case DockerStatement docker when RegisterConnections && !string.IsNullOrEmpty(docker.Alias):
                 metadata.RegisterDocumentConnection(documentUri, docker.Alias, "DOCKER", docker.ImageName.ToSql());
                 activeConnections.Add(docker.Alias);
@@ -159,6 +177,14 @@ public sealed class ScriptMetadataDiscovery(IMetadataManager metadata)
         }
 
         return columns.DistinctBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private async Task<List<ColumnMetadata>> ResolveTransformSourceColumnsAsync(TableReference sourceTable, string documentUri)
+    {
+        var connectionName = sourceTable.ConnectionName
+            ?? (IsTempTable(sourceTable.TableName) ? "TEMP" : metadata.GetConnections(documentUri).FirstOrDefault(c => c.IsDocument)?.Name)
+            ?? "DEFAULT";
+        return (await metadata.GetColumnDetailsAsync(connectionName, sourceTable.TableName, documentUri)).ToList();
     }
 
     private static bool IsTempTable(string tableName) => tableName.StartsWith('#');

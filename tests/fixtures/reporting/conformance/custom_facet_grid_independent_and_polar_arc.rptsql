@@ -1,0 +1,64 @@
+-- Conformance Fixture: 2D Grid Facets, Independent Resolution & Polar Arc Stack
+-- Validates FACET (ROW = ..., COLUMN = ...), RESOLVE (Y = INDEPENDENT), and COORDINATE POLAR ARC charts.
+
+SET REPORT TITLE = 'Conformance: 2D Grid Facets & Polar Arcs';
+
+SELECT 'North' AS Region, 'Direct' AS Channel, 'Q1' AS Quarter, 120.0 AS Revenue INTO #facet_grid_sales
+UNION ALL SELECT 'North', 'Direct', 'Q2', 180.0
+UNION ALL SELECT 'North', 'Partner', 'Q1', 25.0
+UNION ALL SELECT 'North', 'Partner', 'Q2', 45.0
+UNION ALL SELECT 'South', 'Direct', 'Q1', 420.0
+UNION ALL SELECT 'South', 'Direct', 'Q2', 590.0
+UNION ALL SELECT 'South', 'Partner', 'Q1', 12.0
+UNION ALL SELECT 'South', 'Partner', 'Q2', 19.0;
+
+SELECT 'Compute' AS Category, 'Core' AS GroupKey, 35.0 AS Amount INTO #polar_arc_mix
+UNION ALL SELECT 'Compute', 'Burst', 20.0
+UNION ALL SELECT 'Storage', 'Core', 30.0
+UNION ALL SELECT 'Storage', 'Burst', 15.0;
+
+CREATE VISUAL FacetGridIndependentBars AS CUSTOM (
+    TITLE = 'Regional Channel Revenue (2D Facet, Independent Y)',
+    SOURCE = #facet_grid_sales,
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            q = BAND (CHANNEL = X, ORDER = SOURCE),
+            rev = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+        ),
+        FACET (ROW = Region, COLUMN = Channel),
+        RESOLVE (Y = INDEPENDENT),
+        LAYERS (
+            bars = RECT (
+                ENCODE (
+                    X = Quarter (TYPE = NOMINAL, SCALE = q),
+                    Y = Revenue (TYPE = QUANTITATIVE, SCALE = rev)
+                )
+            )
+        )
+    )
+);
+
+CREATE VISUAL CustomPolarArcRings AS CUSTOM (
+    TITLE = 'Stacked Polar Arc Breakdown',
+    SOURCE = #polar_arc_mix,
+    CHART (
+        COORDINATE (TYPE = POLAR, INNER_RADIUS = 0.25),
+        LAYERS (
+            rings = ARC (
+                ENCODE (
+                    THETA = Category (TYPE = NOMINAL),
+                    RADIUS = Amount (TYPE = QUANTITATIVE, STACK = ZERO),
+                    COLOR = GroupKey (TYPE = NOMINAL)
+                )
+            )
+        )
+    )
+);
+
+CREATE PAGE FacetAndPolarDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B',
+        MAP ('A' = FacetGridIndependentBars, 'B' = CustomPolarArcRings)
+    )
+);

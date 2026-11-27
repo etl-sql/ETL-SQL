@@ -230,6 +230,7 @@ namespace ETL_SQL.Portal.Tests
                     {
                         ReportId = rRevenue.Id,
                         ManifestPath = snapshotPath,
+                        ScriptHashAtRunTime = "sha256:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(pRevenue))).ToLowerInvariant(),
                         BuiltAt = DateTime.UtcNow,
                         BuiltBy = uAdmin.Id
                     });
@@ -816,6 +817,7 @@ namespace ETL_SQL.Portal.Tests
                 {
                     ReportId = rRevenueId,
                     ManifestPath = exportSnapshotPath,
+                    ScriptHashAtRunTime = "sha256:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(invoiceScriptPath))).ToLowerInvariant(),
                     BuiltAt = DateTime.UtcNow.AddMinutes(1),
                     BuiltBy = 1
                 });

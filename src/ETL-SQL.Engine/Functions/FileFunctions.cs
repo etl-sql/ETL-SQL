@@ -10,6 +10,7 @@ using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Functions;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Functions
 {
@@ -22,27 +23,35 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Registers file-related functions into the global function registry.</summary>
         public static void Register(IFunctionRegistry registry)
         {
-            registry.RegisterWithHelp("REMOTE_FILE_LIST", RemoteFileList, "REMOTE_FILE_LIST(conn_str, [path]): Returns a table of files from a remote connection (SFTP/FTP/Blob).");
+            registry.RegisterWithHelp("REMOTE_FILE_LIST", RemoteFileList, "REMOTE_FILE_LIST(conn_str, [path], [recursive]): Returns a table of files from a remote connection (SFTP/FTP/Blob/S3/SharePoint).");
             registry.RegisterWithHelp("REMOTE_FILE_EXISTS", RemoteFileExists, "REMOTE_FILE_EXISTS(connection, path): Returns 1 if the remote file (or directory, for backward compatibility) exists, or 0 otherwise. Prefer REMOTE_DIRECTORY_EXISTS for directories.");
             registry.RegisterWithHelp("REMOTE_DIRECTORY_EXISTS", RemoteDirectoryExists, "REMOTE_DIRECTORY_EXISTS(connection, path): Returns 1 if the remote directory exists, or 0 otherwise.");
             registry.RegisterWithHelp("REMOTE_FILE_SIZE", RemoteFileSize, "REMOTE_FILE_SIZE(connection, path): Returns the size in bytes of a remote file, or NULL if not found.");
             registry.RegisterWithHelp("REMOTE_FILE_MODIFIED", RemoteFileModified, "REMOTE_FILE_MODIFIED(connection, path): Returns the last modified timestamp of a remote file as a DATETIME, or NULL if not found or unavailable.");
             registry.RegisterWithHelp("FILE_LIST", FileList, "FILE_LIST(path, [recursive]): Returns a table of files in a local directory.");
+            registry.RegisterWithHelp("ARCHIVE_LIST", ArchiveList, "ARCHIVE_LIST(path): Returns a table of archive entries (Name, FullPath, Size, CompressedSize, LastModified, IsDirectory) for .zip, .tar, .tar.gz, .tgz, or .gz files without extracting to disk.");
+            registry.RegisterWithHelp("EXCEL_SHEET_LIST", ExcelSheetList, "EXCEL_SHEET_LIST(path_or_connection): Returns a table of worksheets (SheetIndex, SheetName) in an Excel workbook (.xlsx, .xls, .xlsb) or EXCEL connection.");
             registry.RegisterWithHelp("DIRECTORY", FileList, "DIRECTORY(path, [recursive]): Alias for FILE_LIST.");
             registry.RegisterWithHelp("FILE_EXISTS", FileExists, "FILE_EXISTS(path): Returns true if the file exists.");
             registry.RegisterWithHelp("DIRECTORY_EXISTS", DirectoryExists, "DIRECTORY_EXISTS(path): Returns true if the directory exists.");
+            registry.RegisterWithHelp("DIRECTORY_SIZE", DirectorySize, "DIRECTORY_SIZE(path [, recursive]): Returns the total size in bytes of files in a local directory.");
+            registry.RegisterWithHelp("DIRECTORY_FILE_COUNT", DirectoryFileCount, "DIRECTORY_FILE_COUNT(path [, recursive]): Returns the number of files in a local directory.");
 
             registry.RegisterWithHelp("FILE_HASH", FileHash, "FILE_HASH(path [, algorithm]): Computes the cryptographic hash of a file (MD5, SHA1, SHA256, SHA512).");
             registry.RegisterWithHelp("FILE_SIZE", FileSize, "FILE_SIZE(path): Returns the size of a local file in bytes.");
             registry.RegisterWithHelp("FILE_LINE_COUNT", FileLineCount, "FILE_LINE_COUNT(path [, header_rows]): Streams a local file once and returns the number of lines after skipping optional header_rows.");
             registry.RegisterWithHelp("FILE_CREATED", FileCreated, "FILE_CREATED(path): Returns the creation timestamp of a local file as a DATETIME.");
             registry.RegisterWithHelp("FILE_MODIFIED", FileModified, "FILE_MODIFIED(path): Returns the last write timestamp of a file as a DATETIME.");
+            registry.RegisterWithHelp("FILE_ACCESSED", FileAccessed, "FILE_ACCESSED(path): Returns the last access timestamp of a local file as a DATETIME.");
+            registry.RegisterWithHelp("FILE_READONLY", FileReadOnly, "FILE_READONLY(path): Returns 1 if the local file is read-only, or 0 otherwise.");
             registry.RegisterWithHelp("PATH_COMBINE", PathCombine, "PATH_COMBINE(p1, p2 [, ...]): Combines multiple path segments into a single path.");
             registry.RegisterWithHelp("PATH_FILENAME", PathFilename, "PATH_FILENAME(path): Extracts the filename and extension from a path.");
             registry.RegisterWithHelp("PATH_FILENAME_NO_EXT", PathFilenameNoExt, "PATH_FILENAME_NO_EXT(path): Extracts the filename without its extension from a path.");
             registry.RegisterWithHelp("PATH_EXTENSION", PathExtension, "PATH_EXTENSION(path): Extracts the extension from a path.");
             registry.RegisterWithHelp("PATH_CHANGE_EXTENSION", PathChangeExtension, "PATH_CHANGE_EXTENSION(path, ext): Replaces or removes the extension of a path (accepts '.bak', 'bak', or '' to remove).");
             registry.RegisterWithHelp("PATH_DIRECTORY", PathDirectory, "PATH_DIRECTORY(path): Extracts the directory information from a path.");
+            registry.RegisterWithHelp("PATH_ROOT", PathRoot, "PATH_ROOT(path): Extracts the root directory information from a path.");
+            registry.RegisterWithHelp("PATH_IS_ABSOLUTE", PathIsAbsolute, "PATH_IS_ABSOLUTE(path): Returns 1 if the path is fully qualified (absolute), or 0 otherwise.");
         }
 
         /// <summary>
@@ -119,6 +128,22 @@ namespace ETL_SQL.Engine.Functions
             string resolvedPath = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Read);
             if (!File.Exists(resolvedPath)) return null;
             return new FileInfo(resolvedPath).LastWriteTime;
+        }
+
+        private static object? FileAccessed(List<object?> args, IExecutionContext context)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            string resolvedPath = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Read);
+            if (!File.Exists(resolvedPath)) return null;
+            return new FileInfo(resolvedPath).LastAccessTime;
+        }
+
+        private static object? FileReadOnly(List<object?> args, IExecutionContext context)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            string resolvedPath = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Read);
+            if (!File.Exists(resolvedPath)) return null;
+            return new FileInfo(resolvedPath).IsReadOnly ? 1m : 0m;
         }
 
         private static async Task<object?> FileLineCount(List<object?> args, IExecutionContext context)
@@ -261,25 +286,65 @@ namespace ETL_SQL.Engine.Functions
             return Path.GetDirectoryName(args[0]?.ToString() ?? "");
         }
 
+        private static object? PathRoot(List<object?> args, IExecutionContext context)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            return Path.GetPathRoot(args[0]?.ToString() ?? "") ?? "";
+        }
+
+        private static object? PathIsAbsolute(List<object?> args, IExecutionContext context)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            return Path.IsPathFullyQualified(args[0]?.ToString() ?? "") ? 1m : 0m;
+        }
+
         private static async Task<object?> RemoteFileList(List<object?> args, IExecutionContext context)
         {
             if (args.Count < 1) throw new ExecutionException("REMOTE_FILE_LIST requires at least a connection name.");
+            if (args.Count > 3) throw new ExecutionException("REMOTE_FILE_LIST accepts at most 3 arguments: connection_name, optional path, and optional recursive flag.");
             string connName = args[0]?.ToString() ?? "";
             string path = args.Count > 1 ? args[1]?.ToString() ?? "" : "";
+            bool recursive = args.Count > 2 && args[2] != null && ParseRecursiveFlag(args[2]);
             var remoteFs = GetRemoteFileSystem(context, connName);
 
             var table = new DataTable();
-            table.SetColumns(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
-            await foreach (var fileMeta in remoteFs.ListFilesAsync(path))
+            table.SetColumns(FileMetaData.StandardColumns);
+            if (recursive)
             {
-                await table.AddRowAsync(new Row
+                await foreach (var entry in RemoteDirectoryWalker.WalkAsync(remoteFs, path, recursive: true, context, context.CancellationToken))
                 {
-                    ["Name"] = fileMeta.Name,
-                    ["FullPath"] = fileMeta.FullPath,
-                    ["Size"] = fileMeta.Size,
-                    ["LastModified"] = fileMeta.LastModified,
-                    ["IsDirectory"] = fileMeta.IsDirectory
-                });
+                    var fileMeta = entry.Meta;
+                    await table.AddRowAsync(new Row
+                    {
+                        ["Name"] = fileMeta.Name,
+                        ["FullPath"] = fileMeta.FullPath,
+                        ["Size"] = fileMeta.Size,
+                        ["LastModified"] = fileMeta.LastModified,
+                        ["IsDirectory"] = fileMeta.IsDirectory,
+                        ["CreationTime"] = fileMeta.CreationTime,
+                        ["Permissions"] = fileMeta.Permissions,
+                        ["Owner"] = fileMeta.Owner,
+                        ["IsSymlink"] = fileMeta.IsSymlink
+                    });
+                }
+            }
+            else
+            {
+                await foreach (var fileMeta in remoteFs.ListFilesAsync(path))
+                {
+                    await table.AddRowAsync(new Row
+                    {
+                        ["Name"] = fileMeta.Name,
+                        ["FullPath"] = fileMeta.FullPath,
+                        ["Size"] = fileMeta.Size,
+                        ["LastModified"] = fileMeta.LastModified,
+                        ["IsDirectory"] = fileMeta.IsDirectory,
+                        ["CreationTime"] = fileMeta.CreationTime,
+                        ["Permissions"] = fileMeta.Permissions,
+                        ["Owner"] = fileMeta.Owner,
+                        ["IsSymlink"] = fileMeta.IsSymlink
+                    });
+                }
             }
             return table;
         }
@@ -298,6 +363,104 @@ namespace ETL_SQL.Engine.Functions
             return Task.FromResult<object?>((object?)(res ? 1m : 0m));
         }
 
+        private static object? DirectorySize(List<object?> args, IExecutionContext context)
+        {
+            var stats = MeasureDirectory(args, context, "DIRECTORY_SIZE");
+            return stats.HasValue ? (decimal)stats.Value.TotalBytes : null;
+        }
+
+        private static object? DirectoryFileCount(List<object?> args, IExecutionContext context)
+        {
+            var stats = MeasureDirectory(args, context, "DIRECTORY_FILE_COUNT");
+            return stats.HasValue ? (decimal)stats.Value.FileCount : null;
+        }
+
+        private static bool ParseRecursiveFlag(object? arg) =>
+            arg is bool b
+                ? b
+                : (arg is string s
+                    ? s.Equals("TRUE", StringComparison.OrdinalIgnoreCase)
+                        || s.Equals("ON", StringComparison.OrdinalIgnoreCase)
+                        || s == "1"
+                    : Convert.ToBoolean(arg));
+
+        private static bool IsReparseOrLink(FileSystemInfo entry) =>
+            (entry.Attributes & FileAttributes.ReparsePoint) != 0 || entry.LinkTarget != null;
+
+        private static (long FileCount, long TotalBytes)? MeasureDirectory(List<object?> args, IExecutionContext context, string functionName)
+        {
+            if (args.Count > 2)
+                throw new ExecutionException($"{functionName} accepts at most 2 arguments: path and optional recursive flag.");
+            if (args.Count < 1 || args[0] == null) return null;
+
+            bool recursive = false;
+            if (args.Count == 2)
+            {
+                if (args[1] == null) return null;
+                recursive = ParseRecursiveFlag(args[1]);
+            }
+
+            string resolvedPath = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Enumerate);
+            if (!Directory.Exists(resolvedPath)) return null;
+
+            long fileCount = 0;
+            long totalBytes = 0;
+            foreach (var fi in EnumerateAuthorizedDirectoryFiles(resolvedPath, recursive, depth: 0, context))
+            {
+                fileCount++;
+                totalBytes += fi.Length;
+            }
+            return (fileCount, totalBytes);
+        }
+
+        private static IEnumerable<FileInfo> EnumerateAuthorizedDirectoryFiles(
+            string currentDir,
+            bool recursive,
+            int depth,
+            IExecutionContext context)
+        {
+            context.CancellationToken.ThrowIfCancellationRequested();
+            var dirInfo = new DirectoryInfo(currentDir);
+
+            foreach (var fi in dirInfo.EnumerateFiles())
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                // Skip symlink/reparse file entries so traversal never escapes the authorized root.
+                if (IsReparseOrLink(fi)) continue;
+                context.IncrementOperationCount(OperationType.FileSystem, fi.FullName);
+                yield return fi;
+            }
+
+            if (!recursive) yield break;
+
+            foreach (var subDir in dirInfo.EnumerateDirectories())
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                // Never follow directory junctions or symlinks out of the authorized root.
+                if (IsReparseOrLink(subDir)) continue;
+
+                int nextDepth = depth + 1;
+                context.SecurityService.CheckRunawayProtection(
+                    OperationType.FileSystem,
+                    0,
+                    nextDepth,
+                    allowLargeCount: context.AllowLargeFileOperationCount,
+                    allowDeepRecursion: context.AllowDeepRecursion,
+                    path: subDir.FullName);
+                if (context.ExecutionPolicy?.IsEnrolled ?? EnterprisePolicyRuntime.Current.IsEnrolled)
+                {
+                    OperationPolicyBoundary.EnforceCeiling(
+                        context,
+                        "Security:MaxRecursiveNestingDepth",
+                        nextDepth,
+                        "<recursive-nesting-depth>");
+                }
+
+                foreach (var child in EnumerateAuthorizedDirectoryFiles(subDir.FullName, recursive: true, nextDepth, context))
+                    yield return child;
+            }
+        }
+
         private static async Task<object?> FileList(List<object?> args, IExecutionContext context)
         {
             var table = new DataTable();
@@ -305,14 +468,13 @@ namespace ETL_SQL.Engine.Functions
 
             if (args.Count < 1 || args[0] == null) return table;
             string path = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Enumerate);
-            bool recursive = args.Count >= 2 && args[1] != null && (args[1] is bool b ? b : (args[1] is string s ? s.Equals("TRUE", StringComparison.OrdinalIgnoreCase) : Convert.ToBoolean(args[1])));
+            bool recursive = args.Count >= 2 && args[1] != null && ParseRecursiveFlag(args[1]);
 
             if (!Directory.Exists(path)) return table;
 
-            foreach (var fPath in Directory.EnumerateFiles(path, "*", (recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)))
+            foreach (var fi in EnumerateAuthorizedDirectoryFiles(path, recursive, depth: 0, context))
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
-                var fi = new FileInfo(fPath);
                 await table.AddRowAsync(new Row
                 {
                     ["Name"] = fi.Name,
@@ -322,6 +484,42 @@ namespace ETL_SQL.Engine.Functions
                     ["LastModified"] = fi.LastWriteTime
                 });
             }
+            return table;
+        }
+
+        private static async Task<object?> ArchiveList(List<object?> args, IExecutionContext context)
+        {
+            var table = new DataTable();
+            table.SetColumns(new[] { "Name", "FullPath", "Size", "CompressedSize", "LastModified", "IsDirectory" });
+
+            if (args.Count < 1 || args[0] == null) return table;
+            string rawPath = args[0]?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(rawPath)) return table;
+
+            string resolvedPath = AuthorizeLocalPath(context, rawPath, FileSystemAccessKind.Read);
+            if (!File.Exists(resolvedPath))
+            {
+                throw new ExecutionException($"Archive file not found: {rawPath}");
+            }
+
+            string? formatArg = args.Count >= 2 ? args[1]?.ToString() : null;
+            var format = SafeArchiveService.ResolveFormat(formatArg, resolvedPath, defaultToZipIfUnknown: false);
+            var entries = SafeArchiveService.ListEntries(resolvedPath, format, context.CancellationToken);
+
+            foreach (var entry in entries)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                await table.AddRowAsync(new Row
+                {
+                    ["Name"] = entry.Name,
+                    ["FullPath"] = entry.FullPath,
+                    ["Size"] = entry.Size,
+                    ["CompressedSize"] = entry.CompressedSize,
+                    ["LastModified"] = entry.LastModified,
+                    ["IsDirectory"] = entry.IsDirectory
+                });
+            }
+
             return table;
         }
 
@@ -423,6 +621,50 @@ namespace ETL_SQL.Engine.Functions
             {
                 throw new ExecutionException($"{functionName} failed for '{path}' on '{connName}': {ex.Message}", ex);
             }
+        }
+
+        private static async Task<object?> ExcelSheetList(List<object?> args, IExecutionContext context)
+        {
+            if (args.Count < 1 || args[0] == null)
+                throw new ExecutionException("EXCEL_SHEET_LIST requires a workbook path or EXCEL connection name.");
+
+            string target = args[0]!.ToString()?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(target))
+                throw new ExecutionException("EXCEL_SHEET_LIST requires a non-empty workbook path or EXCEL connection name.");
+
+            if (context.Connections.TryGetValue(target, out var existing)
+                && existing.ConnectorType.Equals("EXCEL", StringComparison.OrdinalIgnoreCase))
+            {
+                return await ReadSheetListAsync(existing, context);
+            }
+
+            string authorizedPath = AuthorizeLocalPath(context, target, FileSystemAccessKind.Read);
+            if (!File.Exists(authorizedPath))
+                throw new ExecutionException($"EXCEL_SHEET_LIST workbook not found: {target}");
+
+            var connector = ConnectorRegistry.Instance?.GetConnector("EXCEL")
+                ?? throw new ExecutionException("EXCEL connector is not registered.");
+            await using var ds = connector.CreateDataSource(context, authorizedPath);
+            return await ReadSheetListAsync(ds, context);
+        }
+
+        // The connection's `_sheets` view lists the sheets and errors on an unreadable workbook, so the
+        // function and `SELECT * FROM conn._sheets` share one path.
+        private static async Task<DataTable> ReadSheetListAsync(IDataSource workbook, IExecutionContext context)
+        {
+            var sheetsView = workbook.WithTable("_sheets");
+            DataTable? result = null;
+            await foreach (var batch in sheetsView.ReadBatches(10000, context.CancellationToken))
+            {
+                if (result == null) { result = batch; continue; }
+                foreach (var row in batch.Rows) await result.AddRowAsync(row);
+            }
+            if (result == null)
+            {
+                result = new DataTable();
+                result.SetColumns(new[] { "SheetIndex", "SheetName" });
+            }
+            return result;
         }
 
         private static IRemoteFileSystem GetRemoteFileSystem(IExecutionContext context, string connName)

@@ -43,7 +43,7 @@ try {
     for (const args of [['build', '--platform'], ['build', '--sign', 'key'], ['build', '-p', host.platform, '-p', host.platform]])
         assert.throws(() => parsePackagingArguments(args), /Unknown, duplicate, or incomplete/);
     for (const directory of ['src/etl-sql-vscode/src', 'src/etl-sql-vscode/resources', 'src/etl-sql-vscode/syntaxes',
-        'src/etl-sql-vscode/snippets', 'src/etl-sql-vscode/ui', 'build/signing', 'deploy', 'capacity-results/workloads']) fs.mkdirSync(path.join(root, directory), { recursive: true });
+        'src/etl-sql-vscode/snippets', 'src/etl-sql-vscode/ui', 'src/etl-sql-vscode/media/walkthrough', 'build/signing', 'deploy', 'capacity-results/workloads']) fs.mkdirSync(path.join(root, directory), { recursive: true });
     write('Directory.Build.props', `<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework><VersionPrefix>${identity.version}</VersionPrefix><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup></Project>\n`);
     write('Directory.Build.targets', '<Project />\n');
     write('Directory.Packages.props', fs.readFileSync(path.join(repository, 'Directory.Packages.props')));
@@ -93,6 +93,10 @@ try {
     write('src/NewAuthoredSource.cs', 'namespace Regression;\n');
     assert.notEqual(packagingInputSignature(root), signature, 'Adding a .NET source must invalidate the candidate.');
     fs.unlinkSync(path.join(root, 'src/NewAuthoredSource.cs'));
+    assert.equal(packagingInputSignature(root), signature);
+    write('src/etl-sql-vscode/media/walkthrough/regression.md', '# Step\n');
+    assert.notEqual(packagingInputSignature(root), signature, 'A changed walkthrough page must invalidate the candidate.');
+    fs.unlinkSync(path.join(root, 'src/etl-sql-vscode/media/walkthrough/regression.md'));
     assert.equal(packagingInputSignature(root), signature);
     assert.throws(() => packagingIdentity(root, '0.20.0'), /must agree/);
     const outputDirectory = path.join(root, 'accepted');

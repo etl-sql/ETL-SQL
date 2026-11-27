@@ -1,11 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Engines;
 
@@ -20,11 +25,13 @@ internal sealed class ExternalDistinctEngine
     private const long MaxFanOutSampleBytes = 16L * 1024 * 1024;
 
     private readonly IExecutionContext _context;
+    private readonly IBufferManager? _bufferManager;
     private int _partitionCount;
 
     public ExternalDistinctEngine(IExecutionContext context)
     {
         _context = context;
+        _bufferManager = context.ServiceProvider?.GetService<IBufferManager>();
         _partitionCount = Math.Max(1, context.ExternalHashPartitions);
     }
 
@@ -32,11 +39,14 @@ internal sealed class ExternalDistinctEngine
     internal long ColumnarBuildRows { get; private set; }
     internal long ColumnarRepartitionRows { get; private set; }
 
-    public async IAsyncEnumerable<Row> ApplyAsync(IAsyncEnumerable<Row> source)
+    public async IAsyncEnumerable<Row> ApplyAsync(
+        IAsyncEnumerable<Row> source,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        using var linkedCts = PipelineCursorScope.LinkCancellationTokens(_context.CancellationToken, cancellationToken, out var effectiveCancellationToken);
         var threshold = Math.Max(1, _context.JoinSpillThreshold);
         var prefix = new List<Row>(Math.Min(threshold, 4096));
-        await using var enumerator = source.GetAsyncEnumerator();
+        await using var enumerator = source.GetAsyncEnumerator(effectiveCancellationToken);
         while (prefix.Count < threshold && await enumerator.MoveNextAsync())
             prefix.Add(enumerator.Current);
 
@@ -48,6 +58,11 @@ internal sealed class ExternalDistinctEngine
             yield break;
         }
 
+        using var cursor = await PipelineCursorScope.AcquireCursorAsync(
+            _bufferManager,
+            _context.SessionId ?? "DEFAULT",
+            effectiveCancellationToken,
+            owner: this);
         ConfigurePartitionCount(prefix);
 
         var tempFiles = new List<string>();
@@ -135,15 +150,37 @@ internal sealed class ExternalDistinctEngine
             yield break;
         }
 
-        // Governor on → build with a memory backstop so wide rows under the row threshold still
-        // can't blow the ceiling. On pressure (null), try to repartition; if that can't help,
-        // apply the governor policy.
-        var built = await DedupToList(name, ceiling);
+        // Governor on → build with a memory backstop and shared coordinator lease so wide rows under
+        // the row threshold still can't blow the ceiling. On pressure (null), release the lease,
+        // try to repartition; if that can't help, apply the governor policy.
+        var arbiter = _context.MemoryArbiter ?? MemoryGrantArbiter.Shared;
+        var dedupLease = arbiter.AcquireLease();
+        PackedRows? built = null;
+        try
+        {
+            built = await DedupToList(name, ceiling, dedupLease);
+        }
+        catch
+        {
+            dedupLease.Dispose();
+            throw;
+        }
+
         if (built != null)
         {
-            foreach (var blob in built.Blobs) yield return RowPacker.Unpack(blob, built.Columns);
+            try
+            {
+                foreach (var blob in built.Blobs) yield return RowPacker.Unpack(blob, built.Columns);
+            }
+            finally
+            {
+                built.Dispose();
+                dedupLease.Dispose();
+            }
             yield break;
         }
+
+        dedupLease.Dispose();
 
         if (canRepartition)
         {
@@ -199,7 +236,10 @@ internal sealed class ExternalDistinctEngine
         {
             names[partition] = $"distinct_d{depth}_{operationId}_{partition}.tmp";
             tempFiles.Add(names[partition]);
-            writers[partition] = await _context.SpillStore.CreateWriterAsync(names[partition], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
+            writers[partition] = await _context.SpillStore.CreateWriterAsync(
+                names[partition],
+                SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount),
+                SpillFanOut.FlushBytes(_context.EffectiveBatchTargetBytes, PartitionCount));
         }
 
         try
@@ -248,58 +288,74 @@ internal sealed class ExternalDistinctEngine
     /// rows count against the budget — a duplicate adds nothing to the in-memory set. The duplicate
     /// check still needs the <see cref="CompoundKey"/> in <c>seen</c>; only the output rows are packed.
     /// </summary>
-    private async Task<PackedRows?> DedupToList(string name, long ceiling)
+    private async Task<PackedRows?> DedupToList(string name, long ceiling, IMemoryGrantLease lease)
     {
         var seen = new HashSet<CompoundKey>();
         var packed = new PackedRows();
-        var packer = new RowPacker();
+        using var packer = new RowPacker();
         bool columnsCaptured = false;
         var guard = new MemoryBudgetGuard(ceiling);
-        await using var reader = await _context.SpillStore.CreateReaderAsync(name);
-        if (reader is IColumnarSpillReader columnarReader)
+        try
         {
-            await foreach (var batch in columnarReader.AsColumnBatchesAsync())
+            await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+            if (reader is IColumnarSpillReader columnarReader)
             {
-                using (batch)
+                await foreach (var batch in columnarReader.AsColumnBatchesAsync())
                 {
+                    using (batch)
+                    {
+                        if (!columnsCaptured)
+                        {
+                            packed.Columns.AddRange(batch.Schema.Fields.Select(field => field.Name));
+                            columnsCaptured = true;
+                        }
+                        for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                        {
+                            ColumnarBuildRows++;
+                            var key = Key(batch, rowIndex);
+                            if (!seen.Add(key)) continue;
+                            var blob = packer.Pack(batch, rowIndex);
+                            packed.Blobs.Add(blob);
+                            guard.Add(blob.Length + 24 + RowMemory.EstimateKeyBytes(key));
+                            if (guard.Exceeded() || lease.RegisterAndCheckSpill(guard.BytesAccumulated))
+                            {
+                                packed.Dispose();
+                                return null;
+                            }
+                        }
+                    }
+                }
+                return packed;
+            }
+
+            await foreach (var row in reader.AsEnumerableAsync())
+            {
+                var key = Key(row);
+                if (seen.Add(key))
+                {
+                    // Uniform partition schema → capture the column order once (matches the join build).
                     if (!columnsCaptured)
                     {
-                        packed.Columns.AddRange(batch.Schema.Fields.Select(field => field.Name));
+                        packed.Columns.AddRange(row.GetColumnNames());
                         columnsCaptured = true;
                     }
-                    for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                    var blob = packer.Pack(row, packed.Columns);
+                    packed.Blobs.Add(blob);
+                    guard.Add(blob.Length + 24 + RowMemory.EstimateKeyBytes(key)); // blob + seen-set key
+                    if (guard.Exceeded() || lease.RegisterAndCheckSpill(guard.BytesAccumulated))
                     {
-                        ColumnarBuildRows++;
-                        var key = Key(batch, rowIndex);
-                        if (!seen.Add(key)) continue;
-                        var blob = packer.Pack(batch, rowIndex);
-                        packed.Blobs.Add(blob);
-                        guard.Add(blob.Length + 24 + RowMemory.EstimateKeyBytes(key));
-                        if (guard.Exceeded()) return null;
+                        packed.Dispose();
+                        return null;
                     }
                 }
             }
             return packed;
         }
-
-        await foreach (var row in reader.AsEnumerableAsync())
+        catch
         {
-            var key = Key(row);
-            if (seen.Add(key))
-            {
-                // Uniform partition schema → capture the column order once (matches the join build).
-                if (!columnsCaptured)
-                {
-                    packed.Columns.AddRange(row.GetColumnNames());
-                    columnsCaptured = true;
-                }
-                var blob = packer.Pack(row, packed.Columns);
-                packed.Blobs.Add(blob);
-                guard.Add(blob.Length + 24 + RowMemory.EstimateKeyBytes(key)); // blob + seen-set key
-                if (guard.Exceeded()) return null;
-            }
+            packed.Dispose();
+            throw;
         }
-        return packed;
     }
 
     private async IAsyncEnumerable<Row> DedupInMemory(string name)
@@ -340,7 +396,10 @@ internal sealed class ExternalDistinctEngine
             {
                 names[i] = $"distinct_d{depth}_{operationId}_{i}.tmp";
                 tempFiles.Add(names[i]);
-                writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, partitionCount));
+                writers[i] = await _context.SpillStore.CreateWriterAsync(
+                    names[i],
+                    SpillFanOut.FlushRows(_context.EffectiveBatchSize, partitionCount),
+                    SpillFanOut.FlushBytes(_context.EffectiveBatchTargetBytes, partitionCount));
             }
 
             await foreach (var row in source)
@@ -422,9 +481,20 @@ internal sealed class ExternalDistinctEngine
 
     /// <summary>The distinct rows of a partition held as compact packed blobs plus the shared column
     /// order captured from the first retained row, used to decode each blob back to a <see cref="Row"/>.</summary>
-    private sealed class PackedRows
+    private sealed class PackedRows : IDisposable
     {
         public readonly List<string> Columns = new();
         public readonly List<byte[]> Blobs = new();
+
+        public void Dispose()
+        {
+            for (var i = 0; i < Blobs.Count; i++)
+            {
+                if (Blobs[i] is { Length: > 0 } blob)
+                    CryptographicOperations.ZeroMemory(blob);
+            }
+            Blobs.Clear();
+            Columns.Clear();
+        }
     }
 }

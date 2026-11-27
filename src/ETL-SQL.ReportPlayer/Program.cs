@@ -271,9 +271,9 @@ if (multiMode)
         var body = await JsonSerializer.DeserializeAsync<NativeChartLayoutRequest>(ctx.Request.Body, webOptions);
         if (body == null || string.IsNullOrWhiteSpace(body.VisualName)
             || !Enum.TryParse<NativeChartLayoutTier>(body.Tier, true, out var tier))
-            return Results.BadRequest("visualName and a COMPACT, STANDARD, or WIDE tier are required");
-        var manifest = await svc.ResolveVisualLayoutAsync(body.VisualName, tier);
-        return manifest is null ? Results.NotFound() : BrowserManifest(manifest);
+            return Results.BadRequest("visualName and a valid native layout tier are required");
+        var patch = await svc.ResolveVisualLayoutPatchAsync(body.VisualName, tier);
+        return patch is null ? Results.NotFound() : Results.Json(patch, noCache);
     });
 
     app.MapPost("/reports/{name}/api/bookmark",
@@ -390,9 +390,9 @@ else
         var body = await JsonSerializer.DeserializeAsync<NativeChartLayoutRequest>(ctx.Request.Body, webOptions);
         if (body == null || string.IsNullOrWhiteSpace(body.VisualName)
             || !Enum.TryParse<NativeChartLayoutTier>(body.Tier, true, out var tier))
-            return Results.BadRequest("visualName and a COMPACT, STANDARD, or WIDE tier are required");
-        var manifest = await svc.ResolveVisualLayoutAsync(body.VisualName, tier);
-        return manifest is null ? Results.NotFound() : BrowserManifest(manifest);
+            return Results.BadRequest("visualName and a valid native layout tier are required");
+        var patch = await svc.ResolveVisualLayoutPatchAsync(body.VisualName, tier);
+        return patch is null ? Results.NotFound() : Results.Json(patch, noCache);
     });
 
     app.MapPost("/api/bookmark", async (HttpContext ctx, DashboardService svc) =>

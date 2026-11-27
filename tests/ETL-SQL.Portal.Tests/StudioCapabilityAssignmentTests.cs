@@ -148,11 +148,11 @@ public sealed class StudioCapabilityAssignmentTests
         Assert.Equal(HttpStatusCode.OK, grantRes.StatusCode);
 
         // Under NoRoleCapabilitiesFactory, admin has no capabilities from role mappings.
-        // Grant ReportPublish to an admin group so admin can publish the seed report.
+        // Grant ReportPublish and ScriptIngress to an admin group so admin can publish the seed report via ScriptPath.
         var adminGroupId = await CreateGroupAsync(client, adminToken, $"admin_grp_{suffix}");
         Assert.Equal(HttpStatusCode.OK,
             (await SetCapabilitiesAsync(client, adminToken, adminGroupId,
-                [StudioCapabilities.StudioAccess, StudioCapabilities.ReportPublish, StudioCapabilities.ScriptSave])).StatusCode);
+                [StudioCapabilities.StudioAccess, StudioCapabilities.ReportPublish, StudioCapabilities.ScriptIngress, StudioCapabilities.ScriptSave])).StatusCode);
         var usersRes = await AuthGet(client, adminToken, "/api/admin/users");
         var usersObj = await usersRes.Content.ReadFromJsonAsync<JsonObject>(Json);
         var adminUserId = usersObj!["items"]!.AsArray().First(u => u!["userName"]!.GetValue<string>() == "admin")!["id"]!.GetValue<int>();

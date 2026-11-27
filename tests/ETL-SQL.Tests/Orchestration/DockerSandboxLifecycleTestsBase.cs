@@ -311,6 +311,9 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         await secondAttempt.DestroyAsync(default);
         Assert.False(await ContainerExistsAsync(secondContainer));
         await secondWorkspace.DestroyAsync();
+        // Both sandboxes wrote this session as their own uid; the orchestrator's account must
+        // still be able to remove it (retention, tenant offboarding, fixture cleanup).
+        Directory.Delete(Path.Combine(SessionRoot, "tenant-a", sessionId), recursive: true);
     }
 
     /// <summary>
@@ -636,17 +639,11 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         }
 
         if (!Directory.Exists(_root)) return;
-        try
-        {
-            foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
-                File.SetAttributes(file, FileAttributes.Normal);
-            Directory.Delete(_root, recursive: true);
-        }
-        catch
-        {
-            // On Linux CI, volume-mounted files written by Docker containers (e.g. metadata.db)
-            // may belong to container UIDs that the host runner cannot remove.
-        }
+        // Sandboxes share this account's group (setgid leaves, umask 0007), so everything they
+        // wrote here is removable by this account. A failure is a real leak, not noise to swallow.
+        foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
+            File.SetAttributes(file, FileAttributes.Normal);
+        Directory.Delete(_root, recursive: true);
     }
 
     private sealed class CapturingWorkspaceProvider(ISandboxWorkspaceProvider inner) : ISandboxWorkspaceProvider

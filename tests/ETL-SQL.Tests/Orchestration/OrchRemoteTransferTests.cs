@@ -28,8 +28,13 @@ namespace ETL_SQL.Tests.Orchestration
             public async IAsyncEnumerable<FileMetaData> ListFilesAsync(string path)
             {
                 await Task.CompletedTask;
-                foreach (var k in RemoteFiles.Keys)
-                    yield return new FileMetaData { Name = k, FullPath = k, Size = 100, IsDirectory = false };
+                // Like a real server: list only entries under the requested folder (empty path = all).
+                var prefix = string.IsNullOrEmpty(path) ? "" : (path.EndsWith('/') ? path : path + "/");
+                foreach (var k in RemoteFiles.Keys.ToList())
+                {
+                    if (prefix.Length > 0 && !k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+                    yield return new FileMetaData { Name = k[prefix.Length..], FullPath = k, Size = 100, IsDirectory = false };
+                }
             }
 
             public Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
@@ -178,6 +183,35 @@ namespace ETL_SQL.Tests.Orchestration
             if (File.Exists(downloadFile)) File.Delete(downloadFile);
         }
 
+        // The local<->remote bridge only uploads or downloads. ENCRYPT FILE ... TO <remote> used to
+        // upload the plaintext and log "File copied"; any operation it cannot perform must refuse.
+        [Theory]
+        [InlineData("ENCRYPT FILE '{0}' TO MYREMOTE PASSWORD 'bridge-test-pw';")]
+        [InlineData("COMPRESS FILE '{0}' TO MYREMOTE;")]
+        [InlineData("DECRYPT FILE '{0}' TO MYREMOTE PASSWORD 'bridge-test-pw';")]
+        [InlineData("DECOMPRESS FILE '{0}' TO MYREMOTE;")]
+        public async Task TransformingFileOperations_ToARemoteConnection_RefuseInsteadOfCopying(string template)
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = services.GetRequiredService<Evaluator>();
+            var mockFs = new MockRemoteFileSystem();
+            evaluator.Connections["MYREMOTE"] = mockFs;
+
+            string localFile = Path.Combine(Path.GetTempPath(), $"bridge_secret_{Guid.NewGuid():N}.csv");
+            File.WriteAllText(localFile, "account,balance\n1,100\n");
+            try
+            {
+                var sql = string.Format(template, localFile.Replace("\\", "\\\\"));
+                var ex = await Assert.ThrowsAnyAsync<Exception>(() => RunScriptAsync(evaluator, sql));
+                Assert.Contains("remote", ex.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.Empty(mockFs.RemoteFiles);
+            }
+            finally
+            {
+                if (File.Exists(localFile)) File.Delete(localFile);
+            }
+        }
+
         [Fact]
         public async Task Test_SqlStyle_FileTransferOverwrite()
         {
@@ -242,7 +276,12 @@ namespace ETL_SQL.Tests.Orchestration
             mockFs.RemoteFiles["some_dir/file2.txt"] = "content2";
             mockFs.RemoteFiles["other_dir/file3.txt"] = "content3";
 
-            await RunScriptAsync(evaluator, "DELETE DIRECTORY 'some_dir/' AT MYREMOTE;");
+            // A non-empty remote directory needs RECURSIVE = ON, the same rule on every connector.
+            await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() =>
+                RunScriptAsync(evaluator, "DELETE DIRECTORY 'some_dir/' AT MYREMOTE;"));
+            Assert.True(mockFs.RemoteFiles.ContainsKey("some_dir/file1.txt"));
+
+            await RunScriptAsync(evaluator, "DELETE DIRECTORY 'some_dir/' AT MYREMOTE WITH (RECURSIVE = ON);");
 
             Assert.False(mockFs.RemoteFiles.ContainsKey("some_dir/file1.txt"));
             Assert.False(mockFs.RemoteFiles.ContainsKey("some_dir/file2.txt"));

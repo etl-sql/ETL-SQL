@@ -263,7 +263,10 @@ public class MergeStatementHandler : IStatementHandler
             foreach (var r in rowsToDelete) targetRows.Remove(r);
             targetRows.AddRange(rowsToAdd);
 
-            if (target is InMemoryDataSource mem)
+            // Restore replaces the resident batches only and keeps rows already spilled to disk.
+            // MERGE read every row, spilled ones included, so writing the result back through
+            // Restore kept each spilled row twice (its old copy on disk and its merged copy).
+            if (target is InMemoryDataSource mem && mem.SpillChunkCount == 0)
             {
                 mem.Restore(new List<DataTable> { await CreateDataTable(targetRows, await target.GetColumnsAsync(context.CancellationToken)) });
             }

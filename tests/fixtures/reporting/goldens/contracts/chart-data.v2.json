@@ -1,0 +1,179 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/chart-data/v1",
+  "version": 1,
+  "name": "monthly_revenue",
+  "rowCount": 2,
+  "columns": [
+    {
+      "name": "count",
+      "valueKind": "integer",
+      "semanticKind": "quantitative",
+      "values": [
+        {
+          "kind": "integer",
+          "integer": 7
+        },
+        {
+          "kind": "integer",
+          "integer": 9
+        }
+      ],
+      "displayValues": [
+        "7",
+        "9"
+      ]
+    },
+    {
+      "name": "ratio",
+      "valueKind": "floatingPoint",
+      "semanticKind": "quantitative",
+      "values": [
+        {
+          "kind": "floatingPoint",
+          "floatingPoint": 0.25
+        },
+        {
+          "kind": "null"
+        }
+      ],
+      "displayValues": [
+        "25%",
+        null
+      ]
+    },
+    {
+      "name": "revenue",
+      "valueKind": "decimal",
+      "semanticKind": "quantitative",
+      "values": [
+        {
+          "kind": "decimal",
+          "decimal": 1234.50
+        },
+        {
+          "kind": "decimal",
+          "decimal": 987.65
+        }
+      ],
+      "displayValues": [
+        "$1,234.50",
+        "$987.65"
+      ]
+    },
+    {
+      "name": "region",
+      "valueKind": "text",
+      "semanticKind": "nominal",
+      "values": [
+        {
+          "kind": "text",
+          "text": "North"
+        },
+        {
+          "kind": "text",
+          "text": "South"
+        }
+      ],
+      "displayValues": []
+    },
+    {
+      "name": "priority",
+      "valueKind": "text",
+      "semanticKind": "ordinal",
+      "values": [
+        {
+          "kind": "text",
+          "text": "High"
+        },
+        {
+          "kind": "text",
+          "text": "Low"
+        }
+      ],
+      "displayValues": []
+    },
+    {
+      "name": "day",
+      "valueKind": "date",
+      "semanticKind": "temporal",
+      "values": [
+        {
+          "kind": "date",
+          "date": "2026-08-20"
+        },
+        {
+          "kind": "date",
+          "date": "2026-08-21"
+        }
+      ],
+      "displayValues": []
+    },
+    {
+      "name": "time",
+      "valueKind": "time",
+      "semanticKind": "temporal",
+      "values": [
+        {
+          "kind": "time",
+          "time": "09:30:00"
+        },
+        {
+          "kind": "time",
+          "time": "10:45:00"
+        }
+      ],
+      "displayValues": []
+    },
+    {
+      "name": "local",
+      "valueKind": "localDateTime",
+      "semanticKind": "temporal",
+      "values": [
+        {
+          "kind": "localDateTime",
+          "localDateTime": "2026-08-20T09:30:00"
+        },
+        {
+          "kind": "localDateTime",
+          "localDateTime": "2026-08-21T10:45:00"
+        }
+      ],
+      "displayValues": []
+    },
+    {
+      "name": "instant",
+      "valueKind": "offsetDateTime",
+      "semanticKind": "temporal",
+      "values": [
+        {
+          "kind": "offsetDateTime",
+          "offsetDateTime": "2026-08-20T09:30:00-05:00"
+        },
+        {
+          "kind": "offsetDateTime",
+          "offsetDateTime": "2026-08-21T10:45:00+02:00"
+        }
+      ],
+      "displayValues": []
+    },
+    {
+      "name": "active",
+      "valueKind": "boolean",
+      "semanticKind": "nominal",
+      "values": [
+        {
+          "kind": "boolean",
+          "boolean": true
+        },
+        {
+          "kind": "boolean",
+          "boolean": false
+        }
+      ],
+      "displayValues": [
+        "Yes",
+        "No"
+      ]
+    }
+  ]
+}

@@ -30,12 +30,16 @@ namespace ETL_SQL.Connectors.Sqlite
             "SQLITE Connector: Connects to local or in-memory SQLite databases.\n" +
             "Options:\n" +
             "  DATABASE: File path to the SQLite database (e.g., C:\\data\\sqlite.db) or ':memory:'.\n" +
+            "  JOURNAL_MODE: Journal mode applied on open (DELETE, TRUNCATE, PERSIST, WAL, MEMORY, OFF).\n" +
+            "  BUSY_TIMEOUT_MS: Non-negative lock wait timeout in milliseconds applied on open.\n" +
             "  TIMEOUT_SECONDS: Connection timeout in seconds.\n" +
             "  TABLE: Pre-selects a default table context.";
 
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
             { "DATABASE", Array.Empty<string>() },
+            { "JOURNAL_MODE", new[] { "DELETE", "TRUNCATE", "PERSIST", "WAL", "MEMORY", "OFF" } },
+            { "BUSY_TIMEOUT_MS", Array.Empty<string>() },
             { "TIMEOUT_SECONDS", Array.Empty<string>() },
             { "TABLE", Array.Empty<string>() }
         };
@@ -56,6 +60,12 @@ namespace ETL_SQL.Connectors.Sqlite
 
         public string BuildConnectionString(Dictionary<string, string> properties)
         {
+            if (properties.TryGetValue("JOURNAL_MODE", out var journalMode))
+                SqliteDataSource.ValidateJournalMode(journalMode);
+
+            if (properties.TryGetValue("BUSY_TIMEOUT_MS", out var busyTimeout))
+                SqliteDataSource.ValidateBusyTimeoutMs(busyTimeout);
+
             string path = properties.GetValueOrDefault("DATABASE", "");
             if (string.IsNullOrEmpty(path))
             {

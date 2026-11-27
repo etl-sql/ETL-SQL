@@ -1,0 +1,80 @@
+-- Conformance Fixture: Error Bars & Confidence Bands
+-- Validates ERROR_LOW/ERROR_HIGH on POINT/RECT and CONFIDENCE_LOW/CONFIDENCE_HIGH on AREA.
+
+SET REPORT TITLE = 'Conformance: Error Bars & Confidence Bands';
+
+SELECT 'T1' AS Trial, 48.0 AS Estimate, 41.0 AS ErrLow, 55.0 AS ErrHigh, 36.0 AS ConfLow, 60.0 AS ConfHigh INTO #experiment_metrics
+UNION ALL SELECT 'T2', 62.0, 56.0, 68.0, 50.0, 74.0
+UNION ALL SELECT 'T3', 54.0, 46.0, 62.0, 42.0, 68.0
+UNION ALL SELECT 'T4', 75.0, 69.0, 81.0, 63.0, 87.0;
+
+CREATE VISUAL ConfidenceAndErrorPoints AS CUSTOM (
+    TITLE = 'Confidence Band & Point Error Bars',
+    SOURCE = #experiment_metrics,
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            trials = BAND (CHANNEL = X, ORDER = SOURCE),
+            score = LINEAR (CHANNEL = Y, INCLUDE_ZERO = OFF)
+        ),
+        LAYERS (
+            confidence = AREA (
+                Z_INDEX = 0,
+                ENCODINGS (
+                    X = Trial (TYPE = NOMINAL, SCALE = trials),
+                    CONFIDENCE_LOW = ConfLow (TYPE = QUANTITATIVE, SCALE = score),
+                    CONFIDENCE_HIGH = ConfHigh (TYPE = QUANTITATIVE, SCALE = score)
+                ),
+                STYLE (COLOR = '#93c5fd', OPACITY = '0.35')
+            ),
+            trend = LINE (
+                Z_INDEX = 1,
+                ENCODINGS (
+                    X = Trial (TYPE = NOMINAL, SCALE = trials),
+                    Y = Estimate (TYPE = QUANTITATIVE, SCALE = score)
+                ),
+                STYLE (COLOR = '#1d4ed8')
+            ),
+            points = POINT (
+                Z_INDEX = 2,
+                ENCODINGS (
+                    X = Trial (TYPE = NOMINAL, SCALE = trials),
+                    Y = Estimate (TYPE = QUANTITATIVE, SCALE = score),
+                    ERROR_LOW = ErrLow (TYPE = QUANTITATIVE, SCALE = score),
+                    ERROR_HIGH = ErrHigh (TYPE = QUANTITATIVE, SCALE = score)
+                ),
+                STYLE (ERROR_BAR_STYLE = 'CAPS', COLOR = '#1e3a8a')
+            )
+        )
+    )
+);
+
+CREATE VISUAL RectErrorBars AS CUSTOM (
+    TITLE = 'Bar Estimates with Error Intervals',
+    SOURCE = #experiment_metrics,
+    CHART (
+        COORDINATE (TYPE = CARTESIAN),
+        SCALES (
+            trials = BAND (CHANNEL = X, ORDER = SOURCE),
+            score = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+        ),
+        LAYERS (
+            bars = RECT (
+                ENCODINGS (
+                    X = Trial (TYPE = NOMINAL, SCALE = trials),
+                    Y = Estimate (TYPE = QUANTITATIVE, SCALE = score),
+                    ERROR_LOW = ErrLow (TYPE = QUANTITATIVE, SCALE = score),
+                    ERROR_HIGH = ErrHigh (TYPE = QUANTITATIVE, SCALE = score)
+                ),
+                STYLE (ERROR_BAR_STYLE = 'CAPS', FILL = '#3b82f6')
+            )
+        )
+    )
+);
+
+CREATE PAGE ExperimentDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A B',
+        MAP ('A' = ConfidenceAndErrorPoints, 'B' = RectErrorBars)
+    )
+);

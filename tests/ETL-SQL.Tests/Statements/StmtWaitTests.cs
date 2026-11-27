@@ -78,7 +78,7 @@ namespace ETL_SQL.Tests.Statements.Statements
         }
 
         [Fact]
-        public async Task Time_VeryRecentPastTime_SchedulesForTomorrow_DoesNotBlock()
+        public async Task WaitForTime_ParsesATimeOfDay()
         {
             // We can't easily test a real WAITFOR TIME without actually waiting,
             // but we can verify that an immediate-past time calculates a 24h delay

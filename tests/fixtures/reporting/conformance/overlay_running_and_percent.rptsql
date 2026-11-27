@@ -1,0 +1,33 @@
+-- Conformance Fixture: Running Total & Percent of Total Overlays
+-- Validates RUNNING_TOTAL and PERCENT_OF_TOTAL overlays alongside REFERENCE_BAND.
+
+SET REPORT TITLE = 'Conformance: Running Total & Percent of Total';
+
+SELECT 'Q1' AS Quarter, 25.0 AS Revenue, 25.0 AS CumulativeRevenue, 25.0 AS SharePct INTO #quarterly_totals
+UNION ALL SELECT 'Q2', 35.0, 60.0, 35.0
+UNION ALL SELECT 'Q3', 40.0, 100.0, 40.0;
+
+CREATE VISUAL RunningTotalAndShareBar AS BAR (
+    TITLE = 'Quarterly Revenue with Cumulative & Share Overlays',
+    SOURCE = #quarterly_totals,
+    MAPPINGS (
+        X = Quarter,
+        Y = Revenue
+    ),
+    OVERLAYS (
+        REFERENCE_BAND (LOW = 20, HIGH = 80, COLOR = '#cbd5e1', LABEL = 'Operating Band'),
+        RUNNING_TOTAL(CumulativeRevenue) AS SOLID WITH (COLOR = '#2563eb', LABEL = 'Running Total'),
+        PERCENT_OF_TOTAL(SharePct) AS DOTTED WITH (COLOR = '#059669', LABEL = 'Share (%)')
+    ),
+    OPTIONS (
+        LEGEND = 'TOP'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '450px')
+);
+
+CREATE PAGE TotalsDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = RunningTotalAndShareBar)
+    )
+);

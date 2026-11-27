@@ -75,7 +75,7 @@ public class ShowPublishedBundlesStatementHandler(IBundleStore store) : IStateme
         if (await ShowBundleTableWriter.TryExecuteRemoteAsync(stmt, stmt.At, context)) return;
         var table = new DataTable();
         ShowBundleTableWriter.AddBundleVersionColumns(table);
-        foreach (var bundle in await store.GetBundlesAsync())
+        foreach (var bundle in await BundleStoreAccessor.GetBundlesAsync(store, context))
             await ShowBundleTableWriter.AddVersionRowAsync(table, bundle);
         await ShowBundleTableWriter.WriteAsync(table, stmt.IntoTable, context);
     }
@@ -91,7 +91,7 @@ public class ShowBundleVersionsStatementHandler(IBundleStore store) : IStatement
         if (await ShowBundleTableWriter.TryExecuteRemoteAsync(stmt, stmt.At, context)) return;
         var table = new DataTable();
         ShowBundleTableWriter.AddBundleVersionColumns(table);
-        foreach (var version in await store.GetVersionsAsync(stmt.BundleName))
+        foreach (var version in await BundleStoreAccessor.GetVersionsAsync(store, context, stmt.BundleName))
             await ShowBundleTableWriter.AddVersionRowAsync(table, version);
         await ShowBundleTableWriter.WriteAsync(table, stmt.IntoTable, context);
     }
@@ -105,8 +105,8 @@ public class ShowBundleFilesStatementHandler(IBundleStore store) : IStatementHan
     {
         var stmt = (ShowBundleFilesStatement)statement;
         if (await ShowBundleTableWriter.TryExecuteRemoteAsync(stmt, stmt.At, context)) return;
-        var files = (await store.GetFilesAsync(stmt.BundleName, stmt.Version)).ToList();
-        if (files.Count == 0 && await store.GetVersionAsync(stmt.BundleName, stmt.Version) == null)
+        var files = (await BundleStoreAccessor.GetFilesAsync(store, context, stmt.BundleName, stmt.Version)).ToList();
+        if (files.Count == 0 && await BundleStoreAccessor.GetVersionAsync(store, context, stmt.BundleName, stmt.Version) == null)
             throw new ExecutionException($"Bundle '{stmt.BundleName}' version {stmt.Version} was not found.");
 
         var table = new DataTable();
@@ -139,8 +139,8 @@ public class ShowBundleDependenciesStatementHandler(IBundleStore store) : IState
     {
         var stmt = (ShowBundleDependenciesStatement)statement;
         if (await ShowBundleTableWriter.TryExecuteRemoteAsync(stmt, stmt.At, context)) return;
-        var deps = (await store.GetDependenciesAsync(stmt.BundleName, stmt.Version)).ToList();
-        if (deps.Count == 0 && await store.GetVersionAsync(stmt.BundleName, stmt.Version) == null)
+        var deps = (await BundleStoreAccessor.GetDependenciesAsync(store, context, stmt.BundleName, stmt.Version)).ToList();
+        if (deps.Count == 0 && await BundleStoreAccessor.GetVersionAsync(store, context, stmt.BundleName, stmt.Version) == null)
             throw new ExecutionException($"Bundle '{stmt.BundleName}' version {stmt.Version} was not found.");
 
         var table = new DataTable();

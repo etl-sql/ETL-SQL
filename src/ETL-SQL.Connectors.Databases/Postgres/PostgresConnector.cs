@@ -39,6 +39,7 @@ namespace ETL_SQL.Connectors.Postgres
             "  CONNECTION_IDLE_LIFETIME: Maximum seconds an idle connection stays in the pool.\n" +
             "  SSL_MODE: Disable, Prefer, Require, etc.\n" +
             "  TRUST_SERVER_CERTIFICATE: Set to TRUE to skip cert validation.\n" +
+            "  SEARCH_PATH: Comma-separated schema search path (e.g. 'analytics, public').\n" +
             "  TABLE: Pre-selects a default table context.";
 
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
@@ -54,6 +55,7 @@ namespace ETL_SQL.Connectors.Postgres
             { "CONNECTION_IDLE_LIFETIME", Array.Empty<string>() },
             { "SSL_MODE", new[] { "Disable", "Prefer", "Require", "VerifyCA", "VerifyFull" } },
             { "TRUST_SERVER_CERTIFICATE", new[] { "TRUE", "FALSE" } },
+            { "SEARCH_PATH", Array.Empty<string>() },
             { "TIMEOUT_SECONDS", Array.Empty<string>() },
             { "TABLE", Array.Empty<string>() }
         };

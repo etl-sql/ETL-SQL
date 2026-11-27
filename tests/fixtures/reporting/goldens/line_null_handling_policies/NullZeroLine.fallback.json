@@ -1,0 +1,37 @@
+{
+  "kind": "rankedTable",
+  "heading": "NULL_HANDLING = ZERO",
+  "items": [
+    {
+      "label": "Jan",
+      "value": "40.0",
+      "order": 0,
+      "group": "Score"
+    },
+    {
+      "label": "Feb",
+      "value": "65.0",
+      "order": 1,
+      "group": "Score"
+    },
+    {
+      "label": "Mar",
+      "value": "-",
+      "order": 2,
+      "group": "Score"
+    },
+    {
+      "label": "Apr",
+      "value": "55.0",
+      "order": 3,
+      "group": "Score"
+    },
+    {
+      "label": "May",
+      "value": "80.0",
+      "order": 4,
+      "group": "Score"
+    }
+  ],
+  "summary": "NULL_HANDLING = ZERO: 5 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

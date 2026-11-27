@@ -136,6 +136,10 @@ namespace ETL_SQL.Tests.Connectors
         private async Task<List<ETL_SQL.Data.DataTable>> Read(FlatFileDataSource ds) =>
             await ds.ReadBatches().ToListAsync();
 
+        // The values of one column across every batch, as text (null stays null).
+        private static List<string?> Column(List<ETL_SQL.Data.DataTable> batches, string name) =>
+            batches.SelectMany(b => b.Rows).Select(r => r[name]?.ToString()).ToList();
+
         // ── FlatFileDataSource ─────────────────────────────────────────────────
 
         [Fact]
@@ -315,17 +319,17 @@ namespace ETL_SQL.Tests.Connectors
             var opts = new Dictionary<string, string> { ["NULL_AS"] = "NULL" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches[0].Rows);
+            Assert.Equal(new string?[] { null, "hello" }, Column(batches, "val"));
         }
 
         [Fact]
         public async Task FlatFile_NullAsBackslashN_ParsesCorrectly()
         {
-            var path = Write("nullasbn.csv", "id,val\n1,\\n");
+            var path = Write("nullasbn.csv", "id,val\n1,\\n\n2,hello");
             var opts = new Dictionary<string, string> { ["NULL_AS"] = "BACKSLASH_N" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches[0]);
+            Assert.Equal(new string?[] { null, "hello" }, Column(batches, "val"));
         }
 
         [Fact]
@@ -363,11 +367,12 @@ namespace ETL_SQL.Tests.Connectors
         [Fact]
         public async Task FlatFile_EncodingUtf16_ParsesCorrectly()
         {
-            var path = Write("utf16.csv", "id,name\n1,Alice");
+            var path = Path.Combine(_dir, "utf16.csv");
+            File.WriteAllText(path, "id,name\n1,Zoë", Encoding.Unicode);
             var opts = new Dictionary<string, string> { ["ENCODING"] = "UTF16" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches);
+            Assert.Equal(new string?[] { "Zoë" }, Column(batches, "name"));
         }
 
         [Fact]
@@ -387,7 +392,7 @@ namespace ETL_SQL.Tests.Connectors
             var opts = new Dictionary<string, string> { ["CULTURE"] = "xx-INVALID" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches);
+            Assert.Equal(new string?[] { "Alice" }, Column(batches, "name"));
         }
 
         [Fact]
@@ -407,7 +412,7 @@ namespace ETL_SQL.Tests.Connectors
             var opts = new Dictionary<string, string> { ["ESCAPE_CHAR"] = "\\" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches[0].Rows);
+            Assert.Equal(new string?[] { "Alice,Smith" }, Column(batches, "name"));
         }
 
         [Fact]
@@ -417,7 +422,7 @@ namespace ETL_SQL.Tests.Connectors
             var opts = new Dictionary<string, string> { ["ROW_DELIMITER"] = "CRLF" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches);
+            Assert.Equal(new string?[] { "Alice", "Bob" }, Column(batches, "name"));
         }
 
         [Fact]
@@ -427,7 +432,7 @@ namespace ETL_SQL.Tests.Connectors
             var opts = new Dictionary<string, string> { ["ROW_DELIMITER"] = "TILDE" };
             var ds = new FlatFileDataSource(Ctx, path, opts);
             var batches = await Read(ds);
-            Assert.NotNull(batches);
+            Assert.Equal(new string?[] { "Alice", "Bob" }, Column(batches, "name"));
         }
 
         [Fact]
@@ -446,7 +451,7 @@ namespace ETL_SQL.Tests.Connectors
             var path = Write("empty.csv", "");
             var ds = new FlatFileDataSource(Ctx, path);
             var batches = await Read(ds);
-            Assert.NotNull(batches);
+            Assert.Empty(batches.SelectMany(b => b.Rows));
         }
 
         [Fact]
@@ -592,26 +597,32 @@ namespace ETL_SQL.Tests.Connectors
         // ── FlatFileConnector ──────────────────────────────────────────────────
 
         [Fact]
-        public void FlatFileConnector_GetHelp_ReturnsNonEmpty()
+        public void FlatFileConnector_GetHelp_DescribesConnectorAndOptions()
         {
             var conn = new FlatFileConnector();
-            Assert.NotEmpty(conn.GetHelp());
+            var help = conn.GetHelp();
+            Assert.Contains("FLATFILE", help, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("DELIMITER", help);
         }
 
         [Fact]
-        public void FlatFileConnector_GetSupportedOptions_ContainsDelimiter()
+        public void FlatFileConnector_GetSupportedOptions_ContainsCoreKeys()
         {
             var conn = new FlatFileConnector();
             var opts = conn.GetSupportedOptions();
-            Assert.True(opts.ContainsKey("DELIMITER"));
+            Assert.Contains("PATH", opts.Keys);
+            Assert.Contains("DELIMITER", opts.Keys);
+            Assert.Contains("HEADER", opts.Keys);
+            Assert.Contains("COMPRESS", opts.Keys);
+            Assert.Contains("ENCRYPT", opts.Keys);
         }
 
         [Fact]
-        public void FlatFileConnector_GetOptionValues_ReturnsValues()
+        public void FlatFileConnector_GetOptionValues_ReturnsHeaderOnOff()
         {
             var conn = new FlatFileConnector();
             var vals = conn.GetOptionValues();
-            Assert.True(vals.ContainsKey("HEADER"));
+            Assert.Equal(new[] { "ON", "OFF" }, vals["HEADER"]);
         }
 
         [Fact]
@@ -750,18 +761,24 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void JsonConnector_GetHelp_ReturnsNonEmpty()
+        public void JsonConnector_GetHelp_DescribesConnectorAndOptions()
         {
             var conn = new JsonConnector();
-            Assert.NotEmpty(conn.GetHelp());
+            var help = conn.GetHelp();
+            Assert.Contains("JSON", help, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ROOT_PATH", help);
         }
 
         [Fact]
-        public void JsonConnector_GetSupportedOptions_ReturnsOptions()
+        public void JsonConnector_GetSupportedOptions_ContainsCoreKeys()
         {
             var conn = new JsonConnector();
             var opts = conn.GetSupportedOptions();
-            Assert.NotNull(opts);
+            Assert.Contains("PATH", opts.Keys);
+            Assert.Contains("ROOT_PATH", opts.Keys);
+            Assert.Contains("COMPRESS", opts.Keys);
+            Assert.Contains("ENCRYPT", opts.Keys);
+            Assert.Contains("PASSWORD", opts.Keys);
         }
 
         [Fact]
@@ -819,7 +836,7 @@ namespace ETL_SQL.Tests.Connectors
             var path = Write("empty.xml", "<root></root>");
             var ds = new XmlDataSource(Ctx, path);
             var batches = await ds.ReadBatches().ToListAsync();
-            Assert.NotNull(batches);
+            Assert.Equal(0, batches.Sum(b => b.Rows.Count));
         }
 
         [Fact]
@@ -845,17 +862,24 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void XmlConnector_GetHelp_ReturnsNonEmpty()
+        public void XmlConnector_GetHelp_DescribesConnectorAndOptions()
         {
             var conn = new XmlConnector();
-            Assert.NotEmpty(conn.GetHelp());
+            var help = conn.GetHelp();
+            Assert.Contains("XML", help, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ROOT_PATH", help);
         }
 
         [Fact]
-        public void XmlConnector_GetSupportedOptions_ReturnsOptions()
+        public void XmlConnector_GetSupportedOptions_ContainsCoreKeys()
         {
             var conn = new XmlConnector();
-            Assert.NotNull(conn.GetSupportedOptions());
+            var opts = conn.GetSupportedOptions();
+            Assert.Contains("PATH", opts.Keys);
+            Assert.Contains("ROOT_PATH", opts.Keys);
+            Assert.Contains("COMPRESS", opts.Keys);
+            Assert.Contains("ENCRYPT", opts.Keys);
+            Assert.Contains("PASSWORD", opts.Keys);
         }
 
         [Fact]
@@ -1015,8 +1039,9 @@ namespace ETL_SQL.Tests.Connectors
             var props = new Dictionary<string, string> { ["SERVER"] = "myserver", ["DATABASE"] = "db" };
             var cs1 = DatabaseConnectionStringBuilder.Build("MSSQL", props);
             var cs2 = DatabaseConnectionStringBuilder.Build("SQLSERVER", props);
-            Assert.False(string.IsNullOrEmpty(cs1));
-            Assert.False(string.IsNullOrEmpty(cs2));
+            Assert.Equal(cs1, cs2);
+            Assert.Contains("Data Source=myserver", cs1, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Initial Catalog=db", cs1, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -1028,7 +1053,8 @@ namespace ETL_SQL.Tests.Connectors
                 ["POOL_LIFETIME"] = "300"
             };
             var cs = DatabaseConnectionStringBuilder.Build("MSSQL", props);
-            Assert.NotEmpty(cs);
+            Assert.Contains("Data Source=srv", cs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Load Balance Timeout=300", cs, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -1053,7 +1079,8 @@ namespace ETL_SQL.Tests.Connectors
                 ["APPLICATION_INTENT"] = "READWRITE"
             };
             var cs = DatabaseConnectionStringBuilder.Build("MSSQL", props);
-            Assert.NotEmpty(cs);
+            Assert.Contains("Data Source=srv", cs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Application Intent=ReadWrite", cs, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -1074,7 +1101,8 @@ namespace ETL_SQL.Tests.Connectors
         {
             var props = new Dictionary<string, string> { ["HOST"] = "host", ["DATABASE"] = "db" };
             var cs = DatabaseConnectionStringBuilder.Build("NPSQL", props);
-            Assert.NotEmpty(cs);
+            Assert.Contains("Host=host", cs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Database=db", cs, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -1099,7 +1127,9 @@ namespace ETL_SQL.Tests.Connectors
                 ["CONNECTION_LIFETIME"] = "300"
             };
             var cs = DatabaseConnectionStringBuilder.Build("ORACLE", props);
-            Assert.NotEmpty(cs);
+            Assert.Contains("orahost", cs);
+            Assert.Contains("xe", cs);
+            Assert.Contains("300", cs);
         }
 
         [Fact]
@@ -1233,7 +1263,7 @@ namespace ETL_SQL.Tests.Connectors
         {
             var props = new Dictionary<string, string> { ["HOST"] = "myblob.example.com" };
             var cs = ConnectionStringBuilder.Build("BLOB", props);
-            Assert.NotEmpty(cs);
+            Assert.Contains("myblob.example.com", cs);
         }
 
         [Fact]

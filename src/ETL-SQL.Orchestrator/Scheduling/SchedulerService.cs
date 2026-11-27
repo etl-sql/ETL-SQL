@@ -95,6 +95,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly ETL_SQL.Core.Execution.ISessionStateManager _sessionManager;
         private readonly INodeCapacityMonitor _capacityMonitor;
         private readonly ITenantMeteringLedger? _meteringLedger;
+        private readonly IScheduledToolPrincipalLookup? _toolPrincipalLookup;
         // Decides when a schedule link is due and where it is armed next. Leases and history
         // stamps stay on the system clock.
         private readonly TimeProvider _clock;
@@ -118,7 +119,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
             ETL_SQL.Core.Execution.ISessionStateManager sessionManager,
             INodeCapacityMonitor? capacityMonitor = null,
             ITenantMeteringLedger? meteringLedger = null,
-            TimeProvider? clock = null)
+            TimeProvider? clock = null,
+            IScheduledToolPrincipalLookup? toolPrincipalLookup = null)
         {
             _clock = clock ?? TimeProvider.System;
             _serviceProvider = serviceProvider;
@@ -127,8 +129,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
             _throttle = throttle;
             _configuration = configuration;
             _sessionManager = sessionManager;
-            _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor();
+            _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor(configuration);
             _meteringLedger = meteringLedger;
+            _toolPrincipalLookup = toolPrincipalLookup;
         }
 
         /// <summary>Process-unique owner id for the maintenance lease, matching the heartbeat's form.</summary>
@@ -143,7 +146,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// its interval and a null next run means "due now", so a run slot is parked here instead;
         /// a disabled job would not do, because the execution lease refuses one.
         /// </summary>
-        public static readonly DateTime ManualOnlyNextRun = new(9000, 1, 1, 0, 0, 0, DateTimeKind.Local);
+        public static readonly DateTime ManualOnlyNextRun = JobDefinition.ManualOnlyNextRun;
 
         /// <summary>Name prefix of a run slot, the only kind of job that accepts submitted text.</summary>
         public const string RunSlotNamePrefix = "PIPELINE:";
@@ -488,7 +491,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// </summary>
         public async Task<ManualTriggerResult> TriggerJobWithOverridesAsync(
             JobId jobId,
-            IReadOnlyDictionary<string, string>? variableOverrides)
+            IReadOnlyDictionary<string, string>? variableOverrides,
+            ExecutionIdentity? callerIdentity = null)
         {
             var job = await _store.GetJobByIdAsync(jobId);
             if (job == null) return ManualTriggerResult.JobNotFound;
@@ -519,7 +523,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 return ManualTriggerResult.AlreadyRunning;
             }
 
-            QueueJob(job, () => ExecuteAdmittedJobAsync(job, capturedOverrides));
+            QueueJob(job, () => ExecuteAdmittedJobAsync(job, capturedOverrides, callerIdentity: callerIdentity));
             return ManualTriggerResult.Accepted;
         }
 
@@ -778,12 +782,18 @@ namespace ETL_SQL.Orchestrator.Scheduling
             if (capacity.IsOverloaded)
             {
                 _logger.LogWarning(
-                    "Job {JobName}: skipping lease claim because this node is overloaded (CPU={Cpu:F1}%, memory={Memory:F1}%).",
-                    job.Name, capacity.ProcessCpuPercent, capacity.MemoryLoadPercent);
+                    "Job {JobName}: skipping lease claim because this node is overloaded (CPU={Cpu:F1}%, hostCPU={HostCpu}, memory={Memory:F1}%, workerReserved={ReservedPct:F1}%, spillFreeMB={SpillFreeMB}).",
+                    job.Name,
+                    capacity.ProcessCpuPercent,
+                    capacity.HostCpuPercent?.ToString("F1") ?? "n/a",
+                    capacity.MemoryLoadPercent,
+                    capacity.WorkerMemoryReservationPercent,
+                    capacity.SpillDiskFreeBytes / (1024L * 1024L));
                 return;
             }
 
-            await ExecuteAdmittedJobAsync(job, variableOverrides, initialSessionId, resumeFromCheckpoint);
+            await ExecuteAdmittedJobAsync(job, variableOverrides, initialSessionId, resumeFromCheckpoint,
+                scheduledOccurrence: !resumeFromCheckpoint && variableOverrides is not { Count: > 0 });
         }
 
         /// <summary>
@@ -796,7 +806,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
             IReadOnlyDictionary<string, string>? variableOverrides = null,
             string? initialSessionId = null,
             bool resumeFromCheckpoint = false,
-            RevisionRun? revision = null)
+            RevisionRun? revision = null,
+            ExecutionIdentity? callerIdentity = null,
+            bool scheduledOccurrence = false)
         {
             // P1.1: claim the per-job execution lease before doing anything observable. This is the
             // single choke point for both scheduled and manually triggered runs — another scheduler
@@ -825,7 +837,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             {
                 await ExecuteLeasedJobAsync(
                     job, leaseDuration, fenceToken.Value, variableOverrides,
-                    initialSessionId, resumeFromCheckpoint, revision);
+                    initialSessionId, resumeFromCheckpoint, revision, callerIdentity, scheduledOccurrence);
             }
             finally
             {
@@ -841,6 +853,80 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
         }
 
+        internal static ExecutionIdentity? ResolveJobExecutionIdentity(
+            JobDefinition job,
+            ExecutionIdentity? explicitIdentity = null,
+            ExecutionIdentity? submitterIdentity = null)
+        {
+            // Submitted revision text is the submitter's, not the owner's: running it as the owner
+            // would give the submitter the owner's rights (ST21b). The run stays in the job's tenant.
+            if (submitterIdentity is not null)
+            {
+                return string.IsNullOrWhiteSpace(job.TenantId)
+                    ? submitterIdentity
+                    : submitterIdentity with { TenantId = job.TenantId };
+            }
+
+            if (!string.IsNullOrWhiteSpace(job.CreatedBy))
+            {
+                if (explicitIdentity is not null &&
+                    string.Equals(explicitIdentity.EffectiveUser, job.CreatedBy, StringComparison.OrdinalIgnoreCase))
+                {
+                    return string.IsNullOrWhiteSpace(job.TenantId)
+                        ? explicitIdentity
+                        : explicitIdentity with { TenantId = job.TenantId };
+                }
+
+                return new ExecutionIdentity
+                {
+                    EffectiveUser = job.CreatedBy,
+                    RealUser = job.CreatedBy,
+                    TenantId = job.TenantId,
+                    IsAdmin = false,
+                    Scopes = job.CreatedBy.StartsWith("service:", StringComparison.OrdinalIgnoreCase)
+                        ? [OrchestratorObjectAuthorizer.ScopeExecute, OrchestratorObjectAuthorizer.ScopeRead]
+                        : []
+                };
+            }
+
+            return explicitIdentity;
+        }
+
+        internal async Task<ExecutionIdentity?> ResolveAttemptIdentityAsync(
+            JobDefinition job, ExecutionIdentity? caller, RevisionRun? revision, CancellationToken ct,
+            bool scheduledOccurrence = false)
+        {
+            var identity = ResolveJobExecutionIdentity(job, caller, revision?.Identity);
+            if (_toolPrincipalLookup is null || revision is not null || identity is null
+                || string.IsNullOrWhiteSpace(job.CreatedBy) || string.IsNullOrWhiteSpace(job.TenantId))
+                return identity;
+
+            if (scheduledOccurrence && caller is null)
+            {
+                if (_store is not IJobToolApprovalStore approvals || !await approvals.HasToolApprovalAsync(job, ct))
+                    return identity;
+
+                var approvedOwner = await _toolPrincipalLookup.ResolveAsync(job.TenantId, job.CreatedBy, ct);
+                if (approvedOwner is null || !await approvals.HasToolApprovalAsync(job, ct))
+                    return identity;
+
+                return identity with { ToolPrincipal = approvedOwner with { ApprovedSavedScriptOnly = true } };
+            }
+
+            if (identity.ToolPrincipal is not { WithinExecutionScope: true } verified
+                || !string.Equals(verified.TenantId, job.TenantId, StringComparison.Ordinal))
+                return identity;
+
+            var current = await _store.GetJobByIdAsync(job.Id);
+            if (current is null || current.Version != job.Version
+                || !string.Equals(current.TenantId, job.TenantId, StringComparison.Ordinal)
+                || !string.Equals(current.CreatedBy, job.CreatedBy, StringComparison.OrdinalIgnoreCase))
+                return identity with { ToolPrincipal = null };
+
+            var principal = await _toolPrincipalLookup.ResolveAsync(job.TenantId, job.CreatedBy, ct);
+            return identity with { ToolPrincipal = principal };
+        }
+
         private async Task ExecuteLeasedJobAsync(
             JobDefinition job,
             TimeSpan leaseDuration,
@@ -848,7 +934,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
             IReadOnlyDictionary<string, string>? variableOverrides,
             string? initialSessionId,
             bool resumeFromCheckpoint,
-            RevisionRun? revision = null)
+            RevisionRun? revision = null,
+            ExecutionIdentity? callerIdentity = null,
+            bool scheduledOccurrence = false)
         {
             _logger.LogInformation("Job runner: {JobName} starting execution cycle (MaxRetries={Max}).", job.Name, job.MaxRetries);
 
@@ -942,11 +1030,18 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     double attemptCpuSeconds = 0;
                     long attemptQueueWaitMs = 0;
                     var usedSandbox = false;
+                    var timeoutSeconds = ReadJobTimeoutSeconds(job.Options);
+                    using var attemptCts = timeoutSeconds is > 0
+                        ? CancellationTokenSource.CreateLinkedTokenSource(cycleCts.Token)
+                        : null;
                     try
                     {
                         await SetRunStateOrCancelAsync(job, fenceToken, ScheduledJobRunState.Queued, cycleCts);
                         var throttleSw = System.Diagnostics.Stopwatch.StartNew();
-                        await using var slot = (IAsyncDisposable)await _throttle.AcquireAsync(job.Name, cycleCts.Token);
+                        var (workloadOptions, slotWeight) = ReadJobSchedulingHints(job.Options);
+                        var workloadClass = JobThrottle.ClassifyWorkload(script, workloadOptions);
+                        await using var slot = (IAsyncDisposable)await _throttle.AcquireAsync(
+                            job.Name, workloadClass, slotWeight, cycleCts.Token);
                         // COMPAT_BREAK: 0.21.0 — a lease lost while queued cannot start execution.
                         await SetRunStateOrCancelAsync(job, fenceToken, ScheduledJobRunState.Running, cycleCts);
                         throttleSw.Stop();
@@ -954,36 +1049,43 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         attemptQueueWaitMs = queueWaitMs;
                         _logger.LogInformation("Job {JobName} acquired throttle slot. Queue wait: {QueueWaitMs} ms.", job.Name, queueWaitMs);
                         using var scope = _serviceProvider.CreateScope();
+                        if (attemptCts is not null)
+                            attemptCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds!.Value));
+                        var attemptToken = (attemptCts ?? cycleCts).Token;
+                        var effectiveIdentity = await ResolveAttemptIdentityAsync(
+                            job, callerIdentity, revision, attemptToken, scheduledOccurrence);
                         var sandboxExecutor = scope.ServiceProvider.GetService<ISandboxScheduledJobExecutor>();
                         if (sandboxExecutor is not null)
                         {
-                            // RunRevisionAsync refuses this up front; submitted text must never
-                            // reach an executor that would run it as the tenant.
-                            if (revision is not null && !sandboxExecutor.SupportsSubmitterIdentity)
+                            // RunRevisionAsync refuses this up front; submitted text and owned jobs must
+                            // never reach an executor that would drop their identity.
+                            if (effectiveIdentity is not null && !sandboxExecutor.SupportsSubmitterIdentity)
                                 throw new InvalidOperationException(
-                                    "Sandbox execution cannot carry a revision run's submitter identity.");
+                                    "Sandbox execution cannot carry the job's execution identity.");
                             usedSandbox = true;
                             lastResult = await sandboxExecutor.ExecuteAsync(
                                 revision is null ? job : job with { Script = script },
                                 historyId, attempt, sessionId, resumeFromCheckpoint, queueWaitMs,
-                                variableOverrides, cycleCts.Token, revision?.Identity);
+                                variableOverrides, attemptToken, effectiveIdentity);
                         }
                         else
                         {
                             var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
                             lastResult = revision is not null
                                 ? await executor.ExecuteTextAsync(
-                                    script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
-                                    executionIdentity: revision.Identity)
+                                    script, sessionId, attemptToken, job.Name, queueWaitMs,
+                                    executionIdentity: effectiveIdentity)
                                 : resumeFromCheckpoint
                                 ? await executor.ResumeTextAsync(
-                                    job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs)
+                                    job.Script, sessionId, attemptToken, job.Name, queueWaitMs,
+                                    executionIdentity: effectiveIdentity)
                                 : variableOverrides is { Count: > 0 }
                                 ? await executor.ExecuteTextAsync(
-                                    job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
-                                    executionIdentity: null, variableOverrides: variableOverrides)
+                                    job.Script, sessionId, attemptToken, job.Name, queueWaitMs,
+                                    executionIdentity: effectiveIdentity, variableOverrides: variableOverrides)
                                 : await executor.ExecuteTextAsync(
-                                    job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs);
+                                    job.Script, sessionId, attemptToken, job.Name, queueWaitMs,
+                                    executionIdentity: effectiveIdentity);
                         }
                         sessionId = lastResult.SessionId ?? sessionId;
 
@@ -1017,6 +1119,16 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             await PersistAttemptEvidenceAsync(job, historyId, attemptStatus, lastResult,
                                 sessionId, currentHash, hashMatched);
                         }
+                    }
+                    catch (OperationCanceledException) when (attemptCts is { IsCancellationRequested: true } && !cycleCts.IsCancellationRequested)
+                    {
+                        _logger.LogWarning("Job {JobName} timed out on attempt {Attempt} after {TimeoutSeconds}s.",
+                            job.Name, attempt, timeoutSeconds);
+                        lastResult = new ScriptExecutionResult(false, 0, $"Job execution timed out after {timeoutSeconds}s.");
+                        finalStatus = "FAILURE";
+                        attemptStatus = UnsuccessfulStatus(historyId);
+                        await PersistAttemptEvidenceAsync(job, historyId, attemptStatus, lastResult,
+                            sessionId, currentHash, hashMatched);
                     }
                     catch (Exception ex)
                     {
@@ -1379,6 +1491,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
         // Do not switch this to UTC piecemeal — persisted rows would be reinterpreted at upgrade.
         private DateTime CalculateNextRun(JobDefinition job)
         {
+            // A manual-only job stays manual after a run; the interval must not re-arm it.
+            if (job.NextRun >= ManualOnlyNextRun) return ManualOnlyNextRun;
             var now = DateTime.Now;
             var interval = job.Interval;
             var unit = job.Unit.ToUpper();
@@ -1500,6 +1614,71 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
 
             return earliest;
+        }
+
+        private static (IReadOnlyDictionary<string, string>? Options, int SlotWeight) ReadJobSchedulingHints(string? options)
+        {
+            if (string.IsNullOrWhiteSpace(options)) return (null, 0);
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(options);
+                if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return (null, 0);
+                Dictionary<string, string>? parsedOptions = null;
+                int slotWeight = 0;
+                foreach (var property in document.RootElement.EnumerateObject())
+                {
+                    if ((property.Name.Equals("WorkloadClass", StringComparison.OrdinalIgnoreCase)
+                         || property.Name.Equals("WORKLOAD_CLASS", StringComparison.OrdinalIgnoreCase)
+                         || property.Name.Equals("Priority", StringComparison.OrdinalIgnoreCase))
+                        && property.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var val = property.Value.GetString();
+                        if (!string.IsNullOrWhiteSpace(val))
+                        {
+                            parsedOptions ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                            parsedOptions[property.Name] = val;
+                        }
+                    }
+                    else if ((property.Name.Equals("SlotWeight", StringComparison.OrdinalIgnoreCase)
+                              || property.Name.Equals("SLOT_WEIGHT", StringComparison.OrdinalIgnoreCase))
+                             && property.Value.ValueKind == System.Text.Json.JsonValueKind.Number
+                             && property.Value.TryGetInt32(out var weight)
+                             && weight > 0)
+                    {
+                        slotWeight = weight;
+                    }
+                }
+                return (parsedOptions, slotWeight);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return (null, 0);
+            }
+        }
+
+        private static int? ReadJobTimeoutSeconds(string? options)
+        {
+            if (string.IsNullOrWhiteSpace(options)) return null;
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(options);
+                if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+                foreach (var property in document.RootElement.EnumerateObject())
+                {
+                    if (!property.Name.Equals("TimeoutSeconds", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (property.Value.ValueKind == System.Text.Json.JsonValueKind.Number
+                        && property.Value.TryGetInt32(out var numeric) && numeric > 0)
+                        return numeric;
+                    if (property.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                        && int.TryParse(property.Value.GetString(), out var parsed) && parsed > 0)
+                        return parsed;
+                }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // Non-JSON free-form options omit per-job timeout override.
+            }
+            return null;
         }
     }
 }

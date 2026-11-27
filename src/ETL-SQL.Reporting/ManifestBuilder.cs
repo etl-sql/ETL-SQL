@@ -450,6 +450,7 @@ namespace ETL_SQL.Reporting
             // resolving the AST: it depends on the rows the surface's visuals actually
             // returned, which only exist now.
             DetailSurfacePayloadGuard.Enforce(manifest);
+            NativeChartLayoutResolver.ApplyFitPageInitialLayouts(manifest);
 
             return manifest;
         }
@@ -914,7 +915,7 @@ namespace ETL_SQL.Reporting
             if (vm.HighlightRows == null) return;
             vm.HighlightRows = null;
             vm.ChartConfig = null;
-            vm.NativeSvg = new SvgChartRenderer().Render(vm);
+            vm.NativeSvg = new SvgChartRenderer().RenderForCard(vm);
         }
 
         /// <summary>

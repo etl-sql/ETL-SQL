@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using Microsoft.Extensions.Configuration;
@@ -22,7 +23,9 @@ namespace ETL_SQL.Engine.Handlers;
 /// Runs a registered tool process, streams data to it via stdin (JSON Lines),
 /// and collects results from stdout (JSON Lines).
 /// </summary>
-public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? catalog = null, IConfiguration? config = null, ICapabilityTokenIssuer? tokenIssuer = null, IToolProcessFactory? processFactory = null) : IStatementHandler
+public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? catalog = null,
+    IConfiguration? config = null, ICapabilityTokenIssuer? tokenIssuer = null, IToolProcessFactory? processFactory = null,
+    IToolApprovalStore? approvalStore = null) : IStatementHandler
 {
     private readonly ILogger _logger = logger;
     private readonly IConfiguration? _config = config;
@@ -33,6 +36,12 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
     public async Task Execute(Statement statement, IExecutionContext context)
     {
         var stmt = (ExecuteToolStatement)statement;
+        if (context.ExecutionIdentity?.ToolPrincipal is { ApprovedSavedScriptOnly: true }
+            && context.CurrentRecursiveDepth > 0)
+        {
+            throw new ExecutionException("Saved-job tool approval applies only to the top-level script.",
+                null, stmt.Line, stmt.Column);
+        }
 
         ToolDefinition toolDef;
         if (catalog != null)
@@ -58,7 +67,8 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
             throw new ExecutionException($"Tool '{stmt.ToolAlias}' is of unsupported type {toolType}.", null, stmt.Line, stmt.Column);
         }
 
-        var command = GetOptionString(toolDef.Options, "COMMAND");
+        var artifact = toolDef.NativeArtifact;
+        var command = artifact?.ExecutablePath ?? GetOptionString(toolDef.Options, "COMMAND");
         if (string.IsNullOrWhiteSpace(command))
             throw new ExecutionException($"Tool '{stmt.ToolAlias}' is missing the COMMAND option.", null, stmt.Line, stmt.Column);
 
@@ -96,6 +106,8 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
         long? containerPidsLimit = null;
         bool isolateNetwork = true;
         string? resolvedNativeCommand = null;
+        string? validatedNativeWorkingDir = null;
+        string? scratchDir = null;
 
         if (toolType == "CONTAINER")
         {
@@ -113,17 +125,27 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
         {
             ValidateNativeIsolationContract(toolDef, context, stmt);
             var ownershipMode = ResolveOwnershipMode(catalog, _config);
-            resolvedNativeCommand = ToolPathGuard.ValidateNativeCommandPath(
+            resolvedNativeCommand = artifact?.ExecutablePath ?? ToolPathGuard.ValidateNativeCommandPath(
                 command,
                 ownershipMode,
                 requireExists: _processFactory is ToolProcessFactory,
                 verifyWriteBoundary: true);
 
-            var scriptPath = GetOptionString(toolDef.Options, "SCRIPT_PATH");
-            if (!string.IsNullOrWhiteSpace(scriptPath))
+            if (!string.IsNullOrWhiteSpace(workingDir))
             {
-                ToolPathGuard.ValidateNativeCommandPath(
+                validatedNativeWorkingDir = ToolPathGuard.ValidateNativeDirectoryPath(
+                    workingDir,
+                    ownershipMode,
+                    requireExists: _processFactory is ToolProcessFactory,
+                    verifyWriteBoundary: true);
+            }
+
+            var scriptPath = GetOptionString(toolDef.Options, "SCRIPT_PATH");
+            if (artifact is null && !string.IsNullOrWhiteSpace(scriptPath))
+            {
+                ToolPathGuard.ValidateNativeScriptPath(
                     scriptPath,
+                    validatedNativeWorkingDir,
                     ownershipMode,
                     requireExists: _processFactory is ToolProcessFactory,
                     verifyWriteBoundary: true);
@@ -237,6 +259,10 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
         else
         {
             startInfo.FileName = resolvedNativeCommand!;
+            // The absolute script path is the first argument. Dash treats later arguments as script data.
+            if (artifact?.ScriptPath is { } fixedScript)
+                startInfo.ArgumentList.Add(fixedScript);
+
             foreach (var arg in args)
             {
                 startInfo.ArgumentList.Add(arg);
@@ -245,23 +271,59 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
             // Sanitized environment: explicitly clear and do not rely on ambient PATH for binary lookup.
             var path = startInfo.EnvironmentVariables.ContainsKey("PATH") ? startInfo.EnvironmentVariables["PATH"] : null;
             startInfo.EnvironmentVariables.Clear();
-            if (path != null) startInfo.EnvironmentVariables["PATH"] = path;
+            if (artifact is null && path != null) startInfo.EnvironmentVariables["PATH"] = path;
 
-            // Canonical scratch root
-            workingDir = Path.Combine(Path.GetTempPath(), "etlsql_tool_" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(workingDir);
-            startInfo.WorkingDirectory = workingDir;
+            // Disposable per-invocation scratch root, kept separate from any approved WORKING_DIR.
+            scratchDir = Path.Combine(Path.GetTempPath(), "etlsql_tool_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(scratchDir);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(scratchDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
+            startInfo.EnvironmentVariables["ETLSQL_SCRATCH_DIR"] = scratchDir;
+            startInfo.EnvironmentVariables["TMP"] = scratchDir;
+            startInfo.EnvironmentVariables["TEMP"] = scratchDir;
+            startInfo.EnvironmentVariables["TMPDIR"] = scratchDir;
+            startInfo.WorkingDirectory = OperatingSystem.IsWindows() && artifact is not null
+                ? Path.GetDirectoryName(artifact.ExecutablePath)!
+                : validatedNativeWorkingDir ?? scratchDir;
         }
 
         IDataSource? ownedOutput = null;
         try
         {
+            await using var verifiedArtifact = artifact is null ? null : await OpenVerifiedArtifactAsync(artifact, stmt, context);
+
+            var approval = artifact is null ? null : $"sha256:{artifact.GenerationSha256} approval:{artifact.ApprovalId}";
+            if (context.IsPersistentSession)
+            {
+                var sessionId = context.SessionId;
+                if (approvalStore is not null && !string.IsNullOrEmpty(sessionId))
+                {
+                    if (!await approvalStore.TryBindAsync(context.SessionRoot, sessionId, stmt.ToolAlias, approval,
+                            context.CancellationToken))
+                        throw new ExecutionException(
+                            $"Tool '{stmt.ToolAlias}' has a different approval in this checkpoint. Restore the original approval or start a fresh session.",
+                            null, stmt.Line, stmt.Column);
+                }
+                else if (artifact is not null)
+                {
+                    throw new ExecutionException("The persistent session cannot record native tool approvals.", null, stmt.Line, stmt.Column);
+                }
+            }
+
             using var process = _processFactory.Create(startInfo);
 
             // P2 - Immutable Logical Checkpoint Identities
-            var argString = string.Join("|", startInfo.ArgumentList);
+            var argString = artifact?.ScriptPath is null ? string.Join("|", startInfo.ArgumentList) : string.Join("|", args);
             var envKeys = startInfo.EnvironmentVariables.Keys.Cast<string>()
-                .Where(k => k != "ETLSQL_CAPABILITY_TOKEN" && k != "ETLSQL_IDEMPOTENCY_KEY")
+                .Where(k => k != "ETLSQL_CAPABILITY_TOKEN"
+                    && k != "ETLSQL_IDEMPOTENCY_KEY"
+                    && k != "ETLSQL_SCRATCH_DIR"
+                    && k != "TMP"
+                    && k != "TEMP"
+                    && k != "TMPDIR")
                 .OrderBy(k => k);
             var envString = string.Join("|", envKeys.Select(k => $"{k}={startInfo.EnvironmentVariables[k]}"));
             var policyHash = context.ExecutionPolicy?.PolicyHash ?? "no-policy";
@@ -307,7 +369,7 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
                         {
                             TenantId = context.StorageCapability?.Tenant?.Tenant.Value,
                             Environment = null,
-                            ToolDigest = toolDef.ToolType,
+                            ToolDigest = artifact?.GenerationSha256 ?? toolDef.ToolType,
                             OperationId = operationId,
                             Actor = actor,
                             RunAttempt = policy?.JobId,
@@ -338,7 +400,7 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
                 startInfo.ArgumentList.Insert(2, containerName);
             }
             using var ioCancellation = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
-            var (stagedOutput, errorOutput) = await RunProcessAsync(process, containerName, stmt, context, ioCancellation, timeoutSecs);
+            var (stagedOutput, errorOutput) = await RunProcessAsync(process, containerName, stmt, context, ioCancellation, timeoutSecs, approval, verifiedArtifact);
             ownedOutput = stagedOutput;
 
             if (process.ExitCode != 0)
@@ -420,7 +482,8 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
                 effectiveSuccess,
                 $"Tool:{stmt.ToolAlias}",
                 SecurityEventDecision.Allowed,
-                $"Tool execution completed successfully without violating resource limits or boundary policy.") with
+                approval is null ? "Tool execution completed successfully without violating resource limits or boundary policy."
+                    : $"Approved native tool execution completed successfully ({approval}).") with
             {
                 ScriptHash = context.ExecutionPolicy?.ScriptHash,
                 JobId = context.ExecutionPolicy?.JobId,
@@ -434,25 +497,43 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
         finally
         {
             if (ownedOutput != null) await ownedOutput.DisposeAsync();
-            if (toolType == "EXECUTABLE" && !string.IsNullOrEmpty(workingDir) && workingDir.StartsWith(Path.GetTempPath()))
+            if (toolType == "EXECUTABLE"
+                && !string.IsNullOrEmpty(scratchDir)
+                && !string.Equals(scratchDir, validatedNativeWorkingDir, StringComparison.OrdinalIgnoreCase))
             {
                 try
                 {
-                    if (Directory.Exists(workingDir))
+                    if (Directory.Exists(scratchDir))
                     {
-                        Directory.Delete(workingDir, true);
+                        Directory.Delete(scratchDir, true);
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warning("Failed to clean up scratch root {Dir}: {Error}", workingDir, ex.Message);
+                    _logger.Warning("Failed to clean up scratch root {Dir}: {Error}", scratchDir, ex.Message);
                 }
             }
         }
     }
 
+    private async Task<FileStream?> OpenVerifiedArtifactAsync(NativeToolArtifact artifact, ExecuteToolStatement statement, IExecutionContext context)
+    {
+        try
+        {
+            return await artifact.OpenForLaunchAsync(context.CancellationToken);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException
+            or NotSupportedException or System.ComponentModel.Win32Exception or BadImageFormatException
+            or System.Security.SecurityException or System.Security.Principal.IdentityNotMappedException)
+        {
+            EmitToolFailure(statement, context, SecurityEventType.OperationDenied, ex.Message);
+            throw new ExecutionException(ex.Message, null, statement.Line, statement.Column);
+        }
+    }
+
     private async Task<(IDataSource? Output, string Error)> RunProcessAsync(IToolProcess process, string? containerName,
-        ExecuteToolStatement statement, IExecutionContext context, CancellationTokenSource cancellation, long timeoutSeconds)
+        ExecuteToolStatement statement, IExecutionContext context, CancellationTokenSource cancellation, long timeoutSeconds,
+        string? approval, FileStream? verifiedArtifact)
     {
         var started = false;
         var attempted = false;
@@ -465,6 +546,13 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
             attempted = true;
             process.Start();
             started = true;
+            if (verifiedArtifact is not null)
+                await verifiedArtifact.DisposeAsync();
+            if (approval is not null)
+            {
+                _logger.Info("Launched approved native tool {ToolAlias} ({Approval}).", statement.ToolAlias, approval);
+            }
+
             var input = CancelOnFailureAsync(async () =>
             {
                 await StreamInputAsync(statement.SourceTable, process.StandardInput, context, cancellation.Token);
@@ -621,14 +709,15 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
     }
 
     /// <summary>
-    /// Splits the ARGS template on spaces, then performs a single-pass replacement of each
-    /// <c>{NAME}</c> placeholder inside each token. Values never introduce new arguments or expand
-    /// nested placeholders; an argument left empty is dropped.
+    /// Splits the ARGS template into argument tokens honoring single and double quotes (so paths
+    /// with spaces stay intact), then performs a single-pass replacement of each <c>{NAME}</c>
+    /// placeholder inside each token. Values never introduce new arguments or expand nested
+    /// placeholders; an argument left empty is dropped.
     /// </summary>
     internal static List<string> BuildArguments(string template, IReadOnlyDictionary<string, string> values)
     {
-        var tokens = template.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var result = new List<string>(tokens.Length);
+        var tokens = TokenizeArgumentTemplate(template);
+        var result = new List<string>(tokens.Count);
         foreach (var token in tokens)
         {
             var replaced = PlaceholderRegex().Replace(token, match =>
@@ -641,6 +730,74 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
         }
 
         return result;
+    }
+
+    internal static List<string> TokenizeArgumentTemplate(string template)
+    {
+        var tokens = new List<string>();
+        if (string.IsNullOrWhiteSpace(template))
+            return tokens;
+
+        var current = new System.Text.StringBuilder();
+        var inToken = false;
+        char quote = '\0';
+
+        for (int i = 0; i < template.Length; i++)
+        {
+            char c = template[i];
+
+            if (quote != '\0')
+            {
+                if (quote == '"' && c == '\\' && i + 1 < template.Length && template[i + 1] == '"')
+                {
+                    current.Append('"');
+                    i++;
+                    continue;
+                }
+
+                if (c == quote)
+                {
+                    quote = '\0';
+                    continue;
+                }
+
+                current.Append(c);
+                continue;
+            }
+
+            if (char.IsWhiteSpace(c))
+            {
+                if (inToken)
+                {
+                    tokens.Add(current.ToString());
+                    current.Clear();
+                    inToken = false;
+                }
+                continue;
+            }
+
+            if (c is '"' or '\'')
+            {
+                quote = c;
+                inToken = true;
+                continue;
+            }
+
+            current.Append(c);
+            inToken = true;
+        }
+
+        if (quote != '\0')
+        {
+            throw new ExecutionException($"Tool ARGS template contains an unclosed {quote} quote.");
+        }
+
+        if (inToken)
+        {
+            tokens.Add(current.ToString());
+        }
+
+        return tokens;
     }
 
     internal List<string> ValidateAndBuildArguments(
@@ -663,8 +820,9 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
             ValidateParameterValue(paramName, value, maxParamLength, roles, allowCallerCodeArgs);
         }
 
-        var tokens = template.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
-        var isInterpreter = IsInterpreterCommand(command);
+        var tokens = TokenizeArgumentTemplate(template);
+        // A pinned interpreter receives a fixed entry point before any template arguments.
+        var isInterpreter = toolDef.NativeArtifact?.ScriptPath is null && ToolPathGuard.IsInterpreterCommand(command);
         var hasFixedScriptBeforeParam = false;
         var pastEndOfOptions = false;
         var endOfOptionsInsertIndex = -1;
@@ -681,7 +839,10 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
             var placeholders = PlaceholderRegex().Matches(token);
             if (placeholders.Count == 0)
             {
-                if (!token.StartsWith('-') && !token.StartsWith('/'))
+                // A '/' token is a fixed script only when it is a multi-segment absolute path
+                // (/opt/tools/run.py). cmd and Windows PowerShell take '/' switches of any length
+                // (/NoProfile, /Command, /V:ON), and PowerShell runs its first positional argument.
+                if (!token.StartsWith('-') && !(token.StartsWith('/') && token.IndexOf('/', 1) < 0))
                     hasFixedScriptBeforeParam = true;
                 continue;
             }
@@ -992,36 +1153,6 @@ public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogPro
             return true;
 
         return false;
-    }
-
-    private static bool IsInterpreterCommand(string command)
-    {
-        var exe = Path.GetFileNameWithoutExtension(command.Trim());
-        return exe.Equals("python", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("python3", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("python2", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("py", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("node", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("nodejs", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("bash", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("sh", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("dash", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("zsh", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("ash", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("ksh", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("pwsh", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("powershell", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("cmd", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("ruby", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("perl", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("php", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("lua", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("awk", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("gawk", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("env", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("xargs", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("cscript", StringComparison.OrdinalIgnoreCase)
-            || exe.Equals("wscript", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsInterpreterExecSwitch(string token) =>

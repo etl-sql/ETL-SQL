@@ -10,8 +10,11 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Observability;
 using ETL_SQL.Orchestrator.Channels;
+using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Service;
+using ETL_SQL.Orchestrator.Storage;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
@@ -134,6 +137,198 @@ public class OrchestratorJobApiAuthTests : IDisposable
                 OrchestratorWebFactory.IdentitySecret));
 
         Assert.Equal(HttpStatusCode.Accepted, (await client.SendAsync(req)).StatusCode);
+    }
+
+    [Fact]
+    public async Task ScheduledToolUseRequiresOwnerApprovalForCurrentVersionAndLiveMembership()
+    {
+        const string tenant = "tenant-a";
+        const string name = "approved-native-workflow";
+        const string alias = "scheduled_tool";
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        var catalog = new LocalToolCatalogProvider(Path.Combine(factory.TempDir, "scheduled-tools"),
+            ToolCatalogOwnershipMode.PersonalWorkstation, validateOwnership: false, requireUseGrants: true);
+        var image = "alpine@sha256:" + new string('d', 64);
+        await catalog.StoreAsync(new ToolDefinition(alias, "CONTAINER",
+            new Dictionary<string, string> { ["COMMAND"] = "echo", ["IMAGE"] = image }, false));
+        await catalog.SetUseGrantAsync(alias, new(tenant, ToolPrincipalKind.Group, "finance-key"), allow: true);
+
+        var lookup = new CurrentToolOwnerLookup(
+            new ToolExecutionPrincipal(tenant, ToolPrincipalKind.User, "alice", ["finance-key"], true));
+        using var host = factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
+                new Dictionary<string, string?> { ["Governance:Docker:AllowedImages:0"] = image }));
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton<IToolCatalogProvider>(catalog);
+                services.AddSingleton<IScheduledToolPrincipalLookup>(lookup);
+            });
+        });
+        using var client = host.CreateClient();
+        var store = host.Services.GetRequiredService<IJobHistoryStore>();
+        await store.SaveJobAsync(new JobDefinition(name, $"SET WHAT_IF ON; EXECUTE TOOL '{alias}';",
+            1, "HOUR", null, null, DateTime.Now.AddHours(1), CreatedBy: "user:alice", TenantId: tenant));
+        var job = (await store.GetJobAsync(tenant, name))!;
+        var approvals = Assert.IsAssignableFrom<IJobToolApprovalStore>(store);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+
+        async Task<HttpStatusCode> ApproveAsync(string subject, long version, bool approved = true,
+            string jobName = name, string subjectType = "user", string[]? scopes = null)
+        {
+            using var req = Request(HttpMethod.Put, $"/api/scheduled-jobs/{jobName}/tool-approval", ValidKey,
+                new { approved }, version);
+            req.Headers.Add(OrchestratorIdentityAssertion.HeaderName, OrchestratorIdentityAssertion.Create(
+                new OrchestratorCaller(subjectType, subject, subject, ["Admin", "OrchestratorManager"], [], tenant, scopes),
+                OrchestratorWebFactory.IdentitySecret));
+            using var response = await client.SendAsync(req, timeout.Token);
+            return response.StatusCode;
+        }
+
+        Assert.Equal(HttpStatusCode.Forbidden, await ApproveAsync("other-admin", job.Version));
+        Assert.Equal(HttpStatusCode.Conflict, await ApproveAsync("alice", job.Version + 1));
+        Assert.Equal(HttpStatusCode.NoContent, await ApproveAsync("alice", job.Version));
+        Assert.True(await approvals.HasToolApprovalAsync(job, timeout.Token));
+
+        const string serviceJobName = "service-owned-workflow";
+        await store.SaveJobAsync(new JobDefinition(serviceJobName, job.Script, 1, "HOUR", null, null,
+            DateTime.Now.AddHours(1), CreatedBy: "service:job-bot", TenantId: tenant));
+        var serviceJob = (await store.GetJobAsync(tenant, serviceJobName))!;
+        Assert.Equal(HttpStatusCode.Forbidden, await ApproveAsync("job-bot", serviceJob.Version,
+            jobName: serviceJobName, subjectType: "service", scopes: ["orchestrator.execute"]));
+        Assert.Equal(HttpStatusCode.NoContent, await ApproveAsync("job-bot", serviceJob.Version,
+            jobName: serviceJobName, subjectType: "service", scopes: ["orchestrator.publish"]));
+
+        async Task<JobHistoryEntry> RunNextOccurrenceAsync()
+        {
+            var baseline = (await store.GetHistoryAsync(job.Id, 1)).FirstOrDefault()?.Id;
+            // Legacy interval jobs and their due query use local wall-clock time.
+            await store.UpdateJobLastRunAsync(job.Id, DateTime.Now, DateTime.Now.AddSeconds(-1));
+            while (true)
+            {
+                var run = (await store.GetHistoryAsync(job.Id, 1)).FirstOrDefault();
+                var current = await store.GetJobByIdAsync(job.Id);
+                if (run is not null && run.Id != baseline && run.EndTime is not null
+                    && current?.NextRun > DateTime.Now)
+                    return run;
+
+                await Task.Delay(50, timeout.Token);
+            }
+        }
+
+        var allowed = await RunNextOccurrenceAsync();
+        Assert.True(allowed.Status == "SUCCESS", allowed.ErrorMessage);
+
+        lookup.Principal = lookup.Principal with { GroupIds = [] };
+        var removed = await RunNextOccurrenceAsync();
+        Assert.Equal("FAILURE", removed.Status);
+        Assert.Contains("unavailable to this caller", removed.ErrorMessage);
+
+        lookup.Principal = lookup.Principal with { GroupIds = ["finance-key"] };
+        job = (await store.GetJobByIdAsync(job.Id))!;
+        Assert.True(await store.TrySaveJobAsync(job with { Script = job.Script + " PRINT 'edited';" }, job.Version));
+        Assert.False(await approvals.HasToolApprovalAsync(job, timeout.Token));
+        var edited = await RunNextOccurrenceAsync();
+        Assert.Equal("FAILURE", edited.Status);
+        Assert.Contains("unavailable to this caller", edited.ErrorMessage);
+
+        job = (await store.GetJobByIdAsync(job.Id))!;
+        Assert.Equal(HttpStatusCode.NoContent, await ApproveAsync("alice", job.Version));
+        Assert.True(await approvals.HasToolApprovalAsync(job, timeout.Token));
+        Assert.Equal(HttpStatusCode.NoContent, await ApproveAsync("alice", job.Version, approved: false));
+        Assert.False(await approvals.HasToolApprovalAsync(job, timeout.Token));
+    }
+
+    private sealed class CurrentToolOwnerLookup(ToolExecutionPrincipal principal) : IScheduledToolPrincipalLookup
+    {
+        public ToolExecutionPrincipal Principal { get; set; } = principal;
+
+        public Task<ToolExecutionPrincipal?> ResolveAsync(string tenantId, string ownerKey, CancellationToken cancellationToken) =>
+            Task.FromResult<ToolExecutionPrincipal?>(tenantId == Principal.TenantId && ownerKey == "user:alice"
+                ? Principal : null);
+    }
+
+    [Fact]
+    public async Task Federated_ToolUseFollowsSignedGroupAndCurrentCatalogGrant()
+    {
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        var catalog = new LocalToolCatalogProvider(
+            Path.Combine(factory.TempDir, "tools"), ToolCatalogOwnershipMode.PersonalWorkstation,
+            validateOwnership: false, requireUseGrants: true);
+        const string alias = "mask_sales";
+        var approvedImage = "alpine@sha256:" + new string('c', 64);
+        var definition = new ToolDefinition(alias, "CONTAINER",
+            new Dictionary<string, string>
+            {
+                ["COMMAND"] = "echo",
+                ["IMAGE"] = approvedImage
+            }, false);
+        const string reconcileAlias = "reconcile_sales";
+        await catalog.StoreAsync(definition);
+        await catalog.StoreAsync(definition with { Name = reconcileAlias });
+        var grant = new ToolUseGrant("tenant-a", ToolPrincipalKind.Group, "finance-id");
+        await catalog.SetUseGrantAsync(alias, grant, allow: true);
+        await catalog.SetUseGrantAsync(reconcileAlias, new("tenant-a", ToolPrincipalKind.Group, "operations-id"), allow: true);
+
+        using var host = factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Governance:Docker:AllowedImages:0"] = approvedImage
+                }));
+            builder.ConfigureServices(services => services.AddSingleton<IToolCatalogProvider>(catalog));
+        });
+        using var client = host.CreateClient();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        async Task<JobStatusResponse> SubmitAsync(string tenant, string groupId, string subjectId, string toolAlias)
+        {
+            string assertion = OrchestratorIdentityAssertion.Create(
+                new OrchestratorCaller("user", subjectId, subjectId, ["OrchestratorManager"], [groupId],
+                    tenant, GroupNames: ["Finance"]),
+                OrchestratorWebFactory.IdentitySecret);
+
+            using var submit = Request(HttpMethod.Post, "/jobs", ValidKey,
+                new { ScriptText = $"SET WHAT_IF ON; EXECUTE TOOL '{toolAlias}';" });
+            submit.Headers.Add(OrchestratorIdentityAssertion.HeaderName, assertion);
+            using var accepted = await client.SendAsync(submit, timeout.Token);
+            Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode);
+            Assert.NotNull(accepted.Headers.Location);
+
+            while (true)
+            {
+                using var poll = Request(HttpMethod.Get, accepted.Headers.Location.ToString(), ValidKey);
+                poll.Headers.Add(OrchestratorIdentityAssertion.HeaderName, assertion);
+                using var result = await client.SendAsync(poll, timeout.Token);
+                result.EnsureSuccessStatusCode();
+                var status = await result.Content.ReadFromJsonAsync<JobStatusResponse>(timeout.Token);
+                Assert.NotNull(status);
+                if (status.Status is not (JobRunStatus.Queued or JobRunStatus.Running))
+                    return status;
+
+                await Task.Delay(25, timeout.Token);
+            }
+        }
+
+        var allowed = await SubmitAsync("tenant-a", "finance-id", "alice", alias);
+        Assert.True(allowed.Status == JobRunStatus.Completed, allowed.ErrorMessage);
+        var operations = await SubmitAsync("tenant-a", "operations-id", "bob", reconcileAlias);
+        Assert.True(operations.Status == JobRunStatus.Completed, operations.ErrorMessage);
+        var otherTool = await SubmitAsync("tenant-a", "finance-id", "alice", reconcileAlias);
+        Assert.Equal(JobRunStatus.Failed, otherTool.Status);
+        Assert.Contains("unavailable to this caller", otherTool.ErrorMessage);
+        var otherGroup = await SubmitAsync("tenant-a", "operations-id", "bob", alias);
+        Assert.Equal(JobRunStatus.Failed, otherGroup.Status);
+        Assert.Contains("unavailable to this caller", otherGroup.ErrorMessage);
+        var otherTenant = await SubmitAsync("tenant-b", "finance-id", "alice", alias);
+        Assert.Equal(JobRunStatus.Failed, otherTenant.Status);
+        Assert.Equal(otherGroup.ErrorMessage, otherTenant.ErrorMessage);
+
+        Assert.True(await catalog.SetUseGrantAsync(alias, grant, allow: false));
+        var revoked = await SubmitAsync("tenant-a", "finance-id", "alice", alias);
+        Assert.Equal(JobRunStatus.Failed, revoked.Status);
+        Assert.Equal(otherGroup.ErrorMessage, revoked.ErrorMessage);
     }
 
     [Theory]

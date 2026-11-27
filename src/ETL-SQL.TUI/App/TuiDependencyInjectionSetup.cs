@@ -62,6 +62,7 @@ namespace ETL_SQL.TUI
             var configuration = new ConfigurationBuilder()
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                .AddInstallerLayers(AppDomain.CurrentDomain.BaseDirectory)
                 .AddEnvironmentVariables()
                 .AddEnterprisePolicy()
                 .Build();
@@ -120,8 +121,10 @@ namespace ETL_SQL.TUI
             services.AddSingleton<ETL_SQL.Services.SecurityService>(securityService);
             services.AddSingleton<ETL_SQL.TUI.Services.IClipboardService, ETL_SQL.TUI.Services.ClipboardService>();
             services.AddSingleton<ISystemResources, DefaultSystemResources>();
-            services.AddSingleton<ETL_SQL.Core.Execution.IBufferManager, BufferManager>();
-            services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BufferManagerOptions()));
+            services.Configure<BufferManagerOptions>(configuration.GetSection("Orchestration:ResourceManagement"));
+            services.AddSingleton<BufferManager>();
+            services.AddSingleton<ETL_SQL.Core.Execution.IBufferManager>(sp => sp.GetRequiredService<BufferManager>());
+            services.AddSingleton<ETL_SQL.Core.IMemoryGrantArbiter>(sp => sp.GetRequiredService<BufferManager>());
             services.AddTransient<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
 
             // ── Connectors ─────────────────────────────────────────────────────
@@ -166,6 +169,9 @@ namespace ETL_SQL.TUI
             services.AddSingleton<IConnector, ETL_SQL.Connectors.BigQuery.BigQueryConnector>();
             services.AddSingleton<IConnector, ETL_SQL.Connectors.Snowflake.SnowflakeConnector>();
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
+            // The database connectors' retry policy is process-wide; Connectors:Retry configures it.
+            ETL_SQL.Connectors.Shared.ConnectorRetryPolicy.Initialize(
+                ETL_SQL.Connectors.Shared.ConnectorRetryPolicy.OptionsFrom(configuration));
 
             // ── Evaluator + execution ──────────────────────────────────────────
             services.AddTransient<ExecutionSession>();
@@ -186,14 +192,11 @@ namespace ETL_SQL.TUI
             services.Configure<JobThrottleOptions>(configuration.GetSection("Scheduling:Throttle"));
             services.AddSingleton<JobThrottle>();
 
-            services.Configure<BufferManagerOptions>(configuration.GetSection("Orchestration:ResourceManagement"));
-            services.AddSingleton<BufferManager>();
-            services.AddSingleton<IBufferManager>(sp => sp.GetRequiredService<BufferManager>());
-
             services.AddSingleton<SQLiteJobHistoryStore>();
             services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<IJobCatalogStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
+            services.AddSingleton<ITenantBundleStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<ILineageCatalogStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<IHostMetricsStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<SchedulerService>();

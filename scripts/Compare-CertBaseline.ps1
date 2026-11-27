@@ -3,14 +3,23 @@
     Compares a cert-report.json against a stored baseline and reports regressions.
 
 .DESCRIPTION
-    Compares scale certification scenarios by correctness first, then by scenario-aware
-    performance bands. Schema v1 reports from Test-ScaleCertification.ps1 are supported, and the
-    schema v2 shape from Docs/Design/performance-regression-quality.md is accepted when baselines add
-    distribution objects and checked-in bands.
+    Compares scale certification scenarios against a hosted baseline by metric class (W6,
+    docs/releases/v0.23.0-w6-performance-gates-design.md):
 
-    Missing baselines and hardware mismatches are warnings. Correctness regressions always fail.
-    Performance failures are suppressed to warnings when the baseline and current machine profiles
-    differ materially, unless -AllowHardwareMismatch is supplied.
+      Correctness  failed scenario, result rows, checksum             always fails
+      Work         spill bytes, spill write bytes, extent count,       exact; fails on any change
+                   partition passes, plan decision/fallback/
+                   rejected/degraded counts
+      Allocation   allocatedMB (median of samples)                    fails above +5%, warns above
+                                                                       +2% or below -10%
+      Machine      elapsed, rows/s, peak working set, GC pause         report-only (warnings)
+
+    Timing is gated only by the paired A/B job in release evidence, never here. spillReadBytes is
+    not compared: it records file length when a reader opens, which is timing-dependent.
+
+    A work or allocation change that is intended is recalibrated in the same commit (see
+    certification-results/README.md). Capture-method or fixture differences only affect timing
+    comparability, so they are reported as warnings instead of refusing the comparison.
 
 .PARAMETER NewReport
     Path to the cert-report.json produced by the current run. Defaults to
@@ -21,12 +30,18 @@
     certification-results/baseline-<tier>.json (resolved after reading the new report's tier).
 
 .PARAMETER RegressionPct
-    Legacy explicit failure threshold for elapsedMs percent increase. When omitted, the comparator
-    uses scenario family bands or per-scenario baseline bands.
+    Warning threshold for elapsedMs percent increase. Elapsed time is report-only; this only
+    changes which timing differences are listed.
+
+.PARAMETER DeterministicReportOnly
+    Reports work and allocation differences as warnings, so only correctness fails. For local
+    runs against the hosted baseline: local runs are not release evidence.
 
 .PARAMETER PerformanceReportOnly
-    Reports every performance band miss as a warning; only correctness (failed scenarios, row
-    counts, checksums) fails. CI uses it on shared runners, where one run's timing is noise.
+    Accepted for compatibility. Machine metrics are always report-only now.
+
+.PARAMETER AllowHardwareMismatch
+    Accepted for compatibility. Hardware differences are reported but no longer change gating.
 
 .PARAMETER MarkdownReport
     Optional path for a Markdown comparison report.
@@ -37,6 +52,7 @@ param(
     [int]$RegressionPct = 150,
     [switch]$AllowHardwareMismatch,
     [switch]$PerformanceReportOnly,
+    [switch]$DeterministicReportOnly,
     [string]$MarkdownReport = ""
 )
 
@@ -434,7 +450,6 @@ if (-not (Test-Path $Baseline)) {
 }
 
 $base = Get-Content $Baseline -Raw | ConvertFrom-Json
-Assert-ScaleCaptureCompatibility -BaselineReport $base -CurrentReport $new -PerformanceReportOnly:$PerformanceReportOnly
 
 if ((Get-PropValue $base @('tier')) -ne $tier) {
     Write-Warning "Baseline tier '$(Get-PropValue $base @('tier'))' does not match new report tier '$tier' - skipping comparison."
@@ -451,19 +466,43 @@ foreach ($scenario in @($new.scenarios)) {
 }
 
 $issues = @()
-$hardwareMismatch = Test-HardwareMismatch $base $new
+# Capture method, warm-up, GC profile and fixture hash decide whether timings are comparable.
+# Timing is report-only here, so a difference is listed rather than blocking the deterministic
+# checks (a one-line scale-test fix used to refuse every comparison; TODO 2.8).
+try {
+    Assert-ScaleCaptureCompatibility -BaselineReport $base -CurrentReport $new -PerformanceReportOnly
+} catch {
+    Add-Issue 'WARN' '_report' 'CAPTURE_COMPATIBILITY' 'baseline' 'current' $null "Machine metrics are not comparable: $($_.Exception.Message)"
+}
+$null = Test-HardwareMismatch $base $new
 Test-ReportMetadata $base $new
-$suppressPerformanceFailures = $PerformanceReportOnly -or ($hardwareMismatch -and -not $AllowHardwareMismatch)
-$suppressionNote = if ($PerformanceReportOnly) { 'Performance is report-only in this run.' } else { 'Performance failure suppressed because baseline hardware differs.' }
+# Machine metrics (elapsed, rows/s, peak working set, GC pause) never fail (W6).
+$suppressPerformanceFailures = $true
+$suppressionNote = 'Machine metric; report-only. Timing is gated only by the paired A/B job.'
+$deterministicLevel = if ($DeterministicReportOnly) { 'WARN' } else { 'FAIL' }
+$deterministicNote = if ($DeterministicReportOnly) { ' Report-only in this run (local).' } else { ' If intended, recalibrate the baseline in this change.' }
+$workCounters = @('spillBytes', 'spillWriteBytes', 'spillExtentCount', 'partitionPassCount',
+    'planDecisionCount', 'planFallbackCount', 'planRejectedCount', 'planDegradedCount')
+$allocFailPct = 5.0
+$allocWarnPct = 2.0
+$allocImprovedPct = 10.0
 
+$baseList = @()
 $baseMap = @{}
 foreach ($scenario in @($base.scenarios)) {
     $name = Get-ScenarioName $scenario
     if ($name) {
         $rows = Get-ScenarioRowCount $scenario
         $key = if ($null -ne $rows) { "$name|$rows" } else { "$name|" }
-        $baseMap[$key] = $scenario
-        if (-not $baseMap.ContainsKey("$name|")) { $baseMap["$name|"] = $scenario }
+        $entry = [pscustomobject]@{
+            Scenario = $scenario
+            Name = $name
+            Key = $key
+            Matched = $false
+        }
+        $baseList += $entry
+        $baseMap[$key] = $entry
+        if (-not $baseMap.ContainsKey("$name|")) { $baseMap["$name|"] = $entry }
     }
 }
 
@@ -473,13 +512,16 @@ foreach ($scenario in @($new.scenarios)) {
 
     $rows = Get-ScenarioRowCount $scenario
     $key = if ($null -ne $rows) { "$name|$rows" } else { "$name|" }
-    $baselineScenario = $baseMap[$key]
-    if ($null -eq $baselineScenario) { $baselineScenario = $baseMap["$name|"] }
+    $baseEntry = $baseMap[$key]
+    if ($null -eq $baseEntry) { $baseEntry = $baseMap["$name|"] }
 
-    if ($null -eq $baselineScenario) {
+    if ($null -eq $baseEntry) {
         Add-Issue 'WARN' $name 'MISSING_BASELINE' 'missing' 'present' $null 'New scenario has no checked-in baseline yet.'
         continue
     }
+
+    $baseEntry.Matched = $true
+    $baselineScenario = $baseEntry.Scenario
 
     $baselinePassed = Get-CorrectnessPassed $baselineScenario
     $currentPassed = Get-CorrectnessPassed $scenario
@@ -532,13 +574,33 @@ foreach ($scenario in @($new.scenarios)) {
         Compare-HigherIsWorse $name 'PEAK_WORKING_SET_MB' $baselinePeak $currentPeak 10.0 15.0 $suppressPerformanceFailures ' MB' $spread
     }
 
-    $baselineSpill = Get-MetricValue $baselineScenario @('totalSpilledBytes', 'spilledBytes', 'spillWriteBytes') @('median', 'max', 'value')
-    $currentSpill = Get-MetricValue $scenario @('totalSpilledBytes', 'spilledBytes', 'spillWriteBytes') @('median', 'max', 'value')
-    if ($null -ne $baselineSpill -and $null -ne $currentSpill) {
-        $spread = Get-MetricSpread $baselineScenario 'totalSpilledBytes'
-        if ($spread -eq 0.0) { $spread = Get-MetricSpread $baselineScenario 'spilledBytes' }
-        if ($spread -eq 0.0) { $spread = Get-MetricSpread $baselineScenario 'spillWriteBytes' }
-        Compare-HigherIsWorse $name 'SPILLED_BYTES' $baselineSpill $currentSpill 25.0 50.0 $suppressPerformanceFailures ' bytes' $spread
+    # Work: what the engine did. Identical in every hosted sample (W6 slice 1), so exact.
+    foreach ($counter in $workCounters) {
+        $baselineWork = Get-MetricValue $baselineScenario @($counter) @('median', 'value')
+        $currentWork = Get-MetricValue $scenario @($counter) @('median', 'value')
+        # A counter on only one side (renamed or dropped field) must not pass silently.
+        if (($null -eq $baselineWork) -ne ($null -eq $currentWork)) {
+            $baselineText = if ($null -eq $baselineWork) { 'missing' } else { $baselineWork }
+            $currentText = if ($null -eq $currentWork) { 'missing' } else { $currentWork }
+            Add-Issue $deterministicLevel $name 'MISSING_WORK_COUNTER' $baselineText $currentText $null "Work counter '$counter' is recorded on only one side.$deterministicNote"
+        } elseif ($null -ne $baselineWork -and $baselineWork -ne $currentWork) {
+            $delta = if ($baselineWork -ne 0) { (($currentWork - $baselineWork) / $baselineWork) * 100.0 } else { $null }
+            Add-Issue $deterministicLevel $name "WORK_$($counter.ToUpperInvariant())" $baselineWork $currentWork $delta "The engine did different work.$deterministicNote"
+        }
+    }
+
+    # Allocation: median of samples; replica medians agree within 1.2% on hosted runners.
+    $baselineAlloc = Get-MetricValue $baselineScenario @('allocatedMB') @('median', 'value')
+    $currentAlloc = Get-MetricValue $scenario @('allocatedMB') @('median', 'value')
+    if ($null -ne $baselineAlloc -and $null -ne $currentAlloc -and $baselineAlloc -gt 0) {
+        $delta = [math]::Round((($currentAlloc - $baselineAlloc) / $baselineAlloc) * 100.0, 1)
+        if ($delta -gt $allocFailPct) {
+            Add-Issue $deterministicLevel $name 'ALLOCATED_MB' "$baselineAlloc MB" "$currentAlloc MB" $delta "Failure band $allocFailPct%.$deterministicNote"
+        } elseif ($delta -gt $allocWarnPct) {
+            Add-Issue 'WARN' $name 'ALLOCATED_MB' "$baselineAlloc MB" "$currentAlloc MB" $delta "Warning band $allocWarnPct%."
+        } elseif ($delta -lt -$allocImprovedPct) {
+            Add-Issue 'WARN' $name 'ALLOCATED_MB' "$baselineAlloc MB" "$currentAlloc MB" $delta "Allocations fell by more than $allocImprovedPct%; recalibrate to lock in the improvement."
+        }
     }
 
     $baselineGc = Get-MetricValue $baselineScenario @('gcPauseMs', 'gcPause') @('median', 'max', 'value')
@@ -547,6 +609,12 @@ foreach ($scenario in @($new.scenarios)) {
         $spread = Get-MetricSpread $baselineScenario 'gcPauseMs'
         if ($spread -eq 0.0) { $spread = Get-MetricSpread $baselineScenario 'gcPause' }
         Compare-HigherIsWorse $name 'GC_PAUSE_MS' $baselineGc $currentGc 20.0 35.0 $suppressPerformanceFailures ' ms' $spread
+    }
+}
+
+foreach ($baseEntry in $baseList) {
+    if (-not $baseEntry.Matched) {
+        Add-Issue 'WARN' $baseEntry.Name 'MISSING_NEW_SCENARIO' 'present' 'missing' $null 'Baseline scenario is missing from the current report.'
     }
 }
 

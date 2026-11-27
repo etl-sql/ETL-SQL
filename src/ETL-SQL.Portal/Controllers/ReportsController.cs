@@ -418,6 +418,10 @@ public class ReportsController : ControllerBase
     [RequireStudioCapability(StudioCapabilities.ReportPublish, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> Publish([FromBody] PublishReportRequest req)
     {
+        if (!HttpContext.RequestServices.GetRequiredService<StudioAuthorizationService>()
+            .HasCapability(User, StudioCapabilities.ScriptIngress))
+            return Forbid();
+
         var perm = await GetEffectivePermissionAsync(req.FolderId);
         if (!perm.AtLeast(FolderPermission.Manage))
             return Forbid();
@@ -884,7 +888,8 @@ public class ReportsController : ControllerBase
             var studioAuthorization = HttpContext.RequestServices.GetRequiredService<StudioAuthorizationService>();
             if (studioAuthorization.Mode != StudioDeploymentMode.SourceControlled)
                 return NotFound(new { error = "External script publication is unavailable in this Studio deployment mode." });
-            if (!studioAuthorization.HasCapability(User, StudioCapabilities.ReportPublish))
+            if (!studioAuthorization.HasCapability(User, StudioCapabilities.ReportPublish)
+                || !studioAuthorization.HasCapability(User, StudioCapabilities.ScriptIngress))
                 return Forbid();
 
             var scriptRoot = portalConfig.ScriptRootPath;

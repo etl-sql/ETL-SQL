@@ -93,6 +93,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public string SessionRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "Sessions", SessionId);
     public IDictionary<string, IDataSource> Connections { get; } = new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
     public IDictionary<string, string> CatalogBackedConnections { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    public ISet<string> SharedConnectionDependencies { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     public IDictionary<string, IDataSource> LocalSources => new Dictionary<string, IDataSource>();
     public IDictionary<string, NamedSet> NamedSets => new Dictionary<string, NamedSet>();
 
@@ -206,6 +207,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public long MaxSessionSize { get; set; } = LanguageMetadata.DefaultMaxSessionSize;
     public bool SpillEncryptionEnabled { get; set; } = true;
     public bool SpillCompressionEnabled { get; set; } = true;
+    public string SpillCompressionLevel { get; set; } = "Adaptive";
     public string SpillFormat { get; set; } = "Arrow";
     public ISpillStore SpillStore => null!;
     public string? DecryptValue(string? value) => value;
@@ -330,7 +332,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public Task EvaluateStatement(Statement statement, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task Evaluate(Script script, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt) => throw new NotSupportedException();
-    public Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args) => Task.CompletedTask;
+    public Task EvaluateProcedure(string name, List<(string? Name, object? Value, string? OutputVariable)> args) => Task.CompletedTask;
     public string ResolvePath(string path)
     {
         if (Governance.CapabilityReference.IsCapabilityReference(path))

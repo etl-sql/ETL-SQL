@@ -9,6 +9,7 @@ using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
 using ETL_SQL.Reporting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -54,18 +55,37 @@ public sealed class DesignerSnapshotServiceTests : IDisposable
 
     private DesignerSnapshotService NewService(PortalDbContext db) => NewServices(db).Service;
 
-    private TestServices NewServices(PortalDbContext db)
+    private TestServices NewServices(PortalDbContext db, bool withAuthorization = true)
     {
         var config = new PortalConfig { ScriptRootPath = _scratch, SnapshotDirectory = _scratch };
         var storage = new InMemoryArtifactStorage();
         var packages = new SnapshotPackageService(config, storage, NullLogger<SnapshotPackageService>.Instance);
+        var services = new ServiceCollection().AddSingleton(db).BuildServiceProvider();
         var service = new DesignerSnapshotService(
             db,
             config,
             new FolderPermissionService(db),
             storage,
-            packages);
+            packages,
+            identities: withAuthorization ? new PortalExecutionIdentityService(
+                services.GetRequiredService<IServiceScopeFactory>(), config,
+                NullLogger<PortalExecutionIdentityService>.Instance) : null,
+            connectionCatalog: withAuthorization ? new PortalConnectionCatalogService(db, config: config) : null);
         return new TestServices(service, packages, config);
+    }
+
+    [Fact]
+    public async Task LoadForDesigner_WithoutAuthorizationServices_DeniesExistingSnapshot()
+    {
+        await using var db = await NewDbAsync();
+        var services = NewServices(db, withAuthorization: false);
+        var report = await CreateReportSnapshotAsync(db, services, "unauthorized.etlsnap",
+            DateTime.UtcNow, CreateManifest("Sales", 1));
+
+        var result = await services.Service.LoadForDesignerAsync(report.Id, User());
+
+        Assert.Equal(DesignerSnapshotService.SnapshotOutcome.Forbidden, result.Outcome);
+        Assert.Null(result.Package);
     }
 
     [Fact]
@@ -237,7 +257,8 @@ public sealed class DesignerSnapshotServiceTests : IDisposable
             ReportId = report.Id,
             ManifestPath = Path.Combine(services.Config.SnapshotDirectory, key),
             BuiltAt = builtAt,
-            BuiltBy = 1
+            BuiltBy = 1,
+            SharedConnectionDependenciesJson = "[]"
         });
         await db.SaveChangesAsync();
         return report;

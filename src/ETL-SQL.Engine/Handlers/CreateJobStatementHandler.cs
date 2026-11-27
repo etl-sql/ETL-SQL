@@ -79,7 +79,9 @@ public class CreateJobStatementHandler : IStatementHandler
             "HOUR",
             null,
             existing?.LastRun,
-            null,
+            // No schedule link means manual-only: park the job so the interval path never fires it.
+            // A linked schedule's next occurrence replaces this when the job is advanced.
+            JobDefinition.ManualOnlyNextRun,
             existing?.IsEnabled ?? true,
             stmt.MaxRetries ?? (patches ? existing!.MaxRetries : 0),
             stmt.RetryDelaySeconds ?? (patches ? existing!.RetryDelaySeconds : 30),
@@ -136,8 +138,8 @@ public class CreateJobStatementHandler : IStatementHandler
             return path;
 
         var store = context.ServiceProvider.GetService<IBundleStore>();
-        if (store == null) return path;
-        var latest = await store.GetLatestVersionAsync(uri.BundleName);
+        if (!BundleStoreAccessor.HasStore(store, context)) return path;
+        var latest = await BundleStoreAccessor.GetLatestVersionAsync(store, context, uri.BundleName);
         if (latest == null) return path;
         var pinned = uri.ToPinnedString(latest.Version);
         context.Log($"Resolved {path} to {pinned} for scheduled job stability.", ConsoleColor.Cyan);

@@ -220,11 +220,11 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count < 2) return RenderPlaceholder(visual);
+            if (rows.Count < 2) return RenderNoData(visual);
 
             // Column 0 is X (numeric or index); columns 1..n are numeric Y series.
             int seriesCount = Math.Max(0, rows.Max(r => r.Count) - 1);
-            if (seriesCount < 1) return RenderPlaceholder(visual);
+            if (seriesCount < 1) return RenderNoData(visual);
 
             var series = new List<List<(double x, double y)>>();
             for (int s = 0; s < seriesCount; s++) series.Add(new List<(double, double)>());
@@ -242,7 +242,7 @@ namespace ETL_SQL.Reporting.Renderers
             }
 
             var all = series.SelectMany(p => p).ToList();
-            if (all.Count < 2) return RenderPlaceholder(visual);
+            if (all.Count < 2) return RenderNoData(visual);
 
             double minX = all.Min(p => p.x), maxX = all.Max(p => p.x);
             double minY = all.Min(p => p.y), maxY = all.Max(p => p.y);
@@ -282,7 +282,7 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count == 0) return RenderPlaceholder(visual);
+            if (rows.Count == 0) return RenderNoData(visual);
 
             var points = new List<(double x, double y)>();
             foreach (var row in rows)
@@ -295,7 +295,7 @@ namespace ETL_SQL.Reporting.Renderers
                 }
             }
 
-            if (points.Count == 0) return RenderPlaceholder(visual);
+            if (points.Count == 0) return RenderNoData(visual);
 
             double minX = points.Min(p => p.x);
             double maxX = points.Max(p => p.x);
@@ -326,7 +326,7 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count == 0) return RenderPlaceholder(visual);
+            if (rows.Count == 0) return RenderNoData(visual);
 
             // HeatMap is usually a grid: RowLabel, Col1, Col2, ...
             var table = new Table().Border(TableBorder.None);
@@ -337,13 +337,19 @@ namespace ETL_SQL.Reporting.Renderers
             }
 
             double maxVal = 0;
+            bool hasNumeric = false;
             foreach (var row in rows)
             {
                 for (int i = 1; i < row.Count; i++)
                 {
-                    if (double.TryParse(row[i], NumberStyles.Any, CultureInfo.InvariantCulture, out var v)) maxVal = Math.Max(maxVal, v);
+                    if (double.TryParse(row[i], NumberStyles.Any, CultureInfo.InvariantCulture, out var v))
+                    {
+                        maxVal = Math.Max(maxVal, v);
+                        hasNumeric = true;
+                    }
                 }
             }
+            if (!hasNumeric) return RenderNoData(visual);
             if (maxVal == 0) maxVal = 1;
 
             foreach (var row in rows)
@@ -438,7 +444,7 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count == 0) return RenderPlaceholder(visual);
+            if (rows.Count == 0) return RenderNoData(visual);
 
             var content = new List<IRenderable>();
             foreach (var row in rows)
@@ -482,6 +488,8 @@ namespace ETL_SQL.Reporting.Renderers
                 }
             }
 
+            if (content.Count == 0) return RenderNoData(visual);
+
             return new Panel(new Rows(content))
                 .Header(Markup.Escape(title))
                 .Border(BoxBorder.Rounded);
@@ -491,21 +499,24 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count == 0) return RenderPlaceholder(visual);
+            if (rows.Count == 0) return RenderNoData(visual);
 
             var content = new List<IRenderable>();
 
             // Recalculate max properly (removed dead maxVal calculation and LINQ)
             double rolling = 0;
             double absoluteMax = 0;
+            bool hasNumeric = false;
             foreach (var r in rows)
             {
                 double v = 0;
-                if (r.Count > 1) double.TryParse(r[1], NumberStyles.Any, CultureInfo.InvariantCulture, out v);
+                if (r.Count > 1 && double.TryParse(r[1], NumberStyles.Any, CultureInfo.InvariantCulture, out v))
+                    hasNumeric = true;
                 rolling += v;
                 absoluteMax = Math.Max(absoluteMax, Math.Abs(rolling));
                 absoluteMax = Math.Max(absoluteMax, Math.Abs(rolling - v));
             }
+            if (!hasNumeric) return RenderNoData(visual);
             if (absoluteMax == 0) absoluteMax = 1;
 
             int fullWidth = 50;
@@ -545,7 +556,7 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count == 0) return RenderPlaceholder(visual);
+            if (rows.Count == 0) return RenderNoData(visual);
 
             var data = new List<(string label, double value)>();
             foreach (var row in rows)
@@ -557,7 +568,7 @@ namespace ETL_SQL.Reporting.Renderers
                 }
             }
 
-            if (data.Count == 0) return RenderPlaceholder(visual);
+            if (data.Count == 0) return RenderNoData(visual);
 
             double maxVal = data.Max(d => d.value);
             if (maxVal == 0) maxVal = 1;
@@ -605,9 +616,10 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count == 0) return RenderPlaceholder(visual);
+            if (rows.Count == 0) return RenderNoData(visual);
 
             var chart = new BreakdownChart() { Width = 60 };
+            bool hasItems = false;
             for (int i = 0; i < rows.Count; i++)
             {
                 var row = rows[i];
@@ -615,8 +627,11 @@ namespace ETL_SQL.Reporting.Renderers
                 if (row.Count > 1 && double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var val))
                 {
                     chart.AddItem(label, val, GetColorForIndex(i));
+                    hasItems = true;
                 }
             }
+
+            if (!hasItems) return RenderNoData(visual);
 
             return new Panel(chart)
             {
@@ -737,6 +752,16 @@ namespace ETL_SQL.Reporting.Renderers
             };
         }
 
+        // A supported chart whose query returned no plottable rows: say so, rather than
+        // calling a type the TUI does render "not currently supported".
+        private static IRenderable RenderNoData(VisualManifest visual)
+        {
+            return new Panel(new Text("No data available for this chart.", new Style(Color.Grey)))
+                .Header(Markup.Escape(GetVisualTitle(visual)))
+                .Border(BoxBorder.Rounded)
+                .Padding(1, 1, 1, 1);
+        }
+
         private static IRenderable RenderPlaceholder(VisualManifest visual)
         {
             return new Panel(new Text($"Visual Type '{Markup.Escape(visual.VisualType)}' is not currently supported in TUI previews.\nUse the Web Dashboard or Markdown export for full rendering.", new Style(Color.Grey)))
@@ -847,7 +872,7 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count == 0) return RenderPlaceholder(visual);
+            if (rows.Count == 0) return RenderNoData(visual);
 
             // Set up a standard 50x12 grid canvas as approved in plan
             var canvas = new Canvas(50, 12);
@@ -874,7 +899,7 @@ namespace ETL_SQL.Reporting.Renderers
                 }
             }
 
-            if (points.Count == 0) return RenderPlaceholder(visual);
+            if (points.Count == 0) return RenderNoData(visual);
 
             // Scale protection
             if (maxX == minX) maxX += 1;
@@ -923,20 +948,25 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count == 0) return RenderPlaceholder(visual);
+            if (rows.Count == 0) return RenderNoData(visual);
 
             var content = new List<IRenderable>();
             double maxVal = 0;
             var stages = new List<(string label, double value)>();
 
+            bool hasNumeric = false;
             foreach (var row in rows)
             {
                 var label = row.Count > 0 ? row[0] ?? "Stage" : "Stage";
-                double val = 0;
-                if (row.Count > 1) double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out val);
-                stages.Add((label, val));
-                maxVal = Math.Max(maxVal, val);
+                if (row.Count > 1 && double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var val))
+                {
+                    hasNumeric = true;
+                    stages.Add((label, val));
+                    maxVal = Math.Max(maxVal, val);
+                }
             }
+
+            if (!hasNumeric) return RenderNoData(visual);
 
             if (maxVal == 0) maxVal = 1;
             int maxWidth = 40;
@@ -970,7 +1000,7 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count == 0) return RenderPlaceholder(visual);
+            if (rows.Count == 0) return RenderNoData(visual);
 
             var content = new List<IRenderable>();
             var tasks = new List<(string name, double start, double end)>();
@@ -979,14 +1009,17 @@ namespace ETL_SQL.Reporting.Renderers
             foreach (var row in rows)
             {
                 var name = row.Count > 0 ? row[0] ?? "Task" : "Task";
-                double start = 0, end = 0;
-                if (row.Count > 1) double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out start);
-                if (row.Count > 2) double.TryParse(row[2], NumberStyles.Any, CultureInfo.InvariantCulture, out end);
-
-                tasks.Add((name, start, end));
-                minTime = Math.Min(minTime, start);
-                maxTime = Math.Max(maxTime, end);
+                if (row.Count > 2 &&
+                    double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var start) &&
+                    double.TryParse(row[2], NumberStyles.Any, CultureInfo.InvariantCulture, out var end))
+                {
+                    tasks.Add((name, start, end));
+                    minTime = Math.Min(minTime, start);
+                    maxTime = Math.Max(maxTime, end);
+                }
             }
+
+            if (tasks.Count == 0) return RenderNoData(visual);
 
             if (maxTime == minTime) maxTime += 1;
             int timelineWidth = 30;
@@ -1027,7 +1060,7 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count == 0) return RenderPlaceholder(visual);
+            if (rows.Count == 0) return RenderNoData(visual);
 
             var canvas = new Canvas(50, 12);
             var candles = new List<(double open, double high, double low, double close)>();
@@ -1048,7 +1081,7 @@ namespace ETL_SQL.Reporting.Renderers
                 }
             }
 
-            if (candles.Count == 0) return RenderPlaceholder(visual);
+            if (candles.Count == 0) return RenderNoData(visual);
 
             if (maxVal == minVal) maxVal += 1;
             int numCandles = Math.Min(candles.Count, 24);
@@ -1096,7 +1129,7 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count == 0) return RenderPlaceholder(visual);
+            if (rows.Count == 0) return RenderNoData(visual);
 
             int facetIdx = 0;
             if (visual.Options.TryGetValue("FACET", out var facetCol) || visual.Options.TryGetValue("FACET_COLUMN", out facetCol))
@@ -1163,7 +1196,7 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            if (rows.Count == 0) return RenderPlaceholder(visual);
+            if (rows.Count == 0) return RenderNoData(visual);
 
             var table = new Table();
             foreach (var col in visual.Columns)

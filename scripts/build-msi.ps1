@@ -11,7 +11,7 @@ if ([string]::IsNullOrWhiteSpace($WindowsPayloadDirectory) -ne [string]::IsNullO
 if ($LASTEXITCODE -ne 0) { throw 'Installer source validation failed.' }
 & node (Join-Path $PSScriptRoot 'sync-assets.js')
 if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci --prefix scripts/typecheck first.' }
-$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.22.0" }
+$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.23.1" }
 $BuildDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer\publish\win-x64\bin"
 $InstallerDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer"
 $PayloadSourceSha = $null
@@ -168,7 +168,7 @@ try {
         exit $LASTEXITCODE
     }
 
-    & $WixToolset.Candle Installer.wxs wwwroot.wxs "-dProductVersion=$WixVersion" "-dWwwrootSource=$wwwrootSource" "-dPublishDir=$BuildDir" -arch x64 -ext WixUtilExtension
+    & $WixToolset.Candle Installer.wxs wwwroot.wxs "-dProductVersion=$WixVersion" "-dWwwrootSource=$wwwrootSource" "-dPublishDir=$BuildDir" -arch x64
     if ($LASTEXITCODE -ne 0) {
         Write-Error "candle.exe failed (exit code $LASTEXITCODE)"
         exit $LASTEXITCODE
@@ -176,7 +176,7 @@ try {
 
     # 3. Link MSI
     Write-Host "Linking MSI package..." -ForegroundColor Gray
-    & $WixToolset.Light Installer.wixobj wwwroot.wixobj -o "ETL-SQL-v$Version.msi" -ext WixUIExtension -ext WixUtilExtension
+    & $WixToolset.Light Installer.wixobj wwwroot.wixobj -o "ETL-SQL-v$Version.msi" -ext WixUIExtension
     if ($LASTEXITCODE -ne 0) {
         Write-Error "light.exe failed (exit code $LASTEXITCODE)"
         exit $LASTEXITCODE

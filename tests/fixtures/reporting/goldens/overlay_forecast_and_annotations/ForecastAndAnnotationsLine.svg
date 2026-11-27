@@ -1,0 +1,72 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='ForecastAndAnnotationsLine-title ForecastAndAnnotationsLine-desc' font-family='sans-serif'>
+<title id='ForecastAndAnnotationsLine-title'>Revenue Trajectory &amp; Forecast Outlook</title>
+<desc id='ForecastAndAnnotationsLine-desc'>Revenue Trajectory &amp; Forecast Outlook: 5 rows, 7 ordered layers, 1 series, 1 facet panels, 2 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Revenue Trajectory &amp; Forecast Outlook</text>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='290' x2='455.4' y2='290' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='290' x2='455.4' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='227.5' x2='455.4' y2='227.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='165' x2='455.4' y2='165' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='102.5' x2='455.4' y2='102.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='455.4' y2='40' stroke='#e5e7eb' stroke-width='1'/>
+<defs><clipPath id='ForecastAndAnnotationsLine-plot-clip'><rect x='60' y='40' width='395.4' height='250'/></clipPath></defs>
+<g clip-path='url(#ForecastAndAnnotationsLine-plot-clip)'>
+<circle class='plot-line-symbol' fill='#5470c6' data-row-index='0' cx='99.54' cy='149.944' r='3'><title>100</title></circle>
+<circle class='plot-line-symbol' fill='#5470c6' data-row-index='1' cx='178.62' cy='86.919' r='3'><title>145</title></circle>
+<circle class='plot-line-symbol' fill='#5470c6' data-row-index='2' cx='257.7' cy='163.95' r='3'><title>90</title></circle>
+<path d='M 99.54 149.944 L 178.62 86.919 L 257.7 163.95' fill='none' stroke='#5470c6' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
+<g class='plot-overlay' data-overlay-type='ForecastConfidence' data-z-index='98'>
+<path class='plot-confidence-band' d='M 257.7 152.745 L 336.78 105.126 L 415.86 51.905 L 415.86 102.325 L 336.78 142.941 L 257.7 175.154 Z' fill='#2563eb' fill-opacity='.2' stroke='#2563eb' stroke-width='1'/>
+</g>
+<g class='plot-overlay' data-overlay-type='Forecast' data-z-index='100'>
+<circle class='plot-overlay-point' fill='#2563eb' stroke='white' stroke-width='1.5' data-row-index='2' cx='257.7' cy='163.95' r='4'><title>90</title></circle>
+<circle class='plot-overlay-point' fill='#2563eb' stroke='white' stroke-width='1.5' data-row-index='3' cx='336.78' cy='124.734' r='4'><title>118</title></circle>
+<circle class='plot-overlay-point' fill='#2563eb' stroke='white' stroke-width='1.5' data-row-index='4' cx='415.86' cy='77.115' r='4'><title>152</title></circle>
+<path class='plot-forecast-line' d='M 257.7 163.95 L 336.78 124.734 L 415.86 77.115' fill='none' stroke='#2563eb' stroke-width='3' stroke-linejoin='round' stroke-linecap='round' stroke-dasharray='7 5'/>
+</g>
+<g class='plot-overlay' data-overlay-type='ForecastAnomaly' data-z-index='102'>
+<g class='plot-points' data-layer='forecast-anomaly-00'>
+<circle class='plot-anomaly-marker' fill='#2563eb' data-row-index='4' cx='415.86' cy='77.115' r='4'></circle>
+</g>
+</g>
+<g class='plot-overlay' data-overlay-type='AnnotationPoint' data-z-index='151'>
+<g class='plot-annotation-point' data-symbol='pin' data-annotation-symbol='pin'>
+<circle cx='178.62' cy='78.919' r='4' fill='#dc2626' stroke='white' stroke-width='1.2'/>
+<path d='M 175.12 80.919 L 178.62 86.919 L 182.12 80.919 Z' fill='#dc2626'/>
+<text x='178.62' y='68.919' text-anchor='middle' font-size='10' font-weight='600' fill='#dc2626'>Peak Actual</text>
+</g>
+</g>
+<g class='plot-overlay' data-overlay-type='AnnotationPoint' data-z-index='152'>
+<g class='plot-annotation-point' data-symbol='arrow' data-annotation-symbol='arrow'>
+<path d='M 257.7 163.95 L 253.7 153.95 L 261.7 153.95 Z' fill='#0f766e'/>
+<line x1='257.7' y1='153.95' x2='257.7' y2='147.95' stroke='#0f766e' stroke-width='2'/>
+<text x='257.7' y='145.95' text-anchor='middle' font-size='10' font-weight='600' fill='#0f766e'>Q1 Low</text>
+</g>
+</g>
+<g class='plot-overlay' data-overlay-type='AnnotationPoint' data-z-index='153'>
+<g class='plot-annotation-point' data-symbol='circle' data-annotation-symbol='circle'>
+<circle cx='257.7' cy='121.933' r='5' fill='#7c3aed' stroke='white' stroke-width='1.5'/>
+<text x='257.7' y='112.933' text-anchor='middle' font-size='10' font-weight='600' fill='#7c3aed'>Review Gate</text>
+</g>
+</g>
+</g>
+<path class='plot-overlay-label-leader' d='M 418.86 77.115 L 422.86 73.615' fill='none' stroke='#2563eb' stroke-width='1'/>
+<rect class='plot-overlay-label-bg' x='422.86' y='66.115' width='51.2' height='14' rx='2' fill='white' fill-opacity='.94'/>
+<text class='plot-overlay-label' title='Forecast' x='425.86' y='77.115' text-anchor='start' font-size='9' font-weight='600' fill='#2563eb'>Forecast</text>
+<text class='plot-axis-label' data-axis-index='0' x='99.54' y='306' text-anchor='middle' font-size='9' fill='#666'>Jan</text>
+<text class='plot-axis-label' data-axis-index='1' x='178.62' y='306' text-anchor='middle' font-size='9' fill='#666'>Feb</text>
+<text class='plot-axis-label' data-axis-index='2' x='257.7' y='306' text-anchor='middle' font-size='9' fill='#666'>Mar</text>
+<text class='plot-axis-label' data-axis-index='3' x='336.78' y='306' text-anchor='middle' font-size='9' fill='#666'>Apr</text>
+<text class='plot-axis-label' data-axis-index='4' x='415.86' y='306' text-anchor='middle' font-size='9' fill='#666'>May</text>
+<line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
+<text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
+<line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>
+<text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>44.63</text>
+<line x1='56' y1='165' x2='60' y2='165' stroke='#bbb'/>
+<text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>89.25</text>
+<line x1='56' y1='102.5' x2='60' y2='102.5' stroke='#bbb'/>
+<text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>133.88</text>
+<line x1='56' y1='40' x2='60' y2='40' stroke='#bbb'/>
+<text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>178.5</text>
+</svg>

@@ -21,6 +21,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task TestBasicProcedure()
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            eval.RedirectOutput = true;
             await eval.Evaluate(new Lexer(@"
                 CREATE PROCEDURE TestProc(@Val INT) AS
                 BEGIN
@@ -29,6 +30,7 @@ namespace ETL_SQL.Tests.Engine
                 END;
             ").TokenizeToScript());
             await eval.Evaluate(new Lexer("EXECUTE TestProc 21;").TokenizeToScript());
+            Assert.Contains(eval.Messages, m => m.Message.Contains("Result: 42"));
         }
 
         [Fact]

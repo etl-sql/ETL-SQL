@@ -507,6 +507,7 @@ CREATE PAGE Dashboard AS DASHBOARD (
                 Assert.Equal("light", button.Styles!["THEME"]);
                 Assert.Equal("#ffffff", button.Styles["COLOR"]);
                 Assert.Empty(visual.Styles!);
+                Assert.Equal("corporate", visual.InheritedTheme);
             }
             finally
             {

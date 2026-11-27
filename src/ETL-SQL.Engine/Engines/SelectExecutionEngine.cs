@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
@@ -45,12 +46,20 @@ public class SelectExecutionEngine
         List<SelectColumn> finalColumns,
         List<string> colNames)
     {
-        // Hold a grant-pool lease for the lifetime of the pipeline; disposed when the consumer
-        // finishes or abandons enumeration, releasing this query's reserved footprint.
-        using var lease = _context.MemoryArbiter.AcquireLease();
-        _memLease = lease;
-        await foreach (var batch in ExecuteHeavyPipelineCore(stmt, sourceBatches, finalColumns, colNames))
-            yield return batch;
+        using var pipelineCursorScope = PipelineCursorScope.EnterDeferred();
+        // Hold a grant-pool lease for the lifetime of in-memory probe/row buffers; released when
+        // transitioning to external engines or when the consumer finishes or abandons enumeration.
+        _memLease = _context.MemoryArbiter.AcquireLease();
+        try
+        {
+            await foreach (var batch in ExecuteHeavyPipelineCore(stmt, sourceBatches, finalColumns, colNames))
+                yield return batch;
+        }
+        finally
+        {
+            _memLease.Dispose();
+            _memLease = UnlimitedMemoryGrantArbiter.Instance.AcquireLease();
+        }
     }
 
     private async IAsyncEnumerable<DataTable> ExecuteHeavyPipelineCore(
@@ -59,6 +68,9 @@ public class SelectExecutionEngine
         List<SelectColumn> finalColumns,
         List<string> colNames)
     {
+        // Keep Top-N's admitted bytes reserved through projection, or until its prefix spills.
+        // Moving a reservation to another lease can fail under concurrent process pressure.
+        using var topNLease = _context.MemoryArbiter.AcquireLease();
         // Qualify bare identifiers (e.g. col → alias.col) so the predicate optimizer
         // can attribute each predicate to the correct source alias.
         stmt = await IdentifierQualifier.QualifyAsync(stmt, _context);
@@ -79,11 +91,31 @@ public class SelectExecutionEngine
         bool hasGroupBy = stmt.GroupBy != null || stmt.GroupingSet != null;
         bool hasPreEvaluatedColumns = hasAggInColumns || hasWindowInColumns || hasGroupBy;
         bool distinctApplied = false;
+        bool orderApplied = false;
 
         _logger.Debug("[PIPELINE] Initializing Multi-Pass Engine Pipeline for {TableName}", fromName);
 
+        var qualifier = new QualifiedRowLayout(fromName, logicalPlan.RequiredColumns);
         var inputStream = sourceBatches.SelectMany(b => b.Rows.Select(r =>
         {
+            // Rows held by their schema qualify into one cached layout; others keep the per-column
+            // path. Either way the result is a new row the pipeline owns, as Clone() gave before.
+            var qualified = qualifier.TryQualify(r);
+            if (qualified != null)
+            {
+                qualified.MayLackColumns = r.MayLackColumns;
+                qualified.DataQualityReplayProvenance = r.DataQualityReplayProvenance is { } provenance
+                    ? provenance with { SourceRow = provenance.SourceRow.CloneWithoutReplayProvenance() }
+                    : null;
+                if (seedReplayProvenance)
+                {
+                    qualified.DataQualityReplayProvenance ??= new DataQualityReplayProvenance(
+                        replaySourceTable!,
+                        r.CloneWithoutReplayProvenance());
+                }
+                return qualified;
+            }
+
             var cloned = r.Clone();
             if (seedReplayProvenance)
             {
@@ -132,9 +164,17 @@ public class SelectExecutionEngine
             // Intentional materialization: GROUP BY / WINDOW / ORDER BY require random access.
 
             // Phase 4 (runtime): Apply LeftSingle predicates to the input stream before any hash
-            // table is built, reducing the number of rows probed through each right-side table.
-            var leftPreds = PredicatePushdownOptimizer.GetSingleSourcePredicates(logicalPlan, fromName)
-                .Select(p => p.Predicate).ToList();
+            // table is built, unless a RIGHT or FULL outer join needs all left rows to decide matches
+            // (filtering a null-extended left side pre-join would turn non-matching left rows into
+            // synthetic unmatched right rows).
+            // COMPAT_BREAK: 0.23.0 — preserve matches before filtering a null-extended left side.
+            bool hasRightOrFullOuterJoin = stmt.Joins.Any(j =>
+                j.JoinType.Contains("RIGHT", StringComparison.OrdinalIgnoreCase)
+                || j.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase));
+            var leftPreds = hasRightOrFullOuterJoin
+                ? new List<Expression>()
+                : PredicatePushdownOptimizer.GetSingleSourcePredicates(logicalPlan, fromName)
+                    .Select(p => p.Predicate).ToList();
             var joinInput = leftPreds.Count > 0
                 ? WhereStream(inputStream, CombineAnds(leftPreds), _context)
                 : inputStream;
@@ -152,7 +192,7 @@ public class SelectExecutionEngine
                     "Join output can stream directly to projection.",
                     ("executionMode", "streaming"),
                     ("stage", "join-projection"));
-                IAsyncEnumerable<Row> joinedStream = _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt);
+                IAsyncEnumerable<Row> joinedStream = _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt, logicalPlan.RequiredColumns);
                 if (!whereApplied && stmt.WhereClause != null)
                 {
                     joinedStream = WhereStream(joinedStream, stmt.WhereClause, _context);
@@ -176,7 +216,7 @@ public class SelectExecutionEngine
                 ("executionMode", "blocking"),
                 ("stage", hasGroupBy || hasAggInColumns ? "join-aggregate" : hasWindowInColumns ? "join-window" : "join-materialize"),
                 ("fallbackDestination", "blocking-row-pipeline"));
-            IAsyncEnumerable<Row> blockingJoinStream = _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt);
+            IAsyncEnumerable<Row> blockingJoinStream = _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt, logicalPlan.RequiredColumns);
             if (!whereApplied && stmt.WhereClause != null)
             {
                 blockingJoinStream = WhereStream(blockingJoinStream, stmt.WhereClause, _context);
@@ -220,11 +260,32 @@ public class SelectExecutionEngine
                         externalEngineStream = externalAggregate.ApplyAggregationExternal(
                             aggregateInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
                         allRows = [];
+                        ResetProbeMemoryLease();
                     }
                     else
                     {
-                        allRows = await _aggregateEngine.ApplyAggregation(
-                            bufferedJoinRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                        try
+                        {
+                            allRows = await _aggregateEngine.ApplyAggregation(
+                                bufferedJoinRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames,
+                                stmt.HavingClause, stmt.GroupingSet, MemoryGovernor.Ceiling(_context));
+                        }
+                        catch (AggregateMemoryPressureException)
+                        {
+                            RecordRowPipelineDecision("select.join-aggregate", PlanDecisionOutcome.Degraded,
+                                "In-memory join aggregate exceeded memory budget; routing to external aggregate.",
+                                PlanDecisionReasonCodes.MemoryAdmissionRejected,
+                                ("executionMode", "external-streaming"),
+                                ("stage", "join-aggregate"),
+                                ("fallbackDestination", "ExternalAggregate"));
+                            var externalAggregate = new ExternalAggregateEngine(_context, _logger);
+                            externalEngineStream = externalAggregate.ApplyAggregationExternal(
+                                bufferedJoinRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames,
+                                stmt.HavingClause, stmt.GroupingSet,
+                                knownRowCount: bufferedJoinRows.Count,
+                                knownInputBytes: bufferedBytes);
+                            allRows = [];
+                        }
                     }
                     aggregateApplied = true;
                 }
@@ -269,6 +330,7 @@ public class SelectExecutionEngine
                         joinEnumeratorHandedOff = true;
                         externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(windowInput, stmt);
                         allRows = [];
+                        ResetProbeMemoryLease();
                         windowApplied = true;
                     }
                     else
@@ -311,7 +373,20 @@ public class SelectExecutionEngine
                     "Scalar aggregate with constant-memory states streams in memory.",
                     ("executionMode", "streaming"),
                     ("stage", "scalar-aggregate"));
-                allRows = await _aggregateEngine.ApplyAggregation(aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                try
+                {
+                    allRows = await _aggregateEngine.ApplyAggregation(
+                        aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet,
+                        MemoryGovernor.Ceiling(_context));
+                }
+                catch (AggregateMemoryPressureException)
+                {
+                    MemoryGovernor.EnforcePolicy(
+                        _context,
+                        "Scalar aggregation exceeded the memory governor ceiling (Engine:TotalMemoryGrantMB / OperatorMemoryGrantMB).");
+                    allRows = await _aggregateEngine.ApplyAggregation(
+                        aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                }
             }
             else
             {
@@ -353,10 +428,32 @@ public class SelectExecutionEngine
                         enumeratorHandedOff = true;
                         externalEngineStream = externalAgg.ApplyAggregationExternal(combinedStream, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
                         allRows = [];
+                        ResetProbeMemoryLease();
                     }
                     else
                     {
-                        allRows = await _aggregateEngine.ApplyAggregation(bufferedForSpill.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                        try
+                        {
+                            allRows = await _aggregateEngine.ApplyAggregation(
+                                bufferedForSpill.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames,
+                                stmt.HavingClause, stmt.GroupingSet, MemoryGovernor.Ceiling(_context));
+                        }
+                        catch (AggregateMemoryPressureException)
+                        {
+                            RecordRowPipelineDecision("select.aggregate-stream", PlanDecisionOutcome.Degraded,
+                                "In-memory aggregate exceeded the memory ceiling; routing to external aggregate.",
+                                PlanDecisionReasonCodes.MemoryAdmissionRejected,
+                                ("executionMode", "external-streaming"),
+                                ("stage", "aggregate"),
+                                ("fallbackDestination", "ExternalAggregate"));
+                            var externalAgg = new ExternalAggregateEngine(_context, _logger);
+                            externalEngineStream = externalAgg.ApplyAggregationExternal(
+                                bufferedForSpill.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames,
+                                stmt.HavingClause, stmt.GroupingSet,
+                                knownRowCount: bufferedForSpill.Count,
+                                knownInputBytes: aggBufferedBytes);
+                            allRows = [];
+                        }
                     }
                 }
                 finally
@@ -393,7 +490,17 @@ public class SelectExecutionEngine
                     : inputStream;
                 if (!whereApplied && stmt.WhereClause != null) whereApplied = true;
 
-                allRows = await TopNFromStream(src, stmt.OrderBy!, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns);
+                var topNResult = await TopNFromStream(src, stmt.OrderBy!, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns, topNLease);
+                orderApplied = true;
+                if (topNResult.ExternalStream != null)
+                {
+                    externalEngineStream = topNResult.ExternalStream;
+                    allRows = [];
+                }
+                else
+                {
+                    allRows = topNResult.Rows!;
+                }
             }
             else
             {
@@ -472,14 +579,26 @@ public class SelectExecutionEngine
                         if (!whereApplied && stmt.WhereClause != null) whereApplied = true;
 
                         var winPrefix = new List<Row>();
-                        var winEnumerator = winInput.GetAsyncEnumerator();
+                        long winBytes = 0;
+                        long winCeiling = MemoryGovernor.Ceiling(_context);
+                        var winEnumerator = winInput.GetAsyncEnumerator(_context.CancellationToken);
                         bool winHandedOff = false;
                         int winCap = Math.Max(1, _context.WindowSpillThreshold);
+                        bool winExceeded = false;
                         try
                         {
                             while (winPrefix.Count < winCap && await winEnumerator.MoveNextAsync())
-                                winPrefix.Add(winEnumerator.Current);
-                            if (winPrefix.Count >= winCap)
+                            {
+                                var r = winEnumerator.Current;
+                                winPrefix.Add(r);
+                                winBytes = checked(winBytes + r.EstimateHeapBytes());
+                                if ((winCeiling > 0 && winBytes > winCeiling) || _memLease.RegisterAndCheckSpill(winBytes))
+                                {
+                                    winExceeded = true;
+                                    break;
+                                }
+                            }
+                            if (winPrefix.Count >= winCap || winExceeded)
                             {
                                 RecordRowPipelineDecision("select.window-probe", PlanDecisionOutcome.Degraded,
                                     "Window input exceeded the in-memory prefix probe; routing to external window.",
@@ -491,6 +610,7 @@ public class SelectExecutionEngine
                                 externalEngineStream = PrependRows(winPrefix, ContinueStreamAndDispose(winEnumerator));
                                 winHandedOff = true;
                                 allRows = [];
+                                ResetProbeMemoryLease();
                             }
                             else
                             {
@@ -568,30 +688,62 @@ public class SelectExecutionEngine
                     knownRowCount: allRows.Count,
                     knownInputBytes: RowWidthEstimator.EstimateTotalBytes(allRows));
                 allRows = [];
+                ResetProbeMemoryLease();
             }
             else
             {
-                allRows = await _aggregateEngine.ApplyAggregation(allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                try
+                {
+                    allRows = await _aggregateEngine.ApplyAggregation(
+                        allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames,
+                        stmt.HavingClause, stmt.GroupingSet, MemoryGovernor.Ceiling(_context));
+                }
+                catch (AggregateMemoryPressureException)
+                {
+                    var externalAgg = new ExternalAggregateEngine(_context, _logger);
+                    externalEngineStream = externalAgg.ApplyAggregationExternal(
+                        allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames,
+                        stmt.HavingClause, stmt.GroupingSet,
+                        knownRowCount: allRows.Count,
+                        knownInputBytes: RowWidthEstimator.EstimateTotalBytes(allRows));
+                    allRows = [];
+                    ResetProbeMemoryLease();
+                }
             }
         }
 
         // 3. WINDOW FUNCTIONS
+        var postWhereRequired = whereApplied
+            ? RequiredColumnAnalyzer.Analyze(stmt, includeWhere: false)
+            : logicalPlan.RequiredColumns;
+        bool canPrunePostWhere = whereApplied
+            && postWhereRequired != null
+            && logicalPlan.RequiredColumns != null
+            && postWhereRequired.Count < logicalPlan.RequiredColumns.Count;
+
         if (hasWindowInColumns && !windowApplied)
         {
             if (externalEngineStream != null)
             {
                 // Phase 7: External agg output streams directly into the window engine —
                 // no intermediate materialization. The result stays lazy until QUALIFY or ORDER BY forces it.
-                externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(externalEngineStream, stmt);
+                var windowInput = canPrunePostWhere
+                    ? ProjectRequiredStream(externalEngineStream, postWhereRequired!)
+                    : externalEngineStream;
+                externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(windowInput, stmt);
             }
             else if (ShouldSpillWindow(allRows))
             {
                 _logger.WriteLine($"[yellow]HYPER-SCALE: Switching to ExternalWindowEngine. Row count {allRows.Count} >= threshold {_context.WindowSpillThreshold}. Session: {_context.SessionId}[/]");
+                var windowInput = canPrunePostWhere
+                    ? ProjectRequiredStream(allRows.ToAsyncEnumerable(), postWhereRequired!)
+                    : allRows.ToAsyncEnumerable();
                 externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(
-                    allRows.ToAsyncEnumerable(), stmt,
+                    windowInput, stmt,
                     knownRowCount: allRows.Count,
                     knownInputBytes: RowWidthEstimator.EstimateTotalBytes(allRows));
                 allRows = [];
+                ResetProbeMemoryLease();
             }
             else
             {
@@ -635,6 +787,7 @@ public class SelectExecutionEngine
             externalEngineStream = new ExternalDistinctEngine(_context).ApplyAsync(
                 ProjectRows(distinctInput, stmt, finalColumns, colNames, hasPreEvaluatedColumns, canDeferWhere));
             allRows = [];
+            ResetProbeMemoryLease();
             hasPreEvaluatedColumns = true;
             whereApplied = true;
             canDeferWhere = false;
@@ -642,7 +795,7 @@ public class SelectExecutionEngine
         }
 
         // 5. ORDER BY
-        if (stmt.OrderBy != null && stmt.OrderBy.Count > 0)
+        if (!orderApplied && stmt.OrderBy != null && stmt.OrderBy.Count > 0)
         {
             // Phase 7: If an external engine stream is pending and the query has a LIMIT/TOP,
             // run the TopN heap directly on the stream to avoid full materialization.
@@ -652,13 +805,26 @@ public class SelectExecutionEngine
             {
                 int limit = Convert.ToInt32(await _context.EvaluateValue(stmt.LimitCount ?? stmt.TopCount!, new Row()));
                 int topOffset = stmt.Offset != null ? Convert.ToInt32(await _context.EvaluateValue(stmt.Offset, new Row())) : 0;
-                allRows = await TopNFromStream(externalEngineStream, stmt.OrderBy, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns);
-                externalEngineStream = null;
+                var topNResult = await TopNFromStream(externalEngineStream, stmt.OrderBy, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns, topNLease);
+                if (topNResult.ExternalStream != null)
+                {
+                    externalEngineStream = topNResult.ExternalStream;
+                    allRows = [];
+                }
+                else
+                {
+                    allRows = topNResult.Rows!;
+                    externalEngineStream = null;
+                }
             }
             else if (externalEngineStream != null)
             {
                 var externalSort = new ExternalSortEngine(_context, _logger);
-                externalEngineStream = externalSort.SortStreamAsync(externalEngineStream, stmt.OrderBy);
+                var sortInput = canPrunePostWhere
+                    ? ProjectRequiredStream(externalEngineStream, postWhereRequired!)
+                    : externalEngineStream;
+                externalEngineStream = externalSort.SortStreamAsync(sortInput, stmt.OrderBy,
+                    ProjectedSortKeys(stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns));
             }
             else
             {
@@ -669,8 +835,13 @@ public class SelectExecutionEngine
                     // Collecting the sorted rows into a list again would hold the whole result in
                     // memory, which is what spilling the sort was meant to avoid.
                     var externalSort = new ExternalSortEngine(_context, _logger);
-                    externalEngineStream = externalSort.SortStreamAsync(allRows.ToAsyncEnumerable(), stmt.OrderBy);
+                    var sortInput = canPrunePostWhere
+                        ? ProjectRequiredStream(allRows.ToAsyncEnumerable(), postWhereRequired!)
+                        : allRows.ToAsyncEnumerable();
+                    externalEngineStream = externalSort.SortStreamAsync(sortInput, stmt.OrderBy,
+                    ProjectedSortKeys(stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns));
                     allRows = [];
+                    ResetProbeMemoryLease();
                 }
                 else
                 {
@@ -738,16 +909,21 @@ public class SelectExecutionEngine
             : ProjectRows(rows, stmt, finalColumns, colNames, hasPreEvaluatedColumns, canDeferWhere);
         var batch = new DataTable();
         batch.SetColumns(colNames);
+        long targetBytes = _context.EffectiveBatchTargetBytes;
+        long batchBytes = 0;
         bool yielded = false;
         await foreach (var row in projectedRows)
         {
             await batch.AddRowAsync(row);
-            if (batch.Rows.Count >= _context.EffectiveBatchSize)
+            batchBytes += row.EstimateHeapBytes();
+            if (batch.Rows.Count >= _context.EffectiveBatchSize
+                || (targetBytes > 0 && batchBytes >= targetBytes))
             {
                 yield return batch;
                 yielded = true;
                 batch = new DataTable();
                 batch.SetColumns(colNames);
+                batchBytes = 0;
             }
         }
         if (batch.Rows.Count > 0 || !yielded) yield return batch;
@@ -1068,6 +1244,22 @@ public class SelectExecutionEngine
         }
     }
 
+    /// <summary>
+    /// The sort keys a spilled ORDER BY reads from rows that are already projected (after an
+    /// aggregate, DISTINCT or window step), resolved the way <see cref="SortInMemory"/> and the
+    /// TopN heap resolve them: positions, aliases and repeated SELECT expressions read the output
+    /// column. Null for source rows, where the external sort evaluates ORDER BY itself and keeps
+    /// its stamped-key fast path. Without this, ORDER BY AVG(amount) over a spilled GROUP BY read
+    /// a column the aggregate no longer has.
+    /// </summary>
+    private Func<Row, Task<object?[]>>? ProjectedSortKeys(
+        List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns, bool hasPreEvaluatedColumns)
+    {
+        if (!hasPreEvaluatedColumns) return null;
+        var extractor = BuildSortKeyExtractor(orderBy, colNames, finalColumns, hasPreEvaluatedColumns);
+        return row => extractor.ExtractAsync(row).AsTask();
+    }
+
     private async Task<List<Row>> SortInMemory(List<Row> rows, List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns, bool hasPreEvaluatedColumns)
     {
         var rowSortKeys = new List<(Row Row, object?[] Keys)>(rows.Count);
@@ -1087,28 +1279,41 @@ public class SelectExecutionEngine
         return rowSortKeys.Select(x => x.Row).ToList();
     }
 
+    private const long TopNHeapEntryOverheadBytes = 64L;
+
+    private readonly record struct TopNResult(List<Row>? Rows, IAsyncEnumerable<Row>? ExternalStream);
+
     /// <summary>
-    /// Streams <paramref name="source"/> through a min-heap of size (limit+offset),
-    /// returning up to (limit+offset) rows in final output order. O(n log(limit+offset)) time
-    /// and O(limit+offset) space — compared to O(n log n) / O(n) for a full sort.
+    /// Streams <paramref name="source"/> through a byte-bounded min-heap of up to (limit+offset)
+    /// rows, returning them in final output order or transitioning to bounded external sorting
+    /// without losing retained or unread rows when the byte grant is exceeded.
     /// </summary>
-    private async Task<List<Row>> TopNFromStream(
+    private async Task<TopNResult> TopNFromStream(
         IAsyncEnumerable<Row> source,
         List<OrderByClause> orderBy,
         List<string> colNames,
         List<SelectColumn> finalColumns,
         int limit,
         int offset,
-        bool hasPreEvaluatedColumns)
+        bool hasPreEvaluatedColumns,
+        IMemoryGrantLease topNLease)
     {
-        int keep = Math.Max(0, checked(offset + limit));
-        if (keep == 0) return new List<Row>();
+        if (offset < 0)
+            throw new ExecutionException("OFFSET must be a non-negative integer.");
+
+        long keepLong = Math.Max(0L, (long)offset + Math.Max(0, limit));
+        if (limit <= 0 || keepLong == 0)
+            return new TopNResult([], null);
+
+        var extractor = BuildSortKeyExtractor(orderBy, colNames, finalColumns, hasPreEvaluatedColumns);
+        long operatorCeiling = MemoryGovernor.Ceiling(_context);
+        long retainedBytes = 0;
 
         // The heap is a MAX-heap over the output order (heap top = worst kept row).
         // PriorityQueue is a min-heap, so we invert the output compare.
         // heap.Peek() returns the row that would appear LAST among the kept rows.
-        var heap = new PriorityQueue<(Row Row, object?[] Keys), (Row Row, object?[] Keys)>(
-            Comparer<(Row Row, object?[] Keys)>.Create((a, b) =>
+        var heap = new PriorityQueue<(Row Row, object?[] Keys, long EntryBytes), (Row Row, object?[] Keys, long EntryBytes)>(
+            Comparer<(Row Row, object?[] Keys, long EntryBytes)>.Create((a, b) =>
             {
                 for (int i = 0; i < orderBy.Count; i++)
                 {
@@ -1117,28 +1322,58 @@ public class SelectExecutionEngine
                 }
                 return 0;
             }));
-        var extractor = BuildSortKeyExtractor(orderBy, colNames, finalColumns, hasPreEvaluatedColumns);
 
-        await foreach (var row in source)
+        var enumerator = source.GetAsyncEnumerator(_context.CancellationToken);
+        bool enumeratorHandedOff = false;
+        try
         {
-            var keys = await extractor.ExtractAsync(row);
-            var entry = (row, keys);
+            while (await enumerator.MoveNextAsync())
+            {
+                _context.CancellationToken.ThrowIfCancellationRequested();
+                var row = enumerator.Current;
+                var keys = await extractor.ExtractAsync(row);
+                long entryBytes = checked(row.EstimateHeapBytes() + RowMemory.EstimateValuesBytes(keys) + TopNHeapEntryOverheadBytes);
+                var entry = (row, keys, entryBytes);
 
-            if (heap.Count < keep)
-            {
-                heap.Enqueue(entry, entry);
-            }
-            else
-            {
-                var peekKeys = heap.Peek().Keys;
-                // Check whether the new row is better (appears earlier) than the worst kept.
-                bool better = false;
-                for (int i = 0; i < orderBy.Count; i++)
+                if (heap.Count < keepLong)
                 {
-                    var res = orderBy[i].OutputOrder(_context.CompareConstants(keys[i], peekKeys[i]), keys[i], peekKeys[i]);
-                    if (res != 0) { better = res < 0; break; }
+                    long prospective = checked(retainedBytes + entryBytes);
+                    if (ExceedsTopNBudget(prospective, operatorCeiling, topNLease))
+                    {
+                        var externalStream = SpillTopNToExternalSort(
+                            heap, (row, keys), enumerator, orderBy, extractor, operatorCeiling, prospective, topNLease);
+                        enumeratorHandedOff = true;
+                        return new TopNResult(null, externalStream);
+                    }
+
+                    heap.Enqueue(entry, entry);
+                    retainedBytes = prospective;
                 }
-                if (better) heap.DequeueEnqueue(entry, entry);
+                else
+                {
+                    var peek = heap.Peek();
+                    if (IsBetterThanPeek(keys, peek.Keys, orderBy))
+                    {
+                        long prospective = checked(retainedBytes - peek.EntryBytes + entryBytes);
+                        if (prospective > retainedBytes && ExceedsTopNBudget(prospective, operatorCeiling, topNLease))
+                        {
+                            var externalStream = SpillTopNToExternalSort(
+                                heap, (row, keys), enumerator, orderBy, extractor, operatorCeiling, prospective, topNLease);
+                            enumeratorHandedOff = true;
+                            return new TopNResult(null, externalStream);
+                        }
+
+                        heap.DequeueEnqueue(entry, entry);
+                        retainedBytes = prospective;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            if (!enumeratorHandedOff)
+            {
+                await enumerator.DisposeAsync();
             }
         }
 
@@ -1146,7 +1381,75 @@ public class SelectExecutionEngine
         var sorted = new List<Row>(heap.Count);
         while (heap.Count > 0) sorted.Add(heap.Dequeue().Row);
         sorted.Reverse();
-        return sorted;
+
+        return new TopNResult(sorted, null);
+    }
+
+    private static bool ExceedsTopNBudget(long prospectiveBytes, long operatorCeiling, IMemoryGrantLease lease) =>
+        (operatorCeiling > 0 && prospectiveBytes > operatorCeiling) || lease.RegisterAndCheckSpill(prospectiveBytes);
+
+    private bool IsBetterThanPeek(object?[] keys, object?[] peekKeys, List<OrderByClause> orderBy)
+    {
+        for (int i = 0; i < orderBy.Count; i++)
+        {
+            var res = orderBy[i].OutputOrder(_context.CompareConstants(keys[i], peekKeys[i]), keys[i], peekKeys[i]);
+            if (res != 0) return res < 0;
+        }
+        return false;
+    }
+
+    private IAsyncEnumerable<Row> SpillTopNToExternalSort(
+        PriorityQueue<(Row Row, object?[] Keys, long EntryBytes), (Row Row, object?[] Keys, long EntryBytes)> heap,
+        (Row Row, object?[] Keys) triggeringRow,
+        IAsyncEnumerator<Row> enumerator,
+        List<OrderByClause> orderBy,
+        SortKeyExtractor extractor,
+        long operatorCeiling,
+        long prospectiveBytes,
+        IMemoryGrantLease topNLease)
+    {
+        var retainedPrefix = new List<(Row Row, object?[] Keys)>(heap.Count + 1);
+        while (heap.Count > 0)
+        {
+            var entry = heap.Dequeue();
+            retainedPrefix.Add((entry.Row, entry.Keys));
+        }
+        retainedPrefix.Add(triggeringRow);
+
+        RecordRowPipelineDecision("select.topn", PlanDecisionOutcome.Degraded,
+            "Top-N retained footprint exceeded memory budget; transitioning to external sort.",
+            PlanDecisionReasonCodes.MemoryAdmissionRejected,
+            ("executionMode", "external-streaming"),
+            ("stage", "top-n"),
+            ("retainedRows", retainedPrefix.Count.ToString()),
+            ("prospectiveBytes", prospectiveBytes.ToString()),
+            ("memoryCeilingBytes", operatorCeiling.ToString()),
+            ("fallbackDestination", "ExternalSort"));
+
+        var externalSort = new ExternalSortEngine(_context, _logger);
+        return SortAndDispose();
+
+        async IAsyncEnumerable<Row> SortAndDispose()
+        {
+            try
+            {
+                // COMPAT_BREAK: 0.23 - retain evaluated ORDER BY keys across a spill.
+                await foreach (var row in externalSort.SortStreamWithPrefixAsync(
+                    ContinueStream(enumerator), orderBy, extractor.ExtractAsync, retainedPrefix, topNLease))
+                    yield return row;
+            }
+            finally
+            {
+                retainedPrefix.Clear();
+                topNLease.Dispose();
+                await enumerator.DisposeAsync();
+            }
+        }
+    }
+
+    private static async IAsyncEnumerable<Row> ContinueStream(IAsyncEnumerator<Row> remaining)
+    {
+        while (await remaining.MoveNextAsync()) yield return remaining.Current;
     }
 
     /// <summary>
@@ -1188,6 +1491,16 @@ public class SelectExecutionEngine
                 resolvers[i] = new SortKeyExtractor.Resolver(
                     null, colIdx >= 0 ? compiledFinal[colIdx] : null, col.Expression);
             }
+            else if (hasPreEvaluatedColumns
+                && finalColumns.FindIndex(c => c.Expression.ToSql().Equals(expr.ToSql(), StringComparison.OrdinalIgnoreCase)) is var sameIdx
+                && sameIdx >= 0 && sameIdx < colNames.Count)
+            {
+                // ORDER BY repeats a SELECT expression (ORDER BY AVG(amount) with an unaliased
+                // AVG(amount) column): the projected row holds its value under the output name
+                // ("column2"), and the expression's own inputs are gone after aggregation.
+                resolvers[i] = new SortKeyExtractor.Resolver(
+                    colNames[sameIdx], compiledFinal[sameIdx], finalColumns[sameIdx].Expression);
+            }
             else
             {
                 resolvers[i] = new SortKeyExtractor.Resolver(null, compiledOrder[i], expr);
@@ -1211,14 +1524,31 @@ public class SelectExecutionEngine
             _resolvers = resolvers;
         }
 
-        public async Task<object?[]> ExtractAsync(Row row)
+        public ValueTask<object?[]> ExtractAsync(Row row)
         {
             var keys = new object?[_resolvers.Length];
             for (int i = 0; i < _resolvers.Length; i++)
             {
                 var r = _resolvers[i];
-                if (r.DirectColName != null && row.HasColumn(r.DirectColName))
-                    keys[i] = row[r.DirectColName];
+                if (r.DirectColName != null && row.TryGetValue(r.DirectColName, out var directVal))
+                    keys[i] = directVal;
+                else if (r.Compiled != null)
+                    keys[i] = r.Compiled(row);
+                else if (r.FallbackExpr != null)
+                    return ExtractFallbackAsync(row, keys, i);
+                else
+                    keys[i] = null;
+            }
+            return new ValueTask<object?[]>(keys);
+        }
+
+        private async ValueTask<object?[]> ExtractFallbackAsync(Row row, object?[] keys, int startIndex)
+        {
+            for (int i = startIndex; i < _resolvers.Length; i++)
+            {
+                var r = _resolvers[i];
+                if (r.DirectColName != null && row.TryGetValue(r.DirectColName, out var directVal))
+                    keys[i] = directVal;
                 else if (r.Compiled != null)
                     keys[i] = r.Compiled(row);
                 else if (r.FallbackExpr != null)
@@ -1250,6 +1580,12 @@ public class SelectExecutionEngine
                 compiled[i] = value;
         }
         return compiled;
+    }
+
+    private void ResetProbeMemoryLease()
+    {
+        _memLease.Dispose();
+        _memLease = _context.MemoryArbiter.AcquireLease();
     }
 
     private bool ShouldSpill(IReadOnlyList<Row> rows)
@@ -1442,6 +1778,15 @@ public class SelectExecutionEngine
     /// reference is cleared, freeing GC pressure on wide join results.
     /// A null <paramref name="required"/> set (e.g. SELECT *) means pruning is skipped.
     /// </summary>
+    private static async IAsyncEnumerable<Row> ProjectRequiredStream(
+        IAsyncEnumerable<Row> source,
+        HashSet<string> required)
+    {
+        var layout = new ProjectedRowLayout(required);
+        await foreach (var row in source)
+            yield return layout.Project(row);
+    }
+
     private static void PruneColumns(List<Row> rows, HashSet<string>? required)
     {
         if (required == null || rows.Count == 0) return;

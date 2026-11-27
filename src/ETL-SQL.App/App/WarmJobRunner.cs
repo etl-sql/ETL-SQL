@@ -69,7 +69,7 @@ namespace ETL_SQL.App
                         null,
                         null,
                         null,
-                        true);
+                        ex is not UnauthorizedAccessException);
                     await Console.Out.WriteLineAsync(JsonSerializer.Serialize(response, JsonOptions));
                     await Console.Out.FlushAsync();
                 }
@@ -83,6 +83,13 @@ namespace ETL_SQL.App
             if (string.IsNullOrWhiteSpace(request.ScriptFile) || !File.Exists(request.ScriptFile))
                 throw new FileNotFoundException("Runner script file not found.", request.ScriptFile);
 
+            var configuration = services.GetService<IConfiguration>();
+            var executionIdentity = await ProcessCallerIdentityLoader.ReadAndConsumeAsync(
+                request.ScriptFile,
+                request.IdentityEnvelopeFile,
+                request.JobName,
+                request.IdentityKey);
+
             var scriptText = await File.ReadAllTextAsync(request.ScriptFile);
             var process = Process.GetCurrentProcess();
             var startCpu = process.TotalProcessorTime.TotalSeconds;
@@ -93,6 +100,7 @@ namespace ETL_SQL.App
                 BatchSize = request.BatchSize > 0 ? request.BatchSize : 10000,
                 IsJsonMode = true,
                 IsSilentMode = true,
+                SaasTenantId = executionIdentity?.TenantId,
                 SessionId = string.IsNullOrWhiteSpace(request.SessionId)
                     ? Guid.NewGuid().ToString("N")
                     : request.SessionId!
@@ -104,6 +112,7 @@ namespace ETL_SQL.App
                 scriptText,
                 jobName: request.JobName,
                 queueWaitMs: request.QueueWaitMs,
+                executionIdentity: executionIdentity,
                 variableOverrides: request.VariableOverrides,
                 resume: request.Resume);
 
@@ -112,7 +121,6 @@ namespace ETL_SQL.App
             var error = execution.Success
                 ? null
                 : string.Join("; ", execution.Diagnostics.Select(d => d.Message));
-            var configuration = services.GetService<IConfiguration>();
             var statementMetrics = StatementMetricsPayload.FromRun(
                 session.LastEvaluator?.Telemetry.ProfileMetrics,
                 runFailed: !execution.Success,
@@ -150,7 +158,9 @@ namespace ETL_SQL.App
         long QueueWaitMs,
         int BatchSize,
         IReadOnlyDictionary<string, string>? VariableOverrides = null,
-        bool Resume = false);
+        bool Resume = false,
+        string? IdentityEnvelopeFile = null,
+        string? IdentityKey = null);
 
     internal sealed record WarmRunnerResponse(
         string Type,
@@ -161,11 +171,11 @@ namespace ETL_SQL.App
         long PeakMemoryBytes,
         double CpuTimeSeconds,
         string? SessionId,
-        long RowsQuarantined,
-        long RowsWarned,
-        string? DataQualityFailures,
-        IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics,
-        IReadOnlyList<DataQualityRuleFailureMetric>? DataQualityRuleFailures,
-        IReadOnlyList<StatementMetricsPayload>? StatementMetrics,
+        long RowsQuarantined = 0,
+        long RowsWarned = 0,
+        string? DataQualityFailures = null,
+        IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics = null,
+        IReadOnlyList<DataQualityRuleFailureMetric>? DataQualityRuleFailures = null,
+        IReadOnlyList<StatementMetricsPayload>? StatementMetrics = null,
         bool RetryAllowed = true);
 }

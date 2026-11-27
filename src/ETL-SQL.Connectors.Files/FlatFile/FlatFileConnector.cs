@@ -44,7 +44,7 @@ namespace ETL_SQL.Connectors.FlatFile
             { "END_AT", Array.Empty<string>() },
             { "COUNT_AT_END", new[] { "ON", "OFF" } },
             { "COMPRESS", new[] { "ON", "OFF" } },
-            { "ENCRYPT", new[] { "ON", "OFF" } },
+            { "ENCRYPT", new[] { "ON", "OFF", "MACHINE", "PASSWORD", "KEYFILE", "PORTAL" } },
             { "PASSWORD", Array.Empty<string>() },
             { "TRANSACTIONAL", new[] { "ON", "OFF" } },
             { "CULTURE", Array.Empty<string>() },
@@ -71,7 +71,8 @@ namespace ETL_SQL.Connectors.FlatFile
             { "TRIM", new[] { "ON", "OFF" } },
             { "FORMAT", new[] { "DELIMITED", "FIXED" } },
             { "TRUNCATE_STRING", new[] { "ON", "OFF" } },
-            { "TRANSACTIONAL", new[] { "ON", "OFF" } }
+            { "TRANSACTIONAL", new[] { "ON", "OFF" } },
+            { "ENCRYPT", new[] { "ON", "OFF", "MACHINE", "PASSWORD", "KEYFILE", "PORTAL" } }
         };
 
         public string GetHelp() =>
@@ -94,7 +95,7 @@ namespace ETL_SQL.Connectors.FlatFile
             "  END_AT: <n> (Stop reading at line n)\n" +
             "  COUNT_AT_END: ON (Validate row count at trailer)\n" +
             "  COMPRESS: ON | OFF (ZIP archive; adds .zip to the path)\n" +
-            "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
+            "  ENCRYPT: ON | OFF | MACHINE | PASSWORD | KEYFILE | PORTAL (AES encryption for the file)\n" +
             "  PASSWORD: Password for encryption/decryption";
 
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)

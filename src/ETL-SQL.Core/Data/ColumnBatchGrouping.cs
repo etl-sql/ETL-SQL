@@ -36,10 +36,12 @@ public sealed class NativeStringGroupCountResult : IDisposable
 {
     private Dictionary<NativeStringGroupKey, long>? _groups = new();
     private IMemoryGrantLease? _lease;
+    private readonly long _memoryCeilingBytes;
 
-    public NativeStringGroupCountResult(IMemoryGrantArbiter? memoryArbiter = null)
+    public NativeStringGroupCountResult(IMemoryGrantArbiter? memoryArbiter = null, long memoryCeilingBytes = 0)
     {
         _lease = (memoryArbiter ?? UnlimitedMemoryGrantArbiter.Instance).AcquireLease();
+        _memoryCeilingBytes = memoryCeilingBytes;
         Groups = new ReadOnlyDictionary<NativeStringGroupKey, long>(_groups);
     }
 
@@ -70,10 +72,7 @@ public sealed class NativeStringGroupCountResult : IDisposable
             if (!groups.TryGetValue(key, out var count))
             {
                 var prospective = checked(EstimatedBytes + 96L + keyBytes * 2L);
-                if (lease.RegisterAndCheckSpill(prospective))
-                    throw new ExecutionException(
-                        $"Native string GROUP BY requires more than {EstimatedBytes:N0} bytes of count state. " +
-                        "Increase Engine:TotalMemoryGrantMB or use spill-capable grouped execution.");
+                NativeGroupBudget.EnsureWithinBudget(lease, _memoryCeilingBytes, EstimatedBytes, prospective, "string", "count");
                 EstimatedBytes = prospective;
             }
             groups[key] = count + 1;
@@ -122,10 +121,12 @@ public sealed class NativeStringGroupAggregateResult<TValue> : IDisposable
 {
     private Dictionary<NativeStringGroupKey, NativeAggregateState<TValue>>? _groups = new();
     private IMemoryGrantLease? _lease;
+    private readonly long _memoryCeilingBytes;
 
-    public NativeStringGroupAggregateResult(IMemoryGrantArbiter? memoryArbiter = null)
+    public NativeStringGroupAggregateResult(IMemoryGrantArbiter? memoryArbiter = null, long memoryCeilingBytes = 0)
     {
         _lease = (memoryArbiter ?? UnlimitedMemoryGrantArbiter.Instance).AcquireLease();
+        _memoryCeilingBytes = memoryCeilingBytes;
         Groups = new ReadOnlyDictionary<NativeStringGroupKey, NativeAggregateState<TValue>>(_groups);
     }
 
@@ -159,10 +160,7 @@ public sealed class NativeStringGroupAggregateResult<TValue> : IDisposable
             {
                 var prospective = checked(
                     EstimatedBytes + 96L + keyBytes * 2L + Unsafe.SizeOf<NativeAggregateState<TValue>>());
-                if (lease.RegisterAndCheckSpill(prospective))
-                    throw new ExecutionException(
-                        $"Native string GROUP BY requires more than {EstimatedBytes:N0} bytes of aggregate state. " +
-                        "Increase Engine:TotalMemoryGrantMB or use spill-capable grouped execution.");
+                NativeGroupBudget.EnsureWithinBudget(lease, _memoryCeilingBytes, EstimatedBytes, prospective, "string", "aggregate");
                 EstimatedBytes = prospective;
                 state = new NativeAggregateState<TValue>(0, 0, 0, default, default);
             }
@@ -216,10 +214,12 @@ public sealed class NativeGroupCountResult<TKey> : IDisposable where TKey : unma
 {
     private Dictionary<NativeGroupKey<TKey>, long>? _groups = new();
     private IMemoryGrantLease? _lease;
+    private readonly long _memoryCeilingBytes;
 
-    public NativeGroupCountResult(IMemoryGrantArbiter? memoryArbiter = null)
+    public NativeGroupCountResult(IMemoryGrantArbiter? memoryArbiter = null, long memoryCeilingBytes = 0)
     {
         _lease = (memoryArbiter ?? UnlimitedMemoryGrantArbiter.Instance).AcquireLease();
+        _memoryCeilingBytes = memoryCeilingBytes;
         Groups = new ReadOnlyDictionary<NativeGroupKey<TKey>, long>(_groups);
     }
 
@@ -244,10 +244,7 @@ public sealed class NativeGroupCountResult<TKey> : IDisposable where TKey : unma
             if (!groups.TryGetValue(key, out var count))
             {
                 var prospective = checked(EstimatedBytes + 64L + Unsafe.SizeOf<NativeGroupKey<TKey>>() + sizeof(long));
-                if (lease.RegisterAndCheckSpill(prospective))
-                    throw new ExecutionException(
-                        $"Native GROUP BY requires more than {EstimatedBytes:N0} bytes of count state. " +
-                        "Increase Engine:TotalMemoryGrantMB or use spill-capable grouped execution.");
+                NativeGroupBudget.EnsureWithinBudget(lease, _memoryCeilingBytes, EstimatedBytes, prospective, null, "count");
                 EstimatedBytes = prospective;
             }
             groups[key] = count + 1;
@@ -289,14 +286,17 @@ public sealed class NativeGroupAggregateResult<TKey, TValue> : IDisposable
 {
     private Dictionary<NativeGroupKey<TKey>, NativeAggregateState<TValue>>? _groups;
     private IMemoryGrantLease? _lease;
+    private readonly long _memoryCeilingBytes;
 
     internal NativeGroupAggregateResult(
         Dictionary<NativeGroupKey<TKey>, NativeAggregateState<TValue>> groups,
         IMemoryGrantLease lease,
-        long estimatedBytes)
+        long estimatedBytes,
+        long memoryCeilingBytes = 0)
     {
         _groups = groups;
         _lease = lease;
+        _memoryCeilingBytes = memoryCeilingBytes;
         Groups = new ReadOnlyDictionary<NativeGroupKey<TKey>, NativeAggregateState<TValue>>(groups);
         EstimatedBytes = estimatedBytes;
     }
@@ -326,10 +326,7 @@ public sealed class NativeGroupAggregateResult<TKey, TValue> : IDisposable
             if (!groups.TryGetValue(key, out var state))
             {
                 var prospective = checked(EstimatedBytes + EstimateGroupBytes());
-                if (lease.RegisterAndCheckSpill(prospective))
-                    throw new ExecutionException(
-                        $"Native GROUP BY requires more than {EstimatedBytes:N0} bytes of aggregate state. " +
-                        "Increase Engine:TotalMemoryGrantMB or use spill-capable grouped execution.");
+                NativeGroupBudget.EnsureWithinBudget(lease, _memoryCeilingBytes, EstimatedBytes, prospective, null, "aggregate");
                 EstimatedBytes = prospective;
                 state = new NativeAggregateState<TValue>(0, 0, 0, default, default);
             }
@@ -384,6 +381,26 @@ public sealed class NativeGroupAggregateResult<TKey, TValue> : IDisposable
     }
 }
 
+internal static class NativeGroupBudget
+{
+    public static void EnsureWithinBudget(
+        IMemoryGrantLease lease,
+        long memoryCeilingBytes,
+        long currentBytes,
+        long prospectiveBytes,
+        string? scopeLabel,
+        string stateKind)
+    {
+        if ((memoryCeilingBytes > 0 && prospectiveBytes > memoryCeilingBytes) || lease.RegisterAndCheckSpill(prospectiveBytes))
+        {
+            var prefix = string.IsNullOrEmpty(scopeLabel) ? "Native" : $"Native {scopeLabel}";
+            throw new ExecutionException(
+                $"{prefix} GROUP BY requires more than {currentBytes:N0} bytes of {stateKind} state. " +
+                "Increase Engine:TotalMemoryGrantMB or use spill-capable grouped execution.");
+        }
+    }
+}
+
 public static partial class ColumnBatchGroupKernels
 {
     public static NativeGroupAggregateResult<TKey, TValue> GroupAggregate<TKey, TValue>(
@@ -392,13 +409,14 @@ public static partial class ColumnBatchGroupKernels
         string valueColumnName,
         IMemoryGrantArbiter? memoryArbiter = null,
         SelectionVector? selection = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        long memoryCeilingBytes = 0)
         where TKey : unmanaged
         where TValue : unmanaged, INumber<TValue>
     {
         var groups = new Dictionary<NativeGroupKey<TKey>, NativeAggregateState<TValue>>();
         var lease = (memoryArbiter ?? UnlimitedMemoryGrantArbiter.Instance).AcquireLease();
-        var result = new NativeGroupAggregateResult<TKey, TValue>(groups, lease, 0);
+        var result = new NativeGroupAggregateResult<TKey, TValue>(groups, lease, 0, memoryCeilingBytes);
 
         try
         {

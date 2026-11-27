@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 using MySqlConnector;
 using Npgsql;
 using Oracle.ManagedDataAccess.Client;
@@ -31,18 +32,44 @@ namespace ETL_SQL.Connectors.Shared
             _options = options ?? new();
         }
 
-        private static int MaxAttempts => _options.MaxAttempts;
-        private static TimeSpan BaseDelay => _options.BaseDelay;
+        /// <summary>
+        /// The retry options in <c>Connectors:Retry</c>. A missing section, or a value out of range
+        /// (fewer than one attempt, a negative delay), falls back to the built-in default.
+        /// </summary>
+        public static ConnectorRetryOptions OptionsFrom(IConfiguration? configuration)
+        {
+            var defaults = new ConnectorRetryOptions();
+            var section = configuration?.GetSection("Connectors:Retry");
+            int? attempts = null;
+            double? delay = null;
+            try
+            {
+                attempts = section?.GetValue<int?>("MaxAttempts");
+                delay = section?.GetValue<double?>("BaseDelaySeconds");
+            }
+            catch (InvalidOperationException)
+            {
+                // A value that is not a number: keep the defaults rather than fail every connection.
+            }
+
+            return new ConnectorRetryOptions
+            {
+                MaxAttempts = attempts is >= 1 ? attempts.Value : defaults.MaxAttempts,
+                BaseDelaySeconds = delay is >= 0 ? delay.Value : defaults.BaseDelaySeconds
+            };
+        }
 
 
         // ── SqlServer ────────────────────────────────────────────────────────
 
-        public static ResiliencePipeline ForSqlServer(ILogger logger) =>
+        public static ResiliencePipeline ForSqlServer(ILogger logger) => ForSqlServer(logger, _options);
+
+        internal static ResiliencePipeline ForSqlServer(ILogger logger, ConnectorRetryOptions options) =>
             new ResiliencePipelineBuilder()
                 .AddRetry(new RetryStrategyOptions
                 {
-                    MaxRetryAttempts = MaxAttempts,
-                    Delay = BaseDelay,
+                    MaxRetryAttempts = options.MaxAttempts,
+                    Delay = options.BaseDelay,
                     BackoffType = DelayBackoffType.Exponential,
                     UseJitter = true,
                     ShouldHandle = new PredicateBuilder()
@@ -52,7 +79,7 @@ namespace ETL_SQL.Connectors.Shared
                     {
                         logger.Warning(
                             "SqlServer transient error on attempt {Attempt}/{Max}: {Message}. Retrying in {Delay}ms.",
-                            args.AttemptNumber + 1, MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
+                            args.AttemptNumber + 1, options.MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
                         return ValueTask.CompletedTask;
                     }
                 })
@@ -93,12 +120,14 @@ namespace ETL_SQL.Connectors.Shared
 
         // ── Postgres ─────────────────────────────────────────────────────────
 
-        public static ResiliencePipeline ForPostgres(ILogger logger) =>
+        public static ResiliencePipeline ForPostgres(ILogger logger) => ForPostgres(logger, _options);
+
+        internal static ResiliencePipeline ForPostgres(ILogger logger, ConnectorRetryOptions options) =>
             new ResiliencePipelineBuilder()
                 .AddRetry(new RetryStrategyOptions
                 {
-                    MaxRetryAttempts = MaxAttempts,
-                    Delay = BaseDelay,
+                    MaxRetryAttempts = options.MaxAttempts,
+                    Delay = options.BaseDelay,
                     BackoffType = DelayBackoffType.Exponential,
                     UseJitter = true,
                     ShouldHandle = new PredicateBuilder()
@@ -108,7 +137,7 @@ namespace ETL_SQL.Connectors.Shared
                     {
                         logger.Warning(
                             "Postgres transient error on attempt {Attempt}/{Max}: {Message}. Retrying in {Delay}ms.",
-                            args.AttemptNumber + 1, MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
+                            args.AttemptNumber + 1, options.MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
                         return ValueTask.CompletedTask;
                     }
                 })
@@ -127,12 +156,14 @@ namespace ETL_SQL.Connectors.Shared
 
         // ── Oracle ───────────────────────────────────────────────────────────
 
-        public static ResiliencePipeline ForOracle(ILogger logger) =>
+        public static ResiliencePipeline ForOracle(ILogger logger) => ForOracle(logger, _options);
+
+        internal static ResiliencePipeline ForOracle(ILogger logger, ConnectorRetryOptions options) =>
             new ResiliencePipelineBuilder()
                 .AddRetry(new RetryStrategyOptions
                 {
-                    MaxRetryAttempts = MaxAttempts,
-                    Delay = BaseDelay,
+                    MaxRetryAttempts = options.MaxAttempts,
+                    Delay = options.BaseDelay,
                     BackoffType = DelayBackoffType.Exponential,
                     UseJitter = true,
                     ShouldHandle = new PredicateBuilder()
@@ -142,7 +173,7 @@ namespace ETL_SQL.Connectors.Shared
                     {
                         logger.Warning(
                             "Oracle transient error on attempt {Attempt}/{Max}: {Message}. Retrying in {Delay}ms.",
-                            args.AttemptNumber + 1, MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
+                            args.AttemptNumber + 1, options.MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
                         return ValueTask.CompletedTask;
                     }
                 })
@@ -173,12 +204,14 @@ namespace ETL_SQL.Connectors.Shared
 
         // ── Snowflake ────────────────────────────────────────────────────────
 
-        public static ResiliencePipeline ForSnowflake(ILogger logger) =>
+        public static ResiliencePipeline ForSnowflake(ILogger logger) => ForSnowflake(logger, _options);
+
+        internal static ResiliencePipeline ForSnowflake(ILogger logger, ConnectorRetryOptions options) =>
             new ResiliencePipelineBuilder()
                 .AddRetry(new RetryStrategyOptions
                 {
-                    MaxRetryAttempts = MaxAttempts,
-                    Delay = BaseDelay,
+                    MaxRetryAttempts = options.MaxAttempts,
+                    Delay = options.BaseDelay,
                     BackoffType = DelayBackoffType.Exponential,
                     UseJitter = true,
                     ShouldHandle = new PredicateBuilder()
@@ -188,7 +221,7 @@ namespace ETL_SQL.Connectors.Shared
                     {
                         logger.Warning(
                             "Snowflake transient error on attempt {Attempt}/{Max}: {Message}. Retrying in {Delay}ms.",
-                            args.AttemptNumber + 1, MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
+                            args.AttemptNumber + 1, options.MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
                         return ValueTask.CompletedTask;
                     }
                 })
@@ -209,12 +242,14 @@ namespace ETL_SQL.Connectors.Shared
 
         // ── BigQuery ─────────────────────────────────────────────────────────
 
-        public static ResiliencePipeline ForBigQuery(ILogger logger) =>
+        public static ResiliencePipeline ForBigQuery(ILogger logger) => ForBigQuery(logger, _options);
+
+        internal static ResiliencePipeline ForBigQuery(ILogger logger, ConnectorRetryOptions options) =>
             new ResiliencePipelineBuilder()
                 .AddRetry(new RetryStrategyOptions
                 {
-                    MaxRetryAttempts = MaxAttempts,
-                    Delay = BaseDelay,
+                    MaxRetryAttempts = options.MaxAttempts,
+                    Delay = options.BaseDelay,
                     BackoffType = DelayBackoffType.Exponential,
                     UseJitter = true,
                     ShouldHandle = new PredicateBuilder()
@@ -224,7 +259,7 @@ namespace ETL_SQL.Connectors.Shared
                     {
                         logger.Warning(
                             "BigQuery transient error on attempt {Attempt}/{Max}: {Message}. Retrying in {Delay}ms.",
-                            args.AttemptNumber + 1, MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
+                            args.AttemptNumber + 1, options.MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
                         return ValueTask.CompletedTask;
                     }
                 })
@@ -246,12 +281,14 @@ namespace ETL_SQL.Connectors.Shared
 
         // ── ODBC ─────────────────────────────────────────────────────────────
 
-        public static ResiliencePipeline ForOdbc(ILogger logger) =>
+        public static ResiliencePipeline ForOdbc(ILogger logger) => ForOdbc(logger, _options);
+
+        internal static ResiliencePipeline ForOdbc(ILogger logger, ConnectorRetryOptions options) =>
             new ResiliencePipelineBuilder()
                 .AddRetry(new RetryStrategyOptions
                 {
-                    MaxRetryAttempts = MaxAttempts,
-                    Delay = BaseDelay,
+                    MaxRetryAttempts = options.MaxAttempts,
+                    Delay = options.BaseDelay,
                     BackoffType = DelayBackoffType.Exponential,
                     UseJitter = true,
                     ShouldHandle = new PredicateBuilder()
@@ -261,7 +298,7 @@ namespace ETL_SQL.Connectors.Shared
                     {
                         logger.Warning(
                             "ODBC transient error on attempt {Attempt}/{Max}: {Message}. Retrying in {Delay}ms.",
-                            args.AttemptNumber + 1, MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
+                            args.AttemptNumber + 1, options.MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
                         return ValueTask.CompletedTask;
                     }
                 })
@@ -287,12 +324,14 @@ namespace ETL_SQL.Connectors.Shared
 
         // ── MySql ────────────────────────────────────────────────────────────
 
-        public static ResiliencePipeline ForMySql(ILogger logger) =>
+        public static ResiliencePipeline ForMySql(ILogger logger) => ForMySql(logger, _options);
+
+        internal static ResiliencePipeline ForMySql(ILogger logger, ConnectorRetryOptions options) =>
             new ResiliencePipelineBuilder()
                 .AddRetry(new RetryStrategyOptions
                 {
-                    MaxRetryAttempts = MaxAttempts,
-                    Delay = BaseDelay,
+                    MaxRetryAttempts = options.MaxAttempts,
+                    Delay = options.BaseDelay,
                     BackoffType = DelayBackoffType.Exponential,
                     UseJitter = true,
                     ShouldHandle = new PredicateBuilder()
@@ -302,7 +341,7 @@ namespace ETL_SQL.Connectors.Shared
                     {
                         logger.Warning(
                             "MySql transient error on attempt {Attempt}/{Max}: {Message}. Retrying in {Delay}ms.",
-                            args.AttemptNumber + 1, MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
+                            args.AttemptNumber + 1, options.MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
                         return ValueTask.CompletedTask;
                     }
                 })

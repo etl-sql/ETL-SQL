@@ -57,9 +57,11 @@ namespace ETL_SQL.Tests.Reporting
             var page = new PageManifest { Title = "My Report", Subtitle = "Q4 2024" };
             page.SlotMap["A"] = "MyTable";
 
-            var result = TerminalRenderer.RenderPage(page, manifest);
+            var text = RenderToText(TerminalRenderer.RenderPage(page, manifest));
 
-            Assert.NotNull(result);
+            Assert.Contains("My Report", text);
+            Assert.Contains("Q4 2024", text);
+            Assert.Contains("Alice", text);
         }
 
         [Fact]
@@ -70,9 +72,10 @@ namespace ETL_SQL.Tests.Reporting
             manifest.Visuals.Add(vis);
             var page = new PageManifest { Name = "P" };
 
-            var result = TerminalRenderer.RenderPage(page, manifest);
+            var text = RenderToText(TerminalRenderer.RenderPage(page, manifest));
 
-            Assert.NotNull(result);
+            Assert.Contains("V1", text);
+            Assert.Contains("42", text);
         }
 
         [Fact]
@@ -84,9 +87,9 @@ namespace ETL_SQL.Tests.Reporting
             var page = new PageManifest();
             page.SlotMap["A"] = "V1";
 
-            var result = TerminalRenderer.RenderPage(page, manifest);
+            var text = RenderToText(TerminalRenderer.RenderPage(page, manifest));
 
-            Assert.NotNull(result);
+            Assert.Contains("99", text);
         }
 
         [Fact]
@@ -96,9 +99,9 @@ namespace ETL_SQL.Tests.Reporting
             var page = new PageManifest();
             page.SlotMap["A"] = "NonExistent";
 
-            var result = TerminalRenderer.RenderPage(page, manifest);
+            var text = RenderToText(TerminalRenderer.RenderPage(page, manifest));
 
-            Assert.NotNull(result);
+            Assert.DoesNotContain("NonExistent", text);
         }
 
         [Fact]
@@ -111,9 +114,9 @@ namespace ETL_SQL.Tests.Reporting
             var page = new PageManifest();
             page.SlotMap["A"] = "MyBtn";
 
-            var result = TerminalRenderer.RenderPage(page, manifest);
+            var text = RenderToText(TerminalRenderer.RenderPage(page, manifest));
 
-            Assert.NotNull(result);
+            Assert.Contains("Click Me", text);
         }
 
         [Fact]
@@ -135,9 +138,10 @@ namespace ETL_SQL.Tests.Reporting
             var page = new PageManifest();
             page.SlotMap["A"] = "MyContainer";
 
-            var result = TerminalRenderer.RenderPage(page, manifest);
+            var text = RenderToText(TerminalRenderer.RenderPage(page, manifest));
 
-            Assert.NotNull(result);
+            Assert.Contains("Sub-Layout", text);
+            Assert.Contains("Nested Button", text);
         }
 
         // ── RenderVisual – BAR ────────────────────────────────────────────────
@@ -147,7 +151,9 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("B", "BAR", new[] { "Label", "Value" },
                 new[] { new[] { "Alpha", "10" }, new[] { "Beta", "20" }, new[] { "Gamma", "15" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("B", text);
+            Assert.Contains("██", text);
         }
 
         [Fact]
@@ -155,14 +161,20 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("B", "BAR", new[] { "Label", "Value" },
                 new[] { new[] { "A", "notanumber" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("B", text);
+            Assert.Contains("No data available", text);
+            Assert.DoesNotContain("Unsupported", text);
         }
 
         [Fact]
         public void RenderVisual_Bar_EmptyRows_ReturnsPlaceholder()
         {
             var v = V("B", "BAR", new[] { "Label", "Value" });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("B", text);
+            Assert.Contains("No data available", text);
+            Assert.DoesNotContain("Unsupported", text);
         }
 
         // ── RenderVisual – HBAR ───────────────────────────────────────────────
@@ -172,7 +184,9 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("H", "HBAR", new[] { "Label", "Value" },
                 new[] { new[] { "East", "300" }, new[] { "West", "200" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("East", text);
+            Assert.Contains("West", text);
         }
 
         [Fact]
@@ -180,7 +194,9 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("H", "HORIZONTALBAR", new[] { "Label", "Value" },
                 new[] { new[] { "North", "400" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("North", text);
+            Assert.Contains("400", text);
         }
 
         // ── RenderVisual – PIE / DONUT ────────────────────────────────────────
@@ -190,7 +206,9 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("P", "PIE", new[] { "Segment", "Share" },
                 new[] { new[] { "A", "30" }, new[] { "B", "70" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("A", text);
+            Assert.Contains("B", text);
         }
 
         [Fact]
@@ -198,7 +216,9 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("D", "DONUT", new[] { "Segment", "Share" },
                 new[] { new[] { "X", "40" }, new[] { "Y", "60" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("X", text);
+            Assert.Contains("Y", text);
         }
 
         // ── RenderVisual – CARD ───────────────────────────────────────────────
@@ -207,16 +227,18 @@ namespace ETL_SQL.Tests.Reporting
         public void RenderVisual_Card_ReturnsPanel()
         {
             var v = V("C", "CARD", new[] { "Value" }, new[] { new[] { "42" } });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(result);
+            Assert.Contains("C", text);
+            Assert.Contains("42", text);
         }
 
         [Fact]
         public void RenderVisual_Card_EmptyRows_ReturnsNa()
         {
             var v = V("C", "CARD", new[] { "Value" });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("N/A", text);
         }
 
         // ── RenderVisual – TABLE ──────────────────────────────────────────────
@@ -226,9 +248,11 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("T", "TABLE", new[] { "Name", "Age" },
                 new[] { new[] { "Alice", "30" }, new[] { "Bob", "25" } });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Table>(result);
+            var result = Assert.IsType<Table>(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(result);
+            Assert.Contains("Alice", text);
+            Assert.Contains("Bob", text);
+            Assert.Contains("30", text);
         }
 
         // ── RenderVisual – TEXT ───────────────────────────────────────────────
@@ -238,7 +262,8 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("Txt", "TEXT", new[] { "Content" }, new[] { new[] { "# Hello" } });
             v.DefaultValue = "# Hello World";
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("Hello", text);
         }
 
         // ── RenderVisual – GAUGE ──────────────────────────────────────────────
@@ -248,14 +273,16 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("G", "GAUGE", new[] { "Val" }, new[] { new[] { "75" } },
                 new Dictionary<string, string> { ["MIN"] = "0", ["MAX"] = "100" });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("75", text);
         }
 
         [Fact]
         public void RenderVisual_Gauge_NonNumericValue_DefaultsToZero()
         {
             var v = V("G", "GAUGE", new[] { "Val" }, new[] { new[] { "N/A" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("0", text);
         }
 
         [Fact]
@@ -263,7 +290,8 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("G", "GAUGE", new[] { "Val" }, new[] { new[] { "95" } },
                 new Dictionary<string, string> { ["MAX"] = "100" });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("95", text);
         }
 
         [Fact]
@@ -271,7 +299,8 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("G", "GAUGE", new[] { "Val" }, new[] { new[] { "75" } },
                 new Dictionary<string, string> { ["MAX"] = "100" });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("75", text);
         }
 
         // ── RenderVisual – BOXPLOT ────────────────────────────────────────────
@@ -282,14 +311,19 @@ namespace ETL_SQL.Tests.Reporting
             // Row format: [label, min, q1, median, q3, max]
             var v = V("BP", "BOXPLOT", new[] { "Cat", "Min", "Q1", "Median", "Q3", "Max" },
                 new[] { new[] { "Group A", "5", "10", "15", "20", "25" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("BP", text);
+            Assert.Contains("Group A", text);
         }
 
         [Fact]
         public void RenderVisual_BoxPlot_EmptyRows_ReturnsPlaceholder()
         {
             var v = V("BP", "BOXPLOT", new[] { "Cat" });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("BP", text);
+            Assert.Contains("No data available", text);
+            Assert.DoesNotContain("Unsupported", text);
         }
 
         [Fact]
@@ -297,7 +331,8 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("BP", "BOXPLOT", new[] { "Cat", "V" },
                 new[] { new[] { "A", "5" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("No data available", text);
         }
 
         // ── RenderVisual – WATERFALL ──────────────────────────────────────────
@@ -312,14 +347,21 @@ namespace ETL_SQL.Tests.Reporting
                 new[] { "Loss",   "-30" },
                 new[] { "Total",  "220" }
             });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("Start", text);
+            Assert.Contains("Gain", text);
+            Assert.Contains("Loss", text);
+            Assert.Contains("Total", text);
         }
 
         [Fact]
         public void RenderVisual_Waterfall_EmptyRows_ReturnsPlaceholder()
         {
             var v = V("WF", "WATERFALL", new[] { "Item", "Amount" });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("WF", text);
+            Assert.Contains("No data available", text);
+            Assert.DoesNotContain("Unsupported", text);
         }
 
         // ── RenderVisual – LINE ───────────────────────────────────────────────
@@ -331,14 +373,17 @@ namespace ETL_SQL.Tests.Reporting
             {
                 new[] { "1", "10" }, new[] { "2", "20" }, new[] { "3", "15" }
             });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("L", text);
+            Assert.Contains("20", text);
         }
 
         [Fact]
         public void RenderVisual_Line_OnlyOneRow_ReturnsPlaceholder()
         {
             var v = V("L", "LINE", new[] { "X", "Y" }, new[] { new[] { "1", "10" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("L", text);
         }
 
         [Fact]
@@ -348,7 +393,8 @@ namespace ETL_SQL.Tests.Reporting
             {
                 new[] { "A", "bad" }, new[] { "B", "worse" }, new[] { "C", "nope" }
             });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("L", text);
         }
 
         // ── RenderVisual – SCATTER ────────────────────────────────────────────
@@ -360,14 +406,20 @@ namespace ETL_SQL.Tests.Reporting
             {
                 new[] { "1.0", "2.5" }, new[] { "3.0", "4.2" }, new[] { "2.0", "1.8" }
             });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var panel = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(panel);
+            Assert.Contains("╭─S", text);
+            Assert.True(text.Split('\n').Length >= 6, "Expected multi-row canvas panel");
         }
 
         [Fact]
         public void RenderVisual_Scatter_EmptyRows_ReturnsPlaceholder()
         {
             var v = V("S", "SCATTER", new[] { "X", "Y" });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("S", text);
+            Assert.Contains("No data available", text);
+            Assert.DoesNotContain("Unsupported", text);
         }
 
         [Fact]
@@ -377,7 +429,8 @@ namespace ETL_SQL.Tests.Reporting
             {
                 new[] { "A", "B" }, new[] { "C", "D" }
             });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("S", text);
         }
 
         // ── RenderVisual – HEATMAP ────────────────────────────────────────────
@@ -390,14 +443,19 @@ namespace ETL_SQL.Tests.Reporting
                 new[] { "Week1", "5",  "10", "8"  },
                 new[] { "Week2", "12", "3",  "15" }
             });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("Week1", text);
+            Assert.Contains("Week2", text);
         }
 
         [Fact]
         public void RenderVisual_HeatMap_EmptyRows_ReturnsPlaceholder()
         {
             var v = V("HM", "HEATMAP", new[] { "Row", "Col" });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("HM", text);
+            Assert.Contains("No data available", text);
+            Assert.DoesNotContain("Unsupported", text);
         }
 
         // ── RenderVisual – SLICER / controls ─────────────────────────────────
@@ -413,7 +471,9 @@ namespace ETL_SQL.Tests.Reporting
             var manifest = new ReportManifest();
             manifest.Parameters["@Region"] = "East";
 
-            Assert.NotNull(TerminalRenderer.RenderVisual(v, manifest));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v, manifest));
+            Assert.Contains("East", text);
+            Assert.Contains("West", text);
         }
 
         [Fact]
@@ -423,14 +483,17 @@ namespace ETL_SQL.Tests.Reporting
             {
                 new[] { "North" }, new[] { "South" }
             });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("North", text);
+            Assert.Contains("South", text);
         }
 
         [Fact]
         public void RenderVisual_Slicer_EmptyRows_ReturnsPlaceholder()
         {
             var v = V("Sl", "SLICER", new[] { "Region" });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("Sl", text);
         }
 
         [Fact]
@@ -440,14 +503,18 @@ namespace ETL_SQL.Tests.Reporting
             {
                 new[] { "OptionA" }, new[] { "OptionB" }
             });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("OptionA", text);
+            Assert.Contains("OptionB", text);
         }
 
         [Fact]
         public void RenderVisual_Slider_ReturnsNonNull()
         {
             var v = V("Sl2", "SLIDER", new[] { "Val" }, new[] { new[] { "50" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("Sl2", text);
+            Assert.DoesNotContain("not currently supported", text, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -467,14 +534,18 @@ namespace ETL_SQL.Tests.Reporting
         public void RenderVisual_Search_ReturnsNonNull()
         {
             var v = V("Sr", "SEARCH", new[] { "Term" }, new[] { new[] { "hello" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("Sr", text);
+            Assert.DoesNotContain("not currently supported", text, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
         public void RenderVisual_ReDatePicker_ReturnsNonNull()
         {
             var v = V("Rd", "REDATEPICKER", new[] { "Date" }, new[] { new[] { "2026-06-05" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("Rd", text);
+            Assert.DoesNotContain("not currently supported", text, StringComparison.OrdinalIgnoreCase);
         }
 
         // ── RenderVisual – unsupported types in TUI ───────────────────────────
@@ -483,44 +554,48 @@ namespace ETL_SQL.Tests.Reporting
         public void RenderVisual_Treemap_ReturnsPremiumPlaceholder()
         {
             var v = V("T", "TREEMAP", new[] { "Name", "Value" }, new[] { new[] { "A", "1" } });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(result);
+            Assert.Contains("T", text);
+            Assert.Contains("A", text);
         }
 
         [Fact]
         public void RenderVisual_Radar_ReturnsPremiumPlaceholder()
         {
             var v = V("R", "RADAR", new[] { "Series", "Metric" }, new[] { new[] { "A", "50" } });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("RADAR", RenderToText(result), StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
         public void RenderVisual_Bubble_RendersCanvasBubbleChart()
         {
             var v = V("B", "BUBBLE", new[] { "X", "Y", "Size" }, new[] { new[] { "10", "20", "5" }, new[] { "30", "40", "10" } });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
+            var panel = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(panel);
+            Assert.Contains("╭─B", text);
+            Assert.True(text.Split('\n').Length >= 6, "Expected multi-row bubble canvas panel");
         }
 
         [Fact]
         public void RenderVisual_Funnel_RendersFunnelChart()
         {
             var v = V("F", "FUNNEL", new[] { "Stage", "Value" }, new[] { new[] { "Leads", "100" }, new[] { "Customers", "10" } });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(result);
+            Assert.Contains("Leads", text);
+            Assert.Contains("Customers", text);
         }
 
         [Fact]
         public void RenderVisual_Gantt_RendersGanttChart()
         {
             var v = V("G", "GANTT", new[] { "Task", "Start", "End" }, new[] { new[] { "Design", "0", "5" }, new[] { "Dev", "5", "15" } });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(result);
+            Assert.Contains("Design", text);
+            Assert.Contains("Dev", text);
         }
 
         [Fact]
@@ -530,17 +605,20 @@ namespace ETL_SQL.Tests.Reporting
             {
                 new[] { "Jan", "100", "110", "95", "105" }
             });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
+            var panel = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(panel);
+            Assert.Contains("╭─C", text);
+            Assert.True(text.Split('\n').Length >= 6, "Expected multi-row candlestick canvas panel");
         }
 
         [Fact]
         public void RenderVisual_Matrix_RendersMatrixGrid()
         {
             var v = V("M", "MATRIX", new[] { "Period", "Rev" }, new[] { new[] { "Q1", "1000" } });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(result);
+            Assert.Contains("Q1", text);
+            Assert.Contains("1000", text);
         }
 
         [Fact]
@@ -548,17 +626,17 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("Tr", "TRELLIS", new[] { "Reg", "Prod", "Sales" }, new[] { new[] { "A", "X", "100" } },
                 opts: new Dictionary<string, string> { ["FACET"] = "Reg" });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("Tr", text);
+            Assert.Contains("A", text);
         }
 
         [Fact]
         public void RenderVisual_Checkbox_RendersInteractiveControl()
         {
             var v = V("Chk", "CHECKBOX", new string[] { });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("Chk", RenderToText(result));
         }
 
         [Fact]
@@ -566,18 +644,16 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("Txt", "TEXTBOX", new string[] { });
             v.DefaultValue = "Initial Text";
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("Initial Text", RenderToText(result));
         }
 
         [Fact]
         public void RenderVisual_Numberbox_RendersInteractiveControl()
         {
             var v = V("Num", "NUMBERBOX", new string[] { });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("Num", RenderToText(result));
         }
 
         [Fact]
@@ -632,9 +708,10 @@ namespace ETL_SQL.Tests.Reporting
         public void RenderVisual_Map_ReturnsPremiumPlaceholder()
         {
             var v = V("M", "MAP", new[] { "Region", "Value" }, new[] { new[] { "US", "100" } });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(result);
+            Assert.Contains("US", text);
+            Assert.Contains("100", text);
         }
 
         [Fact]
@@ -642,45 +719,46 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("Img", "IMAGE", new string[] { });
             v.DefaultValue = "logo.png";
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("logo.png", RenderToText(result));
         }
 
         [Fact]
         public void RenderVisual_Combo_ReturnsPremiumPlaceholder()
         {
             var v = V("Cmb", "COMBO", new[] { "X", "Y" }, new[] { new[] { "A", "10" } });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("COMBO", RenderToText(result), StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
         public void RenderVisual_Sankey_ReturnsPremiumPlaceholder()
         {
             var v = V("Sank", "SANKEY", new[] { "Src", "Dst", "Val" }, new[] { new[] { "A", "B", "100" } });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(result);
+            Assert.Contains("Sank", text);
+            Assert.Contains("100", text);
         }
 
         [Fact]
         public void RenderVisual_Sunburst_ReturnsPremiumPlaceholder()
         {
             var v = V("Sun", "SUNBURST", new[] { "Path", "Val" }, new[] { new[] { "A>B", "10" } });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(result);
+            Assert.Contains("Sun", text);
+            Assert.Contains("10", text);
         }
 
         [Fact]
         public void RenderVisual_Network_ReturnsPremiumPlaceholder()
         {
             var v = V("Net", "NETWORK", new[] { "Src", "Dst" }, new[] { new[] { "A", "B" } });
-            var result = TerminalRenderer.RenderVisual(v);
-            Assert.NotNull(result);
-            Assert.IsType<Panel>(result);
+            var result = Assert.IsType<Panel>(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(result);
+            Assert.Contains("Net", text);
+            Assert.Contains("A", text);
         }
 
         // ── RenderVisual – unknown / fallback ─────────────────────────────────
@@ -689,7 +767,9 @@ namespace ETL_SQL.Tests.Reporting
         public void RenderVisual_UnknownType_ReturnsPlaceholder()
         {
             var v = V("X", "UNKNOWN_VISUAL_TYPE", new[] { "A" });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("UNKNOWN_VISUAL_TYPE", text);
+            Assert.Contains("not currently supported", text, StringComparison.OrdinalIgnoreCase);
         }
 
         // ── GetVisualTitle paths ──────────────────────────────────────────────
@@ -699,7 +779,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("V", "CARD", new[] { "Val" }, new[] { new[] { "100" } },
                 opts: new Dictionary<string, string> { ["TITLE"] = "Options Title" });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("Options Title", RenderToText(TerminalRenderer.RenderVisual(v)));
         }
 
         [Fact]
@@ -707,14 +787,43 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("V", "CARD", new[] { "Val" }, new[] { new[] { "200" } },
                 styles: new Dictionary<string, string> { ["TITLE"] = "Styles Title" });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("Styles Title", RenderToText(TerminalRenderer.RenderVisual(v)));
         }
 
         [Fact]
         public void RenderVisual_TitleFallsBackToVisualName()
         {
             var v = V("MyVisualName", "CARD", new[] { "Val" }, new[] { new[] { "300" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("MyVisualName", RenderToText(TerminalRenderer.RenderVisual(v)));
+        }
+
+        [Theory]
+        [InlineData("BAR")]
+        [InlineData("HBAR")]
+        [InlineData("HORIZONTALBAR")]
+        [InlineData("PIE")]
+        [InlineData("DONUT")]
+        [InlineData("BOXPLOT")]
+        [InlineData("WATERFALL")]
+        [InlineData("LINE")]
+        [InlineData("SCATTER")]
+        [InlineData("HEATMAP")]
+        [InlineData("BUBBLE")]
+        [InlineData("FUNNEL")]
+        [InlineData("GANTT")]
+        [InlineData("CANDLESTICK")]
+        public void RenderVisual_UnparseableRows_ShowsNoDataPanel(string visualType)
+        {
+            var v = V("UnparseableChart", visualType,
+                new[] { "C0", "C1", "C2", "C3", "C4", "C5" },
+                new[]
+                {
+                    new[] { "Row1", "bad", "bad", "bad", "bad", "bad" },
+                    new[] { "Row2", "nope", "nope", "nope", "nope", "nope" }
+                });
+            var text = RenderToText(TerminalRenderer.RenderVisual(v));
+            Assert.Contains("UnparseableChart", text);
+            Assert.Contains("No data available for this chart.", text);
         }
 
         // ── Numeric cell formatting (Card / Table rounding) ──────────────────

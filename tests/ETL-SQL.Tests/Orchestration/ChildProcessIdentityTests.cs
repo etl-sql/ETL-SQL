@@ -58,9 +58,97 @@ public class ChildProcessIdentityTests : IDisposable
         Assert.Equal(1, _factory.Process.Kills);
     }
 
+    [Fact]
+    public void Unregister_CoalescesSpillSweepsAcrossBurstWorkerExits()
+    {
+        var spillRootParent = Path.Combine(_directory, "spill-parent");
+        Directory.CreateDirectory(spillRootParent);
+
+        var deadMarkerDir1 = Path.Combine(spillRootParent, "dead-worker-1");
+        Directory.CreateDirectory(deadMarkerDir1);
+        File.WriteAllText(
+            ETL_SQL.Core.Spill.SpillRootOwnership.MarkerPath(deadMarkerDir1),
+            $"{Environment.MachineName}\n{int.MaxValue}\n0");
+
+        using var tracker = new ChildProcessTracker(
+            NullLogger<ChildProcessTracker>.Instance,
+            Store,
+            _factory,
+            sweepCoalesceInterval: TimeSpan.FromSeconds(30))
+        {
+            SpillParentOverride = spillRootParent
+        };
+
+        // First Unregister runs an immediate sweep.
+        tracker.Register(123, "job-1.etlsql");
+        tracker.Unregister(123);
+        Assert.Equal(1, tracker.SweepExecutionCount);
+        Assert.False(Directory.Exists(deadMarkerDir1));
+
+        // Additional exits inside the coalesce window mark one deferred sweep instead of scanning N times.
+        var deadMarkerDir2 = Path.Combine(spillRootParent, "dead-worker-2");
+        Directory.CreateDirectory(deadMarkerDir2);
+        File.WriteAllText(
+            ETL_SQL.Core.Spill.SpillRootOwnership.MarkerPath(deadMarkerDir2),
+            $"{Environment.MachineName}\n{int.MaxValue}\n0");
+
+        for (int i = 0; i < 5; i++)
+        {
+            tracker.Register(123, $"job-burst-{i}.etlsql");
+            tracker.Unregister(123);
+        }
+
+        Assert.Equal(1, tracker.SweepExecutionCount);
+        Assert.True(Directory.Exists(deadMarkerDir2));
+
+        // Flushing the coalesced sweep performs a single follow-up scan for the entire burst.
+        tracker.FlushCoalescedSweep();
+        Assert.Equal(2, tracker.SweepExecutionCount);
+        Assert.False(Directory.Exists(deadMarkerDir2));
+    }
+
+    [Fact]
+    public void WorkerMemoryTracking_SeparatesAggregateFromUnaccountedExcess()
+    {
+        const long mb = 1024L * 1024L;
+        var factory = new WeightedFactory();
+        using var tracker = new ChildProcessTracker(NullLogger<ChildProcessTracker>.Instance, Store, factory);
+
+        // PID 201 is backed by a 30 MB BufferManager reservation and currently uses 18 MB working set.
+        factory.Add(201, workingSetBytes: 18 * mb);
+        tracker.Register(201, "backed-within.etlsql", reservedMemoryBytes: 30 * mb, backedByBufferManager: true);
+
+        // PID 202 is backed by 20 MB in BufferManager, with 26 MB working set (6 MB excess over grant).
+        factory.Add(202, workingSetBytes: 26 * mb);
+        tracker.Register(202, "backed-over.etlsql", reservedMemoryBytes: 20 * mb, backedByBufferManager: true);
+
+        // PID 203 is unbacked with 15 MB working set.
+        factory.Add(203, workingSetBytes: 15 * mb);
+        tracker.Register(203, "unbacked.etlsql", reservedMemoryBytes: 0, backedByBufferManager: false);
+
+        Assert.Equal((30 + 26 + 15) * mb, tracker.GetAggregateWorkerMemoryBytes());
+        Assert.Equal((0 + 6 + 15) * mb, tracker.GetUnaccountedWorkerMemoryBytes());
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory)) Directory.Delete(_directory, true);
+    }
+
+    private sealed class WeightedFactory : ITrackedChildProcessFactory
+    {
+        private readonly Dictionary<int, WeightedProcess> _map = new();
+        public void Add(int pid, long workingSetBytes) => _map[pid] = new WeightedProcess(pid, workingSetBytes);
+        public ITrackedChildProcess Open(int pid) => _map[pid];
+
+        private sealed class WeightedProcess(int pid, long workingSetBytes) : ITrackedChildProcess
+        {
+            public bool HasExited => false;
+            public ChildProcessIdentity Identity { get; } = new(pid * 10L, $"worker-{pid}.exe");
+            public long WorkingSetBytes => workingSetBytes;
+            public void Kill() { }
+            public void Dispose() { }
+        }
     }
 
     private sealed class FakeFactory : ITrackedChildProcessFactory

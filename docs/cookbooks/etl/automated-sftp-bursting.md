@@ -5,10 +5,9 @@ Split a single large production table into multiple encrypted country-specific C
 CREATE CONNECTION prod        AS MSSQL(SERVER='prod-db', DATABASE='Sales', TRUSTED_CONNECTION=TRUE);
 CREATE CONNECTION vendor_sftp AS SFTP(HOST='sftp.vendor.com', USER='upload', PASSWORD='...');
 
-DECLARE @Countries LIST = (SELECT DISTINCT Country FROM prod.Sales);
-
-FOREACH @C IN @Countries
+FOREACH @row IN (SELECT DISTINCT Country FROM prod.Sales)
 BEGIN
+    DECLARE @C = @row.Country;
     DECLARE @OutFile     = 'C:\Exports\' + @C + '_Sales.csv';
     DECLARE @EncFile     = @OutFile + '.enc';
     DECLARE @RemotePath  = '/inbox/' + @C + '/';

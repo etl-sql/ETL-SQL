@@ -1,6 +1,6 @@
 # SHARE_OF_TOTAL
 
-Computes the percentage contribution of a row's numeric value relative to the group or grand total.
+Computes the fractional share (`0.0` to `1.0`, e.g., `0.25` for 25%) of each row's numeric value relative to the group or grand total. Non-null rows divide by the sum of non-null values in the group; `NULL` input values produce `NULL` outputs.
 
 ```sql
 TRANSFORM #target

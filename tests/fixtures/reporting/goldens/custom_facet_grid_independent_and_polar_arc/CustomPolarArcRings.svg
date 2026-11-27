@@ -1,0 +1,10 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='600' height='350' viewBox='0 0 600 350' role='img' aria-labelledby='CustomPolarArcRings-title CustomPolarArcRings-desc' font-family='sans-serif'>
+<title id='CustomPolarArcRings-title'>Stacked Polar Arc Breakdown</title>
+<desc id='CustomPolarArcRings-desc'>Stacked Polar Arc Breakdown: 4 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
+<rect width='600' height='350' fill='white'/>
+<text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Stacked Polar Arc Breakdown</text>
+<path class='plot-radial-stack' data-row-index='1' data-radius-start='0' data-radius-end='20' d='M 300 103.955 A 70.045 70.045 0 0 1 370.045 174 A 70.045 70.045 0 0 1 300 244.045 L 300 207.5 A 33.5 33.5 0 0 0 333.5 174 A 33.5 33.5 0 0 0 300 140.5 Z' fill='#5470c6' stroke='white' stroke-width='1'><title>Compute: 20.0; radius 0 to 20.0</title></path>
+<path class='plot-radial-stack' data-row-index='3' data-radius-start='0' data-radius-end='15' d='M 300 234.909 A 60.909 60.909 0 0 1 239.091 174 A 60.909 60.909 0 0 1 300 113.091 L 300 140.5 A 33.5 33.5 0 0 0 266.5 174 A 33.5 33.5 0 0 0 300 207.5 Z' fill='#5470c6' stroke='white' stroke-width='1'><title>Storage: 15.0; radius 0 to 15.0</title></path>
+<path class='plot-radial-stack' data-row-index='0' data-radius-start='20' data-radius-end='55' d='M 300 40 A 134 134 0 0 1 434 174 A 134 134 0 0 1 300 308 L 300 244.045 A 70.045 70.045 0 0 0 370.045 174 A 70.045 70.045 0 0 0 300 103.955 Z' fill='#91cc75' stroke='white' stroke-width='1'><title>Compute: 35.0; radius 20.0 to 55.0</title></path>
+<path class='plot-radial-stack' data-row-index='2' data-radius-start='15' data-radius-end='45' d='M 300 289.727 A 115.727 115.727 0 0 1 184.273 174 A 115.727 115.727 0 0 1 300 58.273 L 300 113.091 A 60.909 60.909 0 0 0 239.091 174 A 60.909 60.909 0 0 0 300 234.909 Z' fill='#91cc75' stroke='white' stroke-width='1'><title>Storage: 30.0; radius 15.0 to 45.0</title></path>
+</svg>

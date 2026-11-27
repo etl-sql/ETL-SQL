@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
 using Microsoft.Data.SqlClient;
 using Npgsql;
 using Oracle.ManagedDataAccess.Client;
@@ -65,18 +66,7 @@ namespace ETL_SQL.Connectors
             }
             if (props.TryGetValue("DATABASE", out var db)) builder.InitialCatalog = db;
 
-            bool trusted = props.ContainsKey("TRUSTED_CONNECTION") &&
-                          ConnectorOptionValues.IsTrue(props["TRUSTED_CONNECTION"]);
-
-            if (trusted)
-            {
-                builder.IntegratedSecurity = true;
-            }
-            else
-            {
-                if (props.TryGetValue("USER", out var user)) builder.UserID = user;
-                if (props.TryGetValue("PASSWORD", out var pass)) builder.Password = pass;
-            }
+            ApplySqlServerAuthentication(builder, props);
 
             // Production Options: Security
             if ((props.TryGetValue("USE_SSL", out var ssl) || props.TryGetValue("ENCRYPT", out ssl)) && ssl != null)
@@ -116,6 +106,87 @@ namespace ETL_SQL.Connectors
             return builder.ConnectionString;
         }
 
+        private static void ApplySqlServerAuthentication(SqlConnectionStringBuilder builder, Dictionary<string, string> props)
+        {
+            bool hasAuthMode = props.TryGetValue("AUTH_MODE", out var rawAuthMode);
+            bool hasTrusted = props.TryGetValue("TRUSTED_CONNECTION", out var rawTrusted);
+            bool trustedTrue = hasTrusted && ConnectorOptionValues.IsTrue(rawTrusted);
+            bool hasUser = props.TryGetValue("USER", out var user) && !string.IsNullOrWhiteSpace(user);
+            bool hasPassword = props.TryGetValue("PASSWORD", out var password) && !string.IsNullOrWhiteSpace(password);
+            bool hasClientId = props.TryGetValue("CLIENT_ID", out var clientId) && !string.IsNullOrWhiteSpace(clientId);
+
+            string mode;
+            if (hasAuthMode)
+            {
+                if (string.IsNullOrWhiteSpace(rawAuthMode))
+                    throw new ExecutionException("MSSQL AUTH_MODE must be one of: SQL, WINDOWS, ENTRA_DEFAULT, ENTRA_MANAGED_IDENTITY, ENTRA_SERVICE_PRINCIPAL.");
+
+                mode = rawAuthMode.Trim().ToUpperInvariant();
+            }
+            else
+            {
+                mode = trustedTrue ? "WINDOWS" : "SQL";
+            }
+
+            switch (mode)
+            {
+                case "SQL":
+                    if (trustedTrue)
+                        throw new ExecutionException("MSSQL AUTH_MODE='SQL' cannot be combined with TRUSTED_CONNECTION=TRUE.");
+                    if (hasClientId)
+                        throw new ExecutionException("MSSQL CLIENT_ID is only valid with Entra AUTH_MODE values.");
+                    if (hasUser) builder.UserID = user!;
+                    if (hasPassword) builder.Password = password!;
+                    break;
+
+                case "WINDOWS":
+                    if (hasTrusted && !trustedTrue)
+                        throw new ExecutionException("MSSQL AUTH_MODE='WINDOWS' cannot be combined with TRUSTED_CONNECTION=FALSE.");
+                    if (hasUser || hasPassword)
+                        throw new ExecutionException("MSSQL Windows authentication cannot be combined with USER or PASSWORD.");
+                    if (hasClientId)
+                        throw new ExecutionException("MSSQL Windows authentication cannot be combined with CLIENT_ID.");
+                    builder.IntegratedSecurity = true;
+                    break;
+
+                case "ENTRA_DEFAULT":
+                    if (hasTrusted)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_DEFAULT' cannot be combined with TRUSTED_CONNECTION.");
+                    if (hasUser || hasPassword || hasClientId)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_DEFAULT' does not accept USER, PASSWORD, or CLIENT_ID.");
+                    builder.Authentication = SqlAuthenticationMethod.ActiveDirectoryDefault;
+                    break;
+
+                case "ENTRA_MANAGED_IDENTITY":
+                    if (hasTrusted)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_MANAGED_IDENTITY' cannot be combined with TRUSTED_CONNECTION.");
+                    if (hasUser || hasPassword)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_MANAGED_IDENTITY' does not accept USER or PASSWORD.");
+                    builder.Authentication = SqlAuthenticationMethod.ActiveDirectoryManagedIdentity;
+                    if (hasClientId)
+                        builder.UserID = clientId!;
+                    break;
+
+                case "ENTRA_SERVICE_PRINCIPAL":
+                    if (hasTrusted)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_SERVICE_PRINCIPAL' cannot be combined with TRUSTED_CONNECTION.");
+                    if (hasUser)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_SERVICE_PRINCIPAL' uses CLIENT_ID, not USER.");
+                    if (!hasClientId)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_SERVICE_PRINCIPAL' requires CLIENT_ID.");
+                    if (!hasPassword)
+                        throw new ExecutionException("MSSQL AUTH_MODE='ENTRA_SERVICE_PRINCIPAL' requires PASSWORD (the service principal client secret).");
+                    builder.Authentication = SqlAuthenticationMethod.ActiveDirectoryServicePrincipal;
+                    builder.UserID = clientId!;
+                    builder.Password = password!;
+                    break;
+
+                default:
+                    throw new ExecutionException(
+                        $"Invalid MSSQL AUTH_MODE '{rawAuthMode?.Trim()}'. Allowed values: SQL, WINDOWS, ENTRA_DEFAULT, ENTRA_MANAGED_IDENTITY, ENTRA_SERVICE_PRINCIPAL.");
+            }
+        }
+
         private static string BuildPostgres(Dictionary<string, string> props)
         {
             var builder = new NpgsqlConnectionStringBuilder();
@@ -147,7 +218,112 @@ namespace ETL_SQL.Connectors
             if (props.TryGetValue("TRUST_SERVER_CERTIFICATE", out var trustCert) && trustCert != null && ConnectorOptionValues.IsTrue(trustCert))
                 builder["Trust Server Certificate"] = true;
 
+            if (props.TryGetValue("SEARCH_PATH", out var searchPath))
+                builder.SearchPath = ValidateAndNormalizePostgresSearchPath(searchPath);
+
             return builder.ConnectionString;
+        }
+
+        /// <summary>
+        /// Validates a PostgreSQL <c>SEARCH_PATH</c> option as a comma-separated list of SQL identifiers
+        /// (unquoted identifiers or double-quoted identifiers with doubled-quote escapes) and returns
+        /// the normalized comma-separated string. Throws <see cref="ExecutionException"/> on any invalid value.
+        /// </summary>
+        internal static string ValidateAndNormalizePostgresSearchPath(string? rawSearchPath)
+        {
+            if (string.IsNullOrWhiteSpace(rawSearchPath))
+                throw new ExecutionException("POSTGRES SEARCH_PATH must be a non-empty comma-separated list of schema identifiers.");
+
+            var schemas = new List<string>();
+            int i = 0;
+            int len = rawSearchPath.Length;
+
+            while (true)
+            {
+                while (i < len && char.IsWhiteSpace(rawSearchPath[i])) i++;
+
+                if (i >= len)
+                    throw new ExecutionException("POSTGRES SEARCH_PATH contains an empty schema entry.");
+
+                string entry;
+                if (rawSearchPath[i] == '"')
+                {
+                    int start = i;
+                    i++; // skip opening quote
+                    bool closed = false;
+                    int contentLen = 0;
+
+                    while (i < len)
+                    {
+                        char c = rawSearchPath[i];
+                        if (c < 0x20 || c == 0x7F)
+                            throw new ExecutionException("POSTGRES SEARCH_PATH contains an invalid control character.");
+
+                        if (c == '"')
+                        {
+                            if (i + 1 < len && rawSearchPath[i + 1] == '"')
+                            {
+                                // Escaped double quote inside quoted identifier
+                                i += 2;
+                                contentLen++;
+                                continue;
+                            }
+
+                            i++; // consume closing quote
+                            closed = true;
+                            break;
+                        }
+
+                        i++;
+                        contentLen++;
+                    }
+
+                    if (!closed)
+                        throw new ExecutionException("POSTGRES SEARCH_PATH has an unclosed quoted schema identifier.");
+
+                    if (contentLen == 0)
+                        throw new ExecutionException("POSTGRES SEARCH_PATH contains an empty quoted schema identifier.");
+
+                    entry = rawSearchPath.Substring(start, i - start);
+                }
+                else
+                {
+                    int start = i;
+                    char first = rawSearchPath[i];
+                    if (!((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_'))
+                        throw new ExecutionException($"POSTGRES SEARCH_PATH contains an invalid schema identifier starting with '{first}'. Quote special identifiers with double quotes.");
+
+                    i++;
+                    while (i < len)
+                    {
+                        char c = rawSearchPath[i];
+                        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$')
+                        {
+                            i++;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+
+                    entry = rawSearchPath.Substring(start, i - start);
+                }
+
+                schemas.Add(entry);
+
+                while (i < len && char.IsWhiteSpace(rawSearchPath[i])) i++;
+
+                if (i >= len)
+                    break;
+
+                if (rawSearchPath[i] != ',')
+                    throw new ExecutionException($"POSTGRES SEARCH_PATH contains an invalid schema identifier near '{rawSearchPath[i]}'.");
+
+                i++; // skip comma and expect another identifier
+            }
+
+            return string.Join(", ", schemas);
         }
 
         private static string BuildMySql(Dictionary<string, string> props)

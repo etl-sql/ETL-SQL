@@ -23,7 +23,7 @@ namespace ETL_SQL.Connectors.MockDb
         public Dictionary<string, string[]> GetSupportedOptions() => new();
         public Dictionary<string, string[]> GetOptionValues() => new();
 
-        public string GetHelp() => "Mock DB Connector: Used for testing database interactions without a real server.";
+        public string GetHelp() => "MOCKDB connector: a mock database for testing database interactions without a real server.";
 
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
             => new MockSqlDataSource(context, connectionString, "MockDB", options, new MockDataSeeder());

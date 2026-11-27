@@ -216,6 +216,13 @@ public interface IDataContext
     /// </summary>
     IDictionary<string, string> CatalogBackedConnections { get; }
 
+    /// <summary>
+    /// Governed <c>SHARED:</c> catalog aliases resolved during this execution, including
+    /// parameterized targets, nested <c>RUN SCRIPT</c> calls, and parallel forks.
+    /// Forks share this set; writers must lock it before adding dependencies.
+    /// </summary>
+    ISet<string> SharedConnectionDependencies { get; }
+
     /// <summary>Statement-local data source overrides (used for CTEs).</summary>
     IDictionary<string, IDataSource> LocalSources { get; }
     string? MasterPassword { get; }
@@ -349,11 +356,12 @@ public interface IEngineContext
     Task EvaluateStatement(Statement statement, System.Threading.CancellationToken cancellationToken = default);
     Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default);
     IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt);
-    Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args);
+    Task EvaluateProcedure(string name, List<(string? Name, object? Value, string? OutputVariable)> args);
     string ResolvePath(string path);
     int MaxRecursiveDepth { get; set; }
     int CurrentRecursiveDepth { get; set; }
     int BatchSize { get; set; }
+    long BatchTargetBytes { get => SpillFanOut.DefaultTargetBatchBytes; set { } }
     long TempTableSpillThresholdRows { get; set; }
     int MaxLastResultRows { get; set; }
     int ForeachPageSize { get; set; }
@@ -495,6 +503,8 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
 
     bool SpillEncryptionEnabled { get; set; }
     bool SpillCompressionEnabled { get; set; }
+    /// <summary>Spill compression mode: Adaptive (Fastest under high CPU pressure), Fastest, Optimal, or SmallestSize.</summary>
+    string SpillCompressionLevel { get => "Adaptive"; set { } }
     string SpillFormat { get; set; }
 
     /// <summary>
@@ -548,6 +558,8 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
     int EffectiveBatchSize => AdaptiveExecutionEnabled && AdaptiveAdvisor != null
         ? AdaptiveAdvisor.Snapshot().BatchRows
         : BatchSize;
+    /// <summary>Effective target byte budget per batch.</summary>
+    long EffectiveBatchTargetBytes => BatchTargetBytes;
     /// <summary>Effective PARALLEL worker ceiling, including adaptive advice when enabled.</summary>
     int EffectiveMaxParallelDegree => AdaptiveExecutionEnabled && AdaptiveAdvisor != null
         ? AdaptiveAdvisor.Snapshot().WorkerDegree

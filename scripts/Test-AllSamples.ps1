@@ -189,6 +189,7 @@ if ($ReleaseMode) {
                     -e "Portal__Studio__Mode=SourceControlled" `
                     -e "Portal__Studio__RoleCapabilities__Admin__0=StudioAccess" `
                     -e "Portal__Studio__RoleCapabilities__Admin__1=ReportPublish" `
+                    -e "Portal__Studio__RoleCapabilities__Admin__2=ScriptIngress" `
                     $portalImage | Out-Null
                 if ($LASTEXITCODE -eq 0) {
                     $startedPortalContainer = $true

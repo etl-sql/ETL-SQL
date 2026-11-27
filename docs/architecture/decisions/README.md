@@ -27,6 +27,7 @@
 | [Enterprise Release Gates](enterprise-release-gates.md) | This document is the release-gate checklist for the enterprise policy, monitoring, HA, recovery, and |
 | [Enterprise Security Review Packet](enterprise-security-review-packet.md) | Status: Prepared, not signed off. |
 | [Execution Transparency and Fallback Coverage (v0.15.0 Phase 5) — Design](execution-transparency-and-fallbacks.md) | **Status:** Phase 5 implementation complete for the current v0.15 native/pushdown/external surfaces; |
+| [External tool use grants and native artifact approval](external-tool-use-and-artifact-approval.md) | Proposed caller grants and native launch verification contract. |
 | [Governed Custom Tool Runner - Adversarial Certification Evidence](governed-custom-tool-runner-certification.md) | This document records the adversarial certification evidence for the Governed Custom Tool Runner extension in ETL-SQL. The runner implements OCI-ha... |
 | [HA Topology and Failure Certification](ha-topology-failure-certification.md) | This guide defines the supported Portal and Orchestrator deployment topologies, the readiness |
 | [Host Utilization Time Series & Capacity Reporting — Implementation Plan](host-utilization-and-capacity-planning.md) | - **`NodeCapacityMonitor.Capture()`** (`ETL-SQL.Orchestrator/Scheduling/NodeCapacityMonitor.cs`) |
@@ -63,3 +64,4 @@
 | [Studio Beginner Acceptance Assessment](studio-beginner-acceptance-assessment.md) | Assessment of the combined beginner report and ETL journeys in both hosts, with the remaining gaps and host limits. |
 | [New Chart Types Architectural Evaluation](new-chart-types-evaluation.md) | Architectural evaluation of candidate chart types: Polar coordinate bar/line, Calendar heatmap, Streamgraph, and Parallel coordinates. |
 | [Geographic Density Map Architectural Evaluation](geographic-density-map-evaluation.md) | Architectural evaluation of geographic density maps (MAP MODE = DENSITY) evaluating hexbin, 2D KDE contour, and raster approaches. |
+| [Framed Spill Encryption Format (`ETLSPL03`) and Compression Level Defaults](framed-spill-encryption-etlspl03.md) | Accepted wire specification for single-pass `AES-256-GCM` framed spill encryption (`ETLSPL03`) and `Fastest` vs `Optimal` encrypted compression benchmarks. |

@@ -16,7 +16,7 @@ if [[ "$INSTALLER_ROOT" != "$REPO_ROOT/src/ETL-SQL.Installer" ]]; then
 fi
 cd "$REPO_ROOT"
 
-VERSION=${1:-"0.22.0"}
+VERSION=${1:-"0.23.1"}
 PUBLISHED_BIN_DIR=${2:-"release/linux-x64/bin"}
 ARCH="amd64"
 PKG_NAME="etl-sql"
@@ -144,7 +144,7 @@ if root_owned_file(saved):
 # Generated service secrets live in a file only root and the service account can read, because
 # appsettings.json is shared with the CLI and readable by every local user. Its values are the ones
 # in use, so they win over anything in appsettings.json and nothing below regenerates them.
-# Keep in sync with configure-portal-jwt.ps1 (InstallerConfigurationScriptTests compares them).
+# Keep in sync with ConfigurationExtensions.InstalledSecretPaths (InstallerConfigurationScriptTests compares them).
 SECRET_PATHS = ["Portal:Jwt:Secret", "Portal:Jwt:PreviousSecrets", "Portal:Dataset:AtRestKey", "Portal:Dataset:PreviousAtRestKeys", "Portal:FirstRun:AdminPassword", "Orchestrator:ApiKey", "Orchestrator:PreviousApiKeys", "Orchestrator:IdentitySigningSecret", "Portal:Orchestrator:ApiKey", "Portal:Orchestrator:IdentitySigningSecret"]
 secrets_path = os.path.join(os.path.dirname(path), "appsettings.secrets.json")
 def read_secrets(p):

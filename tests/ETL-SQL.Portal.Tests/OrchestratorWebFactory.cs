@@ -84,6 +84,7 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
             services.RemoveAll<IHostMetricsStore>();
             services.RemoveAll<ISharedTenantLifecycleStore>();
             services.RemoveAll<IBundleStore>();
+            services.RemoveAll<ITenantBundleStore>();
             services.RemoveAll<ILineageCatalogStore>();
             services.RemoveAll<ITenantLineageCatalogStore>();
             services.RemoveAll<IConnectionCatalogProvider>();
@@ -96,6 +97,7 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
             services.AddSingleton<IHostMetricsStore>(testStore);
             services.AddSingleton<ISharedTenantLifecycleStore>(testStore);
             services.AddSingleton<IBundleStore>(testStore);
+            services.AddSingleton<ITenantBundleStore>(testStore);
             services.AddSingleton<ILineageCatalogStore>(testStore);
             services.AddSingleton<ITenantLineageCatalogStore>(testStore);
             // The real monitor reads this machine's memory and this process's CPU. On a busy CI
@@ -106,7 +108,9 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
             services.RemoveAll<INodeCapacityMonitor>();
             services.AddSingleton<INodeCapacityMonitor>(new PortalTestCapacityMonitor());
             services.AddSingleton<IConnectionCatalogProvider>(
-                new LocalConnectionCatalogProvider(Path.Combine(TempDir, "connections")));
+                new LocalConnectionCatalogProvider(
+                    Path.Combine(TempDir, "connections"),
+                    ETL_SQL.Core.Governance.LocalVaultProtectionScope.CurrentUser));
         });
     }
 

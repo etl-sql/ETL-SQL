@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orchestrator — ETL-SQL Portal</title>
-  <link rel="stylesheet" href="/css/portal.css?v=0.22.0">
-  <link rel="stylesheet" href="/designer/designer.css?v=0.22.0">
+  <link rel="stylesheet" href="/css/portal.css?v=0.23.1">
+  <link rel="stylesheet" href="/designer/designer.css?v=0.23.1">
   <style>
     /* ── Top navigation / view switcher ────────────────────────── */
     .orch-view-nav {
@@ -173,6 +173,52 @@
       margin-bottom: 6px;
     }
     .orch-script-header label { margin: 0; }
+    .orch-catalog-banner, .orch-catalog-script-notice {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 10px 12px;
+      border-radius: 6px;
+      background: var(--portal-surface-subtle);
+      border: 1px solid var(--portal-border-soft);
+      font-size: 0.84em;
+    }
+    .orch-catalog-script-notice {
+      margin-bottom: 8px;
+    }
+    .orch-script-readonly {
+      margin: 0;
+      padding: 10px 12px;
+      max-height: 185px;
+      overflow: auto;
+      background: var(--portal-surface);
+      border: 1px solid var(--portal-border-soft);
+      border-radius: 6px;
+      font-family: var(--portal-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+      font-size: 0.8em;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .orch-pending-pipelines {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px 16px;
+    }
+    .orch-pending-pipeline-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 8px 12px;
+      border: 1px solid var(--portal-border-soft);
+      border-radius: 6px;
+      background: var(--portal-surface-subtle);
+      font-size: 0.86em;
+    }
 
     /* ── Toggle buttons ────────────────────────────────────────── */
     .orch-toggle-group {
@@ -267,6 +313,17 @@
     .orch-link-row .btn { padding: 2px 6px; font-size: .92em; }
     .orch-link-meta, .orch-link-empty { color: var(--portal-muted); }
     .orch-link-empty { font-size: .82em; padding: 4px 0; }
+    .orch-history-row { cursor: pointer; transition: background 0.12s; }
+    .orch-history-row:hover { background: var(--portal-surface-subtle); }
+    .orch-waterfall-list { display: flex; flex-direction: column; gap: 8px; }
+    .orch-waterfall-item { padding: 8px 10px; background: var(--portal-surface-subtle); border: 1px solid var(--portal-border-soft); border-radius: 6px; font-size: .84em; }
+    .orch-waterfall-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .orch-waterfall-sql { font-family: var(--portal-mono, ui-monospace, monospace); font-size: .92em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 44ch; }
+    .orch-waterfall-track { height: 8px; border-radius: 4px; background: var(--portal-border-soft); overflow: hidden; }
+    .orch-waterfall-fill { height: 100%; background: var(--portal-accent); border-radius: 4px; min-width: 2px; }
+    .orch-waterfall-fill.failed { background: var(--portal-danger, #dc2626); }
+    .orch-run-error { margin: 8px 0 12px; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(220, 38, 38, 0.35); background: rgba(220, 38, 38, 0.08); font-family: var(--portal-mono, ui-monospace, monospace); font-size: .82em; white-space: pre-wrap; word-break: break-word; }
+    .orch-pool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -301,6 +358,10 @@
         <button class="orch-nav-btn" role="tab" aria-selected="false" aria-controls="viewNotificationsSection" id="orchNavNotifications" type="button">
           <span>🔔 Notifications</span>
           <span class="orch-nav-badge" id="notificationsNavCount">0</span>
+        </button>
+        <button class="orch-nav-btn" role="tab" aria-selected="false" aria-controls="viewFleetSection" id="orchNavFleet" type="button">
+          <span>🖥 Nodes &amp; Sandboxes</span>
+          <span class="orch-nav-badge" id="fleetNavCount">—</span>
         </button>
       </nav>
 
@@ -390,6 +451,18 @@
             </p>
           </div>
           <div id="timelineCalendarWrap" style="display:none;padding:12px 16px;"></div>
+        </div>
+
+        <!-- Unprovisioned Studio Pipelines -->
+        <div class="card" id="pendingPipelinesCard" style="display:none;margin-bottom:16px;">
+          <div class="card-header">
+            <div>
+              <span class="section-kicker">Studio Integration</span>
+              <h3>Studio Pipelines Awaiting Orchestrator Provisioning</h3>
+            </div>
+            <span class="badge" id="pendingPipelinesCount">0</span>
+          </div>
+          <div class="orch-pending-pipelines" id="pendingPipelinesList"></div>
         </div>
 
         <!-- Jobs table card with Search & Pagination -->
@@ -501,6 +574,36 @@
         </div>
       </div><!-- /viewNotificationsSection -->
 
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- VIEW 4: NODES & SANDBOXES FLEET HEALTH                              -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <div id="viewFleetSection" role="tabpanel" aria-labelledby="orchNavFleet" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <span class="section-kicker">Cluster Telemetry</span>
+              <h3>Nodes &amp; Sandbox Pools</h3>
+            </div>
+            <div class="orch-card-actions">
+              <button class="btn btn-sm btn-outline" id="refreshFleetBtn" type="button">↻ Refresh</button>
+            </div>
+          </div>
+          <div style="padding:12px 16px;">
+            <p style="font-size:.84em;color:var(--portal-muted);margin:0 0 12px;">
+              Live node leases from <code>NodeHeartbeatService</code> and sandbox pool capacity from <code>RelationalSandboxAdmissionLedger</code>.
+            </p>
+            <h4 style="margin:0 0 8px;font-size:.9em;">Registered Cluster Nodes</h4>
+            <div id="fleetNodesWrap">
+              <div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading node telemetry…</span></div>
+            </div>
+            <h4 style="margin:16px 0 8px;font-size:.9em;">Sandbox Admission Pools</h4>
+            <div id="fleetPoolsWrap">
+              <div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading sandbox pools…</span></div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /viewFleetSection -->
+
     </div><!-- /admin-content -->
 
     <!-- ── Job detail side panel ──────────────────────────────────────────── -->
@@ -510,7 +613,12 @@
           <h3 id="detailJobName" style="margin:0;">Job Details</h3>
           <div id="detailJobDisplayName" style="font-size:.82em;color:var(--portal-muted);margin-top:2px;"></div>
         </div>
-        <button class="btn-icon" id="closeDetailBtn" title="Close">✕</button>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btn btn-sm btn-outline" id="detailRunBtn" type="button" style="display:none" title="Run job with optional parameter overrides">▶ Run with Parameters…</button>
+          <button class="btn btn-sm btn-outline" id="editJobBtn" type="button" style="display:none">Edit Metadata</button>
+          <button class="btn btn-sm btn-outline btn-danger-soft" id="detailKillBtn" type="button" style="display:none" title="Kill currently running instance">Kill</button>
+          <button class="btn-icon" id="closeDetailBtn" title="Close">✕</button>
+        </div>
       </div>
 
       <div class="orch-detail-tabs">
@@ -548,6 +656,8 @@
           <label>Description</label>
           <p id="detailDescription" style="font-size:.84em;color:var(--portal-text);margin:0;"></p>
         </div>
+
+        <div class="orch-detail-section" id="detailCatalogNotice" style="display:none;"></div>
 
         <!-- Schedule & Linked Schedules -->
         <div class="orch-detail-section">
@@ -678,6 +788,12 @@
       <button class="btn-icon" id="closeCreateBtn" data-dialog-close title="Close">✕</button>
     </div>
     <div class="modal-body">
+      <div id="cj-mode-notice" class="orch-catalog-banner" style="display:none;margin-bottom:10px;">
+        <div>
+          <strong>CatalogOnly governance active</strong>
+          <div class="orch-link-meta">Raw server-filesystem scripts and inline script injection are disabled. Select a Studio catalog Pipeline, Report, or signed <code>orch://</code> bundle.</div>
+        </div>
+      </div>
       <div class="form-row">
         <div class="form-group" style="flex:1">
           <label for="cj-name">Job Identifier <span style="color:var(--portal-danger)">*</span></label>
@@ -693,8 +809,17 @@
         <input id="cj-description" type="text" placeholder="Summary of what this pipeline accomplishes...">
       </div>
 
-      <!-- A published bundle is not offered as a target until the dialog writes orch:// URIs (ROADMAP OR01). -->
+      <!-- Target Kind: Script vs Bundle vs Report -->
       <div class="form-row">
+        <div class="form-group" style="flex:1">
+          <label for="cj-target-kind">Target Type</label>
+          <select id="cj-target-kind">
+            <option value="Script" selected>Script File (.etlsql)</option>
+            <option value="Pipeline">Studio Catalog Pipeline (PIPELINE)</option>
+            <option value="Bundle">Published Bundle (orch://)</option>
+            <option value="Report">Report Refresh (REPORT)</option>
+          </select>
+        </div>
         <div class="form-group" style="flex:1">
           <label for="cj-sandbox-profile">Sandbox Isolation Profile</label>
           <select id="cj-sandbox-profile">
@@ -721,13 +846,58 @@
         </div>
       </div>
 
+      <!-- Bundle Target Inputs -->
+      <div id="cj-bundle-target-row" style="display:none">
+        <div class="form-row">
+          <div class="form-group" style="flex:2">
+            <label for="cj-bundle-select">Published Bundle</label>
+            <select id="cj-bundle-select">
+              <option value="">— Select published bundle —</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label for="cj-bundle-version">Version</label>
+            <select id="cj-bundle-version" disabled>
+              <option value="">— Latest —</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:2">
+            <label for="cj-bundle-entry">Entry Script</label>
+            <select id="cj-bundle-entry" disabled>
+              <option value="">— Default entry —</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="cj-bundle-uri">Or bundle URI (orch://)</label>
+          <input id="cj-bundle-uri" type="text" placeholder="orch://bundle_name@1/main.etlsql">
+        </div>
+      </div>
+
+      <!-- Report Target Inputs -->
+      <div id="cj-report-target-row" class="form-group" style="display:none">
+        <label for="cj-report-path">Report Target Path <span style="color:var(--portal-danger)">*</span></label>
+        <input id="cj-report-path" type="text" placeholder="/Reports/Finance/DailySales">
+      </div>
+
+      <!-- Studio Catalog Pipeline Target Inputs -->
+      <div id="cj-pipeline-target-row" class="form-group" style="display:none">
+        <label for="cj-pipeline-select">Catalog Pipeline <span style="color:var(--portal-danger)">*</span></label>
+        <select id="cj-pipeline-select">
+          <option value="">— Select catalog pipeline —</option>
+        </select>
+        <p style="font-size:.78em;color:var(--portal-muted);margin:4px 0 0;">
+          Provisions the pipeline's governed run slot and grants EXECUTE to its owner without copying script text.
+        </p>
+      </div>
+
       <div id="cj-preview-wrap" style="display:none" class="cj-preview-section">
         <label style="font-size:.75em;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--portal-muted);display:block;margin-bottom:4px;">Target Preview</label>
         <pre class="orch-script-preview" id="cj-script-preview" style="max-height:100px;"></pre>
       </div>
 
       <!-- Schedule Selection Mode -->
-      <div class="form-group" style="margin-top:10px;">
+      <div class="form-group" id="cj-sched-mode-row" style="margin-top:10px;">
         <label>Schedule Mode</label>
         <div style="display:flex;gap:12px;margin-top:4px;">
           <label style="font-weight:normal;font-size:.85em;cursor:pointer;">
@@ -770,7 +940,7 @@
         </select>
       </div>
 
-      <!-- Retries and Policies -->
+      <!-- Retries, Timeout, and Policies -->
       <div class="form-row">
         <div class="form-group">
           <label for="cj-retries">Max Retries</label>
@@ -779,6 +949,10 @@
         <div class="form-group">
           <label for="cj-retry-delay">Retry Delay (s)</label>
           <input id="cj-retry-delay" type="number" min="1" value="30" style="width:80px;">
+        </div>
+        <div class="form-group">
+          <label for="cj-timeout">Timeout (s)</label>
+          <input id="cj-timeout" type="number" min="1" placeholder="Default" style="width:92px;">
         </div>
         <div class="form-group" style="flex:1">
           <label for="cj-hash-policy">Hash Policy</label>
@@ -1050,6 +1224,53 @@
   </div>
 </div>
 
+<!-- ── Schedule / Notification Access & Ownership Modal ─────────────────────── -->
+<div id="catalogAccessModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="catalogAccessTitle">
+  <div class="modal-card modal-md">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Authorization</span>
+        <h3 class="modal-title" id="catalogAccessTitle">Access &amp; Ownership</h3>
+        <p class="modal-subtitle" id="catalogAccessSubtitle">Manage owner and READ / EXECUTE / OVERRIDE / MANAGE permissions.</p>
+      </div>
+      <button class="btn-icon" id="closeCatalogAccessBtn" data-dialog-close title="Close" type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="catalogAccessWrap">
+        <div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading…</span></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="catalogAccessCloseBtn" data-dialog-close type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Run Statement Execution Waterfall Modal ───────────────────────────── -->
+<div id="runWaterfallModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="runWaterfallTitle">
+  <div class="modal-card modal-lg">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Run Inspection</span>
+        <h3 class="modal-title" id="runWaterfallTitle">Run Waterfall</h3>
+        <p class="modal-subtitle" id="runWaterfallSubtitle"></p>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-sm btn-outline btn-danger-soft" id="runWaterfallCancelBtn" type="button" style="display:none">Cancel Run</button>
+        <button class="btn-icon" id="closeRunWaterfallBtn" data-dialog-close title="Close" type="button">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="runWaterfallBody">
+        <div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading statement waterfall…</span></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="runWaterfallCloseBtn" data-dialog-close type="button">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Manual run / backfill modal ─────────────────────────────────────── -->
 <div id="runJobModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="runJobTitle">
   <div class="modal-card modal-md">
@@ -1109,8 +1330,8 @@
   </div>
 </div>
 
-<script src="/js/feedback.js?v=0.22.0"></script>
-<script src="/js/native-charts.js?v=0.22.0"></script>
-<script type="module" src="/js/pages/orchestrator.js?v=0.22.0"></script>
+<script src="/js/feedback.js?v=0.23.1"></script>
+<script src="/js/native-charts.js?v=0.23.1"></script>
+<script type="module" src="/js/pages/orchestrator.js?v=0.23.1"></script>
 </body>
 </html>

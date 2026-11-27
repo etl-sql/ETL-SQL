@@ -572,13 +572,26 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             }
         }
 
-        for (var index = 0; index < statement.Overlays.Count; index++)
+        foreach (var overlayLayer in BuildOverlayLayers(statement.Overlays, bindings))
         {
-            var overlay = statement.Overlays[index];
+            yield return overlayLayer;
+        }
+    }
+
+    internal static IEnumerable<MarkLayerSpec> BuildOverlayLayers(
+        IReadOnlyList<VisualOverlay> overlays,
+        ImmutableArray<FieldBinding> bindings,
+        string yScaleId = "y")
+    {
+        for (var index = 0; index < overlays.Count; index++)
+        {
+            var overlay = overlays[index];
             if (overlay.OverlayType == OverlayType.Forecast)
             {
-                var xField = statement.Mappings.FirstOrDefault(m => m.Role.Equals("X", StringComparison.OrdinalIgnoreCase))?.Column;
-                var xSemanticKind = bindings.FirstOrDefault(b => b.Channel == FieldChannel.X)?.SemanticKind ?? DataSemanticKind.Nominal;
+                var xBinding = bindings.FirstOrDefault(b => b.Channel == FieldChannel.X);
+                var xField = xBinding?.Field;
+                var xSemanticKind = xBinding?.SemanticKind ?? DataSemanticKind.Nominal;
+                var xScaleId = xBinding?.ScaleId;
                 var overlayColor = overlay.Color ?? "#2563eb";
                 var overlayLabel = overlay.Label ?? "Forecast";
 
@@ -590,9 +603,9 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                         MarkKind.Area,
                         98 + index * 10,
                         [
-                            new FieldBinding(FieldChannel.X, xField, xSemanticKind),
-                            new FieldBinding(FieldChannel.ConfidenceLow, overlay.ConfidenceLowField, DataSemanticKind.Quantitative, ScaleId: "y"),
-                            new FieldBinding(FieldChannel.ConfidenceHigh, overlay.ConfidenceHighField, DataSemanticKind.Quantitative, ScaleId: "y")
+                            new FieldBinding(FieldChannel.X, xField, xSemanticKind, ScaleId: xScaleId),
+                            new FieldBinding(FieldChannel.ConfidenceLow, overlay.ConfidenceLowField, DataSemanticKind.Quantitative, ScaleId: yScaleId),
+                            new FieldBinding(FieldChannel.ConfidenceHigh, overlay.ConfidenceHighField, DataSemanticKind.Quantitative, ScaleId: yScaleId)
                         ],
                         [
                             new StyleToken("overlayType", "ForecastConfidence"),
@@ -608,8 +621,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                     MarkKind.Line,
                     100 + index * 10,
                     [
-                        new FieldBinding(FieldChannel.X, xField, xSemanticKind),
-                        new FieldBinding(FieldChannel.Y, overlay.ForecastField, DataSemanticKind.Quantitative, ScaleId: "y")
+                        new FieldBinding(FieldChannel.X, xField, xSemanticKind, ScaleId: xScaleId),
+                        new FieldBinding(FieldChannel.Y, overlay.ForecastField, DataSemanticKind.Quantitative, ScaleId: yScaleId)
                     ],
                     [
                         new StyleToken("overlayType", "Forecast"),
@@ -627,8 +640,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                         MarkKind.Point,
                         102 + index * 10,
                         [
-                            new FieldBinding(FieldChannel.X, xField, xSemanticKind),
-                            new FieldBinding(FieldChannel.Y, overlay.AnomalyField, DataSemanticKind.Quantitative, ScaleId: "y")
+                            new FieldBinding(FieldChannel.X, xField, xSemanticKind, ScaleId: xScaleId),
+                            new FieldBinding(FieldChannel.Y, overlay.AnomalyField, DataSemanticKind.Quantitative, ScaleId: yScaleId)
                         ],
                         [
                             new StyleToken("overlayType", "ForecastAnomaly"),
@@ -669,7 +682,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 var tableCalculationBindings = new List<FieldBinding>();
                 if (xBinding is not null) tableCalculationBindings.Add(xBinding);
                 tableCalculationBindings.Add(new FieldBinding(FieldChannel.Y, overlay.TableCalculationField,
-                    DataSemanticKind.Quantitative, ScaleId: "y"));
+                    DataSemanticKind.Quantitative, ScaleId: yScaleId));
                 yield return new MarkLayerSpec(
                     $"table-calc-{index:D2}-{overlayName.ToLowerInvariant().Replace('_', '-')}",
                     MarkKind.Line,
@@ -717,6 +730,9 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 new("lineStyle", overlay.LineStyle.ToString().ToLowerInvariant()),
                 new("color", overlay.Color ?? "#888888")
             };
+
+            if (!string.IsNullOrWhiteSpace(overlay.SeriesName))
+                styleTokens.Add(new("series", overlay.SeriesName));
 
             if (hasAuthoredLabel)
             {

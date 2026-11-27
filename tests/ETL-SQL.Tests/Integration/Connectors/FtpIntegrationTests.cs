@@ -5,7 +5,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Engine;
 using ETL_SQL.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Xunit;
 using Xunit.Abstractions;
@@ -140,6 +143,221 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
             Assert.Contains("FTP", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(FtpFixture.TestPassword, ex.Message, StringComparison.Ordinal);
+        });
+
+        [Fact]
+        public Task ListFilesAsync_DropsDotAndDotDotEntries() => Diagnosed(async () =>
+        {
+            var folder = $"rt03_{Guid.NewGuid():N}";
+            var subFolder = $"{folder}/sub";
+            var remoteFile = $"{folder}/one.txt";
+            var localFile = LocalPath("rt03_one.txt");
+            File.WriteAllText(localFile, "hello");
+
+            await using var connector = ValidConnector();
+            await connector.CreateDirectoryAsync(folder);
+            await connector.CreateDirectoryAsync(subFolder);
+            await connector.UploadFileAsync(localFile, remoteFile, overwrite: true);
+
+            var entries = await connector.ListFilesAsync(folder).ToListAsync();
+
+            Assert.Equal(2, entries.Count);
+            Assert.DoesNotContain(entries, e => e.Name is "." or "..");
+            Assert.Contains(entries, e => e.Name == "one.txt" && !e.IsDirectory);
+            Assert.Contains(entries, e => e.Name == "sub" && e.IsDirectory);
+
+            var fileEntry = entries.Single(e => e.Name == "one.txt");
+            Assert.Equal(false, fileEntry.IsSymlink);
+            if (fileEntry.Permissions != null)
+                Assert.Matches("^[r-][w-][x-][r-][w-][x-][r-][w-][x-]$", fileEntry.Permissions);
+        });
+
+        [Fact]
+        public Task CopyFileAt_Succeeds_AndRespectsOverwriteOff() => Diagnosed(async () =>
+        {
+            var srcRemote = $"rt04_src_{Guid.NewGuid():N}.txt";
+            var dstRemote = $"rt04_dst_{Guid.NewGuid():N}.txt";
+            var localSrc = LocalPath("rt04_src.txt");
+            var localDst = LocalPath("rt04_dst.txt");
+            File.WriteAllText(localSrc, "ftp copy payload v1");
+
+            await using var connector = ValidConnector();
+            await connector.UploadFileAsync(localSrc, srcRemote, overwrite: true);
+
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            ((IExecutionContext)evaluator).Connections["ftp_rt04"] = connector;
+
+            var copySql = $"COPY FILE '{srcRemote}' TO '{dstRemote}' AT ftp_rt04;";
+            await evaluator.Evaluate(new Parser(new Lexer(copySql).Tokenize(), copySql).Parse());
+
+            Assert.True(await connector.FileExistsAsync(srcRemote));
+            Assert.True(await connector.FileExistsAsync(dstRemote));
+            await connector.DownloadFileAsync(dstRemote, localDst, overwrite: true);
+            Assert.Equal("ftp copy payload v1", File.ReadAllText(localDst));
+
+            // OVERWRITE = OFF fails when destination already exists
+            var noOverwriteSql = $"COPY FILE '{srcRemote}' TO '{dstRemote}' AT ftp_rt04 WITH (OVERWRITE = OFF);";
+            await Assert.ThrowsAsync<ExecutionException>(() =>
+                evaluator.Evaluate(new Parser(new Lexer(noOverwriteSql).Tokenize(), noOverwriteSql).Parse()));
+        });
+
+        [Fact]
+        public Task RecursiveListReceiveAndNonEmptyDelete_EnforcesDepthAndUniformDeleteRule() => Diagnosed(async () =>
+        {
+            var root = $"rt06_{Guid.NewGuid():N}";
+            var localSeed = LocalPath("rt06_seed.txt");
+            File.WriteAllText(localSeed, "ftp-rt06-data");
+
+            await using var connector = ValidConnector();
+            await connector.CreateDirectoryAsync(root);
+            await connector.CreateDirectoryAsync($"{root}/sub");
+            await connector.UploadFileAsync(localSeed, $"{root}/top.txt", overwrite: true);
+            await connector.UploadFileAsync(localSeed, $"{root}/sub/inner.txt", overwrite: true);
+
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            ((IExecutionContext)evaluator).Connections["ftp_rt06"] = connector;
+
+            // 1. Recursive list finds nested files
+            var listSql = $"SELECT * INTO #ftp_rec FROM REMOTE_FILE_LIST(ftp_rt06, '{root}', TRUE);";
+            await evaluator.Evaluate(new Parser(new Lexer(listSql).Tokenize(), listSql).Parse());
+            var listed = (await ((IExecutionContext)evaluator).Connections["#ftp_rec"].ReadBatches().ToListAsync())
+                .SelectMany(b => b.Rows).ToList();
+            Assert.Contains(listed, r => r["Name"]?.ToString() == "top.txt");
+            Assert.Contains(listed, r => r["Name"]?.ToString() == "inner.txt");
+
+            // 2. Depth > 5 fails instead of truncating
+            var deepRoot = $"rt06_deep_{Guid.NewGuid():N}";
+            string cur = deepRoot;
+            await connector.CreateDirectoryAsync(cur);
+            for (int i = 1; i <= 6; i++)
+            {
+                cur += $"/d{i}";
+                await connector.CreateDirectoryAsync(cur);
+            }
+            var deepSql = $"SELECT * INTO #ftp_deep_fail FROM REMOTE_FILE_LIST(ftp_rt06, '{deepRoot}', TRUE);";
+            await Assert.ThrowsAsync<SecurityException>(() =>
+                evaluator.Evaluate(new Parser(new Lexer(deepSql).Tokenize(), deepSql).Parse()));
+
+            // 3. DELETE DIRECTORY without RECURSIVE fails on non-empty FTP folder (uniform with SFTP!)
+            var delNonRec = $"DELETE DIRECTORY '{root}' AT ftp_rt06;";
+            await Assert.ThrowsAsync<ExecutionException>(() =>
+                evaluator.Evaluate(new Parser(new Lexer(delNonRec).Tokenize(), delNonRec).Parse()));
+            Assert.True(await connector.DirectoryExistsAsync(root));
+
+            // 4. DELETE DIRECTORY WITH (RECURSIVE = ON) deletes cleanly
+            var delRec = $"DELETE DIRECTORY '{root}' AT ftp_rt06 WITH (RECURSIVE = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(delRec).Tokenize(), delRec).Parse());
+            Assert.False(await connector.DirectoryExistsAsync(root));
+        });
+
+        [Fact]
+        public Task DirectoryRenameMoveAndCopyAt_AllThreeSucceed() => Diagnosed(async () =>
+        {
+            var baseDir = $"rt07_{Guid.NewGuid():N}";
+            var srcDir = $"{baseDir}/src";
+            var copiedDir = $"{baseDir}/copied";
+            var renamedDir = $"{baseDir}/renamed";
+            var movedDir = $"{baseDir}/archive/moved";
+            var localSeed = LocalPath("rt07_seed.txt");
+            File.WriteAllText(localSeed, "rt07-ftp-payload");
+
+            await using var connector = ValidConnector();
+            await connector.CreateDirectoryAsync(baseDir);
+            await connector.CreateDirectoryAsync($"{baseDir}/archive");
+            await connector.CreateDirectoryAsync(srcDir);
+            await connector.CreateDirectoryAsync($"{srcDir}/sub");
+            await connector.UploadFileAsync(localSeed, $"{srcDir}/a.txt", overwrite: true);
+            await connector.UploadFileAsync(localSeed, $"{srcDir}/sub/b.txt", overwrite: true);
+
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            ((IExecutionContext)evaluator).Connections["ftp_rt07"] = connector;
+
+            // 1. COPY DIRECTORY
+            var copySql = $"COPY DIRECTORY '{srcDir}' TO '{copiedDir}' AT ftp_rt07;";
+            await evaluator.Evaluate(new Parser(new Lexer(copySql).Tokenize(), copySql).Parse());
+            Assert.True(await connector.FileExistsAsync($"{copiedDir}/a.txt"));
+            Assert.True(await connector.FileExistsAsync($"{copiedDir}/sub/b.txt"));
+            Assert.True(await connector.FileExistsAsync($"{srcDir}/a.txt"));
+
+            // 2. RENAME DIRECTORY
+            var renameSql = $"RENAME DIRECTORY '{copiedDir}' TO 'renamed' AT ftp_rt07;";
+            await evaluator.Evaluate(new Parser(new Lexer(renameSql).Tokenize(), renameSql).Parse());
+            Assert.False(await connector.DirectoryExistsAsync(copiedDir));
+            Assert.True(await connector.FileExistsAsync($"{renamedDir}/sub/b.txt"));
+
+            // 3. MOVE DIRECTORY
+            var moveSql = $"MOVE DIRECTORY '{renamedDir}' TO '{movedDir}' AT ftp_rt07;";
+            await evaluator.Evaluate(new Parser(new Lexer(moveSql).Tokenize(), moveSql).Parse());
+            Assert.False(await connector.DirectoryExistsAsync(renamedDir));
+            Assert.True(await connector.FileExistsAsync($"{movedDir}/a.txt"));
+            Assert.True(await connector.FileExistsAsync($"{movedDir}/sub/b.txt"));
+        });
+
+        [Fact]
+        public Task SyncDirectory_BothDirections_NoChangeSecondRun_AndDeleteExtraOffByDefault() => Diagnosed(async () =>
+        {
+            var localSrc = Path.Combine(_tmpDir, "sync_src");
+            var localMirror = Path.Combine(_tmpDir, "sync_mirror");
+            Directory.CreateDirectory(Path.Combine(localSrc, "sub"));
+            Directory.CreateDirectory(localMirror);
+
+            File.WriteAllText(Path.Combine(localSrc, "a.txt"), "ftp-alpha");
+            File.WriteAllText(Path.Combine(localSrc, "sub", "b.txt"), "ftp-beta");
+            File.WriteAllText(Path.Combine(localMirror, "stale_local.txt"), "stale");
+
+            var remoteDir = $"rt08_{Guid.NewGuid():N}";
+            await using var connector = ValidConnector();
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            ((IExecutionContext)evaluator).Connections["ftp_rt08"] = connector;
+
+            // Local -> Remote
+            var l2rSql = $"SYNC DIRECTORY '{localSrc.Replace("\\", "/")}' TO '{remoteDir}' AT ftp_rt08 WITH (RECURSIVE = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(l2rSql).Tokenize(), l2rSql).Parse());
+            Assert.True(await connector.FileExistsAsync($"{remoteDir}/a.txt"));
+            Assert.True(await connector.FileExistsAsync($"{remoteDir}/sub/b.txt"));
+
+            // No-change second run + DELETE_EXTRA off by default
+            var extraLocal = LocalPath("extra.txt");
+            File.WriteAllText(extraLocal, "keep-me");
+            await connector.UploadFileAsync(extraLocal, $"{remoteDir}/extra_remote.txt", overwrite: true);
+            await evaluator.Evaluate(new Parser(new Lexer(l2rSql).Tokenize(), l2rSql).Parse());
+            Assert.True(await connector.FileExistsAsync($"{remoteDir}/extra_remote.txt"));
+
+            // DELETE_EXTRA = ON removes extra_remote.txt
+            var l2rDelSql = $"SYNC DIRECTORY '{localSrc.Replace("\\", "/")}' TO '{remoteDir}' AT ftp_rt08 WITH (RECURSIVE = ON, DELETE_EXTRA = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(l2rDelSql).Tokenize(), l2rDelSql).Parse());
+            Assert.False(await connector.FileExistsAsync($"{remoteDir}/extra_remote.txt"));
+
+            // Remote -> Local (DELETE_EXTRA off keeps stale_local.txt, then ON removes it)
+            var r2lSql = $"SYNC DIRECTORY '{remoteDir}' AT ftp_rt08 TO '{localMirror.Replace("\\", "/")}' WITH (RECURSIVE = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(r2lSql).Tokenize(), r2lSql).Parse());
+            Assert.Equal("ftp-alpha", File.ReadAllText(Path.Combine(localMirror, "a.txt")));
+            Assert.Equal("ftp-beta", File.ReadAllText(Path.Combine(localMirror, "sub", "b.txt")));
+            Assert.True(File.Exists(Path.Combine(localMirror, "stale_local.txt")));
+
+            var r2lDelSql = $"SYNC DIRECTORY '{remoteDir}' AT ftp_rt08 TO '{localMirror.Replace("\\", "/")}' WITH (RECURSIVE = ON, DELETE_EXTRA = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(r2lDelSql).Tokenize(), r2lDelSql).Parse());
+            Assert.False(File.Exists(Path.Combine(localMirror, "stale_local.txt")));
+        });
+
+        [Fact]
+        public Task SendAndReceive_WithVerifyOn_SucceedsOverFtp() => Diagnosed(async () =>
+        {
+            var localSrc = LocalPath("rt09_src.txt");
+            var localDst = LocalPath("rt09_dst.txt");
+            var remote = $"rt09_{Guid.NewGuid():N}.txt";
+            File.WriteAllText(localSrc, "verified-ftp-payload-67890");
+
+            await using var connector = ValidConnector();
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            ((IExecutionContext)evaluator).Connections["ftp_rt09"] = connector;
+
+            var sql =
+                $"SEND FILE '{localSrc.Replace("\\", "/")}' TO '{remote}' AT ftp_rt09 WITH (OVERWRITE = ON, VERIFY = ON);\n" +
+                $"RECEIVE FILE FROM '{remote}' TO '{localDst.Replace("\\", "/")}' AT ftp_rt09 WITH (OVERWRITE = ON, VERIFY = ON);";
+            await evaluator.Evaluate(new Parser(new Lexer(sql).Tokenize(), sql).Parse());
+
+            Assert.Equal("verified-ftp-payload-67890", File.ReadAllText(localDst));
         });
     }
 }

@@ -4,6 +4,11 @@ All notable changes to the "ETL-SQL Tools" extension for Visual Studio Code are 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Get Started walkthrough** (**Help → Welcome → Walkthroughs → Get Started with ETL-SQL**): opens the sample pipeline, runs it, and previews the sample dashboard on the built-in `MOCKDB()` data, in four steps. The new commands **ETL-SQL: Open Sample Pipeline**, **Run Sample Pipeline** and **Preview Sample Dashboard** do the same from the Command Palette.
+
 ## [0.22.0] — 2026-11-04
 
 ### Added

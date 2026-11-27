@@ -9,6 +9,7 @@
 | [CHAR_LENGTH](char_length.md) | Returns the number of characters in a string. `CHAR_LENGTH` is the SQL-standard alias for `LEN`. |
 | [CHARINDEX](charindex.md) | Returns the 1-based position of the first occurrence of a substring within a string. |
 | [CLEAN_STRING](clean_string.md) | Normalizes whitespace in a string: replaces control characters with spaces, collapses runs of |
+| [CLEAN_TEXT](clean_text.md) | Applies an ordered list of text cleaning and standardization rules to a string value. |
 | [CONCAT](concat.md) | Concatenates two or more strings into a single string. |
 | [CONCAT_WS](concat_ws.md) | Concatenates strings with a separator, automatically skipping NULL values. |
 | [DATALENGTH](datalength.md) | Returns the number of bytes used to represent an expression. |
@@ -39,6 +40,7 @@
 | [RTRIM](rtrim.md) | Removes trailing (right-side) whitespace from a string. |
 | [SPACE](space.md) | Returns a string of N space characters. |
 | [SPLIT_PART](split_part.md) | Returns the Nth segment of a string after splitting by a delimiter. |
+| [STANDARDIZE](standardize.md) | Standardizes a string value into a canonical format (`PHONE`, `EMAIL`, `POSTAL_CODE`). |
 | [STR](str.md) | Formats a numeric value as a right-padded string of a specified length. |
 | [STRING_ESCAPE](string_escape.md) | Escapes special characters in a string for safe embedding in a target format. |
 | [STRING_SPLIT](string_split.md) | Splits a string by a delimiter and returns the segments as a table. |

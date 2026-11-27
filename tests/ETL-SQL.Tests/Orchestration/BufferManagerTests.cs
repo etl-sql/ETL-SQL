@@ -61,25 +61,30 @@ namespace ETL_SQL.Tests.Orchestration
         [Fact]
         public async Task BufferManager_FifoOrder_Memory()
         {
-            var bm = CreateBufferManager(maxMemMB: 10);
+            using var bm = CreateBufferManager(maxMemMB: 10, timeoutSec: 5);
+            var waitBudget = TimeSpan.FromSeconds(2);
 
             // Hold all memory
             var res1 = await bm.ReserveMemoryAsync("session1", 10 * 1024 * 1024);
 
-            var task2 = bm.ReserveMemoryAsync("session2", 5 * 1024 * 1024);
-            var task3 = bm.ReserveMemoryAsync("session3", 5 * 1024 * 1024);
+            // Request 6MB each so only one fits at a time (6 + 6 > 10)
+            var task2 = bm.ReserveMemoryAsync("session2", 6 * 1024 * 1024);
+            var task3 = bm.ReserveMemoryAsync("session3", 6 * 1024 * 1024);
 
             // Release session 1
             res1.Dispose();
 
-            // Task 2 should complete first (FIFO)
-            var res2 = await task2;
+            // Task 2 must complete first (FIFO) while task 3 waits for 6MB to free up.
+            // Bounded waits ensure an ordering regression fails quickly instead of hanging.
+            var firstCompleted = await Task.WhenAny(task2, task3).WaitAsync(waitBudget);
+            Assert.True(ReferenceEquals(firstCompleted, task2),
+                "Expected session2 (queued first) to acquire memory before session3 (FIFO order broke).");
+            var res2 = await task2.WaitAsync(waitBudget);
             Assert.NotNull(res2);
+            Assert.False(task3.IsCompleted, "task3 should wait until task2 releases its 6MB reservation");
 
-            // Task 3 should still be waiting (since task 2 took 5MB and 10 is max)
-            // If we release task 2, task 3 is next
             res2.Dispose();
-            var res3 = await task3;
+            using var res3 = await task3.WaitAsync(waitBudget);
             Assert.NotNull(res3);
         }
 
@@ -102,15 +107,30 @@ namespace ETL_SQL.Tests.Orchestration
         public async Task BufferManager_EnforcesSystemMemoryFloor()
         {
             var mockSys = new Mock<ISystemResources>();
-            // Simulate 2GB available (below 4GB default floor)
-            mockSys.Setup(r => r.GetAvailableMemoryBytes()).Returns(2L * 1024 * 1024 * 1024);
+            // Simulate 256MB available (below default 512MB floor)
+            mockSys.Setup(r => r.GetAvailableMemoryBytes()).Returns(256L * 1024 * 1024);
 
             var bm = CreateBufferManager(maxMemMB: 100, sysRes: mockSys.Object);
 
-            // Request 1MB - should timeout even though engine has 100MB free, 
-            // because system memory is below floor.
+            // Request 1MB - should timeout even though engine has 100MB free,
+            // because system memory is below default 512MB floor.
             await Assert.ThrowsAsync<TimeoutException>(() =>
                 bm.ReserveMemoryAsync("session1", 1 * 1024 * 1024));
+
+            // Explicit custom floor also remains honored.
+            var mockExplicitSys = new Mock<ISystemResources>();
+            mockExplicitSys.Setup(r => r.GetAvailableMemoryBytes()).Returns(2L * 1024 * 1024 * 1024);
+            var explicitOptions = Options.Create(new BufferManagerOptions
+            {
+                MaxGlobalMemoryMB = 100,
+                MaxStreamingCursors = 2,
+                ResourceWaitTimeoutSeconds = 1,
+                HysteresisMemoryMB = 0,
+                SystemMemoryFloorMB = 4096
+            });
+            using var explicitBm = new BufferManager(explicitOptions, new TestLogger<BufferManager>(), mockExplicitSys.Object);
+            await Assert.ThrowsAsync<TimeoutException>(() =>
+                explicitBm.ReserveMemoryAsync("session2", 1 * 1024 * 1024));
         }
 
         [Fact]

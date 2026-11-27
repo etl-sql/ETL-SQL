@@ -74,8 +74,8 @@ public class ColumnsDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await BuildBatch(rows);
+        // Always emit the final batch, even when empty: it carries the schema.
+        yield return await BuildBatch(rows);
     }
 
     private async Task AddRows(

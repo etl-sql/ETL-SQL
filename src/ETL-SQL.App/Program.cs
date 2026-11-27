@@ -38,6 +38,9 @@ namespace ETL_SQL
 
             try
             {
+                // Before anything creates a file: a sandbox worker's session state must stay
+                // removable by the orchestrator that mounted it.
+                SandboxProcessUmask.ApplyToProcess();
                 ETL_SQL.Core.Governance.SecurityEventRuntime.ConfigureLocalOutboxFactory(
                     new ETL_SQL.Core.Governance.SqliteSecurityEventOutboxFactory());
                 if (args.Length == 0 || !string.Equals(args[0], "enterprise", StringComparison.OrdinalIgnoreCase))
@@ -47,7 +50,7 @@ namespace ETL_SQL
                 if (isHelpOnly && args.Length > 1)
                 {
                     var helpCommand = CliOrchestrator.BuildRootCommand(_ => Task.FromResult(0));
-                    var parseResult = helpCommand.Parse(args, null);
+                    var parseResult = helpCommand.Parse(args, CliOrchestrator.CreateParserConfiguration());
                     return await parseResult.InvokeAsync(new InvocationConfiguration(), default);
                 }
 
@@ -118,7 +121,7 @@ namespace ETL_SQL
                     return await EngineRunner.Run(ctx);
                 });
 
-                var rootParseResult = rootCommand.Parse(args, null);
+                var rootParseResult = rootCommand.Parse(args, CliOrchestrator.CreateParserConfiguration());
                 return await rootParseResult.InvokeAsync(new InvocationConfiguration(), default);
             }
             catch (Exception ex)

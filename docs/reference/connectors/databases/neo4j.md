@@ -27,6 +27,11 @@ Aliases: `NEO`
 `USER` and `PASSWORD` are passed to the Neo4j driver as an auth token and are not embedded in the
 stored connection URI.
 
+> [!NOTE]
+> `CONNECTION_STRING` / `URI` and structured `HOST` / `PORT` / `PROTOCOL` options are mutually
+> exclusive: when `CONNECTION_STRING` or `URI` is supplied, `HOST`, `PORT`, and `PROTOCOL` are
+> ignored.
+
 Regular `SELECT` statements against `graph.NODE_*` and `graph.EDGE_*` read through the connector's
 virtual table layer. Use `EXECUTE graph BEGIN ... END` for native Cypher pass-through. Truncating a
 table-scoped source such as `graph.NODE_CUSTOMER` deletes only that label; truncating the root
@@ -48,34 +53,28 @@ Graph entities are mapped to virtual tables:
   `_from_label`, and `_to_label`. For portable ETL loads, provide `_from_key` and `_to_key` plus
   `FROM_LABEL`/`TO_LABEL` and optional key-column options.
 
-## Write behavior
+## Write Path & Transactions
 
-- Ingesting into `NODE_<LABEL>` or `EDGE_<TYPE>` uses parameterized `UNWIND` Cypher templates.
-- If `KEY_COLUMNS` is set, writes use `MERGE` for idempotent upserts; otherwise writes use `CREATE`.
-- Edge writes fail by default when endpoint columns are missing or endpoint matches are not found. Set
-  `SKIP_MISSING_ENDPOINTS=TRUE` only when intentionally dropping those edge rows.
-- `DBNull.Value` is written as `NULL`; dates/times and GUIDs are stored as strings; nested maps/rows are
-  stored as JSON text.
-- If `APPEND=FALSE` (the default), the delete-and-load operation runs inside a single Neo4j write
-  transaction so failures roll back the replacement.
-- Inside an engine `BEGIN TRANSACTION`, writes/truncates/native Cypher use the enlisted Neo4j
-  transaction instead of their own per-operation transaction.
-- In `SET WHAT_IF ON`, raw mutating Cypher in `EXECUTE` is skipped.
+- **Bulk / write path** — `INSERT INTO` and `COPY INTO` against `NODE_<LABEL>` or `EDGE_<TYPE>` send batched parameterized Cypher `UNWIND $rows AS row` templates (`CREATE` by default, or `MERGE` when `KEY_COLUMNS` is set). Edge writes fail by default on missing/unmatched endpoints unless `SKIP_MISSING_ENDPOINTS=TRUE`. `DBNull.Value` writes as `NULL`; dates/times and GUIDs write as strings; nested maps/rows write as JSON text. `COPY INTO ... APPEND=FALSE` deletes existing nodes (`MATCH (n:Label) DETACH DELETE n`) or relationships (`MATCH ()-[r:TYPE]->() DELETE r`) before inserting, inside the same write transaction.
+- **`MERGE` behavior** — SQL `MERGE` against a Neo4j virtual table runs in the engine's bounded in-memory merge and rewrites the virtual table via `WriteBatches`. For native graph upserts without reading the full label into engine memory, set `KEY_COLUMNS` on the `NEO4J` connection (which switches `INSERT INTO` to Cypher `UNWIND ... MERGE`) or write Cypher `MERGE` directly in `EXECUTE graph BEGIN ... END`.
+- **Transactions** — Full `ITransactionalDataSource` support. Outside `BEGIN TRANSACTION`, each write runs inside `session.ExecuteWriteAsync` so an `APPEND=FALSE` delete-and-load rolls back atomically on failure. Inside `BEGIN TRANSACTION`, writes, truncates, and `EXECUTE graph BEGIN ... END` share the enlisted Neo4j session transaction (`COMMIT` persists; `ROLLBACK` discards).
+- **`WHAT_IF` behavior** — Under `SET WHAT_IF ON`, `WriteBatches` and `TruncateAsync` are no-ops, and mutating Cypher inside `EXECUTE graph BEGIN ... END` is skipped.
+- **Idempotent-load pattern** — Set `KEY_COLUMNS` on the connection and load with `INSERT INTO graph.NODE_CUSTOMER ...` (which emits Cypher `UNWIND ... MERGE ... SET n += row`), or run parameterized Cypher `MERGE` inside `EXECUTE graph BEGIN ... END` wrapped in `BEGIN TRANSACTION ... COMMIT`.
 
 ## Authentication
 
-Neo4j supports basic authentication:
-- **Basic Auth**: Supply `USER` (default `neo4j`) and `PASSWORD` options.
-- **Encryption**: Set `ENCRYPTION=TRUE` for Neo4j AuraDB or secure Bolt listeners.
+Neo4j supports basic authentication and URI-scheme TLS:
+- **Basic Auth**: Supply `USER` (default `neo4j`) and `PASSWORD` options (supports `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'` with `Security:AllowedEnvVars`).
+- **Encryption**: TLS comes from the URI scheme (`neo4j+s://`, `bolt+s://`, `neo4j+ssc://`, or `bolt+ssc://`, or `PROTOCOL='neo4j+s'` / `'bolt+s'`) rather than a separate option.
 
 ## Examples
 
 ```sql
--- Ingest customers as graph nodes
+-- Ingest customers as graph nodes using TLS URI and a secret reference
 CREATE CONNECTION graph AS NEO4J(
-    URI='bolt://localhost:7687',
+    URI='neo4j+s://graph.internal:7687',
     USER='neo4j',
-    PASSWORD='password',
+    PASSWORD='SECRET:prod/neo4j/password',
     KEY_COLUMNS='customer_id'
 );
 INSERT INTO graph.NODE_CUSTOMER (customer_id, name, city)
@@ -94,7 +93,7 @@ END;
 ## Troubleshooting
 
 - **Invalid Credentials**: Verify password against Neo4j Browser or Aura console.
-- **Bolt Protocol Error**: Ensure connecting to bolt/neo4j URI protocol (e.g. `bolt://host:7687`).
+- **Bolt Protocol Error**: Ensure connecting to bolt/neo4j URI protocol (e.g. `bolt://host:7687` or `neo4j+s://host:7687`).
 - **Cypher Pushdown**: Write native Cypher within `EXECUTE neo_conn BEGIN ... END`.
 
 ## References

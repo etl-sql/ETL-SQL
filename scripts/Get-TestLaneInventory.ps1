@@ -23,11 +23,17 @@ param(
 
     [string]$OutFile = "",
 
-    [switch]$FailOnIssues
+    [switch]$FailOnIssues,
+
+    # The checkout to scan; scripts/checks/test-test-lane-inventory.mjs points it at a fixture tree.
+    # Untyped: it is reassigned to the resolved PathInfo below, whose .Path the scan relies on.
+    $RepoRoot = (Join-Path $PSScriptRoot "..")
 )
 
 $ErrorActionPreference = "Stop"
-$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+# Get-Item expands an 8.3 short path (RUNNER~1 style) to the long form Get-ChildItem
+# returns, so the prefix strips below line up. CI's temp directory is a short path.
+$RepoRoot = (Get-Item -LiteralPath (Resolve-Path $RepoRoot).Path).FullName
 $TestsRoot = Join-Path $RepoRoot "tests"
 
 function Get-ProjectForFile {
@@ -37,7 +43,7 @@ function Get-ProjectForFile {
     while ($dir -and $dir.StartsWith($TestsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
         $project = Get-ChildItem -LiteralPath $dir -Filter "*.csproj" -File -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($project) {
-            return $project.FullName.Substring($RepoRoot.Path.Length).TrimStart('\', '/')
+            return $project.FullName.Substring($RepoRoot.Length).TrimStart('\', '/')
         }
         $parent = Split-Path -Parent $dir
         if ($parent -eq $dir) { break }
@@ -49,13 +55,29 @@ function Get-ProjectForFile {
 
 function Get-TestRecords {
     $records = New-Object System.Collections.Generic.List[object]
-    $files = Get-ChildItem -LiteralPath $TestsRoot -Recurse -Filter "*.cs" -File |
-        Where-Object { $_.FullName -notmatch "\\(bin|obj)\\|\\\.vscode-test\\" }
+    $files = @(Get-ChildItem -LiteralPath $TestsRoot -Recurse -Filter "*.cs" -File |
+        Where-Object { $_.FullName -notmatch "[\\/](bin|obj|\.vscode-test)[\\/]" })
+
+    # A partial test class declares its traits once; its other files inherit them.
+    $partialCategories = @{}
+    foreach ($file in $files) {
+        $project = Get-ProjectForFile $file.FullName
+        $pending = New-Object System.Collections.Generic.List[string]
+        foreach ($line in [System.IO.File]::ReadAllLines($file.FullName)) {
+            foreach ($match in [regex]::Matches($line, '\[Trait\("Category",\s*"([^"]+)"\)\]')) { $pending.Add($match.Groups[1].Value) }
+            if ($line -match '^\s*(public|internal)\s+((static|sealed|partial|abstract)\s+)*\b(class|record)\s+([A-Za-z_][A-Za-z0-9_]*)') {
+                $typeName = $Matches[5]
+                if ($line -match '\bpartial\b' -and $pending.Count -gt 0) { $partialCategories["$project|$typeName"] = @($pending) }
+                $pending.Clear()
+            }
+        }
+    }
 
     foreach ($file in $files) {
-        $relative = $file.FullName.Substring($RepoRoot.Path.Length).TrimStart('\', '/')
+        $relative = $file.FullName.Substring($RepoRoot.Length).TrimStart('\', '/')
         $project = Get-ProjectForFile $file.FullName
         $lines = [System.IO.File]::ReadAllLines($file.FullName)
+        $outerIndent = $null
         $classCategories = @()
         $pendingCategories = New-Object System.Collections.Generic.List[string]
 
@@ -65,8 +87,14 @@ function Get-TestRecords {
                 $pendingCategories.Add($match.Groups[1].Value)
             }
 
-            if ($line -match '^\s*(public|internal)\s+(sealed\s+|partial\s+|abstract\s+)*\b(class|record)\s+([A-Za-z_][A-Za-z0-9_]*)') {
-                $classCategories = @($pendingCategories)
+            if ($line -match '^(\s*)(public|internal)\s+((static|sealed|partial|abstract)\s+)*\b(class|record)\s+([A-Za-z_][A-Za-z0-9_]*)') {
+                $indent = $Matches[1].Length
+                $typeName = $Matches[6]
+                # Only the outermost types carry test traits; a nested type must not reset them.
+                if ($null -eq $outerIndent) { $outerIndent = $indent }
+                if ($indent -le $outerIndent) {
+                    $classCategories = if ($pendingCategories.Count -gt 0) { @($pendingCategories) } else { @($partialCategories["$project|$typeName"]) }
+                }
                 $pendingCategories.Clear()
             }
 
@@ -143,7 +171,8 @@ function Get-LanesForTest {
     )
 
     $lanes = New-Object System.Collections.Generic.List[string]
-    $isSlt = Test-HasCategory $Categories "SLT"
+    # The slt lane runs the whole SqlLogicTests project: the corpus and the runner's own unit tests.
+    $isSlt = (Test-HasCategory $Categories "SLT") -or $Project -like "tests\ETL-SQL.SqlLogicTests\*"
     $isPerf = Test-HasCategory $Categories "Performance"
     $isIntegration = Test-HasCategory $Categories "Integration"
     $isHosted = Test-HasCategory $Categories "HostedServices"
@@ -216,7 +245,7 @@ $sourceFiles = @(Get-ChildItem -LiteralPath $TestsRoot -Recurse -Filter "*.cs" -
     Where-Object { $_.FullName -notmatch "\\(bin|obj)\\|\\\.vscode-test\\" })
 $staleMilestoneNames = New-Object System.Collections.Generic.List[string]
 foreach ($file in $sourceFiles) {
-    $relative = $file.FullName.Substring($RepoRoot.Path.Length).TrimStart('\', '/')
+    $relative = $file.FullName.Substring($RepoRoot.Length).TrimStart('\', '/')
     if ($file.BaseName -match '(?i)(Phase|Wave|Sprint)\d+') {
         $staleMilestoneNames.Add($relative)
         continue
@@ -225,9 +254,10 @@ foreach ($file in $sourceFiles) {
         $staleMilestoneNames.Add($relative)
     }
 }
-$misplacedRootFiles = @(Get-ChildItem -LiteralPath (Join-Path $TestsRoot "ETL-SQL.Tests") -File -Filter "*.cs" |
+$engineTestsRoot = Join-Path $TestsRoot "ETL-SQL.Tests"
+$misplacedRootFiles = @(Get-ChildItem -LiteralPath $engineTestsRoot -File -Filter "*.cs" -ErrorAction $(if (Test-Path -LiteralPath $engineTestsRoot) { 'Stop' } else { 'Ignore' }) |
     Where-Object { $_.Name -ne "GlobalUsings.cs" } |
-    ForEach-Object { $_.FullName.Substring($RepoRoot.Path.Length).TrimStart('\', '/') })
+    ForEach-Object { $_.FullName.Substring($RepoRoot.Length).TrimStart('\', '/') })
 $byProject = Group-Count -Items $records -KeySelector { param($r) $r.project }
 
 $categoryRows = New-Object System.Collections.Generic.List[object]

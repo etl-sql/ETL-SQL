@@ -76,7 +76,9 @@ Polling reloads the table and timeline catalog when the connection recovers.
 
 | Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `Orchestration:JobThrottle:MaxConcurrentJobs` | integer | `0` | Max concurrent scheduled jobs. `0` resolves dynamically to logical core count. |
+| `Orchestration:JobThrottle:MaxConcurrentJobs` | integer | `0` | Max concurrent scheduled jobs. `0` resolves dynamically to half of logical core count (minimum 1). |
+| `Orchestration:JobThrottle:ReservedShortJobSlots` | integer | `-1` (`auto`) | Execution slots held back from heavy jobs so short jobs keep moving when heavy spills fill the remaining slots. `-1` reserves 1 slot when `MaxConcurrentJobs >= 2`; `0` disables reservation. |
+| `Orchestration:JobThrottle:HeavyJobSlotWeight` | integer | `1` | Default slot weight charged to heavy jobs when no per-job weight is set. |
 | `Orchestration:JobThrottle:PollInitialDelayMs` | integer | `100` | Initial delay before retrying a saturated cross-process throttle slot. |
 | `Orchestration:JobThrottle:PollMaxDelayMs` | integer | `2000` | Maximum throttle retry delay after exponential backoff. |
 | `Orchestration:JobThrottle:PollJitterRatio` | number | `0.2` | Symmetric jitter applied to throttle retries to prevent synchronized database polling. |
@@ -89,11 +91,11 @@ Polling reloads the table and timeline catalog when the connection recovers.
 
 | Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `Orchestration:ResourceManagement:MaxGlobalMemoryMB` | integer | `2048` | Memory floor threshold for scheduling new background tasks. |
+| `Orchestration:ResourceManagement:MaxGlobalMemoryMB` | integer | `2048` | Shared global RAM ceiling (MB) across async reservations and operator leases when `Engine:TotalMemoryGrantMB` is unset or `-1` (`auto`). When both are active under `auto`, the coordinator takes `min(auto, MaxGlobalMemoryMB)`. Explicit `Engine:TotalMemoryGrantMB >= 0` takes precedence. |
 | `Orchestration:ResourceManagement:MaxStreamingCursors` | integer | `50` | Max open active cursors across all jobs. |
 | `Orchestration:ResourceManagement:ResourceWaitTimeoutSeconds` | integer | `600` | Duration jobs wait in queue for RAM to free before timing out. |
-| `Orchestration:ResourceManagement:HysteresisMemoryMB` | integer | `256` | Memory buffer required before the queue restarts paused jobs. |
-| `Orchestration:ResourceManagement:SystemMemoryFloorMB` | integer | `4096` | Target free system RAM floor; new jobs wait if host free RAM is lower. |
+| `Orchestration:ResourceManagement:HysteresisMemoryMB` | integer | `256` | Memory cooldown buffer required before admission resumes after exhaustion (`safe = max(MaxGlobalMemory - Hysteresis, MaxGlobalMemory / 2)`). |
+| `Orchestration:ResourceManagement:SystemMemoryFloorMB` | integer | `512` | Minimum live host/container free memory headroom (MB); new allocations wait and operators spill when live headroom drops below this floor (0 disables). Default lowered from `4096` because headroom now measures current free memory instead of total capacity. |
 
 ---
 
@@ -113,7 +115,7 @@ Polling reloads the table and timeline catalog when the connection recovers.
 
 | Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `Jobs:UseProcessSpawning` | boolean | `false` | When true, runs jobs in isolated OS sub-processes instead of thread tasks. A child process cannot carry the caller's identity, so runs submitted under one (ad-hoc `POST /jobs` runs and revision runs) are refused while this is on; scheduled runs are unaffected. |
+| `Jobs:UseProcessSpawning` | boolean | `false` | When true, runs jobs in isolated OS sub-processes instead of thread tasks. Identity-bound runs (ad-hoc `POST /jobs`, revision runs, and scheduled runs of owned jobs, which run as their owner) cross into the child as a signed, single-use envelope verified with a key minted for that run; no shared secret is needed, and the child never receives `Orchestrator:IdentitySigningSecret` (it is removed from the inherited environment). |
 | `Jobs:UseWarmRunner` | boolean | `false` | When true with process spawning, reuses warm `ETL-SQL runner` child processes. Falls back to one-shot spawning if a runner fails. |
 | `Jobs:ExecutablePath` | string | `""` | Absolute path to `ETL-SQL.exe` when process spawning is active. |
 | `Jobs:ArgumentsTemplate` | string | `""` | Overrides arguments passed to a spawned job. Supports `{ScriptFile}` and `{SessionId}`. **A custom template must keep `--json`** — see below. |
@@ -121,7 +123,8 @@ Polling reloads the table and timeline catalog when the connection recovers.
 | `Jobs:WarmRunnerPoolSize` | integer | `2` | Maximum number of reusable runner processes for concurrent job execution. |
 | `Jobs:WarmRunnerStartupTimeoutSeconds` | integer | `10` | Time allowed for a newly spawned warm runner to publish its ready handshake. |
 | `Jobs:WarmRunnerBatchSize` | integer | `10000` | Batch size passed into warm runner execution sessions. |
-| `Jobs:MaxConcurrentJobs` | integer | `0` | Process scale throttle. `0` = logical processor count. |
+| `Jobs:MaxConcurrentJobs` | integer | `0` | Process scale throttle. `0` = auto (half of logical core count, minimum 1). |
+| `Jobs:WorkerMemoryGrantMB` | integer | `0` (`auto`) | Memory grant (MB) reserved in the host coordinator and passed into each spawned child process as its ceiling. `0` sizes a fair share from the host global ceiling and worker concurrency so workers cannot oversubscribe the host. |
 
 ### A custom `Jobs:ArgumentsTemplate` must keep `--json`
 

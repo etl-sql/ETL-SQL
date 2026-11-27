@@ -1,0 +1,345 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
+  "specId": "StepAfterInterpolationLine",
+  "title": "Step-After Interpolation",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 1.0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 5.0
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 1.0
+          },
+          "label": "1"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 2.0
+          },
+          "label": "2"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 3.0
+          },
+          "label": "3"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 4.0
+          },
+          "label": "4"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 5.0
+          },
+          "label": "5"
+        }
+      ],
+      "includesZero": false
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 84.000
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.000
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 21.000
+          },
+          "label": "21"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 42.000
+          },
+          "label": "42"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 63.000
+          },
+          "label": "63"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 84.000
+          },
+          "label": "84"
+        }
+      ],
+      "includesZero": true
+    }
+  ],
+  "series": [
+    {
+      "key": "Value",
+      "label": "Value",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "Value",
+      "color": "#5470c6"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "Value",
+      "label": "Value",
+      "order": 0,
+      "color": "#5470c6"
+    }
+  ],
+  "layers": [
+    {
+      "id": "stepAfter",
+      "mark": "line",
+      "zIndex": 0,
+      "seriesKey": "Value",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 1.0
+              },
+              "displayValue": "1.0"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 20.0
+              },
+              "displayValue": "20.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 2.0
+              },
+              "displayValue": "2.0"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 55.0
+              },
+              "displayValue": "55.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 3.0
+              },
+              "displayValue": "3.0"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 35.0
+              },
+              "displayValue": "35.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 3,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 4.0
+              },
+              "displayValue": "4.0"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 80.0
+              },
+              "displayValue": "80.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        },
+        {
+          "rowIndex": 4,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 5.0
+              },
+              "displayValue": "5.0"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 60.0
+              },
+              "displayValue": "60.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [
+        {
+          "name": "INTERPOLATION",
+          "value": "STEP_AFTER"
+        },
+        {
+          "name": "COLOR",
+          "value": "#7c3aed"
+        }
+      ],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Step-After Interpolation: 5 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Step-After Interpolation",
+    "items": [
+      {
+        "label": "1.0",
+        "value": "20.0",
+        "order": 0,
+        "group": "Value"
+      },
+      {
+        "label": "2.0",
+        "value": "55.0",
+        "order": 1,
+        "group": "Value"
+      },
+      {
+        "label": "3.0",
+        "value": "35.0",
+        "order": 2,
+        "group": "Value"
+      },
+      {
+        "label": "4.0",
+        "value": "80.0",
+        "order": 3,
+        "group": "Value"
+      },
+      {
+        "label": "5.0",
+        "value": "60.0",
+        "order": 4,
+        "group": "Value"
+      }
+    ],
+    "summary": "Step-After Interpolation: 5 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Step-After Interpolation"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "StepX",
+    "valueKey": "Value"
+  }
+}

@@ -1,0 +1,502 @@
+{
+  "schema": "https://etl-sql.org/schemas/reporting/plot-plan/v3",
+  "version": 3,
+  "specId": "IdentityScaleCustom",
+  "title": "Identity Color \u0026 Size Mapping",
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 600,
+    "height": 350
+  },
+  "scales": [
+    {
+      "id": "x",
+      "channel": "x",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0.900
+        },
+        {
+          "kind": "decimal",
+          "decimal": 3.100
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.900
+          },
+          "label": "0.9"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 1.450
+          },
+          "label": "1.45"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 2.000
+          },
+          "label": "2"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 2.550
+          },
+          "label": "2.55"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 3.100
+          },
+          "label": "3.1"
+        }
+      ],
+      "includesZero": false,
+      "title": "Trial"
+    },
+    {
+      "id": "y",
+      "channel": "y",
+      "kind": "linear",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 50.400
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 0.000
+          },
+          "label": "0"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 12.600
+          },
+          "label": "12.6"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 25.200
+          },
+          "label": "25.2"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 37.800
+          },
+          "label": "37.8"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 50.400
+          },
+          "label": "50.4"
+        }
+      ],
+      "includesZero": true,
+      "title": "Score"
+    },
+    {
+      "id": "c",
+      "channel": "color",
+      "kind": "identity",
+      "domain": [
+        {
+          "kind": "text",
+          "text": "#2563eb"
+        },
+        {
+          "kind": "text",
+          "text": "#059669"
+        },
+        {
+          "kind": "text",
+          "text": "#dc2626"
+        }
+      ],
+      "categories": [
+        "#2563eb",
+        "#059669",
+        "#dc2626"
+      ],
+      "ticks": [
+        {
+          "value": {
+            "kind": "text",
+            "text": "#2563eb"
+          },
+          "label": "#2563eb"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "#059669"
+          },
+          "label": "#059669"
+        },
+        {
+          "value": {
+            "kind": "text",
+            "text": "#dc2626"
+          },
+          "label": "#dc2626"
+        }
+      ],
+      "includesZero": false,
+      "discreteColors": [
+        {
+          "seriesKey": "#2563eb",
+          "color": "#2563eb"
+        },
+        {
+          "seriesKey": "#059669",
+          "color": "#059669"
+        },
+        {
+          "seriesKey": "#dc2626",
+          "color": "#dc2626"
+        }
+      ]
+    },
+    {
+      "id": "s",
+      "channel": "size",
+      "kind": "identity",
+      "domain": [
+        {
+          "kind": "decimal",
+          "decimal": 6.0
+        },
+        {
+          "kind": "decimal",
+          "decimal": 16.0
+        }
+      ],
+      "categories": [],
+      "ticks": [
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 6.0
+          },
+          "label": "6"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 8.5
+          },
+          "label": "8.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 11.0
+          },
+          "label": "11"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 13.5
+          },
+          "label": "13.5"
+        },
+        {
+          "value": {
+            "kind": "decimal",
+            "decimal": 16.0
+          },
+          "label": "16"
+        }
+      ],
+      "includesZero": false
+    }
+  ],
+  "series": [
+    {
+      "key": "#059669",
+      "label": "#059669",
+      "order": 0,
+      "color": "#059669"
+    },
+    {
+      "key": "#2563eb",
+      "label": "#2563eb",
+      "order": 1,
+      "color": "#2563eb"
+    },
+    {
+      "key": "#dc2626",
+      "label": "#dc2626",
+      "order": 2,
+      "color": "#dc2626"
+    }
+  ],
+  "palette": [
+    {
+      "seriesKey": "#059669",
+      "color": "#059669"
+    },
+    {
+      "seriesKey": "#2563eb",
+      "color": "#2563eb"
+    },
+    {
+      "seriesKey": "#dc2626",
+      "color": "#dc2626"
+    }
+  ],
+  "legend": [
+    {
+      "seriesKey": "#059669",
+      "label": "#059669",
+      "order": 0,
+      "color": "#059669"
+    },
+    {
+      "seriesKey": "#2563eb",
+      "label": "#2563eb",
+      "order": 1,
+      "color": "#2563eb"
+    },
+    {
+      "seriesKey": "#dc2626",
+      "label": "#dc2626",
+      "order": 2,
+      "color": "#dc2626"
+    }
+  ],
+  "layers": [
+    {
+      "id": "pts-00",
+      "mark": "point",
+      "zIndex": 0,
+      "seriesKey": "#059669",
+      "data": [
+        {
+          "rowIndex": 1,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 2.0
+              },
+              "displayValue": "2.0"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 48.0
+              },
+              "displayValue": "48.0"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "#059669"
+              },
+              "displayValue": "#059669"
+            },
+            {
+              "channel": "size",
+              "value": {
+                "kind": "decimal",
+                "decimal": 11.0
+              },
+              "displayValue": "11.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "pts-01",
+      "mark": "point",
+      "zIndex": 1,
+      "seriesKey": "#2563eb",
+      "data": [
+        {
+          "rowIndex": 0,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 1.0
+              },
+              "displayValue": "1.0"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 24.0
+              },
+              "displayValue": "24.0"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "#2563eb"
+              },
+              "displayValue": "#2563eb"
+            },
+            {
+              "channel": "size",
+              "value": {
+                "kind": "decimal",
+                "decimal": 6.0
+              },
+              "displayValue": "6.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    },
+    {
+      "id": "pts-02",
+      "mark": "point",
+      "zIndex": 2,
+      "seriesKey": "#dc2626",
+      "data": [
+        {
+          "rowIndex": 2,
+          "channels": [
+            {
+              "channel": "x",
+              "value": {
+                "kind": "decimal",
+                "decimal": 3.0
+              },
+              "displayValue": "3.0"
+            },
+            {
+              "channel": "y",
+              "value": {
+                "kind": "decimal",
+                "decimal": 35.0
+              },
+              "displayValue": "35.0"
+            },
+            {
+              "channel": "color",
+              "value": {
+                "kind": "text",
+                "text": "#dc2626"
+              },
+              "displayValue": "#dc2626"
+            },
+            {
+              "channel": "size",
+              "value": {
+                "kind": "decimal",
+                "decimal": 16.0
+              },
+              "displayValue": "16.0"
+            }
+          ],
+          "isGap": false,
+          "encodings": []
+        }
+      ],
+      "style": [],
+      "stack": "none",
+      "bandSize": 0.75,
+      "tickThickness": 0.15,
+      "tickOrientation": "auto"
+    }
+  ],
+  "nulls": {
+    "default": "gap",
+    "fields": [],
+    "gapRows": [],
+    "skippedRows": []
+  },
+  "accessibleSummary": "Identity Color \u0026 Size Mapping: 3 rows, 3 ordered layers, 3 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "fallback": {
+    "kind": "rankedTable",
+    "heading": "Identity Color \u0026 Size Mapping",
+    "items": [
+      {
+        "label": "2.0",
+        "value": "48.0",
+        "order": 0,
+        "group": "#059669"
+      },
+      {
+        "label": "1.0",
+        "value": "24.0",
+        "order": 100000,
+        "group": "#2563eb"
+      },
+      {
+        "label": "3.0",
+        "value": "35.0",
+        "order": 200000,
+        "group": "#dc2626"
+      }
+    ],
+    "summary": "Identity Color \u0026 Size Mapping: 3 ordered semantic values."
+  },
+  "coordinate": {
+    "kind": "cartesian"
+  },
+  "style": [
+    {
+      "name": "title",
+      "value": "Identity Color \u0026 Size Mapping"
+    }
+  ],
+  "facets": [],
+  "interaction": {
+    "selection": "none",
+    "effect": "highlight",
+    "highlight": "none",
+    "triggers": [],
+    "key": "StepX",
+    "valueKey": "MetricY"
+  }
+}

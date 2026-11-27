@@ -573,6 +573,16 @@ public abstract class EbnfNode
             case EbnfOptional or EbnfRepetition:
                 return true;
             case EbnfRef reference:
+                if (reference.Name == "identifier")
+                {
+                    text = "x ";
+                    return true;
+                }
+                if (reference.Name == "additional_identifier")
+                {
+                    text = "y ";
+                    return true;
+                }
                 if (reference.Name == "retention_literal")
                 {
                     text = "'30 DAYS' ";

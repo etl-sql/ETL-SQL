@@ -27,6 +27,7 @@ Thank you for your interest in contributing! This document explains how to set u
 | Tool | Version | Notes |
 | :--- | :--- | :--- |
 | [.NET SDK](https://dotnet.microsoft.com/download) | **10.0+** | Required |
+| [Node.js](https://nodejs.org/) | **22.x** (npm 10.x) | Required for browser asset preparation before builds |
 | Git | Any recent | — |
 | Docker (optional) | 20+ | Required for Testcontainers integration tests only |
 
@@ -36,7 +37,10 @@ Thank you for your interest in contributing! This document explains how to set u
 git clone https://github.com/etl-sql/ETL-SQL.git
 cd ETL-SQL
 git config core.hooksPath scripts
-dotnet build
+npm ci --prefix scripts/typecheck
+node scripts/sync-assets.js
+node scripts/sync-assets.js -Check
+dotnet build ETL-SQL.slnx
 ```
 
 The repository hook runs `dotnet format` on staged C# files before each commit and re-stages formatter
@@ -46,12 +50,12 @@ swept into the commit.
 ### Running the Test Suite
 
 ```bash
-# The default lane — what CI runs. Excludes Docker integration, long-running perf,
+# Targeted run while iterating and before opening a PR (GitHub CI runs the impacted lanes)
+dotnet test tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj --filter "FullyQualifiedName~<ClassOrTest>"
+
+# The default lane — excludes Docker integration, long-running perf,
 # the SLT corpus, the randomized fuzzer, and the Playwright browser lane.
 dotnet test ETL-SQL.slnx --filter "Category!=Integration&Category!=Performance&Category!=SLT&Category!=Fuzz&Category!=Browser"
-
-# A single test project — do this while iterating, not the solution-wide suite
-dotnet test tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj
 
 # With coverage (requires the dotnet-reportgenerator local tool)
 dotnet test ETL-SQL.slnx --collect:"XPlat Code Coverage" --results-directory ./coverage
@@ -59,9 +63,9 @@ dotnet test ETL-SQL.slnx --collect:"XPlat Code Coverage" --results-directory ./c
 
 The opt-in lanes (Docker integration, performance, SLT, fuzz, browser) and the `scripts/test-lane.ps1`
 gateway are documented in [AGENTS.md §9](AGENTS.md#9-build-test--run). The
-pre-push hook runs source preflight and formatting in about three minutes. Run
-`.\scripts\Test-PrePush.ps1` yourself for the complete local set (about twelve minutes) before a
-broad change.
+pre-push hook skips heavy preflight for docs-only changes and runs source preflight and formatting
+otherwise. GitHub Actions is the merge gate for impacted lanes; run `.\scripts\Test-PrePush.ps1`
+yourself when you need a local sweep before a broad change.
 
 ### Running the Application
 
@@ -301,9 +305,9 @@ Signed-off-by: Your Name <you@example.com>
 
 Before opening a PR, verify:
 
-- [ ] `dotnet build` passes with zero warnings
-- [ ] `dotnet test --filter "Category!=Integration&Category!=Browser"` passes (all unit tests green)
-- [ ] New or changed behavior has test coverage
+- [ ] `dotnet build ETL-SQL.slnx` passes with zero warnings (after `node scripts/sync-assets.js`)
+- [ ] Targeted tests (`dotnet test tests/<Project>/<Project>.csproj --filter ...`) pass for new or changed behavior (GitHub CI runs the full impacted lanes)
+- [ ] If browser assets or TypeScript/JavaScript changed, `node scripts/sync-assets.js -Check`, `node scripts/typecheck-browser.mjs`, and `node scripts/lint-browser.mjs` pass
 - [ ] No `.Result`, `.Wait()`, or `Logger.Instance` introduced
 - [ ] All new file paths go through `ResolvePath()`
 - [ ] All new AST nodes are `record` types

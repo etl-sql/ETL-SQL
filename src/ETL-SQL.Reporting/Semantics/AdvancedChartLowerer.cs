@@ -30,9 +30,24 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         var inference = InferScales(chart.Coordinate.Kind, layers);
         layers = inference.Layers;
         var inferredScales = inference.Scales;
-        var bindings = layers.SelectMany(layer => layer.Bindings)
-            .GroupBy(binding => binding.Channel)
-            .Select(group => group.First()).ToList();
+        var bindings = new List<FieldBinding>();
+        foreach (var binding in layers.SelectMany(layer => layer.Bindings))
+        {
+            if (binding.Channel == FieldChannel.Color && binding.SourceKind == BindingSourceKind.Datum)
+            {
+                if (!bindings.Any(existing =>
+                    existing.Channel == FieldChannel.Color &&
+                    existing.SourceKind == BindingSourceKind.Datum &&
+                    Equals(existing.Constant, binding.Constant)))
+                {
+                    bindings.Add(binding);
+                }
+            }
+            else if (bindings.All(existing => existing.Channel != binding.Channel))
+            {
+                bindings.Add(binding);
+            }
+        }
         if (chart.Facet?.RowField is { } row)
             bindings.Add(new FieldBinding(FieldChannel.Row, row, DataSemanticKind.Nominal));
         if (chart.Facet?.ColumnField is { } column)
@@ -77,6 +92,15 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
             Resolution(chart.Resolution.X), Resolution(chart.Resolution.Y), Resolution(chart.Resolution.Color));
         var title = manifest.Options.GetValueOrDefault("title") ?? manifest.Name;
         var resolvedBindings = bindings.ToImmutableArray();
+        var allScales = declaredScales.AddRange(inferredScales.Where(inferred => declaredScales.All(declared =>
+            !declared.Id.Equals(inferred.Id, StringComparison.OrdinalIgnoreCase))));
+        if (statement.Overlays.Count > 0)
+        {
+            var primaryYScaleId = resolvedBindings.FirstOrDefault(b => b.Channel is FieldChannel.Y or FieldChannel.Close && b.Axis != AxisRole.Secondary)?.ScaleId
+                ?? allScales.FirstOrDefault(s => s.Channel == FieldChannel.Y)?.Id
+                ?? "y";
+            layers = layers.AddRange(NamedVisualChartLowerer.BuildOverlayLayers(statement.Overlays, resolvedBindings, primaryYScaleId));
+        }
         var spec = ChartSpec.Create(
             manifest.Name,
             statement.Source.TempTableName ?? $"inline:{manifest.Name}",
@@ -92,8 +116,7 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
                     chart.Coordinate.MapFile ?? chart.Coordinate.MapName ?? "WORLD",
                     chart.Coordinate.FeatureKey ?? "name")
             },
-            declaredScales.AddRange(inferredScales.Where(inferred => declaredScales.All(declared =>
-                !declared.Id.Equals(inferred.Id, StringComparison.OrdinalIgnoreCase)))),
+            allScales,
             ChartStyleTokens.Formatting(context, manifest,
                 layers.SelectMany(layer => layer.Bindings)
                     .Where(binding => binding.SourceKind == BindingSourceKind.Field && binding.Field is not null && binding.Format is not null)
@@ -309,6 +332,15 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
             if (!connected || whenTrue.Kind != ChartValueKind.Null) ValidatePointShape(Display(whenTrue), condition);
             if (whenFalse is not null && (!connected || whenFalse.Kind != ChartValueKind.Null)) ValidatePointShape(Display(whenFalse), condition);
         }
+        if (condition.Channel == AdvancedChartConditionChannel.LineDash)
+        {
+            if (whenTrue.Kind != ChartValueKind.Null)
+                whenTrue = ChartValue.From(NamedVisualChartLowerer.NormalizeLineDash(Display(whenTrue))?.ToUpperInvariant()
+                    ?? throw AdvancedChartSemanticException.At(condition, $"CONDITIONS LINE_DASH accepts only SOLID, DASHED, DOTTED, or null; found '{Display(whenTrue)}'."));
+            if (whenFalse is { Kind: not ChartValueKind.Null })
+                whenFalse = ChartValue.From(NamedVisualChartLowerer.NormalizeLineDash(Display(whenFalse))?.ToUpperInvariant()
+                    ?? throw AdvancedChartSemanticException.At(condition, $"CONDITIONS LINE_DASH accepts only SOLID, DASHED, DOTTED, or null; found '{Display(whenFalse)}'."));
+        }
         return new EncodingConditionSpec(
             AdvancedChartEnumBridge.Condition(condition.Channel),
             Predicate(condition.Predicate, condition),
@@ -359,29 +391,74 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         return Value(context.VarContext.GetVariable(name));
     }
 
-    private ScaleSpec Scale(AdvancedChartScale scale) => new(
-        scale.Name, Channel(scale.Channel), Scale(scale.Kind), scale.IncludeZero,
-        scale.ExplicitOrder.Select(item => Display(EvaluateLiteral(item, scale))).ToImmutableArray(),
-        scale.Minimum is null ? null : EvaluateLiteral(scale.Minimum, scale),
-        scale.Maximum is null ? null : EvaluateLiteral(scale.Maximum, scale),
-        scale.Reverse,
-        scale.MajorTickCount,
-        scale.TickInterval,
-        scale.MinorTicks,
-        scale.LabelRotation,
-        scale.LabelSkip,
-        scale.OuterPadding,
-        scale.TickFormat,
-        scale.TimeUnit)
+    private ScaleSpec Scale(AdvancedChartScale scale)
     {
-        ColorRange = scale.ColorRange is null ? null : new ColorRangeSpec(
-            AdvancedChartEnumBridge.ColorRange(scale.ColorRange.Kind),
-            Display(EvaluateLiteral(scale.ColorRange.Low, scale.ColorRange)),
-            Display(EvaluateLiteral(scale.ColorRange.High, scale.ColorRange)),
-            scale.ColorRange.Mid is null ? null : Display(EvaluateLiteral(scale.ColorRange.Mid, scale.ColorRange)),
-            scale.ColorRange.Midpoint is null ? null : PlotPlanResolver.Number(EvaluateLiteral(scale.ColorRange.Midpoint, scale.ColorRange)),
-            scale.ColorRange.NullColor is null ? "#9ca3af" : Display(EvaluateLiteral(scale.ColorRange.NullColor, scale.ColorRange)))
-    };
+        NumericRangeSpec? numericRange = null;
+        var discreteRange = ImmutableArray<string>.Empty;
+        var discreteColorMap = ImmutableArray<PaletteAssignment>.Empty;
+
+        if (!scale.DiscreteColorMap.IsDefaultOrEmpty)
+        {
+            discreteColorMap = scale.DiscreteColorMap
+                .Select(entry => new PaletteAssignment(
+                    Display(EvaluateLiteral(entry.Domain, entry)),
+                    Display(EvaluateLiteral(entry.Color, entry))))
+                .ToImmutableArray();
+        }
+        else if (!scale.RangeValues.IsDefaultOrEmpty)
+        {
+            if (scale.Channel == AdvancedChartChannel.Color)
+            {
+                discreteRange = scale.RangeValues
+                    .Select(expr => Display(EvaluateLiteral(expr, scale)))
+                    .ToImmutableArray();
+            }
+            else if (scale.Channel is AdvancedChartChannel.Size or AdvancedChartChannel.Opacity && scale.RangeValues.Length == 2)
+            {
+                decimal EvalNumericRangeBound(Expression expr)
+                {
+                    var inner = expr switch
+                    {
+                        BinaryExpression { Operator: TokenType.MINUS, Left: LiteralExpression { Value: 0m }, Right: LiteralExpression n } => n,
+                        UnaryExpression { Operator: TokenType.MINUS or TokenType.PLUS, Expression: LiteralExpression n } => n,
+                        _ => expr
+                    };
+                    var val = PlotPlanResolver.Number(EvaluateLiteral(inner, scale))
+                        ?? throw AdvancedChartSemanticException.At(scale, $"Scale '{scale.Name}' RANGE bounds must be numeric.");
+                    return expr is UnaryExpression { Operator: TokenType.MINUS } or BinaryExpression { Operator: TokenType.MINUS } ? -val : val;
+                }
+                numericRange = new NumericRangeSpec(EvalNumericRangeBound(scale.RangeValues[0]), EvalNumericRangeBound(scale.RangeValues[1]));
+            }
+        }
+
+        return new ScaleSpec(
+            scale.Name, Channel(scale.Channel), Scale(scale.Kind), scale.IncludeZero,
+            scale.ExplicitOrder.Select(item => Display(EvaluateLiteral(item, scale))).ToImmutableArray(),
+            scale.Minimum is null ? null : EvaluateLiteral(scale.Minimum, scale),
+            scale.Maximum is null ? null : EvaluateLiteral(scale.Maximum, scale),
+            scale.Reverse,
+            scale.MajorTickCount,
+            scale.TickInterval,
+            scale.MinorTicks,
+            scale.LabelRotation,
+            scale.LabelSkip,
+            scale.OuterPadding,
+            scale.TickFormat,
+            scale.TimeUnit,
+            scale.Title)
+        {
+            ColorRange = scale.ColorRange is null ? null : new ColorRangeSpec(
+                AdvancedChartEnumBridge.ColorRange(scale.ColorRange.Kind),
+                Display(EvaluateLiteral(scale.ColorRange.Low, scale.ColorRange)),
+                Display(EvaluateLiteral(scale.ColorRange.High, scale.ColorRange)),
+                scale.ColorRange.Mid is null ? null : Display(EvaluateLiteral(scale.ColorRange.Mid, scale.ColorRange)),
+                scale.ColorRange.Midpoint is null ? null : PlotPlanResolver.Number(EvaluateLiteral(scale.ColorRange.Midpoint, scale.ColorRange)),
+                scale.ColorRange.NullColor is null ? "#9ca3af" : Display(EvaluateLiteral(scale.ColorRange.NullColor, scale.ColorRange))),
+            NumericRange = numericRange,
+            DiscreteRange = discreteRange,
+            DiscreteColorMap = discreteColorMap
+        };
+    }
 
     private FieldBinding Binding(AdvancedChartEncoding binding)
     {

@@ -5,8 +5,11 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Mongodb;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
+using ETL_SQL.Engine;
 using ETL_SQL.Services;
+using Microsoft.Extensions.DependencyInjection;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Moq;
@@ -102,6 +105,217 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Assert.NotNull(row1);
             Assert.Equal("Alice", row1["name"]?.ToString());
             Assert.Equal("Paris", row1["city"]?.ToString());
+        }
+
+        [Fact]
+        public async Task MongodbDataSource_KeyColumnsUpsert_RerunLeavesOneDocumentPerKey()
+        {
+            var ctx = MakeContext();
+            var collName = $"upsert_products_{Guid.NewGuid():N}";
+            var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "DATABASE", _fixture.DatabaseName },
+                { "COLLECTION", collName },
+                { "KEY_COLUMNS", "tenant_id, sku" }
+            };
+
+            var ds = new MongodbDataSource(ctx, _fixture.ConnectionString, _fixture.DatabaseName, collName, options);
+
+            static async IAsyncEnumerable<DataTable> SingleBatch(DataTable t)
+            {
+                yield return t;
+                await Task.CompletedTask;
+            }
+
+            // First load
+            var batch1 = new DataTable();
+            batch1.SetColumns(["tenant_id", "sku", "price"]);
+            await batch1.AddRowAsync(new Row { ["tenant_id"] = "t1", ["sku"] = "SKU-1", ["price"] = 10 });
+            await batch1.AddRowAsync(new Row { ["tenant_id"] = "t1", ["sku"] = "SKU-2", ["price"] = 20 });
+            await ds.WriteBatches(SingleBatch(batch1), append: true);
+
+            // Second load: re-run SKU-1 with updated price, keep SKU-2 identical, add SKU-3
+            var batch2 = new DataTable();
+            batch2.SetColumns(["tenant_id", "sku", "price"]);
+            await batch2.AddRowAsync(new Row { ["tenant_id"] = "t1", ["sku"] = "SKU-1", ["price"] = 15 });
+            await batch2.AddRowAsync(new Row { ["tenant_id"] = "t1", ["sku"] = "SKU-2", ["price"] = 20 });
+            await batch2.AddRowAsync(new Row { ["tenant_id"] = "t1", ["sku"] = "SKU-3", ["price"] = 30 });
+            await ds.WriteBatches(SingleBatch(batch2), append: true);
+
+            var readBatches = await ds.ReadBatches().ToListAsync();
+            var rows = readBatches.SelectMany(b => b.Rows).ToList();
+            Assert.Equal(3, rows.Count);
+
+            Assert.Equal(15, Convert.ToInt32(rows.Single(r => r["sku"]?.ToString() == "SKU-1")["price"]));
+            Assert.Equal(20, Convert.ToInt32(rows.Single(r => r["sku"]?.ToString() == "SKU-2")["price"]));
+            Assert.Equal(30, Convert.ToInt32(rows.Single(r => r["sku"]?.ToString() == "SKU-3")["price"]));
+
+            // APPEND=FALSE still drops first even when KEY_COLUMNS is set.
+            var batch3 = new DataTable();
+            batch3.SetColumns(["tenant_id", "sku", "price"]);
+            await batch3.AddRowAsync(new Row { ["tenant_id"] = "t1", ["sku"] = "SKU-9", ["price"] = 99 });
+            await ds.WriteBatches(SingleBatch(batch3), append: false);
+
+            var afterDrop = (await ds.ReadBatches().ToListAsync()).SelectMany(b => b.Rows).ToList();
+            Assert.Single(afterDrop);
+            Assert.Equal("SKU-9", afterDrop[0]["sku"]?.ToString());
+        }
+
+        [Fact]
+        public async Task MongodbDataSource_KeyColumnsUpsert_NullKeyFailsWithRowOrdinal()
+        {
+            var ctx = MakeContext();
+            var collName = $"upsert_null_{Guid.NewGuid():N}";
+            var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "DATABASE", _fixture.DatabaseName },
+                { "COLLECTION", collName },
+                { "KEY_COLUMNS", "sku" }
+            };
+
+            var ds = new MongodbDataSource(ctx, _fixture.ConnectionString, _fixture.DatabaseName, collName, options);
+
+            var batch = new DataTable();
+            batch.SetColumns(["sku", "name"]);
+            await batch.AddRowAsync(new Row { ["sku"] = "OK-1", ["name"] = "Good" });
+            await batch.AddRowAsync(new Row { ["sku"] = null, ["name"] = "Bad" });
+
+            static async IAsyncEnumerable<DataTable> SingleBatch(DataTable t)
+            {
+                yield return t;
+                await Task.CompletedTask;
+            }
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => ds.WriteBatches(SingleBatch(batch), append: true));
+            Assert.Contains("row 2", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("sku", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+            var after = (await ds.ReadBatches().ToListAsync()).SelectMany(b => b.Rows).ToList();
+            Assert.Empty(after);
+        }
+
+        [Fact]
+        public async Task MongodbDataSource_ExecutePassThrough_KeepsFieldsFirstSeenLate()
+        {
+            // A field that appears only after the first 10,000 documents must still be a column.
+            var ctx = MakeContext();
+            var collName = $"sparse_{Guid.NewGuid():N}";
+            var client = new MongoDB.Driver.MongoClient(_fixture.ConnectionString);
+            var coll = client.GetDatabase(_fixture.DatabaseName).GetCollection<MongoDB.Bson.BsonDocument>(collName);
+            var docs = Enumerable.Range(1, 10_001).Select(i =>
+            {
+                var d = new MongoDB.Bson.BsonDocument { ["n"] = i };
+                if (i == 10_001) d["late"] = "x";
+                return d;
+            });
+            await coll.InsertManyAsync(docs);
+
+            var ds = new MongodbDataSource(ctx, _fixture.ConnectionString, _fixture.DatabaseName, collName);
+            var batches = await ds.ExecuteRawSql(
+                $"{{\"collection\":\"{collName}\",\"filter\":{{}},\"projection\":{{\"_id\":0}},\"sort\":{{\"n\":1}}}}").ToListAsync();
+
+            var table = Assert.Single(batches);
+            Assert.Contains("late", table.ColumnNames);
+            Assert.Equal(10_001, table.Rows.Count);
+            Assert.Equal("x", table.Rows[^1]["late"]);
+            Assert.Null(table.Rows[0]["late"]);
+        }
+
+        [Fact]
+        public async Task MongodbDataSource_ExecutePassThrough_FilterPipelineRefusedWritesAndWhatIf()
+        {
+            var ctx = MakeContext();
+            var collName = $"passthrough_{Guid.NewGuid():N}";
+            var outColl = $"forbidden_out_{Guid.NewGuid():N}";
+            var mergeColl = $"forbidden_merge_{Guid.NewGuid():N}";
+
+            var seedDs = new MongodbDataSource(ctx, _fixture.ConnectionString, _fixture.DatabaseName, collName);
+            var seedTable = new DataTable();
+            seedTable.SetColumns(["sku", "category", "price"]);
+            await seedTable.AddRowAsync(new Row { ["sku"] = "E1", ["category"] = "Electronics", ["price"] = 100 });
+            await seedTable.AddRowAsync(new Row { ["sku"] = "E2", ["category"] = "Electronics", ["price"] = 50 });
+            await seedTable.AddRowAsync(new Row { ["sku"] = "B1", ["category"] = "Books", ["price"] = 20 });
+
+            static async IAsyncEnumerable<DataTable> SingleBatch(DataTable t)
+            {
+                yield return t;
+                await Task.CompletedTask;
+            }
+            await seedDs.WriteBatches(SingleBatch(seedTable), append: false);
+
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            var connStr = _fixture.ConnectionString.Replace("'", "''");
+            var dbName = _fixture.DatabaseName.Replace("'", "''");
+
+            // 1. Filter (find) with projection, sort, limit via EXECUTE ... INTO #filtered BEGIN ... END
+            var filterScript =
+                $"CREATE CONNECTION mongo_pt AS MONGODB('{connStr}', DATABASE='{dbName}');\n" +
+                $"EXECUTE mongo_pt INTO #filtered BEGIN\n" +
+                $"  {{\n" +
+                $"    \"collection\": \"{collName}\",\n" +
+                $"    \"filter\": {{ \"category\": \"Electronics\", \"price\": {{ \"$gte\": 50 }} }},\n" +
+                $"    \"projection\": {{ \"_id\": 0, \"sku\": 1, \"price\": 1 }},\n" +
+                $"    \"sort\": {{ \"price\": -1 }},\n" +
+                $"    \"limit\": 1\n" +
+                $"  }}\n" +
+                $"END;";
+            await evaluator.Evaluate(new Parser(new Lexer(filterScript).Tokenize(), filterScript).Parse());
+
+            var filtered = await ((IExecutionContext)evaluator).Connections["#filtered"].ReadBatches().ToListAsync();
+            var filteredRows = filtered.SelectMany(b => b.Rows).ToList();
+            Assert.Single(filteredRows);
+            Assert.Equal("E1", filteredRows[0]["sku"]?.ToString());
+            Assert.Equal(100, Convert.ToInt32(filteredRows[0]["price"]));
+
+            // 2. Aggregation pipeline via EXECUTE ... INTO #agg BEGIN ... END
+            var aggScript =
+                $"EXECUTE mongo_pt INTO #agg BEGIN\n" +
+                $"  {{\n" +
+                $"    \"collection\": \"{collName}\",\n" +
+                $"    \"pipeline\": [\n" +
+                $"      {{ \"$group\": {{ \"_id\": \"$category\", \"total\": {{ \"$sum\": \"$price\" }}, \"cnt\": {{ \"$sum\": 1 }} }} }},\n" +
+                $"      {{ \"$sort\": {{ \"_id\": 1 }} }}\n" +
+                $"    ]\n" +
+                $"  }}\n" +
+                $"END;";
+            await evaluator.Evaluate(new Parser(new Lexer(aggScript).Tokenize(), aggScript).Parse());
+
+            var agg = await ((IExecutionContext)evaluator).Connections["#agg"].ReadBatches().ToListAsync();
+            var aggRows = agg.SelectMany(b => b.Rows).ToList();
+            Assert.Equal(2, aggRows.Count);
+            Assert.Equal("Books", aggRows[0]["_id"]?.ToString());
+            Assert.Equal(20, Convert.ToInt32(aggRows[0]["total"]));
+            Assert.Equal("Electronics", aggRows[1]["_id"]?.ToString());
+            Assert.Equal(150, Convert.ToInt32(aggRows[1]["total"]));
+
+            // 3. Refused $out and $merge stages
+            var outScript =
+                $"EXECUTE mongo_pt BEGIN\n" +
+                $"  {{ \"collection\": \"{collName}\", \"pipeline\": [ {{ \"$out\": \"{outColl}\" }} ] }}\n" +
+                $"END;";
+            await Assert.ThrowsAsync<ExecutionException>(() =>
+                evaluator.Evaluate(new Parser(new Lexer(outScript).Tokenize(), outScript).Parse()));
+
+            var mergeScript =
+                $"EXECUTE mongo_pt BEGIN\n" +
+                $"  {{ \"collection\": \"{collName}\", \"pipeline\": [ {{ \"$merge\": {{ \"into\": \"{mergeColl}\" }} }} ] }}\n" +
+                $"END;";
+            await Assert.ThrowsAsync<ExecutionException>(() =>
+                evaluator.Evaluate(new Parser(new Lexer(mergeScript).Tokenize(), mergeScript).Parse()));
+
+            var collections = (await seedDs.GetTablesAsync()).ToList();
+            Assert.DoesNotContain(outColl, collections);
+            Assert.DoesNotContain(mergeColl, collections);
+
+            // 4. SET WHAT_IF ON logs and does not run
+            var whatIfScript =
+                $"SET WHAT_IF ON;\n" +
+                $"EXECUTE mongo_pt INTO #whatif_not_created BEGIN\n" +
+                $"  {{ \"collection\": \"{collName}\", \"filter\": {{ \"category\": \"Books\" }} }}\n" +
+                $"END;\n" +
+                $"SET WHAT_IF OFF;";
+            await evaluator.Evaluate(new Parser(new Lexer(whatIfScript).Tokenize(), whatIfScript).Parse());
+            Assert.False(((IExecutionContext)evaluator).Connections.ContainsKey("#whatif_not_created"));
         }
     }
 }

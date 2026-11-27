@@ -201,6 +201,95 @@ namespace ETL_SQL.Tests.Docs
                 failure.Contains("CSV", StringComparison.OrdinalIgnoreCase));
         }
 
+        [Fact]
+        public void DatabaseConnectorPages_OptionsTablesMatchConnectorAllowlist()
+        {
+            var registry = ETL_SQL.Program.ServiceProvider?.GetService<IConnectorRegistry>()
+                ?? ETL_SQL.App.DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<IConnectorRegistry>();
+
+            var dbDocsDir = RepoFile("docs/reference/connectors/databases");
+            var pages = Directory.GetFiles(dbDocsDir, "*.md", SearchOption.TopDirectoryOnly)
+                .Where(f => !Path.GetFileName(f).Equals("README.md", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            Assert.Equal(10, pages.Length);
+
+            var failures = new List<string>();
+            foreach (var page in pages)
+            {
+                var connectorName = Path.GetFileNameWithoutExtension(page).ToUpperInvariant();
+                var connector = registry.GetConnector(connectorName);
+                if (connector == null)
+                {
+                    failures.Add($"{Path.GetFileName(page)}: unknown connector '{connectorName}'.");
+                    continue;
+                }
+
+                var content = File.ReadAllText(page).Replace("\r\n", "\n");
+                var documented = ExtractOptionsTableKeys(content);
+                var supported = connector.GetSupportedOptions().Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var missing = supported.Except(documented, StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
+                var extra = documented.Except(supported, StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
+                if (missing.Count > 0)
+                    failures.Add($"{Path.GetFileName(page)}: missing options from ## Options table: {string.Join(", ", missing)}");
+                if (extra.Count > 0)
+                    failures.Add($"{Path.GetFileName(page)}: undocumented/stale options in ## Options table: {string.Join(", ", extra)}");
+                if (!documented.Contains("TIMEOUT_SECONDS"))
+                    failures.Add($"{Path.GetFileName(page)}: TIMEOUT_SECONDS must be documented in ## Options table.");
+                if (!content.Contains("Security:AllowedEnvVars", StringComparison.Ordinal) &&
+                    !content.Contains("SECRET:", StringComparison.Ordinal) &&
+                    !content.Contains("ENC:", StringComparison.Ordinal))
+                {
+                    failures.Add($"{Path.GetFileName(page)}: must include at least one non-inline credential pattern (ENC:, SECRET:, or Security:AllowedEnvVars).");
+                }
+            }
+
+            Assert.True(failures.Count == 0,
+                $"Database connector documentation parity failures ({failures.Count}):\n" +
+                string.Join("\n", failures));
+        }
+
+        private static HashSet<string> ExtractOptionsTableKeys(string markdown)
+        {
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var lines = markdown.Split('\n');
+            bool inOptions = false;
+            bool pastSeparator = false;
+            foreach (var rawLine in lines)
+            {
+                var line = rawLine.Trim();
+                if (!inOptions)
+                {
+                    if (line.Equals("## Options", StringComparison.OrdinalIgnoreCase))
+                        inOptions = true;
+                    continue;
+                }
+
+                if (line.StartsWith("## ", StringComparison.Ordinal))
+                    break;
+
+                if (!line.StartsWith('|'))
+                    continue;
+
+                if (!pastSeparator)
+                {
+                    if (line.Contains("---", StringComparison.Ordinal))
+                        pastSeparator = true;
+                    continue;
+                }
+
+                var cells = line.Split('|');
+                if (cells.Length < 2) continue;
+                foreach (Match m in Regex.Matches(cells[1], @"`([A-Z0-9_]+)`", RegexOptions.IgnoreCase))
+                {
+                    keys.Add(m.Groups[1].Value);
+                }
+            }
+            return keys;
+        }
+
         // ── Help files in docs/reference exist and are non-empty ─────────────────
 
         [Fact]
@@ -852,9 +941,10 @@ namespace ETL_SQL.Tests.Docs
                 RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
             // Paths that look developer-specific but are not a dependency on anyone's machine:
-            // well-known OS locations, and deliberately synthetic identities in test fixtures.
+            // well-known OS locations, GitHub Actions hosted runner accounts in recorded release
+            // evidence (e.g. /Users/runner/ in dotnet --info logs), and synthetic test identities.
             var allowed = new Regex(
-                @"[\\/]Users[\\/](Public|Default|All Users)\b|[\\/](alice|bob|carol|dave|testuser|user)\b",
+                @"[\\/]Users[\\/](Public|Default|All Users)\b|[\\/](alice|bob|carol|dave|testuser|user|runner)\b",
                 RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
             // Only committed files matter: downloaded caches such as .vscode-test contain vendored
@@ -1022,7 +1112,10 @@ namespace ETL_SQL.Tests.Docs
             var readmePath = RepoFile("src/etl-sql-vscode/README.md");
             Assert.True(File.Exists(readmePath), $"Missing VS Code README.md");
             var readme = File.ReadAllText(readmePath);
-            Assert.Contains("img.shields.io/visual-studio-marketplace/v/Octocolee.etl-sql-vscode", readme);
+            // Static badge: shields.io retired its dynamic visual-studio-marketplace badges (they
+            // render "retired badge"). Set-Version bumps this one, so it must match the release.
+            Assert.Contains($"img.shields.io/badge/VS%20Marketplace-v{currentVersion}-007ACC", readme);
+            Assert.DoesNotContain("img.shields.io/visual-studio-marketplace", readme);
 
             // 4. Verify WelcomeView.ts uses correct restructured documentation links
             var welcomeViewPath = RepoFile("src/etl-sql-vscode/src/WelcomeView.ts");

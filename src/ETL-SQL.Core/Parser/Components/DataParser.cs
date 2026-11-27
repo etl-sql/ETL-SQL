@@ -161,9 +161,17 @@ public class DataParser : ParserComponent
         Consume(TokenType.LPAREN, $"Expected '(' after {algorithm}");
         while (!Match(TokenType.RPAREN))
         {
-            var keyTok = ConsumeIdentifier("Expected parameter name");
+            Token keyTok = _parser.Current.Type < TokenType.STAR
+                ? Advance()
+                : ConsumeIdentifier("Expected parameter name");
             Consume(TokenType.EQUALS, "Expected '='");
-            var valTok = ParseExpression();
+            Expression valTok;
+            if (Match(TokenType.ON))
+                valTok = new IdentifierExpression("ON") { Line = keyTok.Line, Column = keyTok.Column };
+            else if (Match(TokenType.OFF))
+                valTok = new IdentifierExpression("OFF") { Line = keyTok.Line, Column = keyTok.Column };
+            else
+                valTok = ParseExpression();
             options[keyTok.Value] = valTok;
             if (!Match(TokenType.COMMA))
             {
@@ -916,9 +924,15 @@ public class DataParser : ParserComponent
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS after IF"); ifExists = true; }
             var path = ParseExpression();
             string? connectionName = null;
-            if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
+            Expression? recursive = null;
+            while (true)
+            {
+                if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
+                else if (Match(TokenType.WITH)) { recursive = ParseWithOptions("DELETE DIRECTORY", "RECURSIVE").GetValueOrDefault("RECURSIVE") ?? recursive; }
+                else break;
+            }
             Match(TokenType.SEMICOLON);
-            return new DirectoryOperationStatement(DirectoryOpType.Delete, path, ifExists: ifExists, connectionName: connectionName) { Line = startToken.Line, Column = startToken.Column };
+            return new DirectoryOperationStatement(DirectoryOpType.Delete, path, recursive: recursive, ifExists: ifExists, connectionName: connectionName) { Line = startToken.Line, Column = startToken.Column };
         }
         if (Match(TokenType.DIRECTORY_CONTENTS))
         {

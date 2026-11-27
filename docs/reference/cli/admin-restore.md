@@ -14,6 +14,7 @@ etl-sql admin restore [options]
 | :--- | :--- |
 | `--expected-tenant` | Required host-fixed tenant identity for a Managed Dedicated archive. |
 | `--from` | Path to the data backup archive (etl-sql-backup-*.zip). |
+| `--in-place` | Restore directly into an existing installation directory and its configured database and data paths. External target paths are allowed only when the host appsettings.json already resolves the same path; otherwise use a normal --to <staging dir> restore. |
 | `--keys` | Path to the matching keys archive (etl-sql-keys-*.zip). |
 | `--report` | Write a machine-readable JSON recovery report to this path. |
 | `--to` | Target directory to restore into (required unless --validate). |

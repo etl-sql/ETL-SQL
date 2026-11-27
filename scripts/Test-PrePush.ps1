@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$Configuration = "Release",
     [switch]$SkipFormat,
@@ -30,17 +30,18 @@ Write-Host "Selecting affected validation lanes..."
     --output (Join-Path $RepoRoot "release-validation/preflight/local-ci-impact.json")
 if ($LASTEXITCODE -ne 0) { throw 'CI impact selection failed.' }
 
+$impact = Get-Content (Join-Path $RepoRoot 'release-validation/preflight/local-ci-impact.json') -Raw | ConvertFrom-Json
+if (@($impact.lanes).Count -eq 1 -and $impact.lanes[0] -eq 'source-preflight') {
+    Write-Host "Documentation-only pre-push passed (heavy preflight skipped; CI validates on push). Full release certification remains required before tagging." -ForegroundColor Green
+    exit 0
+}
+
 Write-Host "[1/7] Collecting source preflight findings..."
 & node (Join-Path $ScriptRoot "setup-actionlint.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Workflow checker setup failed." }
 & node (Join-Path $ScriptRoot "release-preflight.mjs")
 if ($LASTEXITCODE -ne 0) { throw 'Source preflight failed. See all findings in the report above.' }
 
-$impact = Get-Content (Join-Path $RepoRoot 'release-validation/preflight/local-ci-impact.json') -Raw | ConvertFrom-Json
-if (@($impact.lanes).Count -eq 1 -and $impact.lanes[0] -eq 'source-preflight') {
-    Write-Host "Documentation-only pre-push passed. Full release certification remains required before tagging." -ForegroundColor Green
-    exit 0
-}
 $selectedSourceLanes = @($impact.lanes | Sort-Object) -join ','
 if ($selectedSourceLanes -ceq 'msi-upgrade,source-preflight' -and
     $impact.nativePackages -is [bool] -and -not $impact.nativePackages) {

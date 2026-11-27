@@ -496,6 +496,8 @@ public class ReportSnapshot
     public string? ParametersJson { get; set; }
     public string? ScriptHashAtRunTime { get; set; }
     public bool? HashMatched { get; set; }
+    /// <summary>JSON array of governed SHARED: connection aliases resolved during the snapshot build.</summary>
+    public string? SharedConnectionDependenciesJson { get; set; }
 }
 
 // ── Portal execution jobs ─────────────────────────────────────────────────────

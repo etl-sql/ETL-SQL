@@ -448,6 +448,24 @@ namespace ETL_SQL.App
             Arity = ArgumentArity.ZeroOrOne,
             DefaultValueFactory = _ => null
         };
+        private static readonly Option<bool> RestoreInPlaceOption = new("--in-place", Array.Empty<string>())
+        {
+            Description = "Restore directly into an existing installation directory and its configured database and data paths. External target paths are allowed only when the host appsettings.json already resolves the same path; otherwise use a normal --to <staging dir> restore."
+        };
+        private static readonly Option<bool> AdminPurgeConfirmOption = new("--confirm", Array.Empty<string>())
+        {
+            Description = "Confirm permanent deletion of all installed runtime data (required to delete)."
+        };
+        private static readonly Option<bool> AdminPurgeDryRunOption = new("--dry-run", Array.Empty<string>())
+        {
+            Description = "List the installed runtime data that would be removed without deleting anything."
+        };
+        private static readonly Option<string?> AdminPurgeInstallDirOption = new("--install-dir", Array.Empty<string>())
+        {
+            Description = "Installation directory whose configured runtime data should be purged (default: current install directory).",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
         private static readonly Option<string?> SecretNameOption = new("--name", new[] { "-n" })
         {
             Description = "Name of the secret (letters, numbers, period, underscore, hyphen).",
@@ -485,6 +503,11 @@ namespace ETL_SQL.App
             Description = "Field name this entry classifies as sensitive (repeatable): masked in displays and SECRET:-resolvable.",
             AllowMultipleArgumentsPerToken = true
         };
+        private static readonly Option<string?> ToolGrantTenantOption = new("--tenant")
+        {
+            Description = "Tenant ID from the configured Orchestrator identity authority."
+        };
+
         private static readonly Option<string?> ToolNameOption = new("--name", new[] { "-n" })
         {
             Description = "Name of the tool.",
@@ -960,6 +983,15 @@ namespace ETL_SQL.App
         private static readonly Option<string?> GatewayViewerClaimsOption = new("--viewer-claims") { Description = "Allowlist: viewer_groups, viewer_roles, viewer_scopes, is_admin." };
         private static readonly Option<int?> GatewayViewerLifetimeOption = new("--viewer-context-ttl-seconds") { Description = "Signed viewer context lifetime from 1 to 300 seconds (default 60)." };
 
+        /// <summary>
+        /// Parser settings for every CLI entry point. Response files are off because
+        /// <c>--var @Name=Value</c> is the documented variable form (and the form the
+        /// Orchestrator emits); with response files on, a leading <c>@</c> is read as a
+        /// file path and the run fails with "Response file not found".
+        /// </summary>
+        public static ParserConfiguration CreateParserConfiguration() =>
+            new() { ResponseFileTokenReplacer = null };
+
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
             var rootCommand = new RootCommand("ETL-SQL Engine - Modern Data Integration Tool");
@@ -1110,12 +1142,22 @@ namespace ETL_SQL.App
                 RestoreFromOption,
                 RestoreKeysOption,
                 RestoreToOption,
+                RestoreInPlaceOption,
                 RestoreValidateOption,
                 RestoreReportOption,
                 RestoreExpectedTenantOption,
             };
             restoreCommand.SetAction(context => Dispatch(context, "admin-restore", handler));
             adminCommand.Add(restoreCommand);
+
+            var purgeDataCommand = new Command("purge-data", "Delete all installed ETL-SQL runtime data (reports, snapshots, databases, logs, sessions, secrets)")
+            {
+                AdminPurgeConfirmOption,
+                AdminPurgeDryRunOption,
+                AdminPurgeInstallDirOption,
+            };
+            purgeDataCommand.SetAction(context => Dispatch(context, "admin-purge-data", handler));
+            adminCommand.Add(purgeDataCommand);
 
             var migrateDbCommand = new Command("migrate-database", "Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment")
             {
@@ -1803,6 +1845,21 @@ namespace ETL_SQL.App
             };
             deleteToolCommand.SetAction(context => Dispatch(context, "admin-machine-tool-delete", handler));
             machineToolCommand.Add(deleteToolCommand);
+
+            var grantToolCommand = new Command("grant", "Grant use of a machine-local tool")
+            {
+                ToolNameOption, ToolGrantTenantOption, GrantPrincipalKindOption, GrantPrincipalOption
+            };
+            grantToolCommand.SetAction(context => Dispatch(context, "admin-machine-tool-grant", handler));
+            machineToolCommand.Add(grantToolCommand);
+
+            var revokeToolCommand = new Command("revoke", "Revoke use of a machine-local tool")
+            {
+                ToolNameOption, ToolGrantTenantOption, GrantPrincipalKindOption, GrantPrincipalOption
+            };
+            revokeToolCommand.SetAction(context => Dispatch(context, "admin-machine-tool-revoke", handler));
+            machineToolCommand.Add(revokeToolCommand);
+
             machineCommand.Add(machineToolCommand);
 
             adminCommand.Add(machineCommand);
@@ -2179,9 +2236,16 @@ namespace ETL_SQL.App
                 cliContext.RestoreFrom = res.GetValue(RestoreFromOption);
                 cliContext.RestoreKeys = res.GetValue(RestoreKeysOption);
                 cliContext.RestoreTo = res.GetValue(RestoreToOption);
+                cliContext.RestoreInPlace = res.GetValue(RestoreInPlaceOption);
                 cliContext.RestoreValidateOnly = res.GetValue(RestoreValidateOption);
                 cliContext.RestoreReport = res.GetValue(RestoreReportOption);
                 cliContext.RestoreExpectedTenant = res.GetValue(RestoreExpectedTenantOption);
+            }
+            else if (commandName == "admin-purge-data")
+            {
+                cliContext.AdminPurgeConfirm = res.GetValue(AdminPurgeConfirmOption);
+                cliContext.AdminPurgeDryRun = res.GetValue(AdminPurgeDryRunOption);
+                cliContext.AdminPurgeInstallDir = res.GetValue(AdminPurgeInstallDirOption);
             }
             else if (commandName == "admin-migrate-database")
             {
@@ -2314,6 +2378,13 @@ namespace ETL_SQL.App
             {
                 cliContext.ToolName = res.GetValue(ToolNameOption);
             }
+            else if (commandName is "admin-machine-tool-grant" or "admin-machine-tool-revoke")
+            {
+                cliContext.ToolName = res.GetValue(ToolNameOption);
+                cliContext.ToolGrantTenant = res.GetValue(ToolGrantTenantOption);
+                cliContext.GrantPrincipalKind = res.GetValue(GrantPrincipalKindOption);
+                cliContext.GrantPrincipalId = res.GetValue(GrantPrincipalOption);
+            }
             else if (commandName == "enterprise-enroll")
             {
                 cliContext.EnterpriseTenant = res.GetValue(EnterpriseTenantOption);
@@ -2400,7 +2471,8 @@ namespace ETL_SQL.App
             table.AddRow("admin doctor", "System health check (alias of top-level 'doctor'). Use --profile full for deep checks.");
             table.AddRow("admin support-bundle", "Collect a redacted support archive (config, health, logs, DB metrics).");
             table.AddRow("admin backup", "Back up portal/orchestrator state into split-custody data + keys archives.");
-            table.AddRow("admin restore", "Validate (--validate) and restore a backup (--from <data> --keys <keys> --to <dir>).");
+            table.AddRow("admin restore", "Validate (--validate) and restore a backup (--from <data> --keys <keys> --to <dir> | --in-place).");
+            table.AddRow("admin purge-data", "Delete installed runtime data (requires --confirm; use --dry-run to preview).");
             table.AddRow("admin migrate-database", "Copy SQLite Portal/Orchestrator state into the configured PostgreSQL (--dry-run to verify only).");
             table.AddRow("admin ha-soak", "Prepare HA soak topology artifacts, runbooks, metrics, and diagnostics through the admin CLI.");
             table.AddRow("enterprise enroll|status|unenroll", "Manage protected machine-level enterprise policy enrollment.");

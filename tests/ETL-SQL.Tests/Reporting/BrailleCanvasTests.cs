@@ -52,7 +52,16 @@ namespace ETL_SQL.Tests.Reporting
         {
             var c = new BrailleCanvas(2, 1);
             c.Set(0, 0, "blue");
-            Assert.NotNull(c.ToRenderable()); // builds Markup internally; invalid tokens would throw
+            var renderable = c.ToRenderable();
+            using var writer = new System.IO.StringWriter();
+            var console = Spectre.Console.AnsiConsole.Create(new Spectre.Console.AnsiConsoleSettings
+            {
+                Ansi = Spectre.Console.AnsiSupport.No,
+                ColorSystem = Spectre.Console.ColorSystemSupport.NoColors,
+                Out = new Spectre.Console.AnsiConsoleOutput(writer)
+            });
+            console.Write(renderable);
+            Assert.Contains("⠁", writer.ToString());
         }
     }
 }

@@ -115,9 +115,12 @@ namespace ETL_SQL.Tests.Repro
                 // Execute
                 await evaluator.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
 
-                // Verify
+                // Verify round-trip read from the written Parquet file
                 Assert.True(File.Exists(pqPath), "File should be created");
                 Assert.True(new FileInfo(pqPath).Length > 0, "File should have data");
+                await evaluator.Evaluate(new Parser(new Lexer("SELECT COUNT(*) AS cnt FROM p.FILE;").Tokenize()).Parse());
+                Assert.NotNull(evaluator.LastResult);
+                Assert.Equal(150m, Convert.ToDecimal(evaluator.LastResult!.Rows[0]["cnt"]));
             }
             finally
             {

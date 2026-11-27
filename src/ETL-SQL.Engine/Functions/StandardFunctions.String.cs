@@ -64,6 +64,8 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("REMOVE_HTML_CHARACTERS", RemoveHtmlCharacters, "REMOVE_HTML_CHARACTERS(str): Decodes literal HTML entities (e.g. &nbsp; &mdash; &#8217;), then normalizes typographic/\"smart\" Unicode characters to plain ASCII equivalents (curly quotes -> \" and ', en/em dashes -> -, ellipsis -> ..., bullet -> *, NBSP -> space) and strips zero-width characters. Fixes invisible mismatches that break string comparisons.");
             registry.RegisterWithHelp("INITCAP", (args, ctx) => InitCap(Text(args[0])), "INITCAP(str): Capitalizes the first letter of each word.");
             registry.RegisterWithHelp("CLEAN_STRING", CleanString, "CLEAN_STRING(str): Removes control characters, trims whitespace, and collapses multiple whitespace characters into single spaces.");
+            registry.RegisterWithHelp("CLEAN_TEXT", CleanText, "CLEAN_TEXT(value [, rules]): Applies ordered text cleaning rules (TRIM, COLLAPSE_WHITESPACE, STRIP_CONTROL, NULL_IF_EMPTY, UPPER, LOWER, TITLE, INITCAP, PHONE, EMAIL, POSTAL_CODE). Default rules: 'STRIP_CONTROL, COLLAPSE_WHITESPACE, TRIM'.");
+            registry.RegisterWithHelp("STANDARDIZE", StandardizeText, "STANDARDIZE(value, format): Standardizes a text value into a canonical format (PHONE, EMAIL, POSTAL_CODE).");
             registry.RegisterWithHelp("MASK_EMAIL", MaskEmail, "MASK_EMAIL(email): Sanitizes an email address for governance/reporting (e.g. j***n@example.com).");
             registry.RegisterWithHelp("MASK_PHONE", MaskPhone, "MASK_PHONE(phone): Sanitizes a phone number for governance/reporting (e.g. ***-***-1234).");
             registry.RegisterWithHelp("MASK_SSN", MaskSsn, "MASK_SSN(ssn): Sanitizes an SSN for governance/reporting (e.g. ***-**-6789).");
@@ -558,6 +560,27 @@ namespace ETL_SQL.Engine.Functions
                 else sb.Append(c);
             }
             return sb.ToString();
+        }
+
+        private static object? CleanText(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args.Count > 2)
+                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException("CLEAN_TEXT requires 1 or 2 arguments: value [, rules].");
+            if (args[0] == null) return null;
+            if (args.Count == 2 && args[1] == null) return null;
+
+            var rules = args.Count == 2
+                ? TextCleaningEngine.ParseRules(Text(args[1]))
+                : TextCleaningEngine.ParseRules(null);
+            return TextCleaningEngine.ApplyRules(Text(args[0]), rules);
+        }
+
+        private static object? StandardizeText(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count != 2)
+                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException("STANDARDIZE requires 2 arguments: value, format.");
+            if (args[0] == null || args[1] == null) return null;
+            return TextCleaningEngine.Standardize(Text(args[0]), Text(args[1]));
         }
 
         private static object? CleanString(List<object?> args, IExecutionContext ctx)

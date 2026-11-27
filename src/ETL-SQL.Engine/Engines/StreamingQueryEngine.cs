@@ -27,6 +27,8 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
     {
         var resultBatch = new DataTable();
         resultBatch.SetColumns(colNames);
+        long targetBytes = _context.EffectiveBatchTargetBytes;
+        long resultBatchBytes = 0;
 
         bool yielded = false;
         int rowsYielded = 0;
@@ -71,9 +73,7 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
         // column per row, ~40% of the Gate F round-trip's total allocation (see
         // certification-results/spill-alloc-profile). Real columns (not schema aliases) so every
         // consumer — enumeration, fallbacks, correlated-subquery capture — sees the qualified names.
-        ETL_SQL.Data.TableSchema? qualifySource = null;
-        ETL_SQL.Data.TableSchema? qualifiedSchema = null;
-        int[] qualifiedSlots = System.Array.Empty<int>();
+        var qualifier = string.IsNullOrEmpty(fromName) ? null : new QualifiedRowLayout(fromName);
         await foreach (var batch in batches)
         {
             foreach (var row in batch.Rows)
@@ -82,33 +82,10 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
                 var evalRow = row;
                 if (!string.IsNullOrEmpty(fromName))
                 {
-                    if (row.Schema != null && !row.HasDynamicColumns)
+                    var qualified = qualifier!.TryQualify(row);
+                    if (qualified != null)
                     {
-                        if (!ReferenceEquals(row.Schema, qualifySource))
-                        {
-                            var source = row.Schema;
-                            var names = new List<string>(source.ColumnCount * 2);
-                            var slots = new List<int>(source.ColumnCount);
-                            for (int i = 0; i < source.ColumnCount; i++) names.Add(source.GetName(i));
-                            for (int i = 0; i < source.ColumnCount; i++)
-                            {
-                                var name = source.GetName(i);
-                                if (name.Contains('.')) continue;
-                                names.Add($"{fromName}.{name}");
-                                slots.Add(i);
-                            }
-                            qualifiedSchema = new ETL_SQL.Data.TableSchema(names);
-                            source.CopyAliasesTo(qualifiedSchema);
-                            qualifiedSlots = slots.ToArray();
-                            qualifySource = source;
-                        }
-
-                        int canonical = row.Schema.ColumnCount;
-                        var values = new object?[canonical + qualifiedSlots.Length];
-                        for (int i = 0; i < canonical; i++) values[i] = row[i];
-                        for (int i = 0; i < qualifiedSlots.Length; i++)
-                            values[canonical + i] = values[qualifiedSlots[i]];
-                        evalRow = new ETL_SQL.Data.Row(qualifiedSchema!, values);
+                        evalRow = qualified;
                     }
                     else
                     {
@@ -157,14 +134,17 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
                 }
 
                 await resultBatch.AddRowAsync(resRow);
+                resultBatchBytes += resRow.EstimateHeapBytes();
                 rowsYielded++;
 
-                if (resultBatch.Rows.Count >= _context.EffectiveBatchSize)
+                if (resultBatch.Rows.Count >= _context.EffectiveBatchSize
+                    || (targetBytes > 0 && resultBatchBytes >= targetBytes))
                 {
                     yield return resultBatch;
                     yielded = true;
                     resultBatch = new DataTable();
                     resultBatch.SetColumns(colNames);
+                    resultBatchBytes = 0;
                 }
             }
             if (limit.HasValue && rowsYielded >= limit.Value) break;

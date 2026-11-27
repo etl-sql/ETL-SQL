@@ -101,6 +101,194 @@ CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = WorldChoropleth))
         }
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(", PROJECTION = MERCATOR")]
+    public async Task Map_UsStates_DrawsAlaskaAndHawaiiAsInsets(string projection)
+    {
+        // At their true positions Alaska took much of the card and the lower 48 about half its width.
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"map_insets_{Guid.NewGuid()}.rptsql");
+        File.WriteAllText(scriptPath, $@"
+SELECT 'California' AS State, 1250000 AS Revenue INTO #state_rev
+UNION ALL SELECT 'Texas', 980000
+UNION ALL SELECT 'Alaska', 120000
+UNION ALL SELECT 'Hawaii', 150000;
+
+CREATE VISUAL RevenueMap AS MAP (
+  SOURCE = #state_rev,
+  MAPPINGS (REGION = State, VALUE = Revenue),
+  OPTIONS (MAP_NAME = US_STATES, TITLE = 'Revenue by State'{projection})
+);
+
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = RevenueMap));
+");
+        try
+        {
+            var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+            var manifest = await service.GetManifestAsync();
+            var visual = manifest.Visuals.Single(v => v.Name == "RevenueMap");
+            Assert.Null(visual.Error);
+            var svg = new SvgChartRenderer().Render(visual)!;
+
+            static double Num(string s) => double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+            var box = System.Text.RegularExpressions.Regex.Match(svg, "viewBox='0 0 (?<w>[0-9.]+) (?<h>[0-9.]+)'");
+            var width = Num(box.Groups["w"].Value);
+            var height = Num(box.Groups["h"].Value);
+            var regions = System.Text.RegularExpressions.Regex.Matches(svg, "class='plot-geographic-region'[^>]* d='(?<d>[^']+)'[^>]*><title>(?<t>[^<:]+)")
+                .Select(m => (Name: m.Groups["t"].Value.Trim(), Points: System.Text.RegularExpressions.Regex.Matches(m.Groups["d"].Value, "[ML] (?<x>[-0-9.]+) (?<y>[-0-9.]+)")
+                    .Select(p => (X: Num(p.Groups["x"].Value), Y: Num(p.Groups["y"].Value))).ToList()))
+                .ToList();
+            (double MinX, double MaxX, double MinY, double MaxY) Extent(IEnumerable<(double X, double Y)> points)
+            {
+                var list = points.ToList();
+                Assert.NotEmpty(list);
+                return (list.Min(p => p.X), list.Max(p => p.X), list.Min(p => p.Y), list.Max(p => p.Y));
+            }
+
+            var all = Extent(regions.SelectMany(r => r.Points));
+            Assert.True(all.MinX >= 0 && all.MaxX <= width && all.MinY >= 0 && all.MaxY <= height, $"map leaves the chart: {all} in {width}x{height}");
+            var lower48 = Extent(regions.Where(r => r.Name is not ("Alaska" or "Hawaii" or "Puerto Rico")).SelectMany(r => r.Points));
+            var puertoRico = Extent(regions.Where(r => r.Name == "Puerto Rico").SelectMany(r => r.Points));
+            Assert.True(puertoRico.MinY >= lower48.MinY && puertoRico.MaxY <= lower48.MaxY, $"Puerto Rico {puertoRico} sits outside the lower 48 {lower48}");
+            // The lower 48 now set the map's extent (the insets sit inside it), whatever the card's shape.
+            Assert.True((lower48.MaxX - lower48.MinX) / (all.MaxX - all.MinX) > .90 && (lower48.MaxY - lower48.MinY) / (all.MaxY - all.MinY) > .90,
+                $"lower 48 {lower48} do not set the map extent {all}");
+            Assert.True((lower48.MaxX - lower48.MinX) / width > .60, $"lower 48 span {(lower48.MaxX - lower48.MinX) / width:P0} of the width: lower 48 {lower48}, all {all} in {width}x{height}");
+            var texas = Extent(regions.Where(r => r.Name == "Texas").SelectMany(r => r.Points));
+            foreach (var inset in new[] { "Alaska", "Hawaii" })
+            {
+                var e = Extent(regions.Where(r => r.Name == inset).SelectMany(r => r.Points));
+                Assert.True(e.MaxY > texas.MinY && e.MinX < texas.MaxX, $"{inset} {e} is not below and left of Texas {texas}");
+            }
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task Map_UsStatesPoints_MarkersMoveWithTheirInsets()
+    {
+        // Lower-case, hyphenated MAP_NAME also reaches the insets (its source authority is upper-cased).
+        static string Choropleth(string options) => $@"
+SELECT 'California' AS State, 1 AS Revenue INTO #state_rev;
+CREATE VISUAL M AS MAP (SOURCE = #state_rev, MAPPINGS (REGION = State, VALUE = Revenue), OPTIONS (MAP_NAME = US_STATES{options}));
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = M));";
+        const string points = @"
+SELECT -149.90 AS Lon, 61.22 AS Lat, 'Anchorage' AS Label INTO #pts
+UNION ALL SELECT -122.33, 47.61, 'Seattle'
+UNION ALL SELECT -64.93, 18.34, 'St. Thomas';
+CREATE VISUAL M AS MAP (SOURCE = #pts, MAPPINGS (LON = Lon, LAT = Lat, TOOLTIP = Label), OPTIONS (MAP_NAME = 'us-states', MODE = 'POINTS'));
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = M));";
+
+        var shapes = GeographicRegions(await RenderMapScriptAsync(Choropleth("")));
+        var svg = await RenderMapScriptAsync(points);
+        static double Num(string s) => double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+        var box = System.Text.RegularExpressions.Regex.Match(svg, "viewBox='0 0 (?<w>[0-9.]+) (?<h>[0-9.]+)'");
+        var (width, height) = (Num(box.Groups["w"].Value), Num(box.Groups["h"].Value));
+        var markers = System.Text.RegularExpressions.Regex.Matches(svg, "<circle(?<a>[^>]*plot-geographic-point[^>]*)>\\s*<title>(?<t>[^<]+)")
+            .ToDictionary(m => m.Groups["t"].Value, m => (
+                X: Num(System.Text.RegularExpressions.Regex.Match(m.Groups["a"].Value, "cx='(?<v>[-0-9.]+)'").Groups["v"].Value),
+                Y: Num(System.Text.RegularExpressions.Regex.Match(m.Groups["a"].Value, "cy='(?<v>[-0-9.]+)'").Groups["v"].Value)));
+
+        foreach (var (label, state) in new[] { ("Anchorage", "Alaska"), ("Seattle", "Washington") })
+        {
+            var (x, y) = markers[label];
+            var e = MapExtent(shapes.Where(s => s.Name == state).SelectMany(s => s.Points));
+            Assert.True(x >= e.MinX && x <= e.MaxX && y >= e.MinY && y <= e.MaxY, $"{label} marker ({x}, {y}) is off {state} {e}");
+        }
+        // Puerto Rico's true position used to stretch the fit far enough to include the Virgin Islands.
+        var (vx, vy) = markers["St. Thomas"];
+        var map = MapExtent(shapes.SelectMany(s => s.Points));
+        Assert.True(vx >= map.MinX && vx <= map.MaxX && vy >= map.MinY && vy <= map.MaxY, $"St. Thomas marker ({vx}, {vy}) is off the map {map} in {width}x{height}");
+
+        // An explicit view is the author's own framing: Alaska stays north-west of Washington.
+        var zoomed = GeographicRegions(await RenderMapScriptAsync(Choropleth(", ZOOM = 1")));
+        var alaska = MapExtent(zoomed.Where(r => r.Name == "Alaska").SelectMany(r => r.Points));
+        var washington = MapExtent(zoomed.Where(r => r.Name == "Washington").SelectMany(r => r.Points));
+        Assert.True(alaska.MinY < washington.MinY && alaska.MinX < washington.MinX, $"Alaska {alaska} is not north-west of Washington {washington}");
+    }
+
+    private static async Task<string> RenderMapScriptAsync(string script)
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"map_script_{Guid.NewGuid()}.rptsql");
+        File.WriteAllText(scriptPath, script);
+        try
+        {
+            var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+            var visual = (await service.GetManifestAsync()).Visuals.Single(v => v.Name == "M");
+            Assert.Null(visual.Error);
+            return new SvgChartRenderer().Render(visual)!;
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+        }
+    }
+
+    private static List<(string Name, List<(double X, double Y)> Points)> GeographicRegions(string svg)
+    {
+        static double Num(string s) => double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+        return System.Text.RegularExpressions.Regex.Matches(svg, "class='plot-geographic-region'[^>]* d='(?<d>[^']+)'[^>]*><title>(?<t>[^<:]+)")
+            .Select(m => (m.Groups["t"].Value.Trim(), System.Text.RegularExpressions.Regex.Matches(m.Groups["d"].Value, "[ML] (?<x>[-0-9.]+) (?<y>[-0-9.]+)")
+                .Select(p => (Num(p.Groups["x"].Value), Num(p.Groups["y"].Value))).ToList()))
+            .ToList();
+    }
+
+    private static (double MinX, double MaxX, double MinY, double MaxY) MapExtent(IEnumerable<(double X, double Y)> points)
+    {
+        var list = points.ToList();
+        Assert.NotEmpty(list);
+        return (list.Min(p => p.X), list.Max(p => p.X), list.Min(p => p.Y), list.Max(p => p.Y));
+    }
+
+    [Fact]
+    public async Task Map_WithoutZoomOrCenter_FitsUsStatesToThePlot()
+    {
+        // The projection mapped the whole world onto the plot, so a US_STATES choropleth was
+        // drawn at world scale: about a third of the width, left of centre (2026-11-21).
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"map_fit_{Guid.NewGuid()}.rptsql");
+        File.WriteAllText(scriptPath, @"
+SELECT 'California' AS State, 1250000 AS Revenue INTO #state_rev
+UNION ALL SELECT 'Texas', 980000;
+
+CREATE VISUAL RevenueMap AS MAP (
+  SOURCE = #state_rev,
+  MAPPINGS (REGION = State, VALUE = Revenue),
+  OPTIONS (MAP_NAME = US_STATES, TITLE = 'Revenue by State')
+);
+
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = RevenueMap));
+");
+        try
+        {
+            var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+            var manifest = await service.GetManifestAsync();
+            var visual = manifest.Visuals.Single(v => v.Name == "RevenueMap");
+            Assert.Null(visual.Error);
+            var svg = new SvgChartRenderer().Render(visual)!;
+
+            static double Num(string s) => double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+            var box = System.Text.RegularExpressions.Regex.Match(svg, "viewBox='0 0 (?<w>[0-9.]+) (?<h>[0-9.]+)'");
+            var width = Num(box.Groups["w"].Value);
+            var height = Num(box.Groups["h"].Value);
+            var points = System.Text.RegularExpressions.Regex.Matches(svg, "class='plot-geographic-region'[^>]* d='(?<d>[^']+)'")
+                .SelectMany(m => System.Text.RegularExpressions.Regex.Matches(m.Groups["d"].Value, "[ML] (?<x>[-0-9.]+) (?<y>[-0-9.]+)"))
+                .Select(m => (X: Num(m.Groups["x"].Value), Y: Num(m.Groups["y"].Value))).ToList();
+            Assert.NotEmpty(points);
+            double minX = points.Min(p => p.X), maxX = points.Max(p => p.X), minY = points.Min(p => p.Y), maxY = points.Max(p => p.Y);
+
+            Assert.True(minX >= 0 && maxX <= width && minY >= 0 && maxY <= height, $"map leaves the chart: x {minX}..{maxX}, y {minY}..{maxY} in {width}x{height}");
+            Assert.True((maxX - minX) / width > .75 || (maxY - minY) / height > .75, $"map spans x {minX}..{maxX}, y {minY}..{maxY} in {width}x{height}");
+            Assert.InRange((minX + maxX) / 2 / width, .4, .6);
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+        }
+    }
+
     [Fact]
     public async Task Map_ZoomAndCenter_PointsModeWithColorAndTooltip_RendersCorrectly()
     {

@@ -32,7 +32,7 @@ public sealed class ProcedureExecutor(VariableScopeManager scopeManager, IExecut
                 throw new ExecutionException($"Unknown function: {f.FunctionName}. If this is a database-specific function, check that the query is being pushed down to the remote source (e.g. by avoiding local-only operations like joins with CSV files).");
             }
 
-            var localVars = BuildParameterDictionary(funcStmt.Parameters, args.Select(v => ((string?)null, v)).ToList());
+            var localVars = BuildParameterDictionary(funcStmt.Parameters, args.Select(v => ((string?)null, v, (string?)null)).ToList());
             _context.VarContext.PushScope(localVars);
             scopePushed = true;
             object? result = null;
@@ -57,7 +57,7 @@ public sealed class ProcedureExecutor(VariableScopeManager scopeManager, IExecut
     /// <summary>
     /// Executes a stored procedure by binding arguments and running its body in an isolated scope.
     /// </summary>
-    public async Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args)
+    public async Task EvaluateProcedure(string name, List<(string? Name, object? Value, string? OutputVariable)> args)
     {
         _context.CurrentRecursiveDepth++;
         var scopePushed = false;
@@ -71,6 +71,7 @@ public sealed class ProcedureExecutor(VariableScopeManager scopeManager, IExecut
             }
 
             var localVars = BuildParameterDictionary(procStmt.Parameters, args);
+            var outputs = OutputBindings(procStmt.Parameters, args);
             _context.VarContext.PushScope(localVars);
             scopePushed = true;
             try
@@ -79,8 +80,14 @@ public sealed class ProcedureExecutor(VariableScopeManager scopeManager, IExecut
             }
             catch (ReturnException)
             {
-                // Procedures do not return values to the caller in standard SQL.
+                // RETURN ends the procedure; OUTPUT parameters are still written back below.
             }
+
+            // The pushed scope is localVars itself, so it holds each parameter's final value.
+            _context.VarContext.PopScope();
+            scopePushed = false;
+            foreach (var (parameter, callerVariable) in outputs)
+                _context.VarContext.SetVariable(callerVariable, localVars.GetValueOrDefault(parameter));
         }
         finally
         {
@@ -90,11 +97,31 @@ public sealed class ProcedureExecutor(VariableScopeManager scopeManager, IExecut
         }
     }
 
+    /// <summary>Pairs each OUTPUT argument's procedure parameter with the caller variable it writes back to.</summary>
+    private static List<(string Parameter, string CallerVariable)> OutputBindings(
+        IReadOnlyList<ParameterDefinition> parameters, IReadOnlyList<(string? Name, object? Value, string? OutputVariable)> args)
+    {
+        var bindings = new List<(string, string)>();
+        var position = 0;
+        foreach (var arg in args)
+        {
+            string? parameter = arg.Name;
+            if (parameter is null)
+            {
+                parameter = position < parameters.Count ? parameters[position].Name : null;
+                position++;
+            }
+            if (arg.OutputVariable is not null && parameter is not null)
+                bindings.Add((parameter, arg.OutputVariable));
+        }
+        return bindings;
+    }
+
     /// <summary>
     /// Builds a name-to-value dictionary from a parameter list and argument values (positional or named).
     /// </summary>
     private static Dictionary<string, object?> BuildParameterDictionary(
-        IReadOnlyList<ParameterDefinition> parameters, IReadOnlyList<(string? Name, object? Value)> args)
+        IReadOnlyList<ParameterDefinition> parameters, IReadOnlyList<(string? Name, object? Value, string? OutputVariable)> args)
     {
         var vars = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 

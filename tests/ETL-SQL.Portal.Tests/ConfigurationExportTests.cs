@@ -243,7 +243,10 @@ public sealed class ConfigurationExportTests
             """;
         var parsed = new ETL_SQL.Core.Parser.Parser(
             new ETL_SQL.Core.Parser.Lexer(script).Tokenize()).Parse();
-        Assert.NotEmpty(parsed.Statements);
+        Assert.Empty(parsed.Diagnostics);
+        var exec = Assert.IsType<ETL_SQL.Core.ExecutePushdownStatement>(Assert.Single(parsed.Statements));
+        Assert.Equal("portal", Assert.IsType<ETL_SQL.Core.IdentifierExpression>(exec.ConnectionName).Name);
+        Assert.Contains("EXPORT PORTAL CONFIGURATION TO 'portal_bootstrap.txt'", exec.SqlText, StringComparison.Ordinal);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

@@ -36,6 +36,8 @@ public static class SecretResolvableFields
         "ACCOUNT_KEY",
         "ACCOUNTKEY",
         "PASSPHRASE",
+        "PRIVATE_KEY_PASSPHRASE",
+        "PRIVATE_KEY_PWD",
         "PRIVATE_KEY",
         "SASL_PASSWORD",
         "SASL_JAAS_CONFIG"
@@ -57,6 +59,9 @@ public static class SecretResolvableFields
             ["WEBHOOK"] = new(StringComparer.OrdinalIgnoreCase) { "URL" },
             ["SLACK"] = new(StringComparer.OrdinalIgnoreCase) { "URL" },
             ["TEAMS"] = new(StringComparer.OrdinalIgnoreCase) { "URL" },
+            ["MSSQL"] = new(StringComparer.OrdinalIgnoreCase) { "CLIENT_ID" },
+            ["SQLSERVER"] = new(StringComparer.OrdinalIgnoreCase) { "CLIENT_ID" },
+            ["SQL"] = new(StringComparer.OrdinalIgnoreCase) { "CLIENT_ID" },
         };
 
     public static bool IsResolvable(string key) =>

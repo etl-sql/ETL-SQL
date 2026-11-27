@@ -8,7 +8,7 @@
 // Cross-cycle functions use hoisted declarations; imported state is read only when
 // those functions run. Boot starts after the graph has evaluated. Preserve that
 // ordering when adding top-level work or changing functions to const declarations.
-import { abbreviateNumber, errorEl, escHtml, formatValue, getOption, getStyle, isOff, isOn, renderInlineMarkdown, renderSafeSvgInto, safeUrl, simpleMarkdown } from './rt-util.js';
+import { abbreviateNumber, errorEl, escHtml, formatValue, getOption, getStyle, isOff, isOn, renderInlineMarkdown, renderSafeSvgInto, safeImageSrc, simpleMarkdown } from './rt-util.js';
 import { ALLOWED_TOKEN_NAMES, applyDesignTokens, isAllowedTokenName } from './rt-theme.js';
 import { actionsFor, evaluateExpressionAgainstParameters, executeAction, matchesCondition } from './rt-actions.js';
 import type { ActionVisual, ReportAction } from './rt-actions.js';
@@ -114,19 +114,89 @@ function shouldShowVisualToolbar(type: string, styles: Record<string, unknown>):
     return !NON_MAXIMIZABLE_CONTROL_TYPES.has(type);
 }
 
-function addVisualToolbar(card: MaximizedVisualCard): void {
+// Corner arrows pointing out (maximize) or in (restore); minus/plus for collapse/expand.
+const MAXIMIZE_ICON_PATHS: Record<'maximize' | 'restore', string> = {
+    maximize: 'M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4',
+    restore: 'M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4',
+};
+const COLLAPSE_ICON_PATHS: Record<'collapse' | 'expand', string> = {
+    collapse: 'M3 8h10',
+    expand: 'M3 8h10M8 3v10',
+};
+
+function makeToolbarIcon(pathData: string, iconName: string): SVGSVGElement {
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    svg.setAttribute('width', '14');
+    svg.setAttribute('height', '14');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.setAttribute('data-icon', iconName);
+    const path = document.createElementNS(svgNs, 'path');
+    path.setAttribute('d', pathData);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '1.75');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+    return svg;
+}
+
+function setMaximizeButtonState(button: HTMLButtonElement, maximized: boolean): void {
+    const icon: 'maximize' | 'restore' = maximized ? 'restore' : 'maximize';
+    const label = maximized ? 'Restore visual' : 'Maximize visual';
+    button.replaceChildren(makeToolbarIcon(MAXIMIZE_ICON_PATHS[icon], icon));
+    button.title = label;
+    button.setAttribute('aria-label', label);
+}
+
+function setCollapseButtonState(button: HTMLButtonElement, collapsed: boolean): void {
+    const icon: 'collapse' | 'expand' = collapsed ? 'expand' : 'collapse';
+    const label = collapsed ? 'Expand visual' : 'Collapse visual';
+    button.replaceChildren(makeToolbarIcon(COLLAPSE_ICON_PATHS[icon], icon));
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+}
+
+function addVisualToolbar(card: MaximizedVisualCard, allowCollapse = true): void {
     card.classList.add('has-visual-toolbar');
     const toolbar = document.createElement('div');
     toolbar.className = 'visual-toolbar';
 
+    let collapseBtn: HTMLButtonElement | null = null;
+    if (allowCollapse) {
+        collapseBtn = document.createElement('button');
+        collapseBtn.type = 'button';
+        collapseBtn.className = 'visual-tool-btn visual-collapse-btn';
+        setCollapseButtonState(collapseBtn, false);
+        collapseBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            if (card.classList.contains('visual-maximized')) {
+                closeMaximizedVisual();
+            }
+            const collapsed = card.classList.toggle('visual-collapsed');
+            setCollapseButtonState(collapseBtn!, collapsed);
+            const fitPage = card.closest('.page[data-fit="SCREEN"]');
+            if (fitPage) fitPage.dispatchEvent(new CustomEvent('etlsql:fit-reflow'));
+        });
+        toolbar.appendChild(collapseBtn);
+    }
+
     const maxBtn = document.createElement('button');
     maxBtn.type = 'button';
-    maxBtn.className = 'visual-tool-btn';
-    maxBtn.textContent = '[]';
-    maxBtn.title = 'Maximize visual';
-    maxBtn.setAttribute('aria-label', 'Maximize visual');
+    maxBtn.className = 'visual-tool-btn visual-maximize-btn';
+    setMaximizeButtonState(maxBtn, false);
     maxBtn.addEventListener('click', e => {
         e.stopPropagation();
+        if (card.classList.contains('visual-collapsed')) {
+            card.classList.remove('visual-collapsed');
+            if (collapseBtn) setCollapseButtonState(collapseBtn, false);
+            const fitPage = card.closest('.page[data-fit="SCREEN"]');
+            if (fitPage) fitPage.dispatchEvent(new CustomEvent('etlsql:fit-reflow'));
+        }
         toggleVisualMaximize(card, maxBtn);
     });
 
@@ -184,11 +254,7 @@ function toggleVisualMaximize(card: MaximizedVisualCard, button: HTMLButtonEleme
     card.style.backgroundColor = card.classList.contains('theme-dark') ? '#1e1e1e' : '#fff';
     card.style.backgroundImage = 'none';
     document.body.classList.add('visual-maximize-active');
-    if (button) {
-        button.textContent = 'x';
-        button.title = 'Restore visual';
-        button.setAttribute('aria-label', 'Restore visual');
-    }
+    if (button) setMaximizeButtonState(button, true);
     setTimeout(() => resizeChartsIn(card), 50);
 }
 
@@ -238,12 +304,9 @@ export function closeMaximizedVisual(): void {
     card._maxOrigBg      = null;
     card._maxOrigBgImage = null;
 
-    const button = card.querySelector<HTMLButtonElement>('.visual-tool-btn');
-    if (button) {
-        button.textContent = '[]';
-        button.title = 'Maximize visual';
-        button.setAttribute('aria-label', 'Maximize visual');
-    }
+    const toolbar = Array.from(card.children).find(child => child.classList.contains('visual-toolbar'));
+    const button = toolbar?.querySelector<HTMLButtonElement>('.visual-maximize-btn');
+    if (button) setMaximizeButtonState(button, false);
 
     _maximizedVisualCard = null;
     setTimeout(() => resizeChartsIn(card), 50);
@@ -322,6 +385,7 @@ export function renderVisual(container: HTMLElement | DocumentFragment, visual: 
     } else {
         title.textContent = visual.name;
     }
+    if (title.textContent) title.title = title.textContent;
 
     const tColor = getStyle(vstyles, 'TITLE_COLOR');
     const tSize = getStyle(vstyles, 'TITLE_SIZE');
@@ -345,6 +409,7 @@ export function renderVisual(container: HTMLElement | DocumentFragment, visual: 
         } else {
             subtitleEl.textContent = customSubtitle as string;
         }
+        if (subtitleEl.textContent) subtitleEl.title = subtitleEl.textContent;
         const sColor = getStyle(vstyles, 'SUBTITLE_COLOR');
         const sSize = getStyle(vstyles, 'SUBTITLE_SIZE');
         const sWeight = getStyle(vstyles, 'SUBTITLE_WEIGHT');
@@ -364,12 +429,17 @@ export function renderVisual(container: HTMLElement | DocumentFragment, visual: 
     if (isCardType) title.style.display = 'none';
 
     card.appendChild(title);
-    if (subtitleEl && !isCardType) card.appendChild(subtitleEl);
+    if (subtitleEl && !isCardType) {
+        if (subtitleEl.textContent && title.textContent) {
+            title.title = `${title.textContent} — ${subtitleEl.textContent}`;
+        }
+        card.appendChild(subtitleEl);
+    }
     if (type === 'HTML') {
         card.id = htmlVisualContainerId(visual.name);
     }
     if (shouldShowVisualToolbar(type, vstyles)) {
-        addVisualToolbar(card);
+        addVisualToolbar(card, !isCardType);
     }
 
     if (visual.error) {
@@ -1081,12 +1151,12 @@ function renderImage(container: HTMLElement, visual: VisualVisual): void {
         visual.rows.forEach(row => {
             const rawUrl = String(row[useIdx] ?? '');
             const img = document.createElement('img');
-            img.src = safeUrl(rawUrl || fallback || '');
+            img.src = safeImageSrc(rawUrl || fallback || '');
             img.alt = alt;
             img.style.objectFit = fit;
             if (aspect) img.style.aspectRatio = aspect.replace(':', '/');
             if (fallback) {
-                img.onerror = () => { img.src = safeUrl(fallback); img.onerror = null; };
+                img.onerror = () => { img.src = safeImageSrc(fallback); img.onerror = null; };
             }
             if (clickActions.length > 0) {
                 img.style.cursor = 'pointer';
@@ -1109,14 +1179,14 @@ function renderImage(container: HTMLElement, visual: VisualVisual): void {
 
     const finalSrc = src || (visual.rows && visual.rows.length > 0 && visual.rows[0][0] != null ? String(visual.rows[0][0]) : '') || fallback || '';
     const img = document.createElement('img');
-    img.src   = safeUrl(finalSrc);
+    img.src   = safeImageSrc(finalSrc);
     img.alt   = alt;
     img.style.maxWidth  = '100%';
     img.style.maxHeight = '100%';
     img.style.objectFit = fit;
     if (aspect) img.style.aspectRatio = aspect.replace(':', '/');
     if (fallback) {
-        img.onerror = () => { img.src = safeUrl(fallback); img.onerror = null; };
+        img.onerror = () => { img.src = safeImageSrc(fallback); img.onerror = null; };
     }
 
     if (clickActions.length > 0) {

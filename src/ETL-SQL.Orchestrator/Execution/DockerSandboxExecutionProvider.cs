@@ -128,6 +128,12 @@ public sealed record DockerSandboxExecutionOptions
     /// must refuse that work instead of running it unthrottled.
     /// </summary>
     public string? IopsThrottleDevice { get; init; }
+
+    /// <summary>
+    /// The host group the sandbox shares its writable mounts through. It is the orchestrator's own
+    /// effective group; it is settable only so tests can exercise both shapes on any host.
+    /// </summary>
+    internal uint? SharedGroupId { get; init; } = SandboxFilePermissions.CurrentSharedGroupId;
 }
 
 /// <summary>
@@ -224,7 +230,7 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
         // The session mount is read-write and the sandbox runs as an unprivileged uid, so this leaf
         // must admit that uid or the workload cannot persist session or checkpoint state at all.
         SandboxFilePermissions.AllowUnprivilegedSandboxWrites(
-            Directory.CreateDirectory(sessionPath).FullName);
+            Directory.CreateDirectory(sessionPath).FullName, _options.SharedGroupId);
         RequireDockerMountSource(workspace.InputPath);
         RequireDockerMountSource(workspace.OutputPath);
         RequireDockerMountSource(sessionPath);
@@ -381,6 +387,13 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             "--mount", $"type=bind,source={sessionPath},target=/var/lib/etl-sql/sessions",
             "--mount", $"type=bind,source={machineKeyPath},target=/run/secrets/etlsql-machine-key,readonly",
             "--env", "Session__Root=/var/lib/etl-sql/sessions",
+            // Without this, the job directories the sandbox uid creates under the session mount are
+            // 0755 and this account can never remove them. With a shared group the mask keeps them
+            // owner-and-group only; see SandboxFilePermissions.
+            "--env", "ETLSQL_SANDBOX_UMASK=" + SandboxFilePermissions.UmaskFor(_options.SharedGroupId),
+            // --memory above bounds the run. The host RAM floor protects a shared host; inside a
+            // capped container it can exceed the whole cap and refuse every grant.
+            "--env", "Orchestration__ResourceManagement__SystemMemoryFloorMB=0",
             "--env", "ETLSQL_MACHINE_KEY_FILE=/run/secrets/etlsql-machine-key",
             "--env", "TMPDIR=/workspace/scratch",
             // Server-owned per-tenant ceiling, not the worker image's default.
@@ -409,6 +422,10 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             // the read-only working directory.
             "run", "/workspace/input/job.etlsql", "--json", "--log", "/workspace/scratch/logs/scripts"
         };
+        // The writable mounts are 2770 in this process's group; the sandbox reaches them through it.
+        if (_options.SharedGroupId is { } sharedGroup)
+            args.InsertRange(args.IndexOf("--user") + 2,
+                ["--group-add", sharedGroup.ToString(CultureInfo.InvariantCulture)]);
         if (capabilityPath is not null)
         {
             args.InsertRange(args.IndexOf("--workdir"),

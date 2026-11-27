@@ -8,14 +8,14 @@ signature checked while it is decrypted.
 
 ```sql
 -- Files
-ENCRYPT FILE '<source>' [TO '<destination>']
+ENCRYPT FILE '<source>' [TO [DIRECTORY] '<destination>']
     { PASSWORD '<passphrase>'
     | KEYFILE '<rsa_public_key.pem>'
     | PGP_KEY '<recipient_public_key.asc>'
         [SIGNING_KEY '<your_private_key.asc>' [SIGNING_PASSWORD '<key_passphrase>']] }
     [WITH (OVERWRITE = ON | OFF, DELETE_SOURCE = ON | OFF)];
 
-DECRYPT FILE '<source>' [TO '<destination>']
+DECRYPT FILE '<source>' [TO [DIRECTORY] '<destination>']
     { PASSWORD '<passphrase>'
     | KEYFILE '<rsa_private_key.pem>' [PASSWORD '<key_passphrase>']
     | PGP_KEY '<your_private_key.asc>' [PASSWORD '<key_passphrase>']
@@ -38,15 +38,22 @@ DECRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' 
 | `PGP_KEY` | an OpenPGP **public** key | the matching OpenPGP **private** key, plus `PASSWORD` for its passphrase | Standard OpenPGP, readable by GnuPG and other PGP tools. |
 
 - Give exactly one method. `KEYFILE` with `PGP_KEY`, or `PASSWORD` with a key on `ENCRYPT FILE`, is a
-  syntax error, because the statement would otherwise use one and ignore the other.
+  syntax error, because the statement would otherwise use one and ignore the other. There is no
+  `ALGORITHM` option: the method is selected by `PASSWORD`, `KEYFILE`, or `PGP_KEY`, and each uses
+  the fixed format in the table above.
 - [CREATE PGP_KEY_PAIR](create-pgp-key-pair.md) writes `public.asc` and `private.asc` into a folder.
   [CREATE SSH_KEY_PAIR](create-ssh-key-pair.md) with `ALGORITHM = 'RSA'` writes `id_rsa` and
   `id_rsa.pub`. An ECDSA key cannot be used with `KEYFILE`.
 - `TO` is optional on `ENCRYPT FILE` and `DECRYPT FILE` (and never encrypts in place). When omitted
   on `ENCRYPT FILE`, it writes next to the source with `.pgp` appended for `PGP_KEY`, or `.enc`
   appended for `PASSWORD` and `KEYFILE`. When omitted on `DECRYPT FILE`, it removes a `.pgp` or
-  `.enc` suffix and errors on any other file name rather than guessing. Existing destinations follow
-  `OVERWRITE`.
+  `.enc` suffix and errors on any other file name rather than guessing. `TO DIRECTORY '<dir>'`
+  writes that same derived filename inside `<dir>` (creating `<dir>` if needed). Existing
+  destinations follow `OVERWRITE`. `DATE_SUFFIX` is not supported on `ENCRYPT FILE` or
+  `DECRYPT FILE` (only `COPY`, `MOVE`, and `RENAME`).
+- Source and destination are local paths. `TO` a remote connection (SFTP, FTP, cloud storage) is
+  rejected rather than uploading the unencrypted file: encrypt locally, then `COPY FILE` the result
+  to the connection, as the vendor-drop example does.
 - The source file is left in place unless `DELETE_SOURCE = ON` (see the vendor-drop example).
 - `ENCRYPT DIRECTORY` encrypts every file, subfolders included, and writes each one as `<name>.enc`
   under the destination with the same folder layout. `DECRYPT DIRECTORY` decrypts only `.enc` files

@@ -10,6 +10,7 @@
 # recomputes it on another host (the hosted Release job runs on Linux). Pin LF so a Windows
 # checkout with core.autocrlf=true does not produce a hash no other checkout can match.
 /tests/fixtures/production-canary-plan.json text eol=lf
+/scripts/checks/fixtures/real-release/verified-draft-906128b33.json text eol=lf
 
 # Shared browser/runtime assets are copied verbatim from
 # src/ETL-SQL.ReportRuntime/Resources/Shared/ to host copies (VS Code, Player, Portal). Pin them to

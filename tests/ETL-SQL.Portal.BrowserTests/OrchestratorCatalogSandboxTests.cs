@@ -303,6 +303,89 @@ public sealed class OrchestratorCatalogSandboxTests(SandboxStoryFixture fixture)
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task TogglingANotificationIsAnnouncedOnlyAfterTheServiceConfirmsIt()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenNotificationsAsync(page);
+        await page.EvaluateAsync("() => window.__orchestratorMock.pauseWrites()");
+        var toggle = page.Locator("[data-action='toggle-notification'][data-name='ops_mail']");
+        await toggle.ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__orchestratorMock.pendingWrites === 1");
+        await Expect(toggle).ToBeDisabledAsync();
+        Assert.Empty(await MessagesAsync(page));
+        await page.EvaluateAsync("() => window.__orchestratorMock.releaseWrites()");
+        await WaitForMessageAsync(page, "Notification 'ops_mail' disabled.");
+        await Expect(toggle).ToHaveTextAsync("Enable");
+        await Expect(toggle).ToBeEnabledAsync();
+        Assert.Equal(1, await WriteCountAsync(page, "PUT", "/api/orchestrator/notifications/ops_mail"));
+        Assert.False(await page.EvaluateAsync<bool>(
+            "() => window.__orchestratorMock.calls.find(call => call.method === 'PUT' && call.path.endsWith('/notifications/ops_mail')).body.isEnabled"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ScheduleAndNotificationAccessPanelsManageGrantsAndOwner()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenSchedulesAsync(page);
+
+        await page.Locator("[data-action='acl-schedule'][data-name='nightly_utc']").ClickAsync();
+        await Expect(page.Locator("#catalogAccessModal")).ToBeVisibleAsync();
+        await Expect(page.Locator("#catalogAccessTitle")).ToHaveTextAsync("Access — Schedule 'nightly_utc'");
+        await Expect(page.Locator("#catalogAccessWrap tbody tr")).ToHaveCountAsync(1);
+        await Expect(page.Locator("#catalogAccessWrap")).ToContainTextAsync("ops-readers");
+
+        await page.Locator("#catalogAclPrincipalKind").SelectOptionAsync("USER");
+        await page.Locator("#catalogAclPrincipalKey").FillAsync("sched-mgr");
+        await page.Locator("#catalogAclPermission").SelectOptionAsync("MANAGE");
+        await page.Locator("#catalogAclGrantBtn").ClickAsync();
+        await WaitForMessageAsync(page, "MANAGE granted to 'sched-mgr'.");
+        await Expect(page.Locator("#catalogAccessWrap tbody tr")).ToHaveCountAsync(2);
+
+        await page.Locator("#catalogAccessWrap [data-revoke-kind='GROUP'][data-revoke-key='ops-readers']").ClickAsync();
+        await page.Locator(".etlsql-feedback-btn-danger").ClickAsync();
+        await WaitForMessageAsync(page, "Access revoked for 'ops-readers'.");
+        await Expect(page.Locator("#catalogAccessWrap tbody tr")).ToHaveCountAsync(1);
+
+        await page.Locator("#catalogAclOwnerKey").FillAsync("sched-owner");
+        await page.Locator("#catalogAclOwnerBtn").ClickAsync();
+        await WaitForMessageAsync(page, "Owner of 'nightly_utc' updated.");
+        await Expect(page.Locator("#catalogAccessWrap")).ToContainTextAsync("User sched-owner");
+        await page.Locator("#catalogAccessCloseBtn").ClickAsync();
+        await Expect(page.Locator("#catalogAccessModal")).ToBeHiddenAsync();
+        await Expect(page.Locator("tr[data-schedule-name='nightly_utc']")).ToContainTextAsync("user:sched-owner");
+
+        await page.Locator("#orchNavNotifications").ClickAsync();
+        await Expect(page.Locator("#notificationsTableWrap tbody tr")).ToHaveCountAsync(2);
+        await page.Locator("[data-action='acl-notification'][data-name='ops_mail']").ClickAsync();
+        await Expect(page.Locator("#catalogAccessModal")).ToBeVisibleAsync();
+        await Expect(page.Locator("#catalogAccessTitle")).ToHaveTextAsync("Access — Notification 'ops_mail'");
+        await Expect(page.Locator("#catalogAccessWrap")).ToContainTextAsync("oncall-eng");
+        await page.Locator("#catalogAclOwnerKey").FillAsync("notif-owner");
+        await page.Locator("#catalogAclOwnerBtn").ClickAsync();
+        await WaitForMessageAsync(page, "Owner of 'ops_mail' updated.");
+        await page.Locator("#catalogAccessCloseBtn").ClickAsync();
+        await Expect(page.Locator("tr[data-notification-name='ops_mail']")).ToContainTextAsync("user:notif-owner");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ARefusedCatalogAccessListExplainsTheRefusalAndOffersNoControls()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenSchedulesAsync(page);
+        await page.EvaluateAsync("() => window.__orchestratorMock.setFailure('acl-denied')");
+        await page.Locator("[data-action='acl-schedule'][data-name='nightly_utc']").ClickAsync();
+        await Expect(page.Locator("#catalogAccessWrap")).ToContainTextAsync("not permitted to administer its access");
+        await Expect(page.Locator("#catalogAclGrantBtn")).ToHaveCountAsync(0);
+        await Expect(page.Locator("#catalogAclOwnerBtn")).ToHaveCountAsync(0);
+        Assert.Empty(session.PageErrors);
+    }
+
     private async Task OpenAsync(IPage page, string scenario = "healthy")
     {
         await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/orchestrator-page-frame.html?fixture={scenario}");
@@ -319,6 +402,16 @@ public sealed class OrchestratorCatalogSandboxTests(SandboxStoryFixture fixture)
         await page.WaitForFunctionAsync(
             "() => window.__orchestratorMock.calls.filter(call => call.method === 'GET' && call.path === '/api/orchestrator/schedules').length >= 2");
         await Expect(page.Locator("[data-action='toggle-schedule'][data-name='nightly_utc']")).ToBeEnabledAsync();
+    }
+
+    private async Task OpenNotificationsAsync(IPage page)
+    {
+        await OpenAsync(page);
+        await page.Locator("#orchNavNotifications").ClickAsync();
+        await Expect(page.Locator("#notificationsTableWrap tbody tr")).ToHaveCountAsync(2);
+        await page.WaitForFunctionAsync(
+            "() => window.__orchestratorMock.calls.filter(call => call.method === 'GET' && call.path === '/api/orchestrator/notifications').length >= 2");
+        await Expect(page.Locator("[data-action='toggle-notification'][data-name='ops_mail']")).ToBeEnabledAsync();
     }
 
     private static Task<string[]> MessagesAsync(IPage page) =>

@@ -12,7 +12,7 @@ public class ConnectionAdminServiceTests
     [Fact]
     public async Task SetListVerifyDisableDelete_FullLifecycle()
     {
-        var catalog = new LocalConnectionCatalogProvider(TempRoot());
+        var catalog = new LocalConnectionCatalogProvider(TempRoot(), LocalVaultProtectionScope.CurrentUser);
         var secrets = new DictionarySecretProvider(("sales_db_password", "resolved"));
         var logger = new CapturingLogger();
 
@@ -45,7 +45,7 @@ public class ConnectionAdminServiceTests
     [Fact]
     public async Task SetConnection_RejectsRawCredentialValues()
     {
-        var catalog = new LocalConnectionCatalogProvider(TempRoot());
+        var catalog = new LocalConnectionCatalogProvider(TempRoot(), LocalVaultProtectionScope.CurrentUser);
         var logger = new CapturingLogger();
 
         Assert.Equal(1, await Run("set-connection", catalog, null, logger, ctx =>

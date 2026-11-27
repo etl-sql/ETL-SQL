@@ -81,3 +81,4 @@ INSERT INTO collector (JobName, RowCount) VALUES ('import_csv', 120000);
 - [Service Connectors](README.md)
 - [Connectors](../README.md)
 - [API/REST Connector](api.md)
+- [ETL Cookbook: Automated Slack/Teams Alerting](../../../cookbooks/etl/automated-slack-teams-alerting.md)

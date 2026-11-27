@@ -145,7 +145,8 @@ namespace ETL_SQL.Tests.Coverage
             node.StartTicks = Stopwatch.GetTimestamp() - Stopwatch.Frequency;
             node.EndTicks = Stopwatch.GetTimestamp();
             var stats = ExecutionTreeAsciiRenderer.FormatStats(node);
-            Assert.NotEmpty(stats);
+            Assert.Contains("1.5k", stats);
+            Assert.Contains("s", stats);
         }
 
         [Fact]
@@ -714,22 +715,34 @@ namespace ETL_SQL.Tests.Coverage
         }
 
         [Fact]
-        public void EngineLogger_Log_AllLevels_NoThrow()
+        public void EngineLogger_Log_AllLevels_FormatsLevelAndColor()
         {
             var log = new EngineLogger("test");
-            log.SuppressConsole = true;
+            var logged = new List<(string Message, ConsoleColor Color)>();
+            log.OnMessage += (msg, _, color) => logged.Add((msg, color));
             log.Log(LogLevel.Info, "info");
             log.Log(LogLevel.Warning, "warn");
             log.Log(LogLevel.Error, "error", new Exception("test ex"));
             log.Log(LogLevel.Debug, "debug");
+            Assert.Equal(
+                new[]
+                {
+                    ("[INFO] [test] info", ConsoleColor.White),
+                    ("[WARNING] [test] warn", ConsoleColor.Yellow),
+                    ($"[ERROR] [test] error{Environment.NewLine}Exception: test ex", ConsoleColor.Red),
+                    ("[DEBUG] [test] debug", ConsoleColor.DarkGray),
+                },
+                logged);
         }
 
         [Fact]
-        public void EngineLogger_WriteLine_NoThrow()
+        public void EngineLogger_WriteLine_LogsAsInfoInItsColor()
         {
             var log = new EngineLogger("test");
-            log.SuppressConsole = true;
+            var logged = new List<(string Message, ConsoleColor Color)>();
+            log.OnMessage += (msg, _, color) => logged.Add((msg, color));
             log.WriteLine("test message", ConsoleColor.Green);
+            Assert.Equal(new[] { ("[INFO] [test] test message", ConsoleColor.Green) }, logged);
         }
 
         [Fact]

@@ -11,12 +11,12 @@ import { applyBookmark, applySavedView, applyUserDefaultSavedView, buildViewsPic
 import { renderAutoPanel, renderFooter, renderHeader, renderNavBar, renderPipelineConsole, showRequiredParametersModal } from './rt-chrome.js';
 import { _nativeLayoutTimers, getNativeLayoutObservers, nativeLayoutTier, observeNativeLayout, renderNativeSvg, setNativeLayoutObservers } from './rt-charts.js';
 import { DESIGN_TOKENS, applyDesignTokens, getDefaultTheme, isAllowedTokenName, isSafeCssValue, resolveDesignTokens, updateBodyTheme } from './rt-theme.js';
-import { renderPage } from './rt-layout.js';
+import { disposePageFit, renderPage } from './rt-layout.js';
 import { closeMaximizedVisual, renderCard, renderVisual, resizeChartsIn } from './rt-visual.js';
 import { DETAIL_ANCHOR_GAP, DETAIL_PREFERRED_SIDE, DETAIL_VIEWPORT_MARGIN, closeOpenDetail, computeDetailPlacement, destroyDetailSurfaces, getOpenDetail } from './rt-detail.js';
 import { reApplyCrossFilterStyling } from './rt-actions.js';
 import { renderDatePicker } from './rt-controls-date.js';
-import { renderButton, renderSearch, renderSlider } from './rt-controls-input.js';
+import { renderButton, renderSearch, renderSlicer, renderSlider } from './rt-controls-input.js';
 import type { ActionVisual, ReportAction } from './rt-actions.js';
 
 export interface RuntimeParameterMeta {
@@ -300,6 +300,7 @@ export function renderManifest(inputManifest: unknown): void {
     setNativeLayoutObservers([]);
     _nativeLayoutTimers.forEach((id: ReturnType<typeof setTimeout>) => clearTimeout(id));
     _nativeLayoutTimers.clear();
+    disposePageFit();
 
     const root = document.getElementById('root');
     if (!root) {
@@ -426,7 +427,7 @@ export function renderManifest(inputManifest: unknown): void {
         });
     }
 
-    renderFooter(root, manifest);
+    renderFooter();
     renderPipelineConsole(root, manifest);
     renderAutoPanel(root, manifest);
     if (getPendingLazyRows() === 0) {
@@ -512,5 +513,5 @@ if (vscode) {
 // Test escape hatch: exposes pure functions for automated testing.
 // Harmless in production (just sets a window property that nothing reads).
 if (typeof window !== 'undefined') {
-    window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, nativeLayoutTier, observeNativeLayout, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash, applyBookmark, applySavedView, captureResolvedState, isOfflineSnapshot, resolveDesignTokens, applyDesignTokens, isSafeCssValue, isAllowedTokenName, DESIGN_TOKENS };
+    window.__reportRuntime__ = { isOn, renderCard, renderVisual, renderSlicer, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, nativeLayoutTier, observeNativeLayout, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash, applyBookmark, applySavedView, captureResolvedState, isOfflineSnapshot, resolveDesignTokens, applyDesignTokens, isSafeCssValue, isAllowedTokenName, DESIGN_TOKENS };
 }

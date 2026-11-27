@@ -369,8 +369,8 @@ public class ReportParser : ParserComponent
             throw new SyntaxException($"CUSTOM visual '{name}' requires a CHART clause.", startToken.Line, startToken.Column);
         if (visualType != VisualType.Custom && advancedChart != null)
             throw new SyntaxException("CHART is only valid on CUSTOM visuals.", startToken.Line, startToken.Column);
-        if (visualType == VisualType.Custom && (mappings.Count > 0 || typedSeries.Count > 0 || overlays.Count > 0 || formattingRules.Count > 0))
-            throw new SyntaxException("CUSTOM visuals use CHART encodings and cannot use MAPPINGS, SERIES, OVERLAYS, or FORMATTING.", startToken.Line, startToken.Column);
+        if (visualType == VisualType.Custom && (mappings.Count > 0 || typedSeries.Count > 0 || formattingRules.Count > 0))
+            throw new SyntaxException("CUSTOM visuals use CHART encodings and cannot use MAPPINGS, SERIES, or FORMATTING.", startToken.Line, startToken.Column);
 
         HtmlTemplateDefinition? htmlTemplateDef = null;
         if (visualType == VisualType.Html)
@@ -594,7 +594,7 @@ public class ReportParser : ParserComponent
                 Advance();
                 scales.AddRange(ParseAdvancedChartScales());
             }
-            else if (IsCurrentValue("ENCODINGS"))
+            else if (IsCurrentValue("ENCODINGS") || IsCurrentValue("ENCODE"))
             {
                 Advance();
                 encodings.AddRange(ParseAdvancedChartEncodings());
@@ -769,9 +769,12 @@ public class ReportParser : ParserComponent
             var outerPadding = 0m;
             string? tickFormat = null;
             string? timeUnit = null;
+            string? scaleTitle = null;
             var order = AdvancedChartSortDirection.Source;
             var explicitOrder = new List<Expression>();
             AdvancedChartColorRange? colorRange = null;
+            var rangeValues = new List<Expression>();
+            var colorMap = new List<AdvancedChartDiscreteColorEntry>();
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
                 var option = ConsumeAdvancedWord("Expected scale option").ToUpperInvariant();
@@ -804,6 +807,10 @@ public class ReportParser : ParserComponent
                     case "TIME_UNIT":
                         timeUnit = ConsumeAdvancedWord("Expected AUTO, DAY, WEEK, MONTH, QUARTER, or YEAR for TIME_UNIT").ToUpperInvariant();
                         break;
+                    case "TITLE":
+                    case "LABEL":
+                        scaleTitle = Consume(TokenType.STRING_LITERAL, $"Expected string {option}").Value;
+                        break;
                     case "ORDER":
                         if (Match(TokenType.LPAREN))
                         {
@@ -816,7 +823,53 @@ public class ReportParser : ParserComponent
                         }
                         else order = ParseAdvancedSort(ConsumeAdvancedWord("Expected scale ORDER value"));
                         break;
-                    case "RANGE": colorRange = ParseAdvancedColorRange(); break;
+                    case "RANGE":
+                        if (Match(TokenType.LPAREN))
+                        {
+                            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                            {
+                                var itemStart = _parser.Current;
+                                var domainOrValue = _parser.ParseExpression();
+                                if (Match(TokenType.EQUALS))
+                                {
+                                    if (rangeValues.Count > 0)
+                                        throw new SyntaxException("Cannot mix keyed domain mappings and positional RANGE values.", itemStart.Line, itemStart.Column);
+                                    var targetColor = _parser.ParseExpression();
+                                    colorMap.Add(new AdvancedChartDiscreteColorEntry(domainOrValue, targetColor)
+                                    {
+                                        Line = itemStart.Line,
+                                        Column = itemStart.Column,
+                                        EndLine = _parser.Previous.EndLine,
+                                        EndColumn = _parser.Previous.EndColumn
+                                    });
+                                }
+                                else if (domainOrValue is BinaryExpression { Operator: TokenType.EQUALS } equalsExpr)
+                                {
+                                    if (rangeValues.Count > 0)
+                                        throw new SyntaxException("Cannot mix keyed domain mappings and positional RANGE values.", itemStart.Line, itemStart.Column);
+                                    colorMap.Add(new AdvancedChartDiscreteColorEntry(equalsExpr.Left, equalsExpr.Right)
+                                    {
+                                        Line = itemStart.Line,
+                                        Column = itemStart.Column,
+                                        EndLine = _parser.Previous.EndLine,
+                                        EndColumn = _parser.Previous.EndColumn
+                                    });
+                                }
+                                else
+                                {
+                                    if (colorMap.Count > 0)
+                                        throw new SyntaxException("Cannot mix keyed domain mappings and positional RANGE values.", itemStart.Line, itemStart.Column);
+                                    rangeValues.Add(domainOrValue);
+                                }
+                                Match(TokenType.COMMA);
+                            }
+                            Consume(TokenType.RPAREN, "Expected ')' after RANGE list");
+                        }
+                        else
+                        {
+                            colorRange = ParseAdvancedColorRange();
+                        }
+                        break;
                     default:
                         throw new SyntaxException($"Unknown scale option '{option}'.",
                         _parser.Previous.Line, _parser.Previous.Column);
@@ -844,9 +897,12 @@ public class ReportParser : ParserComponent
                 OuterPadding = outerPadding,
                 TickFormat = tickFormat,
                 TimeUnit = timeUnit,
+                Title = scaleTitle,
                 Order = order,
                 ExplicitOrder = explicitOrder.ToImmutableArray(),
                 ColorRange = colorRange,
+                RangeValues = rangeValues.ToImmutableArray(),
+                DiscreteColorMap = colorMap.ToImmutableArray(),
                 Line = start.Line,
                 Column = start.Column,
                 EndLine = scaleEnd.EndLine,
@@ -993,7 +1049,7 @@ public class ReportParser : ParserComponent
                     Consume(TokenType.EQUALS, "Expected '=' after HOVER_FOCUS");
                     hoverFocus = ConsumeAdvancedWord("Expected NONE, SELF, or SERIES after HOVER_FOCUS =").ToUpperInvariant();
                 }
-                else if (IsCurrentValue("ENCODINGS"))
+                else if (IsCurrentValue("ENCODINGS") || IsCurrentValue("ENCODE"))
                 {
                     Advance();
                     encodings.AddRange(ParseAdvancedChartEncodings());
@@ -1442,6 +1498,7 @@ public class ReportParser : ParserComponent
         "CONFIDENCE_LOW" => AdvancedChartChannel.ConfidenceLow,
         "CONFIDENCE_HIGH" => AdvancedChartChannel.ConfidenceHigh,
         "COLOR" => AdvancedChartChannel.Color,
+        "OPACITY" => AdvancedChartChannel.Opacity,
         "SIZE" => AdvancedChartChannel.Size,
         "SHAPE" => AdvancedChartChannel.Shape,
         "THETA" => AdvancedChartChannel.Theta,
@@ -1503,6 +1560,7 @@ public class ReportParser : ParserComponent
         "SIZE" => AdvancedChartConditionChannel.Size,
         "SHAPE" => AdvancedChartConditionChannel.Shape,
         "TEXT" => AdvancedChartConditionChannel.Text,
+        "LINE_DASH" => AdvancedChartConditionChannel.LineDash,
         _ => throw new SyntaxException($"Unknown condition channel '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
     };
 
@@ -5288,6 +5346,7 @@ public class ReportParser : ParserComponent
 
             string? color = null;
             string? label = null;
+            string? seriesName = null;
             if (Match(TokenType.WITH))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after WITH in overlay");
@@ -5303,6 +5362,12 @@ public class ReportParser : ParserComponent
                         Advance();
                         Consume(TokenType.EQUALS, "Expected = after LABEL");
                         label = Consume(TokenType.STRING_LITERAL, "Expected label string").Value;
+                    }
+                    else if (IsCurrentValue("SERIES"))
+                    {
+                        Advance();
+                        Consume(TokenType.EQUALS, "Expected = after SERIES");
+                        seriesName = Consume(TokenType.STRING_LITERAL, "Expected series name string").Value;
                     }
                     else if (IsCurrentValue("CONFIDENCE_LOW"))
                     {
@@ -5335,6 +5400,7 @@ public class ReportParser : ParserComponent
                 LineStyle = lineStyle,
                 Color = color,
                 Label = label,
+                SeriesName = seriesName,
                 ForecastField = forecastField,
                 ConfidenceLowField = confidenceLowField,
                 ConfidenceHighField = confidenceHighField,

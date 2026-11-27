@@ -152,8 +152,9 @@ public class ExpressionEvaluator
             return resolvedKey != null ? context[resolvedKey] : null;
         }
 
-        var allNames = context.GetColumnNames();
-        var nameList = allNames as IReadOnlyList<string> ?? allNames.ToList();
+        var nameList = !context.HasDynamicColumns
+            ? schema.GetNamesWithAliases()
+            : schema.GetNamesWithAliases().Concat(context.GetColumnNames().Skip(schema.ColumnCount)).ToList();
         var match = ColumnMatcher.FindMatch(name, nameList);
 
         if (match.IsAmbiguous)

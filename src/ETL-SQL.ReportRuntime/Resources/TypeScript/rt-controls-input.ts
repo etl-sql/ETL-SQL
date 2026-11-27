@@ -5,7 +5,7 @@
  * Slicer, slider, search, checkbox, textbox, numberbox, and button controls.
  */
 import { actionsFor, evaluateExpressionAgainstParameters, executeAction } from './rt-actions.js';
-import { _uiStates, isWebMode, parameters, vscode } from './rt-state.js';
+import { _uiStates, isOfflineHost, isWebMode, parameters, vscode } from './rt-state.js';
 import { escHtml, formatValue, getOption, getParam, getStyle, isOn, parseMultiParameter, safeUrl } from './rt-util.js';
 import { postParameters } from './rt-transport.js';
 import { renderManifest } from './report-runtime.js';
@@ -590,11 +590,15 @@ export function renderSlicer(container: HTMLElement, visual: ControlVisual & { n
                 select.addEventListener('change', () => {
                     postBatch(select.value);
                 });
-                wrapper.appendChild(select);
             } else {
+                // Still show the values and the current choice; a file on disk has nothing to re-query.
+                select.disabled = true;
+            }
+            wrapper.appendChild(select);
+            if (!isInteractive && isOfflineHost) {
                 const note = document.createElement('p');
                 note.className = 'slicer-note';
-                note.textContent = '[Slicer — interactive in ReportPlayer only]';
+                note.textContent = 'Filtering works when this report is opened in ReportPlayer or the Portal.';
                 wrapper.appendChild(note);
             }
 

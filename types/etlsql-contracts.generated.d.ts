@@ -252,6 +252,20 @@ interface CatalogLineageHistoryDto {
     folderPath?: string | null;
 }
 
+interface CatalogPipelineLinkDto {
+    pipelineId: number;
+    jobName: string;
+    name: string;
+    description?: string | null;
+    folderId: number;
+    folderPath: string;
+    ownerPrincipalKey?: string | null;
+    ownerDisplayName?: string | null;
+    version: number;
+    isProvisioned: boolean;
+    orchestratorCreatedBy?: string | null;
+}
+
 interface ConnectionHelpDto {
     content: string;
 }
@@ -812,6 +826,32 @@ interface FleetMigrationState {
     error?: string | null;
 }
 
+interface FleetNodeCapacityDto {
+    workingSetBytes: number;
+    gcHeapBytes: number;
+    totalAvailableMemoryBytes: number;
+    memoryLoadPercent: number;
+    processCpuPercent: number;
+    hostCpuPercent: number;
+    processorCount: number;
+    isOverloaded: boolean;
+    stateDiskFreeBytes?: number | null;
+    spillDiskFreeBytes?: number | null;
+}
+
+interface FleetNodeHeartbeatDto {
+    nodeId: string;
+    role: string;
+    isLive: boolean;
+    firstSeenUtc: string;
+    lastHeartbeatUtc: string;
+    expiresAtUtc: string;
+    machine?: string | null;
+    pid?: number | null;
+    startedUtc?: string | null;
+    capacity?: FleetNodeCapacityDto | null;
+}
+
 interface FleetNodeInventory {
     environment: string;
     nodeId: string;
@@ -1168,6 +1208,9 @@ interface JobDefinition {
     modifiedBy?: string | null;
     tenantId?: string | null;
     id: string | null;
+    isManualOnly: boolean;
+    displayNextRun?: string | null;
+    scheduleLabel: string;
 }
 
 interface JobDefinitionDto {
@@ -1267,6 +1310,27 @@ interface JobNotificationLinkDto {
     trigger: string;
     jobName?: string | null;
     notificationName?: string | null;
+}
+
+interface JobRunDetailResponseDto {
+    runId: number;
+    jobName: string;
+    status: string;
+    completed: boolean;
+    startTime: string;
+    endTime?: string | null;
+    errorMessage?: string | null;
+    rowsProcessed: number;
+    scriptHashAtRunTime?: string | null;
+    statementsTruncated: boolean;
+    statements: JobRunStatementDto[];
+}
+
+interface JobRunStatementDto {
+    statement: string;
+    durationMs: number;
+    rowsProcessed: number;
+    failed: boolean;
 }
 
 interface JobScheduleLinkDto {
@@ -1420,9 +1484,22 @@ interface OperationalMetrics {
     windowHours: number;
 }
 
+interface OrchestratorAuthoringModeDto {
+    studioMode: string;
+    externalScriptIngressEnabled: boolean;
+    canCreateInlineScriptJobs: boolean;
+}
+
 interface OrchestratorConnectionStatusDto {
     online: boolean;
     status?: unknown;
+}
+
+interface OrchestratorFleetSnapshotDto {
+    generatedAtUtc: string;
+    sandboxAdmissionEnabled: boolean;
+    nodes: FleetNodeHeartbeatDto[];
+    sandboxPools: SandboxPoolStateDto[];
 }
 
 interface OrchestratorNotificationDispatchRequest {
@@ -1804,6 +1881,15 @@ interface ProtectedLineageHistoryEntry {
     line: number;
 }
 
+interface ProvisionPipelineSlotResultDto {
+    pipelineId: number;
+    jobName: string;
+    slotCreated: boolean;
+    executeGrantApplied: boolean;
+    grantedPrincipalKey?: string | null;
+    message?: string | null;
+}
+
 interface ProvisionTenantAdminRequest {
     tenantId: string;
     activeRelease?: string | null;
@@ -2087,6 +2173,27 @@ interface RunDesignerResponse {
     byteCapped: boolean;
     bytesReturned: number;
     runId?: string | null;
+}
+
+interface SandboxPoolAdmissionDto {
+    admissionId: string;
+    poolId: string;
+    tenantId: string;
+    state: string;
+    weight: number;
+    leaseOwner?: string | null;
+    enqueuedUtc: string;
+    leaseExpiresUtc?: string | null;
+}
+
+interface SandboxPoolStateDto {
+    poolId: string;
+    capacity: number;
+    queuedCount: number;
+    activeCount: number;
+    retainedCount: number;
+    availableSlots: number;
+    openAdmissions: SandboxPoolAdmissionDto[];
 }
 
 interface SaveDesignerResponse {
@@ -2565,6 +2672,21 @@ interface UpdateGroupRequest {
     description?: string | null;
     provider?: string | null;
     adGroup?: string | null;
+}
+
+interface UpdateJobRequest {
+    scriptText?: string | null;
+    interval?: number | null;
+    unit?: string | null;
+    atTime?: string | null;
+    isEnabled?: boolean | null;
+    maxRetries?: number | null;
+    retryDelaySeconds?: number | null;
+    hashPolicy?: string | null;
+    targetPath?: string | null;
+    displayName?: string | null;
+    description?: string | null;
+    options?: Record<string, string> | null;
 }
 
 interface UpdateNotificationRequest {

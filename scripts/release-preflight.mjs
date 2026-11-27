@@ -19,12 +19,14 @@ export const sourceChecks = [
 sourceChecks.push({ id: 'test-inventory', command: 'pwsh', args: ['-NoProfile', '-File', 'scripts/Get-TestLaneInventory.ps1', '-FailOnIssues'] });
 sourceChecks.push({ id: 'release-versions', command: 'pwsh', args: ['-NoProfile', '-File', 'scripts/Test-ReleaseVersions.ps1'] });
 sourceChecks.push({ id: 'installer-sources', command: 'pwsh', args: ['-NoProfile', '-File', 'scripts/Test-InstallerSources.ps1'] });
+// Summarize-PlanFallbacks.ps1 is operator tooling with no CI caller, so its self-test is its only guard.
+sourceChecks.push({ id: 'plan-fallback-ranking', command: 'pwsh', args: ['-NoProfile', '-File', 'scripts/Test-PlanFallbackRanking.ps1'] });
 
 // These fixtures require no restore, build, network or installed product. Each runs in its own
 // process so a failing policy test cannot hide the other source or recovery findings.
 export const releaseAutomationChecks = [
   'nightly-release', 'workflows', 'workflow-timeouts', 'dmg-staging', 'windows-release-packages', 'certified-windows', 'shared-windows-payload', 'macos-release-packages', 'certified-macos', 'package-upload-recovery', 'msi-candidate', 'msi-build-watchdog', 'deb-candidate', 'deb-reuse', 'certification-process', 'release-preflight', 'release-versions', 'changelog-compiler', 'vsix-module-identity', 'vsix-test-host',
-  'installer-sources', 'installer-actions', 'master-release', 'publish-release', 'sbom-output', 'smoke-parity', 'docs-audit', 'production-canary-evidence', 'certification-source', 'deployment-claims', 'release-driver-gates', 'release-run-wait', 'release-tag', 'release-tag-workflow', 'real-release-output', 'release-dry-run', 'release-timeline', 'ci-impact', 'browser-shards', 'built-browser-assets', 'hosted-release-evidence', 'release-evidence-collector', 'release-evidence-reports', 'latest-attempt-artifacts', 'submitted-evidence', 'lane-shard-results', 'engine-coverage', 'scale-comparison-assets', 'alloc-budget', 'release-certification', 'billion-row-evidence', 'service-capacity-certification',
+  'installer-sources', 'installer-actions', 'master-release', 'publish-release', 'sbom-output', 'smoke-parity', 'docs-audit', 'production-canary-evidence', 'certification-source', 'deployment-claims', 'release-driver-gates', 'release-run-wait', 'release-tag', 'release-tag-workflow', 'real-release-output', 'release-dry-run', 'release-timeline', 'ci-impact', 'merge-gate', 'browser-shards', 'built-browser-assets', 'hosted-release-evidence', 'release-evidence-collector', 'release-evidence-reports', 'latest-attempt-artifacts', 'submitted-evidence', 'lane-shard-results', 'engine-coverage', 'scale-comparison-assets', 'alloc-budget', 'release-certification', 'billion-row-evidence', 'service-capacity-certification',
 ].map(name => ({ id: `test-${name}`, command: process.execPath, args: [`scripts/checks/test-${name}.mjs`] }));
 releaseAutomationChecks.push({ id: 'test-release-draft-manifest', command: process.execPath, args: ['scripts/checks/test-release-draft-manifest.mjs'] });
 releaseAutomationChecks.push({ id: 'test-msi-progress', command: process.execPath, args: ['scripts/checks/test-msi-progress.mjs'] });

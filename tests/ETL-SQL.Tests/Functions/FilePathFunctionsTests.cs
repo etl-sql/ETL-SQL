@@ -66,6 +66,47 @@ public sealed class FilePathFunctionsTests : IDisposable
     }
 
     [Fact]
+    public async Task PathRoot_ExtractsRootAndHandlesRelativeAndNull()
+    {
+        Assert.Equal(string.Empty, await EvalScalarAsync("DECLARE @res VARCHAR = PATH_ROOT('relative/orders.csv');"));
+        Assert.Equal(string.Empty, await EvalScalarAsync("DECLARE @res VARCHAR = PATH_ROOT('orders.csv');"));
+        Assert.Equal(string.Empty, await EvalScalarAsync("DECLARE @res VARCHAR = PATH_ROOT('');"));
+        Assert.Null(await EvalScalarAsync("DECLARE @res VARCHAR = PATH_ROOT(NULL);"));
+
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal(@"C:\", await EvalScalarAsync(@"DECLARE @res VARCHAR = PATH_ROOT('C:\Data\orders.csv');"));
+            Assert.Equal(@"\\server\share", await EvalScalarAsync(@"DECLARE @res VARCHAR = PATH_ROOT('\\server\share\orders.csv');"));
+            Assert.Equal(@"\", await EvalScalarAsync("DECLARE @res VARCHAR = PATH_ROOT('/var/data/orders.csv');"));
+        }
+        else
+        {
+            Assert.Equal("/", await EvalScalarAsync("DECLARE @res VARCHAR = PATH_ROOT('/var/data/orders.csv');"));
+        }
+    }
+
+    [Fact]
+    public async Task PathIsAbsolute_DistinguishesFullyQualifiedFromRelativeAndNull()
+    {
+        Assert.Equal(0m, await EvalScalarAsync("DECLARE @res INT = PATH_IS_ABSOLUTE('relative/orders.csv');"));
+        Assert.Equal(0m, await EvalScalarAsync("DECLARE @res INT = PATH_IS_ABSOLUTE('orders.csv');"));
+        Assert.Equal(0m, await EvalScalarAsync("DECLARE @res INT = PATH_IS_ABSOLUTE('');"));
+        Assert.Null(await EvalScalarAsync("DECLARE @res INT = PATH_IS_ABSOLUTE(NULL);"));
+
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal(1m, await EvalScalarAsync(@"DECLARE @res INT = PATH_IS_ABSOLUTE('C:\Data\orders.csv');"));
+            Assert.Equal(1m, await EvalScalarAsync(@"DECLARE @res INT = PATH_IS_ABSOLUTE('\\server\share\orders.csv');"));
+            Assert.Equal(0m, await EvalScalarAsync(@"DECLARE @res INT = PATH_IS_ABSOLUTE('\drive-relative\orders.csv');"));
+            Assert.Equal(0m, await EvalScalarAsync("DECLARE @res INT = PATH_IS_ABSOLUTE('C:drive-relative.csv');"));
+        }
+        else
+        {
+            Assert.Equal(1m, await EvalScalarAsync("DECLARE @res INT = PATH_IS_ABSOLUTE('/var/data/orders.csv');"));
+        }
+    }
+
+    [Fact]
     public async Task FileCreated_ReturnsTimestampForExistingAndNullForMissing()
     {
         var path = PathFor("created.txt");
@@ -89,6 +130,139 @@ public sealed class FilePathFunctionsTests : IDisposable
         var ex = await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
             EvalScalarAsync("DECLARE @res DATETIME = FILE_CREATED('/etc/passwd');"));
         Assert.Contains("Unauthorized", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FileReadOnly_MatchesDirectoryConnectorAndHandlesMissingAndNull()
+    {
+        var path = PathFor("readonly_check.txt");
+        await File.WriteAllTextAsync(path, "hello");
+        try
+        {
+            var writableFlag = await EvalScalarAsync($"DECLARE @res INT = FILE_READONLY('{Esc(path)}');");
+            Assert.Equal(0m, writableFlag);
+
+            File.SetAttributes(path, File.GetAttributes(path) | FileAttributes.ReadOnly);
+
+            var readOnlyFlag = await EvalScalarAsync($"DECLARE @res INT = FILE_READONLY('{Esc(path)}');");
+            Assert.Equal(1m, readOnlyFlag);
+
+            var dirDs = new ETL_SQL.Connectors.Directory.DirectoryDataSource(SystemExecutionContext.Instance, _dir);
+            var rows = new List<Row>();
+            await foreach (var batch in dirDs.ReadBatches())
+                rows.AddRange(batch.Rows);
+            var row = Assert.Single(rows, r => string.Equals(r["FileName"]?.ToString(), "readonly_check.txt", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(true, row["IsReadOnly"]);
+
+            Assert.Null(await EvalScalarAsync($"DECLARE @res INT = FILE_READONLY('{Esc(PathFor("missing_ro.txt"))}');"));
+            Assert.Null(await EvalScalarAsync("DECLARE @res INT = FILE_READONLY(NULL);"));
+
+            var ex = await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+                EvalScalarAsync("DECLARE @res INT = FILE_READONLY('/etc/passwd');"));
+            Assert.Contains("Unauthorized", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
+        }
+    }
+
+    [Fact]
+    public async Task FileAccessed_ReturnsTimestampAndHandlesMissingNullAndBoundary()
+    {
+        var path = PathFor("accessed.txt");
+        await File.WriteAllTextAsync(path, "hello");
+        var expected = new FileInfo(path).LastAccessTime;
+
+        var actual = await EvalScalarAsync($"DECLARE @res DATETIME = FILE_ACCESSED('{Esc(path)}');");
+        var actualDt = Assert.IsType<DateTime>(actual);
+        Assert.Equal(expected, actualDt);
+
+        Assert.Null(await EvalScalarAsync($"DECLARE @res DATETIME = FILE_ACCESSED('{Esc(PathFor("missing_acc.txt"))}');"));
+        Assert.Null(await EvalScalarAsync("DECLARE @res DATETIME = FILE_ACCESSED(NULL);"));
+
+        var ex = await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+            EvalScalarAsync("DECLARE @res DATETIME = FILE_ACCESSED('/etc/passwd');"));
+        Assert.Contains("Unauthorized", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DirectorySizeAndFileCount_NonRecursiveRecursiveEmptyMissingAndNull()
+    {
+        var root = PathFor("dir_metrics");
+        var sub = Path.Combine(root, "sub");
+        var emptyDir = PathFor("dir_empty");
+        Directory.CreateDirectory(sub);
+        Directory.CreateDirectory(emptyDir);
+
+        await File.WriteAllBytesAsync(Path.Combine(root, "a.bin"), new byte[10]);
+        await File.WriteAllBytesAsync(Path.Combine(root, "b.bin"), new byte[25]);
+        await File.WriteAllBytesAsync(Path.Combine(sub, "c.bin"), new byte[40]);
+
+        Assert.Equal(35m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(root)}');"));
+        Assert.Equal(35m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(root)}', FALSE);"));
+        Assert.Equal(75m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(root)}', TRUE);"));
+
+        Assert.Equal(2m, await EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(root)}');"));
+        Assert.Equal(2m, await EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(root)}', FALSE);"));
+        Assert.Equal(3m, await EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(root)}', TRUE);"));
+
+        Assert.Equal(0m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(emptyDir)}');"));
+        Assert.Equal(0m, await EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(emptyDir)}');"));
+
+        Assert.Null(await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(PathFor("no_such_dir"))}');"));
+        Assert.Null(await EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(PathFor("no_such_dir"))}');"));
+        Assert.Null(await EvalScalarAsync("DECLARE @res DECIMAL = DIRECTORY_SIZE(NULL);"));
+        Assert.Null(await EvalScalarAsync("DECLARE @res INT = DIRECTORY_FILE_COUNT(NULL);"));
+        Assert.Null(await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(root)}', NULL);"));
+        Assert.Null(await EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(root)}', NULL);"));
+
+        await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+            EvalScalarAsync("DECLARE @res DECIMAL = DIRECTORY_SIZE('/etc');"));
+        await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+            EvalScalarAsync("DECLARE @res INT = DIRECTORY_FILE_COUNT('/etc');"));
+    }
+
+    [Fact]
+    public async Task DirectorySizeAndFileCount_HonorsRecursionAndFileOperationLimits()
+    {
+        var deepRoot = PathFor("dir_deep");
+        var current = deepRoot;
+        for (int i = 1; i <= 6; i++)
+        {
+            current = Path.Combine(current, $"l{i}");
+            Directory.CreateDirectory(current);
+        }
+        await File.WriteAllBytesAsync(Path.Combine(current, "leaf.bin"), new byte[12]);
+
+        await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+            EvalScalarAsync($"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(deepRoot)}', TRUE);"));
+
+        var allowDepthEvaluator = CreateEvaluator();
+        allowDepthEvaluator.SecurityService.ApprovedSafeZones.Add(_dir);
+        allowDepthEvaluator.AllowDeepRecursion = true;
+        var allowDepthCount = await EvalScalarAsync(
+            $"DECLARE @res INT = DIRECTORY_FILE_COUNT('{Esc(deepRoot)}', TRUE);", allowDepthEvaluator);
+        Assert.Equal(1m, allowDepthCount);
+
+        var manyDir = PathFor("dir_many");
+        Directory.CreateDirectory(manyDir);
+        for (int i = 0; i < 5; i++)
+            await File.WriteAllBytesAsync(Path.Combine(manyDir, $"f{i}.bin"), new byte[4]);
+
+        var limitedEvaluator = CreateEvaluator();
+        limitedEvaluator.SecurityService.MaxFileOperations = 3;
+        await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+            EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(manyDir)}');", limitedEvaluator));
+
+        var allowedOpsEvaluator = CreateEvaluator();
+        allowedOpsEvaluator.SecurityService.MaxFileOperations = 3;
+        allowedOpsEvaluator.SecurityService.ApprovedSafeZones.Add(_dir);
+        allowedOpsEvaluator.AllowLargeFileOperationCount = true;
+        var allowedSize = await EvalScalarAsync(
+            $"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(manyDir)}');", allowedOpsEvaluator);
+        Assert.Equal(20m, allowedSize);
     }
 
     [Fact]
@@ -201,6 +375,104 @@ public sealed class FilePathFunctionsTests : IDisposable
 
         await Assert.ThrowsAsync<ExecutionException>(() =>
             EvalScalarAsync("DECLARE @res INT = REMOTE_DIRECTORY_EXISTS('UNKNOWN_CONN', 'inbox');", evaluator));
+    }
+
+    [WindowsFact]
+    [Trait("Platform", "Windows")]
+    public async Task DirectoryFunctions_DoNotFollowWindowsJunctionOutsideAuthorizedRoot()
+    {
+        var allowedRoot = PathFor("allowed_win");
+        var outsideDir = PathFor("outside_win");
+        Directory.CreateDirectory(allowedRoot);
+        Directory.CreateDirectory(outsideDir);
+        await File.WriteAllBytesAsync(Path.Combine(allowedRoot, "inside.txt"), new byte[5]);
+        await File.WriteAllBytesAsync(Path.Combine(outsideDir, "secret.txt"), new byte[100]);
+
+        var junction = Path.Combine(allowedRoot, "escape_junction");
+        using var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+            "cmd.exe", $"/c mklink /J \"{junction}\" \"{outsideDir}\"")
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        });
+        Assert.NotNull(mklink);
+        Assert.True(mklink!.WaitForExit(5000), "mklink /J timed out");
+        Assert.Equal(0, mklink.ExitCode);
+        Assert.True(Directory.Exists(junction));
+
+        try
+        {
+            var eval = CreateEvaluator();
+            Assert.Equal(1m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_FILE_COUNT('{Esc(allowedRoot)}', TRUE);", eval));
+            Assert.Equal(5m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(allowedRoot)}', TRUE);", eval));
+
+            await eval.Evaluate(new Parser(new Lexer($"SELECT Name FROM FILE_LIST('{Esc(allowedRoot)}', TRUE);").Tokenize()).Parse());
+            var names = eval.LastResult!.Rows.Select(r => r["Name"]?.ToString()).ToList();
+            Assert.Equal(new[] { "inside.txt" }, names);
+        }
+        finally
+        {
+            try { if (Directory.Exists(junction)) Directory.Delete(junction); } catch { }
+        }
+    }
+
+    [UnixFact]
+    [Trait("Platform", "Unix")]
+    public async Task DirectoryFunctions_DoNotFollowUnixSymlinkOutsideAuthorizedRoot()
+    {
+        var allowedRoot = PathFor("allowed_unix");
+        var outsideDir = PathFor("outside_unix");
+        Directory.CreateDirectory(allowedRoot);
+        Directory.CreateDirectory(outsideDir);
+        await File.WriteAllBytesAsync(Path.Combine(allowedRoot, "inside.txt"), new byte[5]);
+        var secretFile = Path.Combine(outsideDir, "secret.txt");
+        await File.WriteAllBytesAsync(secretFile, new byte[100]);
+
+        Directory.CreateSymbolicLink(Path.Combine(allowedRoot, "escape_dir"), outsideDir);
+        File.CreateSymbolicLink(Path.Combine(allowedRoot, "escape_file.txt"), secretFile);
+
+        var eval = CreateEvaluator();
+        Assert.Equal(1m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_FILE_COUNT('{Esc(allowedRoot)}', TRUE);", eval));
+        Assert.Equal(5m, await EvalScalarAsync($"DECLARE @res DECIMAL = DIRECTORY_SIZE('{Esc(allowedRoot)}', TRUE);", eval));
+
+        await eval.Evaluate(new Parser(new Lexer($"SELECT Name FROM FILE_LIST('{Esc(allowedRoot)}', TRUE);").Tokenize()).Parse());
+        var names = eval.LastResult!.Rows.Select(r => r["Name"]?.ToString()).ToList();
+        Assert.Equal(new[] { "inside.txt" }, names);
+    }
+
+    [Fact]
+    public async Task FileList_HonorsRecursiveFlagSpellingsAndDepthCeiling()
+    {
+        var root = PathFor("filelist_flags");
+        var nested = Path.Combine(root, "sub");
+        Directory.CreateDirectory(nested);
+        await File.WriteAllTextAsync(Path.Combine(root, "top.txt"), "a");
+        await File.WriteAllTextAsync(Path.Combine(nested, "child.txt"), "b");
+
+        foreach (var flag in new[] { "TRUE", "'ON'", "'1'", "1" })
+        {
+            var eval = CreateEvaluator();
+            await eval.Evaluate(new Parser(new Lexer($"SELECT Name FROM FILE_LIST('{Esc(root)}', {flag});").Tokenize()).Parse());
+            var names = eval.LastResult!.Rows.Select(r => r["Name"]?.ToString()).OrderBy(x => x).ToList();
+            Assert.Equal(new[] { "child.txt", "top.txt" }, names);
+        }
+
+        // Depth > 5 must be blocked unless SET ALLOW_RECURSIVE_LAYERS ON is declared.
+        var deep = root;
+        for (int i = 1; i <= 6; i++)
+            deep = Path.Combine(deep, $"d{i}");
+        Directory.CreateDirectory(deep);
+        await File.WriteAllTextAsync(Path.Combine(deep, "leaf.txt"), "z");
+
+        var blockedEval = CreateEvaluator();
+        await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() =>
+            blockedEval.Evaluate(new Parser(new Lexer($"SELECT Name FROM FILE_LIST('{Esc(root)}', TRUE);").Tokenize()).Parse()));
+
+        var allowedEval = CreateEvaluator();
+        await allowedEval.Evaluate(new Parser(new Lexer($"SET ALLOW_RECURSIVE_GREATER_THAN_10_LAYERS ON; SELECT Name FROM FILE_LIST('{Esc(root)}', TRUE);").Tokenize()).Parse());
+        Assert.Contains(allowedEval.LastResult!.Rows, r => r["Name"]?.ToString() == "leaf.txt");
     }
 
     private static async IAsyncEnumerable<FileMetaData> AsyncEnum(IEnumerable<FileMetaData> items)

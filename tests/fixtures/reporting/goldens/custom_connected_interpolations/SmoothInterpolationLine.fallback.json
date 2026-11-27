@@ -1,0 +1,37 @@
+{
+  "kind": "rankedTable",
+  "heading": "Smooth Cubic Interpolation",
+  "items": [
+    {
+      "label": "1.0",
+      "value": "20.0",
+      "order": 0,
+      "group": "Value"
+    },
+    {
+      "label": "2.0",
+      "value": "55.0",
+      "order": 1,
+      "group": "Value"
+    },
+    {
+      "label": "3.0",
+      "value": "35.0",
+      "order": 2,
+      "group": "Value"
+    },
+    {
+      "label": "4.0",
+      "value": "80.0",
+      "order": 3,
+      "group": "Value"
+    },
+    {
+      "label": "5.0",
+      "value": "60.0",
+      "order": 4,
+      "group": "Value"
+    }
+  ],
+  "summary": "Smooth Cubic Interpolation: 5 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

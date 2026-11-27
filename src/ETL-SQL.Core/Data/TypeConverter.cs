@@ -58,8 +58,8 @@ public static class TypeConverter
         ["GEOMETRY"] = v => v.ToString(),
         ["GEOGRAPHY"] = v => v.ToString(),
         ["HIERARCHYID"] = v => v.ToString(),
-        ["VARBINARY"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
-        ["BINARY"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
+        ["VARBINARY"] = v => ConvertToBinary(v),
+        ["BINARY"] = v => ConvertToBinary(v),
         ["IMAGE"] = v =>
         {
             if (v is byte[] b) return b;
@@ -77,8 +77,8 @@ public static class TypeConverter
         ["MINMAX"] = v => ConvertToMinMax(v),
         // COMPAT_BREAK: 0.20 — text assigned to a LIST is split into items instead of staying one value.
         ["LIST"] = v => ConvertToList(v),
-        ["BLOB"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
-        ["LOB"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
+        ["BLOB"] = v => ConvertToBinary(v),
+        ["LOB"] = v => ConvertToBinary(v),
         ["UNIQUEIDENTIFIER"] = v => v is Guid g ? g : Guid.Parse(v.ToString() ?? Guid.Empty.ToString()),
         ["GUID"] = v => v is Guid g ? g : Guid.Parse(v.ToString() ?? Guid.Empty.ToString()),
         ["UUID"] = v => v is Guid g ? g : Guid.Parse(v.ToString() ?? Guid.Empty.ToString()),
@@ -154,12 +154,22 @@ public static class TypeConverter
         // A database NULL is NULL, not an empty string: `5 + NULL` concatenated to '5'.
         DBNull => null,
         string text => text,
+        byte[] bytes => "0x" + Convert.ToHexStringLower(bytes),
         DateOnly dateOnly => dateOnly.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         DateTime dateTime => FormatDateTime(dateTime),
         DateTimeOffset offset => FormatDateTime(offset.DateTime) + offset.ToString(" zzz", CultureInfo.InvariantCulture),
         IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
         _ => value.ToString()
     };
+
+    private static byte[] ConvertToBinary(object v)
+    {
+        if (v is byte[] b) return b;
+        var s = v.ToString() ?? "";
+        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            return Convert.FromHexString(s.AsSpan(2));
+        return Convert.FromBase64String(s);
+    }
 
     private static object ConvertToDateTime(object v) => v switch
     {

@@ -17,6 +17,97 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.23.1 — Runtime: enforced native tools require an approved artifact
+- **What changed**: With `Governance:Tools:RequireArtifactApproval` enabled, native tools require a verified executable in protected storage. Restricted Linux workers support direct ELF executables and fixed dash scripts with an additional script digest. Restricted Windows workers support direct x64 PE executables under the dedicated virtual service account. Persistent sessions reject a change to a bound approval.
+- **Who is affected**: Operators enabling native artifact approval for `EXECUTE TOOL`.
+- **Migration**: Publish each reviewed executable, then activate it with `ARTIFACT_SHA256` using the [Linux approval procedure](docs/administration/orchestration/orchestrator-portal.md#approve-native-tools-on-a-restricted-linux-host) or the [Windows service profile](docs/administration/orchestration/orchestrator-portal.md#configure-the-restricted-windows-native-tool-profile). Keep the original version for existing checkpoints. Back up the catalog so older workers can use it if you roll back the upgrade.
+- **Diagnostic**: The tool fails before launch if its required approval is missing, invalid, or different from the session binding.
+- **Earliest removal**: N/A
+
+### v0.23.1 — Runtime: federated tool use requires an explicit grant
+- **What changed**: Federated Orchestrator execution authorizes each `EXECUTE TOOL` call against a tenant-scoped grant. Unattended runs require owner approval of the saved version and a live lookup of that owner.
+- **Who is affected**: Federated jobs that currently invoke a tool from a machine-local catalog.
+- **Migration**: Upgrade the Orchestrator and CLI workers together. Use [tool grant](docs/reference/cli/admin-machine-tool-grant.md) for intended users, groups, or services by stable principal key and tenant. Retain a pre-upgrade catalog backup for rollback because older workers cannot read edited entries.
+- **Diagnostic**: The caller receives a tool-unavailable execution error. The host records an operation denial.
+- **Earliest removal**: N/A
+
+### v0.23.0 — Runtime: MSI release defaults move to appsettings.defaults.json
+- **What changed**: The Windows MSI installs the full release defaults as `appsettings.defaults.json` and no longer replaces `appsettings.json`, which holds only the operator's settings (`{}` on a fresh install). The services, not the installer, generate secrets on first start. An upgrade from v0.22.0 removes, once, every value in `appsettings.json` that equals the v0.22.0 default.
+- **Who is affected**: Windows operators and scripts that read release defaults from the installed `appsettings.json`, or that call the removed `configure-portal-jwt.ps1`.
+- **Migration**: Edit `appsettings.json` as before; read defaults from `appsettings.defaults.json` and do not edit it. Values you set keep overriding the defaults.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.23.0 — Runtime: publishing a report by script path requires ScriptIngress
+- **What changed**: `POST /api/reports` (the CLI `PUBLISH REPORT` statement and script-path publication in SourceControlled Studio mode) now requires the `ScriptIngress` Studio capability in addition to `ReportPublish` and folder Manage. Previously `ReportPublish` was enough.
+- **Who is affected**: SourceControlled Portals whose publishing roles or groups hold `ReportPublish` but not `ScriptIngress`, and scripts that run `PUBLISH REPORT` as those users.
+- **Migration**: Grant `ScriptIngress` to the roles or groups that publish by script path, e.g. `Portal__Studio__RoleCapabilities__Admin__2=ScriptIngress`, or as a group capability grant.
+- **Diagnostic**: The publish returns HTTP 403 (`Portal API error (403 Forbidden)` from `PUBLISH REPORT`).
+- **Earliest removal**: N/A
+
+### v0.23.0 — Runtime: pipeline provisioning respects Studio content permissions
+- **What changed**: The Orchestrator pipeline catalog and provisioning endpoints require read access to the Studio document. An Orchestrator role alone no longer exposes private pipeline metadata or copies its script into a job.
+- **Who is affected**: Orchestrator managers and viewers accessing Studio pipelines.
+- **Migration**: Grant read access to the appropriate Studio folder or document before provisioning its job.
+- **Diagnostic**: Unauthorized provisioning returns HTTP 403; unreadable pipelines are omitted from the catalog.
+- **Earliest removal**: N/A
+
+### v0.23.0 — Runtime: remote orchestration preserves tenant and Gateway boundaries
+- **What changed**: Run-detail reads authorize the recorded tenant and job identity. Completion feeds filter by tenant before pagination and exclude unscoped legacy runs from tenant-scoped requests. Connection synchronization retains Gateway bindings instead of converting them to direct connections.
+- **Who is affected**: Portals connected to a remote Orchestrator.
+- **Migration**: Re-synchronize Gateway connections previously exported without their binding. Tenant-scoped callers must use their own run identifiers.
+- **Diagnostic**: Foreign run identifiers return HTTP 404.
+- **Earliest removal**: N/A
+
+### v0.23.0 — Connector: remote file listings return four more columns
+- **What changed**: `REMOTE_FILE_LIST` and remote file connection queries add `CreationTime`, `Permissions`, `Owner`, and `IsSymlink`. Connectors return `NULL` for metadata they cannot supply.
+- **Who is affected**: Scripts or downstream consumers that expect the previous five-column result from a remote file listing.
+- **Migration**: Select the columns you need explicitly, or update the consumer to accept the additional columns.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.23.0 — Runtime: first-batch grouped aggregation fallback retains its input
+- **What changed**: Native grouped aggregation can fall back to row execution when its first batch exceeds the memory grant. Previously the fallback received an already-disposed batch.
+- **Who is affected**: Native columnar grouped queries with small memory grants or large first batches.
+- **Migration**: None.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.23.0 — Runtime: Top-N retains evaluated sort keys when spilling
+- **What changed**: Switching from Top-N to external sorting keeps the sort keys already evaluated for buffered rows. Previously those expressions ran again during the handoff, which could change ordering for volatile expressions.
+- **Who is affected**: Queries with `ORDER BY` and `TOP`, `LIMIT`, or `OFFSET`/`FETCH` that exceed their memory grant.
+- **Migration**: None. Each input row's sort key is evaluated once across the handoff.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.23.0 — Runtime: machine vault creation requires write authority
+- **What changed**: Vault directories receive their restrictive ACL before any value is written. Windows non-admin processes can no longer create a first entry through inherited directory permissions before those permissions are removed.
+- **Who is affected**: Non-elevated Windows processes initializing LocalMachine secret or connection stores.
+- **Migration**: Run machine-store administration with an elevated administrator token. Use CurrentUser protection for a personal workstation store. ServiceIdentity remains read-only.
+- **Diagnostic**: Access denied while writing a machine-store entry.
+- **Earliest removal**: N/A
+
+### v0.23.0 — Runtime: cached reports require verifiable source and connection access
+- **What changed**: Snapshots record the `SHARED:` connection aliases expanded at execution time (including parameterized targets, nested `RUN SCRIPT` calls, and parallel branches) and re-check caller `Use` permissions against those recorded aliases on every read, export, and designer snapshot request. Legacy snapshots without recorded dependencies still verify the recorded source hash and statically scan the script, failing closed on missing hashes, changed or missing source, unresolved dynamic connections, and external `RUN SCRIPT` dependencies.
+- **Who is affected**: Cached reports using shared connections, older snapshots without recorded dependencies or source hashes, and legacy snapshots whose dependencies cannot be resolved from their source text.
+- **Migration**: Refresh older snapshots to record their runtime dependencies. Grant connection Use permission to readers who need the cached data.
+- **Diagnostic**: HTTP 403 on snapshot or export access.
+- **Earliest removal**: N/A
+
+### v0.23.0 — Semantic: ambiguous pivot outputs and decimal chart coordinates
+- **What changed**: PIVOT rejects labels that collide with grouping columns or with the NULL output label, before modifying the destination. Polynomial overlays retain distinct decimal X coordinates when a large common offset would collapse them during floating-point conversion.
+- **Who is affected**: Pivots with ambiguous output names and polynomial charts with closely spaced, large decimal X values.
+- **Migration**: Rename conflicting grouping columns or pivot values. No chart syntax change is required.
+- **Diagnostic**: PIVOT output column is ambiguous.
+- **Earliest removal**: N/A
+
+### v0.23.0 — Semantic: join filtering, merge joins and window spill correctness
+- **What changed**: Pre-join filtering no longer removes left-side matches needed by RIGHT/FULL joins, and unknown source schemas no longer cause speculative identifier qualification. Merge SEMI/ANTI joins return only qualifying left rows, and mixed-type compound sort keys use a transitive type order. Ordered running RANGE aggregates can spill tied peers while retaining their shared aggregate result.
+- **Who is affected**: Queries using these join paths or mixed-type composite keys; large ordered window queries with tied keys.
+- **Migration**: Recheck results that depended on the old incorrect join filtering or merge behavior. Use explicit table aliases for ambiguous column names. No syntax change is required.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: machine-bound encrypted files use format ETLSQLMF4
 - **What changed**: Machine-bound file encryption (`ENCRYPT = MACHINE`) used one key for both AES and HMAC. It now derives separate keys with HKDF and writes the `ETLSQLMF4` header. Files written with `ETLSQLMF3` are refused.
 - **Who is affected**: Anyone holding machine-bound encrypted export files written before v0.22.0. In-memory machine-bound values are unaffected.

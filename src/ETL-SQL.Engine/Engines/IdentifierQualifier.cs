@@ -24,13 +24,20 @@ internal static class IdentifierQualifier
         if (stmt.WhereClause == null) return stmt;
         if (stmt.Joins == null || stmt.Joins.Count == 0) return stmt;
 
-        // Build bare-name → table-alias map. Skip ambiguous names (same bare col in 2+ tables).
+        // Build bare-name → table-alias map. If any joined source has an unknown schema (subquery,
+        // VALUES, or unreachable metadata), a bare name could also exist on that source, so do not
+        // attribute bare names to another source for pre-join pushdown.
         var colToAlias = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var ambiguous = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        await TryAddTableColumns(stmt.FromTable, context, colToAlias, ambiguous);
+        // COMPAT_BREAK: 0.23.0 — unknown schemas cannot prove a bare name belongs to one source.
+        if (!await TryAddTableColumns(stmt.FromTable, context, colToAlias, ambiguous))
+            return stmt;
         foreach (var join in stmt.Joins)
-            await TryAddTableColumns(join.Table, context, colToAlias, ambiguous);
+        {
+            if (!await TryAddTableColumns(join.Table, context, colToAlias, ambiguous))
+                return stmt;
+        }
 
         if (colToAlias.Count == 0) return stmt;
 
@@ -40,14 +47,14 @@ internal static class IdentifierQualifier
         return stmt with { WhereClause = newWhere };
     }
 
-    private static async Task TryAddTableColumns(
+    private static async Task<bool> TryAddTableColumns(
         TableReference table,
         IExecutionContext context,
         Dictionary<string, string> colToAlias,
         HashSet<string> ambiguous)
     {
         // Subqueries and VALUES rows have no static schema we can consult cheaply.
-        if (table.Subquery != null || table.ValuesRows != null) return;
+        if (table.Subquery != null || table.ValuesRows != null) return false;
 
         string alias = table.Alias ?? table.TableName;
 
@@ -59,11 +66,13 @@ internal static class IdentifierQualifier
         }
         catch
         {
-            return;
+            return false;
         }
 
+        var sawAnyColumn = false;
         foreach (var col in columns)
         {
+            sawAnyColumn = true;
             if (ambiguous.Contains(col)) continue;
 
             if (colToAlias.ContainsKey(col))
@@ -77,6 +86,7 @@ internal static class IdentifierQualifier
                 colToAlias[col] = alias;
             }
         }
+        return sawAnyColumn;
     }
 
     private static Expression QualifyExpression(Expression expr, Dictionary<string, string> colToAlias)

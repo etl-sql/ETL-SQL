@@ -53,13 +53,17 @@ public class JoinEngine
         return string.Compare(a.ToString(), b.ToString(), StringComparison.Ordinal);
     }
 
-    public async IAsyncEnumerable<Row> ApplyJoinsStreaming(IAsyncEnumerable<Row> leftStream, List<JoinClause> joins, SelectStatement stmt)
+    public async IAsyncEnumerable<Row> ApplyJoinsStreaming(
+        IAsyncEnumerable<Row> leftStream,
+        List<JoinClause> joins,
+        SelectStatement stmt,
+        HashSet<string>? requiredColumns = null)
     {
         var currentStream = leftStream;
         var leftTables = new List<TableReference> { stmt.FromTable };
         foreach (var join in joins)
         {
-            currentStream = StreamSingleJoin(currentStream, join, stmt, leftTables.ToList());
+            currentStream = StreamSingleJoin(currentStream, join, stmt, leftTables.ToList(), requiredColumns);
             leftTables.Add(join.Table);
         }
         await foreach (var row in currentStream)
@@ -68,7 +72,12 @@ public class JoinEngine
         }
     }
 
-    private async IAsyncEnumerable<Row> StreamSingleJoin(IAsyncEnumerable<Row> leftStream, JoinClause join, SelectStatement stmt, List<TableReference> leftTables)
+    private async IAsyncEnumerable<Row> StreamSingleJoin(
+        IAsyncEnumerable<Row> leftStream,
+        JoinClause join,
+        SelectStatement stmt,
+        List<TableReference> leftTables,
+        HashSet<string>? requiredColumns = null)
     {
         var leftAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
         var rightAlias = join.Table.Alias ?? join.Table.TableName;
@@ -82,12 +91,7 @@ public class JoinEngine
             bool conditionIsTrue = join.Condition is LiteralExpression lit && true.Equals(lit.Value);
             await foreach (var left in leftStream)
             {
-                var qualifiedLeft = left;
-                if (!string.IsNullOrEmpty(leftAlias))
-                {
-                    qualifiedLeft = left.Clone();
-                    left.ForEachColumn((k, v) => { if (!k.Contains('.')) qualifiedLeft[$"{leftAlias}.{k}"] = v; });
-                }
+                var qualifiedLeft = QualifyForApply(left, leftAlias);
 
                 shape.SeeLeft(qualifiedLeft);
                 _context.OuterRowStack.Push(qualifiedLeft);
@@ -99,12 +103,7 @@ public class JoinEngine
                     {
                         foreach (var rr in rb.Rows)
                         {
-                            var qualifiedRight = rr;
-                            if (!string.IsNullOrEmpty(rightAlias))
-                            {
-                                qualifiedRight = rr.Clone();
-                                rr.ForEachColumn((k, v) => { if (!k.Contains('.')) qualifiedRight[$"{rightAlias}.{k}"] = v; });
-                            }
+                            var qualifiedRight = QualifyForApply(rr, rightAlias);
                             shape.SeeRight(qualifiedRight);
                             var combined = CombineRows(qualifiedLeft, qualifiedRight);
                             if (!conditionIsTrue && !await _context.EvaluateCondition(join.Condition, combined))
@@ -141,7 +140,7 @@ public class JoinEngine
             var externalJoin = new ExternalJoinEngine(_context, _logger) { Shape = shape };
             await foreach (var row in externalJoin.ApplyHashJoinExternal(
                 leftStream,
-                GetJoinRowsAsyncEnumerable(join, shape),
+                GetJoinRowsAsyncEnumerable(join, shape, requiredColumns),
                 join,
                 streamingLeftKeys,
                 streamingRightKeys,
@@ -150,7 +149,7 @@ public class JoinEngine
             yield break;
         }
 
-        var joinRows = await GetJoinRows(join, shape); // Buffer right side (usually smaller)
+        var joinRows = await GetJoinRows(join, shape, requiredColumns); // Buffer right side (usually smaller)
         if (joinRows.Count > 0) shape.SeeRight(joinRows[0]);
         else await DeclareEmptyRightAsync(join, shape, rightSource);
 
@@ -314,22 +313,27 @@ public class JoinEngine
 
     }
 
-    public Task<List<Row>> GetJoinRows(JoinClause join) => GetJoinRows(join, null);
+    public Task<List<Row>> GetJoinRows(JoinClause join) => GetJoinRows(join, null, null);
 
-    private async Task<List<Row>> GetJoinRows(JoinClause join, OuterJoinShape? shape)
+    private async Task<List<Row>> GetJoinRows(JoinClause join, OuterJoinShape? shape, HashSet<string>? requiredColumns = null)
     {
         var rows = new List<Row>();
-        await foreach (var r in GetJoinRowsAsyncEnumerable(join, shape)) rows.Add(r);
+        await foreach (var r in GetJoinRowsAsyncEnumerable(join, shape, requiredColumns)) rows.Add(r);
         return rows;
     }
 
-    public IAsyncEnumerable<Row> GetJoinRowsAsyncEnumerable(JoinClause join) => GetJoinRowsAsyncEnumerable(join, null);
+    public IAsyncEnumerable<Row> GetJoinRowsAsyncEnumerable(JoinClause join) => GetJoinRowsAsyncEnumerable(join, null, null);
 
-    private async IAsyncEnumerable<Row> GetJoinRowsAsyncEnumerable(JoinClause join, OuterJoinShape? shape)
+    private async IAsyncEnumerable<Row> GetJoinRowsAsyncEnumerable(
+        JoinClause join,
+        OuterJoinShape? shape,
+        HashSet<string>? requiredColumns = null)
     {
         var joinBatches = _context.ResolveAndApplyOperators(join.Table);
         string joinName = join.Table.Alias ?? join.Table.TableName;
+        TableSchema? sourceSchema = null;
         TableSchema? joinSchema = null;
+        int[] keptIndices = Array.Empty<int>();
 
         await foreach (var jb in joinBatches)
         {
@@ -339,21 +343,44 @@ public class JoinEngine
 
             foreach (var jr in jb.Rows)
             {
-                if (jr.Schema != null)
+                if (jr.Schema != null && !jr.HasDynamicColumns)
                 {
                     // Build schema once per join: bare names are canonical, qualified names are
-                    // aliases pointing to the same slot. All rows in this join table share this
-                    // schema — no per-row duplication of qualified column entries.
-                    if (joinSchema == null)
+                    // aliases pointing to the same slot. Prune columns not referenced by the query
+                    // so ExternalJoinEngine never spills or packs unused right-side columns.
+                    if (!ReferenceEquals(jr.Schema, sourceSchema) || joinSchema == null)
                     {
-                        joinSchema = new TableSchema(jr.Schema.ColumnNames);
+                        var kept = new List<int>(jr.Schema.ColumnCount);
+                        var names = new List<string>(jr.Schema.ColumnCount);
                         for (int i = 0; i < jr.Schema.ColumnCount; i++)
-                            joinSchema.AddAlias($"{joinName}.{jr.Schema.GetName(i)}", i);
+                        {
+                            var name = jr.Schema.GetName(i);
+                            if (requiredColumns != null && !QualifiedRowLayout.IsColumnOrAliasRequired(jr.Schema, i, name, requiredColumns))
+                                continue;
+                            kept.Add(i);
+                            names.Add(name);
+                        }
+                        if (kept.Count == 0 && jr.Schema.ColumnCount > 0)
+                        {
+                            kept.Add(0);
+                            names.Add(jr.Schema.GetName(0));
+                        }
+
+                        var built = new TableSchema(names);
+                        jr.Schema.CopyAliasesTo(built);
+                        for (int outIdx = 0; outIdx < names.Count; outIdx++)
+                        {
+                            if (!names[outIdx].Contains('.'))
+                                built.AddAlias($"{joinName}.{names[outIdx]}", outIdx);
+                        }
+                        sourceSchema = jr.Schema;
+                        joinSchema = built;
+                        keptIndices = kept.ToArray();
                     }
 
-                    var vals = new object?[joinSchema.ColumnCount];
-                    for (int i = 0; i < Math.Min(jr.Schema.ColumnCount, vals.Length); i++)
-                        vals[i] = jr[jr.Schema.GetName(i)];
+                    var vals = new object?[keptIndices.Length];
+                    for (int i = 0; i < keptIndices.Length; i++)
+                        vals[i] = jr[keptIndices[i]];
                     yield return new Row(joinSchema, vals);
                 }
                 else
@@ -541,9 +568,14 @@ public class JoinEngine
         TableSchema? combinedSchema = sortedLeft.Count > 0 && sortedRight.Count > 0
             ? BuildCombinedSchema(sortedLeft[0], sortedRight[0]) : null;
 
+        // COMPAT_BREAK: 0.23.0 — merge SEMI/ANTI joins emit only matched/unmatched left rows.
+        bool isSemi = IsSemiJoin(join.JoinType);
+        bool isAnti = IsAntiJoin(join.JoinType);
+        bool leftOnly = isSemi || isAnti;
+
         var nextRows = new List<Row>();
-        var matchedLeft = new HashSet<Row>();
-        var matchedRight = new HashSet<Row>();
+        var matchedLeft = new HashSet<Row>(ReferenceEqualityComparer.Instance);
+        var matchedRight = new HashSet<Row>(ReferenceEqualityComparer.Instance);
 
         int i = 0, j = 0;
         while (i < sortedLeft.Count && j < sortedRight.Count)
@@ -565,9 +597,10 @@ public class JoinEngine
                         var combined = CombineRows(sortedLeft[i], sortedRight[j], combinedSchema);
                         if (await _context.EvaluateCondition(join.Condition, combined))
                         {
-                            nextRows.Add(combined);
                             matchedLeft.Add(sortedLeft[i]);
                             matchedRight.Add(sortedRight[j]);
+                            if (!leftOnly)
+                                nextRows.Add(combined);
                         }
                         j++;
                     }
@@ -576,17 +609,30 @@ public class JoinEngine
             }
         }
 
-        if (IsLeftOuter(join.JoinType))
+        if (isSemi)
         {
-            foreach (var left in leftRows) if (!matchedLeft.Contains(left)) nextRows.Add(Unmatched(left, combinedSchema, shape));
+            foreach (var left in leftRows)
+                if (matchedLeft.Contains(left)) nextRows.Add(left.Clone());
         }
-        if (IsRightOuter(join.JoinType))
+        else if (isAnti)
         {
-            foreach (var right in rightRows)
-                if (!matchedRight.Contains(right))
-                    nextRows.Add(combinedSchema != null
-                        ? CombineRows(new Row(combinedSchema), right, combinedSchema)
-                        : shape.Unmatched(right));
+            foreach (var left in leftRows)
+                if (!matchedLeft.Contains(left)) nextRows.Add(left.Clone());
+        }
+        else
+        {
+            if (IsLeftOuter(join.JoinType))
+            {
+                foreach (var left in leftRows) if (!matchedLeft.Contains(left)) nextRows.Add(Unmatched(left, combinedSchema, shape));
+            }
+            if (IsRightOuter(join.JoinType))
+            {
+                foreach (var right in rightRows)
+                    if (!matchedRight.Contains(right))
+                        nextRows.Add(combinedSchema != null
+                            ? CombineRows(new Row(combinedSchema), right, combinedSchema)
+                            : shape.Unmatched(right));
+            }
         }
 
         return nextRows;
@@ -639,6 +685,36 @@ public class JoinEngine
     /// canonical slot for the right's qualified alias, the value is written to that slot so the
     /// left's value is not overwritten.
     /// </summary>
+    /// <summary>
+    /// One side of an APPLY / LATERAL step with every name it answers to held as a real column:
+    /// its canonical columns, its schema aliases (<c>d.name</c> from an earlier qualification)
+    /// and each bare column qualified by <paramref name="alias"/>. The step combines rows by name
+    /// without a combined schema, and a by-name copy carries canonical names only, so a qualified
+    /// name kept as a schema alias (SP07) was dropped and the other side's bare column of the same
+    /// name took its place (<c>d.name</c> was unknown after <c>CROSS JOIN LATERAL (...) e</c>).
+    /// </summary>
+    private static Row QualifyForApply(Row row, string? alias)
+    {
+        var qualified = new Row
+        {
+            MayLackColumns = row.MayLackColumns,
+            DataQualityReplayProvenance = row.DataQualityReplayProvenance,
+        };
+        row.ForEachColumn((k, v) => qualified[k] = v);
+        var schema = row.Schema;
+        if (schema != null)
+        {
+            for (var i = 0; i < schema.ColumnCount; i++)
+            {
+                foreach (var name in schema.EnumerateAliasesOf(schema.GetName(i)))
+                    if (!qualified.HasColumn(name)) qualified[name] = row[i];
+            }
+        }
+        if (!string.IsNullOrEmpty(alias))
+            row.ForEachColumn((k, v) => { if (!k.Contains('.')) qualified[$"{alias}.{k}"] = v; });
+        return qualified;
+    }
+
     private static Row CombineRows(Row left, Row right, TableSchema? schema = null)
     {
         var combined = schema != null ? new Row(schema) : new Row();

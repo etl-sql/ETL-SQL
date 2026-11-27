@@ -182,6 +182,72 @@ public sealed class OrchestratorPageSandboxTests(SandboxStoryFixture fixture) : 
     }
 
     [Fact]
+    public async Task EditJobMetadataSendsIfMatchAndUpdatesTargetScheduleRetriesTimeoutHashPolicyAndSandbox()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenAsync(page);
+
+        await page.Locator("[data-action='edit'][data-name='daily_sales']").ClickAsync();
+        await Expect(page.Locator("#createJobModal")).ToBeVisibleAsync();
+        await Expect(page.Locator("#createJobTitle")).ToHaveTextAsync("Edit Job 'daily_sales'");
+        await Expect(page.Locator("#cj-name")).ToBeDisabledAsync();
+
+        await page.Locator("#cj-display-name").FillAsync("Daily Sales Revised");
+        await page.Locator("#cj-description").FillAsync("Updated daily sync");
+        await page.Locator("#cj-script-path").FillAsync("etl/daily_sales_v2.etlsql");
+        await page.Locator("#cj-interval").FillAsync("4");
+        await page.Locator("#cj-unit").SelectOptionAsync("DAY");
+        await page.Locator("#cj-at-time").FillAsync("03:15");
+        await page.Locator("#cj-retries").FillAsync("2");
+        await page.Locator("#cj-retry-delay").FillAsync("45");
+        await page.Locator("#cj-timeout").FillAsync("600");
+        await page.Locator("#cj-hash-policy").SelectOptionAsync("Block");
+        await page.Locator("#cj-sandbox-profile").SelectOptionAsync("Hardened");
+
+        await page.Locator("#cj-saveBtn").ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__orchestratorMessages.some(item => item.message === \"Job 'daily_sales' updated.\")");
+        await Expect(page.Locator("#createJobModal")).ToBeHiddenAsync();
+
+        Assert.Equal("\"3\"", await page.EvaluateAsync<string>(
+            "() => window.__orchestratorMock.calls.find(call => call.method === 'PUT' && call.path === '/api/orchestrator/jobs/daily_sales').ifMatch"));
+        var summary = await page.EvaluateAsync<string>(@"() => {
+            const body = window.__orchestratorMock.calls.find(call => call.method === 'PUT' && call.path === '/api/orchestrator/jobs/daily_sales').body;
+            return [body.displayName, body.targetPath, body.interval, body.unit, body.atTime, body.maxRetries, body.retryDelaySeconds, body.hashPolicy, body.options?.SandboxProfile, body.options?.TimeoutSeconds].join('|');
+        }");
+        Assert.Equal("Daily Sales Revised|etl/daily_sales_v2.etlsql|4|DAY|03:15|2|45|Block|Hardened|600", summary);
+
+        await page.Locator("tr.job-row[data-name='daily_sales'] td").First.ClickAsync();
+        await Expect(page.Locator("#detailPanel")).ToHaveClassAsync(new System.Text.RegularExpressions.Regex("open"));
+        await Expect(page.Locator("#metaSandboxProfile")).ToHaveTextAsync("Hardened");
+        await Expect(page.Locator("#metaVersion")).ToHaveTextAsync("v4");
+        await page.Locator("#editJobBtn").ClickAsync();
+        await Expect(page.Locator("#createJobModal")).ToBeVisibleAsync();
+        await Expect(page.Locator("#cj-timeout")).ToHaveValueAsync("600");
+        await Expect(page.Locator("#cj-sandbox-profile")).ToHaveValueAsync("Hardened");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task NodesAndSandboxesTabDisplaysNodeHeartbeatsAndPoolStates()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenAsync(page);
+
+        await Expect(page.Locator("#fleetNavCount")).ToHaveTextAsync("2");
+        await page.Locator("#orchNavFleet").ClickAsync();
+        await Expect(page.Locator("#viewFleetSection")).ToBeVisibleAsync();
+        await Expect(page.Locator("#fleetNodesWrap")).ToContainTextAsync("orch-win-01:4120");
+        await Expect(page.Locator("#fleetNodesWrap")).ToContainTextAsync("WIN-ORCH-01 (pid 4120)");
+        await Expect(page.Locator("#fleetNodesWrap")).ToContainTextAsync("14.2% / 27.5%");
+        await Expect(page.Locator("#fleetPoolsWrap")).ToContainTextAsync("Distributed Admission Ledger Active");
+        await Expect(page.Locator("#fleetPoolsWrap")).ToContainTextAsync("2 / 8 occupied");
+        await Expect(page.Locator("#fleetPoolsWrap")).ToContainTextAsync("adm-101");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task SandboxPrototypeMountsTheProductionPage()
     {
         await using var session = await fixture.NewSessionAsync();

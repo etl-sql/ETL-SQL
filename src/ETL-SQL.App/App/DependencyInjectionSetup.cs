@@ -51,7 +51,9 @@ namespace ETL_SQL.App
 
             if (IsTruthy(Environment.GetEnvironmentVariable("ETLSQL_TEST_ISOLATE_DEFAULT_ORCHESTRATOR_DB"))
                 && !effectiveOverrides.ContainsKey("Orchestrator:DatabasePath")
-                && !effectiveOverrides.ContainsKey("Orchestrator__DatabasePath"))
+                && !effectiveOverrides.ContainsKey("Orchestrator__DatabasePath")
+                && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("Orchestrator:DatabasePath"))
+                && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("Orchestrator__DatabasePath")))
             {
                 var testDbRoot = Path.Combine(Path.GetTempPath(), "ETL-SQL.Tests", "orchestrator");
                 Directory.CreateDirectory(testDbRoot);
@@ -63,6 +65,7 @@ namespace ETL_SQL.App
             var builder = new ConfigurationBuilder()
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                .AddInstallerLayers(AppDomain.CurrentDomain.BaseDirectory)
                 .AddInstalledSecrets(AppDomain.CurrentDomain.BaseDirectory)
                 .AddEnvironmentVariables();
             if (effectiveOverrides.Count > 0)

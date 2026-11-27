@@ -115,6 +115,10 @@ public sealed class BookmarkLanguageFeatureTests
         }, CancellationToken.None);
 
         Assert.NotNull(result);
+        var range = result!.Range ?? result.PlaceholderRange?.Range;
+        Assert.NotNull(range);
+        Assert.Equal(PositionOf(ScriptText, "WestQ4 AS").Line, range!.Start.Line);
+        Assert.Equal("WestQ4".Length, range.End.Character - range.Start.Character);
     }
 
     [Fact]

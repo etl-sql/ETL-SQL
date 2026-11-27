@@ -40,6 +40,15 @@ public class TableSchema
 
     public IReadOnlyList<string> ColumnNames => _columnNames;
 
+    /// <summary>
+    /// Returns all canonical column names plus any registered aliases (such as <c>alias.col</c>),
+    /// avoiding allocation when no aliases are registered.
+    /// </summary>
+    public IReadOnlyList<string> GetNamesWithAliases() =>
+        _columnToIndex.Count == _columnNames.Count
+            ? _columnNames
+            : _columnToIndex.Keys.ToList();
+
     public int AddColumn(string name)
     {
         int index = _columnNames.Count;

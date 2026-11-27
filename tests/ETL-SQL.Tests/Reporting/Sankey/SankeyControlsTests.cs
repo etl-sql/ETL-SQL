@@ -229,8 +229,8 @@ public class SankeyControlsTests
         Assert.True(matchA.Success);
         Assert.True(matchB.Success);
 
-        var yA = double.Parse(matchA.Groups[1].Value);
-        var yB = double.Parse(matchB.Groups[1].Value);
+        var yA = double.Parse(matchA.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+        var yB = double.Parse(matchB.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
 
         // Height is 20, plus padding 25 => center-to-center or top-to-top distance should be 45
         Assert.Equal(45.0, Math.Abs(yB - yA), 1);

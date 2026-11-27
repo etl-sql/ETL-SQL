@@ -54,6 +54,86 @@ describe('VS Code preview header chrome', () => {
     });
 });
 
+describe('report header owner badge', () => {
+    async function renderHeaderFor(owner?: string): Promise<any> {
+        const win = makeDOM(w => {
+            w.__OFFLINE__ = true;
+            w.__MANIFEST__ = { ...EMPTY_MANIFEST, title: 'Owned Report', ...(owner ? { owner } : {}) };
+        });
+        win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+        await new Promise(resolve => setTimeout(resolve, 0));
+        return win;
+    }
+
+    it('names the owner when the report has one', async () => {
+        const win = await renderHeaderFor('Finance Team');
+        expect(win.document.querySelector('.header-badge.owner')?.textContent).toContain('Finance Team');
+    });
+
+    it('leaves the owner badge out when the report has no owner', async () => {
+        const win = await renderHeaderFor();
+        expect(win.document.querySelector('.report-header')).not.toBeNull();
+        expect(win.document.querySelector('.header-badge.owner')).toBeNull();
+        expect(win.document.body.textContent).not.toContain('Owner unknown');
+    });
+});
+
+describe('visual maximize button', () => {
+    it('shows an icon, not bracket text, and swaps it on maximize and restore', () => {
+        const win = makeDOM(w => { w.__OFFLINE__ = true; });
+        const container = win.document.createElement('div');
+        win.document.body.appendChild(container);
+        win.__reportRuntime__.renderVisual(container, {
+            name: 'KpiRevenue', visualType: 'CARD', options: { title: 'Revenue' },
+            columns: ['Value'], rows: [['10']], actions: [],
+        }, null, { ...EMPTY_MANIFEST });
+
+        const button = win.document.querySelector('.visual-tool-btn');
+        expect(button).not.toBeNull();
+        const state = () => ({
+            text: button.textContent,
+            label: button.getAttribute('aria-label'),
+            icon: button.querySelector('svg')?.getAttribute('data-icon'),
+        });
+        expect(state()).toEqual({ text: '', label: 'Maximize visual', icon: 'maximize' });
+        button.click();
+        expect(state()).toEqual({ text: '', label: 'Restore visual', icon: 'restore' });
+        button.click();
+        expect(state()).toEqual({ text: '', label: 'Maximize visual', icon: 'maximize' });
+    });
+});
+
+describe('non-interactive slicer', () => {
+    const regionSlicer = (actions: any[]) => ({
+        name: 'Region', visualType: 'SLICER', options: {}, columns: ['Region'],
+        rows: [['East'], ['West']], actions,
+    });
+    const onChange = [{ trigger: 'ON_CHANGE', type: 'SET_PARAMETER', parameterName: '@region' }];
+
+    it('shows the values in a disabled list and says where filtering works when offline', () => {
+        const win = makeDOM(w => { w.__OFFLINE__ = true; });
+        const container = win.document.createElement('div');
+        win.__reportRuntime__.renderSlicer(container, regionSlicer(onChange), { visuals: [] });
+
+        const select = container.querySelector('select');
+        expect(select).not.toBeNull();
+        expect(select.disabled).toBe(true);
+        expect(Array.from(select.options).map((o: any) => o.textContent)).toEqual(['East', 'West']);
+        const note = container.querySelector('.slicer-note')?.textContent ?? '';
+        expect(note).toContain('ReportPlayer');
+        expect(note).not.toContain('[');
+    });
+
+    it('disables a slicer with no parameter action in a live host without an offline note', () => {
+        const win = makeDOM(w => { w.__IS_WEB__ = true; });
+        const container = win.document.createElement('div');
+        win.__reportRuntime__.renderSlicer(container, regionSlicer([]), { visuals: [] });
+
+        expect(container.querySelector('select')?.disabled).toBe(true);
+        expect(container.querySelector('.slicer-note')).toBeNull();
+    });
+});
+
 /** Spin up a fresh DOM with the runtime loaded. */
 function makeDOM(extraSetup?: (win: any) => void): any {
     const dom = new JSDOM(

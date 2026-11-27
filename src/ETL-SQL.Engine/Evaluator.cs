@@ -94,6 +94,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     /// <summary>Aliases created from a SHARED: catalog entry, mapped to connector type.</summary>
     public IDictionary<string, string> CatalogBackedConnections { get; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    public ISet<string> SharedConnectionDependencies { get; private set; } =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     public IDictionary<string, IDataSource> LocalSources => _localSources;
     public IDictionary<string, IDataSource> ReplaySourceOverrides => _replaySourceOverrides;
     public Dictionary<string, string> PendingJobStateUpdates => _pendingJobStateUpdates;
@@ -299,6 +301,9 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     /// <summary>Size of row batches used during streaming operations.</summary>
     public int BatchSize { get => _options.BatchSize; set => _options.BatchSize = value; }
 
+    /// <summary>Target byte footprint per batch before flushing or splitting.</summary>
+    public long BatchTargetBytes { get => _options.BatchTargetBytes; set => _options.BatchTargetBytes = value; }
+
     /// <summary>Number of batches held in memory before spilling to disk for #temp tables.</summary>
     public int MaxInMemoryBatches { get => _options.MaxInMemoryBatches; set => _options.MaxInMemoryBatches = value; }
 
@@ -425,6 +430,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public long SubquerySpillThresholdRows { get => _options.SubquerySpillThresholdRows; set => _options.SubquerySpillThresholdRows = value; }
     public bool SpillEncryptionEnabled { get => _options.SpillEncryptionEnabled; set => _options.SpillEncryptionEnabled = value; }
     public bool SpillCompressionEnabled { get => _options.SpillCompressionEnabled; set => _options.SpillCompressionEnabled = value; }
+    public string SpillCompressionLevel { get => _options.SpillCompressionLevel; set => _options.SpillCompressionLevel = value; }
     public string SpillFormat { get => _options.SpillFormat; set => _options.SpillFormat = value; }
     public long SpillMinimumFreeBytes { get; set; } = DefaultThresholds.SpillMinimumFreeDiskMB(null) * 1024L * 1024L;
 
@@ -707,18 +713,28 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         JoinSpillThreshold = DefaultThresholds.JoinSpillThreshold(config);
         ExternalHashPartitions = DefaultThresholds.ExternalHashPartitions(config);
         BatchSize = DefaultThresholds.BatchSize(config);
+        BatchTargetBytes = DefaultThresholds.BatchTargetBytes(config);
         MaxRecursiveDepth = DefaultThresholds.MaxRecursiveDepth(config);
         _securityService.MaxCteRecursionDepth = MaxRecursiveDepth;
         ExternalSortChunkSize = DefaultThresholds.ExternalSortChunkSize(config);
         WindowSpillThreshold = DefaultThresholds.WindowSpillThreshold(config);
         OperatorMemoryGrantMB = DefaultThresholds.OperatorMemoryGrantMB(config);
-        // Configure the process-wide grant pool (shared across concurrent jobs). 0 = unbounded.
-        MemoryGrantArbiter.Shared.TotalBudgetBytes = (long)DefaultThresholds.TotalMemoryGrantMB(config) * 1024 * 1024;
+        // Bind to the host's unified resource coordinator when available (via IBufferManager);
+        // otherwise configure the fallback shared arbiter from Engine:TotalMemoryGrantMB.
+        if (_bufferManager is IMemoryGrantArbiter coordinatorArbiter)
+        {
+            MemoryArbiter = new SessionScopedMemoryArbiter(_bufferManager, coordinatorArbiter, () => SessionId);
+        }
+        else
+        {
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = (long)DefaultThresholds.TotalMemoryGrantMB(config) * 1024 * 1024;
+        }
         MemoryGovernorPolicy = DefaultThresholds.MemoryGovernorPolicy(config);
         _options.AdaptiveExecutionOptions = LoadAdaptiveOptions(config);
         TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
 
         _options.BatchSize = BatchSize;
+        _options.BatchTargetBytes = BatchTargetBytes;
         _options.SubqueryCacheSize = DefaultThresholds.SubqueryCacheSize(config);
         _options.TempTableSpillThresholdRows = TempTableSpillThresholdRows;
         SpillEncryptionEnabled = (ExecutionPolicy?.IsEnrolled == true
@@ -726,6 +742,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             && bool.TryParse(reqSpillEnc, out var reqSpillBool) && reqSpillBool)
             || DefaultThresholds.SpillEncryptionEnabled(config);
         SpillCompressionEnabled = DefaultThresholds.SpillCompressionEnabled(config);
+        SpillCompressionLevel = DefaultThresholds.SpillCompressionLevel(config);
         SpillFormat = DefaultThresholds.SpillFormat(config);
         SpillMinimumFreeBytes = DefaultThresholds.SpillMinimumFreeDiskMB(config) * 1024L * 1024L;
         MaxLastResultRows = DefaultThresholds.MaxLastResultRows(config);
@@ -1806,7 +1823,13 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         => _batchPipelineHelper.AlignColumns(batches, targetCols);
 
     public IAsyncEnumerable<DataTable> Buffer(IAsyncEnumerable<DataTable> batches)
-        => _batchPipelineHelper.Buffer(batches, CancellationToken);
+    {
+        var targetBatchBytes = ((IExecutionContext)this).EffectiveBatchTargetBytes;
+        long maxQueuedBytes = targetBatchBytes > 0
+            ? Math.Max(targetBatchBytes, targetBatchBytes <= long.MaxValue / 2 ? targetBatchBytes * 2 : long.MaxValue)
+            : 0;
+        return _batchPipelineHelper.Buffer(batches, CancellationToken, maxQueuedBytes: maxQueuedBytes, targetBatchBytes: targetBatchBytes);
+    }
 
     public ForClause? GetForClause(Statement stmt)
     {
@@ -1912,6 +1935,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             NoSaveConnection = NoSaveConnection,
             ConnectionEncryption = ConnectionEncryption,
             BatchSize = BatchSize,
+            BatchTargetBytes = BatchTargetBytes,
             PreviewLimit = PreviewLimit,
             ScriptPassword = ScriptPassword,
             SessionId = SessionId,
@@ -1919,6 +1943,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             MaxGroupingSets = MaxGroupingSets,
             ExecutionPolicy = ExecutionPolicy,
             ExecutionIdentity = ExecutionIdentity,
+            // Dependencies protect the entire run, including branches whose results are
+            // never merged because another branch failed. Writers lock the shared set.
+            // COMPAT_BREAK: 0.23 - snapshot access includes parallel connection dependencies.
+            SharedConnectionDependencies = SharedConnectionDependencies,
             StorageCapability = StorageCapability,
             MemoryArbiter = MemoryArbiter,
             _adaptiveController = _adaptiveController,
@@ -1957,7 +1985,15 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             LastResultSets.AddRange(spawned.LastResultSets);
             if (spawned.LastResult != null) LastResult = spawned.LastResult;
         }
-        lock (_messagesLock) foreach (var entry in spawned.Messages) Log(entry.Message, entry.Color);
+        // Copy first: a fork shares this session's id, so its message handler is still subscribed
+        // and each Log below also appends to spawned.Messages. Enumerating that list directly
+        // threw "Collection was modified" whenever the fork had logged (e.g. a spill notice).
+        LogEntry[] spawnedMessages;
+        if (spawned is Evaluator spawnedEval)
+            lock (spawnedEval._messagesLock) spawnedMessages = spawnedEval.Messages.ToArray();
+        else
+            spawnedMessages = spawned.Messages.ToArray();
+        lock (_messagesLock) foreach (var entry in spawnedMessages) Log(entry.Message, entry.Color);
 
         Telemetry.RowsProcessed += spawned.Telemetry.RowsProcessed;
         Telemetry.TotalSpilledBytes += spawned.Telemetry.TotalSpilledBytes;
@@ -2073,5 +2109,18 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         public override bool Equals(object? obj) => obj is NodeReuseKey k && Equals(k);
 
         public override int GetHashCode() => HashCode.Combine(_hasParent, _parentId, _stmtHash);
+    }
+
+    private sealed class SessionScopedMemoryArbiter(
+        IBufferManager bufferManager,
+        IMemoryGrantArbiter innerArbiter,
+        Func<string?> sessionIdAccessor) : IMemoryGrantArbiter
+    {
+        public long TotalBudgetBytes => innerArbiter.TotalBudgetBytes;
+        public long ReservedBytes => innerArbiter.ReservedBytes;
+        public SystemMemoryFloorPressure? CurrentSystemMemoryFloorPressure => innerArbiter.CurrentSystemMemoryFloorPressure;
+
+        public IMemoryGrantLease AcquireLease()
+            => bufferManager.AcquireMemoryLease(sessionIdAccessor());
     }
 }

@@ -1016,6 +1016,111 @@ public static class CryptoUtils
     }
 
     /// <summary>
+    /// Creates an ASCII-armored detached OpenPGP signature (<c>.sig</c>) for <paramref name="inputFile"/>
+    /// without encrypting it (ROADMAP FO12). Writes beside the destination and moves into place only on
+    /// success so a wrong passphrase or public key never leaves a partial file. Never echoes key material.
+    /// </summary>
+    public static async Task SignFileWithPgpAsync(
+        string inputFile,
+        string outputFile,
+        string signingKeyFile,
+        string? passphrase,
+        bool overwrite)
+    {
+        if (!File.Exists(inputFile))
+            throw new ExecutionException($"Source file for SIGN FILE does not exist: {Path.GetFileName(inputFile)}");
+        if (!File.Exists(signingKeyFile))
+            throw new ExecutionException($"Signing key file not found: {Path.GetFileName(signingKeyFile)}");
+        if (File.Exists(outputFile) && !overwrite)
+            throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
+
+        var tempFile = outputFile + ".etlsql-sign-" + Guid.NewGuid().ToString("N")[..12];
+        try
+        {
+            try
+            {
+                var keys = new EncryptionKeys(new FileInfo(signingKeyFile), passphrase ?? string.Empty);
+                using var pgp = new PGP(keys);
+                await using var input = File.OpenRead(inputFile);
+                await using var output = File.Create(tempFile);
+                await pgp.SignDetachedAsync(input, output, armor: true, headers: null);
+            }
+            catch (Exception ex) when (ex is not ExecutionException and not IOException and not OperationCanceledException)
+            {
+                throw DetachedSigningKeyError(signingKeyFile, ex);
+            }
+
+            File.Move(tempFile, outputFile, overwrite);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    /// <summary>
+    /// Verifies a detached OpenPGP signature (<c>.sig</c>) over <paramref name="inputFile"/> using the
+    /// sender's public key (ROADMAP FO12). Fails closed on missing signature, wrong signer, tampered file,
+    /// or unusable public key, and never echoes key material.
+    /// </summary>
+    public static async Task VerifyFileSignatureWithPgpAsync(
+        string inputFile,
+        string signatureFile,
+        string verifyKeyFile)
+    {
+        var fileName = Path.GetFileName(inputFile);
+        var sigName = Path.GetFileName(signatureFile);
+        var keyName = Path.GetFileName(verifyKeyFile);
+
+        if (!File.Exists(inputFile))
+            throw new ExecutionException($"Source file for VERIFY FILE SIGNATURE does not exist: {fileName}");
+        if (!File.Exists(signatureFile))
+            throw new ExecutionException($"Signature file for VERIFY FILE SIGNATURE does not exist: {sigName}");
+        if (!File.Exists(verifyKeyFile))
+            throw new ExecutionException($"Public key file for VERIFY FILE SIGNATURE does not exist: {keyName}");
+
+        EncryptionKeys keys;
+        try
+        {
+            keys = new EncryptionKeys(new FileInfo(verifyKeyFile));
+        }
+        catch (Exception ex) when (ex is not ExecutionException and not IOException and not OperationCanceledException)
+        {
+            throw new ExecutionException($"Could not verify '{fileName}': PGP_KEY '{keyName}' is not a usable PGP public key.");
+        }
+
+        bool verified;
+        try
+        {
+            using var pgp = new PGP(keys);
+            await using var input = File.OpenRead(inputFile);
+            await using var signature = File.OpenRead(signatureFile);
+            verified = await pgp.VerifyDetachedAsync(input, signature);
+        }
+        catch (Exception ex) when (ex is not ExecutionException and not IOException and not OperationCanceledException)
+        {
+            verified = false;
+        }
+
+        if (!verified)
+        {
+            throw new ExecutionException(
+                $"Could not verify '{fileName}': signature '{sigName}' was not created by PGP_KEY '{keyName}', or the file was modified after signing.");
+        }
+    }
+
+    private static ExecutionException DetachedSigningKeyError(string signingKeyFile, Exception inner)
+    {
+        var name = Path.GetFileName(signingKeyFile);
+        var kind = inner.GetType().Name;
+        if (kind.Contains("Passphrase", StringComparison.Ordinal))
+            return new ExecutionException($"Could not sign with '{name}': the PASSWORD is wrong for this PGP_KEY.");
+        if (kind.Contains("KeyMaterial", StringComparison.Ordinal) || inner.Message.Contains("secret key", StringComparison.OrdinalIgnoreCase))
+            return new ExecutionException($"Could not sign with '{name}': PGP_KEY must be your PGP private key, not a public key.");
+        return new ExecutionException($"Could not sign with '{name}': it is not a usable PGP private key ({kind}).");
+    }
+
+    /// <summary>
     /// Validates a file's lock status (waiting for lock to clear) and expected hash integrity.
     /// </summary>
     public static void ValidateFileAccess(string filePath, Dictionary<string, string>? options, ETL_SQL.Core.IExecutionContext context)

@@ -277,7 +277,9 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
         var userCtrl = CreateExecutionController(db, userId: 2, isAdmin: false);
         var res = await userCtrl.RequestDataRefresh(report.Id);
         var okRes = Assert.IsType<OkObjectResult>(res);
-        Assert.NotNull(okRes.Value);
+        var payload = System.Text.Json.JsonSerializer.SerializeToElement(okRes.Value);
+        var status = payload.GetProperty("status").GetString();
+        Assert.Contains(status, new[] { "Requested", "Started" });
     }
 
     [Fact]

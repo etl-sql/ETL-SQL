@@ -77,7 +77,11 @@ public class ResultFormatter
             rows = batch.Rows.Select(r =>
             {
                 var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-                foreach (var col in batch.ColumnNames) dict[col] = SecretRedactor.RedactValue(col, r[col]);
+                foreach (var col in batch.ColumnNames)
+                {
+                    var val = SecretRedactor.RedactValue(col, r[col]);
+                    dict[col] = val is byte[] bytes ? "0x" + Convert.ToHexStringLower(bytes) : val;
+                }
                 return dict;
             }).ToList()
         };
@@ -92,7 +96,7 @@ public class ResultFormatter
 
         var rows = batch.Rows
             .Select(row => columns
-                .Select(column => SecretRedactor.RedactValue(column, row[column])?.ToString() ?? "NULL")
+                .Select(column => FormatCell(SecretRedactor.RedactValue(column, row[column])))
                 .ToList())
             .ToList();
 
@@ -107,6 +111,13 @@ public class ResultFormatter
             builder.AppendLine(RenderPlainRow(row, widths));
         return builder.ToString().TrimEnd();
     }
+
+    private static string FormatCell(object? value) => value switch
+    {
+        null => "NULL",
+        byte[] bytes => "0x" + Convert.ToHexStringLower(bytes),
+        _ => value.ToString() ?? "NULL"
+    };
 
     private static string RenderPlainRow(IReadOnlyList<string> values, IReadOnlyList<int> widths) =>
         "| " + string.Join(" | ", values.Select((value, index) => value.PadRight(widths[index]))) + " |";

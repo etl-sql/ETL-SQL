@@ -33,6 +33,7 @@ namespace ETL_SQL.SqlLogicTests
 
             object fileLock = new object();
             int count = 0;
+            SltRunner.ResetSpillCoverage();
 
             await Parallel.ForEachAsync(testFiles, new ParallelOptions { MaxDegreeOfParallelism = 4 }, async (filePath, ct) =>
             {
@@ -81,11 +82,42 @@ namespace ETL_SQL.SqlLogicTests
                 }
             });
 
+            var spillCoverage = ReportSpillCoverage();
+
             if (failures.Any())
             {
                 var summary = string.Join(Environment.NewLine, failures.Select(f => $"{Path.GetFileName(f.FilePath)}: {f.Exception.Message}"));
                 throw new Exception($"SLT test run completed with {failures.Count} file failure(s) out of {testFiles.Count} total files.{Environment.NewLine}{Environment.NewLine}Failures:{Environment.NewLine}{summary}");
             }
+
+            // The spill lane sets ETL_SQL_SLT_MIN_SPILL_PERCENT: a threshold override that stops
+            // reaching the engine, or a corpus whose tables fall below the thresholds, would
+            // otherwise leave the lane green with nothing spilled.
+            var minimum = Environment.GetEnvironmentVariable("ETL_SQL_SLT_MIN_SPILL_PERCENT");
+            if (!string.IsNullOrWhiteSpace(minimum)
+                && double.TryParse(minimum, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var minimumPercent))
+            {
+                Assert.True(spillCoverage.Percent >= minimumPercent,
+                    $"Only {spillCoverage.Spilled} of {spillCoverage.Run} SLT queries spilled ({spillCoverage.Percent:F1}%); " +
+                    $"the lane requires at least {minimumPercent:F1}%.");
+            }
+        }
+
+        private static (long Run, long Spilled, double Percent) ReportSpillCoverage()
+        {
+            var run = SltRunner.QueriesRun;
+            var spilled = SltRunner.QueriesSpilled;
+            var percent = run == 0 ? 0 : 100.0 * spilled / run;
+            Console.WriteLine($"SLT spill coverage: {spilled} of {run} result-checked queries spilled ({percent:F1}%).");
+
+            var evidenceDir = Environment.GetEnvironmentVariable("ETL_SQL_SLT_EVIDENCE_DIR");
+            if (!string.IsNullOrWhiteSpace(evidenceDir))
+            {
+                Directory.CreateDirectory(evidenceDir);
+                File.WriteAllText(Path.Combine(evidenceDir, "slt-spill-coverage.json"),
+                    System.Text.Json.JsonSerializer.Serialize(new { queriesRun = run, queriesSpilled = spilled, percent = Math.Round(percent, 2) }));
+            }
+            return (run, spilled, percent);
         }
 
         public static IEnumerable<object[]> GetTestFiles()

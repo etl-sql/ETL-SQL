@@ -1,0 +1,55 @@
+{
+  "kind": "rankedTable",
+  "heading": "Regional Channel Revenue (2D Facet, Independent Y)",
+  "items": [
+    {
+      "label": "Q1",
+      "value": "120.0",
+      "order": 0,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q2",
+      "value": "180.0",
+      "order": 1,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q1",
+      "value": "25.0",
+      "order": 2,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q2",
+      "value": "45.0",
+      "order": 3,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q1",
+      "value": "420.0",
+      "order": 4,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q2",
+      "value": "590.0",
+      "order": 5,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q1",
+      "value": "12.0",
+      "order": 6,
+      "group": "Revenue"
+    },
+    {
+      "label": "Q2",
+      "value": "19.0",
+      "order": 7,
+      "group": "Revenue"
+    }
+  ],
+  "summary": "Regional Channel Revenue (2D Facet, Independent Y): 8 rows, 1 ordered layers, 1 series, 4 facet panels, 0 gaps, 0 skipped rows."
+}

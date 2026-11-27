@@ -82,8 +82,8 @@ public class AlterJobStatementHandler : IStatementHandler
             return path;
 
         var store = context.ServiceProvider.GetService<IBundleStore>();
-        if (store == null) return path;
-        var latest = await store.GetLatestVersionAsync(uri.BundleName);
+        if (!BundleStoreAccessor.HasStore(store, context)) return path;
+        var latest = await BundleStoreAccessor.GetLatestVersionAsync(store, context, uri.BundleName);
         if (latest == null) return path;
         var pinned = uri.ToPinnedString(latest.Version);
         context.Log($"Resolved {path} to {pinned} for scheduled job stability.", ConsoleColor.Cyan);

@@ -75,7 +75,7 @@ public partial class Evaluator
     public ValueTask<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context)
         => _procedureExecutor.EvaluateUserDefinedFunction(f, args, context);
 
-    public Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args)
+    public Task EvaluateProcedure(string name, List<(string? Name, object? Value, string? OutputVariable)> args)
         => _procedureExecutor.EvaluateProcedure(name, args);
 
     public async ValueTask<bool> EvaluateCondition(Expression? expr, Row context)

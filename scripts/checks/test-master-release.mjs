@@ -145,8 +145,6 @@ try {
       write(root,'scripts/real-installer-source-check.ps1',readFileSync(new URL('../Test-InstallerSources.ps1',import.meta.url),'utf8'));
       write(root,'scripts/install.ps1','Retired fixture: must never execute');
       write(root,'src/ETL-SQL.Installer/Installer.wxs','<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"/>');
-      write(root,'src/ETL-SQL.Installer/configure-portal-jwt.ps1','throw "Must never execute"');
-      write(root,'src/ETL-SQL.Installer/installer-actions.js','throw new Error("Must never execute");');
     }
     if (mode !== 'missing-ui') mkdirSync(path.join(root, 'src/etl-sql-vscode/ui'), { recursive: true });
     const nativeName = host === 'Windows' ? 'src/ETL-SQL.Installer/ETL-SQL-v0.22.0.msi' : host === 'Linux' ? 'etl-sql_0.22.0_amd64.deb' : 'ETL-SQL_v0.22.0.dmg';

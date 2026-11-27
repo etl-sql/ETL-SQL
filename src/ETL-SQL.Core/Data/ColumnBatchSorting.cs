@@ -235,6 +235,19 @@ public static class ColumnBatchSortKernels
             }
         }
 
+        if (column is BinaryColumnBuffer binary)
+        {
+            return CompareBinaryRows;
+
+            int CompareBinaryRows(int left, int right)
+            {
+                var nullOrder = CompareNulls(column, left, right, key.NullsFirst, out var bothPresent);
+                if (!bothPresent) return nullOrder;
+                var order = binary.GetBytes(left).SequenceCompareTo(binary.GetBytes(right));
+                return key.Descending ? -order : order;
+            }
+        }
+
         if (column is ColumnBuffer<byte> bytes) return Fixed(bytes, key);
         if (column is ColumnBuffer<short> shorts) return Fixed(shorts, key);
         if (column is ColumnBuffer<int> ints) return Fixed(ints, key);
@@ -279,6 +292,8 @@ public static class ColumnBatchSortKernels
             return string.Compare(Encoding.UTF8.GetString(leftBytes), Encoding.UTF8.GetString(rightBytes),
                 stringComparison);
         }
+        if (left is BinaryColumnBuffer leftBin && right is BinaryColumnBuffer rightBin)
+            return leftBin.GetBytes(leftRow).SequenceCompareTo(rightBin.GetBytes(rightRow));
         if (left is ColumnBuffer<byte> lb && right is ColumnBuffer<byte> rb) return lb.Values.Span[leftRow].CompareTo(rb.Values.Span[rightRow]);
         if (left is ColumnBuffer<short> ls && right is ColumnBuffer<short> rs) return ls.Values.Span[leftRow].CompareTo(rs.Values.Span[rightRow]);
         if (left is ColumnBuffer<int> li && right is ColumnBuffer<int> ri) return li.Values.Span[leftRow].CompareTo(ri.Values.Span[rightRow]);

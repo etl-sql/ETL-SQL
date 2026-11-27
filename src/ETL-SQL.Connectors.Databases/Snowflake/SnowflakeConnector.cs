@@ -34,23 +34,27 @@ namespace ETL_SQL.Connectors.Snowflake
             "  DATABASE: Target database.\n" +
             "  SCHEMA: Target schema (default: PUBLIC).\n" +
             "  WAREHOUSE: Virtual warehouse for query execution.\n" +
+            "  ROLE: Snowflake role to assume for the session.\n" +
             "  USERNAME: Snowflake user name.\n" +
             "  PASSWORD: Password (for username/password auth).\n" +
-            "  PRIVATE_KEY_FILE: Path to RSA private key PEM file (for key-pair JWT auth).";
+            "  PRIVATE_KEY_FILE: Path to RSA private key PEM file (for key-pair JWT auth).\n" +
+            "  PRIVATE_KEY_PASSPHRASE: Passphrase for an encrypted PRIVATE_KEY_FILE (requires PRIVATE_KEY_FILE).";
 
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
-            { "HOST",             Array.Empty<string>() },
-            { "ACCOUNT",          Array.Empty<string>() },
-            { "PORT",             Array.Empty<string>() },
-            { "PROTOCOL",         Array.Empty<string>() },
-            { "DATABASE",         Array.Empty<string>() },
-            { "SCHEMA",           Array.Empty<string>() },
-            { "WAREHOUSE",        Array.Empty<string>() },
-            { "USERNAME",         Array.Empty<string>() },
-            { "PASSWORD",         Array.Empty<string>() },
-            { "PRIVATE_KEY_FILE",   Array.Empty<string>() },
-            { "TIMEOUT_SECONDS",   Array.Empty<string>() },
+            { "HOST",                   Array.Empty<string>() },
+            { "ACCOUNT",                Array.Empty<string>() },
+            { "PORT",                   Array.Empty<string>() },
+            { "PROTOCOL",               Array.Empty<string>() },
+            { "DATABASE",               Array.Empty<string>() },
+            { "SCHEMA",                 Array.Empty<string>() },
+            { "WAREHOUSE",              Array.Empty<string>() },
+            { "ROLE",                   Array.Empty<string>() },
+            { "USERNAME",               Array.Empty<string>() },
+            { "PASSWORD",               Array.Empty<string>() },
+            { "PRIVATE_KEY_FILE",       Array.Empty<string>() },
+            { "PRIVATE_KEY_PASSPHRASE", Array.Empty<string>() },
+            { "TIMEOUT_SECONDS",        Array.Empty<string>() },
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new();
@@ -66,6 +70,24 @@ namespace ETL_SQL.Connectors.Snowflake
             => throw new NotSupportedException("Use IDataSource.GetColumnsAsync instead.");
         public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString)
             => Task.FromResult<IEnumerable<string>>(Array.Empty<string>());
+
+        // Secrets and paths use ADO.NET quoting: Snowflake.Data parses the string with
+        // DbConnectionStringBuilder, so a ';' or '=' inside a password or passphrase stays part of it.
+        internal static string FormatPair(string key, string value)
+        {
+            var sb = new System.Text.StringBuilder();
+            System.Data.Common.DbConnectionStringBuilder.AppendKeyValuePair(sb, key, value);
+            return sb.ToString();
+        }
+
+        // Snowflake.Data re-reads ROLE (and DB, SCHEMA, WAREHOUSE) by splitting the raw string on ';' and
+        // '=', so these values cannot be quoted. Reject the characters instead of building a string that
+        // sets other keys.
+        internal static void ValidateRawValue(string option, string value)
+        {
+            if (value.IndexOfAny(new[] { ';', '=' }) >= 0)
+                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"SNOWFLAKE option {option} must not contain ';' or '='.");
+        }
 
         public string BuildConnectionString(Dictionary<string, string> properties)
         {
@@ -93,15 +115,28 @@ namespace ETL_SQL.Connectors.Snowflake
             if (properties.TryGetValue("PRIVATE_KEY_FILE", out var pkFile) && !string.IsNullOrWhiteSpace(pkFile))
             {
                 parts.Add("authenticator=snowflake_jwt");
-                parts.Add($"private_key_file={pkFile}");
+                parts.Add(FormatPair("private_key_file", pkFile));
+                if (properties.TryGetValue("PRIVATE_KEY_PASSPHRASE", out var pkPass) && !string.IsNullOrWhiteSpace(pkPass))
+                    parts.Add(FormatPair("private_key_pwd", pkPass));
             }
-            else if (properties.TryGetValue("PASSWORD", out var password))
+            else
             {
-                parts.Add($"password={password}");
+                if (properties.TryGetValue("PRIVATE_KEY_PASSPHRASE", out var strayPass) && !string.IsNullOrWhiteSpace(strayPass))
+                    throw new ETL_SQL.Core.Common.Exceptions.ExecutionException("SNOWFLAKE option PRIVATE_KEY_PASSPHRASE requires PRIVATE_KEY_FILE.");
+
+                if (properties.TryGetValue("PASSWORD", out var password))
+                {
+                    parts.Add(FormatPair("password", password));
+                }
             }
 
             if (properties.TryGetValue("WAREHOUSE", out var warehouse))
                 parts.Add($"warehouse={warehouse}");
+            if (properties.TryGetValue("ROLE", out var role) && !string.IsNullOrWhiteSpace(role))
+            {
+                ValidateRawValue("ROLE", role);
+                parts.Add($"role={role}");
+            }
             if (properties.TryGetValue("DATABASE", out var db))
                 parts.Add($"db={db}");
             if (properties.TryGetValue("SCHEMA", out var schema))
@@ -136,15 +171,22 @@ namespace ETL_SQL.Connectors.Snowflake
                 || host.Contains(':', StringComparison.Ordinal);
         }
 
-        private static string? ParseValueFromConnectionString(string cs, string key)
+        // Policy checks must read the connection string exactly as Snowflake.Data does
+        // (DbConnectionStringBuilder): a naive split on ';' would find a "host=" hidden inside a
+        // quoted password and check a different host from the one the driver connects to.
+        internal static System.Data.Common.DbConnectionStringBuilder ParseConnectionString(string cs)
         {
-            foreach (var part in cs.Split(';'))
+            try
             {
-                var kv = part.Trim().Split('=', 2);
-                if (kv.Length == 2 && kv[0].Equals(key, StringComparison.OrdinalIgnoreCase))
-                    return kv[1];
+                return new System.Data.Common.DbConnectionStringBuilder { ConnectionString = cs };
             }
-            return null;
+            catch (ArgumentException ex)
+            {
+                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"SNOWFLAKE connection string is malformed: {ex.Message}", ex);
+            }
         }
+
+        internal static string? ParseValueFromConnectionString(string cs, string key) =>
+            ParseConnectionString(cs).TryGetValue(key, out var value) ? value?.ToString() : null;
     }
 }

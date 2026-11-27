@@ -52,8 +52,8 @@ public class MappingRoleValidationTests
         var stmt = MakeVisual(VisualType.Bar, ("X", "Region"), ("Y", "Revenue"));
         var manifest = MakeManifest("Region", "Revenue");
         var spec = Lowerer.Lower(stmt, manifest);
-        Assert.NotNull(spec);
-        Assert.NotEmpty(spec.Bindings);
+        Assert.Contains(spec.Bindings, b => b.Field == "Region");
+        Assert.Contains(spec.Bindings, b => b.Field == "Revenue");
     }
 
     // ── Every named visual type rejects a bogus role ────────────────────
@@ -144,7 +144,7 @@ public class MappingRoleValidationTests
         var stmt = MakeVisual(VisualType.Bar, ("X", "Cat"), ("Y", "Val"), (role, "Extra"));
         var manifest = MakeManifest("Cat", "Val", "Extra");
         var spec = Lowerer.Lower(stmt, manifest);
-        Assert.NotNull(spec);
+        Assert.Contains(spec.Bindings, b => b.Field == "Extra");
     }
 
     // ── Cross-type confusion: BAR role on PIE and vice versa ────────────

@@ -7,16 +7,28 @@ Returns a table of files on a remote connection (SFTP, FTP, or Azure Blob).
 ```sql
 REMOTE_FILE_LIST(connection_name)
 REMOTE_FILE_LIST(connection_name, path)
+REMOTE_FILE_LIST(connection_name, path, recursive)
 ```
 
 ## Parameters
 
-- **connection_name** - Name of an SFTP, FTP, or Azure Blob connection.
+- **connection_name** - Name of an SFTP, FTP, S3, Azure Blob, or SharePoint connection.
 - **path** - Optional remote directory path to list. Defaults to the connection root.
+- **recursive** - Optional boolean (`TRUE`/`FALSE`, `'ON'`/`'OFF'`, `1`/`0`, default `FALSE`). When enabled, traverses subdirectories up to `SET ALLOW_RECURSIVE_LAYERS` (default `5`), failing instead of truncating if the tree is deeper, and never follows symlinked folders.
 
 ## Returns
 
-Returns a table with these columns: `NAME`, `FULLPATH`, `SIZE`, `LASTMODIFIED`, and `ISDIRECTORY`.
+Returns a table with these columns: `Name`, `FullPath`, `Size`, `LastModified`, `IsDirectory`, `CreationTime`, `Permissions`, `Owner`, and `IsSymlink`.
+
+### Connector Metadata Matrix
+
+| Connector | `CreationTime` | `Permissions` | `Owner` | `IsSymlink` |
+| :--- | :--- | :--- | :--- | :--- |
+| `SFTP` | `NULL` (SFTP v3 has no birth time) | POSIX mode string (e.g. `rwxr-x---`) | Numeric UID string | `TRUE` / `FALSE` |
+| `FTP` | Server `MLSD` `create` fact when reported, else `NULL` | POSIX mode string when reported, else `NULL` | Raw owner when reported, else `NULL` | `TRUE` / `FALSE` |
+| `S3` | `NULL` | `NULL` | Bucket owner display name or ID when returned, else `NULL` | `NULL` |
+| `AZURE_BLOB` | Blob `CreatedOn` timestamp | `NULL` | `NULL` | `NULL` |
+| `SHAREPOINT` | `TimeCreated` timestamp when returned, else `NULL` | `NULL` | `NULL` | `NULL` |
 
 ## Null Behavior
 

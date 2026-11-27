@@ -315,12 +315,34 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
+            using var transaction = connection.BeginTransaction();
+
             using var command = connection.CreateCommand();
+            command.Transaction = transaction;
             command.CommandText = @"
                 DELETE FROM job_schedules WHERE job_id = @jobId AND schedule_id = @scheduleId;";
             command.AddParam("@jobId", jobId);
             command.AddParam("@scheduleId", scheduleId);
-            return await command.ExecuteNonQueryAsync() > 0;
+            var removed = await command.ExecuteNonQueryAsync() > 0;
+
+            // A linked run leaves the link's next occurrence in jobs.next_run. With the last link
+            // gone, the legacy interval path would pick that date up and then re-arm the job every
+            // interval; a job with no schedule runs only when triggered, so it goes back to manual.
+            if (removed)
+            {
+                using var manual = connection.CreateCommand();
+                manual.Transaction = transaction;
+                manual.CommandText = @"
+                    UPDATE jobs SET next_run = @manual
+                    WHERE id = @jobId
+                      AND NOT EXISTS (SELECT 1 FROM job_schedules js WHERE js.job_id = @jobId);";
+                manual.AddParam("@jobId", jobId);
+                manual.AddParam("@manual", JobDefinition.ManualOnlyNextRun.ToString("O"));
+                await manual.ExecuteNonQueryAsync();
+            }
+
+            transaction.Commit();
+            return removed;
         }
 
         public async Task<IReadOnlyList<JobScheduleLink>> GetJobSchedulesAsync(JobId jobIdRef = default)

@@ -42,10 +42,12 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
         IEnumerable<ColumnDefinition> schema,
         int segmentRowCapacity = 10_000,
         IMemoryGrantArbiter? memoryArbiter = null,
-        IEnumerable<TableConstraint>? tableConstraints = null)
+        IEnumerable<TableConstraint>? tableConstraints = null,
+        long segmentByteCapacity = ETL_SQL.Core.Spill.SpillFanOut.DefaultTargetBatchBytes)
     {
         if (segmentRowCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(segmentRowCapacity));
         SegmentRowCapacity = segmentRowCapacity;
+        SegmentByteCapacity = segmentByteCapacity;
         var definitions = schema?.ToArray() ?? throw new ArgumentNullException(nameof(schema));
         if (definitions.Length == 0) throw new ArgumentException("A column store requires at least one column.", nameof(schema));
         _logicalSchema = definitions.ToDictionary(column => column.ColumnName, StringComparer.OrdinalIgnoreCase);
@@ -72,6 +74,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
     }
 
     public int SegmentRowCapacity { get; }
+    public long SegmentByteCapacity { get; }
     public int SegmentCount { get { lock (_segments) return _segments.Count; } }
     public int MutableHeadRows => _head.Rows.Count;
     public long EstimatedRowCount => Interlocked.Read(ref _rowCount);
@@ -134,7 +137,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
                     }
                     _rowCount++;
                     _headEstimatedBytes += rowBytes;
-                    if (_head.Rows.Count >= SegmentRowCapacity)
+                    if (_head.Rows.Count >= SegmentRowCapacity || (SegmentByteCapacity > 0 && _headEstimatedBytes >= SegmentByteCapacity))
                         FreezeHead();
                 }
             }

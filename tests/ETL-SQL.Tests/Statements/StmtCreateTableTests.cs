@@ -64,14 +64,15 @@ namespace ETL_SQL.Tests.Statements
                 SELECT * FROM #DateDefaults;
             ";
 
+            var before = DateTime.Now;
             await evaluator.Evaluate(new Lexer(script).TokenizeToScript());
-            var result = evaluator.LastResult;
+            var after = DateTime.Now;
+            var row = Assert.Single(evaluator.LastResult.Rows);
 
-            Assert.Single(result.Rows);
-            Assert.Equal(1, Convert.ToInt32(result.Rows[0]["Id"]));
-            Assert.IsType<DateTime>(result.Rows[0]["CreatedDate"]);
-            Assert.True((DateTime.Now - (DateTime)result.Rows[0]["CreatedDate"]).TotalSeconds < 5);
-            Assert.Equal(10, Convert.ToInt32(result.Rows[0]["Calculated"]));
+            var created = Assert.IsType<DateTime>(row["CreatedDate"]);
+            Assert.InRange(created, before.AddSeconds(-1), after.AddSeconds(1));
+            Assert.Equal(10m, Convert.ToDecimal(row["Calculated"]));
+            Assert.Equal(1m, Convert.ToDecimal(row["Id"]));
         }
 
         [Fact]

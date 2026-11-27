@@ -145,6 +145,7 @@ const mockBody = new MockElement('body');
 const mockDoc = {
     body: mockBody,
     createElement(tag) { return new MockElement(tag); },
+    createElementNS(_ns, tag) { return new MockElement(tag); },
     createTextNode(text) {
         const node = new MockElement('#text');
         node.textContent = text;
@@ -212,20 +213,25 @@ assert.equal(rtVisual.shouldShowVisualToolbar('CARD', { ALLOW_MAXIMIZE: 'OFF' })
 const card1 = new MockElement('div');
 card1.className = 'visual-card';
 const maxBtn = new MockElement('button');
-maxBtn.className = 'visual-tool-btn';
-maxBtn.textContent = '[]';
-card1.appendChild(maxBtn);
+maxBtn.className = 'visual-tool-btn visual-maximize-btn';
+const toolbar1 = new MockElement('div');
+toolbar1.className = 'visual-toolbar';
+toolbar1.appendChild(maxBtn);
+card1.appendChild(toolbar1);
+const buttonIcon = () => maxBtn.querySelector('svg')?.getAttribute('data-icon');
 
 rtVisual.toggleVisualMaximize(card1, maxBtn);
 assert.ok(card1.classList.contains('visual-maximized'), 'Card has visual-maximized class');
 assert.ok(mockDoc.body.classList.contains('visual-maximize-active'), 'Body has visual-maximize-active class');
-assert.equal(maxBtn.textContent, 'x', 'Button shows x when maximized');
+assert.equal(buttonIcon(), 'restore', 'Button shows the restore icon when maximized');
+assert.equal(maxBtn.getAttribute('aria-label'), 'Restore visual');
 
 // Close maximization
 rtVisual.closeMaximizedVisual();
 assert.ok(!card1.classList.contains('visual-maximized'), 'Card lost visual-maximized class after close');
 assert.ok(!mockDoc.body.classList.contains('visual-maximize-active'), 'Body lost visual-maximize-active class after close');
-assert.equal(maxBtn.textContent, '[]', 'Button restored to [] after close');
+assert.equal(buttonIcon(), 'maximize', 'Button shows the maximize icon after close');
+assert.equal(maxBtn.getAttribute('aria-label'), 'Maximize visual');
 
 // 2. renderVisual card creation
 const visualDef = {
@@ -259,9 +265,30 @@ assert.ok(title, 'Title element exists');
 assert.equal(title.textContent, 'Total Sales');
 
 assert.ok(visualCard.classList.contains('has-visual-toolbar'), 'Card has toolbar class');
-const cardToolBtn = visualCard.querySelector('.visual-tool-btn');
+const cardToolBtn = visualCard.querySelector('.visual-maximize-btn');
 assert.ok(cardToolBtn, 'Maximize button created in toolbar');
 assert.equal(cardToolBtn.getAttribute('aria-label'), 'Maximize visual');
+assert.equal(cardToolBtn.textContent, '', 'Maximize button carries an icon, not bracket text');
+assert.equal(cardToolBtn.querySelector('svg')?.getAttribute('data-icon'), 'maximize');
+const collapseBtn = visualCard.querySelector('.visual-collapse-btn');
+assert.equal(collapseBtn.getAttribute('aria-label'), 'Collapse visual');
+rtVisual.toggleVisualMaximize(visualCard, cardToolBtn);
+rtVisual.closeMaximizedVisual();
+assert.equal(cardToolBtn.getAttribute('aria-label'), 'Maximize visual');
+assert.equal(collapseBtn.getAttribute('aria-label'), 'Collapse visual');
+
+const reportUrl = 'https://reports.example/reports/dashboard.html';
+const inlineImage = 'data:image/png;base64,iVBORw0KGgo=';
+assert.equal(util.safeImageSrc(inlineImage, reportUrl), inlineImage);
+const inlineSvg = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg"/>');
+assert.equal(util.safeImageSrc(inlineSvg, reportUrl), inlineSvg);
+assert.equal(util.safeImageSrc('DATA:IMAGE/png;base64,iVBORw0KGgo=', reportUrl), inlineImage);
+assert.equal(util.safeImageSrc('/images/logo.png', reportUrl), 'https://reports.example/images/logo.png');
+assert.equal(util.safeImageSrc('http://images.example/logo.png', reportUrl), 'http://images.example/logo.png');
+assert.equal(util.safeImageSrc('./logo.png', 'file:///reports/dashboard.html'), 'file:///reports/logo.png');
+assert.equal(util.safeImageSrc('file:///reports/logo.png', reportUrl), '#');
+assert.equal(util.safeImageSrc('data:text/plain,placeholder', reportUrl), '#');
+assert.equal(util.safeImageSrc(String.fromCharCode(1), reportUrl), '');
 
 // 3. renderCard (KPI Card)
 const container = new MockElement('div');

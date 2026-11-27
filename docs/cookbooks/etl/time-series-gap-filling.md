@@ -1,5 +1,41 @@
 # Time Series Gap Filling (FILL_DATES)
+<!-- description: **▶ Runs as-is.** `TRANSFORM ... USING FILL_DATES` materializes missing dates per group with a default value, so chart axes never skip a day. -->
 When building reporting dashboards (e.g. daily sales charts), missing dates in the raw transaction log will cause dates to be skipped on the chart axis. The `TRANSFORM ... USING FILL_DATES` statement solves this by materializing the missing date rows per group in-memory and filling them with a default gap value (e.g. `0`).
+
+## Try It Now (No Database Needed)
+
+Paste into a `.etlsql` file and press **F5**. The built-in `MOCKDB()` orders are sparse, so several regions have days with no sales:
+
+```sql
+CREATE CONNECTION demo AS MOCKDB();
+
+-- 1. Daily order counts per region (MOCKDB orders are sparse, so some days are missing)
+SELECT CAST(OrderDate AS DATE) AS OrderDate, Region, COUNT(SaleID) AS TransactionCount
+INTO #raw_daily_sales
+FROM demo.Orders
+GROUP BY CAST(OrderDate AS DATE), Region;
+
+-- 2. Materialize the missing days per region with 0
+TRANSFORM #filled_daily_sales
+FROM #raw_daily_sales
+USING FILL_DATES (
+    DATE_COL  = 'OrderDate',
+    GAPS_FILL = 0,
+    BY_GROUP  = 'Region'
+);
+
+SELECT (SELECT COUNT(*) FROM #raw_daily_sales)    AS RawRows,
+       (SELECT COUNT(*) FROM #filled_daily_sales) AS FilledRows;
+
+SELECT OrderDate, Region, TransactionCount
+FROM #filled_daily_sales
+WHERE Region = 'EMEA'
+ORDER BY OrderDate;
+```
+
+The row count grows as the missing days are materialized with `0`, so a chart axis built from `#filled_daily_sales` never skips a date. The production version reads from Postgres and loads a reporting table:
+
+## Production Version
 
 **Pattern Scenario:** Extract regional sales transactions, stage them, fill missing dates per region, and load the continuous daily series into a postgreSQL reporting warehouse.
 

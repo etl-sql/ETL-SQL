@@ -104,7 +104,7 @@ public static class AstSerializer
         ConvertFileEncodingStatement s => $"CONVERT FILE ENCODING {s.Source.ToSql()} TO {s.Destination.ToSql()} WITH(FROM_ENCODING={s.FromEncoding.ToSql()}, TO_ENCODING={s.ToEncoding.ToSql()}" + (s.Overwrite != null ? $", OVERWRITE={s.Overwrite.ToSql()}" : "") + ");",
         SplitFileStatement s => $"SPLIT FILE {s.Source.ToSql()} TO {s.DestinationDir.ToSql()} WITH(LIMIT_TYPE={s.LimitType.ToSql()}, LIMIT_VALUE={s.LimitValue.ToSql()}" + (s.Prefix != null ? $", PREFIX={s.Prefix.ToSql()}" : "") + (s.Overwrite != null ? $", OVERWRITE={s.Overwrite.ToSql()}" : "") + ");",
         MergeFilesStatement s => $"MERGE FILES {s.Source.ToSql()} TO {s.Destination.ToSql()}" + (s.Header != null || s.Overwrite != null ? " WITH(" + string.Join(", ", new[] { s.Header != null ? $"HEADER={s.Header.ToSql()}" : null, s.Overwrite != null ? $"OVERWRITE={s.Overwrite.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
-        SyncDirectoryStatement s => $"SYNC DIRECTORY {s.Source.ToSql()} TO {s.Destination.ToSql()}" + (s.DeleteExtra != null || s.Overwrite != null || s.Recursive != null ? " WITH(" + string.Join(", ", new[] { s.DeleteExtra != null ? $"DELETE_EXTRA={s.DeleteExtra.ToSql()}" : null, s.Overwrite != null ? $"OVERWRITE={s.Overwrite.ToSql()}" : null, s.Recursive != null ? $"RECURSIVE={s.Recursive.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
+        SyncDirectoryStatement s => $"SYNC DIRECTORY {s.Source.ToSql()}{(s.SourceConnectionName != null ? $" AT {s.SourceConnectionName}" : "")} TO {s.Destination.ToSql()}{(s.DestinationConnectionName != null ? $" AT {s.DestinationConnectionName}" : "")}" + (s.DeleteExtra != null || s.Overwrite != null || s.Recursive != null ? " WITH(" + string.Join(", ", new[] { s.DeleteExtra != null ? $"DELETE_EXTRA={s.DeleteExtra.ToSql()}" : null, s.Overwrite != null ? $"OVERWRITE={s.Overwrite.ToSql()}" : null, s.Recursive != null ? $"RECURSIVE={s.Recursive.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
         VerifyFileIntegrityStatement s => $"VERIFY FILE INTEGRITY {s.Source.ToSql()}" + (s.HashFile != null || s.ExpectedHash != null || s.Algorithm != null ? " WITH(" + string.Join(", ", new[] { s.HashFile != null ? $"HASH_FILE={s.HashFile.ToSql()}" : null, s.ExpectedHash != null ? $"EXPECTED_HASH={s.ExpectedHash.ToSql()}" : null, s.Algorithm != null ? $"ALGORITHM={s.Algorithm.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
         ExpectSchemaStatement s => FormatExpectSchema(s),
 
@@ -842,6 +842,13 @@ public static class AstSerializer
 
     private static string FormatFileOperation(FileOperationStatement s)
     {
+        if (s.Type == FileOpType.VerifySignature)
+        {
+            var sig = s.Destination != null ? " SIGNATURE " + s.Destination.ToSql() : "";
+            var key = s.PgpKey != null ? " PGP_KEY " + s.PgpKey.ToSql() : "";
+            return $"VERIFY FILE SIGNATURE {s.Source.ToSql()}{sig}{key};";
+        }
+
         var op = s.Type.ToString().ToUpper() + " FILE";
         var dest = s.Destination != null ? " TO " + (s.DestinationIsDirectory ? "DIRECTORY " : "") + s.Destination.ToSql() : "";
         // Keys are clauses, not WITH options: the parser rejects PASSWORD, KEYFILE and PGP_KEY inside WITH.
@@ -854,6 +861,8 @@ public static class AstSerializer
         var opts = new List<string>();
         if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
         if (s.DeleteSource != null) opts.Add($"DELETE_SOURCE={s.DeleteSource.ToSql()}");
+        if (s.Format != null) opts.Add($"FORMAT={s.Format.ToSql()}");
+        if (s.Pattern != null) opts.Add($"PATTERN={s.Pattern.ToSql()}");
         if (s.DateSuffix != null) opts.Add($"DATE_SUFFIX={s.DateSuffix.ToSql()}");
         if (s.SuffixSeparator != null) opts.Add($"SUFFIX_SEPARATOR={s.SuffixSeparator.ToSql()}");
         var options = opts.Count > 0 ? " WITH(" + string.Join(", ", opts) + ")" : "";
@@ -873,6 +882,8 @@ public static class AstSerializer
         var opts = new List<string>();
         if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
         if (s.Recursive != null) opts.Add($"RECURSIVE={s.Recursive.ToSql()}");
+        if (s.Format != null) opts.Add($"FORMAT={s.Format.ToSql()}");
+        if (s.Pattern != null) opts.Add($"PATTERN={s.Pattern.ToSql()}");
         var with = opts.Count > 0 ? " WITH(" + string.Join(", ", opts) + ")" : "";
         var ifExists = s.IfExists ? " IF EXISTS" : "";
         var at = s.ConnectionName != null ? " AT " + s.ConnectionName : "";
@@ -885,7 +896,11 @@ public static class AstSerializer
         var fromTo = s.Type == FileTransferType.Send
             ? $"{s.LocalPath.ToSql()} TO {s.RemotePath.ToSql()}"
             : $"FROM {s.RemotePath.ToSql()} TO {s.LocalPath.ToSql()}";
-        var opts = s.Overwrite != null ? $" WITH(OVERWRITE={s.Overwrite.ToSql()})" : "";
+        var withParts = new List<string>();
+        if (s.Overwrite != null) withParts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
+        if (s.Recursive != null) withParts.Add($"RECURSIVE={s.Recursive.ToSql()}");
+        if (s.Verify != null) withParts.Add($"VERIFY={s.Verify.ToSql()}");
+        var opts = withParts.Count > 0 ? $" WITH({string.Join(", ", withParts)})" : "";
         return $"{op} {fromTo} AT {s.ConnectionName}{opts};";
     }
 
@@ -1737,9 +1752,14 @@ public static class AstSerializer
         if (scale.OuterPadding != 0m) options.Add($"OUTER_PADDING = {Number(scale.OuterPadding)}");
         if (scale.TickFormat is not null) options.Add($"TICK_FORMAT = {Quote(scale.TickFormat)}");
         if (scale.TimeUnit is not null) options.Add($"TIME_UNIT = {scale.TimeUnit}");
+        if (scale.Title is not null) options.Add($"TITLE = {Quote(scale.Title)}");
         options.Add(scale.ExplicitOrder.IsDefaultOrEmpty
             ? $"ORDER = {Upper(scale.Order)}"
             : "ORDER = (" + string.Join(", ", scale.ExplicitOrder.Select(Format)) + ")");
+        if (!scale.DiscreteColorMap.IsDefaultOrEmpty)
+            options.Add("RANGE = ( " + string.Join(", ", scale.DiscreteColorMap.Select(entry => $"{Format(entry.Domain)} = {Format(entry.Color)}")) + " )");
+        else if (!scale.RangeValues.IsDefaultOrEmpty)
+            options.Add("RANGE = ( " + string.Join(", ", scale.RangeValues.Select(Format)) + " )");
         if (scale.ColorRange is { } range)
         {
             var rangeOptions = new List<string> { $"LOW = {range.Low.ToSql()}" };
@@ -1810,6 +1830,7 @@ public static class AstSerializer
     private static string Upper<T>(T value) where T : struct, Enum => value switch
     {
         AdvancedChartCoordinateKind.TransposedCartesian => "TRANSPOSED_CARTESIAN",
+        AdvancedChartConditionChannel.LineDash => "LINE_DASH",
         AdvancedChartChannel.XStart => "X_START",
         AdvancedChartChannel.XEnd => "X_END",
         AdvancedChartChannel.XOffset => "X_OFFSET",
@@ -2367,6 +2388,7 @@ public static class AstSerializer
         if (!string.IsNullOrWhiteSpace(overlay.ConfidenceLowField)) options.Add($"CONFIDENCE_LOW = {overlay.ConfidenceLowField}");
         if (!string.IsNullOrWhiteSpace(overlay.ConfidenceHighField)) options.Add($"CONFIDENCE_HIGH = {overlay.ConfidenceHighField}");
         if (!string.IsNullOrWhiteSpace(overlay.AnomalyField)) options.Add($"ANOMALY = {overlay.AnomalyField}");
+        if (!string.IsNullOrWhiteSpace(overlay.SeriesName)) options.Add($"SERIES = {Quote(overlay.SeriesName)}");
         if (!string.IsNullOrWhiteSpace(overlay.Color)) options.Add($"COLOR = {Quote(overlay.Color)}");
         if (!string.IsNullOrWhiteSpace(overlay.Label)) options.Add($"LABEL = {Quote(overlay.Label)}");
         return $"{type} AS {overlay.LineStyle.ToString().ToUpperInvariant()}"

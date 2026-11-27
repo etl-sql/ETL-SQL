@@ -21,7 +21,7 @@ function svgFor(tier) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Responsive candlestick chart, ${tier.toLowerCase()} layout"><rect width="${width}" height="${height}" fill="#f8fafc"/><text x="24" y="34" font-family="system-ui" font-size="18" font-weight="700" fill="#0f172a">Price and volume · ${tier}</text>${candles}<text x="24" y="${height - 20}" font-family="system-ui" font-size="13" fill="#475569">Resize the sandbox: requests occur only when the tier changes.</text></svg>`;
 }
 
-function manifestFor(tier) {
+function manifestFor(tier, screenFit = false) {
   const size = tier === 'COMPACT' ? [480, 300] : tier === 'WIDE' ? [1200, 600] : [720, 420];
   return {
     source: 'ui-sandbox/native-chart-layout.rptsql',
@@ -33,14 +33,22 @@ function manifestFor(tier) {
       visualType: 'CUSTOM',
       nativeSvg: svgFor(tier),
       semanticFallback: { kind: 'TimeSeriesTable', heading: 'Price and volume', items: [], summary: 'Four daily candlesticks.' },
-      layout: { tier, compactMaxWidth: 479, standardMaxWidth: 959, width: size[0], height: size[1] },
+      layout: screenFit ? undefined : { tier, compactMaxWidth: 479, standardMaxWidth: 959, width: size[0], height: size[1] },
       columns: ['Day', 'Open', 'Close'],
       rows: [['Mon', '10', '13'], ['Tue', '13', '11'], ['Wed', '11', '17'], ['Thu', '17', '15']],
       options: { title: 'Price and volume' },
       actions: [],
       error: null,
-    }],
-    pages: [{ name: 'Main', structure: 'A', slotMap: { A: 'PriceAndVolume' } }],
+    }, ...(screenFit ? [{
+      name: 'TradingSummary',
+      visualType: 'TABLE',
+      columns: ['Day', 'Close'],
+      rows: [['Mon', '13'], ['Tue', '11'], ['Wed', '17'], ['Thu', '15']],
+      options: { title: 'Trading summary', subtitle: 'Daily closing prices' },
+    }] : [])],
+    pages: [screenFit
+      ? { name: 'Main', structure: 'A / B', slotMap: { A: 'PriceAndVolume', B: 'TradingSummary' }, options: { FIT: 'SCREEN', ROW_WEIGHTS: '2, 1' } }
+      : { name: 'Main', structure: 'A', slotMap: { A: 'PriceAndVolume' } }],
     datasets: [],
     parameters: {},
     parameterMetadata: {},
@@ -50,9 +58,13 @@ function manifestFor(tier) {
 export default {
   id: 'native-chart-layout',
   title: 'Native chart responsive tiers',
-  fixtures: [{ id: 'responsive', label: 'Compact / standard / wide' }],
-  async mount(stage, _fixtureId, ctx) {
-    const initial = JSON.stringify(manifestFor('STANDARD')).replace(/</g, '\\u003c');
+  fixtures: [
+    { id: 'responsive', label: 'Compact / standard / wide' },
+    { id: 'screen-fit', label: 'Screen fit and mobile table subtitles' },
+  ],
+  async mount(stage, fixtureId, ctx) {
+    const screenFit = fixtureId === 'screen-fit';
+    const initial = JSON.stringify(manifestFor('STANDARD', screenFit)).replace(/</g, '\\u003c');
     const compact = JSON.stringify(manifestFor('COMPACT')).replace(/</g, '\\u003c');
     const standard = JSON.stringify(manifestFor('STANDARD')).replace(/</g, '\\u003c');
     const wide = JSON.stringify(manifestFor('WIDE')).replace(/</g, '\\u003c');

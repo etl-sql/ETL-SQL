@@ -318,6 +318,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("Chart", "BAR", new[] { "Cat", "Val" },
                 new[] { new[] { "A", "10" } });
+            v.PlotPlan = ETL_SQL.Tests.Reporting.GrammarOfGraphics.GrammarOfGraphicsContractFixtures.PlotPlan();
             var m = M(v);
             var md = MD().Render(m);
             Assert.Contains("data:image/svg+xml", md);
@@ -328,6 +329,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("Chart", "SCATTER", new[] { "X", "Y" },
                 new[] { new[] { "1", "2" }, new[] { "3", "4" } });
+            v.PlotPlan = ETL_SQL.Tests.Reporting.GrammarOfGraphics.GrammarOfGraphicsContractFixtures.PlotPlan();
             var m = M(v);
             var md = MD().Render(m);
             Assert.Contains("| X | Y |", md);
@@ -370,93 +372,40 @@ namespace ETL_SQL.Tests.Reporting
         // ══════════════════════════════════════════════════════════════════════
 
         [Fact]
-        public void Svg_Bar_ProducesSvgWithRect()
+        public void Svg_WithPlotPlan_RendersNativeSvg()
         {
             var v = V("B", "BAR", new[] { "Cat", "Val" },
                 new[] { new[] { "A", "10" }, new[] { "B", "30" } });
-            var svg = SVG().Render(v);
-            Assert.NotNull(svg);
-            Assert.Contains("<rect", svg);
-        }
-
-        [Fact]
-        public void Svg_Bar_EmptyRows_ProducesPlaceholder()
-        {
-            var v = V("B", "BAR", new[] { "Cat", "Val" });
-            var svg = SVG().Render(v);
-            Assert.NotNull(svg);
-            Assert.Contains("BAR chart", svg);
-        }
-
-        [Fact]
-        public void Svg_HBar_ProducesSvgWithHorizontalBars()
-        {
-            var v = V("H", "HBAR", new[] { "Cat", "Val" },
-                new[] { new[] { "East", "300" }, new[] { "West", "150" } });
+            v.PlotPlan = ETL_SQL.Tests.Reporting.GrammarOfGraphics.GrammarOfGraphicsContractFixtures.PlotPlan();
             var svg = SVG().Render(v);
             Assert.NotNull(svg);
             Assert.Contains("<svg", svg);
+            Assert.Contains("<rect", svg);
+        }
+
+        [Theory]
+        [InlineData("BAR")]
+        [InlineData("HBAR")]
+        [InlineData("HORIZONTALBAR")]
+        [InlineData("LINE")]
+        [InlineData("PIE")]
+        [InlineData("DONUT")]
+        [InlineData("SCATTER")]
+        [InlineData("RADAR")]
+        [InlineData("CUSTOM")]
+        public void Svg_PlotPlanBackedTypesWithoutPlotPlan_ThrowExplicitError(string visualType)
+        {
+            var v = V("MissingPlan", visualType, new[] { "Cat", "Val" },
+                new[] { new[] { "A", "10" } });
+            var ex = Assert.Throws<InvalidOperationException>(() => SVG().Render(v));
+            Assert.Contains("PlotPlan", ex.Message, StringComparison.Ordinal);
         }
 
         [Fact]
-        public void Svg_Line_ProducesSvgWithPolyline()
+        public void Svg_UnknownTypeWithoutPlotPlan_ThrowsExplicitError()
         {
-            var v = V("L", "LINE", new[] { "Month", "Revenue" }, new[]
-            {
-                new[] { "Jan", "100" }, new[] { "Feb", "150" }, new[] { "Mar", "120" }
-            });
-            var svg = SVG().Render(v);
-            Assert.NotNull(svg);
-            Assert.Contains("<polyline", svg);
-        }
-
-        [Fact]
-        public void Svg_Line_EmptyRows_ProducesPlaceholder()
-        {
-            var v = V("L", "LINE", new[] { "X", "Y" });
-            var svg = SVG().Render(v);
-            Assert.NotNull(svg);
-            Assert.Contains("LINE chart", svg);
-        }
-
-        [Fact]
-        public void Svg_Line_SinglePoint_SkipsPolyline()
-        {
-            var v = V("L", "LINE", new[] { "X", "Y" }, new[] { new[] { "A", "10" } });
-            var svg = SVG().Render(v);
-            Assert.NotNull(svg);
-            // Single point: no polyline but still has a circle
-            Assert.Contains("<circle", svg);
-        }
-
-        [Fact]
-        public void Svg_Pie_ProducesSvgWithPath()
-        {
-            var v = V("P", "PIE", new[] { "Label", "Value" },
-                new[] { new[] { "A", "40" }, new[] { "B", "60" } });
-            var svg = SVG().Render(v);
-            Assert.NotNull(svg);
-            Assert.Contains("<path", svg);
-        }
-
-        [Fact]
-        public void Svg_Donut_ProducesSvgWithArc()
-        {
-            var v = V("D", "DONUT", new[] { "Label", "Value" },
-                new[] { new[] { "X", "30" }, new[] { "Y", "70" } });
-            var svg = SVG().Render(v);
-            Assert.NotNull(svg);
-            Assert.Contains("<path", svg);
-        }
-
-        [Fact]
-        public void Svg_Pie_AllZeroValues_ProducesPlaceholder()
-        {
-            var v = V("P", "PIE", new[] { "Label", "Value" },
-                new[] { new[] { "A", "0" }, new[] { "B", "0" } });
-            var svg = SVG().Render(v);
-            Assert.NotNull(svg);
-            Assert.Contains("PIE chart", svg);
+            var v = V("X", "UNKNOWN_CHART", new[] { "A" }, new[] { new[] { "1" } });
+            Assert.Throws<InvalidOperationException>(() => SVG().Render(v));
         }
 
         [Fact]
@@ -485,58 +434,6 @@ namespace ETL_SQL.Tests.Reporting
         {
             var v = V("T", "TEXT", new[] { "Content" }, new[] { new[] { "hello" } });
             Assert.Null(SVG().Render(v));
-        }
-
-        [Fact]
-        public void Svg_UnknownType_ProducesPlaceholder()
-        {
-            var v = V("X", "RADAR", new[] { "A" }, new[] { new[] { "1" } });
-            var svg = SVG().Render(v);
-            Assert.NotNull(svg);
-            Assert.Contains("RADAR chart", svg);
-        }
-
-        [Fact]
-        public void Svg_LargeValues_UsesKAndMSuffixes()
-        {
-            // Force large values to trigger K/M tick labels
-            var v = V("B", "BAR", new[] { "Cat", "Val" },
-                new[] { new[] { "A", "1500000" }, new[] { "B", "500000" } });
-            var svg = SVG().Render(v);
-            Assert.NotNull(svg);
-            // Should contain "M" or "K" in tick labels
-            Assert.True(svg.Contains("M") || svg.Contains("K"));
-        }
-
-        [Fact]
-        public void Svg_ValuesInThousands_UsesKSuffix()
-        {
-            var v = V("B", "BAR", new[] { "Cat", "Val" },
-                new[] { new[] { "A", "5000" }, new[] { "B", "3000" } });
-            var svg = SVG().Render(v);
-            Assert.NotNull(svg);
-            Assert.Contains("K", svg);
-        }
-
-        [Fact]
-        public void Svg_BarWithCustomColor_UsesSpecifiedColor()
-        {
-            var v = V("B", "BAR", new[] { "Cat", "Val" },
-                new[] { new[] { "Alpha", "20" } },
-                opts: new Dictionary<string, string> { ["color:Alpha"] = "#AABBCC" });
-            var svg = SVG().Render(v);
-            Assert.NotNull(svg);
-            Assert.Contains("#AABBCC", svg);
-        }
-
-        [Fact]
-        public void Svg_Bar_TruncatesLongLabels()
-        {
-            var v = V("B", "BAR", new[] { "Category", "Value" },
-                new[] { new[] { "VeryLongCategoryNameHere", "42" } });
-            var svg = SVG().Render(v);
-            Assert.NotNull(svg);
-            Assert.Contains("…", svg);
         }
     }
 }

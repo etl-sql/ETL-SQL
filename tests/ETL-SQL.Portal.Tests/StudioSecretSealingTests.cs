@@ -54,18 +54,28 @@ public sealed class StudioSecretSealingTests
     }
 
     [Fact]
-    public void SealEndpoint_LeavesScriptUntouchedWhenAllowPlaintextSecretsIsOn()
+    public void SealEndpoint_KeepsLiteralUsePasswordButStillSealsConnectionsWhenAllowPlaintextSecretsIsOn()
     {
+        // docs/reference/set-commands/set-allow-plaintext-secrets.md: the escape hatch preserves a
+        // literal USE PASSWORD on save while still encrypting connection secrets.
         var controller = new DesignerController(securityService: new SecurityService(NullLogger.Instance));
-        const string raw = "SET ALLOW_PLAINTEXT_SECRETS = ON;\nCREATE CONNECTION db AS MSSQL(SERVER='s', DATABASE='d', UID='u', PASSWORD='DbPassword1!');";
+        const string connection = "CREATE CONNECTION db AS MSSQL(SERVER='s', DATABASE='d', UID='u', PASSWORD='DbPassword1!');";
 
-        var ok = Assert.IsType<OkObjectResult>(controller.Seal(new SealDesignerRequest(raw)));
-        var body = Assert.IsType<SealDesignerResponse>(ok.Value);
+        var withoutPassword = Assert.IsType<SealDesignerResponse>(Assert.IsType<OkObjectResult>(
+            controller.Seal(new SealDesignerRequest("SET ALLOW_PLAINTEXT_SECRETS = ON;\n" + connection))).Value);
+        Assert.True(withoutPassword.AllowsPlaintextSecrets);
+        Assert.True(withoutPassword.RequiresPassword);
+        Assert.False(withoutPassword.Changed);
 
+        var raw = "SET ALLOW_PLAINTEXT_SECRETS = ON;\nUSE PASSWORD = 'MasterPass1!';\n" + connection;
+        var body = Assert.IsType<SealDesignerResponse>(Assert.IsType<OkObjectResult>(
+            controller.Seal(new SealDesignerRequest(raw))).Value);
         Assert.True(body.AllowsPlaintextSecrets);
         Assert.False(body.RequiresPassword);
-        Assert.False(body.Changed);
-        Assert.Equal(raw, body.SealedScript);
+        Assert.True(body.Changed);
+        Assert.Contains("USE PASSWORD = 'MasterPass1!';", body.SealedScript, StringComparison.Ordinal);
+        Assert.Contains("ENC:", body.SealedScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("DbPassword1!", body.SealedScript, StringComparison.Ordinal);
     }
 
     [Fact]

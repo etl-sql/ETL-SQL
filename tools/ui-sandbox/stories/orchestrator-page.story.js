@@ -36,20 +36,90 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
     },
     hourly_orders: { schedules: [], notifications: [], state: [], history: [], grants: [] }
   };
+  let pipelineCatalog = [];
+  if (fixtureId === 'catalog-pipelines' || fixtureId === 'catalog-only') {
+    jobs.push({
+      id: 'job-pipeline-42', name: 'PIPELINE:42', script: 'SELECT 42 AS PipelineRow;', interval: 1, unit: 'DAY',
+      isEnabled: true, maxRetries: 0, retryDelaySeconds: 30, hashPolicy: 'Off',
+      version: 1, jobType: 0, createdBy: 'user:sandbox-admin', lastRun: null, nextRun: null,
+      displayName: 'Nightly Customer Sync'
+    });
+    details['PIPELINE:42'] = { schedules: [], notifications: [], state: [], history: [], grants: [] };
+    pipelineCatalog = [
+      {
+        pipelineId: 42, jobName: 'PIPELINE:42', name: 'Nightly Customer Sync', description: 'Syncs customer ledger',
+        folderId: 7, folderPath: '/Finance/Daily', ownerPrincipalKey: 'author-key',
+        ownerDisplayName: 'Alice Author', version: 3, isProvisioned: true, orchestratorCreatedBy: 'user:sandbox-admin'
+      },
+      {
+        pipelineId: 43, jobName: 'PIPELINE:43', name: 'Hourly Lead Enrichment', description: null,
+        folderId: 8, folderPath: '/Growth', ownerPrincipalKey: 'lead-author-key',
+        ownerDisplayName: 'Bob Author', version: 1, isProvisioned: false, orchestratorCreatedBy: null
+      }
+    ];
+  }
+  const catalogGrants = {
+    Schedule: {
+      nightly_utc: [{ objectId: 'schedule-0', objectKind: 'SCHEDULE', principalKind: 'GROUP', principalId: 'ops-readers', permission: 'EXECUTE', grantedBy: 'user:operator', version: 1 }],
+      hourly_us: []
+    },
+    Notification: {
+      ops_mail: [{ objectId: 'notification-0', objectKind: 'NOTIFICATION', principalKind: 'USER', principalId: 'oncall-eng', permission: 'READ', grantedBy: 'user:operator', version: 1 }],
+      oncall_chat: []
+    }
+  };
   // Objects nobody is accountable for; adopting assigns one owner to all of them.
   let unowned = [{ objectId: 'job-1', kind: 'JOB', name: 'hourly_orders' }, { objectId: 'schedule-1', kind: 'SCHEDULE', name: 'hourly_us' }];
   const detailWaiters = [];
   let detailPausedFor = null;
+  async function objectAclRoute(objectKind, name, parts, method, init) {
+    const collection = objectKind === 'Job' ? jobs : objectKind === 'Schedule' ? schedules : notifications;
+    const item = collection.find(entry => entry.name === name);
+    const grants = objectKind === 'Job'
+      ? (details[name] ? details[name].grants : null)
+      : (catalogGrants[objectKind]?.[name] ?? null);
+    if (method === 'GET') {
+      if (!item || !grants) return json({ error: `The ${objectKind.toLowerCase()} no longer exists.` }, 404);
+      if (failure === 'detail-unavailable') return json({ error: `Orchestrator ${objectKind.toLowerCase()} access is temporarily unavailable. Please retry.` }, 503);
+      if (failure === 'detail-denied' || failure === 'acl-denied') return new Response(null, { status: 403 });
+      if (failure === 'detail-malformed') return json([{ unexpected: true }]);
+      return json(grants);
+    }
+    if (paused) await new Promise(resolve => pending.push(resolve));
+    if (failure === 'denied') return new Response(null, { status: 403 });
+    if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
+    if (failure === 'unexpected') return new Response(null, { status: 206 });
+    if (!item || !grants) return json({ error: `The ${objectKind.toLowerCase()} no longer exists.` }, 404);
+    const body = typeof init.body === 'string' ? JSON.parse(init.body) : {};
+    if (parts[6] === 'owner') {
+      item.createdBy = `${body.principalKind.toLowerCase()}:${body.principalId}`;
+      return json({ kind: objectKind.toUpperCase(), name, owner: body.principalId });
+    }
+    const [principalKind, principalId] = [parts[6], parts[7]];
+    const filtered = grants.filter(grant => !(grant.principalKind === principalKind && grant.principalId === principalId));
+    if (objectKind === 'Job') details[name].grants = filtered;
+    else catalogGrants[objectKind][name] = filtered;
+    if (method === 'DELETE') return new Response(null, { status: 204 });
+    const createdGrant = { objectId: item.id, objectKind: objectKind.toUpperCase(), principalKind, principalId, permission: body.permission, grantedBy: 'user:sandbox-admin', version: 1 };
+    filtered.push(createdGrant);
+    return json(createdGrant);
+  }
   async function detailRoute(path, method, init) {
     const parts = path.split('/').map(decodeURIComponent);
-    const authorization = parts[3] === 'authorization';
-    const name = authorization ? parts[5] : parts[4], kind = authorization ? 'grants' : parts[5];
+    if (parts[3] === 'authorization') {
+      const objectKind = parts[4], name = parts[5];
+      if (objectKind === 'Schedule' || objectKind === 'Notification') {
+        return objectAclRoute(objectKind, name, parts, method, init);
+      }
+      if (method === 'GET' && detailPausedFor === name) await new Promise(resolve => detailWaiters.push(resolve));
+      return objectAclRoute('Job', name, parts, method, init);
+    }
+    const name = parts[4], kind = parts[5];
     const detail = details[name];
     if (method === 'GET') {
       if (detailPausedFor === name) await new Promise(resolve => detailWaiters.push(resolve));
       if (!detail) return json({ error: 'The job no longer exists.' }, 404);
       if (failure === 'detail-unavailable') return json({ error: 'Orchestrator job details are temporarily unavailable. Please retry.' }, 503);
-      if (failure === 'detail-denied' && authorization) return new Response(null, { status: 403 });
       if (failure === 'detail-malformed') return json([{ unexpected: true }]);
       if (kind === 'dag') return json({ nodes: [], edges: [] });
       if (kind === 'audit') return json([{ id: 1, tenantId: 'portal-host', actorType: 'User', actorId: 'operator', action: 'JobScriptEdited',
@@ -65,17 +135,6 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
     if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
     if (failure === 'unexpected') return new Response(null, { status: 206 });
     const body = typeof init.body === 'string' ? JSON.parse(init.body) : {};
-    if (authorization) {
-      if (parts[6] === 'owner') {
-        jobs.find(job => job.name === name).createdBy = `${body.principalKind.toLowerCase()}:${body.principalId}`;
-        return json({ kind: 'JOB', name, owner: body.principalId });
-      }
-      const [principalKind, principalId] = [parts[6], parts[7]];
-      detail.grants = detail.grants.filter(grant => !(grant.principalKind === principalKind && grant.principalId === principalId));
-      if (method === 'DELETE') return new Response(null, { status: 204 });
-      detail.grants.push({ objectId: name, objectKind: 'JOB', principalKind, principalId, permission: body.permission, grantedBy: 'user:sandbox-admin', version: 1 });
-      return json(detail.grants.at(-1));
-    }
     const target = parts[6];
     if (kind === 'schedules' && failure === 'attach-refused') return new Response(null, { status: 403 });
     if (kind === 'schedules') {
@@ -118,11 +177,13 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
       return json({ notificationName: name, delivered: true, skipped: false, message: null });
     }
     const body = typeof init.body === 'string' ? JSON.parse(init.body) : {};
-    if (method === 'POST') {
-      if (items.some(item => item.name === body.name)) return relayed(`'${body.name}' already exists.`, 409);
-      items.push({ id: `${kind}-${items.length}`, createdBy: 'user:sandbox-admin', version: 1, recipient: null, ...body });
-      return new Response(null, { status: 201 });
-    }
+      if (method === 'POST') {
+        if (items.some(item => item.name === body.name)) return relayed(`'${body.name}' already exists.`, 409);
+        items.push({ id: `${kind}-${items.length}`, createdBy: 'user:sandbox-admin', version: 1, recipient: null, ...body });
+        const aclKind = kind === 'schedules' ? 'Schedule' : 'Notification';
+        catalogGrants[aclKind][body.name] = [];
+        return new Response(null, { status: 201 });
+      }
     const item = items.find(candidate => candidate.name === name);
     if (!item) return relayed(`'${name}' not found.`, 404);
     if (method === 'DELETE') {
@@ -154,6 +215,33 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
       if (path === '/api/portal/branding') return json({ displayName: 'ETL-SQL Portal', footerText: 'Sandbox', logoUrl: null });
       if (path === '/api/portal/navigation') return json([{ id: 'navOrchestrator', visible: true, reason: null }]);
       if (path === '/api/orchestrator/status') return json({ online: true, status: 'Online' });
+      if (path === '/api/orchestrator/authoring-mode' && method === 'GET') {
+        const ingress = failure !== 'catalog-only';
+        return json({ studioMode: ingress ? 'SourceControlled' : 'CatalogOnly', externalScriptIngressEnabled: ingress, canCreateInlineScriptJobs: ingress });
+      }
+      if (path === '/api/orchestrator/pipelines/catalog' && method === 'GET') return json(pipelineCatalog);
+      const provisionMatch = /^\/api\/orchestrator\/pipelines\/(\d+)\/provision$/.exec(path);
+      if (provisionMatch && method === 'POST') {
+        const id = Number(provisionMatch[1]);
+        const entry = pipelineCatalog.find(item => item.pipelineId === id);
+        if (!entry) return json({ error: 'Catalog pipeline not found.' }, 404);
+        const slotCreated = !entry.isProvisioned;
+        entry.isProvisioned = true;
+        if (!jobs.some(item => item.name === entry.jobName)) {
+          jobs.push({
+            id: `job-pipeline-${id}`, name: entry.jobName, script: 'SELECT 1;', interval: 1, unit: 'DAY',
+            isEnabled: true, maxRetries: 0, retryDelaySeconds: 30, hashPolicy: 'Off',
+            version: 1, jobType: 0, createdBy: 'user:sandbox-admin', lastRun: null, nextRun: null,
+            displayName: entry.name
+          });
+          details[entry.jobName] = { schedules: [], notifications: [], state: [], history: [], grants: [] };
+        }
+        return json({
+          pipelineId: id, jobName: entry.jobName, slotCreated, executeGrantApplied: true,
+          grantedPrincipalKey: entry.ownerPrincipalKey,
+          message: `Provisioned '${entry.jobName}' and granted EXECUTE to pipeline owner.`
+        });
+      }
       if (path === '/api/orchestrator/metrics') return json({ online: true, metrics: { activeJobs: 0, queuedJobs: 0, completedToday: 0, failedToday: 0 } });
       if (path === '/api/orchestrator/jobs' && method === 'GET') return json(jobs);
       if (path === '/api/orchestrator/jobs/activity') {
@@ -168,7 +256,7 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
       if (path === '/api/orchestrator/triage') return json({ generatedAt: '2026-10-09T12:00:00Z', lookbackHours: 24,
         failureCount: 0, incidentCount: 0, runningCount: 0, missedCount: 0, truncated: false, incidents: [], running: [], missed: [] });
       if (/^\/api\/orchestrator\/jobs\/[^/]+\/(history|schedules|notifications|state|dag|audit|dependencies)(\/|$)/.test(path)
-        || path.startsWith('/api/orchestrator/authorization/Job/')) return detailRoute(path, method, { ...init, query: url.search });
+        || /^\/api\/orchestrator\/authorization\/(Job|Schedule|Notification)\//.test(path)) return detailRoute(path, method, { ...init, query: url.search });
       if (path === '/api/orchestrator/authorization/unowned') return failure === 'legacy'
         ? json({ error: 'Per-object grants and ownership require federated identity.' }, 409) : json(unowned);
       if (path === '/api/orchestrator/authorization/adopt') {
@@ -185,6 +273,86 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
         if (paused) await new Promise(resolve => pending.push(resolve));
         return failure === 'failed' ? json({ error: 'Resume failed: the checkpoint session expired.' }, 409) : new Response(null, { status: 202 });
       }
+      const cancelRunMatch = /^\/api\/orchestrator\/runs\/(\d+)\/cancel$/.exec(path);
+      if (cancelRunMatch && method === 'POST') {
+        if (paused) await new Promise(resolve => pending.push(resolve));
+        if (failure === 'denied') return new Response(null, { status: 403 });
+        if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
+        const runId = Number(cancelRunMatch[1]);
+        const entry = Object.values(details).flatMap(d => d.history).find(r => r.id === runId);
+        if (!entry) return json({ error: `Run '${runId}' not found.` }, 404);
+        if (entry.endTime && !/^(running|queued)$/i.test(entry.status)) {
+          return json({ code: 'run_already_finished', error: `Run ${runId} already finished as ${entry.status}.` }, 409);
+        }
+        entry.status = 'Cancelled';
+        entry.endTime = '2026-10-10T12:05:00Z';
+        return new Response(null, { status: 202 });
+      }
+      const getRunMatch = /^\/api\/orchestrator\/runs\/(\d+)$/.exec(path);
+      if (getRunMatch && method === 'GET') {
+        if (failure === 'failed' || failure === 'detail-unavailable') {
+          return json({ error: 'Run waterfall details are temporarily unavailable.' }, 503);
+        }
+        const runId = Number(getRunMatch[1]);
+        const entry = Object.values(details).flatMap(d => d.history).find(r => r.id === runId);
+        if (!entry) return json({ error: `Run '${runId}' not found.` }, 404);
+        const completed = Boolean(entry.endTime) && !/^(running|queued)$/i.test(entry.status);
+        return json({
+          runId: entry.id,
+          jobName: entry.jobName,
+          status: entry.status,
+          completed,
+          startTime: entry.startTime,
+          endTime: entry.endTime,
+          errorMessage: entry.errorMessage,
+          rowsProcessed: entry.rowsProcessed,
+          scriptHashAtRunTime: 'sha256:sandbox',
+          statementsTruncated: false,
+          statements: runId === 42
+            ? [
+                { statement: 'SELECT * FROM staging.orders;', durationMs: 1450, rowsProcessed: 1200, failed: false },
+                { statement: 'MERGE INTO dbo.daily_sales USING #orders;', durationMs: 39200, rowsProcessed: 0, failed: true }
+              ]
+            : [
+                { statement: 'SELECT 1 AS Ok;', durationMs: 42, rowsProcessed: entry.rowsProcessed, failed: false }
+              ]
+        });
+      }
+      if (path === '/api/orchestrator/fleet' && method === 'GET') {
+        if (readsPaused) await new Promise(resolve => pendingReads.push(resolve));
+        if (failure === 'fleet-unavailable') return json({ error: 'Fleet telemetry unavailable.' }, 503);
+        return json({
+          generatedAtUtc: '2026-10-09T12:00:00Z',
+          sandboxAdmissionEnabled: true,
+          nodes: [
+            {
+              nodeId: 'orch-win-01:4120', role: 'Orchestrator', isLive: true,
+              firstSeenUtc: '2026-10-08T00:00:00Z', lastHeartbeatUtc: '2026-10-09T11:59:55Z', expiresAtUtc: '2026-10-09T12:00:25Z',
+              machine: 'WIN-ORCH-01', pid: 4120, startedUtc: '2026-10-08T00:00:00Z',
+              capacity: { workingSetBytes: 268435456, gcHeapBytes: 134217728, totalAvailableMemoryBytes: 17179869184,
+                memoryLoadPercent: 38.4, processCpuPercent: 14.2, hostCpuPercent: 27.5, processorCount: 8, isOverloaded: false,
+                stateDiskFreeBytes: 53687091200, spillDiskFreeBytes: 107374182400 }
+            },
+            {
+              nodeId: 'portal-win-01:5100', role: 'Portal', isLive: true,
+              firstSeenUtc: '2026-10-08T00:00:00Z', lastHeartbeatUtc: '2026-10-09T11:59:52Z', expiresAtUtc: '2026-10-09T12:00:22Z',
+              machine: 'WIN-PORTAL-01', pid: 5100, startedUtc: '2026-10-08T00:00:00Z',
+              capacity: { workingSetBytes: 201326592, gcHeapBytes: 94371840, totalAvailableMemoryBytes: 17179869184,
+                memoryLoadPercent: 31.0, processCpuPercent: 5.1, hostCpuPercent: 20.0, processorCount: 8, isOverloaded: false,
+                stateDiskFreeBytes: 53687091200, spillDiskFreeBytes: null }
+            }
+          ],
+          sandboxPools: [
+            {
+              poolId: 'standard', capacity: 8, queuedCount: 1, activeCount: 2, retainedCount: 0, availableSlots: 6,
+              openAdmissions: [
+                { admissionId: 'adm-101', poolId: 'standard', tenantId: 'portal-host', state: 'Active', weight: 100,
+                  leaseOwner: 'orch-win-01:4120', enqueuedUtc: '2026-10-09T11:58:00Z', leaseExpiresUtc: '2026-10-09T12:02:00Z' }
+              ]
+            }
+          ]
+        });
+      }
       if (path === '/api/orchestrator/data-quality/status') return failure === 'quality-unavailable' ? json({ error: 'Quality status is unavailable.' }, 503)
         : json([{ runId: '42', jobName: 'daily_sales', startTime: '2026-10-09T02:00:00Z', endTime: null, status: 'Failed', rowsProcessed: 1200,
           rowsWarned: 7, rowsQuarantined: 3, failedRuleCount: 1, freshestValueUtc: null, freshnessState: 'Fresh', errorSummary: null },
@@ -195,39 +363,94 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
       const catalog = /^\/api\/orchestrator\/(schedules|notifications)(\/|$)/.exec(path);
       if (catalog) return catalogRoute(catalog[1], catalog[1] === 'schedules' ? schedules : notifications, path, method, init);
       if (path === '/api/orchestrator/scripts') return failure === 'pickers-unavailable' ? json({ error: 'Script unavailable.' }, 503)
+        : failure === 'catalog-only' ? json({ error: 'Server script browsing is disabled in this deployment mode.' }, 404)
         : json({ files: ['etl/daily_sales.etlsql', 'etl/hourly_orders.etlsql'] });
-      if (path === '/api/orchestrator/bundles') return json([{ bundleName: 'sales_bundle', version: 1 }, { bundleName: 'sales_bundle', version: 2 }]);
+      if (path === '/api/orchestrator/bundles') return json([
+        { bundleName: 'sales_bundle', version: 1, entryPath: 'main.etlsql' },
+        { bundleName: 'sales_bundle', version: 2, entryPath: 'main.etlsql' }
+      ]);
+      const bundleVersionsMatch = /^\/api\/orchestrator\/bundles\/([^/]+)\/versions$/.exec(path);
+      if (bundleVersionsMatch) {
+        if (readsPaused) await new Promise(resolve => pendingReads.push(resolve));
+        const bundleName = decodeURIComponent(bundleVersionsMatch[1]);
+        if (bundleName !== 'sales_bundle') return json([]);
+        if (failure === 'bundle-version-removed') return json([
+          { bundleName: 'sales_bundle', version: 1, entryPath: 'legacy.etlsql' }
+        ]);
+        return json([
+          { bundleName: 'sales_bundle', version: 2, entryPath: 'main.etlsql' },
+          { bundleName: 'sales_bundle', version: 1, entryPath: 'legacy.etlsql' }
+        ]);
+      }
+      const bundleFilesMatch = /^\/api\/orchestrator\/bundles\/([^/]+)\/versions\/(\d+)\/files$/.exec(path);
+      if (bundleFilesMatch) {
+        if (readsPaused) await new Promise(resolve => pendingReads.push(resolve));
+        const bundleName = decodeURIComponent(bundleFilesMatch[1]);
+        const version = Number(bundleFilesMatch[2]);
+        if (bundleName !== 'sales_bundle') return json({ error: 'Bundle not found.' }, 404);
+        return json(version === 2
+          ? [
+              { bundleName: 'sales_bundle', version: 2, virtualPath: 'main.etlsql', content: '', contentHash: 'sha256:a', sizeBytes: 10, contentType: 'text/plain' },
+              { bundleName: 'sales_bundle', version: 2, virtualPath: 'sub/backfill.etlsql', content: '', contentHash: 'sha256:b', sizeBytes: 12, contentType: 'text/plain' }
+            ]
+          : [
+              { bundleName: 'sales_bundle', version: 1, virtualPath: 'legacy.etlsql', content: '', contentHash: 'sha256:c', sizeBytes: 10, contentType: 'text/plain' }
+            ]);
+      }
       if (path === '/api/orchestrator/service/stop') {
         if (paused) await new Promise(resolve => pending.push(resolve));
         return failure === 'failed' ? json({ error: 'The Orchestrator service refused the stop request.' }, 500)
           : failure === 'denied' ? new Response(null, { status: 403 }) : json({ message: 'Stop signal sent.' });
       }
-      if (path === '/api/orchestrator/jobs' && method === 'POST') {
-        if (paused) await new Promise(resolve => pending.push(resolve));
-        const body = JSON.parse(init.body);
-        if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
-        if (jobs.some(item => item.name === body.name)) return relayed(`Job '${body.name}' already exists.`, 409);
-        jobs.push({ id: `job-${jobs.length}`, name: body.name, script: '', interval: body.interval ?? 1, unit: body.unit ?? 'HOUR', isEnabled: true,
-          maxRetries: body.maxRetries, retryDelaySeconds: body.retryDelaySeconds, hashPolicy: body.hashPolicy, version: 1, jobType: 0,
-          targetPath: body.targetPath, displayName: body.displayName, createdBy: 'user:sandbox-admin', lastRun: null, nextRun: null });
-        details[body.name] = { schedules: [], notifications: [], state: [], history: [], grants: [] };
-        return new Response(null, { status: 201 });
-      }
-      if (path.startsWith('/api/orchestrator/') && method !== 'GET') {
-        if (paused) await new Promise(resolve => pending.push(resolve));
-        if (failure === 'denied') return json({ error: 'Job management is denied.' }, 403);
-        if (failure === 'failed') return json({ error: 'Service rejected the write.' }, 503);
-        if (failure === 'conflict') return json({ error: 'The resource changed after it was read. Refresh it and retry.' }, 409);
-        if (failure === 'unexpected') return new Response(null, { status: 206 });
-        const name = decodeURIComponent(path.split('/')[4]);
-        const job = jobs.find(item => item.name === name);
-        if (method === 'PUT' || method === 'DELETE') {
-          if (headers.get('If-Match') !== `"${job?.version}"`) return json({ error: 'This mutation requires the current resource version in the If-Match header.' }, 428);
-          if (method === 'DELETE') jobs = jobs.filter(item => item !== job);
-          else { Object.assign(job, JSON.parse(init.body)); job.isEnabled = JSON.parse(init.body).isEnabled ?? JSON.parse(init.body).IsEnabled ?? job.isEnabled; job.version++; }
-          return new Response(null, { status: method === 'PUT' ? 204 : 200 });
+        if (path === '/api/orchestrator/jobs' && method === 'POST') {
+          if (paused) await new Promise(resolve => pending.push(resolve));
+          const body = JSON.parse(init.body);
+          if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
+          if (jobs.some(item => item.name === body.name)) return relayed(`Job '${body.name}' already exists.`, 409);
+          jobs.push({ id: `job-${jobs.length}`, name: body.name, script: '', interval: body.interval ?? 1, unit: body.unit ?? 'HOUR', isEnabled: true,
+            maxRetries: body.maxRetries, retryDelaySeconds: body.retryDelaySeconds, hashPolicy: body.hashPolicy, version: 1,
+            jobType: String(body.jobType ?? '').toUpperCase() === 'REPORT' ? 1 : 0,
+            options: body.options ? JSON.stringify(body.options) : null,
+            targetPath: body.targetPath, displayName: body.displayName, description: body.description ?? null,
+            createdBy: 'user:sandbox-admin', lastRun: null, nextRun: null });
+          details[body.name] = { schedules: [], notifications: [], state: [], history: [], grants: [] };
+          return new Response(null, { status: 201 });
         }
-        if (path.endsWith('/trigger')) return new Response(null, { status: 202 });
+        if (path.startsWith('/api/orchestrator/') && method !== 'GET') {
+          if (paused) await new Promise(resolve => pending.push(resolve));
+          if (failure === 'denied') return json({ error: 'Job management is denied.' }, 403);
+          if (failure === 'failed') return json({ error: 'Service rejected the write.' }, 503);
+          if (failure === 'conflict') return json({ error: 'The resource changed after it was read. Refresh it and retry.' }, 409);
+          if (failure === 'unexpected') return new Response(null, { status: 206 });
+          const name = decodeURIComponent(path.split('/')[4]);
+          const job = jobs.find(item => item.name === name);
+          if (method === 'PUT' || method === 'DELETE') {
+            if (headers.get('If-Match') !== `"${job?.version}"`) return json({ error: 'This mutation requires the current resource version in the If-Match header.' }, 428);
+            if (method === 'DELETE') jobs = jobs.filter(item => item !== job);
+            else {
+              const body = JSON.parse(init.body);
+              const { options: bodyOptions, ...rest } = body;
+              Object.assign(job, rest);
+              if (bodyOptions !== undefined && bodyOptions !== null) {
+                job.options = typeof bodyOptions === 'string' ? bodyOptions : JSON.stringify(bodyOptions);
+              }
+              job.isEnabled = body.isEnabled ?? body.IsEnabled ?? job.isEnabled;
+              job.version++;
+            }
+            return new Response(null, { status: method === 'PUT' ? 204 : 200 });
+          }
+        if (path.endsWith('/trigger')) {
+          const jobDetail = details[name];
+          if (jobDetail) {
+            const nextId = Math.max(42, ...Object.values(details).flatMap(d => d.history).map(h => h.id)) + 1;
+            jobDetail.history.unshift({
+              id: nextId, jobName: name, startTime: '2026-10-10T12:00:00Z', endTime: null, status: 'Running',
+              errorMessage: null, rowsProcessed: 0, peakMemoryBytes: 0, cpuTimeSeconds: 0,
+              rowsQuarantined: 0, rowsWarned: 0, checkpointLabel: null, hasResumeSession: false
+            });
+          }
+          return new Response(null, { status: 202 });
+        }
         return new Response(null, { status: 200 });
       }
       return json({ error: `Unexpected sandbox route: ${method} ${path}` }, 404);

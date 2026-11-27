@@ -11,7 +11,7 @@ public enum AdvancedChartChannel
     Low, Q1, Median, Q3, High, Mean, Open, Close,
     ErrorLow, ErrorHigh,
     ConfidenceLow, ConfidenceHigh,
-    Color, Size, Shape, Theta, Radius, Longitude, Latitude, Region, Route, Text, Tooltip, Detail
+    Color, Opacity, Size, Shape, Theta, Radius, Longitude, Latitude, Region, Route, Text, Tooltip, Detail
 }
 public enum AdvancedChartAxisRole { None, Primary, Secondary }
 public enum AdvancedChartSortDirection { Source, Ascending, Descending }
@@ -19,7 +19,7 @@ public enum AdvancedChartScaleKind { Linear, Logarithmic, Time, Band, Point, Ord
 public enum AdvancedChartCoordinateKind { Cartesian, TransposedCartesian, Polar, Geographic }
 public enum AdvancedChartGeographicProjection { Equirectangular, Mercator }
 public enum AdvancedChartResolutionMode { Shared, Independent }
-public enum AdvancedChartConditionChannel { Color, Opacity, Size, Shape, Text }
+public enum AdvancedChartConditionChannel { Color, Opacity, Size, Shape, Text, LineDash }
 public enum AdvancedChartBindingSourceKind { Field, Datum, Value }
 public enum AdvancedChartStackMode { None, Zero, Normalize }
 public enum AdvancedChartPositionKind { Identity, Jitter, Nudge }
@@ -46,6 +46,7 @@ public static class AdvancedChartScaleInference
                 _ => null
             },
             AdvancedChartChannel.Color => dataKind == AdvancedChartDataKind.Quantitative ? AdvancedChartScaleKind.Linear : AdvancedChartScaleKind.Ordinal,
+            AdvancedChartChannel.Opacity => dataKind == AdvancedChartDataKind.Quantitative ? AdvancedChartScaleKind.Linear : null,
             AdvancedChartChannel.Shape => dataKind is AdvancedChartDataKind.Nominal or AdvancedChartDataKind.Ordinal ? AdvancedChartScaleKind.Ordinal : null,
             AdvancedChartChannel.Size => dataKind == AdvancedChartDataKind.Quantitative ? AdvancedChartScaleKind.Linear : null,
             AdvancedChartChannel.Theta => dataKind is AdvancedChartDataKind.Nominal or AdvancedChartDataKind.Ordinal ? AdvancedChartScaleKind.Ordinal : AdvancedChartScaleKind.Linear,
@@ -122,6 +123,8 @@ public sealed record AdvancedChartLayer : AstNode
     public ImmutableArray<AdvancedChartCondition> Conditions { get; init; } = [];
 }
 
+public sealed record AdvancedChartDiscreteColorEntry(Expression Domain, Expression Color) : AstNode;
+
 public sealed record AdvancedChartScale : AstNode
 {
     public required string Name { get; init; }
@@ -139,9 +142,12 @@ public sealed record AdvancedChartScale : AstNode
     public decimal OuterPadding { get; init; }
     public string? TickFormat { get; init; }
     public string? TimeUnit { get; init; }
+    public string? Title { get; init; }
     public AdvancedChartSortDirection Order { get; init; }
     public ImmutableArray<Expression> ExplicitOrder { get; init; } = [];
     public AdvancedChartColorRange? ColorRange { get; init; }
+    public ImmutableArray<Expression> RangeValues { get; init; } = [];
+    public ImmutableArray<AdvancedChartDiscreteColorEntry> DiscreteColorMap { get; init; } = [];
 }
 
 public sealed record AdvancedChartCoordinate : AstNode

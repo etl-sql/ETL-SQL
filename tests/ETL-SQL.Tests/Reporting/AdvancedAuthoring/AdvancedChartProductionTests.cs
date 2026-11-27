@@ -842,10 +842,10 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
             CREATE VISUAL BadLine AS CUSTOM (
               SOURCE = #prepared,
               CHART (
-                COORDINATE (TYPE = CARTESIAN),
-                SCALES (x = BAND (CHANNEL = X), y = LINEAR (CHANNEL = Y)),
+                COORDINATE (TYPE = POLAR),
+                SCALES (t = ORDINAL (CHANNEL = THETA), r = LINEAR (CHANNEL = RADIUS)),
                 LAYERS (trend = LINE (
-                  ENCODINGS (X = Category (TYPE = NOMINAL, SCALE = x), Y = Value (TYPE = QUANTITATIVE, SCALE = y)),
+                  ENCODINGS (THETA = Category (TYPE = NOMINAL, SCALE = t), RADIUS = Value (TYPE = QUANTITATIVE, SCALE = r)),
                   CONDITIONS (COLOR WHEN Value < 0 THEN '#b91c1c')
                 ))
               )
@@ -1188,5 +1188,547 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
             Assert.Contains("Fri", text);
             Assert.Contains("2D Heatmap Grid", text);
         }
+    }
+
+    [Fact]
+    public void ColorDatum_MultiLayer_PreservesDistinctPaletteColorsAndLegend()
+    {
+        const string sql = """
+            CREATE VISUAL ComboDatum AS CUSTOM (
+              SOURCE = #metrics,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (depts = BAND (CHANNEL = X)),
+                LAYERS (
+                  actual_bars = RECT (
+                    ENCODINGS (
+                      X = Dept (TYPE = NOMINAL, SCALE = depts),
+                      Y = Actual (TYPE = QUANTITATIVE),
+                      COLOR = DATUM('Actual') (TYPE = NOMINAL)
+                    )
+                  ),
+                  budget_line = LINE (
+                    ENCODINGS (
+                      X = Dept (TYPE = NOMINAL, SCALE = depts),
+                      Y = Budget (TYPE = QUANTITATIVE),
+                      COLOR = DATUM('Budget') (TYPE = NOMINAL)
+                    )
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var statement = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(statement));
+
+        var manifest = new VisualManifest
+        {
+            Name = "ComboDatum",
+            Columns = ["Dept", "Actual", "Budget"],
+            Rows = [["Eng", "100", "120"], ["Sales", "90", "85"]]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 600, 350));
+
+        Assert.Equal(2, plan.Series.Length);
+        Assert.Contains(plan.Legend, entry => entry.Label == "Actual");
+        Assert.Contains(plan.Legend, entry => entry.Label == "Budget");
+        var actualColor = Assert.Single(plan.Palette, p => p.SeriesKey == "Actual").Color;
+        var budgetColor = Assert.Single(plan.Palette, p => p.SeriesKey == "Budget").Color;
+        Assert.NotEqual(actualColor, budgetColor);
+        Assert.Equal("Actual", plan.Layers.Single(l => l.Id == "actual_bars").SeriesKey);
+        Assert.Equal("Budget", plan.Layers.Single(l => l.Id == "budget_line").SeriesKey);
+
+        var svg = new SvgChartRenderer().Render(plan);
+        Assert.Contains("Actual", svg);
+        Assert.Contains("Budget", svg);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MultiGrainDataset_SelectsNonNullCategoryRowPerLayer(bool faceted)
+    {
+        var sql = $$"""
+            CREATE VISUAL MultiGrain AS CUSTOM (
+              SOURCE = #combined,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (depts = BAND (CHANNEL = X)),
+                {{(faceted ? "FACET (WRAP = Region, COLUMNS = 2)," : "")}}
+                LAYERS (
+                  details = RECT (
+                    ENCODINGS (
+                      X = Dept (TYPE = NOMINAL, SCALE = depts),
+                      Y = DetailSpend (TYPE = QUANTITATIVE),
+                      COLOR = DATUM('Detail') (TYPE = NOMINAL)
+                    )
+                  ),
+                  targets = LINE (
+                    ENCODINGS (
+                      X = Dept (TYPE = NOMINAL, SCALE = depts),
+                      Y = SummaryBudget (TYPE = QUANTITATIVE),
+                      COLOR = DATUM('Budget') (TYPE = NOMINAL)
+                    )
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var statement = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(statement));
+
+        var manifest = new VisualManifest
+        {
+            Name = "MultiGrain",
+            Columns = ["Region", "Dept", "DetailSpend", "SummaryBudget"],
+            Rows =
+            [
+                ["West", "Eng", "100", null],
+                ["West", "Eng", null, "120"],
+                ["West", "Sales", null, "85"],
+                ["West", "Sales", "90", null],
+                ["West", "Ops", null, null]
+            ]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 600, 350));
+
+        var detailLayer = Assert.Single(plan.Layers, l => l.Id == "details");
+        var targetLayer = Assert.Single(plan.Layers, l => l.Id == "targets");
+
+        Assert.Equal(100m, detailLayer.Data.Single(d => d.Channels.Any(c => c.Channel == FieldChannel.X && c.Value.Text == "Eng"))
+            .Channels.Single(c => c.Channel == FieldChannel.Y).Value.Decimal);
+        Assert.Equal(90m, detailLayer.Data.Single(d => d.Channels.Any(c => c.Channel == FieldChannel.X && c.Value.Text == "Sales"))
+            .Channels.Single(c => c.Channel == FieldChannel.Y).Value.Decimal);
+        Assert.True(detailLayer.Data.Single(d => d.Channels.Any(c => c.Channel == FieldChannel.X && c.Value.Text == "Ops")).IsGap);
+
+        Assert.Equal(120m, targetLayer.Data.Single(d => d.Channels.Any(c => c.Channel == FieldChannel.X && c.Value.Text == "Eng"))
+            .Channels.Single(c => c.Channel == FieldChannel.Y).Value.Decimal);
+        Assert.Equal(85m, targetLayer.Data.Single(d => d.Channels.Any(c => c.Channel == FieldChannel.X && c.Value.Text == "Sales"))
+            .Channels.Single(c => c.Channel == FieldChannel.Y).Value.Decimal);
+        Assert.True(targetLayer.Data.Single(d => d.Channels.Any(c => c.Channel == FieldChannel.X && c.Value.Text == "Ops")).IsGap);
+    }
+
+    [Fact]
+    public void ContinuousTimeScale_OrdersChronologicallyKeepsDuplicateTimestampsAndPositionsPointsWithTimeUnit()
+    {
+        const string sql = """
+            CREATE VISUAL Telemetry AS CUSTOM (
+              SOURCE = #events,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (
+                  t = TIME (
+                    CHANNEL = X,
+                    MIN = '2026-01-01',
+                    MAX = '2027-01-01',
+                    TIME_UNIT = MONTH,
+                    TICK_FORMAT = 'MMM yyyy',
+                    TICK_INTERVAL = 3
+                  ),
+                  v = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+                ),
+                LAYERS (
+                  pts = POINT (
+                    ENCODINGS (
+                      X = RecordedAt (TYPE = TEMPORAL, SCALE = t),
+                      Y = Value (TYPE = QUANTITATIVE, SCALE = v)
+                    )
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var statement = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(statement));
+
+        // Intentionally out-of-order and includes duplicate timestamps plus unequal time gaps
+        var manifest = new VisualManifest
+        {
+            Name = "Telemetry",
+            Columns = ["RecordedAt", "Value"],
+            Rows =
+            [
+                ["2026-12-31", "80"],
+                ["2026-01-01", "10"],
+                ["2026-01-02", "20"],
+                ["2026-01-02", "55"]
+            ]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 600, 350));
+
+        var xScale = plan.Scales.Single(s => s.Id == "t");
+        Assert.Equal(ScaleKind.Time, xScale.Kind);
+        Assert.Empty(xScale.Categories);
+        Assert.StartsWith("2026-01-01", PlotPlanResolver.Display(xScale.Domain[0]));
+        Assert.StartsWith("2027-01-01", PlotPlanResolver.Display(xScale.Domain[^1]));
+        // Quarterly intervals across [2026-01-01 .. 2027-01-01]: Jan 2026, Apr 2026, Jul 2026, Oct 2026, Jan 2027
+        Assert.Equal(5, xScale.Ticks.Length);
+        Assert.Equal(["Jan 2026", "Apr 2026", "Jul 2026", "Oct 2026", "Jan 2027"], xScale.Ticks.Select(t => t.Label));
+
+        // Duplicate timestamps must be preserved
+        var ptsLayer = Assert.Single(plan.Layers);
+        Assert.Equal(4, ptsLayer.Data.Length);
+
+        var svg = new SvgChartRenderer().Render(plan);
+        var doc = System.Xml.Linq.XDocument.Parse(svg);
+        var circles = doc.Descendants().Where(e => e.Name.LocalName == "circle").ToList();
+        Assert.Equal(4, circles.Count);
+
+        // 2026-01-02 (index 2, 3) is 1/365 of the span away from 2026-01-01 (index 1),
+        // while 2026-12-31 (index 0) is 364/365 of the span — proportional, not uniform category slots.
+        decimal Cx(int rowIndex) => decimal.Parse(
+            circles.Single(c => c.Attribute("data-row-index")?.Value == rowIndex.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .Attribute("cx")!.Value,
+            System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Equal(Cx(2), Cx(3));
+        Assert.True(Cx(2) - Cx(1) < 5m, $"Expected 1-day gap on 1-year axis to be < 5px, got {Cx(2) - Cx(1)}px");
+        Assert.True(Cx(0) - Cx(2) > 400m, $"Expected 363-day gap on 1-year axis to be > 400px, got {Cx(0) - Cx(2)}px");
+    }
+
+    [Fact]
+    public void ContinuousTimeScale_HonorsMajorTickCountAndIndependentFacets()
+    {
+        const string sql = """
+            CREATE VISUAL FacetTime AS CUSTOM (
+              SOURCE = #events,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (
+                  t = TIME (CHANNEL = X, MAJOR_TICK_COUNT = 3),
+                  v = LINEAR (CHANNEL = Y)
+                ),
+                FACET (WRAP = Region, COLUMNS = 2),
+                RESOLVE (X = INDEPENDENT, Y = INDEPENDENT),
+                LAYERS (
+                  line = LINE (
+                    ENCODINGS (
+                      X = Day (TYPE = TEMPORAL, SCALE = t),
+                      Y = Value (TYPE = QUANTITATIVE, SCALE = v)
+                    )
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var statement = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+
+        var manifest = new VisualManifest
+        {
+            Name = "FacetTime",
+            Columns = ["Region", "Day", "Value"],
+            Rows =
+            [
+                ["East", "2026-01-01", "10"],
+                ["East", "2026-01-07", "30"],
+                ["West", "2026-06-01", "20"],
+                ["West", "2026-06-30", "40"]
+            ]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 800, 400));
+
+        Assert.Equal(2, plan.Facets.Length);
+        var eastTime = plan.Facets[0].Scales.Single(s => s.Id == "t");
+        var westTime = plan.Facets[1].Scales.Single(s => s.Id == "t");
+
+        Assert.Empty(eastTime.Categories);
+        Assert.Empty(westTime.Categories);
+        Assert.StartsWith("2026-01-01", PlotPlanResolver.Display(eastTime.Domain[0]));
+        Assert.StartsWith("2026-01-07", PlotPlanResolver.Display(eastTime.Domain[^1]));
+        Assert.StartsWith("2026-06-01", PlotPlanResolver.Display(westTime.Domain[0]));
+        Assert.StartsWith("2026-06-30", PlotPlanResolver.Display(westTime.Domain[^1]));
+        Assert.InRange(eastTime.Ticks.Length, 2, 4);
+        Assert.InRange(westTime.Ticks.Length, 2, 4);
+    }
+
+    [Fact]
+    public async Task CustomChart_AllowsCategoricalAndTemporalLineAreaConditionsAndLineDashAndSegmentStyle()
+    {
+        const string sql = """
+            CREATE VISUAL CategoricalConditionLine AS CUSTOM (
+              SOURCE = #prepared,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (x = BAND (CHANNEL = X), y = LINEAR (CHANNEL = Y)),
+                LAYERS (
+                  trend = LINE (
+                    ENCODINGS (X = Category (TYPE = NOMINAL, SCALE = x), Y = Value (TYPE = QUANTITATIVE, SCALE = y)),
+                    CONDITIONS (
+                      COLOR WHEN Value < 0 THEN '#b91c1c' ELSE '#2563eb',
+                      LINE_DASH WHEN IsProj = 1 THEN 'DASHED' ELSE 'SOLID'
+                    )
+                  )
+                )
+              )
+            );
+
+            CREATE VISUAL TemporalConditionArea AS CUSTOM (
+              SOURCE = #events,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (t = TIME (CHANNEL = X), y = LINEAR (CHANNEL = Y)),
+                LAYERS (
+                  band = AREA (
+                    ENCODINGS (X = RecordedAt (TYPE = TEMPORAL, SCALE = t), Y = Value (TYPE = QUANTITATIVE, SCALE = y)),
+                    STYLE (LINE_DASH = 'DOTTED'),
+                    CONDITIONS (COLOR WHEN Value < 0 THEN '#dc2626')
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var diagnostics = await new AdvancedChartAuthoringRule().AnalyzeAsync(script, new DefaultLintContext());
+        Assert.Empty(diagnostics);
+
+        var lineStmt = script.Statements.OfType<CreateVisualStatement>().First(s => s.Name == "CategoricalConditionLine");
+        var reparsed = Assert.Single(new Parser(new Lexer(lineStmt.ToSql()).Tokenize(), lineStmt.ToSql()).Parse().Statements.OfType<CreateVisualStatement>());
+        Assert.Equal(lineStmt.ToSql(), reparsed.ToSql());
+
+        var lineManifest = new VisualManifest
+        {
+            Name = "CategoricalConditionLine",
+            Columns = ["Category", "Value", "IsProj"],
+            Rows = [["A", "10", "0"], ["B", "-5", "1"], ["C", "20", "1"]]
+        };
+        var lineSpec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(lineStmt, lineManifest);
+        var lineData = new VisualChartDataBuilder().Build(lineSpec, lineManifest);
+        var linePlan = new PlotPlanResolver().Resolve(lineSpec, lineData, new PlotBounds(0, 0, 600, 350));
+        var lineSvg = new SvgChartRenderer().Render(linePlan);
+        Assert.Contains("stroke='#b91c1c'", lineSvg);
+        Assert.Contains("stroke-dasharray='7 5'", lineSvg);
+
+        var areaStmt = script.Statements.OfType<CreateVisualStatement>().First(s => s.Name == "TemporalConditionArea");
+        var areaManifest = new VisualManifest
+        {
+            Name = "TemporalConditionArea",
+            Columns = ["RecordedAt", "Value"],
+            Rows = [["2026-01-01", "10"], ["2026-01-10", "-5"], ["2026-01-20", "15"]]
+        };
+        var areaSpec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(areaStmt, areaManifest);
+        var areaData = new VisualChartDataBuilder().Build(areaSpec, areaManifest);
+        var areaPlan = new PlotPlanResolver().Resolve(areaSpec, areaData, new PlotBounds(0, 0, 600, 350));
+        var areaSvg = new SvgChartRenderer().Render(areaPlan);
+        Assert.Contains("fill='#dc2626'", areaSvg);
+        Assert.Contains("stroke-dasharray='1 5'", areaSvg);
+    }
+
+    [Fact]
+    public void CustomChart_SupportsOverlaysAndSegmentStyleOption()
+    {
+        const string sql = """
+            CREATE VISUAL CustomWithOverlays AS CUSTOM (
+              SOURCE = #sales,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (t = POINT (CHANNEL = X), amt = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)),
+                LAYERS (
+                  actual = LINE (
+                    ENCODINGS (
+                      X = Period (TYPE = ORDINAL, SCALE = t),
+                      Y = Revenue (TYPE = QUANTITATIVE, SCALE = amt),
+                      COLOR = DATUM('Actual') (TYPE = NOMINAL)
+                    )
+                  )
+                )
+              ),
+              OPTIONS (
+                SEGMENT_STYLE (WHEN IsForecast = 1 THEN LINE_DASH = DASHED, COLOR = '#64748b')
+              ),
+              OVERLAYS (
+                REFERENCE_LINE (VALUE = 150, LABEL = 'Target', COLOR = '#ef4444'),
+                AVERAGE AS SOLID WITH (LABEL = 'Avg', COLOR = '#10b981'),
+                LINEAR AS DASHED WITH (SERIES = 'Actual', LABEL = 'Trend', COLOR = '#6366f1')
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var stmt = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(stmt));
+
+        var roundTripped = stmt.ToSql();
+        var reparsed = Assert.Single(new Parser(new Lexer(roundTripped).Tokenize(), roundTripped).Parse().Statements.OfType<CreateVisualStatement>());
+        Assert.Equal(roundTripped, reparsed.ToSql());
+
+        var manifest = new VisualManifest
+        {
+            Name = "CustomWithOverlays",
+            Columns = ["Period", "Revenue", "IsForecast"],
+            Rows = [["P1", "100", "0"], ["P2", "140", "0"], ["P3", "180", "1"], ["P4", "220", "1"]]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(stmt, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 700, 380));
+        plan = ETL_SQL.Reporting.Builders.VisualBuilder.ApplySegmentStyles(plan, [null, null, new() { LineDash = "DASHED", Color = "#64748b" }, new() { LineDash = "DASHED", Color = "#64748b" }]);
+
+        Assert.Contains(plan.Layers, l => l.Style.Any(t => t.Name == "overlayType" && t.Value == "ReferenceLine"));
+        Assert.Contains(plan.Layers, l => l.Style.Any(t => t.Name == "overlayType" && t.Value == "Average"));
+        Assert.Contains(plan.Layers, l => l.Style.Any(t => t.Name == "overlayType" && t.Value == "Linear"));
+
+        var svg = new SvgChartRenderer().Render(plan);
+        Assert.Contains("Target", svg);
+        Assert.Contains("Avg", svg);
+        Assert.Contains("Trend", svg);
+        Assert.Contains("stroke-dasharray='7 5'", svg);
+        Assert.Contains("stroke='#64748b'", svg);
+    }
+
+    [Fact]
+    public void CustomChart_SupportsDiscreteColorMapSizeRangeOpacityChannelAndScaleTitle()
+    {
+        const string sql = """
+            CREATE VISUAL RichCustom AS CUSTOM (
+              SOURCE = #metrics,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (
+                  x = LINEAR (CHANNEL = X, TITLE = 'Score Index'),
+                  y = LINEAR (CHANNEL = Y, LABEL = 'Return (%)'),
+                  c = ORDINAL (CHANNEL = COLOR, RANGE = ('North' = '#112233', 'South' = '#445566')),
+                  s = LINEAR (CHANNEL = SIZE, RANGE = (6, 28)),
+                  op = LINEAR (CHANNEL = OPACITY)
+                ),
+                LAYERS (
+                  pts = POINT (
+                    ENCODE (
+                      X = Score (TYPE = QUANTITATIVE, SCALE = x),
+                      Y = ReturnPct (TYPE = QUANTITATIVE, SCALE = y),
+                      COLOR = Region (TYPE = NOMINAL, SCALE = c),
+                      SIZE = Volume (TYPE = QUANTITATIVE, SCALE = s),
+                      OPACITY = Confidence (TYPE = QUANTITATIVE, SCALE = op)
+                    )
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var stmt = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(stmt));
+
+        var roundTripped = stmt.ToSql();
+        var reparsed = Assert.Single(new Parser(new Lexer(roundTripped).Tokenize(), roundTripped).Parse().Statements.OfType<CreateVisualStatement>());
+        Assert.Equal(roundTripped, reparsed.ToSql());
+
+        var manifest = new VisualManifest
+        {
+            Name = "RichCustom",
+            Columns = ["Score", "ReturnPct", "Region", "Volume", "Confidence"],
+            Rows =
+            [
+                ["10", "5", "North", "100", "0.25"],
+                ["50", "15", "South", "500", "0.85"]
+            ]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(stmt, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 700, 400));
+
+        Assert.Equal("#112233", plan.Series.Single(s => s.Key == "North").Color);
+        Assert.Equal("#445566", plan.Series.Single(s => s.Key == "South").Color);
+        var xScale = plan.Scales.Single(s => s.Id == "x");
+        var yScale = plan.Scales.Single(s => s.Id == "y");
+        Assert.Equal("Score Index", xScale.Title);
+        Assert.Equal("Return (%)", yScale.Title);
+
+        var svg = new SvgChartRenderer().Render(plan);
+        Assert.Contains("Score Index", svg);
+        Assert.Contains("Return (%)", svg);
+
+        var doc = System.Xml.Linq.XDocument.Parse(svg);
+        var circles = doc.Descendants().Where(e => e.Name.LocalName == "circle").ToList();
+        Assert.Equal(2, circles.Count);
+        var north = circles.Single(c => c.Attribute("data-row-index")?.Value == "0");
+        var south = circles.Single(c => c.Attribute("data-row-index")?.Value == "1");
+        Assert.Equal("#112233", north.Attribute("fill")?.Value);
+        Assert.Equal("6", north.Attribute("r")?.Value);
+        Assert.Equal("0.25", north.Attribute("fill-opacity")?.Value);
+        Assert.Equal("#445566", south.Attribute("fill")?.Value);
+        Assert.Equal("28", south.Attribute("r")?.Value);
+        Assert.Equal("0.85", south.Attribute("fill-opacity")?.Value);
+    }
+
+    [Fact]
+    public void CustomChart_SupportsPositionalDiscreteColorRangeWithExplicitOrder()
+    {
+        const string sql = """
+            CREATE VISUAL PositionalPaletteCustom AS CUSTOM (
+              SOURCE = #metrics,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (
+                  c = ORDINAL (CHANNEL = COLOR, ORDER = ('North', 'South'), RANGE = ('#112233', '#445566'))
+                ),
+                LAYERS (
+                  bars = RECT (
+                    ENCODE (
+                      X = Region (TYPE = NOMINAL),
+                      Y = Volume (TYPE = QUANTITATIVE),
+                      COLOR = Region (TYPE = NOMINAL, SCALE = c)
+                    )
+                  )
+                )
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var stmt = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        Assert.Empty(AdvancedChartSemanticValidator.Validate(stmt));
+
+        var manifest = new VisualManifest
+        {
+            Name = "PositionalPaletteCustom",
+            Columns = ["Region", "Volume"],
+            Rows = [["South", "40"], ["North", "25"]]
+        };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(stmt, manifest);
+        var data = new VisualChartDataBuilder().Build(spec, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, data, new PlotBounds(0, 0, 600, 350));
+
+        Assert.Equal("#112233", plan.Series.Single(s => s.Key == "North").Color);
+        Assert.Equal("#445566", plan.Series.Single(s => s.Key == "South").Color);
+    }
+
+    [Theory]
+    [InlineData("OPTIONS (X_AXIS (MIN = 0), Y_AXIS (LABEL = 'Sales'))", "X_AXIS")]
+    [InlineData("OPTIONS (AXIS_X = 'Category', AXIS_Y = 'Value')", "AXIS_X")]
+    [InlineData("OPTIONS (STACKED = ON)", "STACKED")]
+    [InlineData("OPTIONS (LINE_WIDTH = 3)", "LINE_WIDTH")]
+    public void CustomChart_RejectsOuterAxisBlocksAndNamedVisualOnlyOptions(string extraClause, string expectedToken)
+    {
+        var sql = $$"""
+            CREATE VISUAL BadCustomOptions AS CUSTOM (
+              SOURCE = #prepared,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                LAYERS (bars = RECT (ENCODINGS (X = Category (TYPE = NOMINAL), Y = Value (TYPE = QUANTITATIVE))))
+              ),
+              {{extraClause}}
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var stmt = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        var diagnostics = AdvancedChartSemanticValidator.Validate(stmt);
+        Assert.Contains(diagnostics, d => d.Message.Contains(expectedToken, StringComparison.OrdinalIgnoreCase));
     }
 }

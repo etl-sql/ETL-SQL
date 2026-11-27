@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
@@ -12,104 +11,87 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
+    /// <summary>
+    /// EXECUTE against a connection. For a table it does not know, the mock source echoes each bound
+    /// parameter with the SQL it received, which shows what actually reached the source. The table
+    /// and column names avoid the mock's own tables: it matches them by substring.
+    /// </summary>
     public class ExecuteKitchenSinkTests
     {
+        private static async Task<Evaluator> Run(string script)
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            evaluator.Connections["ds"] = new MockSqlDataSource(SystemExecutionContext.Instance, "mock://", "MSSQL");
+            await evaluator.Evaluate(new Parser(new Lexer(script).Tokenize()).Parse());
+            return evaluator;
+        }
+
+        private static (object?[] Values, string Sql) Echo(Evaluator evaluator)
+        {
+            var rows = evaluator.LastResult!.Rows;
+            return (rows.Select(r => r["ParameterValue"]).ToArray(), rows[0]["ProcessedSql"]!.ToString()!);
+        }
+
         [Fact]
         public async Task TestExecuteKitchenSink_PositionalParameters()
         {
-            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            var mockDb = new MockSqlDataSource(SystemExecutionContext.Instance, "mock://", "MSSQL");
-            evaluator.Connections["ds"] = mockDb;
-
-            var script = @"
+            var evaluator = await Run(@"
 DECLARE @id INT = 101;
 DECLARE @name VARCHAR(50) = 'Alice';
 
 EXECUTE ds INTO #temp WITH(@id, @name)
 BEGIN
-    SELECT * FROM ds.Employees WHERE EmployeeID = ? AND Name = ?;
+    SELECT * FROM ds.Probe WHERE pid = ? AND label = ?;
 END
 
-SELECT * FROM #temp;";
-            var parser = new Parser(new Lexer(script).Tokenize());
-            var ast = parser.Parse();
+SELECT * FROM #temp;");
 
-            await evaluator.Evaluate(ast);
-
-            Assert.NotNull(evaluator.LastResult);
-            // In MockSqlDataSource, if source is not found it returns a dummy table with ParameterValue and ProcessedSql
-            // But here ds.Employees exists in MockSqlDataSource? 
-            // Wait, MockSqlDataSource has "Employee" by default usually.
-
-            // Let's check if it actually executed.
-            Assert.True(evaluator.Connections.ContainsKey("#temp"), "Temp table #temp should exist");
+            var (values, sql) = Echo(evaluator);
+            Assert.Equal(new object?[] { 101m, "Alice" }, values.Select(v => v is int or long ? Convert.ToDecimal(v) : v));
+            Assert.Contains("pid = @p0 AND label = @p1", sql, StringComparison.Ordinal);
         }
 
+        /// <summary>An indexed placeholder names its WITH argument, whatever order it appears in.</summary>
         [Fact]
         public async Task TestExecuteKitchenSink_IndexedParameters()
         {
-            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            var mockDb = new MockSqlDataSource(SystemExecutionContext.Instance, "mock://", "MSSQL");
-            evaluator.Connections["ds"] = mockDb;
-
-            var script = @"
+            var evaluator = await Run(@"
 DECLARE @id INT = 102;
 DECLARE @name VARCHAR(50) = 'Bob';
 
 EXEC ds INTO #temp2 WITH(@id, @name)
 BEGIN
-    SELECT * FROM ds.Employees WHERE EmployeeID = ?1 AND Name = ?2;
+    SELECT * FROM ds.Probe WHERE pid = ?2 AND label = ?1;
 END
 
-SELECT * FROM #temp2;";
-            var parser = new Parser(new Lexer(script).Tokenize());
-            var ast = parser.Parse();
+SELECT * FROM #temp2;");
 
-            await evaluator.Evaluate(ast);
-
-            Assert.NotNull(evaluator.LastResult);
-            Assert.True(evaluator.Connections.ContainsKey("#temp2"), "Temp table #temp2 should exist");
+            var (values, sql) = Echo(evaluator);
+            Assert.Equal(new object?[] { 102m, "Bob" }, values.Select(v => v is int or long ? Convert.ToDecimal(v) : v));
+            Assert.Contains("pid = @p1 AND label = @p0", sql, StringComparison.Ordinal);
         }
 
         [Fact]
         public async Task TestExecuteKitchenSink_DynamicString()
         {
-            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            var mockDb = new MockSqlDataSource(SystemExecutionContext.Instance, "mock://", "MSSQL");
-            evaluator.Connections["ds"] = mockDb;
-
-            var script = @"
+            var evaluator = await Run(@"
 DECLARE @query VARCHAR(500) = 'SELECT * FROM Employees';
 EXECUTE ds INTO #temp3 (@query);
-SELECT * FROM #temp3;";
-            var parser = new Parser(new Lexer(script).Tokenize());
-            var ast = parser.Parse();
+SELECT * FROM #temp3;");
 
-            await evaluator.Evaluate(ast);
-
-            Assert.NotNull(evaluator.LastResult);
-            Assert.True(evaluator.Connections.ContainsKey("#temp3"), "Temp table #temp3 should exist");
+            // The mock's Employees table has 100 rows; #temp3 holds all of them.
+            Assert.Equal(100, evaluator.LastResult!.Rows.Count);
+            Assert.Contains("EmpID", evaluator.LastResult.ColumnNames);
         }
 
-        [Fact]
-        public async Task TestExecuteKitchenSink_ShorthandSynonyms()
+        [Theory]
+        [InlineData("EXEC")]
+        [InlineData("EXECUTE")]
+        public async Task TestExecuteKitchenSink_ShorthandSynonyms(string keyword)
         {
-            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            var mockDb = new MockSqlDataSource(SystemExecutionContext.Instance, "mock://", "MSSQL");
-            evaluator.Connections["ds"] = mockDb;
+            var evaluator = await Run($"DECLARE @q = 'SELECT * FROM Employees'; {keyword} ds INTO #syn (@q); SELECT * FROM #syn;");
 
-            // Test that EXEC and EXECUTE both work for the new syntax
-            var script1 = "DECLARE @q = 'SELECT 1'; EXEC ds (@q);";
-            var script2 = "DECLARE @q = 'SELECT 1'; EXECUTE ds (@q);";
-
-            var ast1 = new Parser(new Lexer(script1).Tokenize()).Parse();
-            var ast2 = new Parser(new Lexer(script2).Tokenize()).Parse();
-
-            await evaluator.Evaluate(ast1);
-            Assert.NotNull(evaluator.LastResult);
-
-            await evaluator.Evaluate(ast2);
-            Assert.NotNull(evaluator.LastResult);
+            Assert.Equal(100, evaluator.LastResult!.Rows.Count);
         }
     }
 }

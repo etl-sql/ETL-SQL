@@ -29,6 +29,20 @@ namespace ETL_SQL.Tests.Engine
             await eval.Evaluate(Parse(sql));
         }
 
+        private static async Task<Evaluator> RunEval(string sql)
+        {
+            var eval = Eval();
+            eval.RedirectOutput = true;
+            await eval.Evaluate(Parse(sql));
+            return eval;
+        }
+
+        private static async Task<string> Output(string sql)
+        {
+            var eval = await RunEval(sql);
+            return string.Join("\n", eval.Messages.Select(m => m.Message));
+        }
+
         // ── ASSERT ────────────────────────────────────────────────────────────
 
         [Fact]
@@ -128,63 +142,80 @@ namespace ETL_SQL.Tests.Engine
         // ── HELP ──────────────────────────────────────────────────────────────
 
         [Fact]
-        public async Task Help_Root_ExecutesWithoutError()
+        public async Task Help_Root_PrintsTopic()
         {
-            await Run("HELP;");
+            var output = await Output("HELP;");
+            Assert.Contains("ETL-SQL Help System", output);
+            Assert.Contains("HELP SNIPPETS", output);
         }
 
         [Fact]
-        public async Task Help_Connection_ExecutesWithoutError()
+        public async Task Help_Connection_PrintsTopic()
         {
-            await Run("HELP CONNECTION;");
+            var output = await Output("HELP CONNECTION;");
+            Assert.Contains("MSSQL", output);
+            Assert.DoesNotContain("List of connection types not found.", output);
         }
 
         [Fact]
-        public async Task Help_Function_ExecutesWithoutError()
+        public async Task Help_Function_PrintsTopic()
         {
-            await Run("HELP FUNCTION;");
+            var output = await Output("HELP FUNCTION;");
+            Assert.Contains("Available Functions:", output);
+            Assert.Contains("CONCAT", output);
         }
 
         [Fact]
-        public async Task Help_Visual_ExecutesWithoutError()
+        public async Task Help_Visual_PrintsTopic()
         {
-            await Run("HELP VISUAL;");
+            var output = await Output("HELP VISUAL;");
+            Assert.Contains("CREATE VISUAL", output);
         }
 
         [Fact]
-        public async Task Help_SpecificConnector_ExecutesWithoutError()
+        public async Task Help_SpecificConnector_PrintsTopic()
         {
-            await Run("HELP CONNECTION MSSQL;");
+            var output = await Output("HELP CONNECTION MSSQL;");
+            Assert.Contains("HELP: CONNECTION MSSQL", output);
+            Assert.Contains("TRUSTED_CONNECTION", output);
         }
 
         [Fact]
-        public async Task Help_SpecificFunction_ExecutesWithoutError()
+        public async Task Help_SpecificFunction_PrintsTopic()
         {
-            await Run("HELP FUNCTION CONCAT;");
+            var output = await Output("HELP FUNCTION CONCAT;");
+            Assert.Contains("Concatenates multiple strings", output);
         }
 
         [Fact]
-        public async Task Help_Snippets_ListsAll_ExecutesWithoutError()
+        public async Task Help_Snippets_ListsAll_PrintsTopic()
         {
-            await Run("HELP SNIPPETS;");
+            var output = await Output("HELP SNIPPETS;");
+            Assert.Contains("$bar", output);
+            Assert.Contains("$mssql", output);
         }
 
         [Fact]
-        public async Task Help_Snippets_SpecificTrigger_ExecutesWithoutError()
+        public async Task Help_Snippets_SpecificTrigger_PrintsTopic()
         {
-            await Run("HELP SNIPPETS bar;");
+            var output = await Output("HELP SNIPPETS bar;");
+            Assert.Contains("HELP: SNIPPET $bar", output);
+            Assert.Contains("AS BAR", output);
         }
 
         [Fact]
-        public async Task Help_Snippets_WithDollarPrefix_ExecutesWithoutError()
+        public async Task Help_Snippets_WithDollarPrefix_PrintsTopic()
         {
-            await Run("HELP SNIPPETS $mssql;");
+            var output = await Output("HELP SNIPPETS $mssql;");
+            Assert.Contains("HELP: SNIPPET $mssql", output);
+            Assert.Contains("AS MSSQL", output);
         }
 
         [Fact]
-        public async Task Help_Snippets_UnknownTrigger_ExecutesWithoutError()
+        public async Task Help_Snippets_UnknownTrigger_PrintsTopic()
         {
-            await Run("HELP SNIPPETS nonexistent;");
+            var output = await Output("HELP SNIPPETS nonexistent;");
+            Assert.Contains("Snippet '$nonexistent' not found.", output);
         }
 
         // ── eng.version ───────────────────────────────────────────────────────
@@ -194,7 +225,8 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = Eval();
             await eval.Evaluate(Parse("SELECT * FROM eng.version;"));
-            Assert.NotNull(eval.LastResult);
+            Assert.Equal(new[] { "component", "version", "metadata" }, eval.LastResult!.ColumnNames);
+            Assert.NotEmpty(eval.LastResult.Rows);
         }
 
         [Fact]
@@ -202,7 +234,8 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = Eval();
             await eval.Evaluate(Parse("SELECT * INTO #V FROM eng.version; SELECT * FROM #V;"));
-            Assert.NotNull(eval.LastResult);
+            Assert.Contains("version", eval.LastResult!.ColumnNames);
+            Assert.NotEmpty(eval.LastResult.Rows);
         }
 
         // ── DROP TABLE ────────────────────────────────────────────────────────
@@ -210,7 +243,8 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task DropTable_ExistingTable_RemovesTable()
         {
-            await Run("SELECT 1 AS Id INTO #T; DROP TABLE #T;");
+            var eval = await RunEval("SELECT 1 AS Id INTO #T; DROP TABLE #T;");
+            await Assert.ThrowsAnyAsync<Exception>(() => eval.Evaluate(Parse("SELECT * FROM #T;")));
         }
 
         [Fact]
@@ -224,12 +258,16 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task DropIndex_AfterCreate_Succeeds()
         {
-            await Run(@"
+            var eval = Eval();
+            await eval.Evaluate(Parse(@"
                 SELECT 1 AS Id, 'Alice' AS Name INTO #Employees;
                 INSERT INTO #Employees VALUES (2, 'Bob');
                 CREATE INDEX idx_name ON #Employees (Name);
                 DROP INDEX idx_name ON #Employees;
-            ");
+            "));
+            var ex = await Assert.ThrowsAsync<ExecutionException>(
+                () => eval.Evaluate(Parse("DROP INDEX idx_name ON #Employees;")));
+            Assert.Contains("Unknown index", ex.Message);
         }
 
         // ── DROP PROCEDURE ────────────────────────────────────────────────────
@@ -237,12 +275,14 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task DropProcedure_AfterCreate_Succeeds()
         {
-            await Run(@"
+            var eval = Eval();
+            await eval.Evaluate(Parse(@"
                 CREATE PROCEDURE MyProc AS BEGIN
                     SELECT 1 AS Val INTO #Result;
                 END;
                 DROP PROCEDURE MyProc;
-            ");
+            "));
+            Assert.False(eval.TryGetProcedure("MyProc", out _));
         }
 
         [Fact]
@@ -256,12 +296,14 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task DropFunction_AfterCreate_Succeeds()
         {
-            await Run(@"
+            var eval = Eval();
+            await eval.Evaluate(Parse(@"
                 CREATE FUNCTION MyFunc(@x INT) RETURNS INT AS BEGIN
                     RETURN @x * 2;
                 END;
                 DROP FUNCTION MyFunc;
-            ");
+            "));
+            Assert.False(eval.TryGetFunction("MyFunc", out _));
         }
 
         [Fact]
@@ -275,67 +317,78 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task SetBatchSize_UpdatesContext()
         {
-            await Run("SET BATCHSIZE = 500;");
+            var eval = await RunEval("SET BATCHSIZE = 500;");
+            Assert.Equal(500, eval.BatchSize);
         }
 
         [Fact]
         public async Task SetJoinSpillThreshold_UpdatesContext()
         {
-            await Run("SET JOIN_SPILL_THRESHOLD = 50000;");
+            var eval = await RunEval("SET JOIN_SPILL_THRESHOLD = 50000;");
+            Assert.Equal(50000, eval.JoinSpillThreshold);
         }
 
         [Fact]
         public async Task SetWindowSpillThreshold_UpdatesContext()
         {
-            await Run("SET WINDOW_SPILL_THRESHOLD = 25000;");
+            var eval = await RunEval("SET WINDOW_SPILL_THRESHOLD = 25000;");
+            Assert.Equal(25000, eval.WindowSpillThreshold);
         }
 
         [Fact]
         public async Task SetMaxRecursiveDepth_UpdatesContext()
         {
-            await Run("SET MAX_RECURSIVE_DEPTH = 50;");
+            var eval = await RunEval("SET MAX_RECURSIVE_DEPTH = 50;");
+            Assert.Equal(50, eval.MaxRecursiveDepth);
         }
 
         [Fact]
         public async Task SetMaxParallelDegree_UpdatesContext()
         {
-            await Run("SET MAX_PARALLEL_DEGREE = 4;");
+            var eval = await RunEval("SET MAX_PARALLEL_DEGREE = 4;");
+            Assert.Equal(4, eval.MaxParallelDegree);
         }
 
         [Fact]
         public async Task SetRegexMatchTimeout_UpdatesContext()
         {
-            await Run("SET REGEX_MATCH_TIMEOUT = 5000;");
+            var eval = await RunEval("SET REGEX_MATCH_TIMEOUT = 5000;");
+            Assert.Equal(5000, eval.RegexMatchTimeoutMs);
         }
 
         [Fact]
         public async Task SetMaxGroupingSets_UpdatesContext()
         {
-            await Run("SET MAX_GROUPING_SETS = 64;");
+            var eval = await RunEval("SET MAX_GROUPING_SETS = 64;");
+            Assert.Equal(64, eval.MaxGroupingSets);
         }
 
         [Fact]
         public async Task SetMaxGenerateRows_UpdatesContext()
         {
-            await Run("SET MAX_GENERATE_ROWS = 10000;");
+            var eval = await RunEval("SET MAX_GENERATE_ROWS = 10000;");
+            Assert.Equal(10000, eval.MaxGenerateRows);
         }
 
         [Fact]
         public async Task SetForeachPageSize_UpdatesContext()
         {
-            await Run("SET FOREACH_PAGE_SIZE = 200;");
+            var eval = await RunEval("SET FOREACH_PAGE_SIZE = 200;");
+            Assert.Equal(200, eval.ForeachPageSize);
         }
 
         [Fact]
         public async Task SetExternalHashPartitions_UpdatesContext()
         {
-            await Run("SET EXTERNAL_HASH_PARTITIONS = 8;");
+            var eval = await RunEval("SET EXTERNAL_HASH_PARTITIONS = 8;");
+            Assert.Equal(8, eval.ExternalHashPartitions);
         }
 
         [Fact]
         public async Task SetMaxLastResultRows_UpdatesContext()
         {
-            await Run("SET MAX_LAST_RESULT_ROWS = 1000;");
+            var eval = await RunEval("SET MAX_LAST_RESULT_ROWS = 1000;");
+            Assert.Equal(1000, eval.MaxLastResultRows);
         }
 
         [Fact]
@@ -355,59 +408,68 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task SetExternalSortChunkSize_UpdatesContext()
         {
-            await Run("SET EXTERNAL_SORT_CHUNK_SIZE = 5000;");
+            var eval = await RunEval("SET EXTERNAL_SORT_CHUNK_SIZE = 5000;");
+            Assert.Equal(5000, eval.ExternalSortChunkSize);
         }
 
         [Fact]
         public async Task SetMaxInMemoryBatches_UpdatesContext()
         {
-            await Run("SET MAX_IN_MEMORY_BATCHES = 10;");
+            var eval = await RunEval("SET MAX_IN_MEMORY_BATCHES = 10;");
+            Assert.Equal(10, eval.MaxInMemoryBatches);
         }
 
         // ── SET SPILL_ENCRYPTION / SPILL_COMPRESSION ──────────────────────────
 
         [Fact]
-        public async Task SetSpillEncryption_Off_ExecutesWithoutError()
+        public async Task SetSpillEncryption_Off_DisablesEncryption()
         {
-            await Run("SET SPILL_ENCRYPTION OFF;");
+            var eval = await RunEval("SET SPILL_ENCRYPTION ON; SET SPILL_ENCRYPTION OFF;");
+            Assert.False(eval.SpillEncryptionEnabled);
         }
 
         [Fact]
-        public async Task SetSpillEncryption_On_ExecutesWithoutError()
+        public async Task SetSpillEncryption_On_EnablesEncryption()
         {
-            await Run("SET SPILL_ENCRYPTION ON;");
+            var eval = await RunEval("SET SPILL_ENCRYPTION OFF; SET SPILL_ENCRYPTION ON;");
+            Assert.True(eval.SpillEncryptionEnabled);
         }
 
         [Fact]
-        public async Task SetSpillCompression_Off_ExecutesWithoutError()
+        public async Task SetSpillCompression_Off_DisablesCompression()
         {
-            await Run("SET SPILL_COMPRESSION OFF;");
+            var eval = await RunEval("SET SPILL_ENCRYPTION ON; SET SPILL_COMPRESSION ON; SET SPILL_COMPRESSION OFF;");
+            Assert.False(eval.SpillCompressionEnabled);
         }
 
         [Fact]
-        public async Task SetSpillCompression_On_ExecutesWithoutError()
+        public async Task SetSpillCompression_On_EnablesCompression()
         {
-            await Run("SET SPILL_COMPRESSION ON;");
+            var eval = await RunEval("SET SPILL_ENCRYPTION ON; SET SPILL_COMPRESSION OFF; SET SPILL_COMPRESSION ON;");
+            Assert.True(eval.SpillCompressionEnabled);
         }
 
         // ── PRINT ─────────────────────────────────────────────────────────────
 
         [Fact]
-        public async Task Print_StringLiteral_ExecutesWithoutError()
+        public async Task Print_StringLiteral_WritesMessage()
         {
-            await Run("PRINT 'Hello, World!';");
+            var eval = await RunEval("PRINT 'Hello, World!';");
+            Assert.Contains(eval.Messages, m => m.Message.EndsWith("Hello, World!", StringComparison.Ordinal));
         }
 
         [Fact]
         public async Task Print_WithVariable_OutputsValue()
         {
-            await Run("DECLARE @msg STRING = 'Test'; PRINT @msg;");
+            var eval = await RunEval("DECLARE @msg STRING = 'Test'; PRINT @msg;");
+            Assert.Contains(eval.Messages, m => m.Message.EndsWith("Test", StringComparison.Ordinal));
         }
 
         [Fact]
         public async Task Print_MultipleArgs_JoinsWithSpace()
         {
-            await Run("PRINT 'A', 'B', 'C';");
+            var eval = await RunEval("PRINT 'A', 'B', 'C';");
+            Assert.Contains(eval.Messages, m => m.Message.EndsWith("A B C", StringComparison.Ordinal));
         }
 
         // ── eng.safe_zones / eng.sessions ──────────────────────────────────────
@@ -415,13 +477,15 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task ShowSafeZones_ProducesResult()
         {
-            await Run("SELECT * FROM eng.safe_zones;");
+            var eval = await RunEval("SELECT * FROM eng.safe_zones;");
+            Assert.Equal(new[] { "path", "is_system_path", "resolution" }, eval.LastResult!.ColumnNames);
         }
 
         [Fact]
         public async Task ShowSessions_ProducesResult()
         {
-            await Run("SELECT * FROM eng.sessions;");
+            var eval = await RunEval("SELECT * FROM eng.sessions;");
+            Assert.Contains("session_id", eval.LastResult!.ColumnNames);
         }
 
         // ── THROW ─────────────────────────────────────────────────────────────
@@ -429,14 +493,18 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task Throw_InsideTryCatch_CaughtByHandler()
         {
-            await Run(@"
+            var eval = Eval();
+            await eval.Evaluate(Parse(@"
+                DECLARE @caught INT = 0;
                 BEGIN TRY
                     THROW 'Test error';
+                    SET @caught = 99;
                 END
                 BEGIN CATCH
-                    PRINT 'Caught';
+                    SET @caught = 1;
                 END
-            ");
+            "));
+            Assert.Equal(1m, eval.GetVariable("@caught"));
         }
 
         [Fact]
@@ -465,7 +533,8 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task While_WithContinue_SkipsIteration()
         {
-            await Run(@"
+            var eval = Eval();
+            await eval.Evaluate(Parse(@"
                 DECLARE @i INT = 0;
                 DECLARE @sum INT = 0;
                 WHILE @i < 5 BEGIN
@@ -473,7 +542,8 @@ namespace ETL_SQL.Tests.Engine
                     IF @i = 3 CONTINUE;
                     SET @sum = @sum + @i;
                 END;
-            ");
+            "));
+            Assert.Equal(12m, eval.GetVariable("@sum"));
         }
 
         // ── TRUNCATE TABLE ────────────────────────────────────────────────────
@@ -498,15 +568,20 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = Eval();
             await eval.Evaluate(Parse("DECLARE @x INT = 42; SELECT * FROM eng.variables;"));
-            Assert.NotNull(eval.LastResult);
+            var row = Assert.Single(eval.LastResult!.Rows, r => string.Equals(r["variable_name"]?.ToString(), "@x", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("42", row["value"]?.ToString());
         }
 
         // ── CLEAR SESSION ─────────────────────────────────────────────────────
 
         [Fact]
-        public async Task ClearSession_ExecutesWithoutError()
+        public async Task ClearSession_DropsSessionVariables()
         {
-            await Run("CLEAR SESSION;");
+            var eval = Eval();
+            await eval.Evaluate(Parse("DECLARE @keep INT = 7;"));
+            Assert.Equal(7m, eval.GetVariable("@keep"));
+            await eval.Evaluate(Parse("CLEAR SESSION;"));
+            Assert.Null(eval.GetVariable("@keep"));
         }
     }
 }

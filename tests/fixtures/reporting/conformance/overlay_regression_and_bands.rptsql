@@ -1,0 +1,37 @@
+-- Conformance Fixture: Linear/Polynomial Regression & Reference Overlays
+-- Validates LINEAR, POLYNOMIAL(2), REFERENCE_LINE, and REFERENCE_BAND lowering and rendering.
+
+SET REPORT TITLE = 'Conformance: Regression & Reference Overlays';
+
+SELECT 1 AS StepX, 12.0 AS Score INTO #regression_samples
+UNION ALL SELECT 2, 19.0
+UNION ALL SELECT 3, 29.0
+UNION ALL SELECT 4, 43.0
+UNION ALL SELECT 5, 58.0
+UNION ALL SELECT 6, 77.0;
+
+CREATE VISUAL RegressionAndBandsScatter AS SCATTER (
+    TITLE = 'Regression Fits & Reference Targets',
+    SOURCE = #regression_samples,
+    MAPPINGS (
+        X = StepX,
+        Y = Score
+    ),
+    OVERLAYS (
+        REFERENCE_BAND (LOW = 25, HIGH = 55, COLOR = '#cbd5e1', LABEL = 'Target Band'),
+        REFERENCE_LINE (VALUE = 42, LABEL = 'Threshold', STYLE = DOTTED, COLOR = '#dc2626'),
+        LINEAR AS SOLID WITH (COLOR = '#2563eb', LABEL = 'Linear Fit'),
+        POLYNOMIAL(2) AS DASHED WITH (COLOR = '#7c3aed', LABEL = 'Quadratic Fit')
+    ),
+    OPTIONS (
+        LEGEND = 'TOP'
+    ),
+    STYLE (WIDTH = '100%', HEIGHT = '450px')
+);
+
+CREATE PAGE RegressionDashboard AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = RegressionAndBandsScatter)
+    )
+);

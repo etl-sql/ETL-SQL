@@ -15,7 +15,10 @@ namespace ETL_SQL.Portal.Controllers;
 [Route("api/admin/secrets")]
 [Authorize(Roles = "Admin")]
 [RequirePortalModule("SecretStore")]
-public class SecretsAdminController(PortalSecretStoreService store, AuditService audit) : ControllerBase
+public class SecretsAdminController(
+    PortalSecretStoreService store,
+    AuditService audit,
+    OrchestratorGovernanceSyncService? orchSync = null) : ControllerBase
 {
     public sealed record SetSecretRequest(string Value);
 
@@ -45,6 +48,7 @@ public class SecretsAdminController(PortalSecretStoreService store, AuditService
         // Staged rows commit atomically with the store's own SaveChanges.
         audit.Stage(CurrentUserId, existed ? "SECRET_ROTATE" : "SECRET_SET", "PortalSecret", name);
         await store.StoreAsync(name, request.Value, CurrentUserId, ct);
+        if (orchSync is not null) await orchSync.TrySyncSecretAsync(name, request.Value, ct);
         return NoContent();
     }
 
@@ -109,6 +113,7 @@ public class SecretsAdminController(PortalSecretStoreService store, AuditService
 
         audit.Stage(CurrentUserId, "SECRET_DISABLE", "PortalSecret", name);
         await store.DisableAsync(name, CurrentUserId, ct);
+        if (orchSync is not null) await orchSync.TrySyncSecretStateAsync(name, enabled: false, ct);
         return NoContent();
     }
 
@@ -121,6 +126,7 @@ public class SecretsAdminController(PortalSecretStoreService store, AuditService
 
         audit.Stage(CurrentUserId, "SECRET_ENABLE", "PortalSecret", name);
         await store.EnableAsync(name, CurrentUserId, ct);
+        if (orchSync is not null) await orchSync.TrySyncSecretStateAsync(name, enabled: true, ct);
         return NoContent();
     }
 
@@ -132,6 +138,7 @@ public class SecretsAdminController(PortalSecretStoreService store, AuditService
 
         audit.Stage(CurrentUserId, "SECRET_DELETE", "PortalSecret", name);
         await store.DeleteAsync(name, ct);
+        if (orchSync is not null) await orchSync.TryDeleteSecretAsync(name, ct);
         return NoContent();
     }
 }

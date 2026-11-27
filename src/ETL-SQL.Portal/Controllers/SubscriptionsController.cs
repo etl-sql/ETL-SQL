@@ -27,7 +27,8 @@ public class SubscriptionsController(
     SubscriptionScriptService subscriptionScripts,
     SubscriptionQueryService subscriptionQueries,
     DatasetTenantScope? tenantScope = null,
-    PortalTenantCatalogScope? catalogScope = null) : ControllerBase
+    PortalTenantCatalogScope? catalogScope = null,
+    OrchestratorProxyService? orchestratorProxy = null) : ControllerBase
 {
     private readonly DatasetTenantScope _tenantScope = tenantScope
         ?? throw new InvalidOperationException("Subscription routes require tenant scope.");
@@ -214,13 +215,21 @@ public class SubscriptionsController(
 
         var jobDef = SubscriptionOrchestration.BuildJobDefinition(
             sub, report.Name, scriptPath, _tenantScope.TenantId);
-        var orchDbPath = dbLocator.Resolve();
-        if (orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
+        if (orchestratorProxy is { IsConfigured: true })
         {
-            var store = orchestratorStoreFactory.Create(orchDbPath);
-            await store.InitializeAsync();
-            await SubscriptionOrchestration.SaveJobAndScheduleAsync(
-                store, sub, report.Name, scriptPath, _tenantScope.TenantId);
+            await orchestratorProxy.SyncSubscriptionJobAsync(
+                sub.Id, BuildSyncPayload(sub, jobDef, rearmExisting: false));
+        }
+        else
+        {
+            var orchDbPath = dbLocator.Resolve();
+            if (orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
+            {
+                var store = orchestratorStoreFactory.Create(orchDbPath);
+                await store.InitializeAsync();
+                await SubscriptionOrchestration.SaveJobAndScheduleAsync(
+                    store, sub, report.Name, scriptPath, _tenantScope.TenantId);
+            }
         }
 
         await audit.LogAsync(CurrentUserId, "CREATE_SUBSCRIPTION", "Subscription", sub.Id.ToString(), jobDef.Name);
@@ -308,40 +317,55 @@ public class SubscriptionsController(
         }
 
         // Sync the Orchestrator job and its unified links if scheduling, notification, or active state changed.
-        var orchDbPath = dbLocator.Resolve();
-        if ((orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
-            && (scheduleChanged || atTimeChanged || notificationChanged || req.IsActive.HasValue))
+        if (scheduleChanged || atTimeChanged || notificationChanged || req.IsActive.HasValue)
         {
-            var store = orchestratorStoreFactory.Create(orchDbPath);
-            await store.InitializeAsync();
-            var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name);
-            var job = await SubscriptionOrchestration.ResolveLocalJobAsync(store, _tenantScope.TenantId, jobName);
-            if (job is not null)
+            if (orchestratorProxy is { IsConfigured: true })
             {
-                var (interval, unit) = SubscriptionOrchestration.ParseSchedule(sub.Schedule);
-                var updated = job with
+                if (sub.Report is not null && !string.IsNullOrEmpty(sub.ScriptPath))
                 {
-                    Interval = interval > 0 ? interval : job.Interval,
-                    Unit = interval > 0 ? unit : job.Unit,
-                    AtTime = sub.AtTime,
-                    IsEnabled = sub.IsActive
-                };
-                await store.SaveJobAsync(updated);
-                await SubscriptionOrchestration.SaveScheduleLinkAsync(
-                    store,
-                    sub,
-                    updated.Id,
-                    _tenantScope.TenantId,
-                    rearmExisting: scheduleChanged || atTimeChanged);
-                await SubscriptionOrchestration.SaveNotificationLinkAsync(
-                    store, sub, updated.Id, _tenantScope.TenantId);
+                    var jobDef = SubscriptionOrchestration.BuildJobDefinition(
+                        sub, sub.Report.Name, sub.ScriptPath, _tenantScope.TenantId);
+                    await orchestratorProxy.SyncSubscriptionJobAsync(
+                        sub.Id, BuildSyncPayload(sub, jobDef, rearmExisting: scheduleChanged || atTimeChanged));
+                }
             }
-            else if (sub.Report is not null && !string.IsNullOrEmpty(sub.ScriptPath))
+            else
             {
-                // Heal a missing job from row state (e.g. a crash between the portal row and
-                // the job DB during create) instead of leaving the subscription dormant.
-                await SubscriptionOrchestration.SaveJobAndScheduleAsync(
-                    store, sub, sub.Report.Name, sub.ScriptPath, _tenantScope.TenantId);
+                var orchDbPath = dbLocator.Resolve();
+                if (orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
+                {
+                    var store = orchestratorStoreFactory.Create(orchDbPath);
+                    await store.InitializeAsync();
+                    var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name);
+                    var job = await SubscriptionOrchestration.ResolveLocalJobAsync(store, _tenantScope.TenantId, jobName);
+                    if (job is not null)
+                    {
+                        var (interval, unit) = SubscriptionOrchestration.ParseSchedule(sub.Schedule);
+                        var updated = job with
+                        {
+                            Interval = interval > 0 ? interval : job.Interval,
+                            Unit = interval > 0 ? unit : job.Unit,
+                            AtTime = sub.AtTime,
+                            IsEnabled = sub.IsActive
+                        };
+                        await store.SaveJobAsync(updated);
+                        await SubscriptionOrchestration.SaveScheduleLinkAsync(
+                            store,
+                            sub,
+                            updated.Id,
+                            _tenantScope.TenantId,
+                            rearmExisting: scheduleChanged || atTimeChanged);
+                        await SubscriptionOrchestration.SaveNotificationLinkAsync(
+                            store, sub, updated.Id, _tenantScope.TenantId);
+                    }
+                    else if (sub.Report is not null && !string.IsNullOrEmpty(sub.ScriptPath))
+                    {
+                        // Heal a missing job from row state (e.g. a crash between the portal row and
+                        // the job DB during create) instead of leaving the subscription dormant.
+                        await SubscriptionOrchestration.SaveJobAndScheduleAsync(
+                            store, sub, sub.Report.Name, sub.ScriptPath, _tenantScope.TenantId);
+                    }
+                }
             }
         }
 
@@ -357,12 +381,16 @@ public class SubscriptionsController(
         var items = (req.Subscriptions ?? []).GroupBy(item => item.Id).Select(group => group.First()).ToList();
         if (items.Count == 0) return BadRequest(new { error = "Select at least one subscription." });
 
-        var orchDbPath = dbLocator.Resolve();
+        var useRemote = orchestratorProxy is { IsConfigured: true };
         IJobHistoryStore? store = null;
-        if (orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
+        if (!useRemote)
         {
-            store = orchestratorStoreFactory.Create(orchDbPath);
-            await store.InitializeAsync();
+            var orchDbPath = dbLocator.Resolve();
+            if (orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
+            {
+                store = orchestratorStoreFactory.Create(orchDbPath);
+                await store.InitializeAsync();
+            }
         }
 
         var results = new List<BulkMutationResult>();
@@ -395,9 +423,16 @@ public class SubscriptionsController(
                 continue;
             }
 
-            if (store is not null)
+            if (useRemote && sub.Report is not null && !string.IsNullOrEmpty(sub.ScriptPath))
             {
-                var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report.Name);
+                var jobDef = SubscriptionOrchestration.BuildJobDefinition(
+                    sub, sub.Report.Name, sub.ScriptPath, _tenantScope.TenantId);
+                await orchestratorProxy!.SyncSubscriptionJobAsync(
+                    sub.Id, BuildSyncPayload(sub, jobDef, rearmExisting: false));
+            }
+            else if (store is not null)
+            {
+                var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name);
                 var job = await SubscriptionOrchestration.ResolveLocalJobAsync(store, _tenantScope.TenantId, jobName);
                 if (job is not null)
                 {
@@ -449,20 +484,27 @@ public class SubscriptionsController(
                 sub.ScriptPath, out resolvedScriptPath, _tenantScope.TenantId))
             return Forbid();
 
-        var orchDbPath = dbLocator.Resolve();
-        if (orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
+        if (orchestratorProxy is { IsConfigured: true })
         {
-            var store = orchestratorStoreFactory.Create(orchDbPath);
-            await store.InitializeAsync();
-            // Resolved in this subscription's own tenant: the generated job name repeats across
-            // tenants, so deleting by name alone would reach another tenant's job.
-            var job = await SubscriptionOrchestration.ResolveLocalJobAsync(store, _tenantScope.TenantId, jobName);
-            if (job is not null && job.Id.IsAssigned)
-                await store.DeleteJobAsync(job.Id);
-            await SubscriptionOrchestration.DeleteScheduleIfUnusedAsync(
-                store, sub.Id, _tenantScope.TenantId);
-            await SubscriptionOrchestration.DeleteNotificationIfUnusedAsync(
-                store, sub.Id, _tenantScope.TenantId);
+            await orchestratorProxy.DeleteSubscriptionJobAsync(sub.Id, jobName);
+        }
+        else
+        {
+            var orchDbPath = dbLocator.Resolve();
+            if (orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
+            {
+                var store = orchestratorStoreFactory.Create(orchDbPath);
+                await store.InitializeAsync();
+                // Resolved in this subscription's own tenant: the generated job name repeats across
+                // tenants, so deleting by name alone would reach another tenant's job.
+                var job = await SubscriptionOrchestration.ResolveLocalJobAsync(store, _tenantScope.TenantId, jobName);
+                if (job is not null && job.Id.IsAssigned)
+                    await store.DeleteJobAsync(job.Id);
+                await SubscriptionOrchestration.DeleteScheduleIfUnusedAsync(
+                    store, sub.Id, _tenantScope.TenantId);
+                await SubscriptionOrchestration.DeleteNotificationIfUnusedAsync(
+                    store, sub.Id, _tenantScope.TenantId);
+            }
         }
 
         if (!string.IsNullOrEmpty(resolvedScriptPath) && System.IO.File.Exists(resolvedScriptPath))
@@ -522,4 +564,28 @@ public class SubscriptionsController(
             !c.Disabled
             && c.ConnectorType.Equals("SMTP", StringComparison.OrdinalIgnoreCase)
             && c.Alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
+
+    private static object BuildSyncPayload(Subscription sub, JobDefinition jobDef, bool rearmExisting)
+    {
+        var schedule = SubscriptionOrchestration.BuildScheduleDefinition(sub);
+        var notification = SubscriptionOrchestration.BuildNotificationDefinition(sub);
+        return new
+        {
+            JobName = jobDef.Name,
+            Script = jobDef.Script,
+            jobDef.Interval,
+            jobDef.Unit,
+            jobDef.AtTime,
+            jobDef.IsEnabled,
+            jobDef.MaxRetries,
+            jobDef.RetryDelaySeconds,
+            ScheduleName = schedule.Name,
+            schedule.Cron,
+            schedule.TimeZone,
+            RearmExisting = rearmExisting,
+            NotificationName = notification?.Name,
+            notification?.ConnectionName,
+            notification?.Recipient
+        };
+    }
 }

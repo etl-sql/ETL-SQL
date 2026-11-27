@@ -138,7 +138,7 @@ namespace ETL_SQL.Tests.Docs
         /// Yields (id, code) for every ```sql fenced block. The id is "File.md:NN" where NN is the
         /// 1-based line of the first content line, so a failing theory case names the exact recipe.
         /// </summary>
-        private static IEnumerable<(string Id, string Code)> ExtractSqlBlocks(string markdown, string fileName)
+        internal static IEnumerable<(string Id, string Code)> ExtractSqlBlocks(string markdown, string fileName)
         {
             var lines = markdown.Replace("\r\n", "\n").Split('\n');
             for (var i = 0; i < lines.Length; i++)

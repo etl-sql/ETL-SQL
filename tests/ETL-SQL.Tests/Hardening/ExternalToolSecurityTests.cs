@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
@@ -27,12 +28,157 @@ public sealed class ExternalToolSecurityTests : IDisposable
 {
     private readonly string _tempRoot;
 
+    [Fact]
+    public void XT08_FixedDashApprovalBindsBothFilesToTheSameGeneration()
+    {
+        var root = Path.Combine(_tempRoot, "artifacts");
+        var interpreterDigest = new string('a', 64);
+        var scriptDigest = new string('b', 64);
+        var generation = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+            Encoding.ASCII.GetBytes(interpreterDigest + "\n" + scriptDigest)));
+        var version = Path.Combine(root, "tool", generation);
+        var interpreter = Path.Combine(version, "dash");
+        var entry = Path.Combine(version, "entry.sh");
+        var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["COMMAND"] = interpreter,
+            ["ARTIFACT_SHA256"] = interpreterDigest,
+            ["SCRIPT_PATH"] = entry,
+            ["SCRIPT_SHA256"] = scriptDigest
+        };
+
+        if (!OperatingSystem.IsLinux())
+        {
+            Assert.Throws<PlatformNotSupportedException>(() => NativeToolArtifact.Resolve(root, "Tool", "EXECUTABLE", options));
+            return;
+        }
+
+        var approval = NativeToolArtifact.Resolve(root, "Tool", "EXECUTABLE", options);
+        Assert.Equal(interpreter, approval.ExecutablePath);
+        Assert.Equal(entry, approval.ScriptPath);
+        Assert.Equal(generation, approval.GenerationSha256);
+
+        options["ARGS"] = "{data}";
+        var newContract = NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options);
+        Assert.Equal(approval.GenerationSha256, newContract.GenerationSha256);
+        Assert.NotEqual(approval.ApprovalId, newContract.ApprovalId);
+
+        options["SCRIPT_SHA256"] = new string('c', 64);
+        Assert.Throws<InvalidOperationException>(() => NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options));
+        options["SCRIPT_SHA256"] = scriptDigest;
+        options["SCRIPT_PATH"] = Path.Combine(root, "other.sh");
+        Assert.Throws<InvalidOperationException>(() => NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options));
+        options["SCRIPT_PATH"] = entry;
+        options.Remove("ARTIFACT_SHA256");
+        Assert.Throws<ArgumentException>(() => NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options));
+    }
+
+    [Fact]
+    public async Task XT08_WindowsApprovalRejectsInteractiveExecutionAndNonLocalPaths()
+    {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041) || RuntimeInformation.OSArchitecture != System.Runtime.InteropServices.Architecture.X64)
+            return;
+
+        const string virtualAccount = @"NT SERVICE\EtlsqlXt08Fixture";
+        var root = Path.Combine(_tempRoot, "artifacts");
+        var digest = new string('a', 64);
+        var version = Path.Combine(root, "tool", digest);
+        var executable = Path.Combine(version, "fixture.exe");
+        var catalog = Path.Combine(_tempRoot, "catalog", "tool.json");
+        var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["COMMAND"] = executable,
+            ["ARTIFACT_SHA256"] = digest
+        };
+
+        Assert.Throws<InvalidOperationException>(() => NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options));
+        Assert.Throws<InvalidOperationException>(() =>
+            NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options, @"NT AUTHORITY\LocalService", catalog));
+        var networkError = Assert.Throws<InvalidOperationException>(() =>
+            NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options, virtualAccount, @"\\server\catalog\tool.json"));
+        Assert.Contains("absolute drive paths", networkError.Message, StringComparison.Ordinal);
+        options["COMMAND"] = executable + ":other";
+        var streamError = Assert.Throws<InvalidOperationException>(() =>
+            NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options, virtualAccount, catalog));
+        Assert.Contains("alternate data streams", streamError.Message, StringComparison.Ordinal);
+        options["COMMAND"] = executable;
+
+        options["WORKING_DIR"] = root;
+        Assert.Throws<InvalidOperationException>(() =>
+            NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options, virtualAccount, catalog));
+        options["WORKING_DIR"] = version;
+
+        var artifact = NativeToolArtifact.Resolve(root, "tool", "EXECUTABLE", options, virtualAccount, catalog);
+        Assert.Equal(executable, artifact.ExecutablePath);
+        Assert.Equal(digest, artifact.GenerationSha256);
+
+        using var identity = WindowsIdentity.GetCurrent();
+        var serviceSid = new SecurityIdentifier(WellKnownSidType.ServiceSid, null);
+        if (!new WindowsPrincipal(identity).IsInRole(serviceSid) || identity.IsSystem)
+        {
+            var error = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => artifact.OpenForLaunchAsync(default));
+            Assert.Contains("virtual service token", error.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task XT08_WindowsHandleVerifiesPeAndReplacementKeepsAnOpenCatalogSnapshot()
+    {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041) || RuntimeInformation.OSArchitecture != System.Runtime.InteropServices.Architecture.X64)
+            return;
+
+        var executable = Path.Combine(_tempRoot, "fixture.exe");
+        File.Copy(Environment.ProcessPath!, executable);
+        using (var verified = new FileStream(executable, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            WindowsNativeToolBoundary.VerifyExecutable(verified, executable);
+            Assert.Equal(0, verified.Position);
+            Assert.Throws<IOException>(() => new FileStream(executable, FileMode.Open, FileAccess.Write, FileShare.ReadWrite).Dispose());
+        }
+
+        var active = Path.Combine(_tempRoot, "active.json");
+        var staged = Path.Combine(_tempRoot, "staged.json");
+        await File.WriteAllTextAsync(active, "generation-one");
+        await File.WriteAllTextAsync(staged, "generation-two");
+        using var snapshot = new FileStream(active, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        WindowsNativeToolBoundary.ReplaceCatalogEntry(staged, active);
+        using var reader = new StreamReader(snapshot);
+        Assert.Equal("generation-one", await reader.ReadToEndAsync());
+        Assert.Equal("generation-two", await File.ReadAllTextAsync(active));
+    }
+
     public ExternalToolSecurityTests()
     {
         SecurityEventRuntime.ConfigureLocalOutboxFactory(new SqliteSecurityEventOutboxFactory());
         EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
-        _tempRoot = Path.Combine(Path.GetTempPath(), "etlsql_xt_sec_" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_tempRoot);
+        _tempRoot = CreateProtectedTestRoot();
+    }
+
+    internal static string CreateProtectedTestRoot()
+    {
+        var baseDir = Path.GetTempPath();
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                ToolPathGuard.VerifyAncestorWriteBoundaries(baseDir, ToolCatalogOwnershipMode.PersonalWorkstation);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Host %TEMP% grants write/delete-child to extra principals (e.g., sandbox SIDs),
+                // so ToolPathGuard rightly rejects any child under %TEMP%. Place the test root
+                // under the user profile (whose ancestors are trusted) with an explicit protected ACL.
+                var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                if (!string.IsNullOrWhiteSpace(profile) && Directory.Exists(profile))
+                    baseDir = profile;
+            }
+        }
+
+        var root = Path.Combine(baseDir, ".etlsql_xt_sec_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        if (OperatingSystem.IsWindows())
+            ProtectWindowsDirectory(root);
+        return root;
     }
 
     public void Dispose()
@@ -46,11 +192,12 @@ public sealed class ExternalToolSecurityTests : IDisposable
     // Stock Windows lets Authenticated Users create folders in C:\ and Users write to
     // C:\ProgramData. Checking ancestors with the full write mask rejected every catalog on every
     // Windows host, so ancestors are held only to the rights that could replace the path.
-    [Fact]
+    [WindowsFact]
+    [Trait("Platform", "Windows")]
+    [SupportedOSPlatform("windows")]
     public void XT04_WindowsAncestorMayAllowNewSiblingsButNotReplacement()
     {
-        if (OperatingSystem.IsWindows())
-            AssertWindowsAncestorRule();
+        AssertWindowsAncestorRule();
     }
 
     [SupportedOSPlatform("windows")]
@@ -144,12 +291,10 @@ public sealed class ExternalToolSecurityTests : IDisposable
         await Assert.ThrowsAnyAsync<Exception>(() => catalog.ListAsync());
     }
 
-    [Fact]
+    [WindowsFact]
+    [Trait("Platform", "Windows")]
     public async Task XT01_LocalCatalogRejectsDirectoryLinkRoot()
     {
-        if (!OperatingSystem.IsWindows())
-            return;
-
         var targetDir = Path.Combine(_tempRoot, "real_target");
         var junctionDir = Path.Combine(_tempRoot, "junction_catalog");
         Directory.CreateDirectory(targetDir);
@@ -161,9 +306,10 @@ public sealed class ExternalToolSecurityTests : IDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true
         });
-        mklink?.WaitForExit(5000);
-        if (mklink?.ExitCode != 0 || !Directory.Exists(junctionDir))
-            return;
+        Assert.NotNull(mklink);
+        Assert.True(mklink!.WaitForExit(5000), "mklink /J timed out");
+        Assert.Equal(0, mklink.ExitCode);
+        Assert.True(Directory.Exists(junctionDir), "Expected junction directory to be created");
 
         try
         {
@@ -232,6 +378,32 @@ public sealed class ExternalToolSecurityTests : IDisposable
 
         var tempFoldersAfter = Directory.GetDirectories(Path.GetTempPath(), "etlsql_tool_*");
         Assert.Equal(tempFoldersBefore.Count, tempFoldersAfter.Length);
+    }
+
+    [Fact]
+    public async Task SavedJobApprovalDoesNotAuthorizeToolsFromNestedCode()
+    {
+        var catalog = new Mock<IToolCatalogProvider>(MockBehavior.Strict);
+        var context = new Mock<IExecutionContext>();
+        context.SetupGet(c => c.CurrentRecursiveDepth).Returns(1);
+        context.SetupGet(c => c.ExecutionIdentity).Returns(new ExecutionIdentity
+        {
+            EffectiveUser = "user:job-owner",
+            RealUser = "user:job-owner",
+            TenantId = "tenant-a",
+            IsAdmin = false,
+            ToolPrincipal = new("tenant-a", ToolPrincipalKind.User, "job-owner", [], true,
+                ApprovedSavedScriptOnly: true)
+        });
+        var processFactory = new RecordingProcessFactory();
+        var handler = new ExecuteToolStatementHandler(new Mock<ILogger>().Object, catalog.Object,
+            processFactory: processFactory);
+
+        var exception = await Assert.ThrowsAsync<ExecutionException>(
+            () => handler.Execute(new ExecuteToolStatement("nested_tool"), context.Object));
+        Assert.Contains("top-level script", exception.Message);
+        catalog.VerifyNoOtherCalls();
+        Assert.Empty(processFactory.StartedCommands);
     }
 
     [Fact]
@@ -393,6 +565,26 @@ public sealed class ExternalToolSecurityTests : IDisposable
         Assert.Equal(1, deleteDenied);
         writableCatalog.VerifyNoOtherCalls();
 
+        ctx.ToolGrantTenant = "tenant-a";
+        ctx.GrantPrincipalKind = "GROUP";
+        ctx.GrantPrincipalId = "finance-id";
+        var grant = new ToolUseGrant("tenant-a", ToolPrincipalKind.Group, "finance-id");
+        var grantDenied = await ToolAdminService.ExecuteAsync(
+            "admin-machine-tool-grant", ctx, writableCatalog.Object, logger.Object, CancellationToken.None, isElevated: () => false);
+        Assert.Equal(1, grantDenied);
+        writableCatalog.VerifyNoOtherCalls();
+
+        writableCatalog.Setup(w => w.SetUseGrantAsync("mytool", grant, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        writableCatalog.Setup(w => w.SetUseGrantAsync("mytool", grant, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        Assert.Equal(0, await ToolAdminService.ExecuteAsync("admin-machine-tool-grant", ctx,
+            writableCatalog.Object, logger.Object, CancellationToken.None, isElevated: () => true));
+        Assert.Equal(0, await ToolAdminService.ExecuteAsync("admin-machine-tool-revoke", ctx,
+            writableCatalog.Object, logger.Object, CancellationToken.None, isElevated: () => true));
+        writableCatalog.Verify(w => w.SetUseGrantAsync("mytool", grant, true, It.IsAny<CancellationToken>()), Times.Once);
+        writableCatalog.Verify(w => w.SetUseGrantAsync("mytool", grant, false, It.IsAny<CancellationToken>()), Times.Once);
+
         // Explicit elevation succeeds and delegates store cleanly.
         writableCatalog.Setup(w => w.StoreAsync(It.IsAny<ToolDefinition>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
@@ -546,6 +738,46 @@ public sealed class ExternalToolSecurityTests : IDisposable
         Assert.Equal([fixedScriptPath, "--format", "csv", "--", @"C:\work\data.csv"], built);
     }
 
+    // Windows PowerShell and cmd take '/'-prefixed switches of any length, and PowerShell runs its
+    // first positional argument as a command, so a long '/' switch is not a fixed script.
+    [Theory]
+    [InlineData("powershell", "/NoProfile {CODE}")]
+    [InlineData("powershell", "/NoProfile /NonInteractive {CODE}")]
+    [InlineData("powershell", "/Command {CODE}")]
+    [InlineData("cmd", "/V:ON {CODE}")]
+    [InlineData("pwsh", "/nologo {CODE}")]
+    public void XT05_LongSlashSwitchesDoNotCountAsAFixedScript(string exe, string args)
+    {
+        var command = OperatingSystem.IsWindows() ? $@"C:\Tools\{exe}.exe" : $"/usr/bin/{exe}";
+        var handler = new ExecuteToolStatementHandler(new Mock<ILogger>().Object);
+        var def = new ToolDefinition("slash_switch", "EXECUTABLE", new Dictionary<string, string>
+        {
+            ["COMMAND"] = command,
+            ["ARGS"] = args
+        }, false);
+
+        var ex = Assert.Throws<ExecutionException>(() => handler.ValidateAndBuildArguments(
+            def, command, args, new Dictionary<string, string> { ["CODE"] = "Remove-Item -Recurse C:\\" }));
+        Assert.Contains("ALLOW_CALLER_CODE_ARGS", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void XT05_AbsoluteUnixScriptPathCountsAsAFixedScript()
+    {
+        const string command = "/usr/bin/python3";
+        const string args = "/opt/etlsql/tools/report.py {INFILE}";
+        var handler = new ExecuteToolStatementHandler(new Mock<ILogger>().Object);
+        var def = new ToolDefinition("py_abs", "EXECUTABLE", new Dictionary<string, string>
+        {
+            ["COMMAND"] = command,
+            ["ARGS"] = args
+        }, false);
+
+        var built = handler.ValidateAndBuildArguments(
+            def, command, args, new Dictionary<string, string> { ["INFILE"] = "data.csv" });
+        Assert.Equal(["/opt/etlsql/tools/report.py", "data.csv"], built);
+    }
+
     // ── XT06: Container resource limits & isolation profile checks ────────────
 
     [Fact]
@@ -643,6 +875,37 @@ public sealed class ExternalToolSecurityTests : IDisposable
     }
 
     [SupportedOSPlatform("windows")]
+    private static void ProtectWindowsDirectory(string directory)
+    {
+        var info = new DirectoryInfo(directory);
+        var sec = new DirectorySecurity();
+        sec.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        sec.AddAccessRule(new FileSystemAccessRule(
+            new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
+            FileSystemRights.FullControl,
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+            PropagationFlags.None,
+            AccessControlType.Allow));
+        sec.AddAccessRule(new FileSystemAccessRule(
+            new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
+            FileSystemRights.FullControl,
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+            PropagationFlags.None,
+            AccessControlType.Allow));
+        using var identity = WindowsIdentity.GetCurrent();
+        if (identity.User != null)
+        {
+            sec.AddAccessRule(new FileSystemAccessRule(
+                identity.User,
+                FileSystemRights.FullControl,
+                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                PropagationFlags.None,
+                AccessControlType.Allow));
+        }
+        info.SetAccessControl(sec);
+    }
+
+    [SupportedOSPlatform("windows")]
     private static void GrantWindowsUsersWrite(string directory)
     {
         var info = new DirectoryInfo(directory);
@@ -673,6 +936,243 @@ public sealed class ExternalToolSecurityTests : IDisposable
             PropagationFlags.None,
             AccessControlType.Allow));
         info.SetAccessControl(sec);
+    }
+
+    // ── XT09: Separate working directory, approved assets and disposable scratch ──
+
+    [Fact]
+    public void XT09_ArgumentTemplateQuoting_PreservesPathsWithSpacesAndRejectsUnclosedQuotes()
+    {
+        var toolDef = new ToolDefinition(
+            "PyTool",
+            "EXECUTABLE",
+            new Dictionary<string, string> { ["PARAM_ROLES"] = "batch=NUMBER;file=PATH" },
+            Disabled: false);
+
+        var handler = new ExecuteToolStatementHandler(new Mock<ILogger>().Object);
+
+        var winArgs = handler.ValidateAndBuildArguments(
+            toolDef,
+            @"C:\Program Files\Python312\python.exe",
+            "\"C:\\Program Files\\My Tools\\transform.py\" --batch-size {batch} --input {file}",
+            new Dictionary<string, string>
+            {
+                ["batch"] = "250",
+                ["file"] = @"C:\Data Files\orders 2026.csv"
+            });
+
+        Assert.Equal(
+            [
+                @"C:\Program Files\My Tools\transform.py",
+                "--batch-size",
+                "250",
+                "--input",
+                @"C:\Data Files\orders 2026.csv"
+            ],
+            winArgs);
+
+        var unixArgs = handler.ValidateAndBuildArguments(
+            toolDef,
+            "/usr/bin/python3",
+            "'/opt/my tools/run.py' --batch-size {batch}",
+            new Dictionary<string, string> { ["batch"] = "10" });
+
+        Assert.Equal(["/opt/my tools/run.py", "--batch-size", "10"], unixArgs);
+
+        var unclosed = Assert.Throws<ExecutionException>(() =>
+            ExecuteToolStatementHandler.BuildArguments("\"C:\\Program Files\\unclosed.py --x", new Dictionary<string, string>()));
+        Assert.Contains("unclosed", unclosed.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task XT09_WorkingDirAndRelativeScriptValidation_EnforcesBoundaries()
+    {
+        var approvedDir = Path.Combine(_tempRoot, "approved assets with spaces");
+        var scriptsDir = Path.Combine(approvedDir, "scripts");
+        Directory.CreateDirectory(scriptsDir);
+        var scriptFile = Path.Combine(scriptsDir, "transform.py");
+        await File.WriteAllTextAsync(scriptFile, "print('ok')");
+
+        // Relative and UNC WORKING_DIR must be rejected.
+        Assert.Throws<InvalidOperationException>(() =>
+            ToolPathGuard.ValidateNativeDirectoryPath("relative/dir", ToolCatalogOwnershipMode.PersonalWorkstation));
+        Assert.Throws<InvalidOperationException>(() =>
+            ToolPathGuard.ValidateNativeDirectoryPath(@"\\server\share\tools", ToolCatalogOwnershipMode.PersonalWorkstation));
+
+        // Relative SCRIPT_PATH without WORKING_DIR must be rejected.
+        Assert.Throws<InvalidOperationException>(() =>
+            ToolPathGuard.ValidateNativeScriptPath("scripts/transform.py", null, ToolCatalogOwnershipMode.PersonalWorkstation));
+
+        // Relative SCRIPT_PATH escaping WORKING_DIR must be rejected.
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            ToolPathGuard.ValidateNativeScriptPath("../escape.py", approvedDir, ToolCatalogOwnershipMode.PersonalWorkstation));
+
+        // Valid WORKING_DIR and contained relative SCRIPT_PATH succeed.
+        var validatedDir = ToolPathGuard.ValidateNativeDirectoryPath(
+            approvedDir, ToolCatalogOwnershipMode.PersonalWorkstation, requireExists: true, verifyWriteBoundary: true);
+        var resolvedScript = ToolPathGuard.ValidateNativeScriptPath(
+            Path.Combine("scripts", "transform.py"), validatedDir, ToolCatalogOwnershipMode.PersonalWorkstation, requireExists: true, verifyWriteBoundary: true);
+
+        Assert.Equal(Path.GetFullPath(approvedDir), validatedDir);
+        Assert.Equal(Path.GetFullPath(scriptFile), resolvedScript);
+    }
+
+    [Theory]
+    [InlineData("success")]
+    [InlineData("timeout")]
+    [InlineData("cancel")]
+    public async Task XT09_NativeTool_SuccessTimeoutCancellation_HonorsWorkingDirAndCleansOnlyScratch(string mode)
+    {
+        var approvedDir = Path.Combine(_tempRoot, "approved workdir " + mode);
+        var scriptsDir = Path.Combine(approvedDir, "sub dir");
+        Directory.CreateDirectory(scriptsDir);
+        var approvedAsset = Path.Combine(scriptsDir, "mask tool.py");
+        await File.WriteAllTextAsync(approvedAsset, "# approved asset");
+
+        var fakeBin = Path.Combine(_tempRoot, OperatingSystem.IsWindows() ? "tool.exe" : "tool");
+        await File.WriteAllTextAsync(fakeBin, "binary");
+
+        var catalogRoot = Path.Combine(_tempRoot, "catalog_" + mode);
+        var catalog = new LocalToolCatalogProvider(
+            catalogRoot,
+            ToolCatalogOwnershipMode.PersonalWorkstation,
+            new OsToolCatalogProtector(),
+            validateOwnership: true);
+
+        await catalog.StoreAsync(new ToolDefinition(
+            "CleanRunner",
+            "EXECUTABLE",
+            new Dictionary<string, string>
+            {
+                ["COMMAND"] = fakeBin,
+                ["WORKING_DIR"] = approvedDir,
+                ["SCRIPT_PATH"] = Path.Combine("sub dir", "mask tool.py"),
+                ["ARGS"] = "\"sub dir/mask tool.py\" --tag {tag}",
+                ["TIMEOUT"] = "1"
+            },
+            Disabled: false));
+
+        var factory = new LifecycleToolProcessFactory(mode);
+        var handler = new ExecuteToolStatementHandler(new Mock<ILogger>().Object, catalog, processFactory: factory);
+
+        using var cts = new CancellationTokenSource();
+        var ctx = new Mock<IExecutionContext>();
+        ctx.SetupGet(c => c.CancellationToken).Returns(cts.Token);
+        ctx.SetupGet(c => c.IsWhatIf).Returns(false);
+        ctx.SetupGet(c => c.Connections).Returns(new Dictionary<string, IDataSource>());
+
+        var stmt = new ExecuteToolStatement("CleanRunner", null, null, null, null);
+
+        if (mode == "cancel")
+        {
+            factory.OnStarted = () => cts.Cancel();
+            await Assert.ThrowsAsync<OperationCanceledException>(() => handler.Execute(stmt, ctx.Object));
+        }
+        else if (mode == "timeout")
+        {
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => handler.Execute(stmt, ctx.Object));
+            Assert.Contains("timed out", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        else
+        {
+            await handler.Execute(stmt, ctx.Object);
+        }
+
+        Assert.NotNull(factory.CapturedStartInfo);
+        Assert.Equal(Path.GetFullPath(approvedDir), factory.CapturedStartInfo!.WorkingDirectory);
+        Assert.Equal(["sub dir/mask tool.py", "--tag", "{tag}"], factory.CapturedStartInfo.ArgumentList.ToList());
+
+        var scratchDir = factory.CapturedStartInfo.EnvironmentVariables["ETLSQL_SCRATCH_DIR"];
+        Assert.False(string.IsNullOrWhiteSpace(scratchDir));
+        Assert.NotEqual(Path.GetFullPath(approvedDir), Path.GetFullPath(scratchDir!));
+        Assert.Equal(scratchDir, factory.CapturedStartInfo.EnvironmentVariables["TMP"]);
+        Assert.Equal(scratchDir, factory.CapturedStartInfo.EnvironmentVariables["TEMP"]);
+        Assert.Equal(scratchDir, factory.CapturedStartInfo.EnvironmentVariables["TMPDIR"]);
+        Assert.True(factory.ScratchExistedDuringRun, "Disposable scratch directory must exist while the tool runs.");
+        Assert.False(Directory.Exists(scratchDir), $"Disposable scratch directory must be removed on {mode}.");
+
+        // Approved WORKING_DIR and its assets must NEVER be deleted.
+        Assert.True(Directory.Exists(approvedDir), $"Approved WORKING_DIR must remain intact on {mode}.");
+        Assert.True(File.Exists(approvedAsset), $"Approved asset inside WORKING_DIR must remain intact on {mode}.");
+    }
+
+    [Fact]
+    public async Task XT09_NativeTool_WithoutWorkingDir_UsesAndCleansUpDisposableScratch()
+    {
+        var fakeBin = Path.Combine(_tempRoot, OperatingSystem.IsWindows() ? "noscratch.exe" : "noscratch");
+        await File.WriteAllTextAsync(fakeBin, "binary");
+
+        var catalogRoot = Path.Combine(_tempRoot, "catalog_default_wd");
+        var catalog = new LocalToolCatalogProvider(
+            catalogRoot,
+            ToolCatalogOwnershipMode.PersonalWorkstation,
+            new OsToolCatalogProtector(),
+            validateOwnership: true);
+
+        await catalog.StoreAsync(new ToolDefinition(
+            "ScratchDefault",
+            "EXECUTABLE",
+            new Dictionary<string, string> { ["COMMAND"] = fakeBin },
+            Disabled: false));
+
+        var factory = new LifecycleToolProcessFactory("success");
+        var handler = new ExecuteToolStatementHandler(new Mock<ILogger>().Object, catalog, processFactory: factory);
+
+        var ctx = new Mock<IExecutionContext>();
+        ctx.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+        ctx.SetupGet(c => c.IsWhatIf).Returns(false);
+        ctx.SetupGet(c => c.Connections).Returns(new Dictionary<string, IDataSource>());
+
+        await handler.Execute(new ExecuteToolStatement("ScratchDefault", null, null, null, null), ctx.Object);
+
+        Assert.NotNull(factory.CapturedStartInfo);
+        var scratchDir = factory.CapturedStartInfo!.EnvironmentVariables["ETLSQL_SCRATCH_DIR"];
+        Assert.False(string.IsNullOrWhiteSpace(scratchDir));
+        Assert.Equal(scratchDir, factory.CapturedStartInfo.WorkingDirectory);
+        Assert.True(factory.ScratchExistedDuringRun);
+        Assert.False(Directory.Exists(scratchDir));
+    }
+
+    private sealed class LifecycleToolProcessFactory(string mode) : IToolProcessFactory
+    {
+        public ProcessStartInfo? CapturedStartInfo { get; private set; }
+        public bool ScratchExistedDuringRun { get; private set; }
+        public Action? OnStarted { get; set; }
+
+        public IToolProcess Create(ProcessStartInfo start)
+        {
+            CapturedStartInfo = start;
+            var scratch = start.EnvironmentVariables["ETLSQL_SCRATCH_DIR"];
+            ScratchExistedDuringRun = !string.IsNullOrEmpty(scratch) && Directory.Exists(scratch);
+            return new LifecycleToolProcess(mode, OnStarted);
+        }
+    }
+
+    private sealed class LifecycleToolProcess(string mode, Action? onStarted) : IToolProcess
+    {
+        private bool _killed;
+        public int ExitCode => 0;
+        public bool HasExited => mode == "success" || _killed;
+        public StreamWriter StandardInput { get; } = new(new MemoryStream(), Encoding.UTF8);
+        public StreamReader StandardOutput { get; } = new(new MemoryStream());
+        public StreamReader StandardError { get; } = new(new MemoryStream());
+
+        public void Start() => onStarted?.Invoke();
+        public void Kill() => _killed = true;
+
+        public Task WaitForExitAsync(CancellationToken token)
+        {
+            if (mode == "success" || _killed)
+                return Task.CompletedTask;
+            return Task.Delay(Timeout.InfiniteTimeSpan, token);
+        }
+
+        public void Dispose()
+        {
+            StandardInput.Dispose();
+            StandardOutput.Dispose();
+            StandardError.Dispose();
+        }
     }
 
     private sealed class RecordingProcessFactory : IToolProcessFactory

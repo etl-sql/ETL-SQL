@@ -35,35 +35,42 @@ namespace ETL_SQL.Tests.Security
         {
             var tempDir = Path.Combine(Path.GetTempPath(), "ETL-SQL-Symlink-Test-" + Guid.NewGuid());
             Directory.CreateDirectory(tempDir);
-            var safeZone = Path.Combine(tempDir, "Safe");
-            Directory.CreateDirectory(safeZone);
+            try
+            {
+                var safeZone = Path.Combine(tempDir, "Safe");
+                Directory.CreateDirectory(safeZone);
 
-            var targetDir = Path.Combine(tempDir, "Secret");
-            Directory.CreateDirectory(targetDir);
-            File.WriteAllText(Path.Combine(targetDir, "data.txt"), "secret data");
+                var targetDir = Path.Combine(tempDir, "Secret");
+                Directory.CreateDirectory(targetDir);
+                File.WriteAllText(Path.Combine(targetDir, "data.txt"), "secret data");
 
-            var symlinkPath = Path.Combine(safeZone, "LinkToSecret");
+                var symlinkPath = Path.Combine(safeZone, "LinkToSecret");
 
-            // Create a symlink: LinkToSecret -> Secret. SymlinkFact skips machines that cannot.
-            Directory.CreateSymbolicLink(symlinkPath, targetDir);
+                // Create a symlink: LinkToSecret -> Secret. SymlinkFact skips machines that cannot.
+                Directory.CreateSymbolicLink(symlinkPath, targetDir);
 
-            var filePathViaLink = Path.Combine(symlinkPath, "data.txt");
+                var filePathViaLink = Path.Combine(symlinkPath, "data.txt");
 
-            // Trigger ResolvePath via Evaluator (which calls SecurityService.ValidatePath)
-            var registry = new Mock<ETL_SQL.Core.Functions.IFunctionRegistry>();
-            var tracker = new Mock<ILineageTracker>();
-            var docker = new Mock<IDockerManager>();
-            var sessions = new Mock<SessionStateManager>(_logger.Object, _security, new Mock<IConfiguration>().Object, new ETL_SQL.Core.Execution.SqliteSessionMetadataStoreFactory(), null);
+                // Trigger ResolvePath via Evaluator (which calls SecurityService.ValidatePath)
+                var registry = new Mock<ETL_SQL.Core.Functions.IFunctionRegistry>();
+                var tracker = new Mock<ILineageTracker>();
+                var docker = new Mock<IDockerManager>();
+                var sessions = new Mock<SessionStateManager>(_logger.Object, _security, new Mock<IConfiguration>().Object, new ETL_SQL.Core.Execution.SqliteSessionMetadataStoreFactory(), null);
 
-            var handlers = new List<IStatementHandler>();
-            var evaluator = new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, _logger.Object, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());
+                var handlers = new List<IStatementHandler>();
+                var evaluator = new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, _logger.Object, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());
 
-            // Act
-            var resolved = evaluator.ResolvePath(filePathViaLink);
+                // Act
+                var resolved = evaluator.ResolvePath(filePathViaLink);
 
-            // Assert
-            Assert.Contains("Secret", resolved);
-            Assert.DoesNotContain("LinkToSecret", resolved);
+                // Assert
+                Assert.Contains("Secret", resolved);
+                Assert.DoesNotContain("LinkToSecret", resolved);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+            }
         }
 
         [Fact]

@@ -1,0 +1,70 @@
+-- Negative Conformance Corpus: Domain & Runtime Lowering Errors
+
+-- statement ok
+SELECT 'Jan' AS Month, 10.0 AS PositiveX, 0.0 AS ZeroY INTO #domain_data
+UNION ALL SELECT 'Feb', 20.0, -5.0
+UNION ALL SELECT 'Mar', 30.0, 45.0;
+
+-- statement error domain requires positive values
+CREATE VISUAL ZeroOnCustomLogScale AS CUSTOM (
+  SOURCE = #domain_data,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      x = BAND (CHANNEL = X),
+      y = LOGARITHMIC (CHANNEL = Y, INCLUDE_ZERO = OFF)
+    ),
+    LAYERS (
+      pts = POINT (
+        ENCODE (X = Month (TYPE = NOMINAL, SCALE = x), Y = ZeroY (TYPE = QUANTITATIVE, SCALE = y))
+      )
+    )
+  )
+);
+CREATE PAGE PLog AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = ZeroOnCustomLogScale));
+
+-- statement error domain requires positive values
+CREATE VISUAL NegativeOnNamedLogScatter AS SCATTER (
+  SOURCE = #domain_data,
+  MAPPINGS (X = PositiveX, Y = ZeroY),
+  OPTIONS (Y_AXIS (SCALE = LOG, INCLUDE_ZERO = OFF))
+);
+CREATE PAGE PNamedLog AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = NegativeOnNamedLogScatter));
+
+-- statement error domain cannot exceed MAX bound
+CREATE VISUAL InvertedDomainBounds AS CUSTOM (
+  SOURCE = #domain_data,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      y = LINEAR (CHANNEL = Y, MIN = 100, MAX = 10)
+    ),
+    LAYERS (
+      pts = POINT (
+        ENCODE (X = Month (TYPE = NOMINAL), Y = PositiveX (TYPE = QUANTITATIVE, SCALE = y))
+      )
+    )
+  )
+);
+CREATE PAGE PMinMax AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = InvertedDomainBounds));
+
+-- statement error domain must fall inside resolved domain
+CREATE VISUAL MidpointOutsideDomain AS CUSTOM (
+  SOURCE = #domain_data,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      c = LINEAR (CHANNEL = COLOR, MIN = 0, MAX = 50, RANGE = DIVERGING (LOW = '#dc2626', MID = '#f59e0b', MIDPOINT = 120, HIGH = '#16a34a'))
+    ),
+    LAYERS (
+      pts = POINT (
+        ENCODE (
+          X = Month (TYPE = NOMINAL),
+          Y = PositiveX (TYPE = QUANTITATIVE),
+          COLOR = PositiveX (TYPE = QUANTITATIVE, SCALE = c)
+        )
+      )
+    )
+  )
+);
+CREATE PAGE PMid AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = MidpointOutsideDomain));

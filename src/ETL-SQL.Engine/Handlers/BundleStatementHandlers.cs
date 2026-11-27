@@ -318,7 +318,7 @@ public class PublishBundleStatementHandler(IBundleStore store) : IStatementHandl
             .CanonicalPath;
         var preflight = await BundlePublishSupport.PreflightAsync(stmt.BundleName, sourceRoot,
             stmt.EntryPath, publishPassword, encryptionPassword);
-        var version = await store.PublishBundleAsync(new BundlePublishRequest(
+        var version = await BundleStoreAccessor.PublishBundleAsync(store, context, new BundlePublishRequest(
             stmt.BundleName,
             preflight.EntryPath,
             preflight.Files,
@@ -377,10 +377,10 @@ public class ExportScriptStatementHandler(IBundleStore store) : IStatementHandle
 
         if (!BundleUri.TryParse(source, out var uri) || uri == null)
             throw new ExecutionException("EXPORT SCRIPT source must be an orch://bundle@version/path.etlsql path.");
-        var version = uri.Version ?? (await store.GetLatestVersionAsync(uri.BundleName))?.Version
+        var version = uri.Version ?? (await BundleStoreAccessor.GetLatestVersionAsync(store, context, uri.BundleName))?.Version
             ?? throw new ExecutionException($"Bundle '{uri.BundleName}' was not found.");
 
-        var files = (await store.GetFilesAsync(uri.BundleName, version)).ToList();
+        var files = (await BundleStoreAccessor.GetFilesAsync(store, context, uri.BundleName, version)).ToList();
         if (files.Count == 0)
             throw new ExecutionException($"Bundle '{uri.BundleName}' version {version} has no files.");
 

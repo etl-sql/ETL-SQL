@@ -1,7 +1,11 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Data;
@@ -10,6 +14,7 @@ using ETL_SQL.Core.Planning;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Planning;
+using ETL_SQL.Engine.Services;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -33,6 +38,10 @@ public class ExternalJoinEngine
 
 
     private readonly IBufferManager? _bufferManager;
+    private List<string>? _knownRightColumns;
+    private List<IReadOnlyList<string>?>? _knownRightColumnAliases;
+    private TableSchema? _knownRightSchema;
+    private TableSchema? _knownLeftSchema;
 
     public ExternalJoinEngine(IExecutionContext context, ILogger logger)
     {
@@ -49,13 +58,30 @@ public class ExternalJoinEngine
     internal OuterJoinShape Shape { get; init; } = new();
 
     /// <summary>Performs an external hash join by partitioning both left and right streams to disk before join processing.</summary>
-    public async IAsyncEnumerable<Row> ApplyHashJoinExternal(IAsyncEnumerable<Row> leftStream, IAsyncEnumerable<Row> rightStream, JoinClause join, List<string> leftKeys, List<string> rightKeys, long? knownBuildRowCount = null, long? knownBuildBytes = null)
+    public async IAsyncEnumerable<Row> ApplyHashJoinExternal(
+        IAsyncEnumerable<Row> leftStream,
+        IAsyncEnumerable<Row> rightStream,
+        JoinClause join,
+        List<string> leftKeys,
+        List<string> rightKeys,
+        long? knownBuildRowCount = null,
+        long? knownBuildBytes = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
+        using var linkedCts = PipelineCursorScope.LinkCancellationTokens(_context.CancellationToken, cancellationToken, out var effectiveCancellationToken);
+        using var cursor = await PipelineCursorScope.AcquireCursorAsync(
+            _bufferManager,
+            _context.SessionId ?? "DEFAULT",
+            effectiveCancellationToken,
+            owner: this);
+        _knownRightColumns = null;
+        _knownRightColumnAliases = null;
+        _knownRightSchema = null;
+        _knownLeftSchema = null;
         var tempFiles = new List<string>();
         try
         {
-            await using var rightEnumerator = rightStream.GetAsyncEnumerator(_context.CancellationToken);
+            await using var rightEnumerator = rightStream.GetAsyncEnumerator(effectiveCancellationToken);
             var rightSample = new List<Row>(MaxFanOutSampleRows);
             long sampledBytes = 0;
             while (rightSample.Count < MaxFanOutSampleRows
@@ -66,7 +92,11 @@ public class ExternalJoinEngine
                 rightSample.Add(row);
                 sampledBytes = checked(sampledBytes + row.EstimateHeapBytes());
             }
-            if (rightSample.Count > 0) Shape.SeeRight(rightSample[0]);
+            if (rightSample.Count > 0)
+            {
+                Shape.SeeRight(rightSample[0]);
+                CaptureKnownRightSchema(rightSample[0]);
+            }
             ConfigurePartitionCount(rightSample, rightKeys, knownBuildRowCount, knownBuildBytes);
             PlanDecisionRecorder.Record(_context, "external-join", "ExternalJoin",
                 PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
@@ -84,6 +114,7 @@ public class ExternalJoinEngine
             // 2. Join Phase (one partition at a time)
             for (int i = 0; i < PartitionCount; i++)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 await foreach (var row in JoinPartition(
                     leftPartitions.Names[i],
                     rightPartitions.Names[i],
@@ -93,25 +124,18 @@ public class ExternalJoinEngine
                     leftKeys,
                     rightKeys,
                     depth: 0,
-                    tempFiles))
+                    tempFiles,
+                    effectiveCancellationToken))
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     yield return row;
                 }
             }
         }
         finally
         {
-            foreach (var path in tempFiles)
-            {
-                try
-                {
-                    _context.SpillStore.DeleteChunk(path);
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warning($"Error cleaning up external join chunk {path}: {ex.Message}");
-                }
-            }
+            while (tempFiles.Count > 0)
+                DeleteTempChunk(tempFiles[^1], tempFiles);
         }
     }
 
@@ -124,11 +148,12 @@ public class ExternalJoinEngine
         if (sample.Count == 0) return;
         long inputBytes = 0;
         long keyBytes = 0;
+        var keyList = keys as List<string> ?? keys.ToList();
         var frequencies = new Dictionary<CompoundKey, int>();
         foreach (var row in sample)
         {
             inputBytes = checked(inputBytes + row.EstimateHeapBytes());
-            var key = GetHashKey(row, keys.ToList());
+            var key = GetHashKey(row, keyList);
             keyBytes = checked(keyBytes + RowMemory.EstimateKeyBytes(key));
             frequencies[key] = frequencies.TryGetValue(key, out var count) ? count + 1 : 1;
         }
@@ -177,16 +202,31 @@ public class ExternalJoinEngine
         List<string> leftKeys,
         List<string> rightKeys,
         int depth,
-        List<string> tempFiles)
+        List<string> tempFiles,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         // Memory-guarded direct join. The (right) build side is read fully before any probe row is
         // emitted, so if heap growth crosses the governor ceiling mid-build (e.g. wide rows under the
         // row threshold) we can repartition or apply policy without having yielded anything.
         long ceiling = MemoryGovernor.Ceiling(_context);
-        var hashTable = await BuildJoinHashTable(rightName, rightKeys, new MemoryBudgetGuard(ceiling));
+        var arbiter = _context.MemoryArbiter ?? MemoryGrantArbiter.Shared;
+        var buildLease = arbiter.AcquireLease();
+        PackedBuildTable? hashTable = null;
+        try
+        {
+            hashTable = await BuildJoinHashTable(rightName, rightKeys, ceiling, buildLease, rightRowCount);
+        }
+        catch
+        {
+            buildLease.Dispose();
+            throw;
+        }
 
         if (hashTable == null)
         {
+            // Release rejected build footprint before recursing or enforcing policy.
+            buildLease.Dispose();
             PlanDecisionRecorder.Record(_context, "external-join.memory", "ExternalJoin",
                 PlanDecisionOutcome.Degraded, PlanDecisionReasonCodes.MemoryAdmissionRejected,
                 "External join build partition exceeded the memory ceiling; attempting recursive repartition.",
@@ -200,7 +240,10 @@ public class ExternalJoinEngine
                 var split = await TryRepartitionBothSides(leftName, rightName, leftKeys, rightKeys, rightRowCount, depth + 1, tempFiles);
                 if (split != null)
                 {
-                    await foreach (var row in JoinSubPartitions(split.Value.Left, split.Value.Right, join, leftKeys, rightKeys, depth + 1, tempFiles))
+                    // Readers for both parent chunks closed in RepartitionPartition; delete superseded files before recursing.
+                    DeleteTempChunk(leftName, tempFiles);
+                    DeleteTempChunk(rightName, tempFiles);
+                    await foreach (var row in JoinSubPartitions(split.Value.Left, split.Value.Right, join, leftKeys, rightKeys, depth + 1, tempFiles, cancellationToken))
                         yield return row;
                     yield break;
                 }
@@ -225,19 +268,33 @@ public class ExternalJoinEngine
                 "Engine:MemoryGovernorPolicy = SpillOnly to churn to completion.");
 
             // SpillOnly churn: rebuild unguarded and continue.
-            hashTable = await BuildJoinHashTable(rightName, rightKeys, new MemoryBudgetGuard(0));
+            hashTable = await BuildJoinHashTable(rightName, rightKeys, 0, lease: null, rightRowCount);
         }
 
-        await foreach (var row in ProbeJoin(leftName, hashTable!, join, leftKeys))
-            yield return row;
+        // Build side is materialized in PackedBuildTable and its reader has closed; delete build partition before probing.
+        DeleteTempChunk(rightName, tempFiles);
+
+        try
+        {
+            await foreach (var row in ProbeJoin(leftName, hashTable!, join, leftKeys, cancellationToken))
+                yield return row;
+        }
+        finally
+        {
+            hashTable?.Dispose();
+            buildLease.Dispose();
+            DeleteTempChunk(leftName, tempFiles);
+        }
     }
 
     /// <summary>Recurses into the per-partition joins produced by a repartition step.</summary>
-    private async IAsyncEnumerable<Row> JoinSubPartitions(PartitionSet left, PartitionSet right, JoinClause join, List<string> leftKeys, List<string> rightKeys, int depth, List<string> tempFiles)
+    private async IAsyncEnumerable<Row> JoinSubPartitions(
+        PartitionSet left, PartitionSet right, JoinClause join, List<string> leftKeys, List<string> rightKeys,
+        int depth, List<string> tempFiles, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         for (int i = 0; i < PartitionCount; i++)
         {
-            await foreach (var row in JoinPartition(left.Names[i], right.Names[i], left.Counts[i], right.Counts[i], join, leftKeys, rightKeys, depth, tempFiles))
+            await foreach (var row in JoinPartition(left.Names[i], right.Names[i], left.Counts[i], right.Counts[i], join, leftKeys, rightKeys, depth, tempFiles, cancellationToken))
                 yield return row;
         }
     }
@@ -260,91 +317,160 @@ public class ExternalJoinEngine
             _logger.Debug("Recursively repartitioned external join partition at depth {Depth}. largestRight={LargestRight}", nextDepth, largestRight);
             return (left, right);
         }
+
+        // Split did not reduce skew; discard unused child partitions so parent replay does not retain both generations.
+        foreach (var child in left.Names)
+            DeleteTempChunk(child, tempFiles);
+        foreach (var child in right.Names)
+            DeleteTempChunk(child, tempFiles);
         return null;
     }
 
-    /// <summary>
-    /// Builds the hash table from the (right) build side, holding each build row as a compact packed
-    /// <c>byte[]</c> (see <see cref="RowPacker"/>) rather than a fat <see cref="Row"/> object graph —
-    /// the dominant memory cost of a large hash-join build. Rows are decoded back to a <see cref="Row"/>
-    /// only on a probe-key match. Returns null if the accumulated build footprint (precise byte
-    /// accounting, using the exact blob lengths) crosses the governor ceiling mid-build, so the caller
-    /// can repartition or apply policy before any probe row has been emitted.
-    /// </summary>
-    private async Task<PackedBuildTable?> BuildJoinHashTable(string rightName, List<string> rightKeys, MemoryBudgetGuard guard)
+    private void DeleteTempChunk(string chunkName, List<string> tempFiles)
     {
-        var table = new PackedBuildTable();
-        var packer = new RowPacker();
-        bool columnsCaptured = false;
-        await using var rightReader = await _context.SpillStore.CreateReaderAsync(rightName);
-        if (rightReader is IColumnarSpillReader columnarReader)
+        try
         {
-            await foreach (var batch in columnarReader.AsColumnBatchesAsync())
+            _context.SpillStore.DeleteChunk(chunkName);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning($"Error cleaning up external join chunk {chunkName}: {ex.Message}");
+        }
+        finally
+        {
+            tempFiles.Remove(chunkName);
+        }
+    }
+
+    /// <summary>
+    /// Builds the hash table from the (right) build side, packing each build row into budget-capped
+    /// pooled <c>byte[]</c> slabs rather than fat <see cref="Row"/> object graphs or per-row arrays.
+    /// Rows are decoded back to a <see cref="Row"/> only on a probe-key match. Returns null if the
+    /// accumulated build footprint crosses the governor ceiling mid-build, so the caller can
+    /// repartition or apply policy before any probe row has been emitted.
+    /// </summary>
+    private async Task<PackedBuildTable?> BuildJoinHashTable(string rightName, List<string> rightKeys, long budgetBytes, IMemoryGrantLease? lease, long expectedRows = 0)
+    {
+        var guard = new MemoryBudgetGuard(budgetBytes);
+        bool caseSensitive = _context.CaseSensitiveComparison;
+        long cappedExpected = budgetBytes > 0
+            ? Math.Min(expectedRows, Math.Max(64L, budgetBytes / 64))
+            : expectedRows;
+        int initialCapacity = cappedExpected > 0 ? (int)Math.Min(1 << 20, cappedExpected) : 0;
+        var table = new PackedBuildTable(budgetBytes, caseSensitive, rightKeys.Count, initialCapacity);
+        using var packer = new RowPacker();
+        bool columnsCaptured = false;
+        int keyCount = rightKeys.Count;
+        int extraCount = Math.Max(0, keyCount - 1);
+        JoinKey[] extraKeyBuffer = extraCount > 0 ? new JoinKey[extraCount] : Array.Empty<JoinKey>();
+        try
+        {
+            await using var rightReader = await _context.SpillStore.CreateReaderAsync(rightName);
+            if (rightReader is IColumnarSpillReader columnarReader)
             {
-                using (batch)
+                ColumnBatchSchema? cachedBatchSchema = null;
+                int[] keyOrdinals = keyCount > 0 ? new int[keyCount] : Array.Empty<int>();
+                await foreach (var batch in columnarReader.AsColumnBatchesAsync())
                 {
-                    if (!columnsCaptured)
+                    using (batch)
                     {
-                        table.Columns.AddRange(batch.Schema.Fields.Select(field => field.Name));
-                        columnsCaptured = true;
-                    }
-                    for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
-                    {
-                        var keyValues = new object?[rightKeys.Count];
-                        for (var keyIndex = 0; keyIndex < rightKeys.Count; keyIndex++)
+                        if (!columnsCaptured)
                         {
-                            var columnIndex = batch.Schema.GetOrdinal(rightKeys[keyIndex]);
-                            keyValues[keyIndex] = RowPacker.ReadBatchValue(batch, columnIndex, rowIndex);
+                            table.Columns.AddRange(batch.Schema.Fields.Select(field => field.Name));
+                            table.ColumnAliases.AddRange(batch.Schema.Fields.Select(field => field.Aliases));
+                            columnsCaptured = true;
                         }
-                        var key = CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, keyValues);
-                        var blob = packer.Pack(batch, rowIndex);
-                        AddBuildRow(table, key, blob, guard);
-                        ColumnarBuildRows++;
-                        if (guard.Exceeded()) return null;
+                        if (batch.RowCount == 0) continue;
+
+                        if (!ReferenceEquals(cachedBatchSchema, batch.Schema))
+                        {
+                            cachedBatchSchema = batch.Schema;
+                            for (int k = 0; k < keyCount; k++)
+                                keyOrdinals[k] = cachedBatchSchema.GetOrdinal(rightKeys[k]);
+                        }
+                        var packPlan = RowPacker.BatchColumnPlan.For(batch);
+
+                        for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                        {
+                            JoinKey key0 = keyCount > 0
+                                ? JoinKey.FromBatchColumn(batch, keyOrdinals[0], rowIndex)
+                                : JoinKey.Null;
+                            bool hasNullKey = keyCount > 0 && key0.IsNull;
+                            for (var k = 1; k < keyCount; k++)
+                            {
+                                var extra = JoinKey.FromBatchColumn(batch, keyOrdinals[k], rowIndex);
+                                extraKeyBuffer[k - 1] = extra;
+                                if (extra.IsNull) hasNullKey = true;
+                            }
+
+                            var (slotIdx, byteLength) = packer.PackInto(batch, rowIndex, packPlan, table);
+                            table.IndexRow(key0, extraKeyBuffer, hasNullKey, slotIdx, byteLength, guard);
+                            ColumnarBuildRows++;
+                            if (guard.Exceeded() || (lease?.RegisterAndCheckSpill(guard.BytesAccumulated) == true))
+                            {
+                                table.Dispose();
+                                return null;
+                            }
+                        }
                     }
+                }
+                return table;
+            }
+
+            TableSchema? cachedRowSchema = null;
+            int[] rowKeySlots = keyCount > 0 ? new int[keyCount] : Array.Empty<int>();
+            var vtReader = rightReader as ISortSpillReader;
+            while (true)
+            {
+                var rightRow = vtReader != null
+                    ? await vtReader.ReadRowValueTaskAsync()
+                    : await rightReader.ReadRowAsync();
+                if (rightRow == null) break;
+
+                // The build side has a uniform schema; capture the column order once (matches how the
+                // Arrow spill writer infers its schema from the first row).
+                if (!columnsCaptured)
+                {
+                    var rightSchema = rightRow.Schema;
+                    foreach (var colName in rightRow.GetColumnNames())
+                    {
+                        table.Columns.Add(colName);
+                        IReadOnlyList<string>? aliases = rightSchema != null
+                            ? rightSchema.EnumerateAliasesOf(colName).ToArray()
+                            : null;
+                        table.ColumnAliases.Add(aliases is { Count: > 0 } ? aliases : null);
+                    }
+                    columnsCaptured = true;
+                }
+
+                JoinKey key0 = JoinKey.Null;
+                bool hasNullKey = false;
+                if (keyCount > 0)
+                {
+                    ExtractRowJoinKeys(rightRow, rightKeys, rowKeySlots, ref cachedRowSchema, out key0, extraKeyBuffer, out hasNullKey);
+                }
+
+                var (slotIdx, byteLength) = packer.PackInto(rightRow, table.Columns, table);
+                table.IndexRow(key0, extraKeyBuffer, hasNullKey, slotIdx, byteLength, guard);
+                if (guard.Exceeded() || (lease?.RegisterAndCheckSpill(guard.BytesAccumulated) == true))
+                {
+                    table.Dispose();
+                    return null;
                 }
             }
             return table;
         }
-
-        await foreach (var rightRow in rightReader.AsEnumerableAsync())
+        catch
         {
-            // The build side has a uniform schema; capture the column order once (matches how the
-            // Arrow spill writer infers its schema from the first row).
-            if (!columnsCaptured)
-            {
-                table.Columns.AddRange(rightRow.GetColumnNames());
-                columnsCaptured = true;
-            }
-
-            var key = GetHashKey(rightRow, rightKeys);
-            var blob = packer.Pack(rightRow, table.Columns);
-            AddBuildRow(table, key, blob, guard);
-            if (guard.Exceeded()) return null;
+            table.Dispose();
+            throw;
         }
-        return table;
-    }
-
-    private static void AddBuildRow(
-        PackedBuildTable table,
-        CompoundKey key,
-        byte[] blob,
-        MemoryBudgetGuard guard)
-    {
-        int idx = table.Rows.Count;
-        table.Rows.Add(blob);
-        if (!table.Index.TryGetValue(key, out var bucket))
-        {
-            bucket = new List<int>();
-            table.Index[key] = bucket;
-            guard.Add(RowMemory.EstimateKeyBytes(key) + 48);
-        }
-        bucket.Add(idx);
-        guard.Add(blob.Length + 24);
     }
 
     /// <summary>Streams the probe (left) side against a packed build table, emitting join results.</summary>
-    private async IAsyncEnumerable<Row> ProbeJoin(string leftName, PackedBuildTable table, JoinClause join, List<string> leftKeys)
+    private async IAsyncEnumerable<Row> ProbeJoin(
+        string leftName, PackedBuildTable table, JoinClause join, List<string> leftKeys,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // SEMI and ANTI return left rows only, each at most once. "LEFT SEMI JOIN" is not an outer join.
         bool isSemi = join.JoinType.Contains("SEMI", StringComparison.OrdinalIgnoreCase);
@@ -352,63 +478,163 @@ public class ExternalJoinEngine
         bool leftOnly = isSemi || isAnti;
         bool isLeftJoin = !leftOnly && (join.JoinType.Contains("LEFT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase));
         bool isRightJoin = !leftOnly && (join.JoinType.Contains("RIGHT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase));
-        // Track matched build rows by physical index (one bit per packed blob) for RIGHT/FULL outer.
-        var matched = isRightJoin ? new bool[table.Rows.Count] : null;
+        // Track matched build rows by physical index (one bit per packed slot) for RIGHT/FULL outer.
+        var matched = isRightJoin ? new bool[table.RowCount] : null;
+        var compiledCondition = RowExpressionCompiler.TryCompilePredicate(_context, join.Condition, out var predicate)
+            ? predicate
+            : null;
+        int keyCount = leftKeys.Count;
+        int extraCount = Math.Max(0, keyCount - 1);
+        JoinKey[] extraKeyBuffer = extraCount > 0 ? new JoinKey[extraCount] : Array.Empty<JoinKey>();
 
         await using var leftReader = await _context.SpillStore.CreateReaderAsync(leftName);
         if (leftReader is IColumnarSpillReader columnarReader)
         {
+            ColumnBatchSchema? cachedBatchSchema = null;
+            int[] keyOrdinals = keyCount > 0 ? new int[keyCount] : Array.Empty<int>();
+            RowPacker.NameLayout? leftRowLayout = null;
+            BatchCombinedLayout? batchCombinedLayout = null;
+            object?[]? scratchCombinedValues = null;
+            Row? scratchCombinedRow = null;
+
             await foreach (var batch in columnarReader.AsColumnBatchesAsync())
             {
                 using (batch)
                 {
+                    if (batch.RowCount == 0) continue;
+
+                    if (!ReferenceEquals(cachedBatchSchema, batch.Schema))
+                    {
+                        cachedBatchSchema = batch.Schema;
+                        for (int k = 0; k < keyCount; k++)
+                            keyOrdinals[k] = cachedBatchSchema.GetOrdinal(leftKeys[k]);
+                        leftRowLayout = RowPacker.LayoutFor(cachedBatchSchema);
+                        IReadOnlyList<string>? rightCols = table.Columns.Count > 0 ? table.Columns : _knownRightColumns;
+                        IReadOnlyList<IReadOnlyList<string>?>? rightAliases = table.Columns.Count > 0 ? table.ColumnAliases : _knownRightColumnAliases;
+                        if (rightCols is { Count: > 0 })
+                        {
+                            batchCombinedLayout = BatchCombinedLayout.Create(cachedBatchSchema, rightCols, rightAliases);
+                            if (table.RowCount > 0 && leftOnly && compiledCondition != null)
+                            {
+                                scratchCombinedValues = new object?[batchCombinedLayout.Schema.ColumnCount];
+                                scratchCombinedRow = new Row(batchCombinedLayout.Schema, scratchCombinedValues);
+                            }
+                        }
+                    }
+                    var packPlan = RowPacker.BatchColumnPlan.For(batch);
+
                     for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         ColumnarProbeRows++;
-                        var key = GetHashKey(batch, rowIndex, leftKeys);
-                        bool producedMatch = false;
-                        Row? left = null;
-                        if (table.Index.TryGetValue(key, out var matches))
+
+                        JoinKey key0 = keyCount > 0
+                            ? JoinKey.FromBatchColumn(batch, keyOrdinals[0], rowIndex)
+                            : JoinKey.Null;
+                        bool hasNullKey = keyCount > 0 && key0.IsNull;
+                        for (var k = 1; k < keyCount; k++)
                         {
-                            left = RowPacker.MaterializeBatchRow(batch, rowIndex);
-                            foreach (var idx in matches)
+                            var extra = JoinKey.FromBatchColumn(batch, keyOrdinals[k], rowIndex);
+                            extraKeyBuffer[k - 1] = extra;
+                            if (extra.IsNull) hasNullKey = true;
+                        }
+
+                        bool producedMatch = false;
+                        if (!hasNullKey && table.TryGetChain(key0, extraKeyBuffer, out var chain))
+                        {
+                            var layout = batchCombinedLayout!;
+                            if (leftOnly && scratchCombinedRow != null && scratchCombinedValues != null)
                             {
-                                var right = RowPacker.Unpack(table.Rows[idx], table.Columns);
-                                var combined = CombineRows(left, right);
-                                if (await _context.EvaluateCondition(join.Condition, combined))
+                                FillLeftValuesFromBatch(batch, packPlan, rowIndex, layout, scratchCombinedValues);
+                                for (var idx = chain.Head; idx >= 0; idx = table.GetNextInBucket(idx))
                                 {
-                                    producedMatch = true;
-                                    if (leftOnly) break;
-                                    yield return combined;
-                                    if (matched != null) matched[idx] = true;
+                                    table.UnpackRowInto(idx, scratchCombinedValues, layout.RightSlots);
+                                    if (compiledCondition!(scratchCombinedRow))
+                                    {
+                                        producedMatch = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                object?[]? firstLeftValues = null;
+                                for (var idx = chain.Head; idx >= 0; idx = table.GetNextInBucket(idx))
+                                {
+                                    var values = new object?[layout.Schema.ColumnCount];
+                                    if (firstLeftValues == null)
+                                    {
+                                        FillLeftValuesFromBatch(batch, packPlan, rowIndex, layout, values);
+                                        firstLeftValues = values;
+                                    }
+                                    else
+                                    {
+                                        CopyNonOverwrittenLeftValues(firstLeftValues, values, layout);
+                                    }
+
+                                    table.UnpackRowInto(idx, values, layout.RightSlots);
+                                    var combined = new Row(layout.Schema, values);
+                                    bool isMatch = compiledCondition != null
+                                        ? compiledCondition(combined)
+                                        : await _context.EvaluateCondition(join.Condition, combined);
+                                    if (isMatch)
+                                    {
+                                        producedMatch = true;
+                                        if (leftOnly) break;
+                                        yield return combined;
+                                        if (matched != null) matched[idx] = true;
+                                    }
                                 }
                             }
                         }
+
                         if (leftOnly)
                         {
                             if (producedMatch == isSemi)
-                                yield return left ?? RowPacker.MaterializeBatchRow(batch, rowIndex);
+                                yield return RowPacker.MaterializeBatchScalarRow(batch, packPlan, leftRowLayout!, rowIndex);
                         }
                         else if (!producedMatch && isLeftJoin)
-                            yield return Shape.Unmatched(left ?? RowPacker.MaterializeBatchRow(batch, rowIndex));
+                        {
+                            yield return batchCombinedLayout != null
+                                ? UnmatchedLeftFromBatch(batch, packPlan, rowIndex, batchCombinedLayout)
+                                : Shape.Unmatched(RowPacker.MaterializeBatchScalarRow(batch, packPlan, leftRowLayout!, rowIndex));
+                        }
                     }
                 }
             }
         }
         else
         {
-            await foreach (var left in leftReader.AsEnumerableAsync())
+            TableSchema? cachedRowSchema = null;
+            TableSchema? unmatchedRightSchema = null;
+            int[] rowKeySlots = keyCount > 0 ? new int[keyCount] : Array.Empty<int>();
+            var vtReader = leftReader as ISortSpillReader;
+            while (true)
             {
-                var key = GetHashKey(left, leftKeys);
-                bool producedMatch = false;
+                var left = vtReader != null
+                    ? await vtReader.ReadRowValueTaskAsync()
+                    : await leftReader.ReadRowAsync();
+                if (left == null) break;
 
-                if (table.Index.TryGetValue(key, out var matches))
+                cancellationToken.ThrowIfCancellationRequested();
+                JoinKey key0 = JoinKey.Null;
+                bool hasNullKey = false;
+                if (keyCount > 0)
                 {
-                    foreach (var idx in matches)
+                    ExtractRowJoinKeys(left, leftKeys, rowKeySlots, ref cachedRowSchema, out key0, extraKeyBuffer, out hasNullKey);
+                }
+
+                bool producedMatch = false;
+                if (!hasNullKey && table.TryGetChain(key0, extraKeyBuffer, out var chain))
+                {
+                    for (var idx = chain.Head; idx >= 0; idx = table.GetNextInBucket(idx))
                     {
-                        var right = RowPacker.Unpack(table.Rows[idx], table.Columns);
+                        var right = table.UnpackRow(idx);
                         var combined = CombineRows(left, right);
-                        if (await _context.EvaluateCondition(join.Condition, combined))
+                        bool isMatch = compiledCondition != null
+                            ? compiledCondition(combined)
+                            : await _context.EvaluateCondition(join.Condition, combined);
+                        if (isMatch)
                         {
                             producedMatch = true;
                             if (leftOnly) break;
@@ -423,21 +649,51 @@ public class ExternalJoinEngine
                     if (producedMatch == isSemi) yield return left;
                 }
                 else if (!producedMatch && isLeftJoin)
-                    yield return Shape.Unmatched(left);
+                {
+                    if (table.RowCount > 0) unmatchedRightSchema ??= table.UnpackRow(0).Schema;
+                    yield return UnmatchedLeft(left, unmatchedRightSchema ?? _knownRightSchema);
+                }
             }
         }
 
         if (isRightJoin && matched != null)
         {
-            for (int idx = 0; idx < table.Rows.Count; idx++)
+            for (int idx = 0; idx < table.RowCount; idx++)
             {
                 if (!matched[idx])
-                {
-                    var unmatched = CombineRows(null, RowPacker.Unpack(table.Rows[idx], table.Columns));
-                    Shape.Complete(unmatched);
-                    yield return unmatched;
-                }
+                    yield return UnmatchedRight(table.UnpackRow(idx));
             }
+        }
+    }
+
+    private static void FillLeftValuesFromBatch(
+        ColumnBatch batch,
+        RowPacker.BatchColumnPlan packPlan,
+        int rowIndex,
+        BatchCombinedLayout layout,
+        object?[] destination)
+    {
+        var leftSlots = layout.LeftSlots;
+        var overwritten = layout.LeftOverwritten;
+        for (int i = 0; i < leftSlots.Length; i++)
+        {
+            if (overwritten[i]) continue;
+            destination[leftSlots[i]] = RowPacker.ReadBatchScalar(batch, packPlan, i, rowIndex);
+        }
+    }
+
+    private static void CopyNonOverwrittenLeftValues(
+        object?[] source,
+        object?[] destination,
+        BatchCombinedLayout layout)
+    {
+        var leftSlots = layout.LeftSlots;
+        var overwritten = layout.LeftOverwritten;
+        for (int i = 0; i < leftSlots.Length; i++)
+        {
+            if (overwritten[i]) continue;
+            int slot = leftSlots[i];
+            destination[slot] = source[slot];
         }
     }
 
@@ -468,7 +724,10 @@ public class ExternalJoinEngine
         {
             names[i] = $"{uniquePrefix}_{prefix}_{i}.tmp";
             tempFiles.Add(names[i]);
-            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
+            writers[i] = await _context.SpillStore.CreateWriterAsync(
+                names[i],
+                SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount),
+                SpillFanOut.FlushBytes(_context.EffectiveBatchTargetBytes, PartitionCount));
         }
 
         try
@@ -515,23 +774,38 @@ public class ExternalJoinEngine
     {
         var names = new string[PartitionCount];
         var counts = new long[PartitionCount];
-        var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
+        var writers = new ISpillWriter[PartitionCount];
 
         var uniquePrefix = Guid.NewGuid().ToString("N");
         for (int i = 0; i < PartitionCount; i++)
         {
             names[i] = $"{uniquePrefix}_{prefix}_{i}.tmp";
             tempFiles.Add(names[i]);
-            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
+            writers[i] = await _context.SpillStore.CreateWriterAsync(
+                names[i],
+                SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount),
+                SpillFanOut.FlushBytes(_context.EffectiveBatchTargetBytes, PartitionCount));
         }
 
         try
         {
             bool isLeftInput = depth == 0 && prefix == "left";
+            bool caseSensitive = _context.CaseSensitiveComparison;
+            TableSchema? cachedSchema = null;
+            int keyCount = keys.Count;
+            int[] keySlots = keyCount > 0 ? new int[keyCount] : Array.Empty<int>();
+            int extraCount = Math.Max(0, keyCount - 1);
+            JoinKey[] extraKeyBuffer = extraCount > 0 ? new JoinKey[extraCount] : Array.Empty<JoinKey>();
+
             await foreach (var row in stream)
             {
-                if (isLeftInput) Shape.SeeLeft(row);
-                int pIdx = GetPartitionIndex(row, keys, depth);
+                if (isLeftInput)
+                {
+                    Shape.SeeLeft(row);
+                    if (_knownLeftSchema == null)
+                        CaptureKnownLeftSchema(row);
+                }
+                int pIdx = GetPartitionIndex(row, keys, keySlots, ref cachedSchema, extraKeyBuffer, depth, caseSensitive);
                 counts[pIdx]++;
                 await writers[pIdx].WriteRowAsync(row);
             }
@@ -559,14 +833,65 @@ public class ExternalJoinEngine
     private async IAsyncEnumerable<Row> ReadPartitionStream(string name)
     {
         await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+        if (reader is ISortSpillReader vtReader)
+        {
+            while (true)
+            {
+                var row = await vtReader.ReadRowValueTaskAsync();
+                if (row == null) yield break;
+                yield return row;
+            }
+        }
         await foreach (var row in reader.AsEnumerableAsync())
             yield return row;
     }
 
-    private int GetPartitionIndex(Row row, List<string> keys, int depth)
+    private int GetPartitionIndex(
+        Row row,
+        List<string> keys,
+        int[] keySlots,
+        ref TableSchema? cachedSchema,
+        JoinKey[] extraKeyBuffer,
+        int depth,
+        bool caseSensitive)
     {
-        var key = depth == 0 ? GetHashKey(row, keys) : GetPartitionHashKey(row, keys, depth);
-        return (key.GetHashCode() & 0x7FFFFFFF) % PartitionCount;
+        int keyCount = keys.Count;
+        if (keyCount == 0)
+            return (JoinKey.ComputeEmptyHashCode(depth) & 0x7FFFFFFF) % PartitionCount;
+
+        ExtractRowJoinKeys(row, keys, keySlots, ref cachedSchema, out var key0, extraKeyBuffer, out _);
+        int hash = JoinKey.ComputeHashCode(depth, key0, extraKeyBuffer, caseSensitive);
+        return (hash & 0x7FFFFFFF) % PartitionCount;
+    }
+
+    private static void ExtractRowJoinKeys(
+        Row row,
+        List<string> keys,
+        int[] keySlots,
+        ref TableSchema? cachedSchema,
+        out JoinKey key0,
+        Span<JoinKey> extraKeys,
+        out bool hasNullKey)
+    {
+        var schema = row.Schema;
+        if (schema != null && !ReferenceEquals(schema, cachedSchema))
+        {
+            cachedSchema = schema;
+            for (int i = 0; i < keys.Count; i++)
+                keySlots[i] = schema.GetIndex(keys[i]);
+        }
+
+        object? v0 = schema != null && keySlots[0] >= 0 ? row[keySlots[0]] : row[keys[0]];
+        key0 = JoinKey.FromValue(v0);
+        hasNullKey = key0.IsNull;
+
+        for (int i = 1; i < keys.Count; i++)
+        {
+            object? vi = schema != null && keySlots[i] >= 0 ? row[keySlots[i]] : row[keys[i]];
+            var extra = JoinKey.FromValue(vi);
+            extraKeys[i - 1] = extra;
+            if (extra.IsNull) hasNullKey = true;
+        }
     }
 
     private CompoundKey GetHashKey(Row row, List<string> keys)
@@ -577,27 +902,344 @@ public class ExternalJoinEngine
         return CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, values);
     }
 
-    private CompoundKey GetHashKey(ColumnBatch batch, int rowIndex, List<string> keys)
+    // One join step sees one left and one right layout, so a single cached entry covers it.
+    private CombinedLayout? _combinedLayout;
+
+    /// <summary>
+    /// Combined row layout mapping a columnar probe <see cref="ColumnBatchSchema"/> and packed
+    /// build column list into one output <see cref="TableSchema"/>. Tracks which left columns are
+    /// overwritten by the right side so probe matching skips reading overwritten left cells.
+    /// </summary>
+    private sealed class BatchCombinedLayout
     {
-        var values = new object?[keys.Count];
-        for (var i = 0; i < keys.Count; i++)
+        public TableSchema Schema { get; }
+        public int[] LeftSlots { get; }
+        public bool[] LeftOverwritten { get; }
+        public int[] RightSlots { get; }
+
+        private BatchCombinedLayout(TableSchema schema, int[] leftSlots, bool[] leftOverwritten, int[] rightSlots)
         {
-            var column = batch.Schema.GetOrdinal(keys[i]);
-            values[i] = RowPacker.ReadBatchValue(batch, column, rowIndex);
+            Schema = schema;
+            LeftSlots = leftSlots;
+            LeftOverwritten = leftOverwritten;
+            RightSlots = rightSlots;
         }
-        return CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, values);
+
+        public static BatchCombinedLayout Create(
+            ColumnBatchSchema leftSchema,
+            IReadOnlyList<string> rightColumns,
+            IReadOnlyList<IReadOnlyList<string>?>? rightAliases = null)
+        {
+            var names = new List<string>(leftSchema.Count + rightColumns.Count);
+            var slots = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var aliasMap = new List<(string Alias, int Slot)>();
+
+            var leftSlots = new int[leftSchema.Count];
+            var leftHasAliases = new bool[leftSchema.Count];
+            for (int i = 0; i < leftSchema.Count; i++)
+            {
+                var field = leftSchema.Fields[i];
+                var name = field.Name;
+                if (!slots.TryGetValue(name, out var slot))
+                {
+                    slot = names.Count;
+                    slots[name] = slot;
+                    names.Add(name);
+                }
+                leftSlots[i] = slot;
+                if (field.Aliases is { Count: > 0 })
+                {
+                    leftHasAliases[i] = true;
+                    for (int a = 0; a < field.Aliases.Count; a++)
+                        aliasMap.Add((field.Aliases[a], slot));
+                }
+            }
+
+            var rightSlots = new int[rightColumns.Count];
+            var rightWrittenSlots = new HashSet<int>();
+            for (int i = 0; i < rightColumns.Count; i++)
+            {
+                var name = rightColumns[i];
+                var rAliases = rightAliases != null && i < rightAliases.Count ? rightAliases[i] : null;
+                if (!slots.TryGetValue(name, out var slot))
+                {
+                    slot = names.Count;
+                    slots[name] = slot;
+                    names.Add(name);
+                }
+                else
+                {
+                    // Bare-name collision with left. If left's slot carries qualified aliases (e.g. l.id),
+                    // preserve left's slot for its aliases and give right its own slot so l.id and r.id
+                    // remain independently addressable, while bare name resolves to right (matching prior behavior).
+                    bool leftNeedsOwnSlot = slot < leftHasAliases.Length && leftHasAliases[slot];
+                    if (leftNeedsOwnSlot || rAliases is { Count: > 0 })
+                    {
+                        var leftFieldAliases = slot < leftSchema.Count ? leftSchema.Fields[slot].Aliases : null;
+                        if (leftFieldAliases is { Count: > 0 })
+                            names[slot] = leftFieldAliases[0];
+                        var newSlot = names.Count;
+                        names.Add(name);
+                        slots[name] = newSlot;
+                        slot = newSlot;
+                    }
+                }
+                rightSlots[i] = slot;
+                rightWrittenSlots.Add(slot);
+                if (rAliases is { Count: > 0 })
+                {
+                    for (int a = 0; a < rAliases.Count; a++)
+                        aliasMap.Add((rAliases[a], slot));
+                }
+            }
+
+            var leftOverwritten = new bool[leftSlots.Length];
+            for (int i = 0; i < leftSlots.Length; i++)
+                leftOverwritten[i] = rightWrittenSlots.Contains(leftSlots[i]);
+
+            var schema = new TableSchema(names);
+            for (int i = 0; i < aliasMap.Count; i++)
+                schema.AddAlias(aliasMap[i].Alias, aliasMap[i].Slot);
+
+            return new BatchCombinedLayout(schema, leftSlots, leftOverwritten, rightSlots);
+        }
     }
 
-    private CompoundKey GetPartitionHashKey(Row row, List<string> keys, int depth)
+    /// <summary>
+    /// The combined row layout for one pair of input schemas: the distinct column names in
+    /// first-seen order (left, then right) and, per input column, its slot. A right column whose
+    /// name the left already has maps to the same slot and overwrites it, exactly as the
+    /// name-keyed fallback below does.
+    /// </summary>
+    private sealed class CombinedLayout(TableSchema? left, TableSchema right, TableSchema schema, int[] leftSlots, int[] rightSlots)
     {
-        var values = new object?[keys.Count];
-        for (int i = 0; i < keys.Count; i++)
-            values[i] = SpillSerializationHelper.UnwrapValue(row[keys[i]]);
-        return CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, values, depth);
+        public TableSchema? Left { get; } = left;
+        public TableSchema Right { get; } = right;
+        public TableSchema Schema { get; } = schema;
+        public int[] LeftSlots { get; } = leftSlots;
+        public int[] RightSlots { get; } = rightSlots;
+
+        public static CombinedLayout Create(TableSchema? left, TableSchema right)
+        {
+            var names = new List<string>();
+            var slots = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var aliasMap = new List<(string Alias, int Slot)>();
+
+            var leftSlots = left == null ? Array.Empty<int>() : new int[left.ColumnCount];
+            var leftAliasesBySlot = left == null ? null : new List<string>?[left.ColumnCount];
+            if (left != null)
+            {
+                for (var i = 0; i < left.ColumnCount; i++)
+                {
+                    var name = left.GetName(i);
+                    if (!slots.TryGetValue(name, out var slot))
+                    {
+                        slot = names.Count;
+                        slots[name] = slot;
+                        names.Add(name);
+                    }
+                    leftSlots[i] = slot;
+                    var aliases = left.EnumerateAliasesOf(name).ToList();
+                    if (aliases.Count > 0)
+                    {
+                        if (slot < leftAliasesBySlot!.Length)
+                            leftAliasesBySlot[slot] = aliases;
+                        for (int a = 0; a < aliases.Count; a++)
+                            aliasMap.Add((aliases[a], slot));
+                    }
+                }
+            }
+
+            var rightSlots = new int[right.ColumnCount];
+            for (var i = 0; i < right.ColumnCount; i++)
+            {
+                var name = right.GetName(i);
+                var rAliases = right.EnumerateAliasesOf(name).ToList();
+                if (!slots.TryGetValue(name, out var slot))
+                {
+                    slot = names.Count;
+                    slots[name] = slot;
+                    names.Add(name);
+                }
+                else
+                {
+                    var lAliases = leftAliasesBySlot != null && slot < leftAliasesBySlot.Length
+                        ? leftAliasesBySlot[slot]
+                        : null;
+                    if (lAliases is { Count: > 0 } || rAliases.Count > 0)
+                    {
+                        if (lAliases is { Count: > 0 })
+                            names[slot] = lAliases[0];
+                        var newSlot = names.Count;
+                        names.Add(name);
+                        slots[name] = newSlot;
+                        slot = newSlot;
+                    }
+                }
+                rightSlots[i] = slot;
+                for (int a = 0; a < rAliases.Count; a++)
+                    aliasMap.Add((rAliases[a], slot));
+            }
+
+            var schema = new TableSchema(names);
+            for (int i = 0; i < aliasMap.Count; i++)
+                schema.AddAlias(aliasMap[i].Alias, aliasMap[i].Slot);
+            return new CombinedLayout(left, right, schema, leftSlots, rightSlots);
+        }
+    }
+
+    /// <summary>
+    /// The row a left outer join returns for a left row with no match, laid out like a matched
+    /// row with every right column NULL. Matched and unmatched rows must share one layout: in the
+    /// combined layout a bare name that both sides define is the right side's column and the left
+    /// side's is held under its qualified name, while a bare left row uses the bare name for the
+    /// left value. A spill writer maps later rows onto the first row's schema by name, so mixing
+    /// the two shapes put left values into right columns (<c>b.g</c> read <c>a.g</c>).
+    /// Without a right schema (no right rows) the shape pads the row by name, as before.
+    /// </summary>
+    private Row UnmatchedLeft(Row left, TableSchema? rightSchema)
+    {
+        var leftSchema = left.Schema;
+        if (rightSchema == null || leftSchema == null || left.HasDynamicColumns)
+            return Shape.Unmatched(left);
+
+        var layout = _combinedLayout;
+        if (layout == null || !ReferenceEquals(layout.Left, leftSchema) || !ReferenceEquals(layout.Right, rightSchema))
+            _combinedLayout = layout = CombinedLayout.Create(leftSchema, rightSchema);
+        var values = new object?[layout.Schema.ColumnCount];
+        for (var i = 0; i < layout.LeftSlots.Length; i++) values[layout.LeftSlots[i]] = left[i];
+        var row = new Row(layout.Schema, values)
+        {
+            MayLackColumns = left.MayLackColumns,
+            DataQualityReplayProvenance = left.DataQualityReplayProvenance,
+        };
+        Shape.Complete(row);
+        return row;
+    }
+
+    /// <summary>
+    /// <see cref="UnmatchedLeft"/> for a probe batch row. Left values fill every left slot,
+    /// including a bare name the right side would overwrite in a matched row, which keeps the
+    /// left value there as the by-name padding did.
+    /// </summary>
+    private void CaptureKnownRightSchema(Row firstRight)
+    {
+        var cols = new List<string>();
+        var aliasesList = new List<IReadOnlyList<string>?>();
+        var rightSchema = firstRight.Schema;
+        foreach (var colName in firstRight.GetColumnNames())
+        {
+            cols.Add(colName);
+            IReadOnlyList<string>? aliases = rightSchema != null
+                ? rightSchema.EnumerateAliasesOf(colName).ToArray()
+                : null;
+            aliasesList.Add(aliases is { Count: > 0 } ? aliases : null);
+        }
+
+        if (cols.Count == 0) return;
+        _knownRightColumns = cols;
+        _knownRightColumnAliases = aliasesList;
+        if (rightSchema != null && !firstRight.HasDynamicColumns)
+        {
+            _knownRightSchema = rightSchema;
+        }
+        else
+        {
+            var built = new TableSchema(cols);
+            for (int i = 0; i < aliasesList.Count; i++)
+            {
+                if (aliasesList[i] is { } aliases)
+                {
+                    for (int a = 0; a < aliases.Count; a++)
+                        built.AddAlias(aliases[a], i);
+                }
+            }
+            _knownRightSchema = built;
+        }
+    }
+
+    private void CaptureKnownLeftSchema(Row firstLeft)
+    {
+        if (firstLeft.Schema != null && !firstLeft.HasDynamicColumns)
+        {
+            _knownLeftSchema = firstLeft.Schema;
+            return;
+        }
+
+        var cols = firstLeft.GetColumnNames().ToList();
+        if (cols.Count == 0) return;
+        var built = new TableSchema(cols);
+        if (firstLeft.Schema != null)
+        {
+            for (int i = 0; i < cols.Count; i++)
+            {
+                foreach (var alias in firstLeft.Schema.EnumerateAliasesOf(cols[i]))
+                    built.AddAlias(alias, i);
+            }
+        }
+        _knownLeftSchema = built;
+    }
+
+    private Row UnmatchedRight(Row right)
+    {
+        var rightSchema = right.Schema;
+        if (_knownLeftSchema == null || rightSchema == null || right.HasDynamicColumns)
+        {
+            var fallback = CombineRows(null, right);
+            Shape.Complete(fallback);
+            return fallback;
+        }
+
+        var layout = _combinedLayout;
+        if (layout == null || !ReferenceEquals(layout.Left, _knownLeftSchema) || !ReferenceEquals(layout.Right, rightSchema))
+            _combinedLayout = layout = CombinedLayout.Create(_knownLeftSchema, rightSchema);
+        var values = new object?[layout.Schema.ColumnCount];
+        for (var i = 0; i < layout.RightSlots.Length; i++) values[layout.RightSlots[i]] = right[i];
+        var row = new Row(layout.Schema, values)
+        {
+            MayLackColumns = right.MayLackColumns,
+        };
+        Shape.Complete(row);
+        return row;
+    }
+
+    private Row UnmatchedLeftFromBatch(
+        ColumnBatch batch,
+        RowPacker.BatchColumnPlan packPlan,
+        int rowIndex,
+        BatchCombinedLayout layout)
+    {
+        var values = new object?[layout.Schema.ColumnCount];
+        var leftSlots = layout.LeftSlots;
+        for (int i = 0; i < leftSlots.Length; i++)
+            values[leftSlots[i]] = RowPacker.ReadBatchScalar(batch, packPlan, i, rowIndex);
+        var row = new Row(layout.Schema, values);
+        Shape.Complete(row);
+        return row;
     }
 
     private Row CombineRows(Row? left, Row right)
     {
+        // Rows held positionally by their schemas combine into a cached layout: one values array
+        // per output row instead of a per-row name dictionary (about a third of the external
+        // join's allocation before this path existed).
+        var rightSchema = right.Schema;
+        var leftSchema = left?.Schema;
+        if (rightSchema != null && !right.HasDynamicColumns && (left == null || (leftSchema != null && !left.HasDynamicColumns)))
+        {
+            var layout = _combinedLayout;
+            if (layout == null || !ReferenceEquals(layout.Left, leftSchema) || !ReferenceEquals(layout.Right, rightSchema))
+                _combinedLayout = layout = CombinedLayout.Create(leftSchema, rightSchema);
+            var values = new object?[layout.Schema.ColumnCount];
+            for (var i = 0; i < layout.LeftSlots.Length; i++) values[layout.LeftSlots[i]] = left![i];
+            for (var i = 0; i < layout.RightSlots.Length; i++) values[layout.RightSlots[i]] = right[i];
+            return new Row(layout.Schema, values)
+            {
+                MayLackColumns = (left?.MayLackColumns ?? false) || right.MayLackColumns,
+                DataQualityReplayProvenance = left?.DataQualityReplayProvenance,
+            };
+        }
+
         var combined = new Row();
         combined.MayLackColumns = (left?.MayLackColumns ?? false) || right.MayLackColumns;
         combined.DataQualityReplayProvenance = left?.DataQualityReplayProvenance;
@@ -609,16 +1251,423 @@ public class ExternalJoinEngine
     private readonly record struct PartitionSet(string[] Names, long[] Counts);
 
     /// <summary>
-    /// The probe-side hash table: build rows held as compact packed blobs (<see cref="Rows"/>) with a
-    /// key index (<see cref="Index"/>) mapping each join key to the physical row indices that carry it.
+    /// The probe-side hash table: build rows held in budget-capped pooled <c>byte[]</c> slabs with
+    /// a pooled flat <see cref="RowSlot"/> index chaining duplicate keys in insertion order, indexed
+    /// by a pooled unboxed <see cref="JoinKey"/> hash table.
     /// <see cref="Columns"/> is the shared column order captured from the first build row, used to
-    /// decode a blob back into a <see cref="Row"/> on a probe match.
+    /// decode a slab slice back into a <see cref="Row"/> on a probe match.
     /// </summary>
-    private sealed class PackedBuildTable
+    internal sealed class PackedBuildTable : IDisposable
     {
+        internal const int MinSlabBytes = 4 * 1024;
+        internal const int MaxDefaultSlabBytes = 64 * 1024;
+        private const int InitialSlotCapacity = 64;
+        private const int InitialBucketCapacity = 128;
+
+        private sealed class Slab
+        {
+            public readonly byte[] Buffer;
+            public int Used;
+            public Slab(byte[] buffer) => Buffer = buffer;
+        }
+
+        internal struct RowSlot
+        {
+            public int SlabIndex;
+            public int Offset;
+            public int Length;
+            public int NextInBucket;
+        }
+
+        private struct KeyEntry
+        {
+            public int HashCode;
+            public JoinKey Key0;
+            public int ExtraKeyOffset;
+            public int Head;
+            public int Tail;
+            public int NextInHash;
+        }
+
+        internal readonly record struct BucketChain(int Head, int Tail);
+
+        private readonly bool _caseSensitive;
+        private readonly int _keyCount;
+        private readonly int _extraKeyCount;
+        private readonly List<Slab> _slabs = new();
+        private RowSlot[] _rows;
+        private int _rowCount;
+        private int[] _buckets;
+        private KeyEntry[] _entries;
+        private int _entryCount;
+        private JoinKey[]? _extraKeys;
+        private int _extraKeyCountUsed;
+        private bool _disposed;
+
         public readonly List<string> Columns = new();
-        public readonly List<byte[]> Rows = new();
-        public readonly Dictionary<CompoundKey, List<int>> Index = new();
+        public readonly List<IReadOnlyList<string>?> ColumnAliases = new();
+        public int TargetSlabBytes { get; }
+
+        public PackedBuildTable(long budgetBytes = 0, bool caseSensitive = false, int keyCount = 1, int expectedRows = 0)
+        {
+            _caseSensitive = caseSensitive;
+            _keyCount = Math.Max(0, keyCount);
+            _extraKeyCount = Math.Max(0, _keyCount - 1);
+            TargetSlabBytes = budgetBytes > 0
+                ? (int)Math.Clamp(budgetBytes / 4, MinSlabBytes, MaxDefaultSlabBytes)
+                : MaxDefaultSlabBytes;
+            int slotCap = expectedRows > 0
+                ? Math.Clamp(expectedRows, InitialSlotCapacity, 1 << 20)
+                : InitialSlotCapacity;
+            int bucketTarget = expectedRows > 0
+                ? Math.Clamp((int)Math.Min(1 << 20, expectedRows * 2L), InitialBucketCapacity, 1 << 20)
+                : InitialBucketCapacity;
+            int bucketCap = (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)bucketTarget);
+            _rows = ArrayPool<RowSlot>.Shared.Rent(slotCap);
+            _buckets = ArrayPool<int>.Shared.Rent(bucketCap);
+            Array.Fill(_buckets, -1);
+            _entries = ArrayPool<KeyEntry>.Shared.Rent(slotCap);
+            if (_extraKeyCount > 0)
+                _extraKeys = ArrayPool<JoinKey>.Shared.Rent(slotCap * _extraKeyCount);
+        }
+
+        public int RowCount => _rowCount;
+        public int SlabCount => _slabs.Count;
+
+        public (int RowIndex, int ByteLength) AppendRowBytes(byte[] source, int sourceOffset, int length)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            int slabIndex = _slabs.Count - 1;
+            if (slabIndex < 0 || length > _slabs[slabIndex].Buffer.Length - _slabs[slabIndex].Used)
+            {
+                int requestBytes = Math.Max(TargetSlabBytes, Math.Max(1, length));
+                _slabs.Add(new Slab(ArrayPool<byte>.Shared.Rent(requestBytes)));
+                slabIndex = _slabs.Count - 1;
+            }
+
+            var slab = _slabs[slabIndex];
+            int offset = slab.Used;
+            if (length > 0)
+            {
+                Buffer.BlockCopy(source, sourceOffset, slab.Buffer, offset, length);
+                slab.Used += length;
+            }
+
+            int rowIndex = _rowCount;
+            if (rowIndex == _rows.Length)
+            {
+                var grown = ArrayPool<RowSlot>.Shared.Rent(_rows.Length * 2);
+                Array.Copy(_rows, 0, grown, 0, _rowCount);
+                ArrayPool<RowSlot>.Shared.Return(_rows, clearArray: true);
+                _rows = grown;
+            }
+
+            _rows[rowIndex] = new RowSlot
+            {
+                SlabIndex = slabIndex,
+                Offset = offset,
+                Length = length,
+                NextInBucket = -1,
+            };
+            _rowCount++;
+            return (rowIndex, length);
+        }
+
+        public void IndexRow(CompoundKey key, int rowIndex, int blobLength, MemoryBudgetGuard guard)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            int keyLen = key.Length;
+            if (keyLen == 0)
+            {
+                IndexRow(JoinKey.Null, ReadOnlySpan<JoinKey>.Empty, hasNullKey: false, rowIndex, blobLength, guard);
+                return;
+            }
+
+            var key0 = JoinKey.FromValue(key[0]);
+            bool hasNullKey = key0.IsNull;
+            int extraLen = keyLen - 1;
+            var extraKeys = extraLen == 0 ? Array.Empty<JoinKey>() : new JoinKey[extraLen];
+            for (int i = 1; i < keyLen; i++)
+            {
+                var extra = JoinKey.FromValue(key[i]);
+                extraKeys[i - 1] = extra;
+                if (extra.IsNull) hasNullKey = true;
+            }
+            IndexRow(key0, extraKeys, hasNullKey, rowIndex, blobLength, guard);
+        }
+
+        public void IndexRow(
+            in JoinKey key0,
+            ReadOnlySpan<JoinKey> extraKeys,
+            bool hasNullKey,
+            int rowIndex,
+            int blobLength,
+            MemoryBudgetGuard guard)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            guard.Add(blobLength + 16);
+            if (hasNullKey) return;
+
+            int hash = _keyCount == 0
+                ? JoinKey.ComputeEmptyHashCode(0)
+                : JoinKey.ComputeHashCode(0, key0, extraKeys, _caseSensitive);
+            int bucket = BucketIndex(hash, _buckets.Length);
+
+            for (int entryIdx = _buckets[bucket]; entryIdx >= 0; entryIdx = _entries[entryIdx].NextInHash)
+            {
+                ref var existing = ref _entries[entryIdx];
+                if (existing.HashCode == hash && KeysMatch(in existing, in key0, extraKeys))
+                {
+                    _rows[existing.Tail].NextInBucket = rowIndex;
+                    existing.Tail = rowIndex;
+                    return;
+                }
+            }
+
+            if (_entryCount == _entries.Length)
+                GrowEntries();
+            if (_entryCount >= (_buckets.Length * 3) / 4)
+            {
+                GrowBuckets();
+                bucket = BucketIndex(hash, _buckets.Length);
+            }
+
+            int extraOffset = -1;
+            if (_extraKeyCount > 0)
+            {
+                extraOffset = _extraKeyCountUsed;
+                EnsureExtraKeyCapacity(_extraKeyCountUsed + _extraKeyCount);
+                extraKeys.CopyTo(_extraKeys.AsSpan(extraOffset, _extraKeyCount));
+                _extraKeyCountUsed += _extraKeyCount;
+            }
+
+            int newEntryIdx = _entryCount++;
+            _entries[newEntryIdx] = new KeyEntry
+            {
+                HashCode = hash,
+                Key0 = key0,
+                ExtraKeyOffset = extraOffset,
+                Head = rowIndex,
+                Tail = rowIndex,
+                NextInHash = _buckets[bucket],
+            };
+            _buckets[bucket] = newEntryIdx;
+
+            guard.Add(EstimateJoinKeyBytes(in key0, extraKeys) + 32);
+        }
+
+        public bool TryGetChain(in JoinKey key0, ReadOnlySpan<JoinKey> extraKeys, out BucketChain chain)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_entryCount == 0)
+            {
+                chain = default;
+                return false;
+            }
+
+            int hash = _keyCount == 0
+                ? JoinKey.ComputeEmptyHashCode(0)
+                : JoinKey.ComputeHashCode(0, key0, extraKeys, _caseSensitive);
+            int bucket = BucketIndex(hash, _buckets.Length);
+
+            for (int entryIdx = _buckets[bucket]; entryIdx >= 0; entryIdx = _entries[entryIdx].NextInHash)
+            {
+                ref readonly var entry = ref _entries[entryIdx];
+                if (entry.HashCode == hash && KeysMatch(in entry, in key0, extraKeys))
+                {
+                    chain = new BucketChain(entry.Head, entry.Tail);
+                    return true;
+                }
+            }
+
+            chain = default;
+            return false;
+        }
+
+        public bool TryGetChain(CompoundKey key, out BucketChain chain)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_entryCount == 0)
+            {
+                chain = default;
+                return false;
+            }
+
+            int keyLen = key.Length;
+            if (keyLen == 0)
+                return TryGetChain(JoinKey.Null, ReadOnlySpan<JoinKey>.Empty, out chain);
+
+            var key0 = JoinKey.FromValue(key[0]);
+            if (key0.IsNull)
+            {
+                chain = default;
+                return false;
+            }
+
+            int extraLen = keyLen - 1;
+            var extraKeys = extraLen == 0 ? Array.Empty<JoinKey>() : new JoinKey[extraLen];
+            for (int i = 1; i < keyLen; i++)
+            {
+                var extra = JoinKey.FromValue(key[i]);
+                if (extra.IsNull)
+                {
+                    chain = default;
+                    return false;
+                }
+                extraKeys[i - 1] = extra;
+            }
+            return TryGetChain(key0, extraKeys, out chain);
+        }
+
+        // Rows reach this table already partitioned by ComputeHashCode(depth, key) % PartitionCount,
+        // so with a power-of-two partition count all keys here share the hash's low bits. Take the
+        // bucket from the high bits of a Fibonacci-mixed hash instead, which depend on every bit.
+        // Bucket arrays are powers of two (rented by power-of-two size).
+        private static int BucketIndex(int hash, int bucketCount)
+        {
+            if (bucketCount <= 1) return 0;
+            int shift = 32 - System.Numerics.BitOperations.Log2((uint)bucketCount);
+            return (int)(((uint)hash * 0x9E3779B9u) >> shift);
+        }
+
+        internal int LongestHashChainForTests()
+        {
+            int longest = 0;
+            for (int bucket = 0; bucket < _buckets.Length; bucket++)
+            {
+                int length = 0;
+                for (int entryIdx = _buckets[bucket]; entryIdx >= 0; entryIdx = _entries[entryIdx].NextInHash)
+                    length++;
+                longest = Math.Max(longest, length);
+            }
+            return longest;
+        }
+
+        private bool KeysMatch(in KeyEntry entry, in JoinKey key0, ReadOnlySpan<JoinKey> extraKeys)
+        {
+            if (_keyCount == 0) return true;
+            if (!JoinKey.Equals(in entry.Key0, in key0, _caseSensitive)) return false;
+            if (_extraKeyCount == 0) return true;
+
+            var stored = _extraKeys.AsSpan(entry.ExtraKeyOffset, _extraKeyCount);
+            for (int i = 0; i < _extraKeyCount; i++)
+            {
+                if (!JoinKey.Equals(in stored[i], in extraKeys[i], _caseSensitive))
+                    return false;
+            }
+            return true;
+        }
+
+        private static long EstimateJoinKeyBytes(in JoinKey key0, ReadOnlySpan<JoinKey> extraKeys)
+        {
+            long bytes = 32 + 8 + key0.EstimateHeapBytes();
+            for (int i = 0; i < extraKeys.Length; i++)
+                bytes += 8 + extraKeys[i].EstimateHeapBytes();
+            return bytes;
+        }
+
+        private void GrowEntries()
+        {
+            var grown = ArrayPool<KeyEntry>.Shared.Rent(_entries.Length * 2);
+            Array.Copy(_entries, 0, grown, 0, _entryCount);
+            ArrayPool<KeyEntry>.Shared.Return(_entries, clearArray: true);
+            _entries = grown;
+        }
+
+        private void GrowBuckets()
+        {
+            int newSize = _buckets.Length * 2;
+            var grown = ArrayPool<int>.Shared.Rent(newSize);
+            Array.Fill(grown, -1);
+            for (int i = 0; i < _entryCount; i++)
+            {
+                int bucket = BucketIndex(_entries[i].HashCode, grown.Length);
+                _entries[i].NextInHash = grown[bucket];
+                grown[bucket] = i;
+            }
+            ArrayPool<int>.Shared.Return(_buckets, clearArray: false);
+            _buckets = grown;
+        }
+
+        private void EnsureExtraKeyCapacity(int required)
+        {
+            if (_extraKeys != null && required <= _extraKeys.Length) return;
+            int nextSize = _extraKeys == null ? InitialSlotCapacity * _extraKeyCount : Math.Max(_extraKeys.Length * 2, required);
+            var grown = ArrayPool<JoinKey>.Shared.Rent(nextSize);
+            if (_extraKeys != null)
+            {
+                if (_extraKeyCountUsed > 0)
+                    Array.Copy(_extraKeys, 0, grown, 0, _extraKeyCountUsed);
+                ArrayPool<JoinKey>.Shared.Return(_extraKeys, clearArray: true);
+            }
+            _extraKeys = grown;
+        }
+
+        public Row UnpackRow(int rowIndex)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var slot = _rows[rowIndex];
+            return RowPacker.Unpack(
+                _slabs[slot.SlabIndex].Buffer,
+                slot.Offset,
+                slot.Length,
+                Columns,
+                ColumnAliases.Count == Columns.Count ? ColumnAliases : null);
+        }
+
+        public void UnpackRowInto(int rowIndex, object?[] destination, int[] targetSlots)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var slot = _rows[rowIndex];
+            RowPacker.UnpackInto(_slabs[slot.SlabIndex].Buffer.AsSpan(slot.Offset, slot.Length), Columns.Count, destination, targetSlots);
+        }
+
+        public int GetNextInBucket(int rowIndex)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _rows[rowIndex].NextInBucket;
+        }
+
+        internal IReadOnlyList<(byte[] Buffer, int Used)> GetSlabBuffersForTests() =>
+            _slabs.Select(s => (s.Buffer, s.Used)).ToArray();
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            for (var i = 0; i < _slabs.Count; i++)
+            {
+                var slab = _slabs[i];
+                if (slab.Used > 0)
+                    CryptographicOperations.ZeroMemory(slab.Buffer.AsSpan(0, slab.Used));
+                ArrayPool<byte>.Shared.Return(slab.Buffer);
+            }
+            _slabs.Clear();
+            if (_rows != null)
+            {
+                ArrayPool<RowSlot>.Shared.Return(_rows, clearArray: true);
+                _rows = null!;
+            }
+            if (_buckets != null)
+            {
+                ArrayPool<int>.Shared.Return(_buckets, clearArray: false);
+                _buckets = null!;
+            }
+            if (_entries != null)
+            {
+                ArrayPool<KeyEntry>.Shared.Return(_entries, clearArray: true);
+                _entries = null!;
+            }
+            if (_extraKeys != null)
+            {
+                ArrayPool<JoinKey>.Shared.Return(_extraKeys, clearArray: true);
+                _extraKeys = null;
+            }
+            _rowCount = 0;
+            _entryCount = 0;
+            _extraKeyCountUsed = 0;
+            Columns.Clear();
+            ColumnAliases.Clear();
+        }
     }
 }
-

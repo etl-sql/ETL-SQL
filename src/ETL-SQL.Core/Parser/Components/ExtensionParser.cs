@@ -130,6 +130,8 @@ public class ExtensionParser : ParserComponent
         string? connectionName = null;
         Expression? remotePath = null;
         Expression? overwrite = null;
+        Expression? recursive = null;
+        Expression? verify = null;
 
         if (!isSqlStyle && _parser.Current.Type != TokenType.LPAREN) isSqlStyle = true;
 
@@ -156,7 +158,15 @@ public class ExtensionParser : ParserComponent
                     else localPath = ParseExpression();
                 }
                 else if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
-                else if (Match(TokenType.WITH)) { overwrite = ParseWithOptions(type == FileTransferType.Send ? "SEND FILE" : "RECEIVE FILE", "OVERWRITE").GetValueOrDefault("OVERWRITE"); }
+                else if (Match(TokenType.WITH))
+                {
+                    var opts = type == FileTransferType.Send
+                        ? ParseWithOptions("SEND FILE", "OVERWRITE", "VERIFY")
+                        : ParseWithOptions("RECEIVE FILE", "OVERWRITE", "RECURSIVE", "VERIFY");
+                    overwrite = opts.GetValueOrDefault("OVERWRITE") ?? overwrite;
+                    recursive = opts.GetValueOrDefault("RECURSIVE") ?? recursive;
+                    verify = opts.GetValueOrDefault("VERIFY") ?? verify;
+                }
                 else if (Match(TokenType.COMMA)) { continue; }
                 else if (localPath == null && type == FileTransferType.Send && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                     localPath = ParseExpression();
@@ -203,6 +213,8 @@ public class ExtensionParser : ParserComponent
             ConnectionName = connectionName!,
             RemotePath = remotePath!,
             Overwrite = overwrite,
+            Recursive = recursive,
+            Verify = verify,
             IsSqlStyle = isSqlStyle,
             Line = startToken.Line,
             Column = startToken.Column
@@ -223,11 +235,13 @@ public class ExtensionParser : ParserComponent
             TokenType.DECOMPRESS_FILE or TokenType.DECOMPRESS => FileOpType.Decompress,
             TokenType.ENCRYPT_FILE or TokenType.ENCRYPT => FileOpType.Encrypt,
             TokenType.DECRYPT_FILE or TokenType.DECRYPT => FileOpType.Decrypt,
+            TokenType.SIGN => FileOpType.Sign,
             _ => throw new SyntaxException($"Unexpected file operation: {startToken.Type}", startToken.Line, startToken.Column)
         };
 
         Expression? source = null, dest = null, overwrite = null, password = null, keyFile = null, pgpKey = null;
         Expression? dateSuffix = null, suffixSeparator = null, signingKey = null, signingPassword = null, verifyKey = null, deleteSource = null;
+        Expression? format = null, pattern = null;
         string? connectionName = null;
         bool isFunctionStyle = Match(TokenType.LPAREN);
         if (isFunctionStyle)
@@ -290,11 +304,16 @@ public class ExtensionParser : ParserComponent
                     var options = type switch
                     {
                         FileOpType.Copy or FileOpType.Move or FileOpType.Rename => ParseWithOptions(name, "OVERWRITE", "DATE_SUFFIX", "SUFFIX_SEPARATOR"),
-                        FileOpType.Encrypt or FileOpType.Decrypt or FileOpType.Compress or FileOpType.Decompress => ParseWithOptions(name, "OVERWRITE", "DELETE_SOURCE"),
+                        FileOpType.Encrypt or FileOpType.Decrypt => ParseWithOptions(name, "OVERWRITE", "DELETE_SOURCE"),
+                        FileOpType.Sign => ParseWithOptions(name, "OVERWRITE"),
+                        FileOpType.Compress => ParseWithOptions(name, "OVERWRITE", "DELETE_SOURCE", "FORMAT"),
+                        FileOpType.Decompress => ParseWithOptions(name, "OVERWRITE", "DELETE_SOURCE", "FORMAT", "PATTERN"),
                         _ => ParseWithOptions(name, "OVERWRITE"),
                     };
                     overwrite = options.GetValueOrDefault("OVERWRITE") ?? overwrite;
                     deleteSource = options.GetValueOrDefault("DELETE_SOURCE") ?? deleteSource;
+                    format = options.GetValueOrDefault("FORMAT") ?? format;
+                    pattern = options.GetValueOrDefault("PATTERN") ?? pattern;
                     dateSuffix = options.GetValueOrDefault("DATE_SUFFIX") ?? dateSuffix;
                     suffixSeparator = options.GetValueOrDefault("SUFFIX_SEPARATOR") ?? suffixSeparator;
                 }
@@ -306,9 +325,21 @@ public class ExtensionParser : ParserComponent
                 else break;
             }
             if (source == null) throw new SyntaxException($"Source path is mandatory for {startToken.Value}", _parser.Current.Line, _parser.Current.Column);
-            RejectIgnoredKeyClauses($"{type.ToString().ToUpperInvariant()} FILE", type is FileOpType.Encrypt or FileOpType.Decrypt,
-                type == FileOpType.Encrypt, password, keyFile, pgpKey, startToken);
-            RejectMisplacedSigningClauses(type, pgpKey, signingKey, signingPassword, verifyKey, startToken);
+            if (type == FileOpType.Sign)
+            {
+                if (keyFile != null)
+                    throw new SyntaxException("SIGN FILE supports OpenPGP keys only (PGP_KEY); KEYFILE is not supported.", startToken.Line, startToken.Column);
+                if (signingKey != null || signingPassword != null || verifyKey != null)
+                    throw new SyntaxException("SIGN FILE uses PGP_KEY and optional PASSWORD, not SIGNING_KEY, SIGNING_PASSWORD, or VERIFY_KEY.", startToken.Line, startToken.Column);
+                if (pgpKey == null)
+                    throw new SyntaxException("SIGN FILE requires a PGP_KEY clause pointing to your OpenPGP private key.", startToken.Line, startToken.Column);
+            }
+            else
+            {
+                RejectIgnoredKeyClauses($"{type.ToString().ToUpperInvariant()} FILE", type is FileOpType.Encrypt or FileOpType.Decrypt,
+                    type == FileOpType.Encrypt, password, keyFile, pgpKey, startToken);
+                RejectMisplacedSigningClauses(type, pgpKey, signingKey, signingPassword, verifyKey, startToken);
+            }
         }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
@@ -318,6 +349,8 @@ public class ExtensionParser : ParserComponent
             SigningPassword = signingPassword,
             VerifyKey = verifyKey,
             DeleteSource = deleteSource,
+            Format = format,
+            Pattern = pattern,
             Line = startToken.Line,
             Column = startToken.Column,
         };
@@ -387,6 +420,7 @@ public class ExtensionParser : ParserComponent
         };
 
         Expression? path = null, extra = null, overwrite = null, recursive = null, password = null, keyFile = null, pgpKey = null;
+        Expression? format = null, pattern = null;
         string? connectionName = null;
         bool ifExists = false;
         bool isFunctionStyle = Match(TokenType.LPAREN);
@@ -438,11 +472,18 @@ public class ExtensionParser : ParserComponent
                 else if (Match(TokenType.RECURSIVE) || MatchIdentifier("RECURSIVE")) { recursive = ParseExpression(); }
                 else if (Match(TokenType.WITH))
                 {
-                    var options = type == DirectoryOpType.DeleteContents
-                        ? ParseWithOptions(DirectoryStatementName(type), "RECURSIVE")
-                        : ParseWithOptions(DirectoryStatementName(type), "OVERWRITE");
+                    var dirStmtName = DirectoryStatementName(type);
+                    var options = type switch
+                    {
+                        DirectoryOpType.Delete or DirectoryOpType.DeleteContents => ParseWithOptions(dirStmtName, "RECURSIVE"),
+                        DirectoryOpType.Compress => ParseWithOptions(dirStmtName, "OVERWRITE", "FORMAT"),
+                        DirectoryOpType.Decompress => ParseWithOptions(dirStmtName, "OVERWRITE", "FORMAT", "PATTERN"),
+                        _ => ParseWithOptions(dirStmtName, "OVERWRITE"),
+                    };
                     overwrite = options.GetValueOrDefault("OVERWRITE") ?? overwrite;
                     recursive = options.GetValueOrDefault("RECURSIVE") ?? recursive;
+                    format = options.GetValueOrDefault("FORMAT") ?? format;
+                    pattern = options.GetValueOrDefault("PATTERN") ?? pattern;
                 }
                 else if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
                 else if (path == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
@@ -457,12 +498,18 @@ public class ExtensionParser : ParserComponent
                 throw new SyntaxException($"{name} does not support KEYFILE or PGP_KEY. Directories are encrypted with PASSWORD only.", startToken.Line, startToken.Column);
             if (password != null && type is not (DirectoryOpType.Encrypt or DirectoryOpType.Decrypt))
                 throw new SyntaxException($"{name} does not take PASSWORD; only ENCRYPT DIRECTORY and DECRYPT DIRECTORY do.", startToken.Line, startToken.Column);
-            if (recursive != null && type != DirectoryOpType.DeleteContents)
-                throw new SyntaxException($"{name} does not take RECURSIVE; only DELETE DIRECTORY_CONTENTS does.", startToken.Line, startToken.Column);
+            if (recursive != null && type is not (DirectoryOpType.Delete or DirectoryOpType.DeleteContents))
+                throw new SyntaxException($"{name} does not take RECURSIVE; only DELETE DIRECTORY and DELETE DIRECTORY_CONTENTS do.", startToken.Line, startToken.Column);
         }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-        return new DirectoryOperationStatement(type, path, extra, overwrite, recursive, password, keyFile, pgpKey, ifExists, connectionName) { Line = startToken.Line, Column = startToken.Column };
+        return new DirectoryOperationStatement(type, path, extra, overwrite, recursive, password, keyFile, pgpKey, ifExists, connectionName)
+        {
+            Format = format,
+            Pattern = pattern,
+            Line = startToken.Line,
+            Column = startToken.Column
+        };
 
     }
 
@@ -1002,8 +1049,12 @@ public class ExtensionParser : ParserComponent
     {
         Consume(TokenType.DIRECTORY, "Expected DIRECTORY after SYNC");
         var source = ParseExpression();
+        string? sourceConn = null;
+        if (Match(TokenType.AT)) sourceConn = ConsumeIdentifier("Expected connection name after AT").Value;
         Consume(TokenType.TO, "Expected TO after source directory path");
         var destination = ParseExpression();
+        string? destConn = null;
+        if (Match(TokenType.AT)) destConn = ConsumeIdentifier("Expected connection name after AT").Value;
 
         Expression? deleteExtra = null;
         Expression? overwrite = null;
@@ -1017,14 +1068,81 @@ public class ExtensionParser : ParserComponent
             recursive = options.GetValueOrDefault("RECURSIVE");
         }
 
+        if (destConn == null && sourceConn == null && Match(TokenType.AT))
+            destConn = ConsumeIdentifier("Expected connection name after AT").Value;
+
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-        return new SyncDirectoryStatement(source, destination, deleteExtra, overwrite, recursive) { Line = startToken.Line, Column = startToken.Column };
+        return new SyncDirectoryStatement(source, destination, deleteExtra, overwrite, recursive, sourceConn, destConn) { Line = startToken.Line, Column = startToken.Column };
+    }
+
+    public Statement ParseVerifyFile(Token startToken)
+    {
+        Consume(TokenType.FILE, "Expected FILE after VERIFY");
+        if (Match(TokenType.INTEGRITY))
+            return ParseVerifyFileIntegrityBody(startToken);
+        if (MatchIdentifier("SIGNATURE"))
+            return ParseVerifyFileSignatureBody(startToken);
+
+        throw new SyntaxException("Expected INTEGRITY or SIGNATURE after VERIFY FILE", _parser.Current.Line, _parser.Current.Column);
+    }
+
+    private Statement ParseVerifyFileSignatureBody(Token startToken)
+    {
+        var source = ParseExpression();
+        Expression? signatureFile = null;
+        Expression? pgpKey = null;
+
+        while (true)
+        {
+            if (MatchIdentifier("SIGNATURE"))
+            {
+                signatureFile = ParseExpression();
+            }
+            else if (Match(TokenType.PGP_KEY))
+            {
+                pgpKey = ParseExpression();
+            }
+            else if (Match(TokenType.PASSWORD) || Match(TokenType.KEYFILE)
+                || MatchIdentifier("SIGNING_KEY") || MatchIdentifier("SIGNING_PASSWORD") || MatchIdentifier("VERIFY_KEY"))
+            {
+                throw new SyntaxException(
+                    $"VERIFY FILE SIGNATURE takes PGP_KEY (the sender's OpenPGP public key) and optional SIGNATURE '<path>', not {_parser.Previous.Value.ToUpperInvariant()}.",
+                    startToken.Line, startToken.Column);
+            }
+            else if (Match(TokenType.WITH))
+            {
+                throw new SyntaxException("VERIFY FILE SIGNATURE does not take a WITH clause.", startToken.Line, startToken.Column);
+            }
+            else if (Match(TokenType.LF) || Match(TokenType.CR) || Match(TokenType.CRLF))
+            {
+                continue;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        if (pgpKey == null)
+            throw new SyntaxException("VERIFY FILE SIGNATURE requires a PGP_KEY clause pointing to the sender's OpenPGP public key.", startToken.Line, startToken.Column);
+
+        if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+        return new FileOperationStatement(FileOpType.VerifySignature, source, destination: signatureFile, pgpKey: pgpKey)
+        {
+            Line = startToken.Line,
+            Column = startToken.Column
+        };
     }
 
     public Statement ParseVerifyFileIntegrity(Token startToken)
     {
         Consume(TokenType.FILE, "Expected FILE after VERIFY");
         Consume(TokenType.INTEGRITY, "Expected INTEGRITY after VERIFY FILE");
+        return ParseVerifyFileIntegrityBody(startToken);
+    }
+
+    private Statement ParseVerifyFileIntegrityBody(Token startToken)
+    {
         var source = ParseExpression();
 
         Expression? hashFile = null;

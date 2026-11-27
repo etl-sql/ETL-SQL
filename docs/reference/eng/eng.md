@@ -15,6 +15,7 @@ WHERE predicate;
 - **eng.connections** - Active session connections.
 - **eng.tables** - Tables exposed by active connections.
 - **eng.columns** - Column metadata for session and connection tables.
+- **eng.datasets** - Datasets visible to the caller.
 - **eng.variables** - Session variables with sensitive values masked.
 - **eng.views** - Session view definitions.
 - **eng.version** - Engine version metadata.

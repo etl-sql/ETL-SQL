@@ -12,6 +12,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Services;
 
 namespace ETL_SQL.Engine.Storage;
@@ -55,8 +56,9 @@ public sealed class ConnectionsDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
@@ -116,8 +118,9 @@ public sealed class TablesDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
@@ -171,8 +174,9 @@ public sealed class ViewsDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
@@ -250,8 +254,9 @@ public sealed class VariablesDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
@@ -373,8 +378,9 @@ public sealed class SafeZonesDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
@@ -483,8 +489,9 @@ public sealed class ProfileDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
@@ -543,8 +550,9 @@ public sealed class ConnectionConfigDataSource : IDataSource
             }
         }
 
-        if (rows.Count > 0)
-            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+        // Always emit the final batch, even when empty: it carries the schema, so
+        // SELECT * on an empty catalog view still returns its columns.
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
@@ -552,6 +560,87 @@ public sealed class ConnectionConfigDataSource : IDataSource
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
         throw new NotSupportedException("eng.connection_config is read-only.");
+
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+/// <summary>
+/// eng.datasets: the datasets the caller can see, from the Portal registry when one is attached and
+/// otherwise the datasets created in this session. It replaces the retired SHOW DATASETS.
+/// </summary>
+public sealed class DatasetsDataSource : IDataSource
+{
+    private readonly Evaluator _evaluator;
+    private static readonly string[] Columns =
+        ["name", "folder_path", "access_level", "row_count", "last_refresh", "is_stale", "refresh_interval", "ttl"];
+
+    public DatasetsDataSource(Evaluator evaluator)
+    {
+        _evaluator = evaluator;
+    }
+
+    public string Path => "eng.datasets";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+        ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(
+        int batchSize,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        if (_evaluator.DatasetRegistry is { } registry)
+        {
+            foreach (var ds in await registry.ListAll(_evaluator.DatasetCallerContext ?? ""))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(new Row
+                {
+                    ["name"] = ds.Name,
+                    ["folder_path"] = ds.FolderPath,
+                    ["access_level"] = ds.AccessLevel.ToString(),
+                    ["row_count"] = ds.RowCount,
+                    ["last_refresh"] = ds.LastRefresh?.ToString("o"),
+                    ["is_stale"] = ShowDatasetsStatementHandler.IsStale(ds) ? "1" : "0",
+                    ["refresh_interval"] = ds.RefreshInterval,
+                    ["ttl"] = ds.Ttl
+                });
+            }
+        }
+        else
+        {
+            var folder = System.IO.Path.GetDirectoryName(_evaluator.CurrentScriptPath) ?? "";
+            foreach (var (name, definition) in _evaluator.ReportContext.DatasetDefinitions.OrderBy(d => d.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(new Row
+                {
+                    ["name"] = name,
+                    ["folder_path"] = folder,
+                    ["access_level"] = DatasetAccessLevel.Private.ToString(),
+                    ["row_count"] = null,
+                    ["last_refresh"] = null,
+                    ["is_stale"] = "0",
+                    ["refresh_interval"] = definition.RefreshInterval,
+                    ["ttl"] = definition.Ttl
+                });
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+        WriteBatches(batches, append, CancellationToken.None);
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("eng.datasets is read-only.");
 
     public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
     public object? Snapshot() => null;
@@ -584,9 +673,9 @@ public sealed class JobsDataSource : IDataSource
                 rows.Add(new Row
                 {
                     ["name"] = job.Name,
-                    ["schedule"] = $"EVERY {job.Interval} {job.Unit}" + (job.AtTime != null ? $" AT {job.AtTime}" : ""),
+                    ["schedule"] = job.ScheduleLabel,
                     ["last_run"] = job.LastRun,
-                    ["next_run"] = job.NextRun,
+                    ["next_run"] = job.DisplayNextRun,
                     ["script"] = job.Script,
                     ["enabled"] = job.IsEnabled ? 1 : 0
                 });
@@ -1035,9 +1124,14 @@ public sealed class HostMetricsDataSource : IDataSource
 public sealed class BundlesDataSource : IDataSource
 {
     private readonly IBundleStore? _store;
+    private readonly IExecutionContext? _context;
     private static readonly string[] Columns = ["bundle_name", "version", "entry_path", "content_hash", "published_at", "publisher", "description"];
 
-    public BundlesDataSource(IBundleStore? store) => _store = store;
+    public BundlesDataSource(IBundleStore? store, IExecutionContext? context = null)
+    {
+        _store = store;
+        _context = context;
+    }
 
     public string Path => "eng.bundles";
     public Dictionary<string, string>? Options => null;
@@ -1048,9 +1142,9 @@ public sealed class BundlesDataSource : IDataSource
     public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var rows = new List<Row>();
-        if (_store != null)
+        if (BundleStoreAccessor.HasStore(_store, _context))
         {
-            foreach (var bundle in await _store.GetBundlesAsync())
+            foreach (var bundle in await BundleStoreAccessor.GetBundlesAsync(_store, _context))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 AddBundleVersionRow(rows, bundle);
@@ -1093,13 +1187,19 @@ public sealed class BundleFilesDataSource : IDataSource
     private readonly IBundleStore? _store;
     private readonly string? _filterBundle;
     private readonly int? _filterVersion;
+    private readonly IExecutionContext? _context;
     private static readonly string[] Columns = ["bundle_name", "version", "virtual_path", "content_hash", "size_bytes", "content_type"];
 
-    public BundleFilesDataSource(IBundleStore? store, string? filterBundle = null, int? filterVersion = null)
+    public BundleFilesDataSource(
+        IBundleStore? store,
+        string? filterBundle = null,
+        int? filterVersion = null,
+        IExecutionContext? context = null)
     {
         _store = store;
         _filterBundle = filterBundle;
         _filterVersion = filterVersion;
+        _context = context;
     }
 
     public string Path => "eng.bundle_files";
@@ -1111,13 +1211,13 @@ public sealed class BundleFilesDataSource : IDataSource
     public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var rows = new List<Row>();
-        if (_store != null)
+        if (BundleStoreAccessor.HasStore(_store, _context))
         {
             if (_filterBundle != null)
             {
                 if (_filterVersion.HasValue)
                 {
-                    foreach (var file in await _store.GetFilesAsync(_filterBundle, _filterVersion.Value))
+                    foreach (var file in await BundleStoreAccessor.GetFilesAsync(_store, _context, _filterBundle, _filterVersion.Value))
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         rows.Add(new Row
@@ -1139,8 +1239,8 @@ public sealed class BundleFilesDataSource : IDataSource
                 }
                 else
                 {
-                    foreach (var version in await _store.GetVersionsAsync(_filterBundle))
-                        foreach (var file in await _store.GetFilesAsync(version.BundleName, version.Version))
+                    foreach (var version in await BundleStoreAccessor.GetVersionsAsync(_store, _context, _filterBundle))
+                        foreach (var file in await BundleStoreAccessor.GetFilesAsync(_store, _context, version.BundleName, version.Version))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                             rows.Add(new Row
@@ -1163,9 +1263,9 @@ public sealed class BundleFilesDataSource : IDataSource
             }
             else
             {
-                foreach (var bundle in await _store.GetBundlesAsync())
-                    foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
-                        foreach (var file in await _store.GetFilesAsync(version.BundleName, version.Version))
+                foreach (var bundle in await BundleStoreAccessor.GetBundlesAsync(_store, _context))
+                    foreach (var version in await BundleStoreAccessor.GetVersionsAsync(_store, _context, bundle.BundleName))
+                        foreach (var file in await BundleStoreAccessor.GetFilesAsync(_store, _context, version.BundleName, version.Version))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                             rows.Add(new Row
@@ -1204,13 +1304,19 @@ public sealed class BundleDependenciesDataSource : IDataSource
     private readonly IBundleStore? _store;
     private readonly string? _filterBundle;
     private readonly int? _filterVersion;
+    private readonly IExecutionContext? _context;
     private static readonly string[] Columns = ["bundle_name", "version", "from_path", "to_path"];
 
-    public BundleDependenciesDataSource(IBundleStore? store, string? filterBundle = null, int? filterVersion = null)
+    public BundleDependenciesDataSource(
+        IBundleStore? store,
+        string? filterBundle = null,
+        int? filterVersion = null,
+        IExecutionContext? context = null)
     {
         _store = store;
         _filterBundle = filterBundle;
         _filterVersion = filterVersion;
+        _context = context;
     }
 
     public string Path => "eng.bundle_dependencies";
@@ -1222,13 +1328,13 @@ public sealed class BundleDependenciesDataSource : IDataSource
     public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var rows = new List<Row>();
-        if (_store != null)
+        if (BundleStoreAccessor.HasStore(_store, _context))
         {
             if (_filterBundle != null)
             {
                 if (_filterVersion.HasValue)
                 {
-                    foreach (var dependency in await _store.GetDependenciesAsync(_filterBundle, _filterVersion.Value))
+                    foreach (var dependency in await BundleStoreAccessor.GetDependenciesAsync(_store, _context, _filterBundle, _filterVersion.Value))
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         rows.Add(new Row
@@ -1248,8 +1354,8 @@ public sealed class BundleDependenciesDataSource : IDataSource
                 }
                 else
                 {
-                    foreach (var version in await _store.GetVersionsAsync(_filterBundle))
-                        foreach (var dependency in await _store.GetDependenciesAsync(version.BundleName, version.Version))
+                    foreach (var version in await BundleStoreAccessor.GetVersionsAsync(_store, _context, _filterBundle))
+                        foreach (var dependency in await BundleStoreAccessor.GetDependenciesAsync(_store, _context, version.BundleName, version.Version))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                             rows.Add(new Row
@@ -1270,9 +1376,9 @@ public sealed class BundleDependenciesDataSource : IDataSource
             }
             else
             {
-                foreach (var bundle in await _store.GetBundlesAsync())
-                    foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
-                        foreach (var dependency in await _store.GetDependenciesAsync(version.BundleName, version.Version))
+                foreach (var bundle in await BundleStoreAccessor.GetBundlesAsync(_store, _context))
+                    foreach (var version in await BundleStoreAccessor.GetVersionsAsync(_store, _context, bundle.BundleName))
+                        foreach (var dependency in await BundleStoreAccessor.GetDependenciesAsync(_store, _context, version.BundleName, version.Version))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                             rows.Add(new Row

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
@@ -13,15 +14,38 @@ using MongoDB.Driver;
 
 namespace ETL_SQL.Connectors.Mongodb
 {
-    public class MongodbDataSource : IDataSource
+    public class MongodbDataSource : IDatabaseSource
     {
         private string _connectionString;
         private readonly string _databaseName;
         private readonly string? _tableName;
         private readonly Dictionary<string, string>? _options;
+        private readonly IReadOnlyList<string> _keyColumns;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private IMongoClient? _client;
+
+        internal static IReadOnlyList<string> ParseKeyColumns(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                throw new ExecutionException("MONGODB KEY_COLUMNS must be a non-empty comma-separated list of column names.");
+
+            var parts = raw.Split(',');
+            var result = new List<string>(parts.Length);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var part in parts)
+            {
+                var trimmed = part.Trim();
+                if (string.IsNullOrEmpty(trimmed))
+                    throw new ExecutionException("MONGODB KEY_COLUMNS contains an empty column name.");
+
+                if (seen.Add(trimmed))
+                    result.Add(trimmed);
+            }
+
+            return result;
+        }
 
         public MongodbDataSource(IExecutionContext context, string connectionString, string databaseName, string? tableName = null, Dictionary<string, string>? options = null, IMongoClient? client = null)
         {
@@ -29,6 +53,9 @@ namespace ETL_SQL.Connectors.Mongodb
             _logger = context.Logger;
             _tableName = tableName;
             _options = options;
+            _keyColumns = options != null && options.TryGetValue("KEY_COLUMNS", out var rawKeys)
+                ? ParseKeyColumns(rawKeys)
+                : Array.Empty<string>();
             _client = client;
             _databaseName = databaseName;
 
@@ -50,6 +77,286 @@ namespace ETL_SQL.Connectors.Mongodb
         public string Path => _tableName ?? _databaseName;
         public Dictionary<string, string>? Options => _options;
         public string ConnectorType => "MONGODB";
+        public string ConnectionString => _connectionString;
+        public string Dialect => "MONGODB";
+        public bool SupportsSqlPushdown => false;
+
+        public HashSet<string> GetSupportedFunctions() => new();
+
+        public Task<string> GetVersionAsync() =>
+            new MongodbConnector().GetVersionAsync(_context!, _connectionString);
+
+        public Task<IEnumerable<string>> GetViewsAsync() =>
+            Task.FromResult<IEnumerable<string>>(Array.Empty<string>());
+
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) =>
+            WithTable(tableName).GetColumnsAsync();
+
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken) =>
+            WithTable(tableName).GetColumnsAsync(cancellationToken);
+
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
+
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ExecuteRawSqlCore(sql, cancellationToken),
+                "MongoDB",
+                ShouldWrapProviderException);
+
+        private sealed record ParsedMongoCommand(
+            string Collection,
+            BsonDocument? Filter,
+            BsonDocument? Projection,
+            BsonDocument? Sort,
+            int? Limit,
+            int? Skip,
+            IReadOnlyList<BsonDocument>? Pipeline);
+
+        private static readonly HashSet<string> AllowedTopLevelKeys = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "collection", "filter", "pipeline", "projection", "sort", "limit", "skip"
+        };
+
+        // $out and $merge write; $where, $function and $accumulator run server-side JavaScript.
+        // Checked anywhere in the command (filter, projection, sort, nested pipeline stages).
+        private static readonly HashSet<string> ForbiddenOperators = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "$out", "$merge", "$where", "$function", "$accumulator"
+        };
+
+        private ParsedMongoCommand ParseAndValidateCommand(string commandJson)
+        {
+            if (string.IsNullOrWhiteSpace(commandJson))
+                throw new ExecutionException("MongoDB EXECUTE command cannot be empty.");
+
+            // DROP TABLE, CREATE TABLE, ALTER TABLE and similar statements reach a MONGODB connection as
+            // generated SQL text. Say so plainly instead of reporting a JSON parse position.
+            if (commandJson.TrimStart()[0] != '{')
+                throw new ExecutionException(
+                    "MONGODB connections do not run SQL. Use EXECUTE <connection> BEGIN { ... } END with a JSON " +
+                    "find (collection + filter) or aggregate (collection + pipeline) command.");
+
+            JsonDocument doc;
+            try
+            {
+                doc = JsonDocument.Parse(commandJson);
+            }
+            catch (JsonException ex)
+            {
+                long line = (ex.LineNumber ?? 0) + 1;
+                long col = (ex.BytePositionInLine ?? 0) + 1;
+                throw new ExecutionException($"Invalid MongoDB EXECUTE JSON at line {line}, column {col}.");
+            }
+
+            using (doc)
+            {
+                if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                    throw new ExecutionException("MongoDB EXECUTE command must be a JSON object.");
+
+                RejectForbiddenOperatorsRecursive(doc.RootElement);
+
+                string? collection = null;
+                JsonElement? filterElem = null;
+                JsonElement? pipelineElem = null;
+                JsonElement? projectionElem = null;
+                JsonElement? sortElem = null;
+                int? limit = null;
+                int? skip = null;
+
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    if (!AllowedTopLevelKeys.Contains(prop.Name))
+                    {
+                        throw new ExecutionException(
+                            $"MongoDB EXECUTE pass-through is read-only and does not allow key '{prop.Name}'. " +
+                            "Allowed keys: collection, filter, pipeline, projection, sort, limit, skip.");
+                    }
+
+                    switch (prop.Name.ToLowerInvariant())
+                    {
+                        case "collection":
+                            if (prop.Value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(prop.Value.GetString()))
+                                throw new ExecutionException("MongoDB EXECUTE 'collection' must be a non-empty string.");
+                            collection = prop.Value.GetString()!.Trim();
+                            break;
+
+                        case "filter":
+                            if (prop.Value.ValueKind != JsonValueKind.Object)
+                                throw new ExecutionException("MongoDB EXECUTE 'filter' must be a JSON object.");
+                            filterElem = prop.Value;
+                            break;
+
+                        case "pipeline":
+                            if (prop.Value.ValueKind != JsonValueKind.Array)
+                                throw new ExecutionException("MongoDB EXECUTE 'pipeline' must be a JSON array of stage objects.");
+                            pipelineElem = prop.Value;
+                            break;
+
+                        case "projection":
+                            if (prop.Value.ValueKind != JsonValueKind.Object)
+                                throw new ExecutionException("MongoDB EXECUTE 'projection' must be a JSON object.");
+                            projectionElem = prop.Value;
+                            break;
+
+                        case "sort":
+                            if (prop.Value.ValueKind != JsonValueKind.Object)
+                                throw new ExecutionException("MongoDB EXECUTE 'sort' must be a JSON object.");
+                            sortElem = prop.Value;
+                            break;
+
+                        case "limit":
+                            if (prop.Value.ValueKind != JsonValueKind.Number || !prop.Value.TryGetInt32(out var lim) || lim <= 0)
+                                throw new ExecutionException("MongoDB EXECUTE 'limit' must be a positive integer.");
+                            limit = lim;
+                            break;
+
+                        case "skip":
+                            if (prop.Value.ValueKind != JsonValueKind.Number || !prop.Value.TryGetInt32(out var sk) || sk < 0)
+                                throw new ExecutionException("MongoDB EXECUTE 'skip' must be a non-negative integer.");
+                            skip = sk;
+                            break;
+                    }
+                }
+
+                collection ??= _tableName;
+                if (string.IsNullOrWhiteSpace(collection))
+                    throw new ExecutionException("MongoDB EXECUTE command must specify 'collection' (or set COLLECTION on the connection).");
+
+                if (filterElem.HasValue && pipelineElem.HasValue)
+                    throw new ExecutionException("MongoDB EXECUTE command cannot specify both 'filter' and 'pipeline'.");
+
+                if (!filterElem.HasValue && !pipelineElem.HasValue)
+                    throw new ExecutionException("MongoDB EXECUTE command must specify either 'filter' or 'pipeline'.");
+
+                if (pipelineElem.HasValue)
+                {
+                    if (projectionElem.HasValue || sortElem.HasValue || limit.HasValue || skip.HasValue)
+                        throw new ExecutionException("MongoDB EXECUTE 'projection', 'sort', 'limit', and 'skip' are only valid with 'filter'; use pipeline stages instead.");
+
+                    var stages = new List<BsonDocument>();
+                    foreach (var stage in pipelineElem.Value.EnumerateArray())
+                    {
+                        if (stage.ValueKind != JsonValueKind.Object)
+                            throw new ExecutionException("Each stage in MongoDB EXECUTE 'pipeline' must be a JSON object.");
+
+                        stages.Add(BsonDocument.Parse(stage.GetRawText()));
+                    }
+
+                    return new ParsedMongoCommand(collection, null, null, null, null, null, stages);
+                }
+
+                var filterDoc = BsonDocument.Parse(filterElem!.Value.GetRawText());
+                var projectionDoc = projectionElem.HasValue ? BsonDocument.Parse(projectionElem.Value.GetRawText()) : null;
+                var sortDoc = sortElem.HasValue ? BsonDocument.Parse(sortElem.Value.GetRawText()) : null;
+
+                return new ParsedMongoCommand(collection, filterDoc, projectionDoc, sortDoc, limit, skip, null);
+            }
+        }
+
+        private static void RejectForbiddenOperatorsRecursive(JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in element.EnumerateObject())
+                {
+                    if (ForbiddenOperators.Contains(prop.Name))
+                    {
+                        throw new ExecutionException(
+                            $"MongoDB EXECUTE pass-through is read-only and runs no server-side JavaScript; '{prop.Name}' is not allowed.");
+                    }
+
+                    if (prop.Value.ValueKind == JsonValueKind.Object || prop.Value.ValueKind == JsonValueKind.Array)
+                        RejectForbiddenOperatorsRecursive(prop.Value);
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in element.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.Object || item.ValueKind == JsonValueKind.Array)
+                        RejectForbiddenOperatorsRecursive(item);
+                }
+            }
+        }
+
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(
+            string commandJson,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var parsed = ParseAndValidateCommand(commandJson);
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+
+            if (_context != null && _context.IsWhatIf)
+            {
+                string mode = parsed.Pipeline != null ? "aggregate" : "find";
+                _logger.WriteLine($"WHAT IF: Would execute MongoDB {mode} on collection '{parsed.Collection}'.", ConsoleColor.Yellow);
+                yield break;
+            }
+
+            var client = GetClient();
+            var db = client.GetDatabase(_databaseName);
+            var coll = db.GetCollection<BsonDocument>(parsed.Collection);
+
+            IAsyncCursor<BsonDocument> cursor;
+            if (parsed.Pipeline != null)
+            {
+                var pipelineDef = PipelineDefinition<BsonDocument, BsonDocument>.Create(parsed.Pipeline);
+                cursor = await coll.AggregateAsync(pipelineDef, options: null, cancellationToken: effectiveCancellationToken);
+            }
+            else
+            {
+                var findOptions = new FindOptions<BsonDocument>
+                {
+                    Projection = parsed.Projection,
+                    Sort = parsed.Sort,
+                    Limit = parsed.Limit,
+                    Skip = parsed.Skip
+                };
+                cursor = await coll.FindAsync(parsed.Filter!, findOptions, effectiveCancellationToken);
+            }
+
+            // One result table: documents are schemaless, and EXECUTE takes its columns from the first
+            // batch, so a field that first appears in a later batch would be dropped. The handler holds
+            // the whole result in memory anyway; use limit or a $match/$project stage to bound it.
+            var columns = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var rows = new List<Dictionary<string, object?>>();
+
+            using (cursor)
+            {
+                while (await cursor.MoveNextAsync(effectiveCancellationToken))
+                {
+                    foreach (var doc in cursor.Current)
+                    {
+                        var values = new Dictionary<string, object?>(doc.ElementCount, StringComparer.Ordinal);
+                        foreach (var element in doc)
+                        {
+                            if (seen.Add(element.Name)) columns.Add(element.Name);
+                            values[element.Name] = ConvertBsonValue(element.Value);
+                        }
+                        rows.Add(values);
+                    }
+                }
+            }
+
+            if (rows.Count == 0) yield break;
+
+            var result = new DataTable();
+            result.SetColumns(columns);
+            foreach (var values in rows)
+            {
+                var row = result.NewRow();
+                foreach (var col in columns)
+                    row[col] = values.TryGetValue(col, out var val) ? val : null;
+                await result.AddRowAsync(row);
+            }
+
+            yield return result;
+        }
 
         private IMongoClient GetClient()
         {
@@ -176,23 +483,55 @@ namespace ETL_SQL.Connectors.Mongodb
                     await db.DropCollectionAsync(_tableName, effectiveCancellationToken);
                 }
 
+                long rowOrdinal = 0;
                 await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                 {
                     if (batch.Rows.Count == 0) continue;
 
-                    var docs = new List<BsonDocument>();
-                    foreach (var row in batch.Rows)
+                    if (_keyColumns.Count == 0)
                     {
-                        var doc = new BsonDocument();
-                        foreach (var col in batch.ColumnNames)
+                        var docs = new List<BsonDocument>(batch.Rows.Count);
+                        foreach (var row in batch.Rows)
                         {
-                            var val = row[col];
-                            doc[col] = ConvertToBsonValue(val);
+                            var doc = new BsonDocument();
+                            foreach (var col in batch.ColumnNames)
+                            {
+                                doc[col] = ConvertToBsonValue(row[col]);
+                            }
+                            docs.Add(doc);
                         }
-                        docs.Add(doc);
-                    }
 
-                    await coll.InsertManyAsync(docs, options: null, cancellationToken: effectiveCancellationToken);
+                        await coll.InsertManyAsync(docs, options: null, cancellationToken: effectiveCancellationToken);
+                    }
+                    else
+                    {
+                        var resolvedKeys = ResolveBatchKeyColumns(batch.ColumnNames, _keyColumns);
+                        var writes = new List<WriteModel<BsonDocument>>(batch.Rows.Count);
+
+                        foreach (var row in batch.Rows)
+                        {
+                            rowOrdinal++;
+                            var filter = new BsonDocument();
+                            foreach (var keyCol in resolvedKeys)
+                            {
+                                var keyVal = row[keyCol];
+                                if (keyVal == null || keyVal == DBNull.Value)
+                                    throw new ExecutionException($"MongoDB upsert failed at row {rowOrdinal}: key column '{keyCol}' is NULL.");
+
+                                filter[keyCol] = ConvertToBsonValue(keyVal);
+                            }
+
+                            var doc = new BsonDocument();
+                            foreach (var col in batch.ColumnNames)
+                            {
+                                doc[col] = ConvertToBsonValue(row[col]);
+                            }
+
+                            writes.Add(new ReplaceOneModel<BsonDocument>(filter, doc) { IsUpsert = true });
+                        }
+
+                        await coll.BulkWriteAsync(writes, options: null, cancellationToken: effectiveCancellationToken);
+                    }
                 }
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
@@ -300,6 +639,19 @@ namespace ETL_SQL.Connectors.Mongodb
                 }
             }
             return BsonValue.Create(val);
+        }
+
+        private static IReadOnlyList<string> ResolveBatchKeyColumns(IReadOnlyList<string> batchColumns, IReadOnlyList<string> configuredKeys)
+        {
+            var resolved = new List<string>(configuredKeys.Count);
+            foreach (var key in configuredKeys)
+            {
+                var match = batchColumns.FirstOrDefault(c => string.Equals(c, key, StringComparison.OrdinalIgnoreCase));
+                if (match == null)
+                    throw new ExecutionException($"MongoDB upsert failed: KEY_COLUMNS entry '{key}' was not found in the source batch columns.");
+                resolved.Add(match);
+            }
+            return resolved;
         }
 
         private static bool ShouldWrapProviderException(Exception ex) =>

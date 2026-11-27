@@ -1,0 +1,31 @@
+{
+  "kind": "rankedTable",
+  "heading": "Log-Log Response Scaling",
+  "items": [
+    {
+      "label": "10.0",
+      "value": "100.0",
+      "order": 0,
+      "group": "LatencyMs"
+    },
+    {
+      "label": "100.0",
+      "value": "400.0",
+      "order": 1,
+      "group": "LatencyMs"
+    },
+    {
+      "label": "1000.0",
+      "value": "2500.0",
+      "order": 2,
+      "group": "LatencyMs"
+    },
+    {
+      "label": "10000.0",
+      "value": "10000.0",
+      "order": 3,
+      "group": "LatencyMs"
+    }
+  ],
+  "summary": "Log-Log Response Scaling: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

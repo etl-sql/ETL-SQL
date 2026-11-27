@@ -7,12 +7,24 @@ namespace ETL_SQL.Data;
 
 public record FileMetaData
 {
+    public static readonly string[] StandardColumns =
+    {
+        "Name", "FullPath", "Size", "LastModified", "IsDirectory",
+        "CreationTime", "Permissions", "Owner", "IsSymlink"
+    };
+
     public string Name { get; init; } = "";
     public string FullPath { get; init; } = "";
     public long Size { get; init; }
     public DateTime? LastModified { get; init; }
     public bool IsDirectory { get; init; }
+    public DateTime? CreationTime { get; init; }
+    public string? Permissions { get; init; }
+    public string? Owner { get; init; }
+    public bool? IsSymlink { get; init; }
 }
+
+public sealed record RemoteFileVerificationInfo(long Size, string? Md5Hex = null);
 
 public interface IRemoteFileSystem : IAsyncDisposable
 {
@@ -28,6 +40,12 @@ public interface IRemoteFileSystem : IAsyncDisposable
     Task<bool> FileExistsAsync(string remotePath);
     Task<bool> DirectoryExistsAsync(string remotePath);
     Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true);
+    Task CopyFileAsync(string remoteSource, string remoteDest, bool overwrite = true, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException($"Server-side file copy is not supported on {GetType().Name}.");
+    Task RenameDirectoryAsync(string remoteSource, string remoteDest, bool overwrite = true, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException($"Remote directory rename/move is not supported on {GetType().Name}.");
     Task CreateDirectoryAsync(string remotePath);
     Task DeleteDirectoryAsync(string remotePath);
+    Task<RemoteFileVerificationInfo?> GetFileVerificationInfoAsync(string remotePath, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException($"Transfer verification metadata is not supported on {GetType().Name}.");
 }

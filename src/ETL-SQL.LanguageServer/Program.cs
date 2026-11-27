@@ -73,6 +73,7 @@ namespace ETL_SQL.LSP
                         var configuration = new ConfigurationBuilder()
                             .SetBasePath(AppContext.BaseDirectory)
                             .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                            .AddInstallerLayers(AppContext.BaseDirectory)
                             .AddEnterprisePolicy()
                             .Build();
                         services.AddSingleton<IConfiguration>(configuration);
@@ -146,12 +147,15 @@ namespace ETL_SQL.LSP
                             return sec;
                         });
                         services.AddSingleton<ISystemResources, DefaultSystemResources>();
-                        services.AddSingleton<IBufferManager, ETL_SQL.Orchestrator.Execution.BufferManager>();
-                        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BufferManagerOptions()));
+                        services.Configure<BufferManagerOptions>(configuration.GetSection("Orchestration:ResourceManagement"));
+                        services.AddSingleton<ETL_SQL.Orchestrator.Execution.BufferManager>();
+                        services.AddSingleton<IBufferManager>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Execution.BufferManager>());
+                        services.AddSingleton<ETL_SQL.Core.IMemoryGrantArbiter>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Execution.BufferManager>());
                         services.AddSingleton<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>();
                         services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>());
                         services.AddSingleton<IJobCatalogStore>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>());
                         services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>());
+                        services.AddSingleton<ITenantBundleStore>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>());
 
                         services.AddTransient<IReportContext, Engine.Services.ReportRegistry>();
                         services.AddTransient<Engine.Services.EvaluatorComponentRegistry>();

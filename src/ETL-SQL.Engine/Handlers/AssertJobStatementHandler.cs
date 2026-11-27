@@ -40,9 +40,36 @@ public class AssertJobStatementHandler(
 
     public Type SupportedStatementType => typeof(AssertJobStatement);
 
-    public async Task Execute(Statement statement, IExecutionContext context)
+    /// <summary>Rendered alert notification payload shared across local and remote ASSERT JOB delivery.</summary>
+    public sealed record AssertAlertMessage(
+        string NotificationName,
+        string AlertKind,
+        string Title,
+        string Text,
+        string FailedPredicates,
+        string FailingColumns,
+        string Owners,
+        decimal RowsValidated,
+        decimal RowsQuarantined,
+        decimal RowsWarned);
+
+    public async Task Execute(Statement statement, IExecutionContext context) =>
+        await ExecuteWithMetricsProviderAsync(
+            (AssertJobStatement)statement,
+            context,
+            context.JobMetrics,
+            (ctx, st, msg) => SendLocalAlertAsync(ctx, st, msg));
+
+    /// <summary>
+    /// Evaluates <paramref name="stmt"/> using the supplied metrics provider and alert sender,
+    /// allowing remote orchestrator connectors to share the local evaluation and alert-suppression logic.
+    /// </summary>
+    public async Task ExecuteWithMetricsProviderAsync(
+        AssertJobStatement stmt,
+        IExecutionContext context,
+        IJobMetricsProvider? metricsProvider,
+        Func<IExecutionContext, AssertJobStatement, AssertAlertMessage, Task<bool>> sendAlertAsync)
     {
-        var stmt = (AssertJobStatement)statement;
         var report = context.DataQuality;
 
         int historyRuns = ReadOption("Engine:DataQuality:HistoryRuns", DefaultHistoryRuns);
@@ -81,7 +108,7 @@ public class AssertJobStatementHandler(
                 var columnHistoryLimit = predicate.UsesSigma
                     ? Math.Max(historyRuns, minSigmaHistoryRuns)
                     : historyRuns;
-                var columnHistory = await LoadColumnHistoryAsync(context, stmt.JobName, predicate, columnHistoryLimit);
+                var columnHistory = await LoadColumnHistoryAsync(metricsProvider, context, stmt.JobName, predicate, columnHistoryLimit);
                 if (columnHistory is null)
                 {
                     throw new ExecutionException(
@@ -103,7 +130,7 @@ public class AssertJobStatementHandler(
                 var historyLimit = stmt.Predicates.Any(p => p.IsHistorical && p.UsesSigma)
                     ? Math.Max(historyRuns, minSigmaHistoryRuns)
                     : historyRuns;
-                history = await LoadHistoryAsync(context, stmt.JobName, historyLimit);
+                history = await LoadHistoryAsync(metricsProvider, context, stmt.JobName, historyLimit);
                 historyLoaded = true;
             }
 
@@ -130,7 +157,7 @@ public class AssertJobStatementHandler(
         if (failures.Count == 0)
         {
             if (stmt.FailureNotification != null)
-                await HandleAlertTransitionAsync(context, stmt, failed: false, failures, alertRealertHours);
+                await HandleAlertTransitionAsync(context, stmt, metricsProvider, sendAlertAsync, failed: false, failures, alertRealertHours);
 
             logger.Debug("ASSERT JOB {JobName}: all {Count} predicate(s) passed.", stmt.JobName, stmt.Predicates.Count);
             return;
@@ -144,7 +171,7 @@ public class AssertJobStatementHandler(
         // only fires when the run survives is not an alert. Delivery failure keeps its own policy
         // (log and continue) and never decides the run's outcome — only THROW does.
         if (stmt.FailureNotification != null)
-            await HandleAlertTransitionAsync(context, stmt, failed: true, failures, alertRealertHours, summary);
+            await HandleAlertTransitionAsync(context, stmt, metricsProvider, sendAlertAsync, failed: true, failures, alertRealertHours, summary);
 
         if (stmt.ThrowOnFailure)
             throw new ExecutionException(summary, null, stmt.Line, stmt.Column);
@@ -276,18 +303,16 @@ public class AssertJobStatementHandler(
     }
 
     private static async Task<IReadOnlyList<Core.Data.JobRunMetrics>?> LoadHistoryAsync(
-        IExecutionContext context, string jobName, int limit)
+        IJobMetricsProvider? provider, IExecutionContext context, string jobName, int limit)
     {
-        var provider = context.JobMetrics;
         if (provider is null) return null;
         return await provider.GetRecentRunMetricsAsync(
             CatalogStatementSupport.ActingTenant(context), jobName, limit, context.CancellationToken);
     }
 
     private static async Task<IReadOnlyList<Core.Data.ColumnRunMetrics>?> LoadColumnHistoryAsync(
-        IExecutionContext context, string jobName, JobMetricPredicate predicate, int limit)
+        IJobMetricsProvider? provider, IExecutionContext context, string jobName, JobMetricPredicate predicate, int limit)
     {
-        var provider = context.JobMetrics;
         if (provider is null) return null;
         return await provider.GetRecentColumnMetricsAsync(
             CatalogStatementSupport.ActingTenant(context),
@@ -300,19 +325,23 @@ public class AssertJobStatementHandler(
     /// Delivery failure has its own policy (log and continue), independent of ON FAILURE THROW:
     /// a broken alerting channel must not decide whether the run fails.
     /// </summary>
-    private async Task HandleAlertTransitionAsync(
+    private static async Task HandleAlertTransitionAsync(
         IExecutionContext context,
         AssertJobStatement stmt,
+        IJobMetricsProvider? provider,
+        Func<IExecutionContext, AssertJobStatement, AssertAlertMessage, Task<bool>> sendAlertAsync,
         bool failed,
         List<string> failures,
         int alertRealertHours,
         string? failureSummary = null)
     {
-        var provider = context.JobMetrics;
         if (provider is null)
         {
             if (failed)
-                await SendAlertAsync(context, stmt, "FAILURE", failures, failureSummary!);
+            {
+                var payload = BuildAlertMessage(context, stmt, "FAILURE", failures, failureSummary!);
+                await sendAlertAsync(context, stmt, payload);
+            }
             return;
         }
 
@@ -331,13 +360,13 @@ public class AssertJobStatementHandler(
 
             if (shouldAlert)
             {
-                deliveredFailure = await SendAlertAsync(context, stmt, "FAILURE", failures, failureSummary!);
+                var payload = BuildAlertMessage(context, stmt, "FAILURE", failures, failureSummary!);
+                deliveredFailure = await sendAlertAsync(context, stmt, payload);
             }
             else if (prior?.LastFailureAlertedAtUtc is DateTimeOffset lastAlerted)
             {
                 var message = $"ASSERT JOB {stmt.JobName}: suppressing repeated alert for {stmt.Predicates.Count} predicate(s); " +
                     $"last failure alert was {lastAlerted:O}.";
-                logger.Info("{AssertJobAlertSuppressed}", message);
                 context.Log(message, ConsoleColor.Yellow);
             }
 
@@ -356,7 +385,8 @@ public class AssertJobStatementHandler(
         if (prior?.LastFailed == true)
         {
             var summary = $"ASSERT JOB {stmt.JobName} recovered: all {stmt.Predicates.Count} predicate(s) passed.";
-            await SendAlertAsync(context, stmt, "RECOVERY", [], summary);
+            var payload = BuildAlertMessage(context, stmt, "RECOVERY", [], summary);
+            await sendAlertAsync(context, stmt, payload);
         }
 
         await provider.SaveAssertJobAlertStateAsync(
@@ -370,12 +400,54 @@ public class AssertJobStatementHandler(
             context.CancellationToken);
     }
 
-    private async Task<bool> SendAlertAsync(
+    private static AssertAlertMessage BuildAlertMessage(
         IExecutionContext context,
         AssertJobStatement stmt,
         string alertKind,
         List<string> failures,
         string summary)
+    {
+        var report = context.DataQuality;
+        var title = alertKind.Equals("RECOVERY", StringComparison.OrdinalIgnoreCase)
+            ? $"Data quality recovery: {stmt.JobName}"
+            : $"Data quality alert: {stmt.JobName}";
+
+        // Name the columns that actually failed and who owns them, so the alert reaches
+        // someone who can act rather than only stating that a threshold moved. Column names
+        // and stewards only — never sample values, which may be PII.
+        var failingColumns = report.Failures
+            .Select(f => f.Column)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(c => c, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var owners = report.Failures
+            .Where(f => !string.IsNullOrWhiteSpace(f.Owner))
+            .Select(f => f.Owner!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(o => o, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var text = owners.Count > 0
+            ? $"{summary} Owner(s): {string.Join(", ", owners)}."
+            : summary;
+
+        return new AssertAlertMessage(
+            NotificationName: stmt.FailureNotification!,
+            AlertKind: alertKind,
+            Title: title,
+            Text: text,
+            FailedPredicates: string.Join("; ", failures),
+            FailingColumns: string.Join(", ", failingColumns),
+            Owners: string.Join(", ", owners),
+            RowsValidated: report.RowsValidated,
+            RowsQuarantined: report.RowsQuarantined,
+            RowsWarned: report.RowsWarned);
+    }
+
+    private async Task<bool> SendLocalAlertAsync(
+        IExecutionContext context,
+        AssertJobStatement stmt,
+        AssertAlertMessage message)
     {
         var notification = await ResolveFailureNotificationAsync(stmt, CatalogStatementSupport.ActingTenant(context));
         if (notification is null) return false;
@@ -390,42 +462,21 @@ public class AssertJobStatementHandler(
                 return false;
             }
 
-            var report = context.DataQuality;
             var table = new DataTable();
             table.SetColumns(["Title", "Text", "JobName", "AlertKind", "FailedPredicates",
                 "RowsValidated", "RowsQuarantined", "RowsWarned", "Owners", "FailingColumns", "Recipient"]);
             var row = table.NewRow();
-            row["Title"] = alertKind.Equals("RECOVERY", StringComparison.OrdinalIgnoreCase)
-                ? $"Data quality recovery: {stmt.JobName}"
-                : $"Data quality alert: {stmt.JobName}";
-            row["Text"] = summary;
+            row["Title"] = message.Title;
+            row["Text"] = message.Text;
             row["JobName"] = stmt.JobName;
-            row["AlertKind"] = alertKind;
-            row["FailedPredicates"] = string.Join("; ", failures);
-            row["RowsValidated"] = (decimal)report.RowsValidated;
-            row["RowsQuarantined"] = (decimal)report.RowsQuarantined;
-            row["RowsWarned"] = (decimal)report.RowsWarned;
-
-            // Name the columns that actually failed and who owns them, so the alert reaches
-            // someone who can act rather than only stating that a threshold moved. Column names
-            // and stewards only — never sample values, which may be PII.
-            var failingColumns = report.Failures
-                .Select(f => f.Column)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(c => c, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            var owners = report.Failures
-                .Where(f => !string.IsNullOrWhiteSpace(f.Owner))
-                .Select(f => f.Owner!)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(o => o, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            row["FailingColumns"] = string.Join(", ", failingColumns);
-            row["Owners"] = string.Join(", ", owners);
+            row["AlertKind"] = message.AlertKind;
+            row["FailedPredicates"] = message.FailedPredicates;
+            row["RowsValidated"] = message.RowsValidated;
+            row["RowsQuarantined"] = message.RowsQuarantined;
+            row["RowsWarned"] = message.RowsWarned;
+            row["FailingColumns"] = message.FailingColumns;
+            row["Owners"] = message.Owners;
             row["Recipient"] = notification.Recipient ?? "";
-            if (owners.Count > 0)
-                row["Text"] = $"{summary} Owner(s): {string.Join(", ", owners)}.";
 
             await table.AddRowAsync(row);
 

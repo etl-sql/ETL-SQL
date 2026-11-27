@@ -10,9 +10,10 @@ import { createTriageController } from '../triage-controller.js';
 import { activityQuery } from '../orchestrator-activity.js';
 import type { ActivityRequest } from '../orchestrator-activity.js';
 import { createScheduledJobActivityCoordinator } from '../orchestrator-activity-coordinator.js';
-import { renderScheduledJobsTable } from '../orchestrator-job-table.js';
+import { renderScheduledJobsTable, studioDocumentHref } from '../orchestrator-job-table.js';
+import { escHtml, renderFleetNodesHtml, renderSandboxPoolsHtml } from '../orchestrator-admin-ui.js';
 import { createJobActionController, createJobRunDialog, jobVersion, requireMutationStatus } from '../orchestrator-job-actions.js';
-import { createNotificationCatalog, createScheduleCatalog } from '../orchestrator-catalogs.js';
+import { createCatalogAccessDialog, createNotificationCatalog, createScheduleCatalog } from '../orchestrator-catalogs.js';
 import { readCatalogJson } from '../orchestrator-catalog-responses.js';
 import { createJobDetail } from '../orchestrator-job-detail.js';
 import { createJobDialog } from '../orchestrator-create-job.js';
@@ -23,8 +24,8 @@ import { createUnownedDialog } from '../orchestrator-unowned.js';
  * Page owner for orchestrator.html: checks who may be here, then composes the job list, timeline,
  * triage board, catalogs, detail panel, and dialogs, and takes them all down when the page is left.
  */
-type View = 'jobs' | 'schedules' | 'notifications';
-const VIEWS: View[] = ['jobs', 'schedules', 'notifications'];
+type View = 'jobs' | 'schedules' | 'notifications' | 'fleet';
+const VIEWS: View[] = ['jobs', 'schedules', 'notifications', 'fleet'];
 const job = (name: string) => `/api/orchestrator/jobs/${encodeURIComponent(name)}`;
 
 function mountOrchestratorPage(): void {
@@ -68,12 +69,72 @@ function mountOrchestratorPage(): void {
 
     // ── Jobs: list, actions, timeline, detail ──────────────────────────────────
     let catalogJobs: JobDefinition[] = [], visibleJobs: JobDefinition[] = [];
+    let catalogPipelines: CatalogPipelineLinkDto[] = [];
+    let externalScriptIngressEnabled = true;
+    const catalogPipelinesByJob = new Map<string, CatalogPipelineLinkDto>();
     const findJob = (name: string | null | undefined) =>
         visibleJobs.find(item => item.name === name) ?? catalogJobs.find(item => item.name === name) ?? null;
+    const findCatalogPipeline = (name: string | null | undefined) =>
+        name ? (catalogPipelinesByJob.get(name) ?? null) : null;
     const jobsWrap = box('jobsTableWrap');
+    const pendingPipelinesCard = box('pendingPipelinesCard');
+    const pendingPipelinesList = box('pendingPipelinesList');
+    const pendingPipelinesCount = box('pendingPipelinesCount');
+
+    function renderPendingPipelines() {
+        if (!isManager) {
+            pendingPipelinesCard.style.display = 'none';
+            pendingPipelinesList.replaceChildren();
+            return;
+        }
+        const pending = catalogPipelines.filter(item => !item.isProvisioned);
+        pendingPipelinesCount.textContent = String(pending.length);
+        if (!pending.length) {
+            pendingPipelinesCard.style.display = 'none';
+            pendingPipelinesList.replaceChildren();
+            return;
+        }
+        pendingPipelinesCard.style.display = '';
+        pendingPipelinesList.innerHTML = pending.map(item => `<div class="orch-pending-pipeline-row">
+            <div>
+              <strong>${escHtml(item.name)}</strong>
+              <span class="badge" style="font-size:.75em;margin-left:6px;background:var(--portal-surface-subtle)">📁 ${escHtml(item.folderPath)}</span>
+              <span class="orch-link-meta" style="margin-left:6px;">${escHtml(item.jobName)}${item.ownerDisplayName ? ` · Owner: ${escHtml(item.ownerDisplayName)}` : ''}</span>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+              <a class="btn btn-sm btn-outline" href="${escHtml(studioDocumentHref(item.pipelineId))}">Open in Studio ↗</a>
+              <button class="btn btn-sm btn-primary" type="button" data-provision-pipeline="${item.pipelineId}">Provision &amp; Grant EXECUTE</button>
+            </div>
+          </div>`).join('');
+    }
+
+    async function loadPipelineCatalog(): Promise<void> {
+        try {
+            const raw = await readJson('/api/orchestrator/pipelines/catalog', lifetime.signal);
+            if (lifetime.signal.aborted || !Array.isArray(raw)) return;
+            const parsed: CatalogPipelineLinkDto[] = [];
+            for (const entry of raw) {
+                if (isObject(entry) && typeof entry.pipelineId === 'number' && typeof entry.jobName === 'string'
+                    && typeof entry.name === 'string' && typeof entry.folderPath === 'string') {
+                    parsed.push(entry as unknown as CatalogPipelineLinkDto);
+                }
+            }
+            catalogPipelines = parsed;
+            catalogPipelinesByJob.clear();
+            for (const item of parsed) catalogPipelinesByJob.set(item.jobName, item);
+            renderPendingPipelines();
+            const open = findOpenJob();
+            if (visibleJobs.length) {
+                jobsWrap.innerHTML = renderScheduledJobsTable(visibleJobs, open?.id, catalogPipelinesByJob);
+            }
+            if (open) detail.refresh(open);
+        } catch {
+            // Non-fatal: table and detail still render Orchestrator-native fields if catalog lookup fails.
+        }
+    }
 
     const detail = createJobDetail({
-        root: document, isAdmin, fetch: apiFetch, notify, confirm: ask, charts, createEditor: createScriptEditor,
+        root: document, isAdmin, isManager, fetch: apiFetch, notify, confirm: ask, charts, createEditor: createScriptEditor,
         renderDag: (container, dag) => {
             if (!isObject(dag) || !Array.isArray(dag.nodes) || !Array.isArray(dag.edges)) throw new TypeError('Invalid job flow response.');
             renderDag(container, dag as Parameters<typeof renderDag>[1]);
@@ -83,7 +144,23 @@ function mountOrchestratorPage(): void {
             for (const row of jobsWrap.querySelectorAll<HTMLElement>('tr.job-row'))
                 row.classList.toggle('selected', name !== null && row.dataset.name === name);
         },
-        sessionExpired
+        sessionExpired,
+        findCatalogPipeline,
+        onPipelineProvisioned: async () => { await Promise.all([loadPipelineCatalog(), activity.refresh()]); },
+        isExternalScriptIngressEnabled: () => externalScriptIngressEnabled,
+        editJob: value => createDialog.openEdit(value),
+        runJob: name => runDialog.open(name),
+        killJob: async name => {
+            try {
+                await requireMutationStatus(await apiFetch(`${job(name)}/kill`, { method: 'POST', signal: lifetime.signal }), 200);
+                if (!lifetime.signal.aborted) {
+                    notify(`Kill signal sent to '${name}'.`);
+                    await activity.refresh();
+                }
+            } catch (failure) {
+                if (!lifetime.signal.aborted) notify(`Error: ${asError(failure).message}`, true);
+            }
+        }
     });
     const timeline = createJobTimeline<JobDefinition>({ root: document, open: detail.open });
 
@@ -94,7 +171,7 @@ function mountOrchestratorPage(): void {
         const open = findOpenJob();
         // The open panel follows the job as each poll reports it, so a later save sends the current version.
         if (open) detail.refresh(open);
-        jobsWrap.innerHTML = renderScheduledJobsTable(visibleJobs, open?.id);
+        jobsWrap.innerHTML = renderScheduledJobsTable(visibleJobs, open?.id, catalogPipelinesByJob);
         if (!focused?.action || !focused.name) return;
         const replacement = Array.from(jobsWrap.querySelectorAll<HTMLElement>('[data-action][data-name]'))
             .find(button => button.dataset.action === focused.action && button.dataset.name === focused.name);
@@ -151,16 +228,69 @@ function mountOrchestratorPage(): void {
         const button = event.target.closest<HTMLButtonElement>('button[data-action]');
         if (button) {
             if (button.dataset.action === 'trigger' && button.dataset.name) runDialog.open(button.dataset.name);
+            else if (button.dataset.action === 'edit' && button.dataset.name) {
+                const target = findJob(button.dataset.name);
+                if (target) createDialog.openEdit(target);
+            }
             else void jobActions.run(button);
             return;
         }
-        if (event.target.closest('button')) return;
+        if (event.target.closest('button, a')) return;
         const selected = findJob(event.target.closest<HTMLElement>('tr.job-row')?.dataset.name);
         if (selected) detail.open(selected);
     }, { signal: lifetime.signal });
-    box('refreshJobsBtn').addEventListener('click', () => { void activity.refresh(); }, { signal: lifetime.signal });
+    pendingPipelinesList.addEventListener('click', async event => {
+        const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-provision-pipeline]') : null;
+        const pipelineId = button ? Number(button.dataset.provisionPipeline) : NaN;
+        if (!button || !Number.isSafeInteger(pipelineId) || pipelineId <= 0 || lifetime.signal.aborted) return;
+        button.disabled = true;
+        try {
+            const response = await apiFetch(`/api/orchestrator/pipelines/${encodeURIComponent(String(pipelineId))}/provision`, {
+                method: 'POST', signal: lifetime.signal
+            });
+            await requireMutationStatus(response, 200);
+            const result = await response.json().catch(() => null) as ProvisionPipelineSlotResultDto | null;
+            if (lifetime.signal.aborted) return;
+            notify(result?.message || `Provisioned Orchestrator run slot PIPELINE:${pipelineId}.`);
+            await Promise.all([loadPipelineCatalog(), activity.refresh()]);
+        } catch (failure) {
+            if (!lifetime.signal.aborted) {
+                notify(`Error: ${asError(failure).message}`, true);
+                button.disabled = false;
+            }
+        }
+    }, { signal: lifetime.signal });
+    box('refreshJobsBtn').addEventListener('click', () => {
+        void loadPipelineCatalog();
+        void activity.refresh();
+    }, { signal: lifetime.signal });
 
-    const createDialog = createJobDialog({ root: document, fetch: apiFetch, notify, sessionExpired, created: () => activity.refresh() });
+    async function loadAuthoringMode(): Promise<void> {
+        try {
+            const raw = await readJson('/api/orchestrator/authoring-mode', lifetime.signal);
+            if (lifetime.signal.aborted || !isObject(raw)) return;
+            if (typeof raw.externalScriptIngressEnabled === 'boolean') {
+                externalScriptIngressEnabled = raw.externalScriptIngressEnabled;
+            }
+        } catch {
+            // Keep default permissive mode only if authoring-mode endpoint is unavailable on an older backend.
+        }
+    }
+
+    const createDialog = createJobDialog({
+        root: document,
+        fetch: apiFetch,
+        notify,
+        sessionExpired,
+        findTarget: name => { const found = findJob(name); return found ? { name, version: found.version } : null; },
+        created: async () => { await Promise.all([loadPipelineCatalog(), activity.refresh()]); },
+        updated: async name => {
+            await activity.refresh();
+            const current = findJob(name);
+            if (current && detail.selectedName === name) detail.refresh(current);
+        },
+        isExternalScriptIngressEnabled: () => externalScriptIngressEnabled
+    });
     const unowned = createUnownedDialog({ root: document, fetch: apiFetch, notify, confirm: ask, sessionExpired,
         changed: async () => {
             await activity.refresh();
@@ -170,7 +300,10 @@ function mountOrchestratorPage(): void {
         } });
 
     // ── Schedule and notification catalogs ─────────────────────────────────────
-    const catalogHost = { root: document, notify, confirm: ask };
+    const catalogAccess = createCatalogAccessDialog({
+        root: document, isAdmin, fetch: apiFetch, notify, confirm: ask, sessionExpired
+    });
+    const catalogHost = { root: document, notify, confirm: ask, openAccess: catalogAccess.open };
     const schedules = createScheduleCatalog(catalogHost, {
         list: signal => readJson('/api/orchestrator/schedules?limit=1000', signal),
         create: (body, signal) => apiFetch('/api/orchestrator/schedules', { method: 'POST', body, signal }),
@@ -185,6 +318,38 @@ function mountOrchestratorPage(): void {
         dispatch: (name, body, signal) => apiFetch(`/api/orchestrator/notifications/${encodeURIComponent(name)}/dispatch`, { method: 'POST', body, signal })
     });
 
+    // ── Nodes & Sandbox Pools ─────────────────────────────────────────────────
+    let fleetGeneration = 0;
+    let fleetReads: AbortController | null = null;
+    async function loadFleet(): Promise<void> {
+        if (lifetime.signal.aborted) return;
+        const current = ++fleetGeneration;
+        fleetReads?.abort();
+        const scope = fleetReads = new AbortController();
+        const nodesWrap = box('fleetNodesWrap');
+        const poolsWrap = box('fleetPoolsWrap');
+        const badge = box('fleetNavCount');
+        try {
+            const raw = await readJson('/api/orchestrator/fleet', scope.signal);
+            if (lifetime.signal.aborted || current !== fleetGeneration) return;
+            if (!isObject(raw) || !Array.isArray(raw.nodes) || !Array.isArray(raw.sandboxPools)) {
+                throw new TypeError('Invalid fleet telemetry response.');
+            }
+            const snapshot = raw as unknown as OrchestratorFleetSnapshotDto;
+            const liveCount = snapshot.nodes.filter(node => node.isLive).length;
+            badge.textContent = String(liveCount);
+            nodesWrap.innerHTML = renderFleetNodesHtml(snapshot.nodes);
+            poolsWrap.innerHTML = renderSandboxPoolsHtml(snapshot.sandboxPools, Boolean(snapshot.sandboxAdmissionEnabled));
+        } catch (failure) {
+            if (lifetime.signal.aborted || current !== fleetGeneration) return;
+            badge.textContent = '—';
+            const alert = `<div class="error-msg show" role="alert">Fleet telemetry is unavailable: ${escHtml(asError(failure).message)}</div>`;
+            nodesWrap.innerHTML = alert;
+            poolsWrap.replaceChildren();
+        }
+    }
+    box('refreshFleetBtn').addEventListener('click', () => { void loadFleet(); }, { signal: lifetime.signal });
+
     function showView(view: View) {
         for (const name of VIEWS) {
             const suffix = name.charAt(0).toUpperCase() + name.slice(1);
@@ -194,6 +359,7 @@ function mountOrchestratorPage(): void {
         }
         if (view === 'schedules') void schedules.load();
         if (view === 'notifications') void notifications.load();
+        if (view === 'fleet') void loadFleet();
     }
     for (const name of VIEWS)
         box(`orchNav${name.charAt(0).toUpperCase() + name.slice(1)}`).addEventListener('click', () => showView(name), { signal: lifetime.signal });
@@ -248,21 +414,25 @@ function mountOrchestratorPage(): void {
     // script and sends the author here; a name that matches nothing leaves the list as it is, since
     // the job may not have been run into existence yet.
     async function start() {
+        await loadAuthoringMode();
+        if (lifetime.signal.aborted) return;
         void activity.poll();
         void triage.reload();
-        // Both catalogs load with the page so their navigation counts are read, not assumed to be zero.
+        // Both catalogs and fleet telemetry load with the page so navigation counts reflect live state.
         void schedules.load();
         void notifications.load();
+        void loadFleet();
         if (isAdmin) void unowned.refreshCount();
-        await activity.refresh();
+        await Promise.all([loadPipelineCatalog(), activity.refresh()]);
         const requested = lifetime.signal.aborted ? null : findJob(new URLSearchParams(location.search).get('job'));
         if (requested) detail.open(requested);
     }
     const statusTimer = setInterval(() => { void activity.poll(); }, 5000);
     window.addEventListener('pagehide', () => {
         clearInterval(statusTimer);
+        fleetReads?.abort();
         lifetime.abort();
-        for (const owner of [jobActions, runDialog, createDialog, unowned, triage, schedules, notifications, detail, timeline, activity])
+        for (const owner of [jobActions, runDialog, createDialog, unowned, triage, catalogAccess, schedules, notifications, detail, timeline, activity])
             owner.dispose();
     }, { once: true });
     // A page restored from the back/forward cache has disposed owners; load it again instead.

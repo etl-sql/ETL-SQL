@@ -46,6 +46,13 @@ param(
     [ValidateRange(1, 32)]
     [int]$EngineShardGroupCount = 1,
 
+    # The same split for the Portal lane: its twelve shards take longer in sequence than one CI
+    # job's budget. The HostedServices process runs in group 1 only.
+    [ValidateRange(1, 32)]
+    [int]$PortalShardGroup = 1,
+    [ValidateRange(1, 32)]
+    [int]$PortalShardGroupCount = 1,
+
     # The integration and timing lanes check the machine first (scripts/Test-Environment.ps1)
     # and stop in seconds when Docker, the ODBC driver, free memory or an idle processor is
     # missing, instead of failing minutes in. CI provisions its runners itself and skips it.
@@ -59,6 +66,12 @@ if ($EngineShardGroup -gt $EngineShardGroupCount -or $EngineShardGroupCount -gt 
 }
 if ($EngineShardGroupCount -gt 1 -and $Lane -notin @('engine', 'spill')) {
     throw 'Engine shard groups are only valid for the engine and spill lanes.'
+}
+if ($PortalShardGroup -gt $PortalShardGroupCount -or $PortalShardGroupCount -gt $PortalShardCount) {
+    throw 'Portal shard groups must partition the configured shard count.'
+}
+if ($PortalShardGroupCount -gt 1 -and $Lane -ne 'portal') {
+    throw 'Portal shard groups are only valid for the portal lane.'
 }
 
 if ($MemoryLimitGB -gt 0) {
@@ -486,26 +499,41 @@ switch ($Lane) {
             } else {
                 Join-Path $repoRoot ("release-validation\engine-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
             }
-            Invoke-ShardedTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $evidenceDir engine -Group $EngineShardGroup -GroupCount $EngineShardGroupCount
+            # Name tests that leave MemoryGrantArbiter.Shared reservations behind (see the spill lane).
+            # Disable the ambient host RAM floor so transient CI runner memory dips do not reject tiny
+            # operator grants in unrelated unit tests; dedicated BufferManager tests verify the floor
+            # deterministically with explicit options and a mock ISystemResources.
+            $previousArbiterTrace = $env:ETLSQL_ARBITER_TRACE_DIR
+            $previousSystemFloor = $env:Orchestration__ResourceManagement__SystemMemoryFloorMB
+            $env:ETLSQL_ARBITER_TRACE_DIR = $evidenceDir
+            $env:Orchestration__ResourceManagement__SystemMemoryFloorMB = "0"
+            try {
+                Invoke-ShardedTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $evidenceDir engine -Group $EngineShardGroup -GroupCount $EngineShardGroupCount
+            } finally {
+                $env:ETLSQL_ARBITER_TRACE_DIR = $previousArbiterTrace
+                $env:Orchestration__ResourceManagement__SystemMemoryFloorMB = $previousSystemFloor
+            }
         } else {
             Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter
         }
     }
     "portal" {
         if ($PortalShardCount -gt 1) {
-            $evidenceDir = if ($CollectCoverage) {
+            $evidenceDir = if ($CollectCoverage -or $ResultsDirectory -ne "coverage") {
                 Join-Path $repoRoot $ResultsDirectory
             } else {
                 Join-Path $repoRoot ("release-validation\portal-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
             }
-            Invoke-ShardedTests "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter $PortalShardCount $evidenceDir portal
+            Invoke-ShardedTests "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter $PortalShardCount $evidenceDir portal -Group $PortalShardGroup -GroupCount $PortalShardGroupCount
         } else {
             Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter
         }
-        # The real IHostedService pipeline gets its own process so unrelated Portal classes cannot
-        # consume its startup/shutdown budget or share its background-service state.
-        Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"
-        Invoke-LineageUiSmoke
+        if ($PortalShardGroup -eq 1) {
+            # The real IHostedService pipeline gets its own process so unrelated Portal classes cannot
+            # consume its startup/shutdown budget or share its background-service state.
+            Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"
+            Invoke-LineageUiSmoke
+        }
     }
     "portal-hosted" {
         Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"
@@ -518,9 +546,12 @@ switch ($Lane) {
     "integration" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category=Integration"
         Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "Category=Integration"
+        # Real Docker practice journey (StudioSandboxPracticeTests); needs the sandbox worker image the CI job builds.
+        Invoke-DotNetTest "tests\ETL-SQL.Portal.BrowserTests\ETL-SQL.Portal.BrowserTests.csproj" "Category=Integration"
     }
     "perf" {
-        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category=Performance"
+        # Scale assessments are engine-lane exclusions too; this lane is their only runner (nightly-tests.yml).
+        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category=Performance|Category=ScaleAssessment"
         Invoke-DotNetTest "tests\ETL-SQL.PerfTests\ETL-SQL.PerfTests.csproj" "Category=Performance"
     }
     "full" {
@@ -570,12 +601,15 @@ switch ($Lane) {
         $spillSessionRoot = Join-Path ([IO.Path]::GetTempPath()) ("etl-sql-spill-lane-" + [Guid]::NewGuid().ToString("N"))
         New-Item -ItemType Directory -Path $spillSessionRoot | Out-Null
         $overrides = @{
-            "Engine__BatchSize"                   = "7"
-            "Engine__JoinSpillThreshold"          = "10"
-            "Engine__ExternalSortChunkSize"       = "10"
-            "Engine__WindowSpillThreshold"        = "10"
-            "Engine__TempTableSpillThresholdRows" = "25"
-            "Engine__MaxInMemoryBatches"          = "2"
+            "Engine__BatchSize"                                         = "7"
+            "Engine__JoinSpillThreshold"                                = "10"
+            "Engine__ExternalSortChunkSize"                             = "10"
+            "Engine__WindowSpillThreshold"                              = "10"
+            "Engine__TempTableSpillThresholdRows"                       = "25"
+            "Engine__MaxInMemoryBatches"                                = "2"
+            # Disable ambient host RAM floor during sharded spill runs (dedicated BufferManager tests
+            # cover SystemMemoryFloorMB with explicit options and a mock ISystemResources).
+            "Orchestration__ResourceManagement__SystemMemoryFloorMB"    = "0"
         }
         # BatchSize is deliberately not a round number and not a multiple of the row counts in the
         # corpus: batch boundaries that always land between logical groups hide exactly the
@@ -591,18 +625,51 @@ switch ($Lane) {
             }
 
             $spillEvidence = Join-Path $repoRoot ("release-validation\spill-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+            # Name the tests that leave MemoryGrantArbiter.Shared reservations behind (they make later
+            # tests in the process fail on the memory governor ceiling); restored with the overrides.
+            $previous['ETLSQL_ARBITER_TRACE_DIR'] = $env:ETLSQL_ARBITER_TRACE_DIR
+            $env:ETLSQL_ARBITER_TRACE_DIR = $spillEvidence
             Invoke-ShardedTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $spillEvidence engine -Group $EngineShardGroup -GroupCount $EngineShardGroupCount
 
             # CI splits the engine shards across workers (Spill Certification); the SLT corpus
             # runs once, in the first group.
             if ($EngineShardGroup -eq 1) {
                 $previousRunSlt = $env:ETL_SQL_RUN_SLT
+                $previousMinSpill = $env:ETL_SQL_SLT_MIN_SPILL_PERCENT
+                $previousSltEvidence = $env:ETL_SQL_SLT_EVIDENCE_DIR
+                # Corpus tables hold 2-30 rows, below the engine-suite thresholds above: at those
+                # only 24.7% of result-checked queries spilled. At one or two rows 41% do, and
+                # that found seven spill defects the corpus had never reached (2026-11-21).
+                # Engine__BatchSize stays odd so batch boundaries cut through logical groups.
+                $sltOverrides = @{
+                    "Engine__BatchSize"                   = "3"
+                    "Engine__JoinSpillThreshold"          = "1"
+                    "Engine__ExternalSortChunkSize"       = "2"
+                    "Engine__WindowSpillThreshold"        = "1"
+                    "Engine__TempTableSpillThresholdRows" = "2"
+                    "Engine__MaxInMemoryBatches"          = "1"
+                }
+                $sltPrevious = @{}
                 try {
                     $env:ETL_SQL_RUN_SLT = "1"
+                    foreach ($key in $sltOverrides.Keys) {
+                        $sltPrevious[$key] = [Environment]::GetEnvironmentVariable($key)
+                        [Environment]::SetEnvironmentVariable($key, $sltOverrides[$key])
+                    }
+                    # The floor catches an override that stops reaching the engine, which would
+                    # leave the lane green with nothing spilled (measured 41.0%). The count is
+                    # written to slt-spill-coverage.json in the lane evidence.
+                    $env:ETL_SQL_SLT_MIN_SPILL_PERCENT = "35"
+                    $env:ETL_SQL_SLT_EVIDENCE_DIR = $spillEvidence
                     Invoke-DotNetTest "tests\ETL-SQL.SqlLogicTests\ETL-SQL.SqlLogicTests.csproj" "Category=SLT"
                 }
                 finally {
+                    foreach ($key in $sltPrevious.Keys) {
+                        [Environment]::SetEnvironmentVariable($key, $sltPrevious[$key])
+                    }
                     $env:ETL_SQL_RUN_SLT = $previousRunSlt
+                    $env:ETL_SQL_SLT_MIN_SPILL_PERCENT = $previousMinSpill
+                    $env:ETL_SQL_SLT_EVIDENCE_DIR = $previousSltEvidence
                 }
             }
         }
@@ -617,6 +684,8 @@ switch ($Lane) {
         }
     }
     "slt" {
+        # The runner's own parser, value-format and error-handling tests carry no SLT category.
+        Invoke-DotNetTest "tests\ETL-SQL.SqlLogicTests\ETL-SQL.SqlLogicTests.csproj" "Category!=SLT"
         $previousRunSlt = $env:ETL_SQL_RUN_SLT
         try {
             $env:ETL_SQL_RUN_SLT = "1"

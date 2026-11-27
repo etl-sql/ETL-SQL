@@ -201,5 +201,244 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.NotNull(r.Error);
             Assert.True(Directory.Exists(root));
         }
+
+        [Fact]
+        public void RunAdminPurgeData_RefusesWithoutConfirmation()
+        {
+            var installDir = SeedInstalledInstance(out var systemDb, out var sessionDir);
+            try
+            {
+                var exit = DataPurgeService.RunAdminPurgeData(new ETL_SQL.Core.CliContext
+                {
+                    Command = "admin-purge-data",
+                    AdminPurgeInstallDir = installDir,
+                    AdminPurgeConfirm = false,
+                    AdminPurgeDryRun = false
+                }, ETL_SQL.Common.NullLogger.Instance);
+
+                Assert.Equal(1, exit);
+                Assert.True(Directory.Exists(Path.Combine(installDir, "Reports")));
+                Assert.True(Directory.Exists(Path.Combine(installDir, "Snapshots")));
+                Assert.True(File.Exists(Path.Combine(installDir, "portal.db")));
+                Assert.True(File.Exists(systemDb));
+                Assert.True(Directory.Exists(sessionDir));
+            }
+            finally
+            {
+                TryDeleteDirectory(Path.GetDirectoryName(installDir)!);
+            }
+        }
+
+        [Fact]
+        public void RunAdminPurgeData_DryRun_PreviewsWithoutDeleting()
+        {
+            var installDir = SeedInstalledInstance(out var systemDb, out var sessionDir);
+            try
+            {
+                var exit = DataPurgeService.RunAdminPurgeData(new ETL_SQL.Core.CliContext
+                {
+                    Command = "admin-purge-data",
+                    AdminPurgeInstallDir = installDir,
+                    AdminPurgeConfirm = false,
+                    AdminPurgeDryRun = true
+                }, ETL_SQL.Common.NullLogger.Instance);
+
+                Assert.Equal(0, exit);
+                Assert.True(Directory.Exists(Path.Combine(installDir, "Reports")));
+                Assert.True(File.Exists(Path.Combine(installDir, "appsettings.secrets.json")));
+                Assert.True(File.Exists(systemDb));
+                Assert.True(Directory.Exists(sessionDir));
+            }
+            finally
+            {
+                TryDeleteDirectory(Path.GetDirectoryName(installDir)!);
+            }
+        }
+
+        [Fact]
+        public void RunAdminPurgeData_WithConfirm_DeletesOnlyIntendedRuntimeData()
+        {
+            var installDir = SeedInstalledInstance(out var systemDb, out var sessionDir);
+            try
+            {
+                var exit = DataPurgeService.RunAdminPurgeData(new ETL_SQL.Core.CliContext
+                {
+                    Command = "admin-purge-data",
+                    AdminPurgeInstallDir = installDir,
+                    AdminPurgeConfirm = true
+                }, ETL_SQL.Common.NullLogger.Instance);
+
+                Assert.Equal(0, exit);
+                Assert.True(Directory.Exists(installDir));
+                Assert.True(File.Exists(Path.Combine(installDir, "ETL-SQL.exe")));
+                Assert.True(File.Exists(Path.Combine(installDir, "appsettings.json")));
+                Assert.False(Directory.Exists(Path.Combine(installDir, "logs")));
+                Assert.False(Directory.Exists(Path.Combine(installDir, "Snapshots")));
+                Assert.False(Directory.Exists(Path.Combine(installDir, "Reports")));
+                Assert.False(Directory.Exists(Path.Combine(installDir, "data")));
+                Assert.False(Directory.Exists(Path.Combine(installDir, ".portal-keys")));
+                Assert.False(File.Exists(Path.Combine(installDir, "portal.db")));
+                Assert.False(File.Exists(Path.Combine(installDir, "portal.db-wal")));
+                Assert.False(File.Exists(Path.Combine(installDir, "appsettings.secrets.json")));
+                Assert.False(File.Exists(Path.Combine(installDir, "first-run-password.txt")));
+                Assert.False(File.Exists(systemDb));
+                Assert.False(File.Exists(systemDb + "-shm"));
+                Assert.False(Directory.Exists(sessionDir));
+            }
+            finally
+            {
+                TryDeleteDirectory(Path.GetDirectoryName(installDir)!);
+            }
+        }
+
+        [Fact]
+        public void RunAdminPurgeData_WithConfirm_IsSafeWhenDirectoriesDoNotExist()
+        {
+            var root = Path.Combine(_baseDir, "etlsql_purge_empty_" + Guid.NewGuid().ToString("N"));
+            var installDir = Path.Combine(root, "install");
+            Directory.CreateDirectory(installDir);
+            File.WriteAllText(Path.Combine(installDir, "appsettings.json"), $$"""
+            {
+              "Portal": {
+                "Orchestrator": { "DatabasePath": "{{Path.Combine(root, "missing", "etlsql.db").Replace("\\", "\\\\")}}" }
+              },
+              "Session": { "Root": "{{Path.Combine(root, "missing-sessions").Replace("\\", "\\\\")}}" }
+            }
+            """);
+
+            try
+            {
+                var exit = DataPurgeService.RunAdminPurgeData(new ETL_SQL.Core.CliContext
+                {
+                    Command = "admin-purge-data",
+                    AdminPurgeInstallDir = installDir,
+                    AdminPurgeConfirm = true
+                }, ETL_SQL.Common.NullLogger.Instance);
+
+                Assert.Equal(0, exit);
+                Assert.True(Directory.Exists(installDir));
+            }
+            finally
+            {
+                TryDeleteDirectory(root);
+            }
+        }
+
+        [Fact]
+        public void RunAdminPurgeData_RefusesInstallDirItselfWhenMisconfigured()
+        {
+            var root = Path.Combine(_baseDir, "etlsql_purge_guard_" + Guid.NewGuid().ToString("N"));
+            var installDir = Path.Combine(root, "install");
+            Directory.CreateDirectory(installDir);
+            var exePath = Path.Combine(installDir, "ETL-SQL.exe");
+            File.WriteAllText(exePath, "BINARY");
+            File.WriteAllText(Path.Combine(installDir, "appsettings.json"), $$"""
+            {
+              "Portal": {
+                "ScriptRootPath": ".",
+                "Orchestrator": { "DatabasePath": "{{Path.Combine(root, "missing", "etlsql.db").Replace("\\", "\\\\")}}" }
+              },
+              "Session": { "Root": "{{Path.Combine(root, "missing-sessions").Replace("\\", "\\\\")}}" }
+            }
+            """);
+
+            try
+            {
+                var exit = DataPurgeService.RunAdminPurgeData(new ETL_SQL.Core.CliContext
+                {
+                    Command = "admin-purge-data",
+                    AdminPurgeInstallDir = installDir,
+                    AdminPurgeConfirm = true
+                }, ETL_SQL.Common.NullLogger.Instance);
+
+                Assert.Equal(1, exit);
+                Assert.True(Directory.Exists(installDir));
+                Assert.True(File.Exists(exePath));
+            }
+            finally
+            {
+                TryDeleteDirectory(root);
+            }
+        }
+
+        [Fact]
+        public void PurgeData_FindsPathsDeclaredOnlyInDefaults()
+        {
+            // An MSI install's appsettings.json holds only the operator's edits; the data paths come
+            // from appsettings.defaults.json.
+            var installDir = SeedInstalledInstance(out var systemDb, out _);
+            try
+            {
+                File.Move(Path.Combine(installDir, "appsettings.json"),
+                    Path.Combine(installDir, ETL_SQL.Common.ConfigurationExtensions.DefaultsFileName));
+                File.WriteAllText(Path.Combine(installDir, "appsettings.json"), "{}");
+
+                var exit = DataPurgeService.RunAdminPurgeData(new ETL_SQL.Core.CliContext
+                {
+                    Command = "admin-purge-data",
+                    AdminPurgeInstallDir = installDir,
+                    AdminPurgeConfirm = true,
+                }, ETL_SQL.Common.NullLogger.Instance);
+
+                Assert.Equal(0, exit);
+                Assert.False(File.Exists(systemDb));
+                Assert.True(File.Exists(Path.Combine(installDir, "ETL-SQL.exe")));
+            }
+            finally
+            {
+                TryDeleteDirectory(Path.GetDirectoryName(installDir)!);
+            }
+        }
+
+        private string SeedInstalledInstance(out string systemDb, out string sessionDir)
+        {
+            var root = Path.Combine(_baseDir, "etlsql_admin_purge_" + Guid.NewGuid().ToString("N"));
+            var installDir = Path.Combine(root, "install");
+            var systemDir = Path.Combine(root, "systemdata");
+            sessionDir = Path.Combine(root, "sessions");
+            systemDb = Path.Combine(systemDir, "etlsql.db");
+            Directory.CreateDirectory(installDir);
+            Directory.CreateDirectory(systemDir);
+            Directory.CreateDirectory(sessionDir);
+
+            File.WriteAllText(Path.Combine(installDir, "ETL-SQL.exe"), "BINARY");
+            File.WriteAllText(Path.Combine(installDir, "appsettings.json"), $$"""
+            {
+              "Portal": {
+                "DatabasePath": "./portal.db",
+                "SnapshotDirectory": "./Snapshots",
+                "ScriptRootPath": "./Reports",
+                "DatasetRootPath": "./data/datasets",
+                "MapRootPath": "./data/maps",
+                "Orchestrator": { "DatabasePath": "{{systemDb.Replace("\\", "\\\\")}}" }
+              },
+              "Session": { "Root": "{{sessionDir.Replace("\\", "\\\\")}}" }
+            }
+            """);
+
+            Directory.CreateDirectory(Path.Combine(installDir, "logs", "orchestrator"));
+            File.WriteAllText(Path.Combine(installDir, "logs", "orchestrator", "orch.log"), "log");
+            Directory.CreateDirectory(Path.Combine(installDir, "Snapshots"));
+            File.WriteAllText(Path.Combine(installDir, "Snapshots", "s.json"), "{}");
+            Directory.CreateDirectory(Path.Combine(installDir, "Reports"));
+            File.WriteAllText(Path.Combine(installDir, "Reports", "r.rptsql"), "SELECT 1;");
+            Directory.CreateDirectory(Path.Combine(installDir, "data", "datasets"));
+            File.WriteAllText(Path.Combine(installDir, "data", "datasets", "d.parquet"), "data");
+            Directory.CreateDirectory(Path.Combine(installDir, ".portal-keys"));
+            File.WriteAllText(Path.Combine(installDir, ".portal-keys", "k.xml"), "<k/>");
+            File.WriteAllText(Path.Combine(installDir, "portal.db"), "db");
+            File.WriteAllText(Path.Combine(installDir, "portal.db-wal"), "wal");
+            File.WriteAllText(Path.Combine(installDir, "appsettings.secrets.json"), "{}");
+            File.WriteAllText(Path.Combine(installDir, "first-run-password.txt"), "pw");
+            File.WriteAllText(systemDb, "orch");
+            File.WriteAllText(systemDb + "-shm", "shm");
+            File.WriteAllText(Path.Combine(sessionDir, "s.db"), "session");
+            return installDir;
+        }
+
+        private static void TryDeleteDirectory(string path)
+        {
+            try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); } catch { }
+        }
     }
 }

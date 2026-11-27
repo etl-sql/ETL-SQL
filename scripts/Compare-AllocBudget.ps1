@@ -4,30 +4,27 @@
 
 .DESCRIPTION
     Regression budgets for the Gate F #temp round trip. A budget is a blessed
-    profile report (same JSON schema, produced by scripts/Test-SpillAllocProfile.ps1) captured on
-    the certification workstation. The comparison fails on:
+    profile report (same JSON schema, produced by scripts/Test-SpillAllocProfile.ps1) captured on a
+    hosted ubuntu-latest runner by the Performance Calibration workflow. The comparison fails on:
 
       1. Correctness evidence - the report must cover the same row count as the budget and show
          physical spill (the profiling test itself asserts row-count and spill correctness; this
          guards against comparing the wrong artifact).
-      2. Allocation - allocation.bytesPerRow above budget by more than -AllocTolerancePct.
-      3. GC - gen2 collection count above budget by more than -GcCountTolerancePct (+ small
-         absolute floor), or GC pause above budget by more than -PauseTolerancePct (+ absolute
-         floor, since pause is the noisiest metric).
-      4. Peak memory containment - peakWorkingSetMB above budget by more than -PeakTolerancePct.
-         Per the Phase 1 gate, a throughput improvement does NOT pass if containment regresses.
+      2. Allocation - allocation.bytesPerRow above budget by more than -AllocTolerancePct
+         (5%; five hosted runs agree within 0.1%).
+
+    GC gen2 count, GC pause and peak working set are machine metrics and only warn (W6,
+    docs/releases/v0.23.0-w6-performance-gates-design.md). The scale tiers' absolute memory cap
+    still fails.
 
     Throughput is intentionally not gated here - scenario throughput bands are Phase 3 scope
-    (Gate F / Compare-CertBaseline). Budgets are machine-pinned like the cert baselines; when a
-    run is meaningfully better than budget the script suggests re-blessing
-    (Test-SpillAllocProfile.ps1 -UpdateBudget).
+    (Gate F / Compare-CertBaseline). When a run is meaningfully better than budget the script
+    suggests recalibrating.
 
 .PARAMETER MachineMetricsReportOnly
-    Report GC counts, GC pause and peak working set as warnings instead of failing. They depend on
-    the host (cores, memory, GC heap count), and the budget comes from one workstation, so hosted
-    CI gates only what the host does not change: spill evidence and allocated bytes per row. The
-    first hosted run (CI 42725899666) did 77 gen2 collections against a workstation limit of 74
-    while allocation passed.
+    Marks a hosted gate run: a missing budget then fails instead of warning. GC counts, GC pause
+    and peak working set warn in every mode (the first hosted run, CI 42725899666, did 77 gen2
+    collections against a workstation limit of 74 while allocation passed).
 
 .PARAMETER Report
     Path to the new profile report JSON.
@@ -42,7 +39,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Report,
     [string]$Budget = "",
-    [double]$AllocTolerancePct = 10,
+    [double]$AllocTolerancePct = 5,
     [double]$GcCountTolerancePct = 30,
     [double]$PauseTolerancePct = 35,
     [double]$PeakTolerancePct = 15,
@@ -76,7 +73,7 @@ $machineWarnings = New-Object System.Collections.Generic.List[object]
 function Add-Regression([string]$kind, $budgetValue, $currentValue) {
     $row = [pscustomobject]@{ Kind = $kind; Budget = $budgetValue; Current = $currentValue }
     # Call Add directly: assigning an if-expression would unroll an empty list to $null.
-    if ($MachineMetricsReportOnly -and $kind -in @('GC_GEN2_COLLECTIONS', 'GC_PAUSE_MS', 'PEAK_WORKING_SET_MB')) {
+    if ($kind -in @('GC_GEN2_COLLECTIONS', 'GC_PAUSE_MS', 'PEAK_WORKING_SET_MB')) {
         $script:machineWarnings.Add($row)
     }
     else { $script:regressions.Add($row) }
@@ -114,7 +111,7 @@ if ($new.memory.peakWorkingSetMB -gt $peakLimit) {
 }
 
 if ($machineWarnings.Count -gt 0) {
-    Write-Host "`n[WARN] $($machineWarnings.Count) host-dependent metric(s) over the workstation budget (report only):" -ForegroundColor Yellow
+    Write-Host "`n[WARN] $($machineWarnings.Count) host-dependent metric(s) over budget (report only):" -ForegroundColor Yellow
     $machineWarnings | Format-Table Kind, Budget, Current -AutoSize | Out-String | Write-Host
 }
 

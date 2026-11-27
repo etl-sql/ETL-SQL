@@ -215,7 +215,11 @@ namespace ETL_SQL.Connectors
                     FullPath = blob.Name,
                     Size = blob.Properties?.ContentLength ?? 0,
                     LastModified = blob.Properties?.LastModified?.DateTime ?? DateTime.MinValue,
-                    IsDirectory = false
+                    IsDirectory = false,
+                    CreationTime = blob.Properties?.CreatedOn?.DateTime,
+                    Permissions = null,
+                    Owner = null,
+                    IsSymlink = null
                 };
             }
         }
@@ -300,6 +304,46 @@ namespace ETL_SQL.Connectors
             }
         }
 
+        public async Task<RemoteFileVerificationInfo?> GetFileVerificationInfoAsync(string remotePath, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var container = GetContainer();
+                var blobClient = container.GetBlobClient(remotePath);
+                if (!await blobClient.ExistsAsync(cancellationToken))
+                    return null;
+                var props = await blobClient.GetPropertiesAsync(cancellationToken: cancellationToken);
+                string? md5Hex = props.Value.ContentHash is { Length: 16 } hash
+                    ? Convert.ToHexString(hash).ToLowerInvariant()
+                    : null;
+                return new RemoteFileVerificationInfo(props.Value.ContentLength, md5Hex);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Azure Blob", ex);
+            }
+        }
+
+        public async Task CopyFileAsync(string remoteSource, string remoteDest, bool overwrite = true, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var container = GetContainer();
+                var srcBlob = container.GetBlobClient(remoteSource);
+                var destBlob = container.GetBlobClient(remoteDest);
+
+                if (!overwrite && await destBlob.ExistsAsync(cancellationToken))
+                    throw new ExecutionException($"Destination blob already exists: {remoteDest}");
+
+                var operation = await destBlob.StartCopyFromUriAsync(srcBlob.Uri, cancellationToken: cancellationToken);
+                await operation.WaitForCompletionAsync(cancellationToken);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Azure Blob", ex);
+            }
+        }
+
         public async Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true)
         {
             try
@@ -354,7 +398,7 @@ namespace ETL_SQL.Connectors
                 _context?.CancellationToken ?? System.Threading.CancellationToken.None);
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Writing batches to Azure Blob directly is not supported. Use SEND FILE.");
-        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)FileMetaData.StandardColumns);
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
         public IDataSource WithTable(string tableName) => this;

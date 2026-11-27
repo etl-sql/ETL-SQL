@@ -18,5 +18,6 @@ JOIN pg_conn.Territories AS P ON S.TerritoryID = P.ID
 JOIN csv_conn             AS C ON S.PromoID     = C.ID
 WHERE S.Total > 5000;
 
-SELECT * FROM #CrossPlatformResult ORDER BY S.ID;
+-- The S/P/C aliases end with the statement above; #CrossPlatformResult has plain column names
+SELECT ID, Name, Region, DiscountCode FROM #CrossPlatformResult ORDER BY ID;
 ```

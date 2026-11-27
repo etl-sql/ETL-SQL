@@ -59,7 +59,9 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin machine secret verify`](admin-machine-secret-verify.md) | Resolve a machine-local secret without printing the value |
 | [`etl-sql admin machine tool`](admin-machine-tool.md) | Manage the machine-local tool catalog |
 | [`etl-sql admin machine tool delete`](admin-machine-tool-delete.md) | Permanently remove a machine-local tool |
+| [`etl-sql admin machine tool grant`](admin-machine-tool-grant.md) | Grant use of a machine-local tool |
 | [`etl-sql admin machine tool list`](admin-machine-tool-list.md) | List machine-local tools |
+| [`etl-sql admin machine tool revoke`](admin-machine-tool-revoke.md) | Revoke use of a machine-local tool |
 | [`etl-sql admin machine tool set`](admin-machine-tool-set.md) | Store a machine-local tool |
 | [`etl-sql admin migrate-database`](admin-migrate-database.md) | Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment |
 | [`etl-sql admin orchestrator`](admin-orchestrator.md) | Manage per-object Orchestrator grants and ownership |
@@ -79,6 +81,7 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin promotion saas-onboard`](admin-promotion-saas-onboard.md) | Create and populate one physically isolated SaaS tenant boundary |
 | [`etl-sql admin promotion saas-upgrade`](admin-promotion-saas-upgrade.md) | Drain and upgrade one Managed Dedicated tenant boundary |
 | [`etl-sql admin promotion validate`](admin-promotion-validate.md) | Validate mappings and collisions without changing the target |
+| [`etl-sql admin purge-data`](admin-purge-data.md) | Delete all installed ETL-SQL runtime data (reports, snapshots, databases, logs, sessions, secrets) |
 | [`etl-sql admin restore`](admin-restore.md) | Validate and restore a backup (data + keys archives) |
 | [`etl-sql admin service-account`](admin-service-account.md) | Manage Portal service accounts |
 | [`etl-sql admin service-account create`](admin-service-account-create.md) | Create a Portal service account |

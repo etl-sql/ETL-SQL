@@ -89,9 +89,8 @@ those rehearsals do not need to be repeated for each release and do not certify 
 > (`publish-marketplace.yml`), which verifies the VSIX provenance from Release on the tag,
 > publishes with the vsce version that packaged the VSIXs and skips a version and platform the
 > Marketplace already has. To retry a failed publish, dispatch it on `main` with `tag=vX.Y.Z`.
-> Keep Marketplace trusted-publisher entries for both `publish-marketplace.yml` (dispatch) and
-> `release.yml` (the caller when Release runs it) until a tagged release has published through
-> the call.
+> The Marketplace trusted publisher is `publish-marketplace.yml`; it covers both the dispatch and
+> the call from Release.
 >
 > Since v0.22.0 the local pre-release gate (`Test-PreRelease.ps1`) is an optional developer tool.
 > Release drivers no longer read its state, and no workstation run is part of the release. The
@@ -193,7 +192,7 @@ candidate; missing artifacts or changed package bytes must pass verification bef
 Each upload step has a ten-minute deadline. Windows has a twenty-minute job budget; macOS has
 twenty-five minutes to include staging the accepted files from their native artifact trees.
 
-Replace `x.y.z` with the target version (current target: **0.22.0**) throughout.
+Replace `x.y.z` with the target version (current target: **0.23.1**) throughout.
 
 ---
 
@@ -526,8 +525,7 @@ The first-attempt runner loss is explained (2026-11-07): Windows Restart Manager
 hosted runner's `provjobd`, which reads newly installed files for about a minute, so an uninstall
 soon after an install lost the runner. The MSI authors `MSIRESTARTMANAGERCONTROL=Disable` and the
 source preflight rejects missing, weakened or duplicate authoring. `DisableShutdown` is not enough:
-Restart Manager still shut applications down in silent mode. The MSI's `ServiceControl` and
-`CloseApplication` entries stop ETL-SQL's own services and programs. The
+Restart Manager still shut applications down in silent mode. The MSI's `ServiceControl` entries (`Stop="both" Wait="yes"`) stop ETL-SQL's services without force-killing processes. The
 [Windows Installer property reference](https://learn.microsoft.com/en-us/windows/win32/msi/msirestartmanagercontrol)
 defines the values.
 Do not infer its cause from a successful diagnostic or retry. The frozen release candidate still
@@ -733,11 +731,14 @@ and on pushes that change the engine. It builds Release, then runs the EBNF and 
 10M-row spill allocation profile, and Smoke and Standard scale certification. The EBNF and SLT
 lanes run under the `de_DE.UTF-8` culture (comma decimal, day-first dates); Windows CI is en-US and
 other Linux jobs are invariant, so engine text that follows the host locale fails here. Each scale tier is
-compared with `certification-results/baseline-<tier>.json` using
-`Compare-CertBaseline.ps1 -PerformanceReportOnly`: timing misses are warnings, while row counts,
-checksums and failed scenarios fail the job. The spill budget gates allocated bytes per row and
-spill evidence; GC counts, GC pause and peak working set depend on the host and only warn there
-(`-MachineMetricsReportOnly`). Its artifact `engine-certification-<run>-<attempt>`
+compared with the hosted baseline `certification-results/baseline-<tier>.json` by
+`Compare-CertBaseline.ps1`. Failed scenarios, row counts, checksums, work counters (spill bytes,
+extents, partition passes, plan counts; exact) and allocated MB (median, +5%) fail the job. Elapsed
+time, GC pause and peak working set only warn. The spill budget gates allocated bytes per row
+(+5%) and spill evidence; GC counts, pause and peak only warn. An intended work or allocation
+change recalibrates the baselines in the same commit from a Performance Calibration run
+(`perf-calibration.yml`). See the
+[W6 design note](v0.23.0-w6-performance-gates-design.md). Its artifact `engine-certification-<run>-<attempt>`
 keeps the logs, results and comparison reports. Release requires the job through
 `scripts/hosted-release-policy.json`.
 
@@ -890,6 +891,7 @@ Release Evidence job, sized to about a third of its job limit and gated on deter
 | :--- | :--- | :--- |
 | Stress and Provider scale | *Scale Stress*, *Scale Provider* | `Test-ScaleCertification.ps1 -Tier Stress` / `-Tier Provider` |
 | Huge scale | *Scale Huge &lt;scenario&gt;* (one job per scenario) | `Test-ScaleCertification.ps1 -Tier Huge -Scenario <name>` |
+| Paired A/B timing (the only elapsed-time gate) | *Paired timing / Paired timing &lt;scenario&gt;* (five Standard scenarios; candidate vs previous release tag, A,B,B,A blocks; fails at a 10% median block ratio with 4 of 5 blocks slower), *Paired timing two releases back / …* (same, vs the release before last, at 15%) | `Test-ScalePairedTiming.ps1` via `perf-ab.yml` |
 | Columnar storage/operator gates | *Columnar Storage gate*, *Columnar Operator gate* | `Test-ColumnarStorageGate.ps1`, `Test-ColumnarOperatorGate.ps1` |
 | Service capacity and full baseline | *Service capacity (reference)*, *Service capacity (full)* | `run-service-capacity-certification.mjs` |
 | Sustained HA soak | *HA soak (Compose topology)* | `etl-sql admin ha-soak validate --required-gate All` on the run root |

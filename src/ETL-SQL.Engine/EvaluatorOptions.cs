@@ -39,6 +39,7 @@ public class EvaluatorOptions
 
     // --- Engine Thresholds ---
     public int BatchSize { get; set; } = 10000;
+    public long BatchTargetBytes { get; set; } = Core.Spill.SpillFanOut.DefaultTargetBatchBytes;
     public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
     public int ForeachPageSize { get; set; } = 0;
     public int JoinSpillThreshold { get; set; } = 100000;
@@ -67,6 +68,7 @@ public class EvaluatorOptions
     public bool SkipError { get; set; } = false;
     public bool SpillEncryptionEnabled { get; set; } = true;
     public bool SpillCompressionEnabled { get; set; } = true;
+    public string SpillCompressionLevel { get; set; } = "Adaptive";
     public string SpillFormat { get; set; } = "Arrow";
     public bool AutoRollbackOnFinish { get; set; } = true;
     public bool ReuseLoopNodes { get; set; } = true;

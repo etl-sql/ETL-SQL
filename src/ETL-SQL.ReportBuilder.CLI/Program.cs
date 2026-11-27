@@ -50,6 +50,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             string format = "md";
             bool isInteraction = false;
             bool isMock = false;
+            bool strict = false;
             var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var runPages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -67,6 +68,9 @@ namespace ETL_SQL.ReportBuilder.CLI
                         break;
                     case "--mock":
                         isMock = true;
+                        break;
+                    case "--strict":
+                        strict = true;
                         break;
                     case "--json":
                         format = "json";
@@ -134,6 +138,16 @@ namespace ETL_SQL.ReportBuilder.CLI
             Console.WriteLine($"Report written to:  {outputPath}");
             Console.WriteLine($"Snapshot saved to:  {snapshotPath}");
             Console.WriteLine($"Visuals: {manifest.Visuals.Count}  Pages: {manifest.Pages.Count}  Datasets: {manifest.Datasets.Count}");
+
+            // The report is written either way so the preview can show the visuals that did build.
+            // --strict is for gates (CI, docs samples) where any failed visual must fail the run.
+            if (strict && manifest.Error != null)
+            {
+                Console.Error.WriteLine($"error: {manifest.Error}");
+                foreach (var visual in manifest.Visuals.Where(v => v.Error != null))
+                    Console.Error.WriteLine($"  - {visual.Name}: {visual.Error}");
+                return 3;
+            }
             return 0;
         }
 
@@ -595,7 +609,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             Console.WriteLine("etl-sql-report — Report-SQL build tool");
             Console.WriteLine();
             Console.WriteLine("Usage:");
-            Console.WriteLine("  etl-sql-report build   <script.rptsql> [--output <file>] [--format md|json|pdf] [--parameter @p=v] [--run-page PageName]");
+            Console.WriteLine("  etl-sql-report build   <script.rptsql> [--output <file>] [--format md|json|pdf] [--parameter @p=v] [--run-page PageName] [--strict]");
             Console.WriteLine("  etl-sql-report refresh <script.rptsql>");
             Console.WriteLine("  etl-sql-report offline <script.rptsql | snapshot.etlsnap> [--output <file.html>]");
             Console.WriteLine("  etl-sql-report serve   <script.rptsql> [--port <n>] [--no-browser]");
@@ -609,6 +623,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             Console.WriteLine("  --format, -f      Output format: md (default), json, or pdf.");
             Console.WriteLine("  --mock            Run evaluation in dry-run mock mode using stubbed connection data.");
             Console.WriteLine("  --json            Output build results/diagnostics in structured JSON format.");
+            Console.WriteLine("  --strict          build: exit 3 if any visual failed (the report is still written).");
             Console.WriteLine("  --parameter, -p   Pass a variable to the script (e.g. -p @region=West).");
             Console.WriteLine("  --run-page        Mark a paginated page as run so AUTO/ON_RUN result visuals load.");
             Console.WriteLine("  --manifest, -m    Path to reports.json for multi-report hosting.");

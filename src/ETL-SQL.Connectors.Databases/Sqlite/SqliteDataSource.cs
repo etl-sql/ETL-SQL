@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -20,8 +21,39 @@ namespace ETL_SQL.Connectors.Sqlite
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private readonly int _commandTimeout;
+        private readonly string? _journalMode;
+        private readonly int? _busyTimeoutMs;
         private readonly TransactionState _transactionState;
         private readonly bool _ownsTransactionState;
+
+        private static readonly HashSet<string> AllowedJournalModes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "DELETE", "TRUNCATE", "PERSIST", "WAL", "MEMORY", "OFF"
+        };
+
+        internal static string ValidateJournalMode(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                throw new ExecutionException("SQLITE JOURNAL_MODE must be one of: DELETE, TRUNCATE, PERSIST, WAL, MEMORY, OFF.");
+
+            var trimmed = raw.Trim();
+            if (!AllowedJournalModes.Contains(trimmed))
+                throw new ExecutionException($"Invalid SQLITE JOURNAL_MODE '{trimmed}'. Allowed values: DELETE, TRUNCATE, PERSIST, WAL, MEMORY, OFF.");
+
+            return trimmed.ToUpperInvariant();
+        }
+
+        internal static int ValidateBusyTimeoutMs(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw) ||
+                !int.TryParse(raw.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var ms) ||
+                ms < 0)
+            {
+                throw new ExecutionException("SQLITE BUSY_TIMEOUT_MS must be a non-negative integer.");
+            }
+
+            return ms;
+        }
 
         private sealed class TransactionState
         {
@@ -55,6 +87,12 @@ namespace ETL_SQL.Connectors.Sqlite
                 context,
                 options,
                 builder.DefaultTimeout > 0 ? builder.DefaultTimeout : 30);
+
+            if (options != null && options.TryGetValue("JOURNAL_MODE", out var journalMode))
+                _journalMode = ValidateJournalMode(journalMode);
+
+            if (options != null && options.TryGetValue("BUSY_TIMEOUT_MS", out var busyTimeout))
+                _busyTimeoutMs = ValidateBusyTimeoutMs(busyTimeout);
 
             string dbPath = builder.DataSource;
             if (builder.Mode != SqliteOpenMode.Memory
@@ -101,13 +139,34 @@ namespace ETL_SQL.Connectors.Sqlite
             var connection = new SqliteConnection(_connectionString);
             try
             {
-                await connection.OpenAsync(EffectiveCancellationToken(cancellationToken));
+                var ct = EffectiveCancellationToken(cancellationToken);
+                await connection.OpenAsync(ct);
+                await ApplyConnectionPragmasAsync(connection, ct);
                 return (connection, false);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
                 await connection.DisposeAsync();
                 throw ConnectorExceptionWrapper.Wrap("SQLite", ex);
+            }
+        }
+
+        private async Task ApplyConnectionPragmasAsync(SqliteConnection connection, CancellationToken cancellationToken)
+        {
+            if (_busyTimeoutMs.HasValue)
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandTimeout = _commandTimeout;
+                cmd.CommandText = $"PRAGMA busy_timeout = {_busyTimeoutMs.Value};";
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            if (_journalMode != null)
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandTimeout = _commandTimeout;
+                cmd.CommandText = $"PRAGMA journal_mode = {_journalMode};";
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
         }
 
@@ -559,8 +618,10 @@ namespace ETL_SQL.Connectors.Sqlite
 
                 if (_transactionState.Connection == null)
                 {
+                    var ct = _context?.CancellationToken ?? CancellationToken.None;
                     _transactionState.Connection = new SqliteConnection(_connectionString);
-                    await _transactionState.Connection.OpenAsync(_context?.CancellationToken ?? CancellationToken.None);
+                    await _transactionState.Connection.OpenAsync(ct);
+                    await ApplyConnectionPragmasAsync(_transactionState.Connection, ct);
                 }
                 _transactionState.Transaction = _transactionState.Connection.BeginTransaction();
             }

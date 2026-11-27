@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.ReportHosting;
+using ETL_SQL.Reporting.Semantics;
 using Xunit;
 
 namespace ETL_SQL.Tests.Reporting;
@@ -131,5 +132,46 @@ public sealed class DashboardServiceReviewTests : IDisposable
         // Drilling from any reachable state never indexes past the hierarchy.
         for (var i = 0; i < 5; i++)
             Assert.NotNull(await svc.DrillInAsync("Geo", "West"));
+    }
+
+    [Fact]
+    public async Task CustomVisualDrillIn_RebindsAdvancedChartEncodingsToCurrentLevel()
+    {
+        var path = Write("custom-drill.rptsql", """
+            SELECT 'West' AS region, 'CA' AS state, 'LA' AS city, 10 AS amount INTO #geo;
+            INSERT INTO #geo VALUES ('West', 'WA', 'Seattle', 20);
+            INSERT INTO #geo VALUES ('East', 'NY', 'NYC', 30);
+            CREATE VISUAL CustomGeo AS CUSTOM (
+                SOURCE = (SELECT * FROM #geo),
+                ACTIONS (ON_CLICK = DRILL_IN(HIERARCHY = (region, state, city))),
+                CHART (
+                    COORDINATE (TYPE = CARTESIAN),
+                    LAYERS (
+                        bars = RECT (
+                            ENCODINGS (
+                                X = region (TYPE = NOMINAL),
+                                Y = amount (TYPE = QUANTITATIVE),
+                                TOOLTIP = region (TYPE = NOMINAL)
+                            )
+                        )
+                    )
+                )
+            );
+            """);
+        await using var svc = new DashboardService(path, DashboardTestHelper.CreateMockScopeFactory());
+        var root = await svc.GetManifestAsync();
+        var rootVisual = Assert.Single(root.Visuals, v => v.Name == "CustomGeo");
+        Assert.Null(rootVisual.Error);
+        Assert.Equal("region", rootVisual.Interaction?.Key);
+        Assert.Equal(["West", "East"], rootVisual.PlotPlan!.Scales.First(s => s.Channel == FieldChannel.X).Categories.ToArray());
+
+        var drilled = await svc.DrillInAsync("CustomGeo", "West");
+        var stateVisual = Assert.Single(drilled.Visuals, v => v.Name == "CustomGeo");
+        Assert.Null(stateVisual.Error);
+        Assert.Equal("state", stateVisual.DrillState?.CurrentLevel);
+        Assert.Equal("state", stateVisual.Interaction?.Key);
+        Assert.Equal(["CA", "WA"], stateVisual.PlotPlan!.Scales.First(s => s.Channel == FieldChannel.X).Categories.ToArray());
+        Assert.Contains("CA", stateVisual.NativeSvg);
+        Assert.Contains("WA", stateVisual.NativeSvg);
     }
 }

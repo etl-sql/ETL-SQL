@@ -48,6 +48,10 @@ roots as one coordinated recovery set. ETL-SQL does not back up PostgreSQL for y
   `--expected-tenant <tenant>` on validation/restore. The archive pair is tenant-bound, a restore
   target must be empty, and restored jobs/admissions are fenced until the replacement environment is
   explicitly reviewed.
+- For an in-place rollback (`etl-sql admin restore --in-place`), resolved database and content targets
+  must stay inside the install directory or match the path already configured in the host's own
+  `appsettings.json`; any other external path fails the restore before anything is deleted or
+  written, so use a normal `--to <dir>` restore into an empty staging directory instead.
 
 For supported RPO/RTO targets, restore-drill evidence, cross-environment clone safety, and regional
 failure procedures, see [`docs/architecture/decisions/Disaster_Recovery_Objectives.md`](../../architecture/decisions/disaster-recovery-objectives.md).
@@ -66,7 +70,19 @@ Set log retention and size limits in configuration where supported, and make sur
 
 ### Deleting all data
 
-To wipe every piece of ETL-SQL runtime data consistently — reports, snapshots, the portal and orchestrator databases, logs, persistent sessions, and portal data directories — use the built-in purge command. It resolves the actual configured locations (and the `LocalApplicationData` defaults for sessions and orchestrator history), so it works the same whether ETL-SQL was installed by the Windows MSI, the Linux `.deb`, the macOS bundle, or run ad hoc.
+To wipe every piece of ETL-SQL runtime data consistently — reports, snapshots, the portal and orchestrator databases, logs, persistent sessions, and portal data directories — use the built-in purge commands. They resolve the actual configured locations (and the `LocalApplicationData` defaults for sessions and orchestrator history), so they work the same whether ETL-SQL was installed by the Windows MSI, the Linux `.deb`, the macOS bundle, or run ad hoc.
+
+For an installed service instance (including Windows MSI cleanup before or after uninstall):
+
+```bash
+# Preview exactly what installed runtime data would be deleted — deletes nothing
+etl-sql admin purge-data --dry-run
+
+# Delete installed runtime data, Data Protection key ring, and generated secrets
+etl-sql admin purge-data --confirm
+```
+
+For general/workstation runtime cleanup:
 
 ```bash
 # Preview exactly what would be deleted, with sizes — deletes nothing
@@ -75,14 +91,14 @@ etl-sql purge --dry-run
 # Delete after an interactive confirmation
 etl-sql purge
 
-# Non-interactive (scripts / uninstall automation)
+# Non-interactive (scripts)
 etl-sql purge --yes
 ```
 
 > [!CAUTION]
-> `etl-sql purge` permanently deletes all reports, snapshots, databases, logs, and sessions. It cannot be undone. Back up anything you need first (see **Databases** above). Stop the Portal and Orchestrator services before purging so database files are not locked or recreated.
+> `etl-sql admin purge-data --confirm` and `etl-sql purge` permanently delete all reports, snapshots, databases, logs, and sessions (`admin purge-data --confirm` also removes `appsettings.secrets.json`, `first-run-password.txt`, and `.portal-keys`). It cannot be undone. Back up anything you need first (see **Databases** above). Stop the Portal and Orchestrator services before purging so database files are not locked or recreated.
 
-The Windows MSI uninstaller and the Linux `.deb` purge step still remove this same data automatically when you opt in during uninstall; `etl-sql purge` gives you the same cleanup on demand and on platforms without an uninstall wizard.
+The Windows MSI uninstaller preserves runtime data on both upgrades and uninstalls; run `etl-sql admin purge-data --confirm` before uninstalling (or pass `--install-dir <path>` after uninstalling) when you want to wipe an installation's data. On Linux, `dpkg --purge` / `apt purge` removes runtime data automatically while `apt remove` keeps it.
 
 ---
 

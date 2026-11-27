@@ -476,5 +476,63 @@ CREATE VISUAL SalesChart AS BAR (SOURCE = &daily_sales, MAPPINGS (x = day, y = a
             Assert.Contains("[(\"dataset:&sales\")]", mermaid);
             Assert.DoesNotContain("[\"dataset:&sales\"]", mermaid);
         }
+
+        [Fact]
+        public void Analyze_TransformStatement_RecordsTableColumnAndMetadataLineage()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            var script = Parse(@"
+                SELECT
+                    Id /* @d: Record identifier; */,
+                    Amount /* @d: Gross amount; @pii: true; */
+                INTO #src
+                FROM Sales;
+
+                TRANSFORM #norm
+                FROM #src
+                USING NORMALIZE (
+                    VALUE_COLS = 'Amount',
+                    METHOD = 'MIN_MAX'
+                );
+
+                TRANSFORM #dedup
+                FROM #norm
+                USING DEDUPLICATE (
+                    KEY_COLS = 'Id',
+                    KEEP = 'UNIQUE_ONLY',
+                    REJECT_INTO = #dups
+                );
+            ");
+
+            analyzer.Analyze(script);
+
+            var all = tracker.GetFullLineage().ToList();
+            Assert.Contains(all, e =>
+                e.Operation == "TRANSFORM" &&
+                e.TargetTable == "#norm" &&
+                e.TargetColumn == null &&
+                e.SourceTables.Contains("#src", StringComparer.OrdinalIgnoreCase));
+
+            var normCol = Assert.Single(all, e =>
+                e.Operation == "TRANSFORM" &&
+                e.TargetTable == "#norm" &&
+                e.TargetColumn == "Amount_Normalized");
+            Assert.Contains("Amount", normCol.SourceColumns);
+            Assert.Equal(TransformationKind.Arithmetic, normCol.TransformationKind);
+            Assert.Equal("true", normCol.Metadata.GetValueOrDefault("pii"));
+
+            Assert.Contains(all, e =>
+                e.Operation == "TRANSFORM" &&
+                e.TargetTable == "#norm" &&
+                e.TargetColumn == "Id" &&
+                e.TransformationKind == TransformationKind.PassThrough);
+
+            Assert.Contains(all, e =>
+                e.Operation == "TRANSFORM" &&
+                e.TargetTable == "#dups" &&
+                e.TargetColumn == "Id" &&
+                e.SourceTables.Contains("#norm", StringComparer.OrdinalIgnoreCase));
+        }
     }
 }

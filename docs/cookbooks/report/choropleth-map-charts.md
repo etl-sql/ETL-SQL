@@ -16,11 +16,17 @@ Specify `MAP_NAME` with one of the six built-in keys. The engine serves the GeoJ
 | `EUROPE` | 39 countries | Country name — `"France"`, `"Germany"` |
 
 ```sql
--- Revenue by US state
-SELECT State, SUM(Revenue) AS Revenue
-INTO #state_rev
-FROM dbo.Sales
-GROUP BY State;
+-- Revenue by US state (inline sample data; swap in your own sales table)
+SELECT 'Minnesota' AS State, 412000 AS Revenue INTO #state_rev
+UNION ALL SELECT 'California', 1250000
+UNION ALL SELECT 'Texas',       980000
+UNION ALL SELECT 'New York',    870000
+UNION ALL SELECT 'Florida',     640000
+UNION ALL SELECT 'Illinois',    530000
+UNION ALL SELECT 'Washington',  450000
+UNION ALL SELECT 'Colorado',    300000
+UNION ALL SELECT 'Georgia',     280000
+UNION ALL SELECT 'Wisconsin',   210000;
 
 CREATE VISUAL RevenueMap AS MAP (
   SOURCE   = #state_rev,
@@ -39,9 +45,14 @@ CREATE VISUAL RevenueMap AS MAP (
 County data often carries FIPS codes rather than names. Set `MATCH_BY = FIPS` and put the 5-digit FIPS code in the region column.
 
 ```sql
-SELECT fips_code, incident_count
-INTO #incidents
-FROM dbo.CountyIncidents;
+-- Minnesota metro counties by FIPS code (inline sample data)
+SELECT '27053' AS fips_code, 140 AS incident_count INTO #incidents  -- Hennepin
+UNION ALL SELECT '27123', 95   -- Ramsey
+UNION ALL SELECT '27037', 60   -- Dakota
+UNION ALL SELECT '27003', 48   -- Anoka
+UNION ALL SELECT '27163', 30   -- Washington
+UNION ALL SELECT '27139', 22   -- Scott
+UNION ALL SELECT '27019', 15;  -- Carver
 
 CREATE VISUAL IncidentMap AS MAP (
   SOURCE   = #incidents,
@@ -67,9 +78,10 @@ CREATE VISUAL IncidentMap AS MAP (
 > 3. Reference it with `MAP_FILE`:
 
 ```sql
+-- Requires your own ZCTA GeoJSON file (see the note above) and your own order table
 SELECT zip_code, SUM(orders) AS Orders
 INTO #zip_orders
-FROM dbo.OrdersByZip
+FROM your_conn.OrdersByZip
 GROUP BY zip_code;
 
 CREATE VISUAL ZipMap AS MAP (
@@ -89,13 +101,18 @@ CREATE VISUAL ZipMap AS MAP (
 
 ### Point map (city names, lat/lon coordinates)
 
-Cities are points, not polygons — they cannot be choropleth-filled. Use `MODE = POINTS` with `LON_COL` and `LAT_COL` mappings to scatter-plot locations on a base map instead. The `VALUE` mapping controls dot size.
+Cities are points, not polygons — they cannot be choropleth-filled. Use `MODE = POINTS` with `LON` and `LAT` mappings to scatter-plot locations on a base map instead. The `VALUE` mapping controls dot size.
 
 ```sql
-SELECT city_name, longitude, latitude, SUM(revenue) AS Revenue
-INTO #city_rev
-FROM dbo.SalesByCity
-GROUP BY city_name, longitude, latitude;
+-- City coordinates (inline sample data)
+SELECT 'Minneapolis' AS city_name, -93.265 AS longitude, 44.978 AS latitude, 412000 AS Revenue INTO #city_rev
+UNION ALL SELECT 'Chicago',     -87.630, 41.878, 530000
+UNION ALL SELECT 'New York',    -74.006, 40.713, 870000
+UNION ALL SELECT 'Los Angeles',-118.244, 34.052, 760000
+UNION ALL SELECT 'Dallas',      -96.797, 32.777, 610000
+UNION ALL SELECT 'Seattle',    -122.332, 47.606, 450000
+UNION ALL SELECT 'Denver',     -104.990, 39.739, 300000
+UNION ALL SELECT 'Atlanta',     -84.388, 33.749, 280000;
 
 CREATE VISUAL CityMap AS MAP (
   SOURCE   = #city_rev,

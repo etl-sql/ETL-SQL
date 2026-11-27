@@ -22,17 +22,14 @@ namespace ETL_SQL.Reporting.Renderers;
 /// </summary>
 internal sealed class SpecializedNativeSvgRenderer : RendererBase
 {
-    /// <summary>Vertical space the title band reserves above the plot area.</summary>
-    private const double TitleBand = 38;
-
-    public string? Render(VisualManifest visual, PlotBounds? bounds = null) => visual.VisualType.ToUpperInvariant() switch
+    public string? Render(VisualManifest visual, PlotBounds? bounds = null, bool embedInCard = false) => visual.VisualType.ToUpperInvariant() switch
     {
-        "TREEMAP" => Treemap(visual, FocusedLayoutInputs.From(visual, TreemapKeys(visual), bounds)),
-        "SUNBURST" => Sunburst(visual, bounds),
-        "SANKEY" => Sankey(visual, bounds),
-        "NETWORK" => Network(visual, bounds),
-        "MAP" => Map(visual, FocusedLayoutInputs.From(visual, bounds: bounds)),
-        "MATRIX" => Matrix(visual, FocusedLayoutInputs.From(visual, bounds: bounds)),
+        "TREEMAP" => Treemap(visual, FocusedLayoutInputs.From(visual, TreemapKeys(visual), bounds, embedInCard)),
+        "SUNBURST" => Sunburst(visual, bounds, embedInCard),
+        "SANKEY" => Sankey(visual, bounds, embedInCard),
+        "NETWORK" => Network(visual, bounds, embedInCard),
+        "MAP" => Map(visual, FocusedLayoutInputs.From(visual, bounds: bounds, embedInCard: embedInCard)),
+        "MATRIX" => Matrix(visual, FocusedLayoutInputs.From(visual, bounds: bounds, embedInCard: embedInCard)),
         _ => null
     };
 
@@ -88,12 +85,12 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         {
             var pathSummary = roots.Count <= 3 ? string.Join(" · ", roots.Select(r => r.Id)) : $"{roots[0].Id} · {roots[1].Id} +{roots.Count - 2} more";
             sb.Append($"<g class='hierarchy-breadcrumb' data-show-breadcrumb='true'>");
-            sb.Append($"<rect x='8' y='{F(TitleBand)}' width='{F(inputs.Width - 16)}' height='18' rx='3' fill='{(inputs.IsDark ? "#2b3242" : "#f1f5f9")}'/>");
-            sb.Append($"<text x='16' y='{F(TitleBand + 13)}' font-size='10' font-weight='500' fill='{inputs.Muted}'>All &gt; <tspan fill='{inputs.OnSurface}'>{Xml(pathSummary)}</tspan></text>");
+            sb.Append($"<rect x='8' y='{F(inputs.TitleBand)}' width='{F(inputs.Width - 16)}' height='18' rx='3' fill='{(inputs.IsDark ? "#2b3242" : "#f1f5f9")}'/>");
+            sb.Append($"<text x='16' y='{F(inputs.TitleBand + 13)}' font-size='10' font-weight='500' fill='{inputs.Muted}'>All &gt; <tspan fill='{inputs.OnSurface}'>{Xml(pathSummary)}</tspan></text>");
             sb.Append("</g>");
         }
 
-        Squarify(sb, inputs, roots, nodes, 8, TitleBand + breadcrumbHeight, inputs.Width - 16, inputs.Height - TitleBand - breadcrumbHeight - 8, 0, labelMinSize, labelOverflow);
+        Squarify(sb, inputs, roots, nodes, 8, inputs.TitleBand + breadcrumbHeight, inputs.Width - 16, inputs.Height - inputs.TitleBand - breadcrumbHeight - 8, 0, labelMinSize, labelOverflow);
         return End(sb);
     }
 
@@ -230,7 +227,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
     // ── SUNBURST ───────────────────────────────────────────────────────────────
 
-    private static string Sunburst(VisualManifest v, PlotBounds? bounds)
+    private static string Sunburst(VisualManifest v, PlotBounds? bounds, bool embedInCard)
     {
         var explicitLabel = Index(v, "label", "name", fallback: -1);
         var parent = Index(v, "parent", fallback: -1);
@@ -265,7 +262,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
             .Where(part => part.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var inputs = FocusedLayoutInputs.From(v, roots, bounds);
+        var inputs = FocusedLayoutInputs.From(v, roots, bounds, embedInCard);
 
         // Options
         var showBreadcrumb = false;
@@ -281,16 +278,16 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         var total = paths.Sum(p => p.Value); if (total <= 0) total = Math.Max(1, paths.Count);
         var cx = inputs.Width / 2;
         var breadcrumbHeight = showBreadcrumb ? 22.0 : 0.0;
-        var cy = (TitleBand + breadcrumbHeight + inputs.Height) / 2;
-        var radius = Math.Min(inputs.Width, inputs.Height - TitleBand - breadcrumbHeight) * .42;
+        var cy = (inputs.TitleBand + breadcrumbHeight + inputs.Height) / 2;
+        var radius = Math.Min(inputs.Width, inputs.Height - inputs.TitleBand - breadcrumbHeight) * .42;
         var sb = Start(v, inputs);
 
         if (showBreadcrumb)
         {
             var pathSummary = roots.Count <= 3 ? string.Join(" · ", roots) : $"{roots[0]} · {roots[1]} +{roots.Count - 2} more";
             sb.Append($"<g class='hierarchy-breadcrumb' data-show-breadcrumb='true'>");
-            sb.Append($"<rect x='8' y='{F(TitleBand)}' width='{F(inputs.Width - 16)}' height='18' rx='3' fill='{(inputs.IsDark ? "#2b3242" : "#f1f5f9")}'/>");
-            sb.Append($"<text x='16' y='{F(TitleBand + 13)}' font-size='10' font-weight='500' fill='{inputs.Muted}'>All &gt; <tspan fill='{inputs.OnSurface}'>{Xml(pathSummary)}</tspan></text>");
+            sb.Append($"<rect x='8' y='{F(inputs.TitleBand)}' width='{F(inputs.Width - 16)}' height='18' rx='3' fill='{(inputs.IsDark ? "#2b3242" : "#f1f5f9")}'/>");
+            sb.Append($"<text x='16' y='{F(inputs.TitleBand + 13)}' font-size='10' font-weight='500' fill='{inputs.Muted}'>All &gt; <tspan fill='{inputs.OnSurface}'>{Xml(pathSummary)}</tspan></text>");
             sb.Append("</g>");
         }
 
@@ -322,7 +319,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
     // ── SANKEY ─────────────────────────────────────────────────────────────────
 
-    private static string Sankey(VisualManifest v, PlotBounds? bounds)
+    private static string Sankey(VisualManifest v, PlotBounds? bounds, bool embedInCard)
     {
         var source = Index(v, "source", "from", fallback: 0);
         var target = Index(v, "target", "to", fallback: 1);
@@ -339,7 +336,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         )).Where(e => e.Source.Length > 0 && e.Target.Length > 0).ToList();
 
         var names = links.SelectMany(e => new[] { e.Source, e.Target }).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        var inputs = FocusedLayoutInputs.From(v, names, bounds);
+        var inputs = FocusedLayoutInputs.From(v, names, bounds, embedInCard);
 
         // Options validation & extraction
         var nodeAlign = (v.Options.GetValueOrDefault("NODE_ALIGN") ?? "JUSTIFY").ToUpperInvariant();
@@ -435,7 +432,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
         // Node positioning with node padding
         const double nodeHeight = 20.0;
-        var availableHeight = inputs.Height - TitleBand - 40.0;
+        var availableHeight = inputs.Height - inputs.TitleBand - 40.0;
         var pos = new Dictionary<string, (double X, double Y)>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var group in names.GroupBy(n => ranks[n]))
@@ -445,7 +442,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
             if (list.Count == 1)
             {
-                pos[list[0]] = (colX, TitleBand + 20.0 + availableHeight / 2.0);
+                pos[list[0]] = (colX, inputs.TitleBand + 20.0 + availableHeight / 2.0);
             }
             else
             {
@@ -455,12 +452,12 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
                 if (neededHeight <= availableHeight)
                 {
-                    startY = TitleBand + 20.0 + (availableHeight - neededHeight) / 2.0 + nodeHeight / 2.0;
+                    startY = inputs.TitleBand + 20.0 + (availableHeight - neededHeight) / 2.0 + nodeHeight / 2.0;
                 }
                 else
                 {
                     effectivePadding = Math.Max(2.0, (availableHeight - list.Count * nodeHeight) / Math.Max(1, list.Count - 1));
-                    startY = TitleBand + 20.0 + nodeHeight / 2.0;
+                    startY = inputs.TitleBand + 20.0 + nodeHeight / 2.0;
                 }
 
                 for (var i = 0; i < list.Count; i++)
@@ -491,7 +488,13 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
                 ? c
                 : inputs.Color(nodeName, i);
 
-            sb.Append($"<rect x='{F(p.X - 8)}' y='{F(p.Y - 10)}' width='16' height='20' rx='2' fill='{nodeColor}' data-node='{Xml(nodeName)}'/><text x='{F(p.X + 12)}' y='{F(p.Y + 4)}' font-size='10' fill='{inputs.OnSurface}'>{Xml(Trim(nodeName, 18))}</text>");
+            // Labels sit right of the node, except in the last column, where they would run off
+            // the chart: there they end just left of the node.
+            var lastColumn = ranks[nodeName] == maxRank;
+            var label = lastColumn
+                ? $"<text x='{F(p.X - 12)}' y='{F(p.Y + 4)}' font-size='10' text-anchor='end' fill='{inputs.OnSurface}'>"
+                : $"<text x='{F(p.X + 12)}' y='{F(p.Y + 4)}' font-size='10' fill='{inputs.OnSurface}'>";
+            sb.Append($"<rect x='{F(p.X - 8)}' y='{F(p.Y - 10)}' width='16' height='20' rx='2' fill='{nodeColor}' data-node='{Xml(nodeName)}'/>{label}{Xml(Trim(nodeName, 18))}</text>");
         }
 
         sb.Append("</g>");
@@ -500,7 +503,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
     // ── NETWORK ────────────────────────────────────────────────────────────────
 
-    private static string Network(VisualManifest v, PlotBounds? bounds)
+    private static string Network(VisualManifest v, PlotBounds? bounds, bool embedInCard)
     {
         var source = Index(v, "from", "source", fallback: 0);
         var target = Index(v, "to", "target", fallback: 1);
@@ -603,7 +606,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         var distinctGroups = groupCol >= 0 && nodeGroups.Count > 0
             ? nodeGroups.Values.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(g => g, StringComparer.OrdinalIgnoreCase).ToList()
             : names;
-        var inputs = FocusedLayoutInputs.From(v, distinctGroups, bounds);
+        var inputs = FocusedLayoutInputs.From(v, distinctGroups, bounds, embedInCard);
 
         var layout = v.Options.GetValueOrDefault("LAYOUT") ?? "FORCE";
         double repulsion = 500;
@@ -640,10 +643,10 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         v.Options.TryGetValue("NODE_COLOR", out var customNodeColor);
 
         var cx = inputs.Width / 2;
-        var cy = (TitleBand + inputs.Height) / 2;
+        var cy = (inputs.TitleBand + inputs.Height) / 2;
         var plotMinX = 28.0;
         var plotMaxX = inputs.Width - 28.0;
-        var plotMinY = TitleBand + 24.0;
+        var plotMinY = inputs.TitleBand + 24.0;
         var plotMaxY = inputs.Height - 24.0;
 
         var mappedFixedPositions = new Dictionary<string, (double X, double Y)>(StringComparer.OrdinalIgnoreCase);
@@ -679,7 +682,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         Dictionary<string, (double X, double Y)> pos;
         if (layout.Equals("CIRCULAR", StringComparison.OrdinalIgnoreCase))
         {
-            var radius = Math.Min(inputs.Width, inputs.Height - TitleBand) * .38;
+            var radius = Math.Min(inputs.Width, inputs.Height - inputs.TitleBand) * .38;
             pos = names.Select((n, i) =>
             {
                 if (mappedFixedPositions.TryGetValue(n, out var fixedPos))
@@ -910,11 +913,24 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
             }
         }
 
+        // ZOOM or CENTER keeps the whole-world view they are relative to; otherwise the map is
+        // fitted to its geometry (a US_STATES map used to be drawn at world scale).
+        var explicitView = v.Options.ContainsKey("ZOOM") || v.Options.ContainsKey("CENTER");
+        // A fitted bundled US states map draws Alaska and Hawaii as insets; explicit views keep real positions.
+        var insets = !explicitView && string.IsNullOrWhiteSpace(v.ResolvedMapFile) &&
+            UsStatesInsets.IsBuiltInUsStates(v.Options.GetValueOrDefault("MAP_NAME"));
+
         if (mode.Equals("POINTS", StringComparison.OrdinalIgnoreCase))
         {
-            DrawMapOutline(sb, v, inputs, zoom, centerLat, centerLon);
             var lon = Index(v, "lon", fallback: 0);
             var lat = Index(v, "lat", fallback: 1);
+            using var outline = LoadGeoJson(v);
+            var pointView = explicitView
+                ? WorldView(inputs, zoom, centerLat, centerLon)
+                : FitView(inputs, outline is null
+                    ? v.Rows.Select(r => (Number(r, lon), Number(r, lat)))
+                    : GeometryPoints(outline), insets);
+            DrawMapOutline(sb, outline, inputs, pointView);
             var val = Index(v, "value", fallback: 2);
             var label = Index(v, "label", fallback: 3);
             var colorCol = Index(v, "color");
@@ -925,8 +941,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
             foreach (var (row, i) in v.Rows.Select((r, i) => (r, i)))
             {
-                var x = ProjectX(inputs, Number(row, lon), zoom, centerLon);
-                var y = ProjectY(inputs, Number(row, lat), zoom, centerLat);
+                var (x, y) = pointView.Point(Number(row, lon), Number(row, lat));
                 var fill = accent;
                 if (colorCol >= 0)
                 {
@@ -944,9 +959,10 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
             return End(sb);
         }
 
-        var geo = LoadGeoJson(v);
+        using var geo = LoadGeoJson(v);
         if (geo is null) { sb.Append($"<text x='{F(inputs.Width / 2)}' y='{F(inputs.Height / 2)}' text-anchor='middle' fill='{inputs.OnSurface}'>Map geometry unavailable</text>"); return End(sb); }
 
+        var view = explicitView ? WorldView(inputs, zoom, centerLat, centerLon) : FitView(inputs, GeometryPoints(geo), insets);
         var regionIndex = Index(v, "region", fallback: 0);
         var valueIndex = Index(v, "value", fallback: 1);
         var tooltipIndex = Index(v, "tooltip");
@@ -1019,10 +1035,9 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
             foreach (var polygon in Polygons(feature.GetProperty("geometry")))
             {
-                sb.Append($"<path{(hasMatch ? $" data-row-index='{match.Row}'" : "")} d='{PolygonPath(inputs, polygon, zoom, centerLat, centerLon)}' fill='{fill}' stroke='{inputs.Divider}' stroke-width='.35'><title>{Xml(tip)}</title></path>");
+                sb.Append($"<path{(hasMatch ? $" data-row-index='{match.Row}'" : "")} d='{PolygonPath(polygon, view)}' fill='{fill}' stroke='{inputs.Divider}' stroke-width='.35'><title>{Xml(tip)}</title></path>");
             }
         }
-        geo.Dispose();
         return End(sb);
     }
 
@@ -1031,9 +1046,9 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
     private static string Matrix(VisualManifest v, FocusedLayoutInputs inputs)
     {
         var sb = Start(v, inputs); var cols = Math.Max(1, v.Columns.Count); var rows = Math.Max(1, v.Rows.Count);
-        var cw = (inputs.Width - 20) / cols; var ch = Math.Min(28, (inputs.Height - TitleBand - 8) / (rows + 1));
+        var cw = (inputs.Width - 20) / cols; var ch = Math.Min(28, (inputs.Height - inputs.TitleBand - 8) / (rows + 1));
         var (even, odd) = inputs.BandFills;
-        for (var c = 0; c < cols; c++) { sb.Append($"<rect x='{F(10 + c * cw)}' y='{F(TitleBand)}' width='{F(cw)}' height='{F(ch)}' fill='{inputs.HeaderFill}' stroke='{inputs.Divider}'/><text x='{F(14 + c * cw)}' y='{F(TitleBand + 18)}' font-size='10' font-weight='bold' fill='{inputs.OnSurface}'>{Xml(Trim(v.Columns[c], 16))}</text>"); }
+        for (var c = 0; c < cols; c++) { sb.Append($"<rect x='{F(10 + c * cw)}' y='{F(inputs.TitleBand)}' width='{F(cw)}' height='{F(ch)}' fill='{inputs.HeaderFill}' stroke='{inputs.Divider}'/><text x='{F(14 + c * cw)}' y='{F(inputs.TitleBand + 18)}' font-size='10' font-weight='bold' fill='{inputs.OnSurface}'>{Xml(Trim(v.Columns[c], 16))}</text>"); }
         var isDataBar = v.Options.ContainsKey("mapping:value:data_bar") ||
                         (v.Options.TryGetValue("DATA_BAR", out var dbOpt) && (dbOpt.Equals("ON", StringComparison.OrdinalIgnoreCase) || dbOpt.Equals("TRUE", StringComparison.OrdinalIgnoreCase))) ||
                         (v.Options.TryGetValue("DATA_BARS", out var dbsOpt) && (dbsOpt.Equals("ON", StringComparison.OrdinalIgnoreCase) || dbsOpt.Equals("TRUE", StringComparison.OrdinalIgnoreCase)));
@@ -1055,13 +1070,13 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
                 var (customBg, customFg) = EvaluateMatrixCellFormatting(v, cellRaw, v.Columns[c]);
                 var bgFill = customBg ?? (r % 2 == 0 ? even : odd);
                 var textFill = customFg ?? (customBg != null ? "#000000" : inputs.OnSurface);
-                sb.Append($"<g data-row-index='{r}'><rect x='{F(10 + c * cw)}' y='{F(TitleBand + (r + 1) * ch)}' width='{F(cw)}' height='{F(ch)}' fill='{bgFill}' stroke='{inputs.Divider}'/>");
+                sb.Append($"<g data-row-index='{r}'><rect x='{F(10 + c * cw)}' y='{F(inputs.TitleBand + (r + 1) * ch)}' width='{F(cw)}' height='{F(ch)}' fill='{bgFill}' stroke='{inputs.Divider}'/>");
                 if (isDataBar && double.TryParse(cellRaw, NumberStyles.Any, CultureInfo.InvariantCulture, out var val) && val > 0)
                 {
                     var barW = Math.Min(cw, (val / maxNum) * cw);
-                    sb.Append($"<rect class='matrix-data-bar' x='{F(10 + c * cw)}' y='{F(TitleBand + (r + 1) * ch)}' width='{F(barW)}' height='{F(ch)}' fill='{barColor}' opacity='0.35'/>");
+                    sb.Append($"<rect class='matrix-data-bar' x='{F(10 + c * cw)}' y='{F(inputs.TitleBand + (r + 1) * ch)}' width='{F(barW)}' height='{F(ch)}' fill='{barColor}' opacity='0.35'/>");
                 }
-                sb.Append($"<text x='{F(14 + c * cw)}' y='{F(TitleBand + (r + 1) * ch + 18)}' font-size='10' fill='{textFill}'>{Xml(Trim(cellRaw, 18))}</text></g>");
+                sb.Append($"<text x='{F(14 + c * cw)}' y='{F(inputs.TitleBand + (r + 1) * ch + 18)}' font-size='10' fill='{textFill}'>{Xml(Trim(cellRaw, 18))}</text></g>");
             }
         }
         return End(sb);
@@ -1163,10 +1178,73 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         catch { return null; }
     }
 
-    private static void DrawMapOutline(StringBuilder sb, VisualManifest v, FocusedLayoutInputs inputs, double zoom = 1.0, double centerLat = 0.0, double centerLon = 0.0)
+    private static void DrawMapOutline(StringBuilder sb, JsonDocument? geo, FocusedLayoutInputs inputs, MapView view)
     {
-        using var geo = LoadGeoJson(v); if (geo is null) return;
-        foreach (var feature in geo.RootElement.GetProperty("features").EnumerateArray()) foreach (var polygon in Polygons(feature.GetProperty("geometry"))) sb.Append($"<path d='{PolygonPath(inputs, polygon, zoom, centerLat, centerLon)}' fill='{(inputs.IsDark ? "#2b3242" : "#f1f5f9")}' stroke='{inputs.Muted}' stroke-width='.35'/>");
+        if (geo is null) return;
+        foreach (var feature in geo.RootElement.GetProperty("features").EnumerateArray()) foreach (var polygon in Polygons(feature.GetProperty("geometry"))) sb.Append($"<path d='{PolygonPath(polygon, view)}' fill='{(inputs.IsDark ? "#2b3242" : "#f1f5f9")}' stroke='{inputs.Muted}' stroke-width='.35'/>");
+    }
+
+    private static IEnumerable<(double Lon, double Lat)> GeometryPoints(JsonDocument geo)
+    {
+        foreach (var feature in geo.RootElement.GetProperty("features").EnumerateArray())
+            foreach (var ring in Polygons(feature.GetProperty("geometry")))
+                foreach (var point in ring.EnumerateArray())
+                    yield return (point[0].GetDouble(), point[1].GetDouble());
+    }
+
+    /// <summary>Degrees to chart pixels: x = OriginX + (lon - CenterLon) * ScaleX, y likewise with latitude flipped.</summary>
+    private readonly record struct MapView(double OriginX, double OriginY, double ScaleX, double ScaleY, double CenterLon, double CenterLat, bool Insets = false)
+    {
+        public double X(double lon) => OriginX + (lon - CenterLon) * ScaleX;
+        public double Y(double lat) => OriginY + (CenterLat - lat) * ScaleY;
+
+        /// <summary>Projects a longitude/latitude, first moving Alaska and Hawaii to their insets when <see cref="Insets"/>.</summary>
+        public (double X, double Y) Point(double lon, double lat)
+        {
+            if (Insets) (lon, lat) = UsStatesInsets.Apply(lon, lat);
+            return (X(lon), Y(lat));
+        }
+    }
+
+    /// <summary>The whole world stretched over the plot area; ZOOM and CENTER are relative to it.</summary>
+    private static MapView WorldView(FocusedLayoutInputs inputs, double zoom, double centerLat, double centerLon)
+    {
+        var plotWidth = inputs.Width - 20;
+        var plotHeight = inputs.Height - inputs.TitleBand - 8;
+        return new MapView(10 + plotWidth / 2.0, inputs.TitleBand + plotHeight / 2.0,
+            plotWidth / 360.0 * zoom, plotHeight / 180.0 * zoom, centerLon, centerLat);
+    }
+
+    /// <summary>
+    /// Fits the points' extent into the plot area with one scale for both axes. Longitude is
+    /// narrowed by the cosine of the middle latitude so shapes away from the equator keep their
+    /// proportions. With <paramref name="insets"/>, Alaska and Hawaii are fitted, and later
+    /// projected, at their inset positions.
+    /// </summary>
+    private static MapView FitView(FocusedLayoutInputs inputs, IEnumerable<(double Lon, double Lat)> points, bool insets = false)
+    {
+        double minLon = double.MaxValue, maxLon = double.MinValue, minLat = double.MaxValue, maxLat = double.MinValue;
+        foreach (var point in points)
+        {
+            var (lon, lat) = insets ? UsStatesInsets.Apply(point.Lon, point.Lat) : point;
+            if (!double.IsFinite(lon) || !double.IsFinite(lat)) continue;
+            minLon = Math.Min(minLon, lon); maxLon = Math.Max(maxLon, lon);
+            minLat = Math.Min(minLat, lat); maxLat = Math.Max(maxLat, lat);
+        }
+        if (minLon > maxLon) return WorldView(inputs, 1.0, 0.0, 0.0);
+
+        // A lone point or a tight cluster still gets some surroundings.
+        const double minimumSpan = 10.0;
+        var centerLon = (minLon + maxLon) / 2.0;
+        var centerLat = (minLat + maxLat) / 2.0;
+        var lonSpan = Math.Max(maxLon - minLon, minimumSpan);
+        var latSpan = Math.Max(maxLat - minLat, minimumSpan);
+        var narrowing = Math.Max(0.2, Math.Cos(centerLat * Math.PI / 180.0));
+
+        var plotWidth = inputs.Width - 20;
+        var plotHeight = inputs.Height - inputs.TitleBand - 8;
+        var scale = Math.Min(plotWidth / (lonSpan * narrowing), plotHeight / latSpan) * 0.96;
+        return new MapView(10 + plotWidth / 2.0, inputs.TitleBand + plotHeight / 2.0, scale * narrowing, scale, centerLon, centerLat, insets);
     }
 
     private static IEnumerable<JsonElement> Polygons(JsonElement geometry)
@@ -1176,17 +1254,11 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         else if (type == "MultiPolygon") foreach (var polygon in coordinates.EnumerateArray()) foreach (var ring in polygon.EnumerateArray().Take(1)) yield return ring;
     }
 
-    private static string PolygonPath(FocusedLayoutInputs inputs, JsonElement ring, double zoom = 1.0, double centerLat = 0.0, double centerLon = 0.0) => string.Join(" ", ring.EnumerateArray().Select((point, i) => $"{(i == 0 ? "M" : "L")} {F(ProjectX(inputs, point[0].GetDouble(), zoom, centerLon))} {F(ProjectY(inputs, point[1].GetDouble(), zoom, centerLat))}")) + " Z";
-    private static double ProjectX(FocusedLayoutInputs inputs, double lon, double zoom = 1.0, double centerLon = 0.0)
+    private static string PolygonPath(JsonElement ring, MapView view) => string.Join(" ", ring.EnumerateArray().Select((point, i) =>
     {
-        var cx = 10 + (inputs.Width - 20) / 2.0;
-        return cx + ((lon - centerLon) / 360.0) * (inputs.Width - 20) * zoom;
-    }
-    private static double ProjectY(FocusedLayoutInputs inputs, double lat, double zoom = 1.0, double centerLat = 0.0)
-    {
-        var cy = TitleBand + (inputs.Height - TitleBand - 8) / 2.0;
-        return cy + ((centerLat - lat) / 180.0) * (inputs.Height - TitleBand - 8) * zoom;
-    }
+        var (x, y) = view.Point(point[0].GetDouble(), point[1].GetDouble());
+        return $"{(i == 0 ? "M" : "L")} {F(x)} {F(y)}";
+    })) + " Z";
     private static string InterpolateColorDouble(string low, string high, double ratio)
     {
         ratio = Math.Clamp(ratio, 0.0, 1.0);
@@ -1222,11 +1294,17 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         var interaction = inputs.Interaction.IsSelectable
             ? $" data-interaction-key='{Xml(inputs.Interaction.Key!)}' data-interaction-highlight='{Xml(inputs.Interaction.Highlight)}'"
             : string.Empty;
+        var bgRect = string.Equals(inputs.Surface, "transparent", StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : $"<rect width='100%' height='100%' fill='{inputs.Surface}'/>";
+        var titleText = inputs.EmbedInCard
+            ? string.Empty
+            : $"<text x='{F(inputs.Width / 2)}' y='22' text-anchor='middle' font-size='13' font-weight='bold' fill='{inputs.OnSurface}'>{Xml(inputs.Title)}</text>";
         return new StringBuilder(
             $"<svg xmlns='http://www.w3.org/2000/svg' width='{F(inputs.Width)}' height='{F(inputs.Height)}' viewBox='0 0 {F(inputs.Width)} {F(inputs.Height)}' role='img' aria-label='{Xml(inputs.Title)}' font-family='sans-serif'{interaction}>" +
             $"<desc>{Xml(inputs.AccessibleDescription)}</desc>" +
-            $"<rect width='100%' height='100%' fill='{inputs.Surface}'/>" +
-            $"<text x='{F(inputs.Width / 2)}' y='22' text-anchor='middle' font-size='13' font-weight='bold' fill='{inputs.OnSurface}'>{Xml(inputs.Title)}</text>");
+            bgRect +
+            titleText);
     }
 
     private static string End(StringBuilder sb) { sb.Append("</svg>"); return sb.ToString(); }

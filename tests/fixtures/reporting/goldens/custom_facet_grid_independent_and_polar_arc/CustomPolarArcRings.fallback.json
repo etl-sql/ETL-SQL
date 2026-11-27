@@ -1,0 +1,35 @@
+{
+  "kind": "proportionalBreakdown",
+  "heading": "Stacked Polar Arc Breakdown",
+  "items": [
+    {
+      "label": "Compute",
+      "value": "Compute: 20.0; radius 0 to 20.0",
+      "order": 1,
+      "detail": "radial stack",
+      "group": "Burst"
+    },
+    {
+      "label": "Storage",
+      "value": "Storage: 15.0; radius 0 to 15.0",
+      "order": 3,
+      "detail": "radial stack",
+      "group": "Burst"
+    },
+    {
+      "label": "Compute",
+      "value": "Compute: 35.0; radius 20.0 to 55.0",
+      "order": 0,
+      "detail": "radial stack",
+      "group": "Core"
+    },
+    {
+      "label": "Storage",
+      "value": "Storage: 30.0; radius 15.0 to 45.0",
+      "order": 2,
+      "detail": "radial stack",
+      "group": "Core"
+    }
+  ],
+  "summary": "Stacked Polar Arc Breakdown: 4 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

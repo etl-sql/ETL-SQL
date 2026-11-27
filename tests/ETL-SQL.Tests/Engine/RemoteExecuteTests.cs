@@ -145,7 +145,9 @@ SELECT * FROM #emp;";
             await evaluator.Evaluate(ast);
 
             Assert.NotNull(evaluator.LastResult);
-            Assert.True(evaluator.LastResult.Rows.Count > 0, "INTO #emp should have received rows from remote execution");
+            Assert.Equal(100, evaluator.LastResult.Rows.Count);
+            Assert.Contains("EmpID", evaluator.LastResult.ColumnNames, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Name", evaluator.LastResult.ColumnNames, StringComparer.OrdinalIgnoreCase);
             Assert.True(evaluator.Connections.ContainsKey("#emp"), "Temp table #emp should exist after EXECUTE ... INTO");
         }
 
@@ -168,8 +170,8 @@ SELECT COUNT(*) AS cnt FROM #emp;";
             await evaluator.Evaluate(ast);
 
             Assert.NotNull(evaluator.LastResult);
-            var cnt = Convert.ToInt32(evaluator.LastResult.Rows[0].Columns.Values.First());
-            Assert.True(cnt > 0, "Pre-created #emp should have rows after EXECUTE ... INTO");
+            var cnt = Convert.ToDecimal(evaluator.LastResult.Rows[0].Columns.Values.First());
+            Assert.Equal(100m, cnt);
         }
 
         [Fact]

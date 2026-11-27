@@ -111,7 +111,10 @@ namespace ETL_SQL.App
                             }
 
                             await writable.StoreAsync(name, value!, cancellationToken);
-                            logger.WriteLine($"Secret '{name}' stored in provider '{writable.ProviderName}' (machine scope).", ConsoleColor.Green);
+                            var scopeLabel = writable is OsSecretStoreProvider { ProtectionScope: LocalVaultProtectionScope.CurrentUser }
+                                ? "user scope"
+                                : "machine scope";
+                            logger.WriteLine($"Secret '{name}' stored in provider '{writable.ProviderName}' ({scopeLabel}).", ConsoleColor.Green);
                             return 0;
                         }
                     case "disable-secret":
@@ -164,20 +167,7 @@ namespace ETL_SQL.App
 
         internal static ISecretProvider CreateProvider(IConfiguration? configuration)
         {
-            var options = new SecretProviderOptions
-            {
-                Provider = configuration?["Governance:Secrets:Provider"]
-                    ?? configuration?["Secrets:Provider"]
-                    ?? "Environment",
-                EnvironmentPrefix = configuration?["Governance:Secrets:EnvironmentPrefix"]
-                    ?? configuration?["Secrets:EnvironmentPrefix"],
-                OsStoreRoot = configuration?["Governance:Secrets:OsStoreRoot"]
-                    ?? configuration?["Secrets:OsStoreRoot"],
-                VaultEndpoint = configuration?["Governance:Secrets:VaultEndpoint"]
-                    ?? configuration?["Secrets:VaultEndpoint"],
-                VaultBearerToken = configuration?["Governance:Secrets:VaultBearerToken"]
-                    ?? configuration?["Secrets:VaultBearerToken"]
-            };
+            var options = SecretProviderOptions.FromConfiguration(key => configuration?[key]);
             return new SecretProviderFactory(PolicyBoundHttp.CreateClient()).Create(options);
         }
 

@@ -1,5 +1,36 @@
 # Data Quality Gate
+<!-- description: **▶ Runs as-is.** Assert data quality before loading: in-stream EXPECT rules quarantine bad rows (nulls, orphaned keys, out-of-range values) or fail the job. -->
 Assert data quality before loading. This pattern catches bad data (nulls, orphaned keys, out-of-range values) and either fails the job or routes bad rows to a quarantine table. Never load first and ask questions later.
+
+## Try It Now (No Database Needed)
+
+Paste into a `.etlsql` file and press **F5**. `EXPECT` rules run in-stream against the built-in `MOCKDB()` sample orders:
+
+```sql
+CREATE CONNECTION demo AS MOCKDB();
+
+-- Every row is checked as it streams in. Rows that break a QUARANTINE rule are set
+-- aside with the reason; a THROW rule stops the run. The section label is the
+-- replay point if you fix quarantined rows and re-run.
+stage_orders:
+SELECT
+    SaleID   EXPECT NOT NULL ON FAILURE THROW
+             EXPECT UNIQUE   ON FAILURE THROW,
+    Region   EXPECT NOT NULL ON FAILURE QUARANTINE,
+    Quantity EXPECT > 0      ON FAILURE QUARANTINE,
+    Total    EXPECT <= 1000  ON FAILURE QUARANTINE   -- demo threshold: large orders need review
+INTO #clean_orders
+FROM demo.Orders
+ON FAILURE QUARANTINE TO #quarantine_orders WITH (HANDLING = SCRIPT)
+ON FAILURE THROW;
+
+SELECT COUNT(*) AS CleanRows FROM #clean_orders;
+SELECT COUNT(*) AS QuarantinedRows FROM #quarantine_orders;
+```
+
+About 1 in 6 mock orders exceeds the demo threshold, so they land in `#quarantine_orders` with the failing rule while the rest load into `#clean_orders`. Change `ON FAILURE QUARANTINE` to `ON FAILURE THROW` on the `Total` rule to see the run stop instead. The production version below does the same checks with explicit rule queries, a durable quarantine table, and a `MERGE` into the target.
+
+## Production Version
 
 **Pattern Scenario:** Quality-gate a staging table before merging into production.
 

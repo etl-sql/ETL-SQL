@@ -58,8 +58,8 @@ $currentPath = (Resolve-Path -LiteralPath $CurrentMsi).Path
 if ($upgrade) {
     $previousPath = (Resolve-Path -LiteralPath $PreviousMsi).Path
     $contract = Test-MsiUpgradeContract -PreviousMsi $previousPath -CurrentMsi $currentPath
-    $previousVersion = $previousVersion
-    $currentVersion = $currentVersion
+    $previousVersion = $contract.PreviousVersion
+    $currentVersion = $contract.CurrentVersion
 } else {
     $previousVersion = $null
     $currentVersion = Get-MsiProperty $currentPath 'ProductVersion'
@@ -175,15 +175,33 @@ function Assert-ServiceRunsVersion([string]$Service, [string]$Version) {
     if ($product -notmatch [regex]::Escape(([version]$Version).ToString(3))) { throw "$Service runs $product, expected $Version." }
 }
 
-# The effective value, as the services read it: the installed secrets file overrides appsettings.json.
+# The installer's registry record (MI01), or $null when it is absent or names another folder.
+function Get-InstallRecord {
+    $key = 'HKLM:\Software\ETL-SQL\Install'
+    if (-not (Test-Path -LiteralPath $key)) { return $null }
+    $record = Get-ItemProperty -LiteralPath $key
+    if ([string]$record.InstallFolder -and
+        ([string]$record.InstallFolder).TrimEnd('\') -ieq $installDir.TrimEnd('\')) { return $record }
+    return $null
+}
+
+# The effective value, as the services read it (MI01 layers, lowest first): the release defaults,
+# the installer's registry values, the operator's appsettings.json, then the installed secrets file.
 function Get-Setting([string]$Path) {
     $value = ''
-    foreach ($file in 'appsettings.json', 'appsettings.secrets.json') {
+    foreach ($file in 'appsettings.defaults.json', '(registry)', 'appsettings.json', 'appsettings.secrets.json') {
+        if ($file -ceq '(registry)') {
+            $record = Get-InstallRecord
+            if ($null -ne $record -and $Path -ceq 'Portal:Orchestrator:DatabasePath' -and $record.OrchestratorDatabasePath) {
+                $value = [string]$record.OrchestratorDatabasePath
+            }
+            continue
+        }
         $full = Join-Path $installDir $file
         if (-not (Test-Path -LiteralPath $full)) { continue }
         $node = Get-Content -LiteralPath $full -Raw | ConvertFrom-Json
         $found = $true
-        # Strict mode: a key missing from one of the two files is absent, not an error.
+        # Strict mode: a key missing from one of the files is absent, not an error.
         foreach ($part in $Path.Split(':')) {
             if ($null -eq $node -or $null -eq $node.PSObject.Properties[$part]) { $found = $false; break }
             $node = $node.$part
@@ -191,6 +209,23 @@ function Get-Setting([string]$Path) {
         if ($found) { $value = if ($node -is [string]) { $node } else { '' } }
     }
     return $value
+}
+
+function Initialize-PreviousPortalUpgradeSettings {
+    $cfgPath = Join-Path $installDir 'appsettings.json'
+    $cfg = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
+    if (-not (Test-Path -LiteralPath (Join-Path $installDir 'appsettings.defaults.json') -PathType Leaf)) {
+        # Legacy installers store the configuration in the shared file. The newer layout
+        # supplies these values through the service bootstrap and protected secrets file.
+        $random = { $bytes = [byte[]]::new(32); [Security.Cryptography.RandomNumberGenerator]::Fill($bytes); [Convert]::ToBase64String($bytes) }
+        $cfg.Portal.FirstRun | Add-Member NoteProperty AdminPassword ('Upgrade-' + (& $random).Substring(0, 12).Replace('/', 'x') + '9!') -Force
+        $cfg.Portal.Dataset.AtRestKey = & $random
+        $signing = & $random
+        $cfg.Orchestrator | Add-Member NoteProperty IdentitySigningSecret $signing -Force
+        $cfg.Portal.Orchestrator | Add-Member NoteProperty IdentitySigningSecret $signing -Force
+    }
+    $cfg | Add-Member NoteProperty UpgradeSentinel ([pscustomobject]@{ Value = 'kept' }) -Force
+    ($cfg | ConvertTo-Json -Depth 64) | Set-Content -LiteralPath $cfgPath -Encoding UTF8
 }
 
 function Initialize-PreviousPortalUpgradeBaseline {
@@ -267,9 +302,22 @@ function Uninstall-All([string]$Log) {
     }
 }
 
-function Get-DatabaseFiles {
-    @($installDir, $systemData) | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object {
-        Get-ChildItem -LiteralPath $_ -File | Where-Object Name -match '\.db(-wal|-shm)?$'
+function Invoke-EtlSqlAdmin([string]$ExePath, [string[]]$Arguments, [string]$LogPrefix, [string]$TimeoutMessage) {
+    $stdoutLog = Join-Path $out "$LogPrefix.log"
+    $stderrLog = Join-Path $out "$LogPrefix.err.log"
+    $noInput = Join-Path $out 'empty-stdin.txt'
+    Set-Content -LiteralPath $noInput -Value $null
+    $proc = Start-Process -FilePath $ExePath -ArgumentList $Arguments `
+        -WorkingDirectory $out -PassThru -NoNewWindow -RedirectStandardInput $noInput `
+        -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
+    if (-not $proc.WaitForExit(300000)) {
+        Write-HungInstallDiagnostics -LogPath $stdoutLog -OutPath (Join-Path $out "$LogPrefix.hung.txt")
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        throw [TimeoutException]::new($TimeoutMessage)
+    }
+    if ($proc.ExitCode -ne 0) {
+        $detail = if (Test-Path -LiteralPath $stderrLog) { (Get-Content -LiteralPath $stderrLog -Raw).Trim() } else { '' }
+        throw "$($Arguments[0..1] -join ' ') exited $($proc.ExitCode). $detail".Trim()
     }
 }
 
@@ -290,6 +338,13 @@ try {
         }
         Test-Step 'fresh: dataset at-rest key generated' { -not [string]::IsNullOrWhiteSpace((Get-Setting 'Portal:Dataset:AtRestKey')) }
         Test-Step 'fresh: secrets only in the Administrators and SYSTEM file' { Assert-SecretsProtected }
+        # MI01: the MSI ran no script; the services configured themselves from these.
+        Test-Step 'fresh: appsettings.json is the empty operator template' {
+            $operator = Get-Content -LiteralPath (Join-Path $installDir 'appsettings.json') -Raw | ConvertFrom-Json
+            if (@($operator.PSObject.Properties).Count -ne 0) { throw "appsettings.json holds $(@($operator.PSObject.Properties).Count) top-level settings." }
+            if (-not (Test-Path -LiteralPath (Join-Path $installDir 'appsettings.defaults.json'))) { throw 'appsettings.defaults.json is missing.' }
+        }
+        Test-Step 'fresh: installer choices recorded' { if ($null -eq (Get-InstallRecord)) { throw 'HKLM\Software\ETL-SQL\Install does not name the install folder.' } }
         Test-Step 'fresh: served assets match the candidate' { Invoke-Assets @('--inventory-root', $repoRoot, '--out', (Join-Path $out 'fresh-assets.json')) }
         # `admin backup` runs as the operator, not LocalSystem, so it must be told where the service's
         # job history is.
@@ -303,18 +358,10 @@ try {
             New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
             # Bounded like msiexec: run 39131831623 lost its runner at the step timeout once this call was
             # reached. No console input exists here, so stdin is empty rather than inherited.
-            $backupLog = Join-Path $out 'fresh-backup.log'
-            $noInput = Join-Path $out 'empty-stdin.txt'
-            Set-Content -LiteralPath $noInput -Value $null
-            $backup = Start-Process -FilePath (Join-Path $installDir 'ETL-SQL.exe') -ArgumentList @('admin', 'backup', '--output-dir', "`"$backupDir`"") `
-                -WorkingDirectory $out -PassThru -NoNewWindow -RedirectStandardInput $noInput `
-                -RedirectStandardOutput $backupLog -RedirectStandardError (Join-Path $out 'fresh-backup.err.log')
-            if (-not $backup.WaitForExit(300000)) {
-                Write-HungInstallDiagnostics -LogPath $backupLog -OutPath (Join-Path $out 'fresh-backup.hung.txt')
-                Stop-Process -Id $backup.Id -Force -ErrorAction SilentlyContinue
-                throw [TimeoutException]::new('admin backup did not finish within 5 minutes; see fresh-backup.hung.txt.')
-            }
-            if ($backup.ExitCode -ne 0) { throw "admin backup exited $($backup.ExitCode)." }
+            Invoke-EtlSqlAdmin -ExePath (Join-Path $installDir 'ETL-SQL.exe') `
+                -Arguments @('admin', 'backup', '--output-dir', "`"$backupDir`"") `
+                -LogPrefix 'fresh-backup' `
+                -TimeoutMessage 'admin backup did not finish within 5 minutes; see fresh-backup.hung.txt.'
             $archive = Get-ChildItem -LiteralPath $backupDir -Filter 'etl-sql-backup-*.zip' | Select-Object -First 1
             if ($null -eq $archive) { throw 'admin backup wrote no data archive.' }
             Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -338,16 +385,7 @@ try {
         # 1. The previous release, configured as its documentation says.
         Write-Line "== install previous $($previousVersion)"
         Test-Step 'previous: msiexec install' { Install-Msi $previousPath '01-previous.log' }
-        $cfgPath = Join-Path $installDir 'appsettings.json'
-        $cfg = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
-        $random = { $bytes = [byte[]]::new(32); [Security.Cryptography.RandomNumberGenerator]::Fill($bytes); [Convert]::ToBase64String($bytes) }
-        $cfg.Portal.FirstRun | Add-Member NoteProperty AdminPassword ('Upgrade-' + (& $random).Substring(0, 12).Replace('/', 'x') + '9!') -Force
-        $cfg.Portal.Dataset.AtRestKey = & $random
-        $signing = & $random
-        $cfg.Orchestrator | Add-Member NoteProperty IdentitySigningSecret $signing -Force
-        $cfg.Portal.Orchestrator | Add-Member NoteProperty IdentitySigningSecret $signing -Force
-        $cfg | Add-Member NoteProperty UpgradeSentinel ([pscustomobject]@{ Value = 'kept' }) -Force
-        ($cfg | ConvertTo-Json -Depth 64) | Set-Content -LiteralPath $cfgPath -Encoding UTF8
+        Test-Step 'previous: configure operator settings' { Initialize-PreviousPortalUpgradeSettings }
         Set-ServicesState Stopped
         Set-ServicesState Running
         Test-Step 'previous: Portal healthy' { Wait-Portal 'previous' }
@@ -359,15 +397,26 @@ try {
         $backup = Join-Path $privateBackupRoot 'pre-upgrade-backup'
         Set-ServicesState Stopped
         New-Item -ItemType Directory -Force -Path $backup | Out-Null
-        $saved = @(Get-DatabaseFiles | ForEach-Object {
-            $target = Join-Path $backup ("{0}__{1}" -f ($_.DirectoryName -eq $installDir ? 'install' : 'system'), $_.Name)
-            Copy-Item -LiteralPath $_.FullName -Destination $target; $target })
-        Copy-Item -LiteralPath $cfgPath -Destination (Join-Path $backup 'appsettings.json')
-        Write-Line "NOTE previous: backed up $($saved.Count) database file(s) and the configuration"
+        Test-Step 'previous: admin backup packages databases, configuration, and keys' {
+            Invoke-EtlSqlAdmin -ExePath (Join-Path $installDir 'ETL-SQL.exe') `
+                -Arguments @('admin', 'backup', '--output-dir', "`"$backup`"") `
+                -LogPrefix 'previous-backup' `
+                -TimeoutMessage 'previous admin backup did not finish within 5 minutes; see previous-backup.hung.txt.'
+            $dataArchive = Get-ChildItem -LiteralPath $backup -Filter 'etl-sql-backup-*.zip' | Select-Object -First 1
+            $keysArchive = Get-ChildItem -LiteralPath $backup -Filter 'etl-sql-keys-*.zip' | Select-Object -First 1
+            if ($null -eq $dataArchive -or $null -eq $keysArchive) { throw 'admin backup did not write both data and keys archives.' }
+        }
         Set-ServicesState Running
 
         # 2. Upgrade in place.
         Write-Line "== upgrade to $($currentVersion)"
+        # The previous release is removed after the candidate installs (MI01): a shared component
+        # whose GUID changed would delete the candidate's file, the operator's appsettings.json included.
+        Test-Step 'upgrade: component GUIDs match the previous release' {
+            $compare = & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'checks/Compare-MsiComponentGuids.ps1') -Previous $previousPath -Current $currentPath
+            $compare | ForEach-Object { Write-Line "  $_" }
+            if ($LASTEXITCODE -ne 0) { throw 'Component GUIDs or file ownership differ from the previous release.' }
+        }
         Test-Step 'upgrade: msiexec install' { Install-Msi $currentPath '02-upgrade.log' }
         Test-Step 'upgrade: one installed product' { [void](Assert-EntryCount 1 'Upgrade') }
         Test-Step 'upgrade: Portal healthy' { Wait-Portal 'upgrade' }
@@ -382,25 +431,43 @@ try {
         Test-Step 'upgrade: secrets moved to the Administrators and SYSTEM file' { Assert-SecretsProtected }
         Test-Step 'upgrade: no one-time sign-in for an existing Portal' { -not (Test-Path -LiteralPath (Join-Path $installDir 'first-run-password.txt')) }
         Test-Step 'upgrade: no configuration backup left behind' { -not (Test-Path -LiteralPath (Join-Path $installDir 'appsettings.pre-upgrade.json')) }
+        Test-Step 'upgrade: release defaults installed and no installer script left' {
+            if (-not (Test-Path -LiteralPath (Join-Path $installDir 'appsettings.defaults.json'))) { throw 'appsettings.defaults.json is missing.' }
+            if (Test-Path -LiteralPath (Join-Path $installDir 'configure-portal-jwt.ps1')) { throw 'configure-portal-jwt.ps1 is still installed.' }
+        }
+        Test-Step 'upgrade: installer choices recorded' { if ($null -eq (Get-InstallRecord)) { throw 'HKLM\Software\ETL-SQL\Install does not name the install folder.' } }
         $cacheCurrent = Join-Path $out 'cache-current.json'
         Test-Step 'upgrade: served assets match the candidate; cached browser refetches changes' {
             Invoke-Assets @('--inventory-root', $repoRoot, '--revalidate', $cachePrevious, '--record', $cacheCurrent, '--out', (Join-Path $out 'upgrade-assets.json'))
         }
 
+        # Rollback uninstalls the candidate and installs the previous release (v0.22.0), whose CLI does
+        # not yet support `admin restore --in-place`. Stage the candidate's self-contained single-file
+        # CLI under private scratch before uninstalling it so rollback restores with the candidate's
+        # `admin restore` instead of copying files by hand.
+        $candidateCliDir = Join-Path $privateBackupRoot 'candidate-cli'
+        New-Item -ItemType Directory -Force -Path $candidateCliDir | Out-Null
+        $candidateCli = Join-Path $candidateCliDir 'ETL-SQL.exe'
+        Copy-Item -LiteralPath (Join-Path $installDir 'ETL-SQL.exe') -Destination $candidateCli -Force
+
         # 3. Roll back: the MSI refuses a downgrade, so uninstall the candidate (its data is kept),
-        #    install the previous release, and restore the pre-upgrade backup.
+        #    install the previous release, and restore the pre-upgrade backup via `admin restore`.
         Write-Line "== roll back to $($previousVersion)"
         Test-Step 'rollback: uninstall the candidate' { Uninstall-All '03-rollback-uninstall.log' }
         Test-Step 'rollback: msiexec install previous' { Install-Msi $previousPath '03-rollback-install.log' }
         Set-ServicesState Stopped
-        Get-DatabaseFiles | Remove-Item -Force
-        foreach ($file in Get-ChildItem -LiteralPath $backup -File -Filter '*__*') {
-            $scope, $name = $file.Name -split '__', 2
-            $dir = $scope -eq 'install' ? $installDir : $systemData
-            New-Item -ItemType Directory -Force -Path $dir | Out-Null
-            Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $dir $name)
+        Test-Step 'rollback: admin restore puts previous state back in place' {
+            $dataArchive = Get-ChildItem -LiteralPath $backup -Filter 'etl-sql-backup-*.zip' | Select-Object -First 1
+            $keysArchive = Get-ChildItem -LiteralPath $backup -Filter 'etl-sql-keys-*.zip' | Select-Object -First 1
+            if ($null -eq $dataArchive -or $null -eq $keysArchive) { throw 'Pre-upgrade backup archives are missing.' }
+            Invoke-EtlSqlAdmin -ExePath $candidateCli -Arguments @(
+                'admin', 'restore',
+                '--from', "`"$($dataArchive.FullName)`"",
+                '--keys', "`"$($keysArchive.FullName)`"",
+                '--in-place',
+                '--to', "`"$installDir`""
+            ) -LogPrefix 'rollback-restore' -TimeoutMessage 'admin restore did not finish within 5 minutes; see rollback-restore.hung.txt.'
         }
-        Copy-Item -LiteralPath (Join-Path $backup 'appsettings.json') -Destination $cfgPath -Force
         Set-ServicesState Running
         Test-Step 'rollback: Portal healthy on the restored database' { Wait-Portal 'rollback' }
         Test-Step 'rollback: ETL-SQL-Portal runs the previous executable' { Assert-ServiceRunsVersion 'ETL-SQL-Portal' $previousVersion }

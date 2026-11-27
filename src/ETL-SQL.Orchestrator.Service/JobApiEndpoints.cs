@@ -280,7 +280,8 @@ namespace ETL_SQL.Orchestrator.Service
                     PeakMemoryBytes = entry.PeakMemoryBytes,
                     CpuTimeSeconds = entry.CpuTimeSeconds,
                     ErrorMessage = entry.ErrorMessage,
-                    ReportManifestJson = includeSensitivePayload ? entry.ReportManifestJson : null
+                    ReportManifestJson = includeSensitivePayload ? entry.ReportManifestJson : null,
+                    SharedConnectionDependencies = includeSensitivePayload ? entry.SharedConnectionDependencies : null
                 });
             }).WithName("getJobStatus");
 
@@ -288,6 +289,8 @@ namespace ETL_SQL.Orchestrator.Service
 
             app.MapScheduledJobActivity();
             app.MapJobRevisionRuns();
+            app.MapJobToolApproval();
+            app.MapPortalBridgeEndpoints();
 
             app.MapGet("/api/scheduled-jobs", async (HttpContext ctx, IJobHistoryStore store,
                 OrchestratorObjectAuthorizationService authorization, IConfiguration cfg,
@@ -346,7 +349,7 @@ namespace ETL_SQL.Orchestrator.Service
                         });
 
                     var targetPath = targetKind == JobTargetKind.Script
-                        ? await PinBundleTargetAsync(req.TargetPath, bundleStore)
+                        ? await PinBundleTargetAsync(req.TargetPath, bundleStore, ResolveBundleTenantOrNull(ctx, cfg))
                         : req.TargetPath;
                     var scriptText = targetKind == JobTargetKind.Script
                         ? new RunScriptStatement(
@@ -362,13 +365,12 @@ namespace ETL_SQL.Orchestrator.Service
                     // that names one gets it; one that names none keeps the hourly default (or, on
                     // CREATE OR ALTER, what the job already had). It was once discarded here, so a
                     // job created as "daily at 02:00" ran hourly.
-                    if (req.Interval is <= 0)
-                        return Results.BadRequest(new { Error = "Interval must be positive." });
+                    if (ValidateScheduledJobMetadata(
+                            req.Interval, req.Unit, req.AtTime,
+                            req.MaxRetries, req.RetryDelaySeconds, req.Options,
+                            out var metadataError) is false)
+                        return Results.BadRequest(new { Error = metadataError });
                     var intervalUnit = req.Unit?.ToUpperInvariant();
-                    if (intervalUnit is not (null or "SECOND" or "MINUTE" or "HOUR" or "DAY" or "WEEK" or "MONTH"))
-                        return Results.BadRequest(new { Error = "Unit must be one of: SECOND, MINUTE, HOUR, DAY, WEEK, MONTH" });
-                    if (!string.IsNullOrEmpty(req.AtTime) && !TimeSpan.TryParse(req.AtTime, CultureInfo.InvariantCulture, out _))
-                        return Results.BadRequest(new { Error = "AtTime must be a time of day, such as 02:00." });
 
                     job = new JobDefinition(
                         req.Name,
@@ -419,7 +421,7 @@ namespace ETL_SQL.Orchestrator.Service
                     if (!validUnits.Contains((req.Unit ?? "").ToUpperInvariant()))
                         return Results.BadRequest(new { Error = $"Unit must be one of: {string.Join(", ", validUnits)}" });
 
-                    var scriptText = await PinBundlePathsAsync(req.ScriptText, bundleStore);
+                    var scriptText = await PinBundlePathsAsync(req.ScriptText, bundleStore, ResolveBundleTenantOrNull(ctx, cfg));
                     job = new JobDefinition(
                         req.Name, scriptText, req.Interval.Value, (req.Unit ?? "HOUR").ToUpperInvariant(),
                         req.AtTime, null, null, true, req.MaxRetries ?? 0, req.RetryDelaySeconds ?? 30,
@@ -465,19 +467,18 @@ namespace ETL_SQL.Orchestrator.Service
                         OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
-                // The same schedule rules as creation. Without them an update could store a zero or
-                // negative interval, an unknown unit, or an unparseable time of day on the job.
-                if (req.Interval is <= 0)
-                    return Results.BadRequest(new { Error = "Interval must be positive." });
-                if (req.Unit?.ToUpperInvariant() is not (null or "SECOND" or "MINUTE" or "HOUR" or "DAY" or "WEEK" or "MONTH"))
-                    return Results.BadRequest(new { Error = "Unit must be one of: SECOND, MINUTE, HOUR, DAY, WEEK, MONTH" });
-                if (!string.IsNullOrEmpty(req.AtTime) && !TimeSpan.TryParse(req.AtTime, CultureInfo.InvariantCulture, out _))
-                    return Results.BadRequest(new { Error = "AtTime must be a time of day, such as 02:00." });
+                // The same schedule and policy rules as creation.
+                if (!ValidateScheduledJobMetadata(
+                        req.Interval, req.Unit, req.AtTime,
+                        req.MaxRetries, req.RetryDelaySeconds, req.Options,
+                        out var metadataError))
+                    return Results.BadRequest(new { Error = metadataError });
 
-                var pinnedScript = req.ScriptText != null ? await PinBundlePathsAsync(req.ScriptText, bundleStore) : null;
+                var bundleTenant = ResolveBundleTenantOrNull(ctx, cfg);
+                var pinnedScript = req.ScriptText != null ? await PinBundlePathsAsync(req.ScriptText, bundleStore, bundleTenant) : null;
                 var targetPath = req.TargetPath;
                 if (targetPath is not null && existing.JobType == JobTargetKind.Script)
-                    targetPath = await PinBundleTargetAsync(targetPath, bundleStore);
+                    targetPath = await PinBundleTargetAsync(targetPath, bundleStore, bundleTenant);
                 if (targetPath is not null && existing.JobType == JobTargetKind.Script)
                     pinnedScript = new RunScriptStatement(
                         new LiteralExpression(targetPath, TokenType.STRING_LITERAL),
@@ -491,7 +492,7 @@ namespace ETL_SQL.Orchestrator.Service
                     TargetPath = targetPath ?? existing.TargetPath,
                     Interval = req.Interval ?? existing.Interval,
                     Unit = req.Unit != null ? req.Unit.ToUpperInvariant() : existing.Unit,
-                    AtTime = req.AtTime ?? existing.AtTime,
+                    AtTime = req.AtTime is null ? existing.AtTime : (string.IsNullOrWhiteSpace(req.AtTime) ? null : req.AtTime.Trim()),
                     IsEnabled = req.IsEnabled ?? existing.IsEnabled,
                     MaxRetries = req.MaxRetries ?? existing.MaxRetries,
                     RetryDelaySeconds = req.RetryDelaySeconds ?? existing.RetryDelaySeconds,
@@ -1471,8 +1472,15 @@ namespace ETL_SQL.Orchestrator.Service
                 if (entries is null || entries.Count == 0)
                     return Results.BadRequest(new { Error = "No entries to import." });
 
-                var created = 0;
+                var caller = RequestCaller(ctx);
+                var ownerPrincipal = caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase) &&
+                                     caller.SubjectId.Equals("legacy-api-key", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : caller.PrincipalKey;
+                var tenantScope = ownerPrincipal is null ? null : caller.TenantId;
+
                 var updated = 0;
+                var createdCount = 0;
                 try
                 {
                     foreach (var entry in entries)
@@ -1484,7 +1492,13 @@ namespace ETL_SQL.Orchestrator.Service
                             entry.Target,
                             new Dictionary<string, string>(entry.Options ?? [], StringComparer.OrdinalIgnoreCase),
                             Disabled: false,
-                            entry.SensitiveFields);
+                            entry.SensitiveFields,
+                            Gateway: entry.Gateway,
+                            OwnerPrincipal: entry.OwnerPrincipal ?? ownerPrincipal,
+                            AllowedPrincipals: entry.AllowedPrincipals,
+                            AllowedGroups: entry.AllowedGroups,
+                            TenantId: entry.TenantId ?? tenantScope,
+                            RequireAcl: entry.RequireAcl || (ownerPrincipal is not null));
                         var rawCredential = SharedConnectionValidator.FindRawCredential(definition.Options, definition.Target);
                         if (rawCredential is not null)
                         {
@@ -1500,7 +1514,7 @@ namespace ETL_SQL.Orchestrator.Service
                         if (entry.Status.Equals("disabled", StringComparison.OrdinalIgnoreCase))
                             await writable.DisableAsync(entry.Alias, ct);
 
-                        if (statusBefore == SecretLifecycleStatus.NotFound) created++;
+                        if (statusBefore == SecretLifecycleStatus.NotFound) createdCount++;
                         else updated++;
                     }
                 }
@@ -1509,8 +1523,8 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.BadRequest(new { Error = ex.Message });
                 }
 
-                EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_IMPORT", null, $"Created={created}; Updated={updated}");
-                return Results.Ok(new { Created = created, Updated = updated });
+                EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_IMPORT", null, $"Created={createdCount}; Updated={updated}");
+                return Results.Ok(new { Created = createdCount, Updated = updated });
             }).WithName("importAdminConnections");
 
             app.MapGet("/api/admin/connections/{alias}", async (HttpContext ctx, string alias,
@@ -1541,13 +1555,22 @@ namespace ETL_SQL.Orchestrator.Service
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
 
+                var caller = RequestCaller(ctx);
+                var isLegacyApiKey = caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase) &&
+                                     caller.SubjectId.Equals("legacy-api-key", StringComparison.OrdinalIgnoreCase);
                 var entry = new SharedConnectionDefinition(
                     decodedAlias,
                     request?.ConnectorType ?? "",
                     request?.Target,
                     new Dictionary<string, string>(request?.Options ?? [], StringComparer.OrdinalIgnoreCase),
                     Disabled: false,
-                    request?.SensitiveFields);
+                    request?.SensitiveFields,
+                    Gateway: request?.Gateway,
+                    OwnerPrincipal: request?.OwnerPrincipal ?? (isLegacyApiKey ? null : caller.PrincipalKey),
+                    AllowedPrincipals: request?.AllowedPrincipals,
+                    AllowedGroups: request?.AllowedGroups,
+                    TenantId: request?.TenantId ?? (isLegacyApiKey ? null : caller.TenantId),
+                    RequireAcl: request?.RequireAcl ?? !isLegacyApiKey);
                 var rawCredential = SharedConnectionValidator.FindRawCredential(entry.Options, entry.Target);
                 if (rawCredential is not null)
                 {
@@ -1639,9 +1662,10 @@ namespace ETL_SQL.Orchestrator.Service
                 SharedConnectionDefinition entry;
                 try
                 {
-                    entry = await writable.ResolveAsync(decodedAlias, null, ct);
+                    var testIdentity = ToExecutionIdentity(RequestCaller(ctx));
+                    entry = await writable.ResolveAsync(decodedAlias, testIdentity, ct);
                 }
-                catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
+                catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException or UnauthorizedAccessException)
                 {
                     EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_TEST_DENIED", decodedAlias, "Status=unresolvable", allowed: false);
                     return Results.Conflict(new { Alias = decodedAlias, Status = "unresolvable", Error = ex.Message });
@@ -1809,7 +1833,11 @@ namespace ETL_SQL.Orchestrator.Service
                         required, job.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
-                var triggerResult = await scheduler.TriggerJobWithOverridesAsync(job.Id, overrides);
+                var triggerIdentity = caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase) &&
+                                      caller.SubjectId.Equals("legacy-api-key", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : ToExecutionIdentity(caller);
+                var triggerResult = await scheduler.TriggerJobWithOverridesAsync(job.Id, overrides, triggerIdentity);
                 if (triggerResult == ManualTriggerResult.JobNotFound)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
                 if (triggerResult == ManualTriggerResult.AlreadyRunning)
@@ -2144,6 +2172,14 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (bundleTenant is not null)
+                {
+                    if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                    return Results.Ok(await tenantStore.GetBundlesAsync(bundleTenant));
+                }
                 return Results.Ok(await store.GetBundlesAsync());
             }).WithName("listBundles");
 
@@ -2152,6 +2188,8 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (BundlePublishDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (req.Bundle == null)
                     return Results.BadRequest(new { Error = "Bundle is required." });
                 if (string.IsNullOrWhiteSpace(req.Bundle.BundleName))
@@ -2162,16 +2200,78 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.BadRequest(new { Error = "At least one file is required." });
 
                 var reencrypted = BundlePublishSupport.ReEncryptRequest(req.Bundle, req.Password, SecurityService.GetMachineKey());
+                if (bundleTenant is not null)
+                {
+                    if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                    return Results.Ok(await tenantStore.PublishBundleAsync(bundleTenant, reencrypted));
+                }
                 var version = await store.PublishBundleAsync(reencrypted);
                 return Results.Ok(version);
             }).WithName("publishBundle");
+
+            app.MapGet("/api/bundles/unassigned", async (HttpContext ctx, IBundleStore store, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (LegacyBundleAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (!TryResolveBundleTenant(ctx, cfg, out _))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                    return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                return Results.Ok(await tenantStore.GetUnassignedDefaultBundlesAsync(ctx.RequestAborted));
+            }).WithName("listUnassignedDefaultBundles");
+
+            app.MapPost("/api/bundles/reassign", async (HttpContext ctx, ReassignDefaultBundlesRequest? req,
+                IBundleStore store, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (LegacyBundleAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (bundleTenant is null)
+                {
+                    return Results.BadRequest(new
+                    {
+                        Error = "A target tenant context (caller tenant claim or Orchestrator:TenantId) is required to reassign legacy bundles."
+                    });
+                }
+                if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                    return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+
+                try
+                {
+                    var reassigned = await tenantStore.ReassignDefaultBundlesAsync(
+                        bundleTenant,
+                        req?.BundleName,
+                        req?.IncludeUnbound ?? false,
+                        ctx.RequestAborted);
+                    return Results.Ok(new
+                    {
+                        TenantId = bundleTenant.Tenant.Value,
+                        ReassignedVersions = reassigned
+                    });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.Conflict(new { Error = ex.Message });
+                }
+            }).WithName("reassignDefaultBundles");
 
             app.MapGet("/api/bundles/{name}/versions", async (HttpContext ctx, string name,
                 IBundleStore store, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
-                return Results.Ok(await store.GetVersionsAsync(Uri.UnescapeDataString(name)));
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                var unescaped = Uri.UnescapeDataString(name);
+                if (bundleTenant is not null)
+                {
+                    if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                    return Results.Ok(await tenantStore.GetVersionsAsync(bundleTenant, unescaped));
+                }
+                return Results.Ok(await store.GetVersionsAsync(unescaped));
             }).WithName("listBundleVersions");
 
             app.MapGet("/api/bundles/{name}/versions/{version:int}", async (HttpContext ctx, string name, int version,
@@ -2179,7 +2279,20 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
-                var result = await store.GetVersionAsync(Uri.UnescapeDataString(name), version);
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                var unescaped = Uri.UnescapeDataString(name);
+                BundleVersionInfo? result;
+                if (bundleTenant is not null)
+                {
+                    if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                    result = await tenantStore.GetVersionAsync(bundleTenant, unescaped, version);
+                }
+                else
+                {
+                    result = await store.GetVersionAsync(unescaped, version);
+                }
                 return result == null ? Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." }) : Results.Ok(result);
             }).WithName("getBundleVersion");
 
@@ -2188,9 +2301,20 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
-                if (await store.GetVersionAsync(Uri.UnescapeDataString(name), version) == null)
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                var unescaped = Uri.UnescapeDataString(name);
+                if (bundleTenant is not null)
+                {
+                    if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                    if (await tenantStore.GetVersionAsync(bundleTenant, unescaped, version) == null)
+                        return Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." });
+                    return Results.Ok(await tenantStore.GetFilesAsync(bundleTenant, unescaped, version));
+                }
+                if (await store.GetVersionAsync(unescaped, version) == null)
                     return Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." });
-                return Results.Ok(await store.GetFilesAsync(Uri.UnescapeDataString(name), version));
+                return Results.Ok(await store.GetFilesAsync(unescaped, version));
             }).WithName("listBundleFiles");
 
             app.MapGet("/api/bundles/{name}/versions/{version:int}/dependencies", async (HttpContext ctx, string name, int version,
@@ -2198,9 +2322,20 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
-                if (await store.GetVersionAsync(Uri.UnescapeDataString(name), version) == null)
+                if (!TryResolveBundleTenant(ctx, cfg, out var bundleTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                var unescaped = Uri.UnescapeDataString(name);
+                if (bundleTenant is not null)
+                {
+                    if (RequireTenantBundleStore(ctx, store) is not { } tenantStore)
+                        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                    if (await tenantStore.GetVersionAsync(bundleTenant, unescaped, version) == null)
+                        return Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." });
+                    return Results.Ok(await tenantStore.GetDependenciesAsync(bundleTenant, unescaped, version));
+                }
+                if (await store.GetVersionAsync(unescaped, version) == null)
                     return Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." });
-                return Results.Ok(await store.GetDependenciesAsync(Uri.UnescapeDataString(name), version));
+                return Results.Ok(await store.GetDependenciesAsync(unescaped, version));
             }).WithName("listBundleDependencies");
 
             // ── Service management ────────────────────────────────────────────
@@ -2324,6 +2459,31 @@ namespace ETL_SQL.Orchestrator.Service
             return true;
         }
 
+        private static bool TryResolveBundleTenant(
+            HttpContext context,
+            IConfiguration configuration,
+            out TenantContext? tenant)
+        {
+            tenant = null;
+            if (!TryResolveRequestTenant(context, configuration, out var resolvedTenantId))
+                return false;
+
+            var callerTenant = RequestCaller(context).TenantId;
+            if (!string.IsNullOrWhiteSpace(callerTenant))
+                tenant = TenantContext.FromVerifiedCredential(callerTenant);
+            else if (!string.IsNullOrWhiteSpace(resolvedTenantId))
+                tenant = TenantContext.FromHostConfiguration(resolvedTenantId);
+            return true;
+        }
+
+        private static TenantContext? ResolveBundleTenantOrNull(
+            HttpContext context,
+            IConfiguration configuration) =>
+            TryResolveBundleTenant(context, configuration, out var tenant) ? tenant : null;
+
+        private static ITenantBundleStore? RequireTenantBundleStore(HttpContext ctx, IBundleStore store) =>
+            store as ITenantBundleStore ?? ctx.RequestServices.GetService<ITenantBundleStore>();
+
         private static bool TryResolveLineageTenant(
             HttpContext context,
             IConfiguration configuration,
@@ -2367,8 +2527,25 @@ namespace ETL_SQL.Orchestrator.Service
             // script author wrote — while a grant resolves against the opaque key. This carried the
             // key's predecessor, the numeric group id, so HAS_GROUP could never match in a scheduled
             // job even though it matched in the Portal's own execution path.
-            Groups = caller.EffectiveGroupNames
+            Groups = caller.EffectiveGroupNames,
+            ToolPrincipal = ProjectToolPrincipal(caller)
         };
+
+        private static ToolExecutionPrincipal? ProjectToolPrincipal(OrchestratorCaller caller)
+        {
+            if (string.IsNullOrWhiteSpace(caller.TenantId)) return null;
+
+            var kind = caller.SubjectType.ToLowerInvariant() switch
+            {
+                "user" => ToolPrincipalKind.User,
+                "service" => ToolPrincipalKind.Service,
+                _ => (ToolPrincipalKind?)null
+            };
+            return kind is { } subjectKind
+                ? new ToolExecutionPrincipal(caller.TenantId, subjectKind, caller.SubjectId, caller.GroupIds,
+                    OrchestratorObjectAuthorizationService.WithinScopeCeiling(caller, OrchestratorObjectPermission.Execute))
+                : null;
+        }
 
         /// <summary>An ad-hoc job belongs to the tenant that submitted it; a role does not cross that.</summary>
         private static bool SameAdHocTenant(OrchestratorCaller caller, JobEntry entry) =>
@@ -2589,8 +2766,12 @@ namespace ETL_SQL.Orchestrator.Service
         /// wherever callers carry an identity. In legacy mode the API key is the only identity there
         /// is, and holding it is the authorization — as for <c>/management/stop</c>.
         /// </summary>
-        private static bool ConnectionAdministrationDenied(HttpContext ctx, IConfiguration cfg) =>
-            !OrchestratorAuthorizationMode.IsLegacy(cfg) && !IsObjectAdministrator(RequestCaller(ctx));
+        private static bool ConnectionAdministrationDenied(HttpContext ctx, IConfiguration cfg)
+        {
+            if (OrchestratorAuthorizationMode.IsLegacy(cfg)) return false;
+            var caller = RequestCaller(ctx);
+            return !IsObjectAdministrator(caller) && !caller.IsInRole("PortalSystem");
+        }
 
         // Roles that see Orchestrator state but never run anything through it.
         private static readonly string[] ReadOnlyRoles = ["OrchestratorViewer", "FleetReader", "StewardshipViewer"];
@@ -2616,13 +2797,19 @@ namespace ETL_SQL.Orchestrator.Service
             caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
-        /// Publishing a bundle authors a catalog object, so it follows <see cref="OrchestratorObjectAuthorizationService.CanCreate"/>:
-        /// Admin or OrchestratorManager, within a manage scope ceiling. Reading takes any role and the
-        /// read ceiling. Bundles are not yet tenant-scoped (ROADMAP: Tenant-Scoped Orchestrator Bundle Store).
+        /// Publishing a bundle authors a tenant-scoped catalog object, so it follows
+        /// <see cref="OrchestratorObjectAuthorizationService.CanCreate"/>: Admin or OrchestratorManager,
+        /// within a manage scope ceiling. Reading takes any role and the read ceiling.
         /// </summary>
         private static bool BundlePublishDenied(HttpContext ctx, IConfiguration cfg) =>
             !OrchestratorAuthorizationMode.IsLegacy(cfg)
             && !OrchestratorObjectAuthorizationService.CanCreate(RequestCaller(ctx));
+
+        // Legacy 'default'/unbound bundles predate tenant scoping and belong to no tenant, so
+        // listing or claiming them is an administrator action, not a job author's.
+        private static bool LegacyBundleAdministrationDenied(HttpContext ctx, IConfiguration cfg) =>
+            !OrchestratorAuthorizationMode.IsLegacy(cfg)
+            && !IsObjectAdministrator(RequestCaller(ctx));
 
         private static bool BundleReadDenied(HttpContext ctx, IConfiguration cfg)
         {
@@ -2864,7 +3051,10 @@ namespace ETL_SQL.Orchestrator.Service
             return _cachedScriptRoot!;
         }
 
-        private static async Task<string> PinBundlePathsAsync(string scriptText, IBundleStore store)
+        private static async Task<string> PinBundlePathsAsync(
+            string scriptText,
+            IBundleStore store,
+            TenantContext? tenant = null)
         {
             var parsed = new Parser(new Lexer(scriptText).Tokenize(), scriptText).Parse();
             if (parsed.Statements.Count != 1 || parsed.Statements[0] is not RunScriptStatement run)
@@ -2873,17 +3063,40 @@ namespace ETL_SQL.Orchestrator.Service
                 return scriptText;
             if (!BundleUri.TryParse(path, out var uri) || uri == null || uri.Version.HasValue)
                 return scriptText;
-            var latest = await store.GetLatestVersionAsync(uri.BundleName);
+            BundleVersionInfo? latest;
+            if (tenant is not null)
+            {
+                if (store is not ITenantBundleStore tenantStore)
+                    throw new InvalidOperationException("Tenant-bound bundle resolution requires ITenantBundleStore.");
+                latest = await tenantStore.GetLatestVersionAsync(tenant, uri.BundleName);
+            }
+            else
+            {
+                latest = await store.GetLatestVersionAsync(uri.BundleName);
+            }
             return latest == null
                 ? scriptText
                 : new RunScriptStatement(new LiteralExpression(uri.ToPinnedString(latest.Version), TokenType.STRING_LITERAL), run.Parameters).ToSql();
         }
 
-        private static async Task<string> PinBundleTargetAsync(string targetPath, IBundleStore store)
+        private static async Task<string> PinBundleTargetAsync(
+            string targetPath,
+            IBundleStore store,
+            TenantContext? tenant = null)
         {
             if (!BundleUri.TryParse(targetPath, out var uri) || uri == null || uri.Version.HasValue)
                 return targetPath;
-            var latest = await store.GetLatestVersionAsync(uri.BundleName);
+            BundleVersionInfo? latest;
+            if (tenant is not null)
+            {
+                if (store is not ITenantBundleStore tenantStore)
+                    throw new InvalidOperationException("Tenant-bound bundle resolution requires ITenantBundleStore.");
+                latest = await tenantStore.GetLatestVersionAsync(tenant, uri.BundleName);
+            }
+            else
+            {
+                latest = await store.GetLatestVersionAsync(uri.BundleName);
+            }
             return latest == null ? targetPath : uri.ToPinnedString(latest.Version);
         }
 
@@ -3054,6 +3267,7 @@ namespace ETL_SQL.Orchestrator.Service
             var outcome = JobRunStatus.Failed;
             string? errorMessage = null;
             string? reportManifestJson = null;
+            IReadOnlyList<string>? sharedConnectionDependencies = null;
             try
             {
                 activity = OrchestratorObservability.StartAdHocJobActivity(entry.JobId, entry.CorrelationId);
@@ -3084,6 +3298,9 @@ namespace ETL_SQL.Orchestrator.Service
                     var builder = new ManifestBuilder(evaluator);
                     var manifest = await builder.BuildAsync("remote_script.rptsql");
                     reportManifestJson = JsonSerializer.Serialize(manifest);
+                    sharedConnectionDependencies = evaluator.SharedConnectionDependencies
+                        .OrderBy(alias => alias, StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
 
                     var snapshotDir = "Snapshots";
                     Directory.CreateDirectory(snapshotDir);
@@ -3125,7 +3342,7 @@ namespace ETL_SQL.Orchestrator.Service
                 entry.CompletedAt = DateTimeOffset.UtcNow;
                 // Publish terminal status only after output preparation and scope cleanup. A
                 // concurrent cancellation keeps its terminal state and receives no late payload.
-                entry.TryFinish(outcome, errorMessage, reportManifestJson);
+                entry.TryFinish(outcome, errorMessage, reportManifestJson, sharedConnectionDependencies);
                 logger.LogInformation("Job {JobId} {Status} in {ElapsedMs}ms, rows={Rows}",
                     entry.JobId, entry.Status, entry.ExecutionTimeMs, entry.RowsProcessed);
                 using (activity)
@@ -3140,6 +3357,57 @@ namespace ETL_SQL.Orchestrator.Service
                         entry.CpuTimeSeconds);
                 }
             }
+        }
+
+        private static bool ValidateScheduledJobMetadata(
+            int? interval,
+            string? unit,
+            string? atTime,
+            int? maxRetries,
+            int? retryDelaySeconds,
+            Dictionary<string, string>? options,
+            out string? error)
+        {
+            if (interval is <= 0)
+            {
+                error = "Interval must be positive.";
+                return false;
+            }
+            if (unit?.ToUpperInvariant() is not (null or "SECOND" or "MINUTE" or "HOUR" or "DAY" or "WEEK" or "MONTH"))
+            {
+                error = "Unit must be one of: SECOND, MINUTE, HOUR, DAY, WEEK, MONTH";
+                return false;
+            }
+            if (!string.IsNullOrEmpty(atTime) && !TimeSpan.TryParse(atTime, CultureInfo.InvariantCulture, out _))
+            {
+                error = "AtTime must be a time of day, such as 02:00.";
+                return false;
+            }
+            if (maxRetries is < 0)
+            {
+                error = "MaxRetries must be zero or greater.";
+                return false;
+            }
+            if (retryDelaySeconds is <= 0)
+            {
+                error = "RetryDelaySeconds must be positive.";
+                return false;
+            }
+            if (options is not null)
+            {
+                foreach (var (key, value) in options)
+                {
+                    if (!key.Equals("TimeoutSeconds", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.IsNullOrWhiteSpace(value)
+                        && (!int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) || seconds <= 0))
+                    {
+                        error = "TimeoutSeconds must be a positive integer in seconds.";
+                        return false;
+                    }
+                }
+            }
+            error = null;
+            return true;
         }
 
         // ── Request / response models ─────────────────────────────────────────
@@ -3307,11 +3575,22 @@ namespace ETL_SQL.Orchestrator.Service
             return (await secrets.ResolveAsync(name, ct)).Value;
         }
 
+        private sealed record ReassignDefaultBundlesRequest(
+            string? BundleName = null,
+            bool IncludeUnbound = false
+        );
+
         private sealed record SetConnectionCatalogEntryRequest(
             string ConnectorType,
             string? Target,
             Dictionary<string, string>? Options,
-            List<string>? SensitiveFields = null
+            List<string>? SensitiveFields = null,
+            string? OwnerPrincipal = null,
+            List<string>? AllowedPrincipals = null,
+            List<string>? AllowedGroups = null,
+            string? TenantId = null,
+            bool? RequireAcl = null,
+            GatewayResourceBinding? Gateway = null
         );
 
         private sealed record ConnectionCatalogEntryResponse(
@@ -3320,7 +3599,13 @@ namespace ETL_SQL.Orchestrator.Service
             string? Target,
             Dictionary<string, string> Options,
             string Status,
-            IReadOnlyCollection<string>? SensitiveFields = null
+            IReadOnlyCollection<string>? SensitiveFields = null,
+            string? OwnerPrincipal = null,
+            IReadOnlyCollection<string>? AllowedPrincipals = null,
+            IReadOnlyCollection<string>? AllowedGroups = null,
+            string? TenantId = null,
+            bool RequireAcl = false,
+            GatewayResourceBinding? Gateway = null
         );
 
         private sealed record ImpactConsumerResponse(
@@ -3349,7 +3634,13 @@ namespace ETL_SQL.Orchestrator.Service
                 definition?.Target,
                 options,
                 status.ToString().ToLowerInvariant(),
-                definition?.SensitiveFields);
+                definition?.SensitiveFields,
+                definition?.OwnerPrincipal,
+                definition?.AllowedPrincipals,
+                definition?.AllowedGroups,
+                definition?.TenantId,
+                definition?.RequireAcl ?? false,
+                definition?.Gateway);
         }
 
         private static async Task<StewardshipEvaluation> EvaluateStewardshipAsync(
@@ -3478,13 +3769,18 @@ namespace ETL_SQL.Orchestrator.Service
                 }
             }
 
-            public bool TryFinish(JobRunStatus outcome, string? errorMessage = null, string? reportManifestJson = null)
+            public bool TryFinish(
+                JobRunStatus outcome,
+                string? errorMessage = null,
+                string? reportManifestJson = null,
+                IReadOnlyList<string>? sharedConnectionDependencies = null)
             {
                 lock (gate)
                 {
                     if (IsTerminal(status)) return false;
                     ErrorMessage = errorMessage;
                     ReportManifestJson = reportManifestJson;
+                    SharedConnectionDependencies = sharedConnectionDependencies;
                     status = outcome;
                     return true;
                 }
@@ -3507,6 +3803,7 @@ namespace ETL_SQL.Orchestrator.Service
             public double CpuTimeSeconds { get; set; }
             public string? ErrorMessage { get; set; }
             public string? ReportManifestJson { get; set; }
+            public IReadOnlyList<string>? SharedConnectionDependencies { get; set; }
             public DateTimeOffset? CompletedAt { get; set; }
         }
     }

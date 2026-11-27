@@ -869,26 +869,30 @@ and implemented by `SpillStore` in `ETL-SQL.Engine/Spill/SpillStore.cs`.
 
 `SpillStore` generates a random 256-bit session key when temporary storage initializes. Persistent
 sessions obtain their key from `ISessionStateManager.GetSpillKey(sessionId)` so a saved session can
-reopen its chunks. The cached key is cleared in `Dispose()`. Each encrypted file has a fresh random
-32-byte salt; HKDF-SHA256 derives separate 256-bit encryption and authentication keys from the session
-key and that salt. Derived key buffers are cleared after the cipher and HMAC have copied them.
+reopen its chunks. The cached key is cleared with `CryptographicOperations.ZeroMemory` in `Dispose()`.
+Each encrypted file has a fresh random 32-byte salt and 16-byte chunk identifier; HKDF-SHA256 derives
+a per-chunk 256-bit encryption key from the session key and salt (`"ETL-SQL spill v3"`). Derived key
+and frame scratch buffers are zeroed when writers and readers dispose.
 
 **Write path** (`ISpillWriter`)
 
 The JSON and Arrow writers share `AuthenticatedSpillEncryption`:
 
 ```
-Row data (JSON lines or Arrow IPC)
-  → GZipStream (if SpillCompressionEnabled)
-  → AES-256-CBC CryptoStream (if SpillEncryptionEnabled)
-  → incremental HMAC-SHA256 over the envelope and ciphertext
-  → FileStream, followed by the authentication tag when writing completes
+Row data (JSON lines or Arrow IPC; decimals encoded as 16-byte FixedSizeBinary(16))
+  → GZipStream (if SpillCompressionEnabled; Adaptive / Fastest / Optimal / SmallestSize)
+  → FramedEncryptionWriter (ETLSPL03 single-pass AES-256-GCM frames, 128 KiB default max plaintext)
+  → FileStream
 ```
 
-Encrypted format v2 starts with the eight-byte magic `ETLSPL02`, a codec byte, a compression byte,
-the 32-byte salt and a random 16-byte IV. The HMAC binds that complete header, the length-prefixed
-UTF-8 chunk name and every ciphertext byte. The 32-byte tag follows the ciphertext. Compression
-precedes encryption. An interrupted or failed write does not get a successful authentication footer.
+Encrypted format v3 starts with the 64-byte header: eight-byte magic `ETLSPL03`, a codec byte, a
+compression byte, a 4-byte big-endian max frame size (`131072` bytes default), the 32-byte HKDF salt,
+the 16-byte chunk ID (whose first 4 bytes form the GCM nonce prefix), and 2 reserved flag bytes
+(`0x0000`). Each frame carries a 13-byte frame header (`FrameIndex`, `FrameFlags` with `0x01`
+marking the final frame, and `PayloadLength`), a 16-byte `AES-256-GCM` tag, and the frame ciphertext.
+Every frame's AAD binds the 64-byte file header, the length-prefixed UTF-8 chunk name, and the
+13-byte frame header. Compression precedes encryption. An interrupted or faulted write omits the
+`IS_FINAL` completion frame so readers fail closed.
 
 **Read path** (`ISpillReader`)
 
@@ -899,11 +903,17 @@ the decoder never resolves arbitrary CLR type names. Untyped rows from earlier s
 unknown format markers or type tags fail with a recreate-session diagnostic. Empty JSON chunks remain
 valid. Recreate affected saved sessions even if their old JSON chunks were unencrypted.
 
-Before constructing the JSON or Arrow decoder, the reader verifies the entire envelope and ciphertext
-with a fixed-size buffer and compares the tag in constant time. Only then does it rewind the same
-open file and decrypt through a bounded ciphertext stream. This adds a verification read pass without
-buffering the whole spill in memory. Changed headers, ciphertext, tags, chunk names or session keys,
-and truncated or appended files fail before a row is exposed.
+`AuthenticatedSpillEncryption.CreateReaderAsync` dispatches on the 8-byte magic header (`ETLSPL03`
+single-pass framed GCM reader, with `ETLSPL02` CBC+HMAC read fallback for saved sessions from the
+compatibility window). For `ETLSPL03`, `CreateReaderAsync` validates the 64-byte header and
+authenticates frame `0` on open, then verifies and decrypts subsequent frames sequentially in one
+forward pass without pre-scanning or seeking back across the file. Tampered headers, ciphertexts,
+tags, reordered or duplicated frames, truncated streams missing `IS_FINAL`, trailing bytes after
+`IS_FINAL`, wrong session keys, or renamed/spliced chunks fail closed with `ExecutionException`
+before unverified plaintext from the affected frame is exposed. Arrow `AsColumnBatchesAsync` wraps
+`Int64Array`, `DoubleArray`, 16-byte binary `decimal` (`FixedSizeBinaryArray`), and `StringArray`
+buffers directly into `ColumnBatch` via `WrapExternal` and zeroes the underlying `RecordBatch`
+buffers on final release.
 
 Both codecs retain valid empty files. A missing chunk is an execution failure, preventing deletion
 from silently turning a populated partition into an empty result. Releases before v0.22.0 wrote
@@ -915,7 +925,9 @@ rerunning their source statements. There is no legacy encrypted-file fallback.
 Without an authorized scratch grant, temporary spill initializes under the platform temp directory
 at `ETL-SQL-Spill/<Guid>/`. Persistent spill uses the session's checkpoint grant or
 `<SessionRoot>/<SessionId>/spill/`. `SpillStore.Dispose()` deletes temporary spill and preserves
-persistent chunks. External operators also delete their temporary chunks in `finally` blocks.
+persistent chunks. External operators also delete their temporary chunks in `finally` blocks, and
+`ExternalJoinEngine` eagerly deletes consumed build/probe partitions and superseded repartition
+files as soon as their readers close.
 
 **File naming**
 
@@ -925,8 +937,9 @@ All spill files use GUID-based names (`sort_chunk_{Guid}_{n}.tmp`, `win_part_{Gu
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `Security:SpillEncryptionEnabled` | `true` | AES-256 encryption and HMAC-SHA256 authentication on spill files. |
+| `Security:SpillEncryptionEnabled` | `true` | `ETLSPL03` framed `AES-256-GCM` authenticated encryption on spill files. |
 | `Security:SpillCompressionEnabled` | `true` | GZip compression before encryption. |
+| `Security:SpillCompressionLevel` | `Adaptive` | Compression trade-off (`Adaptive`, `Fastest`, `Optimal`, `SmallestSize`); `Adaptive` uses `Fastest` under high CPU or concurrent writer pressure and `Optimal` when disk reserve headroom tightens. |
 | `Security:SpillFormat` | `Arrow` | `Arrow` IPC or `Json` lines; both use the authenticated envelope when encryption is enabled. |
 
 Encryption and compression both default to `true`. Disabling encryption also disables spill

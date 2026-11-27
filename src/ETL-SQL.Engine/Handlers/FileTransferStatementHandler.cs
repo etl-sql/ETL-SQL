@@ -1,11 +1,15 @@
 using System;
 using System.IO;
+using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -37,6 +41,34 @@ public class FileTransferStatementHandler : IStatementHandler
             var ovVal = await context.EvaluateValue(stmt.Overwrite, new Row());
             if (ovVal is bool b) overwrite = b;
             else if (ovVal != null) overwrite = ovVal.ToString()?.ToUpperInvariant() == "ON" || ovVal.ToString()?.ToUpperInvariant() == "TRUE";
+        }
+
+        bool recursive = false;
+        if (stmt.Recursive != null)
+        {
+            var recVal = await context.EvaluateValue(stmt.Recursive, new Row());
+            if (recVal is bool rb) recursive = rb;
+            else if (recVal != null)
+            {
+                var s = recVal.ToString()?.Trim();
+                recursive = string.Equals(s, "ON", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(s, "TRUE", StringComparison.OrdinalIgnoreCase)
+                    || s == "1";
+            }
+        }
+
+        bool verify = false;
+        if (stmt.Verify != null)
+        {
+            var verVal = await context.EvaluateValue(stmt.Verify, new Row());
+            if (verVal is bool vb) verify = vb;
+            else if (verVal != null)
+            {
+                var s = verVal.ToString()?.Trim();
+                verify = string.Equals(s, "ON", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(s, "TRUE", StringComparison.OrdinalIgnoreCase)
+                    || s == "1";
+            }
         }
 
         if (!context.Connections.TryGetValue(stmt.ConnectionName, out var ds) || ds is not IRemoteFileSystem remoteFs)
@@ -94,6 +126,8 @@ public class FileTransferStatementHandler : IStatementHandler
 
                     _logger.WriteLine($"Sending: {localFile} -> {stmt.ConnectionName}:{remoteFile}", ConsoleColor.Cyan);
                     await remoteFs.UploadFileAsync(authorizedLocalFile, remoteFile, overwrite, context.CancellationToken);
+                    if (verify)
+                        await VerifyTransferAsync(remoteFs, remoteFile, authorizedLocalFile, deleteLocalOnMismatch: false, context.CancellationToken);
                 }
                 _logger.WriteLine("Upload complete.", ConsoleColor.Green);
             }
@@ -113,6 +147,8 @@ public class FileTransferStatementHandler : IStatementHandler
 
                 if (!File.Exists(localPath)) throw new ExecutionException($"Local file not found: {localPath}");
                 await remoteFs.UploadFileAsync(localPath, remotePath, overwrite, context.CancellationToken);
+                if (verify)
+                    await VerifyTransferAsync(remoteFs, remotePath, localPath, deleteLocalOnMismatch: false, context.CancellationToken);
                 _logger.WriteLine("Upload complete.", ConsoleColor.Green);
             }
         }
@@ -121,60 +157,74 @@ public class FileTransferStatementHandler : IStatementHandler
             bool hasWildcard = remotePath.Contains('*') || remotePath.Contains('?');
             localPath = pathAuthorizer.Authorize(context, localPath,
                 FileSystemAccessKind.Write,
-                validateFileType: !hasWildcard).CanonicalPath;
+                validateFileType: !hasWildcard && !recursive).CanonicalPath;
 
-            if (hasWildcard)
+            if (hasWildcard || recursive)
             {
-                string remoteDir = "";
-                string remotePattern = remotePath;
-                var lastSlash = remotePath.LastIndexOfAny(new[] { '/', '\\' });
-                if (lastSlash >= 0)
+                string remoteDir = remotePath;
+                string? remotePattern = null;
+                if (hasWildcard)
                 {
-                    remoteDir = remotePath.Substring(0, lastSlash + 1);
-                    remotePattern = remotePath.Substring(lastSlash + 1);
+                    remoteDir = "";
+                    remotePattern = remotePath;
+                    var lastSlash = remotePath.LastIndexOfAny(new[] { '/', '\\' });
+                    if (lastSlash >= 0)
+                    {
+                        remoteDir = remotePath.Substring(0, lastSlash + 1);
+                        remotePattern = remotePath.Substring(lastSlash + 1);
+                    }
                 }
 
-                _logger.WriteLine($"RECEIVING wildcard matches from {stmt.ConnectionName}:{remotePath} to local directory {localPath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
+                _logger.WriteLine($"RECEIVING {(recursive ? "recursive " : "")}matches from {stmt.ConnectionName}:{remotePath} to local directory {localPath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
 
-                // Compile regex for wildcard pattern
-                string escaped = System.Text.RegularExpressions.Regex.Escape(remotePattern);
-                string regexPattern = "^" + escaped.Replace("\\*", ".*").Replace("\\?", ".") + "$";
-                var regex = new System.Text.RegularExpressions.Regex(regexPattern,
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase,
-                    context.SecurityService.RegexMatchTimeout);
+                System.Text.RegularExpressions.Regex? regex = null;
+                if (remotePattern != null)
+                {
+                    string escaped = System.Text.RegularExpressions.Regex.Escape(remotePattern);
+                    string regexPattern = "^" + escaped.Replace("\\*", ".*").Replace("\\?", ".") + "$";
+                    regex = new System.Text.RegularExpressions.Regex(regexPattern,
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+                        context.SecurityService.RegexMatchTimeout);
+                }
 
-                var remoteFilesList = remoteFs.ListFilesAsync(remoteDir);
                 int matchCount = 0;
 
-                await foreach (var remoteFile in remoteFilesList)
+                await foreach (var entry in RemoteDirectoryWalker.WalkAsync(remoteFs, remoteDir, recursive, context, context.CancellationToken))
                 {
-                    if (remoteFile.IsDirectory) continue;
+                    var remoteFile = entry.Meta;
+                    if (remoteFile.IsDirectory || remoteFile.IsSymlink == true) continue;
 
                     string fileNameOnly = Path.GetFileName(remoteFile.FullPath);
-                    if (regex.IsMatch(fileNameOnly))
+                    if (regex != null && !regex.IsMatch(fileNameOnly))
+                        continue;
+
+                    matchCount++;
+                    string relTarget = recursive
+                        ? SafeRelativeLocalPath(entry.RelativePath, stmt.ConnectionName)
+                        : fileNameOnly;
+                    string localFile = pathAuthorizer.Authorize(context,
+                        Path.Combine(localPath, relTarget),
+                        FileSystemAccessKind.Write).CanonicalPath;
+                    EnsureUnderDirectory(localFile, localPath, stmt.ConnectionName);
+
+                    // Security Hardening: Block writing to script files
+                    context.SecurityService.ValidateWriteAccess(localFile);
+                    context.SecurityService.ValidateFileType(localFile);
+
+                    if (context.IsWhatIf)
                     {
-                        matchCount++;
-                        string localFile = pathAuthorizer.Authorize(context,
-                            Path.Combine(localPath, fileNameOnly),
-                            FileSystemAccessKind.Write).CanonicalPath;
-
-                        // Security Hardening: Block writing to script files
-                        context.SecurityService.ValidateWriteAccess(localFile);
-                        context.SecurityService.ValidateFileType(localFile);
-
-                        if (context.IsWhatIf)
-                        {
-                            _logger.WriteLine($"WHAT IF: Would receive {stmt.ConnectionName}:{remoteFile.FullPath} to local file {localFile}", ConsoleColor.Yellow);
-                            continue;
-                        }
-
-                        _logger.WriteLine($"Receiving: {stmt.ConnectionName}:{remoteFile.FullPath} -> {localFile}", ConsoleColor.Cyan);
-                        var dir = Path.GetDirectoryName(localFile);
-                        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                        localFile = pathAuthorizer.Authorize(context, localFile,
-                            FileSystemAccessKind.Write).CanonicalPath;
-                        await remoteFs.DownloadFileAsync(remoteFile.FullPath, localFile, overwrite);
+                        _logger.WriteLine($"WHAT IF: Would receive {stmt.ConnectionName}:{remoteFile.FullPath} to local file {localFile}", ConsoleColor.Yellow);
+                        continue;
                     }
+
+                    _logger.WriteLine($"Receiving: {stmt.ConnectionName}:{remoteFile.FullPath} -> {localFile}", ConsoleColor.Cyan);
+                    var dir = Path.GetDirectoryName(localFile);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    localFile = pathAuthorizer.Authorize(context, localFile,
+                        FileSystemAccessKind.Write).CanonicalPath;
+                    await remoteFs.DownloadFileAsync(remoteFile.FullPath, localFile, overwrite);
+                    if (verify)
+                        await VerifyTransferAsync(remoteFs, remoteFile.FullPath, localFile, deleteLocalOnMismatch: true, context.CancellationToken);
                 }
 
                 if (matchCount == 0)
@@ -206,8 +256,120 @@ public class FileTransferStatementHandler : IStatementHandler
                 var dir = Path.GetDirectoryName(localPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 await remoteFs.DownloadFileAsync(remotePath, localPath, overwrite);
+                if (verify)
+                    await VerifyTransferAsync(remoteFs, remotePath, localPath, deleteLocalOnMismatch: true, context.CancellationToken);
                 _logger.WriteLine("Download complete.", ConsoleColor.Green);
             }
+        }
+    }
+
+    internal static async Task VerifyTransferAsync(
+        IRemoteFileSystem remoteFs,
+        string remotePath,
+        string localPath,
+        bool deleteLocalOnMismatch,
+        CancellationToken cancellationToken)
+    {
+        RemoteFileVerificationInfo? remoteInfo;
+        try
+        {
+            remoteInfo = await remoteFs.GetFileVerificationInfoAsync(remotePath, cancellationToken);
+        }
+        catch (NotSupportedException)
+        {
+            // Fallback for connectors that do not implement GetFileVerificationInfoAsync:
+            // look up the entry in its parent directory listing.
+            remoteInfo = await LookupSizeFromListingAsync(remoteFs, remotePath, cancellationToken);
+        }
+
+        if (remoteInfo == null)
+        {
+            DeletePartialLocalFileIfNeeded(localPath, deleteLocalOnMismatch);
+            throw new ExecutionException($"Transfer verification failed for '{remotePath}': remote file metadata could not be retrieved.");
+        }
+
+        long localSize = File.Exists(localPath) ? new FileInfo(localPath).Length : -1;
+        if (localSize != remoteInfo.Size)
+        {
+            DeletePartialLocalFileIfNeeded(localPath, deleteLocalOnMismatch);
+            throw new ExecutionException(
+                $"Transfer verification failed for '{remotePath}': size mismatch (remote={remoteInfo.Size} bytes, local={localSize} bytes).");
+        }
+
+        if (!string.IsNullOrEmpty(remoteInfo.Md5Hex))
+        {
+            string localMd5;
+            await using (var stream = File.OpenRead(localPath))
+            {
+                var hash = await MD5.HashDataAsync(stream, cancellationToken);
+                localMd5 = Convert.ToHexString(hash).ToLowerInvariant();
+            }
+
+            if (!string.Equals(localMd5, remoteInfo.Md5Hex, StringComparison.OrdinalIgnoreCase))
+            {
+                DeletePartialLocalFileIfNeeded(localPath, deleteLocalOnMismatch);
+                throw new ExecutionException(
+                    $"Transfer verification failed for '{remotePath}': MD5 checksum mismatch (remote={remoteInfo.Md5Hex}, local={localMd5}).");
+            }
+        }
+    }
+
+    private static async Task<RemoteFileVerificationInfo?> LookupSizeFromListingAsync(
+        IRemoteFileSystem remoteFs,
+        string remotePath,
+        CancellationToken cancellationToken)
+    {
+        var normalized = remotePath.Replace('\\', '/');
+        var slash = normalized.LastIndexOf('/');
+        var parentDir = slash < 0 ? "" : normalized[..slash];
+        var fileName = slash < 0 ? normalized : normalized[(slash + 1)..];
+
+        await foreach (var entry in remoteFs.ListFilesAsync(parentDir).WithCancellation(cancellationToken))
+        {
+            if (!entry.IsDirectory && string.Equals(entry.Name, fileName, StringComparison.Ordinal))
+                return new RemoteFileVerificationInfo(entry.Size, Md5Hex: null);
+        }
+        return null;
+    }
+
+    // Remote names come from the server. On Windows a name such as "..\..\x" (legal on Linux)
+    // would act as separators, so each segment is checked and the result must stay under the target.
+    internal static string SafeRelativeLocalPath(string remoteRelativePath, string? connectionName)
+    {
+        var segments = remoteRelativePath.Split('/');
+        foreach (var segment in segments)
+        {
+            if (segment.Length == 0 || segment is "." or ".."
+                || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+                || segment.Contains('\\') || segment.Contains(':'))
+            {
+                throw new SecurityException(
+                    $"RECEIVE FILE refused remote entry '{remoteRelativePath}' from '{connectionName}': it is not a plain relative path.");
+            }
+        }
+        return Path.Combine(segments);
+    }
+
+    internal static void EnsureUnderDirectory(string localFile, string localRoot, string? connectionName)
+    {
+        var root = Path.GetFullPath(localRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var full = Path.GetFullPath(localFile);
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!full.StartsWith(root, comparison))
+            throw new SecurityException($"RECEIVE FILE refused a remote entry from '{connectionName}' that resolves outside the target directory.");
+    }
+
+    private static void DeletePartialLocalFileIfNeeded(string localPath, bool deleteLocalOnMismatch)
+    {
+        if (!deleteLocalOnMismatch) return;
+        try
+        {
+            if (File.Exists(localPath))
+                File.Delete(localPath);
+        }
+        catch
+        {
+            // Best-effort removal of partial local file.
         }
     }
 }

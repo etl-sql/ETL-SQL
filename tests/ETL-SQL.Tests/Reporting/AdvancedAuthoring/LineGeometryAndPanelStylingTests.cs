@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Xml.Linq;
 using ETL_SQL.Core;
@@ -162,7 +163,7 @@ public sealed class LineGeometryAndPanelStylingTests
         var axisLine = document.Descendants()
             .First(element => (string?)element.Attribute("class") == "plot-axis-line");
         Assert.Equal((string?)axisLine.Attribute("x1"), (string?)panel.Attribute("x"));
-        Assert.True(decimal.Parse((string)panel.Attribute("x")!) > 0m);
+        Assert.True(decimal.Parse((string)panel.Attribute("x")!, CultureInfo.InvariantCulture) > 0m);
     }
 
     [Fact]
@@ -252,7 +253,9 @@ public sealed class LineGeometryAndPanelStylingTests
         for (var index = 0; index < tokens.Length; index++)
         {
             if (tokens[index] is not ("M" or "L")) continue;
-            points.Add((decimal.Parse(tokens[index + 1]), decimal.Parse(tokens[index + 2])));
+            points.Add((
+                decimal.Parse(tokens[index + 1], CultureInfo.InvariantCulture),
+                decimal.Parse(tokens[index + 2], CultureInfo.InvariantCulture)));
         }
         return points;
     }

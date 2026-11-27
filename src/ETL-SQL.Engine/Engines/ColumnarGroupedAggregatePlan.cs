@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 
@@ -22,17 +23,27 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
     private readonly string _keyColumn;
     private readonly string[] _valueColumns;
     private readonly Slot[] _slots;
+    // HAVING as written. It is rewritten onto the output columns in FinalizeResultAsync, once the
+    // caller's output names are known: an unaliased aggregate is named by the caller ("column2"),
+    // not by its SQL text, so a rewrite made here pointed HAVING COUNT(*) at a missing column.
     private readonly Expression? _havingClause;
+    private readonly string?[] _slotAggregateSql;
+    private readonly string[] _keyReferenceNames;
+    private readonly long _memoryCeilingBytes;
     private readonly List<IState> _states = new();
 
     private ColumnarGroupedAggregatePlan(
-        IExecutionContext context, string keyColumn, string[] valueColumns, Slot[] slots, Expression? havingClause)
+        IExecutionContext context, string keyColumn, string[] valueColumns, Slot[] slots, Expression? havingClause,
+        string?[] slotAggregateSql, string[] keyReferenceNames)
     {
         _context = context;
         _keyColumn = keyColumn;
         _valueColumns = valueColumns;
         _slots = slots;
         _havingClause = havingClause;
+        _slotAggregateSql = slotAggregateSql;
+        _keyReferenceNames = keyReferenceNames;
+        _memoryCeilingBytes = MemoryGovernor.Ceiling(context);
     }
 
     public static bool TryCreate(
@@ -54,13 +65,17 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
         var slots = new List<Slot>(statement.Columns.Count);
         var projectedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var aggregateAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var slotAggregateSql = new List<string?>(statement.Columns.Count);
+        var keyReferenceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var column in statement.Columns)
         {
             if (column.Expression is IdentifierExpression identifier
                 && identifier.Name.Split('.').Last().Equals(keyColumn, StringComparison.OrdinalIgnoreCase))
             {
                 slots.Add(new Slot(SlotKind.Key, null, false));
+                slotAggregateSql.Add(null);
                 projectedNames.Add(column.Alias ?? identifier.Name.Split('.').Last());
+                keyReferenceNames.Add(column.Alias ?? identifier.Name.Split('.').Last());
                 continue;
             }
             if (column.Expression is not FunctionCallExpression function
@@ -88,15 +103,18 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
                 valueColumns.Add(argument);
             }
             slots.Add(new Slot(kind, argument, countStar));
+            slotAggregateSql.Add(column.Expression.ToSql());
             var outputName = column.Alias ?? column.Expression.ToSql();
             projectedNames.Add(outputName);
             aggregateAliases[column.Expression.ToSql()] = outputName;
         }
         if (valueColumns.Count > 1 && !slots.Any(slot => slot.Kind == SlotKind.Key)) return false;
-        if (!TryRewriteHaving(statement.HavingClause, aggregateAliases, projectedNames, out var havingClause))
+        // Eligibility only: the rewrite that runs is made in FinalizeResultAsync over the real names.
+        if (!TryRewriteHaving(statement.HavingClause, aggregateAliases, projectedNames, out _))
             return false;
         plan = new ColumnarGroupedAggregatePlan(
-            context, keyColumn, valueColumns.ToArray(), slots.ToArray(), havingClause);
+            context, keyColumn, valueColumns.ToArray(), slots.ToArray(), statement.HavingClause,
+            slotAggregateSql.ToArray(), keyReferenceNames.ToArray());
         return true;
     }
 
@@ -128,18 +146,51 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
             else foreach (var valueColumn in _valueColumns) _states.Add(CreateState(batch, valueColumn));
         }
         foreach (var state in _states) state.Accumulate(batch, selection);
+        if (_memoryCeilingBytes > 0 && _states.Count > 1)
+        {
+            long totalStateBytes = _states.Sum(s => s.EstimatedBytes);
+            if (totalStateBytes > _memoryCeilingBytes)
+                throw new ExecutionException(
+                    $"Native GROUP BY requires more than {totalStateBytes:N0} bytes of aggregate state. " +
+                    "Increase Engine:TotalMemoryGrantMB or use spill-capable grouped execution.");
+        }
     }
 
     public async Task<DataTable> FinalizeResultAsync(IReadOnlyList<string> outputNames)
     {
         var table = new DataTable();
         table.SetColumns(outputNames);
+        using var resultLease = _context.MemoryArbiter.AcquireLease();
+        long liveStateBytes = _states.Sum(s => s.EstimatedBytes);
+        long resultBytes = 0;
+
+        void TrackMaterializedRow(Row row)
+        {
+            resultBytes = checked(resultBytes + row.EstimateHeapBytes() + 24L);
+            var totalBytes = checked(liveStateBytes + resultBytes);
+            if ((_memoryCeilingBytes > 0 && totalBytes > _memoryCeilingBytes)
+                || resultLease.RegisterAndCheckSpill(resultBytes))
+            {
+                throw new ExecutionException(
+                    $"Native GROUP BY requires more than {totalBytes:N0} bytes of aggregate state. " +
+                    "Increase Engine:TotalMemoryGrantMB or use spill-capable grouped execution.");
+            }
+        }
+
         for (var index = 0; index < _states.Count; index++)
-            _states[index].WriteRows(table, _slots, createRows: index == 0);
+        {
+            var state = _states[index];
+            var stateBytes = state.EstimatedBytes;
+            state.WriteRows(table, _slots, createRows: index == 0, index == 0 ? TrackMaterializedRow : null);
+            state.Dispose();
+            liveStateBytes = Math.Max(0, liveStateBytes - stateBytes);
+        }
+        _states.Clear();
         if (_havingClause != null)
         {
+            var having = RewriteHavingOntoOutput(outputNames);
             for (var index = table.Rows.Count - 1; index >= 0; index--)
-                if (!await _context.EvaluateCondition(_havingClause, table.Rows[index]))
+                if (!await _context.EvaluateCondition(having, table.Rows[index]))
                     table.Rows.RemoveAt(index);
         }
         return table;
@@ -157,11 +208,12 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
         if (valueColumn == null)
         {
             if (keyType == typeof(string))
-                return new StringCountState(_context, _keyColumn);
+                return new StringCountState(_context, _keyColumn, _memoryCeilingBytes);
             var countType = typeof(CountState<>).MakeGenericType(keyType);
             return (IState)Activator.CreateInstance(
                 countType, _context, _keyColumn,
-                batch.Schema.Fields[batch.Schema.GetOrdinal(_keyColumn)].LogicalType)!;
+                batch.Schema.Fields[batch.Schema.GetOrdinal(_keyColumn)].LogicalType,
+                _memoryCeilingBytes)!;
         }
         var valueType = batch.GetColumn(valueColumn).ElementType;
         if (keyType == typeof(string))
@@ -169,13 +221,15 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
             var stringStateType = typeof(StringState<>).MakeGenericType(valueType);
             return (IState)Activator.CreateInstance(
                 stringStateType, _context, _keyColumn, valueColumn,
-                batch.Schema.Fields[batch.Schema.GetOrdinal(valueColumn)].LogicalType)!;
+                batch.Schema.Fields[batch.Schema.GetOrdinal(valueColumn)].LogicalType,
+                _memoryCeilingBytes)!;
         }
         var stateType = typeof(State<,>).MakeGenericType(keyType, valueType);
         return (IState)Activator.CreateInstance(
             stateType, _context, _keyColumn, valueColumn,
             batch.Schema.Fields[batch.Schema.GetOrdinal(_keyColumn)].LogicalType,
-            batch.Schema.Fields[batch.Schema.GetOrdinal(valueColumn)].LogicalType)!;
+            batch.Schema.Fields[batch.Schema.GetOrdinal(valueColumn)].LogicalType,
+            _memoryCeilingBytes)!;
     }
 
     private static bool IsNumeric(Type type)
@@ -186,6 +240,20 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
         => IsNumeric(type) || type == typeof(DateOnly) || type == typeof(DateTime)
             || type == typeof(DateTimeOffset) || type == typeof(TimeSpan)
             || type == typeof(Guid) || type == typeof(string);
+
+    private Expression RewriteHavingOntoOutput(IReadOnlyList<string> outputNames)
+    {
+        var aggregateAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var projectedNames = new HashSet<string>(outputNames, StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < _slotAggregateSql.Length && i < outputNames.Count; i++)
+        {
+            if (_slotAggregateSql[i] is { } sql) aggregateAliases.TryAdd(sql, outputNames[i]);
+        }
+        foreach (var keyName in _keyReferenceNames) projectedNames.Add(keyName);
+        if (!TryRewriteHaving(_havingClause, aggregateAliases, projectedNames, out var rewritten) || rewritten == null)
+            throw new ExecutionException("HAVING could not be mapped onto the grouped output columns.");
+        return rewritten;
+    }
 
     private static bool TryRewriteHaving(
         Expression? expression,
@@ -226,8 +294,9 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
 
     private interface IState : IDisposable
     {
+        long EstimatedBytes { get; }
         void Accumulate(ColumnBatch batch, SelectionVector? selection);
-        void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows);
+        void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows, Action<Row>? onRowAdded = null);
     }
 
     private sealed class State<TKey, TValue> : IState
@@ -239,6 +308,7 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
         private readonly string _valueColumn;
         private readonly string _keyLogicalType;
         private readonly string _valueLogicalType;
+        private readonly long _memoryCeilingBytes;
         private NativeGroupAggregateResult<TKey, TValue>? _result;
 
         public State(
@@ -246,26 +316,30 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
             string keyColumn,
             string valueColumn,
             string keyLogicalType,
-            string valueLogicalType)
+            string valueLogicalType,
+            long memoryCeilingBytes)
         {
             _context = context;
             _keyColumn = keyColumn;
             _valueColumn = valueColumn;
             _keyLogicalType = keyLogicalType;
             _valueLogicalType = valueLogicalType;
+            _memoryCeilingBytes = memoryCeilingBytes;
         }
+
+        public long EstimatedBytes => _result?.EstimatedBytes ?? 0;
 
         public void Accumulate(ColumnBatch batch, SelectionVector? selection)
         {
             if (_result == null)
                 _result = ColumnBatchGroupKernels.GroupAggregate<TKey, TValue>(
                     batch, _keyColumn, _valueColumn, _context.MemoryArbiter,
-                    selection, _context.CancellationToken);
+                    selection, _context.CancellationToken, _memoryCeilingBytes);
             else
                 _result.Accumulate(batch, _keyColumn, _valueColumn, selection, _context.CancellationToken);
         }
 
-        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows)
+        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows, Action<Row>? onRowAdded = null)
         {
             if (_result == null) return;
             var nullKey = new object();
@@ -303,7 +377,11 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
                         _ => null
                     };
                 }
-                if (createRows) table.Rows.Add(row);
+                if (createRows)
+                {
+                    onRowAdded?.Invoke(row);
+                    table.Rows.Add(row);
+                }
             }
         }
 
@@ -324,18 +402,20 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
         private readonly string _keyLogicalType;
         private readonly NativeGroupCountResult<TKey> _result;
 
-        public CountState(IExecutionContext context, string keyColumn, string keyLogicalType)
+        public CountState(IExecutionContext context, string keyColumn, string keyLogicalType, long memoryCeilingBytes)
         {
             _context = context;
             _keyColumn = keyColumn;
             _keyLogicalType = keyLogicalType;
-            _result = new NativeGroupCountResult<TKey>(context.MemoryArbiter);
+            _result = new NativeGroupCountResult<TKey>(context.MemoryArbiter, memoryCeilingBytes);
         }
+
+        public long EstimatedBytes => _result.EstimatedBytes;
 
         public void Accumulate(ColumnBatch batch, SelectionVector? selection)
             => _result.Accumulate(batch, _keyColumn, selection, _context.CancellationToken);
 
-        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows)
+        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows, Action<Row>? onRowAdded = null)
         {
             if (!createRows) throw new InvalidOperationException("Key-only count state must create grouped output rows.");
             foreach (var (key, count) in _result.Groups)
@@ -350,6 +430,7 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
                         _ => null
                     };
                 }
+                onRowAdded?.Invoke(row);
                 table.Rows.Add(row);
             }
         }
@@ -369,20 +450,23 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
             IExecutionContext context,
             string keyColumn,
             string valueColumn,
-            string valueLogicalType)
+            string valueLogicalType,
+            long memoryCeilingBytes)
         {
             _context = context;
             _keyColumn = keyColumn;
             _valueColumn = valueColumn;
             _valueLogicalType = valueLogicalType;
-            _result = new NativeStringGroupAggregateResult<TValue>(context.MemoryArbiter);
+            _result = new NativeStringGroupAggregateResult<TValue>(context.MemoryArbiter, memoryCeilingBytes);
         }
+
+        public long EstimatedBytes => _result.EstimatedBytes;
 
         public void Accumulate(ColumnBatch batch, SelectionVector? selection)
             => _result.Accumulate(
                 batch, _keyColumn, _valueColumn, selection, _context.CancellationToken);
 
-        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows)
+        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows, Action<Row>? onRowAdded = null)
         {
             var nullKey = new object();
             Dictionary<object, Row>? existing = null;
@@ -417,7 +501,11 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
                         _ => null
                     };
                 }
-                if (createRows) table.Rows.Add(row);
+                if (createRows)
+                {
+                    onRowAdded?.Invoke(row);
+                    table.Rows.Add(row);
+                }
             }
         }
 
@@ -437,17 +525,19 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
         private readonly string _keyColumn;
         private readonly NativeStringGroupCountResult _result;
 
-        public StringCountState(IExecutionContext context, string keyColumn)
+        public StringCountState(IExecutionContext context, string keyColumn, long memoryCeilingBytes)
         {
             _context = context;
             _keyColumn = keyColumn;
-            _result = new NativeStringGroupCountResult(context.MemoryArbiter);
+            _result = new NativeStringGroupCountResult(context.MemoryArbiter, memoryCeilingBytes);
         }
+
+        public long EstimatedBytes => _result.EstimatedBytes;
 
         public void Accumulate(ColumnBatch batch, SelectionVector? selection)
             => _result.Accumulate(batch, _keyColumn, selection, _context.CancellationToken);
 
-        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows)
+        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows, Action<Row>? onRowAdded = null)
         {
             if (!createRows) throw new InvalidOperationException("String count state must create grouped output rows.");
             foreach (var (key, count) in _result.Groups)
@@ -462,6 +552,7 @@ internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePl
                         _ => null
                     };
                 }
+                onRowAdded?.Invoke(row);
                 table.Rows.Add(row);
             }
         }

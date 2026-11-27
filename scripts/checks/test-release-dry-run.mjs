@@ -32,9 +32,11 @@ assert.match(step('publish-release', 'Publish draft release'), /^        if: env
 assert.match(step('attest-provenance', 'Attest draft artifacts'), /^        if: env\.DRY_RUN != 'true'/m);
 assert.match(jobs['publish-marketplace'], /needs\.publish-release\.result == 'success' && !inputs\.dry_run/);
 
-// The dry run validates the exact release-branch HEAD instead of a tag.
+// The dry run validates a candidate_sha reachable from the release branch instead of a tag.
+const validateStep = step('validate', 'Verify release tag is on a supported release branch');
 assert.match(step('validate', 'Checkout'), /ref: \$\{\{ inputs\.dry_run && inputs\.candidate_sha \|\| env\.TAG_NAME \}\}/);
-assert.match(step('validate', 'Verify release tag is on a supported release branch'), /candidate_sha equal to the release branch HEAD/);
+assert.match(validateStep, /merge-base --is-ancestor \$env:CANDIDATE_SHA "origin\/\$env:GITHUB_REF_NAME"/);
+assert.match(validateStep, /\$expectedSha = if \(\$env:DRY_RUN -eq 'true'\) \{ \$env:CANDIDATE_SHA \} else \{ \$env:GITHUB_SHA \}/);
 
 // The delete job runs whatever happened, after every job that writes to the draft.
 const discard = jobs['discard-dry-run-draft'];

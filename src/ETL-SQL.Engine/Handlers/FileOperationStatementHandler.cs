@@ -107,6 +107,13 @@ public class FileOperationStatementHandler(
                         await remoteFs.RenameFileAsync(remoteSource, finalDest, remoteOverwrite);
                         context.Log($"Remote file {(stmt.Type == FileOpType.Move ? "moved" : "renamed")}: {stmt.ConnectionName}:{remoteSource} -> {finalDest}", ConsoleColor.Green);
                         break;
+                    case FileOpType.Copy:
+                        if (string.IsNullOrWhiteSpace(remoteDest))
+                            throw new ExecutionException("COPY_FILE requires a destination path.");
+
+                        await CopyRemoteFileAsync(remoteFs, remoteSource, remoteFs, remoteDest, remoteOverwrite, DefaultRemoteTempRoot, context.CancellationToken);
+                        context.Log($"Remote file copied: {stmt.ConnectionName}:{remoteSource} -> {remoteDest}", ConsoleColor.Green);
+                        break;
                     default:
                         throw new ExecutionException($"File operation '{stmt.Type}' is not supported on remote systems.");
                 }
@@ -144,8 +151,14 @@ public class FileOperationStatementHandler(
             return;
         }
 
+        string? formatOpt = stmt.Format != null ? (await context.EvaluateValue(stmt.Format, new Row()))?.ToString() : null;
+        string? patternOpt = stmt.Pattern != null ? (await context.EvaluateValue(stmt.Pattern, new Row()))?.ToString() : null;
+        ArchiveFormat? archiveFormat = null;
+        bool decompressGzipToFile = false;
+
         string sourceVal = sourceOperand.RawValue;
         string source = sourceOperand.ResolvedPath;
+        bool destIsDirectory = stmt.DestinationIsDirectory || destOperand.IsDirectory;
         string? destVal = destOperand.RawValue != null ? destOperand.ResolvedPath : null;
         destVal = await ApplyDestinationNamingOptionsAsync(stmt, context, source, destVal, remote: false, isDestinationDirectory: destOperand.IsDirectory);
         string? dest = destVal != null ? context.ResolvePath(destVal) : null;
@@ -155,15 +168,72 @@ public class FileOperationStatementHandler(
             : FileSystemAccessKind.Read;
         source = pathAuthorizer.Authorize(context, source, sourceAccess,
             validateFileType: stmt.Type != FileOpType.Compress || !Directory.Exists(source)).CanonicalPath;
-        if (dest == null && stmt.Destination == null && stmt.Type is FileOpType.Encrypt or FileOpType.Decrypt)
+        if (stmt.Type is FileOpType.Encrypt or FileOpType.Decrypt)
         {
-            dest = DeriveDefaultCryptoDestination(stmt, source, sourceVal);
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = DeriveDefaultCryptoDestination(stmt, source, sourceVal, viaToDirectory: false);
+            }
+            else if (dest != null && destIsDirectory)
+            {
+                var defaultFileName = Path.GetFileName(DeriveDefaultCryptoDestination(stmt, source, sourceVal, viaToDirectory: true));
+                dest = Path.Combine(dest, defaultFileName);
+            }
+        }
+        else if (stmt.Type == FileOpType.Compress)
+        {
+            archiveFormat = SafeArchiveService.ResolveFormat(formatOpt, destIsDirectory ? null : dest, defaultToZipIfUnknown: true);
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = SafeArchiveService.DeriveDefaultCompressDestination(source, archiveFormat.Value, Directory.Exists(source));
+            }
+            else if (dest != null && destIsDirectory)
+            {
+                var defaultFileName = Path.GetFileName(SafeArchiveService.DeriveDefaultCompressDestination(source, archiveFormat.Value, Directory.Exists(source)));
+                dest = Path.Combine(dest, defaultFileName);
+            }
+        }
+        else if (stmt.Type == FileOpType.Decompress)
+        {
+            archiveFormat = SafeArchiveService.ResolveFormat(formatOpt, source, defaultToZipIfUnknown: false);
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = SafeArchiveService.DeriveDefaultDecompressDestination(source, sourceVal);
+            }
+            if (archiveFormat == ArchiveFormat.Gzip && dest != null)
+            {
+                bool looksLikeDir = destIsDirectory
+                    || (destVal != null && (destVal.EndsWith('/') || destVal.EndsWith('\\')))
+                    || Directory.Exists(dest);
+                decompressGzipToFile = !looksLikeDir;
+            }
+        }
+        else if (stmt.Type == FileOpType.Sign)
+        {
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = source + ".sig";
+            }
+            else if (dest != null && destIsDirectory)
+            {
+                dest = Path.Combine(dest, Path.GetFileName(source) + ".sig");
+            }
+        }
+        else if (stmt.Type == FileOpType.VerifySignature)
+        {
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = source + ".sig";
+            }
         }
         if (dest != null && stmt.Type != FileOpType.Rename)
         {
-            var destinationAccess = stmt.Type == FileOpType.Decompress
-                ? FileSystemAccessKind.Extract
-                : FileSystemAccessKind.Write;
+            var destinationAccess = stmt.Type switch
+            {
+                FileOpType.VerifySignature => FileSystemAccessKind.Read,
+                FileOpType.Decompress when !decompressGzipToFile => FileSystemAccessKind.Extract,
+                _ => FileSystemAccessKind.Write
+            };
             dest = pathAuthorizer.Authorize(context, dest, destinationAccess,
                 validateFileType: destinationAccess != FileSystemAccessKind.Extract).CanonicalPath;
         }
@@ -295,6 +365,7 @@ public class FileOperationStatementHandler(
                 case FileOpType.Compress:
                     if (dest != null)
                     {
+                        var compressFormat = archiveFormat ?? SafeArchiveService.ResolveFormat(formatOpt, dest, defaultToZipIfUnknown: true);
                         var compressDest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write);
                         // Security Hardening: Block writing to script files and dangerous types
                         context.SecurityService.ValidateWriteAccess(compressDest.CanonicalPath);
@@ -311,33 +382,46 @@ public class FileOperationStatementHandler(
                             pathAuthorizer.DeleteValidatedFile(context, deleteDest);
                         }
 
+                        if (!Directory.Exists(source) && !File.Exists(source))
+                        {
+                            throw new ExecutionException($"Source for COMPRESS FILE does not exist: {source}");
+                        }
+
+                        var compressParent = Path.GetDirectoryName(compressDest.CanonicalPath);
+                        if (!string.IsNullOrEmpty(compressParent))
+                            Directory.CreateDirectory(compressParent);
+
                         await using var destStream = pathAuthorizer.OpenValidatedWrite(context, compressDest,
                             truncate: true, failIfExists: true);
                         if (Directory.Exists(source))
                         {
-                            System.IO.Compression.ZipFile.CreateFromDirectory(source, destStream);
-                        }
-                        else if (File.Exists(source))
-                        {
-                            using var archive = new ZipArchive(destStream, ZipArchiveMode.Create);
-                            archive.CreateEntryFromFile(source, Path.GetFileName(source));
+                            await SafeArchiveService.CompressDirectoryAsync(source, destStream, compressFormat, context.CancellationToken);
                         }
                         else
                         {
-                            throw new ExecutionException($"Source for COMPRESS FILE does not exist: {source}");
+                            await SafeArchiveService.CompressFileAsync(source, destStream, compressFormat, context.CancellationToken);
                         }
                     }
                     break;
                 case FileOpType.Decompress:
                     if (dest != null)
                     {
+                        var decompressFormat = archiveFormat ?? SafeArchiveService.ResolveFormat(formatOpt, source, defaultToZipIfUnknown: false);
                         // Security Hardening: Block writing to script files and dangerous types
                         context.SecurityService.ValidateWriteAccess(dest);
                         context.SecurityService.ValidateFileType(dest);
 
                         if (File.Exists(source))
                         {
-                            SafeZipExtractor.Extract(source, dest, overwrite, context, pathAuthorizer);
+                            SafeArchiveService.ExtractArchive(
+                                source,
+                                dest,
+                                decompressFormat,
+                                overwrite,
+                                context,
+                                pathAuthorizer,
+                                patternOpt,
+                                decompressGzipToFile);
                             context.Log($"File decompressed: {source} -> {dest}", ConsoleColor.Green);
                         }
                         else
@@ -352,6 +436,9 @@ public class FileOperationStatementHandler(
                         // Security Hardening: Block writing to script files and dangerous types
                         context.SecurityService.ValidateWriteAccess(dest);
                         context.SecurityService.ValidateFileType(dest);
+                        var encryptParent = Path.GetDirectoryName(dest);
+                        if (!string.IsNullOrEmpty(encryptParent))
+                            Directory.CreateDirectory(encryptParent);
 
                         if (stmt.PgpKey != null)
                         {
@@ -387,6 +474,9 @@ public class FileOperationStatementHandler(
                         // Security Hardening: Block writing to script files and dangerous types
                         context.SecurityService.ValidateWriteAccess(dest);
                         context.SecurityService.ValidateFileType(dest);
+                        var decryptParent = Path.GetDirectoryName(dest);
+                        if (!string.IsNullOrEmpty(decryptParent))
+                            Directory.CreateDirectory(decryptParent);
 
                         if (stmt.PgpKey != null)
                         {
@@ -417,6 +507,37 @@ public class FileOperationStatementHandler(
                         }
                     }
                     break;
+                case FileOpType.Sign:
+                    if (dest != null)
+                    {
+                        context.SecurityService.ValidateWriteAccess(dest);
+                        context.SecurityService.ValidateFileType(dest);
+                        var signParent = Path.GetDirectoryName(dest);
+                        if (!string.IsNullOrEmpty(signParent))
+                            Directory.CreateDirectory(signParent);
+
+                        if (stmt.PgpKey == null)
+                            throw new ExecutionException("SIGN FILE requires a PGP_KEY clause.", null, stmt.Line, stmt.Column);
+
+                        string signKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
+                        signKeyPath = pathAuthorizer.Authorize(context, signKeyPath, FileSystemAccessKind.Read).CanonicalPath;
+                        var signPwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
+                        await CryptoUtils.SignFileWithPgpAsync(source, dest, signKeyPath, signPwd, overwrite);
+                        context.Log($"File signed: {source} -> {dest}", ConsoleColor.Green);
+                    }
+                    break;
+                case FileOpType.VerifySignature:
+                    if (dest != null)
+                    {
+                        if (stmt.PgpKey == null)
+                            throw new ExecutionException("VERIFY FILE SIGNATURE requires a PGP_KEY clause.", null, stmt.Line, stmt.Column);
+
+                        string verifyKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
+                        verifyKeyPath = pathAuthorizer.Authorize(context, verifyKeyPath, FileSystemAccessKind.Read).CanonicalPath;
+                        await CryptoUtils.VerifyFileSignatureWithPgpAsync(source, dest, verifyKeyPath);
+                        context.Log($"Signature verified: {source} ({dest})", ConsoleColor.Green);
+                    }
+                    break;
             }
 
             // Only after the operation returned and its output exists: a failure above throws past this.
@@ -438,7 +559,11 @@ public class FileOperationStatementHandler(
         await Task.CompletedTask;
     }
 
-    private static string DeriveDefaultCryptoDestination(FileOperationStatement stmt, string source, string sourceDisplay)
+    private static string DeriveDefaultCryptoDestination(
+        FileOperationStatement stmt,
+        string source,
+        string sourceDisplay,
+        bool viaToDirectory)
     {
         if (stmt.Type == FileOpType.Encrypt)
         {
@@ -455,8 +580,9 @@ public class FileOperationStatementHandler(
 
         if (string.IsNullOrEmpty(derived) || string.IsNullOrEmpty(Path.GetFileName(derived)))
         {
+            var form = viaToDirectory ? "with TO DIRECTORY" : "without TO";
             throw new ExecutionException(
-                $"DECRYPT FILE without TO requires a '.pgp' or '.enc' file extension on '{sourceDisplay}', or specify TO '<destination>'.",
+                $"DECRYPT FILE {form} requires a '.pgp' or '.enc' file extension on '{sourceDisplay}', or specify TO '<destination>'.",
                 null, stmt.Line, stmt.Column);
         }
 
@@ -478,6 +604,64 @@ public class FileOperationStatementHandler(
         };
     }
 
+    internal static string DefaultRemoteTempRoot =>
+        Path.Combine(Path.GetTempPath(), "ETL-SQL-RemoteCopy");
+
+    /// <summary>
+    /// Copies a file between remote filesystems (same-connection or cross-connection).
+    /// When <paramref name="overwrite"/> is false, checks destination existence before any byte moves.
+    /// Uses server-side <see cref="IRemoteFileSystem.CopyFileAsync"/> on same-connection copies when
+    /// supported, otherwise downloads to a temp file under <paramref name="tempRoot"/> and uploads,
+    /// always deleting the temp file on success or failure.
+    /// </summary>
+    internal static async Task CopyRemoteFileAsync(
+        IRemoteFileSystem sourceFs,
+        string sourcePath,
+        IRemoteFileSystem destFs,
+        string destPath,
+        bool overwrite,
+        string tempRoot,
+        CancellationToken cancellationToken)
+    {
+        if (!overwrite && await destFs.FileExistsAsync(destPath))
+        {
+            throw new ExecutionException($"Remote destination file already exists (OVERWRITE=OFF): {destPath}");
+        }
+
+        if (ReferenceEquals(sourceFs, destFs))
+        {
+            try
+            {
+                await sourceFs.CopyFileAsync(sourcePath, destPath, overwrite, cancellationToken);
+                return;
+            }
+            catch (NotSupportedException)
+            {
+                // Protocol has no server-side copy (e.g. SFTP, FTP); fall through to temp-file copy.
+            }
+        }
+
+        Directory.CreateDirectory(tempRoot);
+        string tempFile = Path.Combine(tempRoot, $"copy_{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await sourceFs.DownloadFileAsync(sourcePath, tempFile, overwrite: true);
+            await destFs.UploadFileAsync(tempFile, destPath, overwrite, cancellationToken);
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(tempFile))
+                    File.Delete(tempFile);
+            }
+            catch
+            {
+                // Best-effort cleanup of temp file.
+            }
+        }
+    }
+
     private async Task ExecuteRemoteBridgedFileOperationAsync(
         FileOperationStatement stmt,
         IExecutionContext context,
@@ -485,6 +669,16 @@ public class FileOperationStatementHandler(
         ResolvedFileOperand destOperand,
         bool overwrite)
     {
+        // The bridge only transfers bytes. ENCRYPT/DECRYPT/COMPRESS/DECOMPRESS used to fall through
+        // to a plain upload or download, so ENCRYPT FILE ... TO <remote> sent the plaintext.
+        if (stmt.Type is not (FileOpType.Copy or FileOpType.Move or FileOpType.Rename or FileOpType.Delete))
+        {
+            var opName = $"{stmt.Type.ToString().ToUpperInvariant()} FILE";
+            throw new ExecutionException(
+                $"{opName} cannot read from or write to a remote connection. Run {opName} on a local path, then COPY FILE the result to or from the connection.",
+                null, stmt.Line, stmt.Column);
+        }
+
         var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
         context.IncrementOperationCount(OperationType.FileSystem, sourceOperand.ResolvedPath, 1);
 
@@ -521,36 +715,32 @@ public class FileOperationStatementHandler(
                                 await UpdateConnectionPathInPlaceAsync(context, sourceOperand.ConnectionName, sourceOperand.DataSource, destPath);
                             }
                             break;
+                        case FileOpType.Copy:
+                            await CopyRemoteFileAsync(remoteFs, sourceOperand.ResolvedPath, remoteFs, destPath, overwrite, DefaultRemoteTempRoot, context.CancellationToken);
+                            context.Log($"Remote file copied: {sourceOperand.ConnectionName}:{sourceOperand.ResolvedPath} -> {destPath}", ConsoleColor.Green);
+                            break;
                         default:
                             throw new ExecutionException($"File operation '{stmt.Type}' is not supported on remote connection '{sourceOperand.ConnectionName}'.");
                     }
                 }
                 else
                 {
-                    // Different remote filesystems: Download to temp local file, upload to target
-                    string tempLocal = Path.GetTempFileName();
-                    try
-                    {
-                        await sourceOperand.RemoteFs!.DownloadFileAsync(sourceOperand.ResolvedPath, tempLocal, overwrite: true);
-                        string destPath = destOperand.ResolvedPath;
-                        if (destOperand.IsDirectory)
-                            destPath = CombineRemotePath(destPath, GetRemoteFileName(sourceOperand.ResolvedPath));
-                        await destOperand.RemoteFs!.UploadFileAsync(tempLocal, destPath, overwrite, context.CancellationToken);
+                    // Different remote filesystems: Download to temp file under engine temp root, upload to target
+                    string destPath = destOperand.ResolvedPath;
+                    if (destOperand.IsDirectory)
+                        destPath = CombineRemotePath(destPath, GetRemoteFileName(sourceOperand.ResolvedPath));
 
-                        if (stmt.Type == FileOpType.Move)
-                        {
-                            await sourceOperand.RemoteFs!.DeleteFileAsync(sourceOperand.ResolvedPath);
-                            if (sourceOperand.IsConnection && sourceOperand.ConnectionName != null && sourceOperand.DataSource != null)
-                            {
-                                await UpdateConnectionPathInPlaceAsync(context, sourceOperand.ConnectionName, sourceOperand.DataSource, destPath);
-                            }
-                        }
-                        context.Log($"Remote file {(stmt.Type == FileOpType.Move ? "moved" : "copied")}: {sourceOperand.ConnectionName}:{sourceOperand.ResolvedPath} -> {destOperand.ConnectionName}:{destPath}", ConsoleColor.Green);
-                    }
-                    finally
+                    await CopyRemoteFileAsync(sourceOperand.RemoteFs!, sourceOperand.ResolvedPath, destOperand.RemoteFs!, destPath, overwrite, DefaultRemoteTempRoot, context.CancellationToken);
+
+                    if (stmt.Type == FileOpType.Move)
                     {
-                        if (File.Exists(tempLocal)) File.Delete(tempLocal);
+                        await sourceOperand.RemoteFs!.DeleteFileAsync(sourceOperand.ResolvedPath);
+                        if (sourceOperand.IsConnection && sourceOperand.ConnectionName != null && sourceOperand.DataSource != null)
+                        {
+                            await UpdateConnectionPathInPlaceAsync(context, sourceOperand.ConnectionName, sourceOperand.DataSource, destPath);
+                        }
                     }
+                    context.Log($"Remote file {(stmt.Type == FileOpType.Move ? "moved" : "copied")}: {sourceOperand.ConnectionName}:{sourceOperand.ResolvedPath} -> {destOperand.ConnectionName}:{destPath}", ConsoleColor.Green);
                 }
                 return;
             }
@@ -745,11 +935,23 @@ public class FileOperationStatementHandler(
         if (stmt.DateSuffix == null && !destIsDir)
             return destination;
 
-        if (stmt.Type is not (FileOpType.Copy or FileOpType.Move or FileOpType.Rename))
-            throw new ExecutionException("DATE_SUFFIX and TO DIRECTORY are only supported for COPY FILE, MOVE FILE, and RENAME FILE.", null, stmt.Line, stmt.Column);
+        var opName = $"{stmt.Type.ToString().ToUpperInvariant()} FILE";
+        if (stmt.DateSuffix != null && stmt.Type is not (FileOpType.Copy or FileOpType.Move or FileOpType.Rename))
+            throw new ExecutionException($"DATE_SUFFIX is not supported for {opName}. It is only supported for COPY FILE, MOVE FILE, and RENAME FILE.", null, stmt.Line, stmt.Column);
+
+        if (destIsDir && stmt.Type is not (FileOpType.Copy or FileOpType.Move or FileOpType.Rename
+            or FileOpType.Encrypt or FileOpType.Decrypt or FileOpType.Compress or FileOpType.Decompress or FileOpType.Sign))
+        {
+            throw new ExecutionException($"TO DIRECTORY is not supported for {opName}.", null, stmt.Line, stmt.Column);
+        }
 
         if (string.IsNullOrWhiteSpace(destination))
-            throw new ExecutionException($"{stmt.Type}_FILE requires a destination when using DATE_SUFFIX or TO DIRECTORY.", null, stmt.Line, stmt.Column);
+            throw new ExecutionException($"{opName} requires a destination when using DATE_SUFFIX or TO DIRECTORY.", null, stmt.Line, stmt.Column);
+
+        // Encrypt, Decrypt, Compress, Decompress, and Sign resolve TO DIRECTORY using each operation's
+        // default filename/extraction semantics in Execute().
+        if (stmt.Type is FileOpType.Encrypt or FileOpType.Decrypt or FileOpType.Compress or FileOpType.Decompress or FileOpType.Sign)
+            return destination;
 
         var finalDestination = destination;
         if (destIsDir)

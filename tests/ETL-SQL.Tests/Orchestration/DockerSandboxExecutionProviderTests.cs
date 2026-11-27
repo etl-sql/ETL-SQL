@@ -78,6 +78,11 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
         Assert.DoesNotContain("--privileged", create);
         Assert.Contains($"{DockerSandboxExecutionProvider.AdmissionLabel}=admission-1", create);
         Assert.Contains("Session__Root=/var/lib/etl-sql/sessions", create);
+        // The host must be able to remove what the sandbox uid creates under the session mount.
+        Assert.Contains($"ETLSQL_SANDBOX_UMASK={SandboxFilePermissions.UmaskFor(Options().SharedGroupId)}", create);
+        // The container's --memory cap bounds the run; a host RAM floor larger than the cap would
+        // refuse every grant inside it.
+        Assert.Contains("Orchestration__ResourceManagement__SystemMemoryFloorMB=0", create);
         Assert.Contains("Security__PathProtectionMode=Defined", create);
         Assert.Contains("Security__ApprovedSafeZones__0=/workspace", create);
         Assert.Contains("Security__ApprovedSafeZones__1=/var/lib/etl-sql/sessions", create);
@@ -402,6 +407,33 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
 
     private static SandboxAssignmentIdentity Identity() => new(
         TenantContext.FromVerifiedCredential("tenant-a"), "run-1", "attempt-1");
+
+    /// <summary>
+    /// With a shared host group, the sandbox joins it and writes for owner and group only. Without
+    /// one (a Windows host, or an orchestrator running as root) it keeps the world-writable fallback.
+    /// </summary>
+    [Theory]
+    [InlineData(4242u, "0007")]
+    [InlineData(null, "0000")]
+    public async Task CreateJoinsTheSharedHostGroupWhenThereIsOne(uint? group, string umask)
+    {
+        var commands = new RecordingCommands(
+            ImageEvidence(), Ok("29.6.2"), RuntimeEvidence(), Ok("container-id"), Ok("created"));
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        var provider = new DockerSandboxExecutionProvider(
+            Options() with { SharedGroupId = group }, commands, artifacts);
+
+        await provider.PrepareAsync(Request(artifact) with { AdmissionId = "admission-group" }, workspace, default);
+
+        var create = commands.Calls.Single(call => call.Arguments.FirstOrDefault() == "create").Arguments;
+        Assert.Contains($"ETLSQL_SANDBOX_UMASK={umask}", create);
+        if (group is { } gid)
+            AssertContainsPair(create, "--group-add", gid.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        else
+            Assert.DoesNotContain("--group-add", create);
+    }
 
     private DockerSandboxExecutionOptions Options() => new()
     {

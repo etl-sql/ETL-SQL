@@ -79,40 +79,91 @@ namespace ETL_SQL.Connectors.Snowflake
                 // '.p8' is the documented Snowflake PKCS#8 private-key extension. Allow it only here,
                 // via the per-call override, so the global connector whitelist stays unchanged.
                 context.SecurityService.ValidateFileType(resolvedKeyPath, overrides: SnowflakePrivateKeyExtensions);
-                _connectionString = ReplaceConnectionStringValue(connectionString, "private_key_file", resolvedKeyPath);
+                _connectionString = ReplaceConnectionStringValue(_connectionString, "private_key_file", resolvedKeyPath);
+            }
+
+            string? pkPassphrase = options?.GetValueOrDefault("PRIVATE_KEY_PASSPHRASE");
+            if (!string.IsNullOrWhiteSpace(pkPassphrase))
+            {
+                if (string.IsNullOrWhiteSpace(pkFile))
+                    throw new ExecutionException("SNOWFLAKE option PRIVATE_KEY_PASSPHRASE requires PRIVATE_KEY_FILE.");
+                _connectionString = ReplaceConnectionStringValue(_connectionString, "private_key_pwd", pkPassphrase);
+            }
+
+            string? role = options?.GetValueOrDefault("ROLE");
+            if (!string.IsNullOrWhiteSpace(role))
+            {
+                SnowflakeConnector.ValidateRawValue("ROLE", role);
+                _connectionString = ReplaceConnectionStringValue(_connectionString, "role", role, quote: false);
             }
         }
 
-        private static string? ParseValueFromConnectionString(string cs, string key)
-        {
-            foreach (var part in cs.Split(';'))
-            {
-                var kv = part.Trim().Split('=', 2);
-                if (kv.Length == 2 && kv[0].Equals(key, StringComparison.OrdinalIgnoreCase))
-                    return kv[1];
-            }
-            return null;
-        }
+        private static string? ParseValueFromConnectionString(string cs, string key) =>
+            SnowflakeConnector.ParseValueFromConnectionString(cs, key);
 
         // Sets key=newValue, appending it when the connection string does not carry the key yet: a
-        // PRIVATE_KEY_FILE given only as an option was validated and then silently dropped.
-        internal static string ReplaceConnectionStringValue(string cs, string key, string newValue)
+        // PRIVATE_KEY_FILE given only as an option was validated and then silently dropped. Values are
+        // written with ADO.NET quoting (Snowflake.Data parses with DbConnectionStringBuilder), so a
+        // passphrase or path containing ';' or '=' stays one value instead of adding keys. Pass
+        // quote: false only for ROLE, which Snowflake.Data re-reads raw; SnowflakeConnector.ValidateRawValue
+        // has already rejected ';' in it.
+        internal static string ReplaceConnectionStringValue(string cs, string key, string newValue, bool quote = true)
         {
-            var parts = cs.Split(';');
+            string pair = quote ? SnowflakeConnector.FormatPair(key, newValue) : $"{key}={newValue}";
+            var parts = SplitConnectionString(cs);
             var found = false;
-            for (int i = 0; i < parts.Length; i++)
+            for (int i = 0; i < parts.Count; i++)
             {
-                var kv = parts[i].Trim().Split('=', 2);
-                if (kv.Length == 2 && kv[0].Equals(key, StringComparison.OrdinalIgnoreCase))
+                var kv = parts[i].Split('=', 2);
+                if (kv.Length == 2 && kv[0].Trim().Equals(key, StringComparison.OrdinalIgnoreCase))
                 {
-                    parts[i] = $"{kv[0]}={newValue}";
+                    parts[i] = pair;
                     found = true;
                 }
             }
-            if (found) return string.Join(";", parts);
             var trimmed = cs.TrimEnd();
+            if (found) return string.Join(";", parts) + (trimmed.EndsWith(';') ? ";" : "");
             var separator = trimmed.Length == 0 || trimmed.EndsWith(';') ? "" : ";";
-            return $"{trimmed}{separator}{key}={newValue};";
+            return $"{trimmed}{separator}{pair};";
+        }
+
+        // Splits on ';' outside quoted values ("..." or '...', with doubled quotes as escapes).
+        internal static List<string> SplitConnectionString(string cs)
+        {
+            var parts = new List<string>();
+            var current = new System.Text.StringBuilder();
+            char quote = '\0';
+            bool inValue = false, valueStarted = false;
+            for (int i = 0; i < cs.Length; i++)
+            {
+                char c = cs[i];
+                if (quote != '\0')
+                {
+                    current.Append(c);
+                    if (c == quote)
+                    {
+                        if (i + 1 < cs.Length && cs[i + 1] == quote) current.Append(cs[++i]);
+                        else quote = '\0';
+                    }
+                    continue;
+                }
+                if (c == ';')
+                {
+                    parts.Add(current.ToString());
+                    current.Clear();
+                    inValue = valueStarted = false;
+                    continue;
+                }
+                if (!inValue && c == '=') inValue = true;
+                else if (inValue && !valueStarted && !char.IsWhiteSpace(c))
+                {
+                    valueStarted = true;
+                    if (c == '"' || c == '\'') quote = c;
+                }
+                current.Append(c);
+            }
+            if (current.Length > 0) parts.Add(current.ToString());
+            return parts;
         }
 
         public string ConnectionString => _connectionString;
@@ -539,9 +590,10 @@ namespace ETL_SQL.Connectors.Snowflake
                 return true;
             }
 
-            return connectionString.Contains("port=", StringComparison.OrdinalIgnoreCase)
-                || connectionString.Contains("scheme=http", StringComparison.OrdinalIgnoreCase)
-                || connectionString.Contains("host=", StringComparison.OrdinalIgnoreCase);
+            var parsed = SnowflakeConnector.ParseConnectionString(connectionString);
+            return parsed.ContainsKey("port")
+                || (parsed.TryGetValue("scheme", out var scheme) && scheme?.ToString()?.StartsWith("http", StringComparison.OrdinalIgnoreCase) == true)
+                || parsed.ContainsKey("host");
         }
 
         private static bool IsSnowflakeProviderException(Exception ex)

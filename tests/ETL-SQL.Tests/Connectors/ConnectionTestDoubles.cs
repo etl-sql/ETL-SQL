@@ -19,8 +19,10 @@ internal static class ConnectionTestDoubles
     public static IExecutionContext Context(Dictionary<string, IDataSource>? connections = null)
     {
         var context = new Mock<IExecutionContext>();
+        context.SetupGet(c => c.DataContext).Returns(context.Object);
         context.SetupGet(c => c.Connections).Returns(connections ?? new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase));
         context.SetupGet(c => c.CatalogBackedConnections).Returns(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        context.SetupGet(c => c.SharedConnectionDependencies).Returns(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
         context.SetupGet(c => c.InteractiveMode).Returns(false);
         context.SetupGet(c => c.IsWhatIf).Returns(false);

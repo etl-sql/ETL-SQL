@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,86 @@ namespace ETL_SQL.Portal.Tests;
 [Trait("Category", "Portal")]
 public sealed class ServiceAccountIntegrationTests
 {
+    [Fact]
+    public async Task ScheduledOwnerLookup_IsScopedAndReadsCurrentMembership()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var adminId = await GetAdminIdAsync(factory);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var owner = new PortalUser { UserName = "scheduled-owner", NormalizedUserName = "SCHEDULED-OWNER" };
+        var group = new Group { Name = "scheduled-finance" };
+        var foreign = new PortalUser
+        {
+            UserName = "foreign-owner",
+            NormalizedUserName = "FOREIGN-OWNER",
+            TenantId = "tenant-other"
+        };
+        var membership = new UserGroup { User = owner, Group = group };
+        db.AddRange(owner, foreign, group, membership);
+        await db.SaveChangesAsync();
+        var ownerKey = $"user:{owner.PrincipalKey}";
+
+        var denied = await SendAsync(client, HttpMethod.Post, ScheduledToolPrincipalRequest.Path,
+            adminToken, new ScheduledToolPrincipalRequest(ownerKey));
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        var reader = await CreateAsync(client, adminToken, adminId, "ordinary-reader");
+        var readerToken = await ExchangeAsync(client, reader.ClientId, reader.Secret);
+        var wrongScope = await SendAsync(client, HttpMethod.Post, ScheduledToolPrincipalRequest.Path,
+            readerToken, new ScheduledToolPrincipalRequest(ownerKey));
+        Assert.Equal(HttpStatusCode.Forbidden, wrongScope.StatusCode);
+
+        var directory = await CreateAsync(client, adminToken, adminId, "scheduled-owner-lookup",
+            ScheduledToolPrincipalRequest.Scope);
+        var directoryToken = await ExchangeAsync(client, directory.ClientId, directory.Secret);
+
+        async Task<ToolExecutionPrincipal?> ResolveAsync(string tenant, string key)
+        {
+            var inquiry = new ScheduledToolPrincipalRequest(key);
+            using var response = await SendAsync(client, HttpMethod.Post, ScheduledToolPrincipalRequest.Path,
+                directoryToken, inquiry);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return null;
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var principal = await response.Content.ReadFromJsonAsync<ScheduledToolPrincipalResponse>();
+            return principal?.ForOwner(tenant, inquiry);
+        }
+
+        var live = await ResolveAsync("portal-host", ownerKey);
+        Assert.NotNull(live);
+        Assert.Equal(group.PrincipalKey, Assert.Single(live.GroupIds));
+        Assert.Null(await ResolveAsync("portal-host", $"user:{foreign.PrincipalKey}"));
+        Assert.Null(await ResolveAsync("tenant-other", ownerKey));
+
+        var executor = await CreateAsync(client, adminToken, adminId, "scheduled-executor",
+            ServiceAccountScopes.OrchestratorExecute);
+        var service = await ResolveAsync("portal-host", $"service:{executor.Id}");
+        Assert.NotNull(service);
+        Assert.Equal(ToolPrincipalKind.Service, service.Kind);
+        Assert.Empty(service.GroupIds);
+        Assert.Null(await ResolveAsync("portal-host", $"service:{reader.Id}"));
+        var revokedAccount = await db.ServiceAccounts.SingleAsync(account => account.Id == executor.Id);
+        revokedAccount.RevokedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        Assert.Null(await ResolveAsync("portal-host", $"service:{executor.Id}"));
+
+        db.UserGroups.Remove(membership);
+        await db.SaveChangesAsync();
+        var removed = await ResolveAsync("portal-host", ownerKey);
+        Assert.NotNull(removed);
+        Assert.Empty(removed.GroupIds);
+
+        owner.IsActive = false;
+        await db.SaveChangesAsync();
+        Assert.Null(await ResolveAsync("portal-host", ownerKey));
+
+        var issuance = await SendAsync(client, HttpMethod.Post, "/api/auth/orchestrator-assertion", directoryToken);
+        Assert.Equal(HttpStatusCode.Forbidden, issuance.StatusCode);
+    }
+
     [Fact]
     public async Task CiWorkloadExchange_IsSecretlessShortLivedResourceBoundAndAudited()
     {
@@ -291,14 +372,14 @@ public sealed class ServiceAccountIntegrationTests
     }
 
     private static async Task<(string Id, string ClientId, string Secret)> CreateAsync(
-        HttpClient client, string adminToken, int ownerId, string name)
+        HttpClient client, string adminToken, int ownerId, string name, string requestedScope = ServiceAccountScopes.PortalRead)
     {
         var response = await SendAsync(client, HttpMethod.Post, "/api/admin/service-accounts", adminToken,
             new
             {
                 name,
                 ownerUserId = ownerId,
-                scopes = new[] { "portal.read" },
+                scopes = new[] { requestedScope },
                 roles = Array.Empty<string>(),
                 expiresAt = DateTime.UtcNow.AddHours(1)
             });

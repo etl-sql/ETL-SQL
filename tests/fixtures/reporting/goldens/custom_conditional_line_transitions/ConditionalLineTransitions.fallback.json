@@ -1,0 +1,84 @@
+{
+  "kind": "rankedTable",
+  "heading": "Margin Regime Transitions",
+  "items": [
+    {
+      "label": "1.0",
+      "value": "-12.0",
+      "order": 0,
+      "detail": "conditional Color: #dc2626",
+      "group": "MarginPct"
+    },
+    {
+      "label": "2.0",
+      "value": "6.0",
+      "order": 1,
+      "detail": "conditional Color: #d97706",
+      "group": "MarginPct"
+    },
+    {
+      "label": "3.0",
+      "value": "24.0",
+      "order": 2,
+      "detail": "conditional Color: #16a34a",
+      "group": "MarginPct"
+    },
+    {
+      "label": "4.0",
+      "value": "14.0",
+      "order": 3,
+      "detail": "conditional Color: #d97706",
+      "group": "MarginPct"
+    },
+    {
+      "label": "5.0",
+      "value": "-8.0",
+      "order": 4,
+      "detail": "conditional Color: #dc2626",
+      "group": "MarginPct"
+    },
+    {
+      "label": "6.0",
+      "value": "19.0",
+      "order": 5,
+      "detail": "conditional Color: #16a34a",
+      "group": "MarginPct"
+    },
+    {
+      "label": "Row 1",
+      "value": "Row 1 to row 2; source-owned Color: #dc2626",
+      "order": 6,
+      "detail": "outgoing connection",
+      "group": "trajectory"
+    },
+    {
+      "label": "Row 2",
+      "value": "Row 2 to row 3; source-owned Color: #d97706",
+      "order": 7,
+      "detail": "outgoing connection",
+      "group": "trajectory"
+    },
+    {
+      "label": "Row 3",
+      "value": "Row 3 to row 4; source-owned Color: #16a34a",
+      "order": 8,
+      "detail": "outgoing connection",
+      "group": "trajectory"
+    },
+    {
+      "label": "Row 4",
+      "value": "Row 4 to row 5; source-owned Color: #d97706",
+      "order": 9,
+      "detail": "outgoing connection",
+      "group": "trajectory"
+    },
+    {
+      "label": "Row 5",
+      "value": "Row 5 to row 6; source-owned Color: #dc2626",
+      "order": 10,
+      "detail": "outgoing connection",
+      "group": "trajectory"
+    }
+  ],
+  "summary": "Margin Regime Transitions: 6 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows."
+}

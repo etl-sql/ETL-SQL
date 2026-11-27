@@ -224,24 +224,38 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
 
     private static int CompareValues(object? normA, object? normB)
     {
-
         if (normA == null) return normB == null ? 0 : -1;
         if (normB == null) return 1;
 
-        if (normA is IComparable comp)
+        // COMPAT_BREAK: 0.23.0 — pairwise string fallbacks gave mixed types cyclic sort order.
+        var rankA = TypeRank(normA);
+        var rankB = TypeRank(normB);
+        if (rankA != rankB) return rankA.CompareTo(rankB);
+
+        if (normA is decimal d1 && normB is decimal d2) return d1.CompareTo(d2);
+        if (normA is DateTime dt1 && normB is DateTime dt2) return dt1.CompareTo(dt2);
+        if (normA is bool b1 && normB is bool b2) return b1.CompareTo(b2);
+        if (normA is string s1 && normB is string s2) return string.Compare(s1, s2, StringComparison.OrdinalIgnoreCase);
+
+        if (normA.GetType() == normB.GetType() && normA is IComparable comp)
+            return comp.CompareTo(normB);
+
+        var typeCmp = string.Compare(normA.GetType().FullName, normB.GetType().FullName, StringComparison.Ordinal);
+        return typeCmp != 0
+            ? typeCmp
+            : string.Compare(
+                Convert.ToString(normA, System.Globalization.CultureInfo.InvariantCulture),
+                Convert.ToString(normB, System.Globalization.CultureInfo.InvariantCulture),
+                StringComparison.Ordinal);
+
+        static int TypeRank(object value) => value switch
         {
-            try
-            {
-                // Handle numeric comparisons across types if Normalize didn't quite catch everything
-                if (normA is decimal d1 && normB is decimal d2) return d1.CompareTo(d2);
-                return comp.CompareTo(normB);
-            }
-            catch
-            {
-                return string.Compare(normA.ToString(), normB.ToString(), StringComparison.OrdinalIgnoreCase);
-            }
-        }
-        return string.Compare(normA.ToString(), normB.ToString(), StringComparison.OrdinalIgnoreCase);
+            bool => 1,
+            decimal => 2,
+            DateTime => 3,
+            string => 4,
+            _ => 5
+        };
     }
 
     public override string ToString() => string.Join("|", _values.Select(v => v?.ToString() ?? "NULL"));

@@ -4,7 +4,7 @@
   <img src="docs/assets/logo.png" alt="ETL-SQL Logo" width="160" />
 </p>
 
-![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.22.0-blue?style=for-the-badge&logo=dotnet)
+![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.23.1-blue?style=for-the-badge&logo=dotnet)
 ![Language](https://img.shields.io/badge/Language-C%23-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS-lightgrey?style=for-the-badge)
 [![Build Status](https://github.com/etl-sql/ETL-SQL/actions/workflows/ci.yml/badge.svg)](https://github.com/etl-sql/ETL-SQL/actions/workflows/ci.yml)
@@ -374,6 +374,15 @@ Visuals compile into ETL-SQL's managed Grammar of Graphics engine (`PlotPlan`), 
 - Use slicers, cascading filters, multi-select dropdowns, date pickers, sliders, search boxes, drill-downs, saved views, alerts, subscriptions, and portal administration commands.
 - Export report outputs as Markdown, JSON manifests, native SVG vector graphics, PDF documents, and multi-page paginated print reports.
 
+Each image below is a report recipe exactly as written; paste the recipe into a `.rptsql` file to get the same page.
+
+| | |
+| :---: | :---: |
+| [![Choropleth map of revenue by US state](docs/assets/gallery/choropleth-map.png)](docs/cookbooks/report/choropleth-map-charts.md)<br>[Choropleth map](docs/cookbooks/report/choropleth-map-charts.md) | [![Sankey flow from acquisition channel to plan](docs/assets/gallery/sankey-flow.png)](docs/cookbooks/report/alluvial-flow-composition.md)<br>[Sankey flow](docs/cookbooks/report/alluvial-flow-composition.md) |
+| [![Cash-flow waterfall beside a sales funnel and a gauge](docs/assets/gallery/waterfall-funnel-gauge.png)](docs/cookbooks/report/waterfall-funnel-gauge.md)<br>[Waterfall, funnel and gauge](docs/cookbooks/report/waterfall-funnel-gauge.md) | [![Monthly revenue with a forecast band, target and average lines](docs/assets/gallery/sales-forecast.png)](docs/cookbooks/report/sales-trend-with-forecasting.md)<br>[Trend with forecast](docs/cookbooks/report/sales-trend-with-forecasting.md) |
+
+Regenerate the images with `node scripts/update-readme-gallery.mjs <playwright-package>` after a visual or theme change.
+
 ### Developer Experience
 
 - Run scripts headlessly from the CLI.
@@ -463,11 +472,11 @@ We make no claim that it is perfect — if you hit a bug, please [open an issue]
 
 ## Release Build
 
-Maintainers can run the release script to validate, package, and publish the 0.22.0 artifacts:
+Maintainers can run the release script to validate, package, and publish the 0.23.1 artifacts:
 
 ```powershell
 .\scripts\Test-PreRelease.ps1
-.\scripts\Master-Release.ps1 -Version "0.22.0"
+.\scripts\Master-Release.ps1 -Version "0.23.1"
 ```
 
 ---

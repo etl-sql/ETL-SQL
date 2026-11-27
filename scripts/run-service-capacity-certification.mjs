@@ -228,6 +228,7 @@ export async function certify({ profile, outDir, configuration = 'Release' }) {
     // Registering the reference reports goes through the Studio publishing route.
     Portal__Studio__Mode: 'SourceControlled', Portal__Studio__RoleCapabilities__Admin__0: 'StudioAccess',
     Portal__Studio__RoleCapabilities__Admin__1: 'ReportPublish',
+    Portal__Studio__RoleCapabilities__Admin__2: 'ScriptIngress',
     Session__Root: path.join(state, 'portal-sessions'),
   };
 

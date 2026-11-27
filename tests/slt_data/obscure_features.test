@@ -183,12 +183,13 @@ QUALIFY score > 999
 ORDER BY player;
 ----
 
-# QUALIFY combined with LIMIT
+# QUALIFY combined with LIMIT. Bob and Charlie tie on score; ROW_NUMBER needs a tiebreaker
+# to be deterministic (SQL leaves tie order open, and a spilled sort does not keep input order).
 query TII
-SELECT player, score, ROW_NUMBER() OVER (ORDER BY score DESC) as rn
+SELECT player, score, ROW_NUMBER() OVER (ORDER BY score DESC, player) as rn
 FROM leaderboard
 QUALIFY rn <= 4
-ORDER BY score DESC
+ORDER BY score DESC, rn
 LIMIT 2;
 ----
 Alice

@@ -32,6 +32,30 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("evidence/run.json", capturedContext.OutputJsonPath);
         }
 
+        /// <summary>
+        /// `--var @Name=Value` is the documented form and the one the Orchestrator emits. A
+        /// leading `@` must not be read as a response file path.
+        /// </summary>
+        [Fact]
+        public async Task CliOrchestrator_VarWithAtPrefix_IsNotTreatedAsResponseFile()
+        {
+            CliContext? captured = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                captured = ctx;
+                return Task.FromResult(0);
+            });
+
+            var exit = await root.Parse(
+                ["run", "s.etlsql", "--var", "@minAmount=250", "--var", "region=EMEA"],
+                CliOrchestrator.CreateParserConfiguration()).InvokeAsync();
+
+            Assert.Equal(0, exit);
+            Assert.NotNull(captured);
+            Assert.Equal(250m, Convert.ToDecimal(captured!.Variables["@minAmount"]));
+            Assert.Equal("EMEA", captured.Variables["@region"]);
+        }
+
         [Fact]
         public async Task CliOrchestrator_RecordFlagOverridesConfiguration()
         {
@@ -193,7 +217,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             var parse = root.Parse(new[] { "admin", "user", "create", "--username", "jsmith", "--password", "hunter2" });
 
-            Assert.NotEmpty(parse.Errors);
+            Assert.Contains(parse.Errors, e => e.Message.Contains("--password", StringComparison.Ordinal));
             Assert.Null(captured);
         }
 
@@ -234,7 +258,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             var parse = root.Parse(new[] { "admin", "portal-whoami", "--client-secret", "sas_leak" });
 
-            Assert.NotEmpty(parse.Errors);
+            Assert.Contains(parse.Errors, e => e.Message.Contains("--client-secret", StringComparison.Ordinal));
             Assert.Null(captured);
         }
 
@@ -340,7 +364,7 @@ namespace ETL_SQL.Tests.Orchestration
                 "--client-secret", "sas_leak"
             });
 
-            Assert.NotEmpty(parse.Errors);
+            Assert.Contains(parse.Errors, e => e.Message.Contains("--client-secret", StringComparison.Ordinal));
         }
 
         [Fact]
@@ -358,7 +382,7 @@ namespace ETL_SQL.Tests.Orchestration
                 "admin", "user", "reset-password", "--username", "jsmith", "--password", "hunter2"
             });
 
-            Assert.NotEmpty(parse.Errors);
+            Assert.Contains(parse.Errors, e => e.Message.Contains("--password", StringComparison.Ordinal));
             Assert.Null(captured);
         }
 
@@ -553,7 +577,7 @@ namespace ETL_SQL.Tests.Orchestration
                 new[]
                 {
                     "admin", "restore", "--from", "data.zip", "--keys", "keys.zip",
-                    "--to", "out", "--validate", "--expected-tenant", "tenant-alpha"
+                    "--to", "out", "--in-place", "--validate", "--expected-tenant", "tenant-alpha"
                 },
                 null).InvokeAsync(new InvocationConfiguration(), default);
 
@@ -562,8 +586,33 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("data.zip", capturedContext.RestoreFrom);
             Assert.Equal("keys.zip", capturedContext.RestoreKeys);
             Assert.Equal("out", capturedContext.RestoreTo);
+            Assert.True(capturedContext.RestoreInPlace);
             Assert.Equal("tenant-alpha", capturedContext.RestoreExpectedTenant);
             Assert.True(capturedContext.RestoreValidateOnly);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_AdminPurgeDataParsesConfirmDryRunAndInstallDir()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(
+                new[]
+                {
+                    "admin", "purge-data", "--confirm", "--dry-run", "--install-dir", "C:/ETL-SQL"
+                },
+                null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("admin-purge-data", capturedContext!.Command);
+            Assert.True(capturedContext.AdminPurgeConfirm);
+            Assert.True(capturedContext.AdminPurgeDryRun);
+            Assert.Equal("C:/ETL-SQL", capturedContext.AdminPurgeInstallDir);
         }
 
         [Fact]

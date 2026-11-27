@@ -686,8 +686,8 @@ internal static class PlotPlanTerminalRenderer
         var run = new List<(decimal X, decimal Y)>();
         decimal Ratio(decimal value, ResolvedScale scale)
         {
-            var low = PlotPlanResolver.Number(scale.Domain[0])!.Value;
-            var high = PlotPlanResolver.Number(scale.Domain[^1])!.Value;
+            var low = PlotPlanResolver.PositionNumber(scale.Domain[0])!.Value;
+            var high = PlotPlanResolver.PositionNumber(scale.Domain[^1])!.Value;
             if (high == low) high = low + 1m;
             var ratio = scale.Kind == ScaleKind.Logarithmic
                 ? value <= 0m ? 0m : (decimal)((Math.Log10((double)value) - Math.Log10((double)low)) /
@@ -976,13 +976,18 @@ internal static class PlotPlanTerminalRenderer
                 (item.Layer.SeriesKey ?? item.Layer.Id) + " — " + RadialStackResolver.Description(datum))))));
         var rawComponents = layers.SelectMany(item => item.Data.Select(datum =>
         {
+            var numeric = Value(datum);
+            if (!numeric.HasValue) return ((ResolvedDatum Datum, string Label, string Color, decimal Value, bool IsOther)?)null;
             var datumLabel = Label(datum);
             var series = layers.Count == 1
                 ? plan.Series.FirstOrDefault(candidate => candidate.Key == datumLabel)
                 : plan.Series.FirstOrDefault(candidate => candidate.Key == item.Layer.SeriesKey);
             var label = layers.Count > 1 && item.Data.Count == 1 ? series?.Label ?? datumLabel : datumLabel;
-            return (Datum: datum, Label: label, Color: series?.Color ?? "#808080", Value: Math.Max(0m, Value(datum) ?? 0m));
-        })).ToList();
+            return (Datum: datum, Label: label, Color: series?.Color ?? "#808080", Value: Math.Max(0m, numeric.Value), IsOther: false);
+        })).Where(c => c.HasValue).Select(c => c!.Value).ToList();
+
+        if (rawComponents.Count == 0)
+            return new Markup("[grey]No data available for this chart.[/]");
 
         // 1. Sort order
         var sort = (Style(plan, "SORT") ?? Style(plan, "AXIS_SORT"))?.ToUpperInvariant();
@@ -1004,7 +1009,7 @@ internal static class PlotPlanTerminalRenderer
             minPct > 0m)
         {
             var thresholdRatio = minPct >= 1m ? minPct / 100m : minPct;
-            var kept = new List<(ResolvedDatum Datum, string Label, string Color, decimal Value)>();
+            var kept = new List<(ResolvedDatum Datum, string Label, string Color, decimal Value, bool IsOther)>();
             decimal otherVal = 0m;
             ResolvedDatum? sampleDatum = null;
             foreach (var c in components)
@@ -1021,7 +1026,7 @@ internal static class PlotPlanTerminalRenderer
             }
             if (otherVal > 0m && kept.Count > 0)
             {
-                kept.Add((sampleDatum ?? components[0].Datum, otherLabel, "#9ca3af", otherVal));
+                kept.Add((sampleDatum ?? components[0].Datum, otherLabel, "#9ca3af", otherVal, true));
                 components = kept;
             }
         }
@@ -1030,7 +1035,10 @@ internal static class PlotPlanTerminalRenderer
         var rows = components.Select(component =>
         {
             var proportion = total == 0m ? 0m : component.Value / total;
-            return (IRenderable)new Markup($"{Markup.Escape(Truncate(component.Label, 18).PadRight(18))} [#{component.Color.TrimStart('#')}]{FractionalBar(proportion, componentWidth)}[/] {proportion:P1} ({Markup.Escape(DisplayValue(component.Datum))})");
+            var displayVal = component.IsOther
+                ? component.Value.ToString(CultureInfo.InvariantCulture)
+                : DisplayValue(component.Datum);
+            return (IRenderable)new Markup($"{Markup.Escape(Truncate(component.Label, 18).PadRight(18))} [#{component.Color.TrimStart('#')}]{FractionalBar(proportion, componentWidth)}[/] {proportion:P1} ({Markup.Escape(displayVal)})");
         });
         return new Rows(new[] { (IRenderable)new Markup("[bold]Proportional breakdown[/] [grey](proportional components)[/]") }.Concat(rows));
     }

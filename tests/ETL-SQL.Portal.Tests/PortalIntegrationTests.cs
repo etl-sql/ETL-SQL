@@ -367,6 +367,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     {
         var token = await GetAdminTokenAsync();
         Assert.False(string.IsNullOrWhiteSpace(token), "Expected a JWT token");
+        Assert.Equal(3, token.Split('.').Length);
     }
 
     [Fact]
@@ -1081,7 +1082,11 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", "golden_workflow.rptsql");
         var exportPath = Path.Combine(_factory.TempDir, "scripts", "golden_orders_export.csv");
-        File.Copy(GetGoldenWorkflowPath(), scriptPath, overwrite: true);
+        // This workflow tests cached access. Bind its file destinations explicitly so the
+        // snapshot dependency scan does not have to guess a connection from runtime parameters.
+        var goldenSource = await File.ReadAllTextAsync(GetGoldenWorkflowPath());
+        await File.WriteAllTextAsync(scriptPath, goldenSource.Replace(
+            "FLATFILE(@ExportPath,", $"FLATFILE('{exportPath.Replace("'", "''")}',", StringComparison.Ordinal));
 
         var publishRes = await AuthPost(token, "/api/reports", new
         {
@@ -3754,7 +3759,7 @@ CREATE VISUAL EdgeRows AS TABLE (
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
-    public async Task Snapshot_FailedRefresh_KeepsLastGoodSnapshot()
+    public async Task Snapshot_FailedRefresh_PreservesSnapshot()
     {
         var token = await GetAdminTokenAsync();
 
@@ -3792,7 +3797,7 @@ CREATE VISUAL Answer AS CARD (
         var snap1 = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=false");
         Assert.Equal(HttpStatusCode.OK, snap1.StatusCode);
 
-        // Delete the script — next run will fail
+        // Delete the script — next run will fail, but the prior snapshot recorded its dependencies.
         File.Delete(scriptPath);
 
         var exec2 = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
@@ -3801,7 +3806,7 @@ CREATE VISUAL Answer AS CARD (
         var job2 = await WaitForJobAsync(token, exec2Body!["jobId"]!.GetValue<string>());
         Assert.Equal("Failed", job2["status"]!.GetValue<string>());
 
-        // Old snapshot must still be accessible despite the failed refresh
+        // The prior snapshot remains usable using the dependencies recorded when it ran.
         var snap2 = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=false");
         Assert.Equal(HttpStatusCode.OK, snap2.StatusCode);
         var snapBody = await snap2.Content.ReadFromJsonAsync<JsonObject>(_json);
@@ -3887,6 +3892,8 @@ CREATE VISUAL Answer AS TABLE (
 
         var responses = await Task.WhenAll(readTasks.Append(duplicateRefreshTask));
 
+        // The prior snapshot recorded its SHARED: connection dependencies when it ran, so it stays
+        // readable and exportable while the refresh is in flight, even though the script changed.
         Assert.Equal(HttpStatusCode.OK, responses[0].StatusCode);
         var duringRefreshSnapshot = await responses[0].Content.ReadFromJsonAsync<JsonObject>(_json);
         Assert.NotNull(duringRefreshSnapshot!["manifest"]);
@@ -3910,6 +3917,9 @@ CREATE VISUAL Answer AS TABLE (
 
         var refreshJob = await WaitForJobAsync(token, refreshJobId);
         Assert.Equal("Completed", refreshJob["status"]!.GetValue<string>());
+        var refreshedExport = await AuthGet(token, $"/api/reports/{reportId}/export/csv");
+        Assert.Equal(HttpStatusCode.OK, refreshedExport.StatusCode);
+        Assert.Contains("43", await refreshedExport.Content.ReadAsStringAsync());
     }
 
     [Fact]

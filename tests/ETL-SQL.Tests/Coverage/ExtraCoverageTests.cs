@@ -46,6 +46,13 @@ namespace ETL_SQL.Tests.Coverage
             await eval.Evaluate(Parse(sql));
         }
 
+        private static async Task<Evaluator> RunAndGet(string sql)
+        {
+            var eval = Eval();
+            await eval.Evaluate(Parse(sql));
+            return eval;
+        }
+
         // ── BeginEndBalanceRule — uncovered paths ─────────────────────────────
 
         [Fact]
@@ -544,39 +551,45 @@ namespace ETL_SQL.Tests.Coverage
         // ── SetSecurityOverrideStatementHandler — uncovered switch cases ───────
 
         [Fact]
-        public async Task SetSecurityOverride_FileTypeExtension_Csv_NoError()
+        public async Task SetSecurityOverride_FileTypeExtension_AllowsThatExtension()
         {
-            await Run("SET ALLOW_FILE_TYPE_ACCESS = '.csv';");
+            var eval = await RunAndGet("SET ALLOW_FILE_TYPE_ACCESS = '.csv';");
+            Assert.Contains(".csv", eval.AllowedFileTypeOverrides);
         }
 
         [Fact]
-        public async Task SetSecurityOverride_FileTypeExtension_Parquet_NoError()
+        public async Task SetSecurityOverride_FileTypeExtension_AddsTheMissingDot()
         {
-            await Run("SET ALLOW_FILE_TYPE_ACCESS = '.parquet';");
+            var eval = await RunAndGet("SET ALLOW_FILE_TYPE_ACCESS = 'parquet';");
+            Assert.Contains(".parquet", eval.AllowedFileTypeOverrides);
         }
 
         [Fact]
-        public async Task SetSecurityOverride_LargeFileCount_On_NoError()
+        public async Task SetSecurityOverride_LargeFileCount_On_AllowsIt()
         {
-            await Run("SET ALLOW_GREATER_THAN_50_FILE ON;");
+            var eval = await RunAndGet("SET ALLOW_GREATER_THAN_50_FILE ON;");
+            Assert.True(eval.AllowLargeFileOperationCount);
         }
 
         [Fact]
-        public async Task SetSecurityOverride_LargeFileCount_Off_NoError()
+        public async Task SetSecurityOverride_LargeFileCount_Off_RevokesIt()
         {
-            await Run("SET ALLOW_GREATER_THAN_50_FILE OFF;");
+            var eval = await RunAndGet("SET ALLOW_GREATER_THAN_50_FILE ON; SET ALLOW_GREATER_THAN_50_FILE OFF;");
+            Assert.False(eval.AllowLargeFileOperationCount);
         }
 
         [Fact]
-        public async Task SetSecurityOverride_DeepRecursion_On_NoError()
+        public async Task SetSecurityOverride_DeepRecursion_On_AllowsIt()
         {
-            await Run("SET ALLOW_RECURSIVE_GREATER_THAN_10_LAYERS ON;");
+            var eval = await RunAndGet("SET ALLOW_RECURSIVE_GREATER_THAN_10_LAYERS ON;");
+            Assert.True(eval.AllowDeepRecursion);
         }
 
         [Fact]
-        public async Task SetSecurityOverride_DeepRecursion_Off_NoError()
+        public async Task SetSecurityOverride_DeepRecursion_Off_RevokesIt()
         {
-            await Run("SET ALLOW_RECURSIVE_GREATER_THAN_10_LAYERS OFF;");
+            var eval = await RunAndGet("SET ALLOW_RECURSIVE_GREATER_THAN_10_LAYERS ON; SET ALLOW_RECURSIVE_GREATER_THAN_10_LAYERS OFF;");
+            Assert.False(eval.AllowDeepRecursion);
         }
 
         // ── ReportKeywordLintRule — all statement types ───────────────────────
@@ -665,10 +678,11 @@ namespace ETL_SQL.Tests.Coverage
         // ── LinterFactory ─────────────────────────────────────────────────────
 
         [Fact]
-        public void LinterFactory_CreateWithAllRules_WithoutProvider_ReturnsLinterWithRules()
+        public async Task LinterFactory_CreateWithAllRules_WithoutProvider_ReturnsLinterWithRules()
         {
             var linter = LinterFactory.CreateWithAllRules();
-            Assert.NotNull(linter);
+            var results = await linter.AnalyzeAsync(Parse("DELETE FROM #t;"), new DefaultLintContext());
+            Assert.Contains(results, r => r.RuleName == "SafeDeleteUpdate");
         }
 
         [Fact]
@@ -702,11 +716,12 @@ namespace ETL_SQL.Tests.Coverage
         }
 
         [Fact]
-        public void LinterFactory_CreateWithAllRules_WithServiceProvider_ReturnsLinterWithRules()
+        public async Task LinterFactory_CreateWithAllRules_WithServiceProvider_ReturnsLinterWithRules()
         {
             var sp = DependencyInjectionSetup.BuildServiceProvider();
             var linter = LinterFactory.CreateWithAllRules(sp);
-            Assert.NotNull(linter);
+            var results = await linter.AnalyzeAsync(Parse("DELETE FROM #t;"), new DefaultLintContext());
+            Assert.Contains(results, r => r.RuleName == "SafeDeleteUpdate");
         }
 
         // ── Additional AggregateWithoutGroupByRule edge cases ─────────────────
