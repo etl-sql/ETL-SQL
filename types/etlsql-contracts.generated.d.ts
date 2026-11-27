@@ -1445,6 +1445,7 @@ interface JobHistoryEntry {
     jobId: string | null;
     tenantId?: string | null;
     hasResumeSession: boolean;
+    canCancel: boolean;
 }
 
 interface JobHistoryEntryDto {
@@ -1464,6 +1465,7 @@ interface JobHistoryEntryDto {
     dataQualityFailures?: string | null;
     checkpointLabel?: string | null;
     hasResumeSession: boolean;
+    canCancel: boolean;
 }
 
 interface JobNotificationLinkDto {
@@ -2409,6 +2411,7 @@ interface ScheduledJobActivity {
     runState: "Idle" | "Queued" | "Running";
     completedToday: boolean;
     failedToday: boolean;
+    canExecute: boolean;
 }
 
 interface ScheduledJobActivityCounts {

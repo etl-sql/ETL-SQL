@@ -101,6 +101,16 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
         }
     }
 
+    function renderCatalogResponse(fallbackFocus?: CatalogFocusKind) {
+        const focus = captureCatalogFocus() ?? (fallbackFocus ? { kind: fallbackFocus } : null);
+        const searchSelector = '[data-catalog-search] [name="query"]';
+        const draft = hostContext.homeStage.querySelector<HTMLInputElement>(searchSelector)?.value;
+        renderStudioHome();
+        const input = hostContext.homeStage.querySelector<HTMLInputElement>(searchSelector);
+        if (input && draft !== undefined) input.value = draft;
+        restoreCatalogFocus(focus);
+    }
+
     async function loadCatalog(query: string, page: number, fallbackFocus?: CatalogFocusKind) {
         const discovery = hostContext.opts.catalogDiscovery;
         if (!discovery) return;
@@ -108,7 +118,6 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
         catalogAbort?.abort();
         const abortController = new AbortController();
         catalogAbort = abortController;
-        const focusSnapshot = captureCatalogFocus() ?? (fallbackFocus ? { kind: fallbackFocus } : null);
         const targetPage = Math.max(1, page);
         try {
             const result = await discovery.search(query, targetPage, catalogPageSize, abortController.signal);
@@ -120,14 +129,12 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
             catalogTotal = result.total;
             catalogTotalPages = result.totalPages;
             catalogNotice = null;
-            renderStudioHome();
-            restoreCatalogFocus(focusSnapshot);
+            renderCatalogResponse(fallbackFocus);
         } catch (error) {
             if (requestSeq !== catalogRequestSeq || abortController.signal.aborted) return;
             const message = errorMessage(error);
             catalogNotice = message;
-            renderStudioHome();
-            restoreCatalogFocus(focusSnapshot);
+            renderCatalogResponse(fallbackFocus);
             _feedback.notify(message, { title: 'Catalog refresh failed', tone: 'warning' });
         } finally {
             if (catalogAbort === abortController) catalogAbort = null;
@@ -655,8 +662,7 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
                 if (failedMessage) {
                     catalogNotice = failedMessage;
                     if (hostContext.state.activeDocId === '__home__') {
-                        renderStudioHome();
-                        restoreCatalogFocus({ kind: 'refresh' });
+                        renderCatalogResponse('refresh');
                     }
                 } else if (opened && catalogNotice) {
                     catalogNotice = null;

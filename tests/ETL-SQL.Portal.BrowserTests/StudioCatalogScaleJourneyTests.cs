@@ -240,6 +240,65 @@ public sealed class StudioCatalogScaleJourneyTests(StudioAuthoringFixture fixtur
         Assert.True(await page.EvaluateAsync<bool>("q => window.__STUDIO__.state.catalogReports.every(r => r.name.includes(q))", fastSearchQuery));
 
         await page.UnrouteAsync("**/api/studio/catalog?*");
+
+        // Unsubmitted input and focus survive the arrival of a previously submitted search.
+        var pendingSearch = new TaskCompletionSource<Microsoft.Playwright.IRoute>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await page.RouteAsync("**/api/studio/catalog?*", route =>
+        {
+            pendingSearch.TrySetResult(route);
+            return Task.CompletedTask;
+        });
+        await searchInput.FillAsync($"{prefix}-not-found");
+        await searchInput.PressAsync("Enter");
+        var pending = await pendingSearch.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await searchInput.FillAsync("New search still being typed");
+        await pending.ContinueAsync();
+        await Expect(page.Locator("[data-catalog-status]")).ToContainTextAsync("0 matching catalog documents.");
+        await Expect(searchInput).ToHaveValueAsync("New search still being typed");
+        await Expect(searchInput).ToBeFocusedAsync();
+        await page.UnrouteAsync("**/api/studio/catalog?*");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task HomeRejectsStaleSelectionOfAnAlreadyOpenDirtyDocument()
+    {
+        using var workspace = new StudioTempWorkspace();
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await using var host = await new StudioExecutionScopeJourneyTests(fixture).OpenAsync(page, workspace, false);
+
+        const string dirtyText = "-- Keep this edit when Home opens a stale selection\nSELECT 42;";
+        await StudioExecutionScopeJourneyTests.ReplaceAsync(page, dirtyText);
+        var reportId = await page.EvaluateAsync<int>("() => window.__STUDIO__.state.documents[0].reportId");
+        var documentId = await page.EvaluateAsync<string>("() => window.__STUDIO__.state.documents[0].id");
+        var folderPath = await page.EvaluateAsync<string>("() => window.__STUDIO__.state.documents[0].folderPath");
+        await page.GetByRole(Microsoft.Playwright.AriaRole.Tab, new() { Name = "Home", Exact = true }).ClickAsync();
+        var searchInput = page.GetByRole(Microsoft.Playwright.AriaRole.Textbox, new() { Name = "Search catalog", Exact = true });
+        await searchInput.FillAsync(folderPath);
+        await searchInput.PressAsync("Enter");
+        await Expect(page.Locator("[data-catalog-status]")).ToContainTextAsync("Showing 1–1 of 1");
+        var open = page.Locator($"[data-open-report='{reportId}']").First;
+        await Expect(open).ToBeVisibleAsync();
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var report = await db.Reports.SingleAsync(report => report.Id == reportId);
+            report.Name += " Renamed";
+            await db.SaveChangesAsync();
+        }
+
+        await open.ClickAsync();
+        await Expect(page.Locator("[data-catalog-alert]")).ToContainTextAsync("renamed since the catalog was loaded");
+        Assert.Equal("__home__", await page.EvaluateAsync<string>("() => window.__STUDIO__.state.activeDocId"));
+
+        await page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Refresh catalog", Exact = true }).ClickAsync();
+        await Expect(page.Locator("[data-catalog-alert]")).ToHaveCountAsync(0);
+        await open.ClickAsync();
+        await page.WaitForFunctionAsync("id => window.__STUDIO__.state.activeDocId === id", documentId);
+        Assert.Equal(dirtyText, await page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()"));
+        Assert.True(await page.EvaluateAsync<bool>("() => window.__STUDIO__.state.documents[0].isDirty"));
         Assert.Empty(session.PageErrors);
     }
 

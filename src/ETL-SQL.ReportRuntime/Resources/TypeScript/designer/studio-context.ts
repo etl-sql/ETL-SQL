@@ -334,6 +334,7 @@ export interface StudioOptions extends StudioStateOptions {
     hostedExecution?: boolean;
     onSave?: (content: string, path: string, document?: any) => Promise<any> | any;
     onExit?: (options: { force: boolean; activeRuns: number; dirtyDocuments: number }) => Promise<boolean> | boolean;
+    onValidateCatalogSelection?: (report: unknown) => Promise<unknown>;
     onOpenDocument?: (report: any) => Promise<any> | any;
     /** The catalog keeps pipelines and queries (.etlsql) as well as reports. */
     catalogPipelines?: boolean;

@@ -74,6 +74,16 @@ public sealed class StudioCatalogPagingTests
     [Fact]
     public async Task LargeCatalogFixture_AppliesTenantAndFolderVisibilityBeforePagingAndCounting()
     {
+        await using var db = new PortalDbContext(
+            new DbContextOptionsBuilder<PortalDbContext>().UseSqlite("Data Source=:memory:").Options);
+        await db.Database.OpenConnectionAsync();
+        await db.Database.EnsureCreatedAsync();
+
+        await AssertLargeCatalogPagingAsync(db);
+    }
+
+    internal static async Task AssertLargeCatalogPagingAsync(PortalDbContext db)
+    {
         // Declared large-catalog fixture: 465 total documents (140 visible to caller, 325 hidden).
         // Hidden restricted-folder documents sort first alphabetically (/00-Restricted) so any
         // post-paging filter would produce empty/partial early pages or inflated totals.
@@ -93,11 +103,6 @@ public sealed class StudioCatalogPagingTests
         var config = new PortalConfig { SharedTenancy = new SharedTenancyConfig { Enabled = true } };
         var tenant = TenantContext.FromVerifiedCredential("tenant-alpha");
         var tenantScope = new DatasetTenantScope(config, tenant);
-
-        await using var db = new PortalDbContext(
-            new DbContextOptionsBuilder<PortalDbContext>().UseSqlite("Data Source=:memory:").Options);
-        await db.Database.OpenConnectionAsync();
-        await db.Database.EnsureCreatedAsync();
 
         db.Users.AddRange(
             new PortalUser { Id = 1, UserName = "caller", TenantId = "tenant-alpha" },

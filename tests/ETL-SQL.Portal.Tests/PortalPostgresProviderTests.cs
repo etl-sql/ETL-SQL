@@ -25,6 +25,21 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
     public Task DisposeAsync() => _pg.DisposeAsync().AsTask();
 
     [Fact]
+    public async Task StudioCatalogPagingAndVisibilityUsePostgres()
+    {
+        var config = new PortalConfig
+        {
+            Database = new PortalDatabaseConfig { Provider = "Postgres", ConnectionString = _pg.GetConnectionString() }
+        };
+        var builder = new DbContextOptionsBuilder<PortalDbContext>();
+        PortalDatabase.Configure(builder, config);
+        await using var db = new PortalDbContext(builder.Options);
+        await db.Database.EnsureCreatedAsync();
+
+        await StudioCatalogPagingTests.AssertLargeCatalogPagingAsync(db);
+    }
+
+    [Fact]
     public async Task OperationalMetricsAggregateOnPostgres()
     {
         var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "pg-metrics-" + Guid.NewGuid().ToString("N"));

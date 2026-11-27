@@ -484,16 +484,18 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
         const pref = getStoredProjectionPreference();
         const effectiveProj = (pref === 'code' || pref === 'split') ? pref : proj;
         const existing = hostContext.state.documents.find(doc => doc.reportId === report.id);
-        if (existing) {
-            existing.projection = effectiveProj;
-            if (!existing.lease?.acquired && hostContext.hasCapability('ScriptSave')) {
-                void hostContext.leaseLifecycle.reacquire(existing as any, { silent: true });
-            }
-            await switchDoc(existing.id);
-            return existing;
-        }
-
         try {
+            if (existing) {
+                await hostContext.opts.onValidateCatalogSelection?.(report);
+                if (!hostContext.state.documents.includes(existing)) return null;
+                existing.projection = effectiveProj;
+                if (!existing.lease?.acquired && hostContext.hasCapability('ScriptSave')) {
+                    void hostContext.leaseLifecycle.reacquire(existing as any, { silent: true });
+                }
+                await switchDoc(existing.id);
+                return existing;
+            }
+
             const opened = await hostContext.opts.onOpenDocument?.(report);
             if (!opened) return null;
             const newDoc = {
